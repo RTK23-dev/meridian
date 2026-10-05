@@ -1,0 +1,15 @@
+node_modules
+dist
+.output
+.nitro
+.tanstack
+.vinxi
+.vercel
+.env
+.env.*
+*.log
+screenshots
+artifacts
+attachments
+.grok
+coverage
