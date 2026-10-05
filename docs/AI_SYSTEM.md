@@ -1,25 +1,32 @@
 # AI system
 
-No model is called in this version. There is no provider key in source, and missing providers are not replaced with sample output.
+Models are optional. If neither `XAI_API_KEY` nor `OPENROUTER_API_KEY` is set, generation and brain suggestions return "not configured". They do not invent copy.
 
-## What is real today
+## Routing
 
-`src/lib/meridian/scoring.ts` scores an opportunity from structured inputs and stored weights:
+`src/lib/meridian/providers/chat.server.ts`
 
-```
-brand fit + historical evidence + market signal + novelty + reproducibility − saturation − risk
-```
+- xAI (`grok-4.5`) when `XAI_API_KEY` is present
+- otherwise OpenRouter when `OPENROUTER_API_KEY` is present, model from `OPENROUTER_MODEL` or `openai/gpt-4.1-mini`
+- otherwise no provider
 
-Inputs are clamped to 0–1. The function returns the raw weighted sum and a 0–1 normalization used only for ranking. It does not invent evidence. The overview does not display a score, because there are no candidates.
+Image generation is xAI Imagine only, and only after a person presses Generate image. The image URL is then sent to a vision-capable chat model, which must return structured evidence. JEV scores that evidence and never receives the pixels. If the model is not configured, or the JSON is unusable, visual QA stays in human review and does not invent a score.
 
-Brand completeness counts non-empty fields a person wrote. An empty brain is incomplete, not “understood by AI.”
+## Where a model is used
 
-## Rules for the next AI slice
+- Suggest brand-brain fields from a stored page. Suggestions are pending until accepted. Acceptance is stored as written by the person.
+- Draft a script from the brief's retrieved context.
 
-- Server-only adapter. The UI asks to “understand the brand” or “check the creative,” not to run a pipeline by name.
-- Structured output validated before it is stored.
-- Suggestions stay `ai_inferred` until a person accepts them. Acceptance rewrites provenance to `user_defined`.
-- Retrieved brand facts only. Do not paste the whole library into a prompt.
-- External sites and uploads are data, delimited from system instructions.
-- Log provider, model, latency, and failure. Do not log secrets.
-- If the provider is not configured, the screen says that. It does not render a fake asset.
+## Where a model is not used
+
+Thresholds, ranking, tenant checks, dedupe, learning math, claim checks, and workflow stages.
+
+## Prompts
+
+`src/lib/meridian/prompts/registry.ts` versions `creative_script` and `brain_suggest`. Each model call writes `model_runs` with provider, model, prompt id, version, latency, token count when the provider returns it, status, and correlation id. The API key is not written.
+
+External text is placed inside `<untrusted_source>` tags. The system prompt says that content is data.
+
+## Structured output
+
+Script generation must parse to hook, script, offer, CTA, visual treatment, and claims. A non-JSON reply is a failed job, not a creative.

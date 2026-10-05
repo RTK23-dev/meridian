@@ -16,7 +16,12 @@ import { Route as BrandsNewRouteImport } from './routes/brands/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as BrandsBrandIdIndexRouteImport } from './routes/brands/$brandId/index'
 import { Route as BrandsBrandIdBrainRouteImport } from './routes/brands/$brandId/brain'
+import { Route as BrandsBrandIdLearningRouteImport } from './routes/brands/$brandId/learning'
+import { Route as BrandsBrandIdLibraryRouteImport } from './routes/brands/$brandId/library'
+import { Route as BrandsBrandIdMarketRouteImport } from './routes/brands/$brandId/market'
+import { Route as BrandsBrandIdOpportunitiesRouteImport } from './routes/brands/$brandId/opportunities'
 import { Route as BrandsBrandIdProductsRouteImport } from './routes/brands/$brandId/products'
+import { Route as BrandsBrandIdReviewsRouteImport } from './routes/brands/$brandId/reviews'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -53,9 +58,35 @@ const BrandsBrandIdBrainRoute = BrandsBrandIdBrainRouteImport.update({
   path: '/brands/$brandId/brain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BrandsBrandIdLearningRoute = BrandsBrandIdLearningRouteImport.update({
+  id: '/brands/$brandId/learning',
+  path: '/brands/$brandId/learning',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrandsBrandIdLibraryRoute = BrandsBrandIdLibraryRouteImport.update({
+  id: '/brands/$brandId/library',
+  path: '/brands/$brandId/library',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrandsBrandIdMarketRoute = BrandsBrandIdMarketRouteImport.update({
+  id: '/brands/$brandId/market',
+  path: '/brands/$brandId/market',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrandsBrandIdOpportunitiesRoute =
+  BrandsBrandIdOpportunitiesRouteImport.update({
+    id: '/brands/$brandId/opportunities',
+    path: '/brands/$brandId/opportunities',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const BrandsBrandIdProductsRoute = BrandsBrandIdProductsRouteImport.update({
   id: '/brands/$brandId/products',
   path: '/brands/$brandId/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrandsBrandIdReviewsRoute = BrandsBrandIdReviewsRouteImport.update({
+  id: '/brands/$brandId/reviews',
+  path: '/brands/$brandId/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -66,7 +97,12 @@ export interface FileRoutesByFullPath {
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
+  '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
+  '/brands/$brandId/library': typeof BrandsBrandIdLibraryRoute
+  '/brands/$brandId/market': typeof BrandsBrandIdMarketRoute
+  '/brands/$brandId/opportunities': typeof BrandsBrandIdOpportunitiesRoute
   '/brands/$brandId/products': typeof BrandsBrandIdProductsRoute
+  '/brands/$brandId/reviews': typeof BrandsBrandIdReviewsRoute
   '/brands/$brandId/': typeof BrandsBrandIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -76,7 +112,12 @@ export interface FileRoutesByTo {
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
+  '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
+  '/brands/$brandId/library': typeof BrandsBrandIdLibraryRoute
+  '/brands/$brandId/market': typeof BrandsBrandIdMarketRoute
+  '/brands/$brandId/opportunities': typeof BrandsBrandIdOpportunitiesRoute
   '/brands/$brandId/products': typeof BrandsBrandIdProductsRoute
+  '/brands/$brandId/reviews': typeof BrandsBrandIdReviewsRoute
   '/brands/$brandId': typeof BrandsBrandIdIndexRoute
 }
 export interface FileRoutesById {
@@ -87,7 +128,12 @@ export interface FileRoutesById {
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
+  '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
+  '/brands/$brandId/library': typeof BrandsBrandIdLibraryRoute
+  '/brands/$brandId/market': typeof BrandsBrandIdMarketRoute
+  '/brands/$brandId/opportunities': typeof BrandsBrandIdOpportunitiesRoute
   '/brands/$brandId/products': typeof BrandsBrandIdProductsRoute
+  '/brands/$brandId/reviews': typeof BrandsBrandIdReviewsRoute
   '/brands/$brandId/': typeof BrandsBrandIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -99,7 +145,12 @@ export interface FileRouteTypes {
     | '/brands/new'
     | '/api/auth/$'
     | '/brands/$brandId/brain'
+    | '/brands/$brandId/learning'
+    | '/brands/$brandId/library'
+    | '/brands/$brandId/market'
+    | '/brands/$brandId/opportunities'
     | '/brands/$brandId/products'
+    | '/brands/$brandId/reviews'
     | '/brands/$brandId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -109,7 +160,12 @@ export interface FileRouteTypes {
     | '/brands/new'
     | '/api/auth/$'
     | '/brands/$brandId/brain'
+    | '/brands/$brandId/learning'
+    | '/brands/$brandId/library'
+    | '/brands/$brandId/market'
+    | '/brands/$brandId/opportunities'
     | '/brands/$brandId/products'
+    | '/brands/$brandId/reviews'
     | '/brands/$brandId'
   id:
     | '__root__'
@@ -119,7 +175,12 @@ export interface FileRouteTypes {
     | '/brands/new'
     | '/api/auth/$'
     | '/brands/$brandId/brain'
+    | '/brands/$brandId/learning'
+    | '/brands/$brandId/library'
+    | '/brands/$brandId/market'
+    | '/brands/$brandId/opportunities'
     | '/brands/$brandId/products'
+    | '/brands/$brandId/reviews'
     | '/brands/$brandId/'
   fileRoutesById: FileRoutesById
 }
@@ -130,7 +191,12 @@ export interface RootRouteChildren {
   BrandsNewRoute: typeof BrandsNewRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   BrandsBrandIdBrainRoute: typeof BrandsBrandIdBrainRoute
+  BrandsBrandIdLearningRoute: typeof BrandsBrandIdLearningRoute
+  BrandsBrandIdLibraryRoute: typeof BrandsBrandIdLibraryRoute
+  BrandsBrandIdMarketRoute: typeof BrandsBrandIdMarketRoute
+  BrandsBrandIdOpportunitiesRoute: typeof BrandsBrandIdOpportunitiesRoute
   BrandsBrandIdProductsRoute: typeof BrandsBrandIdProductsRoute
+  BrandsBrandIdReviewsRoute: typeof BrandsBrandIdReviewsRoute
   BrandsBrandIdIndexRoute: typeof BrandsBrandIdIndexRoute
 }
 
@@ -185,11 +251,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BrandsBrandIdBrainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/brands/$brandId/learning': {
+      id: '/brands/$brandId/learning'
+      path: '/brands/$brandId/learning'
+      fullPath: '/brands/$brandId/learning'
+      preLoaderRoute: typeof BrandsBrandIdLearningRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/brands/$brandId/library': {
+      id: '/brands/$brandId/library'
+      path: '/brands/$brandId/library'
+      fullPath: '/brands/$brandId/library'
+      preLoaderRoute: typeof BrandsBrandIdLibraryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/brands/$brandId/market': {
+      id: '/brands/$brandId/market'
+      path: '/brands/$brandId/market'
+      fullPath: '/brands/$brandId/market'
+      preLoaderRoute: typeof BrandsBrandIdMarketRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/brands/$brandId/opportunities': {
+      id: '/brands/$brandId/opportunities'
+      path: '/brands/$brandId/opportunities'
+      fullPath: '/brands/$brandId/opportunities'
+      preLoaderRoute: typeof BrandsBrandIdOpportunitiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/brands/$brandId/products': {
       id: '/brands/$brandId/products'
       path: '/brands/$brandId/products'
       fullPath: '/brands/$brandId/products'
       preLoaderRoute: typeof BrandsBrandIdProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/brands/$brandId/reviews': {
+      id: '/brands/$brandId/reviews'
+      path: '/brands/$brandId/reviews'
+      fullPath: '/brands/$brandId/reviews'
+      preLoaderRoute: typeof BrandsBrandIdReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -202,7 +303,12 @@ const rootRouteChildren: RootRouteChildren = {
   BrandsNewRoute: BrandsNewRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   BrandsBrandIdBrainRoute: BrandsBrandIdBrainRoute,
+  BrandsBrandIdLearningRoute: BrandsBrandIdLearningRoute,
+  BrandsBrandIdLibraryRoute: BrandsBrandIdLibraryRoute,
+  BrandsBrandIdMarketRoute: BrandsBrandIdMarketRoute,
+  BrandsBrandIdOpportunitiesRoute: BrandsBrandIdOpportunitiesRoute,
   BrandsBrandIdProductsRoute: BrandsBrandIdProductsRoute,
+  BrandsBrandIdReviewsRoute: BrandsBrandIdReviewsRoute,
   BrandsBrandIdIndexRoute: BrandsBrandIdIndexRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,5 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
+import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
 import { Button, Field, Notice, Panel, SelectInput, TextArea } from "@/components/ui";
 import { errorText } from "@/components/ui";
@@ -62,7 +63,9 @@ function BrainEditor({ brandId }: { brandId: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-8">
+    <div className="space-y-8">
+      <BrandNav brandId={brandId} />
+      <form onSubmit={submit} className="space-y-8">
       <div className="space-y-2">
         <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-muted">
           {detail.identity.name}
@@ -70,7 +73,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
         <h1 className="font-display text-4xl">Brand brain</h1>
         <p className="max-w-2xl text-muted">
           This is the record later decisions must use. Saving never silently replaces a field you did not change.
-          Website reading and model suggestions are not connected, so every filled field is marked as written by you.
+          Page suggestions, when a model is configured, stay pending until you accept them.
         </p>
       </div>
       {groups.map((group) => (
@@ -100,7 +103,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
       ))}
       <Field
         label="Automation preference"
-        hint="Stored only. This version does not publish, approve, or generate anything on its own."
+        hint="Stored only. Nothing is published or approved because this preference is set."
       >
         <SelectInput
           value={brain.automationLevel}
@@ -133,5 +136,6 @@ function BrainEditor({ brandId }: { brandId: string }) {
         </ul>
       </Panel>
     </form>
+    </div>
   );
 }

@@ -1,11 +1,13 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
+import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
 import { Button, Field, Notice, TextArea, TextInput } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 import { deleteBrand, getBrand, updateBrand, type BrandDetail } from "@/lib/meridian/api";
 import { brainCompleteness } from "@/lib/meridian/brain";
+import { getMachine, type MachineSnapshot } from "@/lib/meridian/machine";
 import { errorText } from "@/components/ui";
 
 export const Route = createFileRoute("/brands/$brandId/")({ component: BrandPage });
@@ -21,6 +23,7 @@ function BrandPage() {
 
 function BrandHome({ brandId }: { brandId: string }) {
   const [detail, setDetail] = useState<BrandDetail | null>(null);
+  const [machine, setMachine] = useState<MachineSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { reload } = useWorkspace();
   const navigate = useNavigate();
@@ -34,6 +37,13 @@ function BrandHome({ brandId }: { brandId: string }) {
       })
       .catch((caught) => {
         if (!cancelled) setError(errorText(caught));
+      });
+    getMachine({ data: { brandId } })
+      .then((next) => {
+        if (!cancelled) setMachine(next);
+      })
+      .catch(() => {
+        if (!cancelled) setMachine(null);
       });
     return () => {
       cancelled = true;
@@ -71,21 +81,15 @@ function BrandHome({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
+      <BrandNav brandId={brandId} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <Link to="/" className="text-sm text-muted">All brands</Link>
           <h1 className="font-display text-4xl">{detail.identity.name}</h1>
           <p className="text-muted">{known.filled} of {known.total} brain fields written. Version {detail.version || 1}.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link to="/brands/$brandId/brain" params={{ brandId }} className="inline-flex min-h-11 items-center rounded-md bg-brass px-4 text-sm font-semibold text-paper">
-            Brand brain
-          </Link>
-          <Link to="/brands/$brandId/products" params={{ brandId }} className="inline-flex min-h-11 items-center rounded-md border border-line bg-panel px-4 text-sm font-semibold">
-            Products ({detail.products.length})
-          </Link>
-        </div>
       </div>
+      {machine ? <MachineStrip snapshot={machine} /> : null}
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
         <Field label="Name">
           <TextInput name="name" defaultValue={detail.identity.name} required disabled={!canEdit} />
@@ -131,6 +135,32 @@ function BrandHome({ brandId }: { brandId: string }) {
           Delete brand
         </Button>
       ) : null}
+    </div>
+  );
+}
+
+function MachineStrip({ snapshot }: { snapshot: MachineSnapshot }) {
+  const steps = [
+    ["Brain", "Open"],
+    ["Market", snapshot.counts.observations > 0 ? `${snapshot.counts.observations} observations` : "No observations"],
+    ["Opportunities", snapshot.counts.openOpportunities > 0 ? `${snapshot.counts.openOpportunities} open` : "Not scored"],
+    ["Reviews", snapshot.counts.reviews > 0 ? `${snapshot.counts.reviews} waiting` : "None waiting"],
+    ["Library", snapshot.counts.creatives > 0 ? `${snapshot.counts.creatives} creatives` : "Empty"],
+    ["Learning", snapshot.counts.patterns > 0 ? `${snapshot.counts.patterns} patterns` : snapshot.counts.performanceRows > 0 ? "Results not computed" : "No results"],
+  ];
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted">
+        Text model: {snapshot.providerConfigured ? snapshot.provider : "not configured"}. Ad library: not connected.
+      </p>
+      <ol className="grid gap-3 md:grid-cols-3">
+        {steps.map(([title, state]) => (
+          <li key={title} className="rounded-lg border border-line bg-panel p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-brass">{state}</p>
+            <h2 className="mt-2 font-display text-xl">{title}</h2>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

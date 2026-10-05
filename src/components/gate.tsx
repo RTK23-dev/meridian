@@ -34,8 +34,8 @@ function Welcome() {
         What should this brand make next?
       </h1>
       <p className="max-w-xl text-lg text-muted">
-        An advertising desk for any brand you add. It starts empty. You create the workspace,
-        write what is true about the brand, and later decisions have to cite that record.
+        An advertising desk for a brand you add. It starts empty. You write what is true,
+        record what you have actually seen, and the next recommendation has to cite that record.
       </p>
       <div className="grid max-w-3xl gap-8 md:grid-cols-2">
         <EmailAuth />

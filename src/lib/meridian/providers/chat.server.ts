@@ -1,0 +1,145 @@
+import type { ChatProvider, ChatRequest, ChatResult } from "@/lib/meridian/providers/types";
+
+function key(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+async function postChat(
+  provider: string,
+  url: string,
+  apiKey: string,
+  extraHeaders: Record<string, string>,
+  request: ChatRequest,
+  user: string | ContentPart[],
+): Promise<ChatResult> {
+  const started = Date.now();
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      signal: AbortSignal.timeout(25_000),
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+        ...extraHeaders,
+      },
+      body: JSON.stringify({
+        model: request.model,
+        temperature: request.temperature,
+        max_tokens: request.maxTokens,
+        messages: [
+          { role: "system", content: request.system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+    if (!response.ok) {
+      return { ok: false, status: "failed", provider, error: `${provider} returned ${response.status}.` };
+    }
+    const body = (await response.json()) as {
+      usage?: { total_tokens?: number };
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = body.choices?.[0]?.message?.content ?? "";
+    if (!content.trim()) {
+      return { ok: false, status: "failed", provider, error: `${provider} returned an empty response.` };
+    }
+    return {
+      ok: true,
+      content,
+      latencyMs: Date.now() - started,
+      tokens: typeof body.usage?.total_tokens === "number" ? body.usage.total_tokens : null,
+      provider,
+      model: request.model,
+    };
+  } catch {
+    return { ok: false, status: "failed", provider, error: `${provider} could not be reached.` };
+  }
+}
+
+export const xaiProvider: ChatProvider = {
+  id: "xai",
+  configured: () => Boolean(key("XAI_API_KEY")),
+  complete: (request) => {
+    const apiKey = key("XAI_API_KEY");
+    if (!apiKey) return Promise.resolve({ ok: false, status: "unavailable", provider: "xai", error: "Text generation is not configured." });
+    return postChat("xai", "https://api.x.ai/v1/chat/completions", apiKey, {}, request, request.user);
+  },
+};
+
+export const openRouterProvider: ChatProvider = {
+  id: "openrouter",
+  configured: () => Boolean(key("OPENROUTER_API_KEY")),
+  complete: (request) => {
+    const apiKey = key("OPENROUTER_API_KEY");
+    if (!apiKey) {
+      return Promise.resolve({ ok: false, status: "unavailable", provider: "openrouter", error: "OpenRouter is not configured." });
+    }
+    return postChat("openrouter", "https://openrouter.ai/api/v1/chat/completions", apiKey, {}, request, request.user);
+  },
+};
+
+/** Prefer the platform xAI key when it is present. OpenRouter is the other adapter, not a fallback that invents text. */
+export function activeChatProvider(): ChatProvider | null {
+  if (xaiProvider.configured()) return xaiProvider;
+  if (openRouterProvider.configured()) return openRouterProvider;
+  return null;
+}
+
+export function providerStatus(): { configured: boolean; provider: string; model: string } {
+  const provider = activeChatProvider();
+  if (!provider) return { configured: false, provider: "none", model: "" };
+  const model = provider.id === "openrouter" ? key("OPENROUTER_MODEL") || "openai/gpt-4.1-mini" : "grok-4.5";
+  return { configured: true, provider: provider.id, model };
+}
+
+export function extractJson(content: string): unknown {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1]?.trim() || trimmed;
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    const start = candidate.indexOf("{");
+    const end = candidate.lastIndexOf("}");
+    if (start >= 0 && end > start) return JSON.parse(candidate.slice(start, end + 1));
+    throw new Error("The model did not return JSON.");
+  }
+}
+
+/** Vision-capable completion. The image URL is untrusted data, never a system instruction. */
+export async function completeWithImage(request: {
+  system: string;
+  text: string;
+  imageUrl: string;
+  maxTokens: number;
+}): Promise<ChatResult> {
+  const provider = activeChatProvider();
+  const status = providerStatus();
+  if (!provider) {
+    return { ok: false, status: "unavailable", provider: "none", error: "No vision model is configured." };
+  }
+  const payload: ChatRequest = {
+    model: status.model,
+    temperature: 0,
+    maxTokens: request.maxTokens,
+    system: request.system,
+    user: request.text,
+  };
+  const parts: ContentPart[] = [
+    { type: "text", text: request.text },
+    { type: "image_url", image_url: { url: request.imageUrl } },
+  ];
+  if (provider.id === "xai") {
+    const apiKey = key("XAI_API_KEY");
+    if (!apiKey) return { ok: false, status: "unavailable", provider: "xai", error: "No vision model is configured." };
+    return postChat("xai", "https://api.x.ai/v1/chat/completions", apiKey, {}, payload, parts);
+  }
+  const apiKey = key("OPENROUTER_API_KEY");
+  if (!apiKey) return { ok: false, status: "unavailable", provider: "openrouter", error: "No vision model is configured." };
+  return postChat("openrouter", "https://openrouter.ai/api/v1/chat/completions", apiKey, {}, payload, parts);
+}

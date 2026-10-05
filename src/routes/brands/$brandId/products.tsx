@@ -1,5 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
+import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
 import { Button, Field, Notice, Panel, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
@@ -83,10 +84,11 @@ function Products({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
+      <BrandNav brandId={brandId} />
       <div>
         <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-muted">{detail.identity.name}</Link>
         <h1 className="font-display text-4xl">Products</h1>
-        <p className="max-w-2xl text-muted">Claims you allow and claims you forbid are stored with the product. Generation is not connected, so nothing is written from these yet.</p>
+        <p className="max-w-2xl text-muted">Allowed and prohibited claims are checked when a creative is saved. The guardian reports evidence. JEV applies the threshold.</p>
       </div>
       {detail.products.length === 0 ? (
         <Panel>No products yet.</Panel>

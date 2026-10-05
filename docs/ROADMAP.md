@@ -1,18 +1,22 @@
 # Roadmap
 
-Done in this tree:
+In this tree:
 
-1. Foundation — accounts, workspaces, roles, brands, Brand Brain, products, audit, scoring weights.
+1. Foundation — accounts, workspaces, roles, brands, Brand Brain, products, audit.
+2. Evidence — manual observations, public-page fetch, no fabricated market.
+3. JEV — typed questions, thresholds, persisted decisions, review.
+4. Opportunities and briefs from stored evidence.
+5. Text production through a provider interface, or a human script.
+6. Text guardian.
+7. Manual performance and learned patterns that change the next rank and the next brief.
 
-Next, in order. Each step ships only when the backend is real.
+Not in this tree:
 
-2. Brand understanding — fetch a public page with SSRF controls, store extracted text as untrusted, propose brain edits the person accepts or rejects.
-3. Competitors — suggest and confirm. No silent monitoring list.
-4. Creative records and analysis, with confidence, once a legal source exists.
-5. Opportunities ranked by the scoring function, each with evidence or an explicit “weak evidence” note.
-6. Briefs and original workflow stages. Generation only through a configured provider.
-7. QA with a vision model, then a human review queue. Decisions: approve, review, reject.
-8. Performance rows and scoped learning. No conclusion from a single creative.
-9. Scheduled jobs, still observable, still unable to publish high-risk work on confidence alone.
+- Ad-library or ads-platform connectors.
+- Vision evidence from a real model.
+- Video generation.
+- Publishing.
+- Threshold calibration from reviewer outcomes.
+- A scheduler. The automation preference is stored and does not run jobs.
 
-Learning updates knowledge and weights. It does not rewrite application source.
+Learning updates knowledge. It does not rewrite application source.

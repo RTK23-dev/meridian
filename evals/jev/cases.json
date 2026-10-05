@@ -1,0 +1,83 @@
+[
+  {
+    "name": "clean creative auto-approves",
+    "question": "creative_qa",
+    "input": {
+      "prohibitedHits": [],
+      "unsupportedClaimHits": [],
+      "missingDisclaimers": [],
+      "avoidedWordHits": [],
+      "productRequired": true,
+      "productMentioned": true,
+      "hasHook": true,
+      "hasCta": true,
+      "toneConflict": false
+    },
+    "expect": "AUTO_APPROVE"
+  },
+  {
+    "name": "unsupported claim rejects",
+    "question": "creative_qa",
+    "input": {
+      "prohibitedHits": [],
+      "unsupportedClaimHits": ["clinically proven"],
+      "missingDisclaimers": [],
+      "avoidedWordHits": [],
+      "productRequired": true,
+      "productMentioned": true,
+      "hasHook": true,
+      "hasCta": true,
+      "toneConflict": false
+    },
+    "expect": "REJECT"
+  },
+  {
+    "name": "missing disclaimer reviews",
+    "question": "claim_safety",
+    "input": {
+      "prohibitedHits": [],
+      "unsupportedClaimHits": [],
+      "missingDisclaimers": ["results vary"]
+    },
+    "expect": "HUMAN_REVIEW"
+  },
+  {
+    "name": "absent vision reviews",
+    "question": "visual_qa",
+    "input": {
+      "available": false,
+      "logoPresent": null,
+      "logoMatchProbability": null,
+      "paletteMatch": null,
+      "productMatch": null,
+      "claimDetected": null,
+      "claimSupported": null,
+      "toneFit": null
+    },
+    "expect": "HUMAN_REVIEW"
+  },
+  {
+    "name": "thin opportunity stays in review",
+    "question": "opportunity_gate",
+    "input": {
+      "competitive": { "competitorCount": 0, "matchingCompetitors": 0, "ownCount": 0, "matchingOwn": 0 },
+      "brand": { "keywordHits": 0, "keywordTotal": 4, "formatPreferred": false, "brainFilled": 0.05 },
+      "historical": { "lift": null, "sampleSize": 0, "impressions": 0, "metric": "ctr" },
+      "risk": { "claimIntensity": 0.2, "aggressiveRejections": 0, "negativeLift": 0 },
+      "reproducibility": { "templateCoverage": 0.35, "copiesProtectedPhrasing": false }
+    },
+    "expect": "HUMAN_REVIEW"
+  },
+  {
+    "name": "unsafe opportunity rejects",
+    "question": "opportunity_gate",
+    "input": {
+      "competitive": { "competitorCount": 4, "matchingCompetitors": 2, "ownCount": 0, "matchingOwn": 0 },
+      "brand": { "keywordHits": 4, "keywordTotal": 4, "formatPreferred": true, "brainFilled": 0.9 },
+      "historical": { "lift": 0.8, "sampleSize": 5, "impressions": 5000, "metric": "ctr" },
+      "risk": { "claimIntensity": 0.85, "aggressiveRejections": 4, "negativeLift": 0.2 },
+      "reproducibility": { "templateCoverage": 0.9, "copiesProtectedPhrasing": false }
+    },
+    "expect": "REJECT"
+  }
+]

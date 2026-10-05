@@ -46,8 +46,8 @@ function Overview() {
         />
         <Stage
           title="Decide"
-          state="Waiting"
-          body="No market evidence is connected, so no opportunity is ranked. Scores are not invented."
+          state="Per brand"
+          body="Open a brand. Opportunities are scored only from evidence stored there. Empty evidence stays empty."
         />
       </ol>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -94,7 +94,7 @@ function recommendation(brands: number, completeness: number, name?: string): st
   if (completeness < 0.35) {
     return `${name ?? "This brand"} is only partly described. Creative decisions wait until audience, positioning, and voice are written.`;
   }
-  return `${name ?? "The brand"} has a usable brain. Market watching, generation, and performance learning are not connected yet, so the next step is still more evidence — not a fabricated ad.`;
+  return `${name ?? "The brand"} has a usable brain. Open it to record what you have seen, score opportunities from that evidence, and write results back.`;
 }
 
 function Stage({ title, state, body }: { title: string; state: string; body: string }) {

@@ -1,24 +1,45 @@
 # Architecture
 
-The running app is a TanStack Start application. Postgres (Neon when deployed, embedded Postgres in local preview) is the system of record. Server functions are the API. The browser never sends a user id that the server trusts.
+TanStack Start application. Postgres (Neon when deployed, embedded Postgres in preview) is the system of record. Server functions are the API. The browser never sends a user id the server trusts.
 
-## Modules that exist
+## Loop
 
-| Module | Status |
-| --- | --- |
-| Auth and session | Wired. Google and X. |
-| Organizations and memberships | Implemented. |
-| Brands, Brand Brain, products | Implemented. |
-| Audit log | Implemented. |
-| Opportunity scoring | Pure function plus stored weights. No candidates yet. |
-| Ingestion, market data, generation, QA, performance, learning | Not built. Interfaces are not faked. |
+```
+organization → brand → brand brain / products
+        → observations and public-page documents
+        → opportunity ranker
+        → JEV opportunity gate
+        → brief
+        → human script or text provider
+        → text guardian → JEV creative QA
+        → library, review, or rejection
+        → manual performance
+        → learned patterns
+        → next rank and next brief
+```
+
+## Modules
+
+| Module | Where | Role |
+| --- | --- | --- |
+| Tenancy | `src/lib/meridian/access.ts`, `api.ts` | Roles and membership |
+| Brand brain | `brain.ts`, `api.ts` | Structured brand record |
+| Knowledge | `knowledge/model.ts` | Attribute query and similarity |
+| Opportunity | `opportunity/` | Hypothesis catalog and ranker |
+| JEV | `jev/` | Threshold gate |
+| Guardian | `guardian/text.ts` | Text evidence only |
+| Brief and workflow | `brief/`, `workflow/` | Context pack and templates |
+| Learning | `learning/engine.ts` | Pattern aggregation |
+| Providers | `providers/` | xAI and OpenRouter chat, xAI image |
+| Sources | `sources/` | Manual adapter, public-page fetch, SSRF checks |
+| API | `machine.ts` | Persistence and tenant checks |
+
+AI output is parsed into fields and then checked by deterministic code. Retrieved page text is wrapped as `untrusted_source` and is not allowed to act as instructions.
+
+Creative production uses original workflow stages. It does not embed another product's runtime.
 
 ## Request path
 
-1. The session middleware resolves `userId`.
-2. The handler loads the brand or workspace and checks membership.
-3. Mutations write the row, a version when the brain changes, and an audit row.
-
-AI providers are not called. When they are added, they must sit behind a server-only adapter. Keys stay on the server. External page text must be passed as untrusted data, never as instructions.
-
-Creative production, when built, should use an original stage model (hook, proof, offer, call to action, and so on) owned by the brand. It should not embed another product’s runtime.
+1. Session middleware resolves `userId`.
+2. The brand id is resolved to an organization. Membership is required.
+3. Mutations write the row, a JEV decision when a gate runs, and an audit row.

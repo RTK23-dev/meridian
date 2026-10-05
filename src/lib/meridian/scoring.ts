@@ -46,6 +46,25 @@ export function clampWeight(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
+export function weightsFromUnknown(row: Record<string, unknown> | undefined): ScoreWeights {
+  if (!row) return { ...DEFAULT_WEIGHTS };
+  const next = { ...DEFAULT_WEIGHTS };
+  const columns: Record<keyof ScoreWeights, string> = {
+    brandFit: "brand_fit",
+    historicalEvidence: "historical_evidence",
+    marketSignal: "market_signal",
+    novelty: "novelty",
+    reproducibility: "reproducibility",
+    saturation: "saturation",
+    risk: "risk",
+  };
+  for (const key of WEIGHT_KEYS) {
+    const value = Number(row[columns[key]]);
+    if (Number.isFinite(value)) next[key] = value;
+  }
+  return next;
+}
+
 /**
  * Transparent opportunity score.
  * Positive terms add support. Saturation and risk subtract.
