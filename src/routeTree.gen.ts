@@ -16,6 +16,8 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as BrandsNewRouteImport } from './routes/brands/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
+import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
 import { Route as BrandsBrandIdIndexRouteImport } from './routes/brands/$brandId/index'
 import { Route as BrandsBrandIdBrainRouteImport } from './routes/brands/$brandId/brain'
 import { Route as BrandsBrandIdIntelligenceRouteImport } from './routes/brands/$brandId/intelligence'
@@ -59,6 +61,16 @@ const BrandsNewRoute = BrandsNewRouteImport.update({
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOauthCallbackRoute = ApiOauthCallbackRouteImport.update({
+  id: '/api/oauth/callback',
+  path: '/api/oauth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWebhooksReceiveRoute = ApiWebhooksReceiveRouteImport.update({
+  id: '/api/webhooks/receive',
+  path: '/api/webhooks/receive',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BrandsBrandIdIndexRoute = BrandsBrandIdIndexRouteImport.update({
@@ -117,6 +129,8 @@ export interface FileRoutesByFullPath {
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/oauth/callback': typeof ApiOauthCallbackRoute
+  '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
   '/brands/$brandId/intelligence': typeof BrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
@@ -135,6 +149,8 @@ export interface FileRoutesByTo {
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/oauth/callback': typeof ApiOauthCallbackRoute
+  '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
   '/brands/$brandId/intelligence': typeof BrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
@@ -154,6 +170,8 @@ export interface FileRoutesById {
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/oauth/callback': typeof ApiOauthCallbackRoute
+  '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
   '/brands/$brandId/intelligence': typeof BrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
@@ -174,6 +192,8 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/brands/new'
     | '/api/auth/$'
+    | '/api/oauth/callback'
+    | '/api/webhooks/receive'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
@@ -192,6 +212,8 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/brands/new'
     | '/api/auth/$'
+    | '/api/oauth/callback'
+    | '/api/webhooks/receive'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
@@ -210,6 +232,8 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/brands/new'
     | '/api/auth/$'
+    | '/api/oauth/callback'
+    | '/api/webhooks/receive'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
@@ -229,6 +253,8 @@ export interface RootRouteChildren {
   ApiHealthRoute: typeof ApiHealthRoute
   BrandsNewRoute: typeof BrandsNewRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
+  ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
   BrandsBrandIdBrainRoute: typeof BrandsBrandIdBrainRoute
   BrandsBrandIdIntelligenceRoute: typeof BrandsBrandIdIntelligenceRoute
   BrandsBrandIdLearningRoute: typeof BrandsBrandIdLearningRoute
@@ -289,6 +315,20 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/oauth/callback': {
+      id: '/api/oauth/callback'
+      path: '/api/oauth/callback'
+      fullPath: '/api/oauth/callback'
+      preLoaderRoute: typeof ApiOauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/webhooks/receive': {
+      id: '/api/webhooks/receive'
+      path: '/api/webhooks/receive'
+      fullPath: '/api/webhooks/receive'
+      preLoaderRoute: typeof ApiWebhooksReceiveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/brands/$brandId/': {
@@ -365,6 +405,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthRoute: ApiHealthRoute,
   BrandsNewRoute: BrandsNewRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiOauthCallbackRoute: ApiOauthCallbackRoute,
+  ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,
   BrandsBrandIdBrainRoute: BrandsBrandIdBrainRoute,
   BrandsBrandIdIntelligenceRoute: BrandsBrandIdIntelligenceRoute,
   BrandsBrandIdLearningRoute: BrandsBrandIdLearningRoute,

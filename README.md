@@ -56,6 +56,20 @@ npm run build
 - `evals/` — gate and market fixtures
 - `docs/` — what the code does, including gaps
 
-## Status
+## Readiness
 
-Not production-ready as a live media buyer. The remaining blockers are credentials, ad accounts, platform permissions, and a long-lived worker host — not a missing publish function that pretends success. The gap table is [docs/PRODUCT_GAP_ANALYSIS.md](docs/PRODUCT_GAP_ANALYSIS.md).
+| Area | Status |
+| --- | --- |
+| Decision loop, JEV, learning write-back | COMPLETE in code. Tests prove a stored result changes the next rank and brief |
+| Local semantic embeddings, worker, scheduler, filesystem storage | COMPLETE in this runtime. A second machine is DEPLOYMENT REQUIRED |
+| S3, Meta, TikTok, Google Ads, Ad Library | EXTERNAL CONNECTION REQUIRED. Clients store an id only after the response contains one |
+| Meta performance sync job | COMPLETE as a worker job. TikTok and Google performance clients are not implemented, so they are not scheduled |
+| OAuth callback and sealed token storage | COMPLETE in code. App ids and `TOKEN_ENCRYPTION_KEY` are EXTERNAL CONNECTION REQUIRED |
+| Signed webhooks | COMPLETE as verification and dedupe. A provider subscription is EXTERNAL CONNECTION REQUIRED |
+| Calibration approval | COMPLETE on the learning page. Nothing changes until an admin approves |
+| Alert delivery | COMPLETE in the product. An external page is not sent unless a webhook target accepts it |
+| Authenticated axe and screen-reader pass | MANUAL VERIFICATION REQUIRED |
+| Live ads and live metrics | Not running here. Do not read a client as a connected account |
+
+Not production-ready as a live media buyer while those external and manual items are open. The gap table is [docs/PRODUCT_GAP_ANALYSIS.md](docs/PRODUCT_GAP_ANALYSIS.md).
+

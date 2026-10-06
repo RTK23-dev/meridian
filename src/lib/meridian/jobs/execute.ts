@@ -104,8 +104,9 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     });
     return result.externalId ? `${result.status}:${result.externalId}` : result.status;
   }
-  if (job.job_type === "performance.ingest") {
-    return "NOT_CONNECTED";
+  if (job.job_type === "performance.ingest" || job.job_type === "performance.sync") {
+    const { runPerformanceSync } = await import("../performance/job.ts");
+    return runPerformanceSync(sql, job, payload);
   }
   if (job.job_type === "experiment.process") {
     const variants = Array.isArray(payload.variants) ? (payload.variants as TrafficVariant[]) : [];
@@ -132,6 +133,11 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   }
   if (job.job_type === "video.analyze") {
     return videoQa(null).decision;
+  }
+  if (job.job_type === "webhook.received") {
+    const eventId = typeof payload.eventId === "string" ? payload.eventId : "";
+    if (!eventId) throw new Error("Webhook job has no event id.");
+    return `stored:${eventId}`;
   }
   if (job.job_type === "notification.dispatch") {
     const title = typeof payload.title === "string" ? payload.title : "";

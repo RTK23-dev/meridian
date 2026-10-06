@@ -27,7 +27,6 @@ Target: WCAG 2.2 AA. This document does not claim conformance.
 
 ## Still missing
 
-- Automated axe scans of every authenticated screen. There is no axe suite yet, and the authenticated flows need a session the preview user does not share with CI.
-- Charts are not a primary surface. Where a number is shown, the text is the value. There is no separate data-table alternative for a future chart.
+- An authenticated axe run and a keyboard walk of the signed-in screens. The preview sign-in is a real account, and this pass did not add a fixture that bypasses it. That remains manual verification, not a passing score.
+- Charts are not a primary surface. Numbers are shown as text. There is no separate chart to label.
 - Video has no player. There is nothing to caption until a video provider is connected.
-- Drag and drop is not used. Uploads use a file input.

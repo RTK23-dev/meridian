@@ -86,6 +86,12 @@ export const disconnectProvider = createServerFn({ method: "POST" })
       on conflict (organization_id, provider) do update set
         status = 'DISCONNECTED', disconnected_at = now(), updated_at = now()
     `;
+    if (data.provider === "meta") {
+      await sql`
+        update job_schedules set enabled = false
+        where organization_id = ${data.organizationId} and job_type = 'performance.sync'
+      `;
+    }
     return { phase: "DISCONNECTED" as const, detail: "Disconnected. Stored external ids were kept. No further requests are sent." };
   });
 

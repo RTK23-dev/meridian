@@ -4,7 +4,9 @@ import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
 import { Button, Notice, Panel, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
+import { getCalibration, decideCalibration } from "@/lib/meridian/calibration/actions";
 import { getLearning, refreshLearning, setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
+import { StatusText } from "@/components/status";
 
 export const Route = createFileRoute("/brands/$brandId/learning")({ component: Page });
 
@@ -19,6 +21,7 @@ function Page() {
 
 function Learning({ brandId }: { brandId: string }) {
   const [data, setData] = useState<Awaited<ReturnType<typeof getLearning>> | null>(null);
+  const [calibration, setCalibration] = useState<Awaited<ReturnType<typeof getCalibration>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const busy = useBusy();
@@ -31,6 +34,13 @@ function Learning({ brandId }: { brandId: string }) {
       })
       .catch((caught) => {
         if (!cancelled) setError(errorText(caught));
+      });
+    getCalibration({ data: { brandId } })
+      .then((next) => {
+        if (!cancelled) setCalibration(next);
+      })
+      .catch(() => {
+        if (!cancelled) setCalibration({ proposals: [], versions: [] });
       });
     return () => {
       cancelled = true;
@@ -121,7 +131,59 @@ function Learning({ brandId }: { brandId: string }) {
         </ul>
       )}
       <Panel>
-        <h2 className="font-display text-2xl">Rejections</h2>
+        <h2 className="font-display text-2xl">Threshold versions</h2>
+        <p className="mt-2 text-sm text-muted">A proposal does not change a gate. An admin has to approve it. The previous version stays in the log.</p>
+        {calibration && calibration.versions.length > 0 ? (
+          <ul className="mt-3 space-y-2 text-sm">
+            {calibration.versions.map((version) => (
+              <li key={version.id}>
+                <StatusText status={`version ${version.version}`} description={`${version.questionId} approved by ${version.approvedBy}. ${version.thresholds}`} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-muted">No approved threshold version. The code defaults are still in use.</p>
+        )}
+        {calibration?.proposals.filter((item) => item.status === "proposed").map((proposal) => (
+          <div key={proposal.id} className="mt-4 space-y-2">
+            <StatusText status="proposed" description={proposal.proposed} />
+            {canAdmin ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={busy.pending}
+                  onClick={() => {
+                    void busy.run(async () => {
+                      const result = await decideCalibration({ data: { brandId, proposalId: proposal.id, decision: "approved" } });
+                      setNote(result.status === "approved" ? `Approved threshold version ${result.version}.` : "The proposal was not approved.");
+                      setCalibration(await getCalibration({ data: { brandId } }));
+                    });
+                  }}
+                >
+                  Approve thresholds
+                </Button>
+                <Button
+                  type="button"
+                  variant="quiet"
+                  disabled={busy.pending}
+                  onClick={() => {
+                    void busy.run(async () => {
+                      await decideCalibration({ data: { brandId, proposalId: proposal.id, decision: "rejected" } });
+                      setNote("The proposal was rejected. Thresholds were not changed.");
+                      setCalibration(await getCalibration({ data: { brandId } }));
+                    });
+                  }}
+                >
+                  Reject proposal
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted">An admin approves or rejects this proposal.</p>
+            )}
+          </div>
+        ))}
+      </Panel>
+      <Panel>
         {data.rejections.length === 0 ? <p className="mt-2 text-muted">No stored rejections.</p> : (
           <ul className="mt-3 space-y-1 text-sm">
             {data.rejections.map((item) => (

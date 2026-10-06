@@ -205,9 +205,10 @@ function Settings() {
         <h2 className="font-display text-2xl">What is and is not connected</h2>
         <ul className="mt-3 space-y-2 text-sm text-muted">
           <li>A public page you name can be fetched and stored as untrusted text. It does not change the brand brain until you accept a suggestion, and only if a text model is configured.</li>
-          <li>Plain text and DOCX can be stored the same way. PDF extraction is not connected.</li>
-          <li>Ad library, platform publishing, neural embeddings, video, and performance feeds are not connected. They return that state and invent nothing.</li>
-          <li>Learning is computed from performance rows you enter. There is no always-on worker, and calibration does not move thresholds.</li>
+          <li>Plain text, DOCX, and PDF text can be stored. Instruction-like lines are dropped. An image-only PDF fails closed.</li>
+          <li>Meta, TikTok, Google Ads, and Ad Library clients exist. They stay not configured until a request succeeds. This environment has no ad account.</li>
+          <li>The worker and scheduler are separate processes. A serverless host does not keep them running. Learning still changes the next rank when performance rows exist.</li>
+          <li>Calibration can propose a threshold. It changes nothing until an admin approves it on the learning page.</li>
         </ul>
       </Panel>
     </div>

@@ -58,7 +58,7 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
     clicks: asNumber(row.clicks),
     conversions: asNumber(row.conversions),
     spendCents: asNumber(row.spend_cents),
-    revenueCents: asNumber(row.revenue_cents),
+    revenueCents: row.revenue_cents == null ? null : asNumber(row.revenue_cents),
   }));
   const patterns = learnPatterns({ organizationId, brandId, creatives, observations });
   await sql`delete from learned_patterns where brand_id = ${brandId} and organization_id = ${organizationId} and scope = 'brand'`;

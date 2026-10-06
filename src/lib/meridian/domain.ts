@@ -32,7 +32,7 @@ export type PerformanceRow = {
   clicks: number;
   conversions: number;
   spendCents: number;
-  revenueCents: number;
+  revenueCents: number | null;
 };
 
 export type LearningState = "OBSERVED" | "INFERRED" | "VALIDATED";

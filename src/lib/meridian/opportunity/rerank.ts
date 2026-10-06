@@ -3,11 +3,20 @@ import { loadBrandContext } from "../context/load.ts";
 import { decide } from "../jev/engine.ts";
 import { opportunityGate } from "../jev/questions.ts";
 import type { Sql } from "../learning/store.ts";
+import { approvedThresholds } from "../calibration/active.ts";
 import { rankOpportunities } from "./engine.ts";
 
 /** Replace open opportunities from stored evidence. Does not learn and does not call a provider. */
 export async function rerankBrand(sql: Sql, organizationId: string, brandId: string): Promise<number> {
   const loaded = await loadBrandContext(sql, organizationId, brandId);
+  const versions = await sql<{ thresholds: string }>`
+    select thresholds from jev_threshold_versions
+    where organization_id = ${organizationId} and question_id = ${opportunityGate.id}
+    order by version desc
+    limit 1
+  `;
+  const thresholds = approvedThresholds(opportunityGate.thresholds, versions[0] ?? null);
+  const question = { ...opportunityGate, thresholds };
   const drafts = rankOpportunities({ organizationId, brandId, ...loaded });
   const open = await sql<{ id: string }>`
     select id from opportunities
@@ -21,7 +30,7 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
   for (const draft of drafts) {
     const opportunityId = randomUUID();
     const decisionId = randomUUID();
-    const decision = decide(opportunityGate, draft.gateInput);
+    const decision = decide(question, draft.gateInput);
     const evidence = [...draft.evidence, ...decision.evidence];
     await sql`
       insert into jev_decisions (

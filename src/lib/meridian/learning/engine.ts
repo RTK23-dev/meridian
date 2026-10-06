@@ -34,6 +34,7 @@ type Totals = {
   conversions: number;
   spendCents: number;
   revenueCents: number;
+  roasSpend: number;
   creativeIds: Set<string>;
 };
 
@@ -44,6 +45,7 @@ function emptyTotals(): Totals {
     conversions: 0,
     spendCents: 0,
     revenueCents: 0,
+    roasSpend: 0,
     creativeIds: new Set(),
   };
 }
@@ -53,7 +55,10 @@ function add(totals: Totals, row: PerformanceRow): void {
   totals.clicks += row.clicks;
   totals.conversions += row.conversions;
   totals.spendCents += row.spendCents;
-  totals.revenueCents += row.revenueCents;
+  if (row.revenueCents != null) {
+    totals.revenueCents += row.revenueCents;
+    totals.roasSpend += row.spendCents;
+  }
   totals.creativeIds.add(row.creativeId);
 }
 
@@ -131,8 +136,8 @@ function pushMetrics(
       );
     }
   }
-  const observedRoas = rate(bucket.revenueCents, bucket.spendCents);
-  const baselineRoas = rate(baseline.revenueCents, baseline.spendCents);
+  const observedRoas = rate(bucket.revenueCents, bucket.roasSpend);
+  const baselineRoas = rate(baseline.revenueCents, baseline.roasSpend);
   if (
     observedRoas !== null &&
     baselineRoas !== null &&
@@ -225,7 +230,8 @@ export function learnPatterns(
     current.clicks += row.clicks;
     current.conversions += row.conversions;
     current.spendCents += row.spendCents;
-    current.revenueCents += row.revenueCents;
+    if (row.revenueCents == null) current.revenueCents = null;
+    else if (current.revenueCents != null) current.revenueCents += row.revenueCents;
     totalsByCreative.set(row.creativeId, current);
   }
 

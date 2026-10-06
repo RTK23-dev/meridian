@@ -2,8 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Authed, useBusy } from "@/components/gate";
 import { useWorkspace } from "@/components/workspace";
+import { StatusText } from "@/components/status";
 import { Button, Notice, Panel, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
+import { beginOauth } from "@/lib/meridian/oauth/begin";
 import { disconnectProvider, probeProviderConnection, reconnectProvider } from "@/lib/meridian/providers/connect";
 import { getSystemStatus } from "@/lib/meridian/system";
 
@@ -78,14 +80,27 @@ function Integrations() {
       <ul className="space-y-3">
         {data.connections.map((item) => (
           <li key={item.provider} className="rounded-lg border border-line bg-panel px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.phase}</p>
             <p className="font-semibold">{item.provider.replaceAll("_", " ")}</p>
-            <p className="text-sm text-muted">{item.detail}</p>
+            <StatusText status={item.phase} description={item.detail} />
             {item.accountName || item.accountId ? (
               <p className="text-sm">Account {item.accountName || "unnamed"} {item.accountId ? `· ${item.accountId}` : ""}</p>
             ) : null}
             {canAdmin ? (
               <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="quiet"
+                  disabled={busy.pending || (item.provider !== "meta" && item.provider !== "tiktok" && item.provider !== "google")}
+                  onClick={() => {
+                    if (item.provider !== "meta" && item.provider !== "tiktok" && item.provider !== "google") return;
+                    void busy.run(async () => {
+                      const result = await beginOauth({ data: { organizationId, provider: item.provider, origin: window.location.origin } });
+                      window.location.assign(result.url);
+                    });
+                  }}
+                >
+                  Connect
+                </Button>
                 <Button
                   type="button"
                   variant="quiet"
