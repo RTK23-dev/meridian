@@ -1,14 +1,16 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Field, Notice, Panel, TextArea, TextInput } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, Skeleton, TextArea, TextInput } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
-import { deleteBrand, getBrand, updateBrand, type BrandDetail } from "@/lib/meridian/api";
+import { deleteBrand, updateBrand } from "@/lib/meridian/api";
 import { brainCompleteness } from "@/lib/meridian/brain";
-import { getMachine, type MachineSnapshot } from "@/lib/meridian/machine";
+import type { MachineSnapshot } from "@/lib/meridian/machine";
 import { errorText } from "@/components/ui";
+import { useBrandQuery, useMachineQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/")({ component: BrandPage });
 
@@ -22,36 +24,16 @@ function BrandPage() {
 }
 
 function BrandHome({ brandId }: { brandId: string }) {
-  const [detail, setDetail] = useState<BrandDetail | null>(null);
-  const [machine, setMachine] = useState<MachineSnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const detailQuery = useBrandQuery(brandId);
+  const machineQuery = useMachineQuery(brandId);
+  const detail = detailQuery.data ?? null;
+  const machine = machineQuery.data ?? null;
   const { reload } = useWorkspace();
   const navigate = useNavigate();
-  const { pending, error: saveError, run } = useBusy();
+  const { pending, error: saveError, run } = useBusy([qk.brand(brandId), qk.machine(brandId)]);
 
-  useEffect(() => {
-    let cancelled = false;
-    getBrand({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setDetail(next);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    getMachine({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setMachine(next);
-      })
-      .catch(() => {
-        if (!cancelled) setMachine(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!detail) return <p className="text-muted">Loading brand…</p>;
+  if (detailQuery.error) return <ErrorState message={errorText(detailQuery.error)} onRetry={() => void detailQuery.refetch()} />;
+  if (!detail) return <div role="status" aria-label="Loading brand" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const known = brainCompleteness(detail.brain);
   const canEdit = hasRole(detail.identity.role, "member");
   const canDelete = hasRole(detail.identity.role, "admin");
@@ -73,8 +55,6 @@ function BrandHome({ brandId }: { brandId: string }) {
           targetCustomers: detail?.brain.targetCustomers ?? "",
         },
       });
-      const next = await getBrand({ data: { brandId } });
-      setDetail(next);
       await reload();
     });
   }

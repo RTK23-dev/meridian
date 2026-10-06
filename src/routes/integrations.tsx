@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Authed, useBusy } from "@/components/gate";
 import { useWorkspace } from "@/components/workspace";
 import { StatusText } from "@/components/status";
-import { Button, Notice, Panel, errorText } from "@/components/ui";
+import { Button, ErrorState, Notice, Panel, Skeleton, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { beginOauth } from "@/lib/meridian/oauth/begin";
 import { refreshStoredToken } from "@/lib/meridian/oauth/refresh";
 import { disconnectProvider, probeProviderConnection, reconnectProvider } from "@/lib/meridian/providers/connect";
-import { getSystemStatus } from "@/lib/meridian/system";
+import { useIntegrationsQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/integrations")({ component: Page });
 
@@ -24,31 +25,13 @@ function Integrations() {
   const { data: workspace } = useWorkspace();
   const organizationId = workspace?.active?.id ?? "";
   const canAdmin = workspace?.active ? hasRole(workspace.active.role, "admin") : false;
-  const [data, setData] = useState<Awaited<ReturnType<typeof getSystemStatus>> | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const query = useIntegrationsQuery(organizationId);
+  const data = query.data ?? null;
   const [note, setNote] = useState<string | null>(null);
-  const busy = useBusy();
+  const busy = useBusy([qk.integrations(organizationId)]);
 
-  function reload() {
-    return getSystemStatus({ data: { organizationId } }).then(setData);
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    getSystemStatus({ data: { organizationId } })
-      .then((next) => {
-        if (!cancelled) setData(next);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [organizationId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!data) return <p className="text-muted" role="status">Loading integration status…</p>;
+  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!data) return <div role="status" aria-label="Loading integration status" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
 
   return (
     <div className="space-y-8">
@@ -112,7 +95,6 @@ function Integrations() {
                         ? await reconnectProvider({ data: { organizationId, provider: item.provider } })
                         : await probeProviderConnection({ data: { organizationId, provider: item.provider } });
                       setNote(`${item.provider}: ${result.phase}. ${result.detail}`);
-                      await reload();
                     });
                   }}
                 >
@@ -126,7 +108,6 @@ function Integrations() {
                     void busy.run(async () => {
                       const result = await disconnectProvider({ data: { organizationId, provider: item.provider } });
                       setNote(`${item.provider}: ${result.detail}`);
-                      await reload();
                     });
                   }}
                 >

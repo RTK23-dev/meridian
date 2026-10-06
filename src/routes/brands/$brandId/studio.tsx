@@ -1,18 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Field, Notice, Panel, SelectInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import {
   generateStudioVariants,
-  getStudioSession,
   openStudioBrief,
   publishStudioVariant,
   recordStudioTestPerformance,
   reviewStudioVariant,
 } from "@/lib/meridian/studio/actions";
 
-type StudioSession = Awaited<ReturnType<typeof getStudioSession>>;
+import { useStudioQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/studio")({ component: Page });
 
@@ -26,29 +26,21 @@ function Page() {
 }
 
 function Studio({ brandId }: { brandId: string }) {
-  const [session, setSession] = useState<StudioSession | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const query = useStudioQuery(brandId);
+  const session = query.data ?? null;
   const [inspectId, setInspectId] = useState<string | null>(null);
   const [compareA, setCompareA] = useState("");
   const [compareB, setCompareB] = useState("");
-  const busy = useBusy();
+  const briefAction = useBusy([qk.studio(brandId), qk.opportunities(brandId)]);
+  const generationAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
+  const reviewAction = useBusy([qk.studio(brandId), qk.reviews(brandId)]);
+  const publishAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
+  const performanceAction = useBusy([qk.studio(brandId), qk.learning(brandId)]);
+  const actionErrors = [briefAction.error, generationAction.error, reviewAction.error, publishAction.error, performanceAction.error].filter(Boolean);
+  const anyActionPending = briefAction.pending || generationAction.pending || reviewAction.pending || publishAction.pending || performanceAction.pending;
 
-  useEffect(() => {
-    let cancelled = false;
-    getStudioSession({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setSession(next);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!session) return <p className="text-muted" role="status">Loading studio…</p>;
+  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!session) return <div role="status" aria-label="Loading studio" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="media" /></div>;
   const canEdit = hasRole(session.role, "member");
   const brief = session.briefs.find((item) => item.status === "ready") ?? session.brief;
   const previous = session.briefs[1];
@@ -66,8 +58,8 @@ function Studio({ brandId }: { brandId: string }) {
           {session.observationCount} competitor observations. Image and video appear only after a provider stores bytes.
         </p>
       </div>
-      {busy.error ? <Notice>{busy.error}</Notice> : null}
-      {busy.pending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
+      {actionErrors.map((error) => <Notice key={error}>{error}</Notice>)}
+      {anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
       {recommendation ? (
         <Panel>
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">Discovered · {recommendation.posture === "exploitation" ? "Exploitation" : "Exploration"} · {recommendation.angle}</p>
@@ -90,10 +82,10 @@ function Studio({ brandId }: { brandId: string }) {
             <Button
               className="mt-4"
               type="button"
-              disabled={busy.pending}
+              disabled={briefAction.pending}
               onClick={() => {
-                void busy.run(async () => {
-                  setSession(await openStudioBrief({ data: { brandId, forceNew: false } }));
+                void briefAction.run(async () => {
+                  await openStudioBrief({ data: { brandId, forceNew: false } });
                 });
               }}
             >
@@ -178,15 +170,15 @@ function Studio({ brandId }: { brandId: string }) {
               onSubmit={(event: FormEvent<HTMLFormElement>) => {
                 event.preventDefault();
                 const form = new FormData(event.currentTarget);
-                void busy.run(async () => {
-                  setSession(await generateStudioVariants({
+                void generationAction.run(async () => {
+                  await generateStudioVariants({
                     data: {
                       brandId,
                       briefId: brief.id,
                       imageProvider: String(form.get("imageProvider") ?? ""),
                       videoProvider: String(form.get("videoProvider") ?? ""),
                     },
-                  }));
+                  });
                 });
               }}
             >
@@ -204,7 +196,7 @@ function Studio({ brandId }: { brandId: string }) {
                 </SelectInput>
               </Field>
               <div className="md:col-span-2">
-                <Button type="submit" disabled={busy.pending || brief.status !== "ready"}>Generate optional images + Hypit video</Button>
+                <Button type="submit" disabled={generationAction.pending || brief.status !== "ready"}>Generate optional images + Hypit video</Button>
                 <p className="mt-2 text-sm text-muted">Estimated generation cost is not shown until a provider returns one. A run is blocked when the daily or concurrency limit is already used.</p>
               </div>
             </form>
@@ -214,10 +206,10 @@ function Studio({ brandId }: { brandId: string }) {
               className="mt-3"
               type="button"
               variant="quiet"
-              disabled={busy.pending}
+              disabled={briefAction.pending}
               onClick={() => {
-                void busy.run(async () => {
-                  setSession(await openStudioBrief({ data: { brandId, forceNew: true } }));
+                void briefAction.run(async () => {
+                  await openStudioBrief({ data: { brandId, forceNew: true } });
                 });
               }}
             >
@@ -264,13 +256,13 @@ function Studio({ brandId }: { brandId: string }) {
                 </Button>
                 {canEdit && variant.creativeStatus === "in_review" ? (
                   <>
-                    <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => setSession(await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "approve", reasonCode: "", note: "" } }))); }}>Approve</Button>
-                    <Button type="button" variant="danger" disabled={busy.pending} onClick={() => { void busy.run(async () => setSession(await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "reject", reasonCode: "too_similar", note: "Does not earn the angle." } }))); }}>Reject</Button>
-                    <Button type="button" variant="quiet" disabled={busy.pending} onClick={() => { void busy.run(async () => setSession(await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "revision", reasonCode: "", note: "Revise the opening. Keep the product." } }))); }}>Request revision</Button>
+                    <Button type="button" disabled={reviewAction.pending} onClick={() => { void reviewAction.run(async () => { await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "approve", reasonCode: "", note: "" } }); }); }}>Approve</Button>
+                    <Button type="button" variant="danger" disabled={reviewAction.pending} onClick={() => { void reviewAction.run(async () => { await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "reject", reasonCode: "too_similar", note: "Does not earn the angle." } }); }); }}>Reject</Button>
+                    <Button type="button" variant="quiet" disabled={reviewAction.pending} onClick={() => { void reviewAction.run(async () => { await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "revision", reasonCode: "", note: "Revise the opening. Keep the product." } }); }); }}>Request revision</Button>
                   </>
                 ) : null}
                 {canEdit && (variant.creativeStatus === "approved" || variant.creativeStatus === "testing") ? (
-                  <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => setSession(await publishStudioVariant({ data: { brandId, creativeId: variant.creativeId, publisher: "test" } }))); }}>
+                  <Button type="button" disabled={publishAction.pending} onClick={() => { void publishAction.run(async () => { await publishStudioVariant({ data: { brandId, creativeId: variant.creativeId, publisher: "test" } }); }); }}>
                     Publish with test publisher
                   </Button>
                 ) : null}
@@ -330,10 +322,10 @@ function Studio({ brandId }: { brandId: string }) {
           <Button
             className="mt-4"
             type="button"
-            disabled={busy.pending || session.publications.length === 0}
+            disabled={performanceAction.pending || session.publications.length === 0}
             onClick={() => {
-              void busy.run(async () => {
-                setSession(await recordStudioTestPerformance({ data: { brandId } }));
+              void performanceAction.run(async () => {
+                await recordStudioTestPerformance({ data: { brandId } });
               });
             }}
           >

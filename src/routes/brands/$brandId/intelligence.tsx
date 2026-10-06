@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed } from "@/components/gate";
-import { Notice, Panel, errorText } from "@/components/ui";
-import { getIntelligence } from "@/lib/meridian/machine";
+import { ErrorState, Panel, Skeleton } from "@/components/ui";
+import { useIntelligenceQuery } from "@/lib/query/hooks";
+import { errorText } from "@/components/ui";
 
 export const Route = createFileRoute("/brands/$brandId/intelligence")({ component: Page });
 
@@ -17,25 +17,12 @@ function Page() {
 }
 
 function Intelligence({ brandId }: { brandId: string }) {
-  const [data, setData] = useState<Awaited<ReturnType<typeof getIntelligence>> | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const query = useIntelligenceQuery(brandId);
+  const data = query.data ?? null;
+  const error = query.error ? errorText(query.error) : null;
 
-  useEffect(() => {
-    let cancelled = false;
-    getIntelligence({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setData(next);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!data) return <p className="text-muted">Loading creative intelligence…</p>;
+  if (error) return <ErrorState message={error} onRetry={() => void query.refetch()} />;
+  if (!data) return <div role="status" aria-label="Loading creative intelligence" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
 
   return (
     <div className="space-y-8">

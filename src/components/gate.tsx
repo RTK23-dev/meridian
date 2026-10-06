@@ -1,11 +1,14 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { GROK_PROVIDERS, signIn } from "@/lib/auth/client";
 import { SignInGate } from "@/lib/auth/gates";
 import { EmailAuth } from "@/components/email-auth";
 import { Shell } from "@/components/shell";
 import { useWorkspace } from "@/components/workspace";
-import { Notice, errorText } from "@/components/ui";
+import { ErrorState, Skeleton, errorText, toast } from "@/components/ui";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { userScopedQueryKey } from "@/lib/query/keys";
 
 export function Authed({ children }: { children: ReactNode }) {
   return (
@@ -18,11 +21,11 @@ export function Authed({ children }: { children: ReactNode }) {
 }
 
 function Ready({ children }: { children: ReactNode }) {
-  const { data, loading, error } = useWorkspace();
+  const { data, loading, error, reload } = useWorkspace();
   if (loading && !data) {
-    return <p className="text-muted">Loading your workspace…</p>;
+    return <div role="status" aria-label="Loading workspace" className="mx-auto max-w-3xl space-y-3 p-6"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   }
-  if (error && !data) return <Notice>{error}</Notice>;
+  if (error && !data) return <ErrorState message={error} onRetry={() => void reload()} />;
   return <>{children}</>;
 }
 
@@ -57,19 +60,24 @@ function Welcome() {
   );
 }
 
-export function useBusy() {
-  const [pending, setPending] = useState(false);
+export function useBusy(invalidate: readonly QueryKey[] = []) {
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { user } = useCurrentUserState();
+  const mutation = useMutation({
+    mutationFn: (task: () => Promise<void>) => task(),
+    onSuccess: async () => {
+      await Promise.all(invalidate.map((key) => queryClient.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, key) })));
+    },
+    onError: (caught) => toast.error(errorText(caught)),
+  });
   async function run(task: () => Promise<void>) {
-    setPending(true);
     setError(null);
     try {
-      await task();
+      await mutation.mutateAsync(task);
     } catch (caught) {
       setError(errorText(caught));
-    } finally {
-      setPending(false);
     }
   }
-  return { pending, error, run };
+  return { pending: mutation.isPending, error, run };
 }

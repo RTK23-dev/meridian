@@ -110,7 +110,7 @@ async function prepareFixtureWorkspace(page) {
     await page.getByLabel("Brand name").fill("UI baseline fixture (not a real brand)");
     await page.getByLabel("What do you sell?").fill("Screenshot fixture only; no real product or business claim.");
     await page.getByRole("button", { name: "Create brand", exact: true }).click();
-    await page.waitForURL(/\/brands\/[^/]+$/, { timeout: 15_000 });
+    await page.waitForURL((url) => /^\/brands\/(?!new$)[^/]+$/.test(url.pathname), { timeout: 15_000 });
   }
 
   const signedInText = await page.locator("body").innerText();
