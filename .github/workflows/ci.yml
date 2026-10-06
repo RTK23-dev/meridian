@@ -39,6 +39,8 @@ jobs:
         run: |
           BROWSER_SMOKE_OUTPUT_ROOT="$GITHUB_WORKSPACE" \
             node scripts/browser-smoke.mjs http://127.0.0.1:8080/ "$GITHUB_WORKSPACE/artifacts/ui-smoke.png"
+      - name: Check design system accessibility
+        run: npm run ui:design-smoke
       - uses: actions/upload-artifact@v4
         if: always()
         with:

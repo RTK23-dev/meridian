@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as Char91_designChar93RouteImport } from './routes/[_design]'
 import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as InviteRouteImport } from './routes/invite'
 import { Route as LoginRouteImport } from './routes/login'
@@ -33,6 +34,11 @@ import { Route as BrandsBrandIdStudioRouteImport } from './routes/brands/$brandI
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Char91_designChar93Route = Char91_designChar93RouteImport.update({
+  id: '/_design',
+  path: '/_design',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationsRoute = IntegrationsRouteImport.update({
@@ -135,6 +141,7 @@ const BrandsBrandIdStudioRoute = BrandsBrandIdStudioRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/_design': typeof Char91_designChar93Route
   '/integrations': typeof IntegrationsRoute
   '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
@@ -157,6 +164,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/_design': typeof Char91_designChar93Route
   '/integrations': typeof IntegrationsRoute
   '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
@@ -180,6 +188,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_design': typeof Char91_designChar93Route
   '/integrations': typeof IntegrationsRoute
   '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
@@ -204,6 +213,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/_design'
     | '/integrations'
     | '/invite'
     | '/login'
@@ -226,6 +236,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/_design'
     | '/integrations'
     | '/invite'
     | '/login'
@@ -248,6 +259,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/_design'
     | '/integrations'
     | '/invite'
     | '/login'
@@ -271,6 +283,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  Char91_designChar93Route: typeof Char91_designChar93Route
   IntegrationsRoute: typeof IntegrationsRoute
   InviteRoute: typeof InviteRoute
   LoginRoute: typeof LoginRoute
@@ -299,6 +312,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_design': {
+      id: '/_design'
+      path: '/_design'
+      fullPath: '/_design'
+      preLoaderRoute: typeof Char91_designChar93RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integrations': {
@@ -439,6 +459,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  Char91_designChar93Route: Char91_designChar93Route,
   IntegrationsRoute: IntegrationsRoute,
   InviteRoute: InviteRoute,
   LoginRoute: LoginRoute,

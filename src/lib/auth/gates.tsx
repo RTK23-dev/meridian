@@ -4,6 +4,7 @@ import { GROK_PROVIDERS, authEnabled, signIn, signOut } from "./client";
 import { hasGateSessionMarker } from "./gate-session-marker";
 import { resolveSignInGateState } from "./sign-in-gate";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, useTheme } from "@/components/ui";
 
 const subscribeToNothing = () => () => {};
 const noGateSessionOnServer = () => false;
@@ -89,6 +90,7 @@ export function SignInButtons() {
  */
 export function UserButton() {
   const user = useCurrentUser();
+  const { theme, setTheme } = useTheme();
   // Sign-out can take a moment (and can fail when deployed), so the control
   // shows it is working and cannot be fired twice.
   const [signingOut, setSigningOut] = useState(false);
@@ -101,6 +103,14 @@ export function UserButton() {
   const label = user.displayName ?? user.primaryEmail ?? "Account";
   return (
     <div className="flex items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" aria-label="Appearance settings" className="min-h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-fg">Appearance</button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" aria-label="Appearance">
+          {(["system", "light", "dark"] as const).map((choice) => <DropdownMenuItem key={choice} role="menuitemradio" aria-checked={theme === choice} onSelect={() => setTheme(choice)}>{choice[0].toUpperCase() + choice.slice(1)}{theme === choice ? " (current)" : ""}</DropdownMenuItem>)}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {user.profileImageUrl ? (
         <img
           src={user.profileImageUrl}
