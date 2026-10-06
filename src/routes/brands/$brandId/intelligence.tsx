@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { BrandNav } from "@/components/brand-nav";
-import { Authed } from "@/components/gate";
 import { ErrorState, Panel, Skeleton } from "@/components/ui";
 import { useIntelligenceQuery } from "@/lib/query/hooks";
 import { errorText } from "@/components/ui";
@@ -10,9 +9,7 @@ export const Route = createFileRoute("/brands/$brandId/intelligence")({ componen
 function Page() {
   const { brandId } = Route.useParams();
   return (
-    <Authed>
-      <Intelligence brandId={brandId} />
-    </Authed>
+    <Intelligence brandId={brandId} />
   );
 }
 

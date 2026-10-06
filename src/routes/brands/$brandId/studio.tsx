@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import {
@@ -19,9 +19,7 @@ export const Route = createFileRoute("/brands/$brandId/studio")({ component: Pag
 function Page() {
   const { brandId } = Route.useParams();
   return (
-    <Authed>
-      <Studio brandId={brandId} />
-    </Authed>
+    <Studio brandId={brandId} />
   );
 }
 

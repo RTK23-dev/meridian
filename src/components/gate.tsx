@@ -10,7 +10,7 @@ import { ErrorState, Skeleton, errorText, toast } from "@/components/ui";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
 
-export function Authed({ children }: { children: ReactNode }) {
+export function ProtectedApp({ children }: { children: ReactNode }) {
   return (
     <SignInGate fallback={<Welcome />}>
       <Shell>
@@ -29,7 +29,7 @@ function Ready({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function Welcome() {
+export function Welcome() {
   return (
     <main id="main" className="mx-auto grid min-h-screen max-w-3xl content-center gap-8 px-6 py-16">
       <p className="text-sm font-semibold uppercase tracking-widest text-brass">Meridian</p>

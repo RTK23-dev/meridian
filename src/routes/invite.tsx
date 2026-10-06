@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { Button, Notice } from "@/components/ui";
 import { acceptInvite } from "@/lib/meridian/api";
 
@@ -8,9 +8,7 @@ export const Route = createFileRoute("/invite")({ component: Page });
 
 function Page() {
   return (
-    <Authed>
-      <Accept />
-    </Authed>
+    <Accept />
   );
 }
 

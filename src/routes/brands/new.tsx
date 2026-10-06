@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { Button, Field, Notice, TextArea, TextInput } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
@@ -10,9 +10,7 @@ export const Route = createFileRoute("/brands/new")({ component: NewBrandPage })
 
 function NewBrandPage() {
   return (
-    <Authed>
-      <NewBrand />
-    </Authed>
+    <NewBrand />
   );
 }
 
