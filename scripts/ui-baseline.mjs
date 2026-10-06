@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { mkdirSync, readdirSync } from "node:fs";
+import { resolve, join, relative, extname, sep } from "node:path";
 import { chromium } from "playwright";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
 
@@ -9,7 +9,6 @@ const baseUrl = checkedUrl(process.env.UI_BASELINE_URL || "http://127.0.0.1:8080
 const root = resolve(process.env.UI_BASELINE_DIR || "docs/ui-baseline");
 const outputRoot = resolve(process.env.UI_BASELINE_OUTPUT_ROOT || process.cwd());
 const outputDir = checkedOutputPath(root, [outputRoot], "baseline output");
-const maxRoutes = Number(process.env.UI_BASELINE_MAX_ROUTES || 60);
 const widths = [390, 768, 1440];
 const themes = ["light", "dark"];
 const explicitRoutes = (process.env.UI_BASELINE_ROUTES || "")
@@ -32,7 +31,7 @@ function routeKey(url) {
 async function discoverRoutes(page) {
   const pending = [baseUrl, ...explicitRoutes.map((path) => new URL(path, baseUrl).href)];
   const visited = new Set();
-  while (pending.length && visited.size < maxRoutes) {
+  while (pending.length) {
     const next = pending.shift();
     if (!next || visited.has(next)) continue;
     const parsed = new URL(next);
@@ -52,7 +51,24 @@ async function discoverRoutes(page) {
       }
     }
   }
-  return [...visited];
+  const brandId = [...visited]
+    .map((url) => new URL(url).pathname.match(/^\/brands\/([^/]+)/)?.[1])
+    .find((value) => value && value !== "new");
+  const routeFiles = readdirSync("src/routes", { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && extname(entry.name) === ".tsx")
+    .map((entry) => relative("src/routes", join(entry.parentPath, entry.name)))
+    .filter((file) => file !== "__root.tsx");
+  const sourceRoutes = routeFiles.map((file) => {
+    const route = file === "index.tsx"
+      ? ""
+      : file.split(sep).join("/").replace(/\.tsx$/, "").replace(/\/index$/, "");
+    return `/${route.split("/").map((part) => {
+      if (!part.startsWith("$")) return part;
+      if (!brandId) throw new Error(`Cannot capture dynamic route ${file}: no seeded brand route was discovered.`);
+      return brandId;
+    }).join("/")}`;
+  });
+  return [...new Set([...visited, ...sourceRoutes.map((path) => new URL(path, baseUrl).href)])];
 }
 
 async function prepareFixtureWorkspace(page) {
