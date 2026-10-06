@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { env, pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
 import { cosineSimilarity, retrieveSimilar, type EmbeddingVector, type VectorHit } from "./provider.ts";
 
@@ -10,8 +12,7 @@ let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 
 function cacheDir(): string {
   if (process.env.HF_HOME?.trim()) return process.env.HF_HOME.trim();
-  if (process.env.VERCEL) return "/tmp/meridian-hf";
-  return "/workspace/.cache/hf";
+  return join(tmpdir(), "meridian-hf");
 }
 
 async function extractor(): Promise<FeatureExtractionPipeline> {
