@@ -2,7 +2,7 @@ export type TransportRequest = {
   method: "GET" | "POST";
   url: string;
   headers: Record<string, string>;
-  body?: string;
+  body?: string | FormData | Uint8Array;
 };
 
 export type TransportResponse = {
@@ -18,7 +18,7 @@ export function liveTransport(fetchImpl: typeof fetch = fetch): Transport {
     const response = await fetchImpl(request.url, {
       method: request.method,
       headers: request.headers,
-      body: request.body,
+      body: request.body as BodyInit | undefined,
     });
     const headers: Record<string, string> = {};
     response.headers.forEach((value, key) => {

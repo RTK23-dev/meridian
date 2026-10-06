@@ -144,6 +144,7 @@ export async function publishPausedStages(input: {
         pageId: input.pageId,
         message: input.message,
         link: input.link,
+        videoId: input.videoId,
         existing: {
           campaign: input.existing?.campaign,
           ad_set: input.existing?.ad_set,
