@@ -13,11 +13,13 @@ organization → brand → brand brain / products
         → human script or text provider
         → text guardian → JEV creative QA
         → library, review, or rejection
-        → manual performance
-        → learning job (queued, not a background worker)
-        → learned patterns, including attribute pairs
+        → manual performance or a provider sync that passed the normalizer
+        → learning job on the worker
+        → learned patterns
         → next rank and next brief
 ```
+
+The web process does not execute the worker loop. `scripts/worker-entry.ts` claims jobs. `scripts/scheduler-entry.ts` only enqueues. Both need `DATABASE_URL`.
 
 ## Modules
 
@@ -25,17 +27,18 @@ organization → brand → brand brain / products
 | --- | --- | --- |
 | Tenancy | `src/lib/meridian/access.ts`, `api.ts` | Roles and membership |
 | Brand brain | `brain.ts`, `api.ts` | Structured brand record |
-| Knowledge | `knowledge/model.ts` | Attribute query and similarity |
-| Opportunity | `opportunity/` | Hypothesis catalog and ranker |
+| Knowledge | `knowledge/` | Attribute query, graph edges, retrieval scope |
+| Opportunity | `opportunity/` | Hypothesis catalog, ranker, refresh |
 | JEV | `jev/` | Threshold gate |
-| Guardian | `guardian/text.ts` | Text evidence only |
+| Guardian | `guardian/text.ts`, `vision/logo.ts` | Text evidence and PNG logo search |
 | Brief and workflow | `brief/`, `workflow/` | Context pack and templates |
-| Learning | `learning/engine.ts` | Single attributes and pairs. States are OBSERVED, INFERRED, VALIDATED |
-| Jobs | `jobs/runner.ts`, `jobs` table | Retry, backoff, dead letter, idempotency. Drained by recompute, not a daemon |
-| Semantic | `semantic/lexical.ts` | Token-hash similarity. Neural embeddings are not connected |
-| Assets | `assets/lifecycle.ts`, `assets` table | Hash of composed text. No object store |
-| Experiments | `experiments/design.ts` | Hypothesis, CTR as the success metric, expected learning |
-| Providers | `providers/` | xAI and OpenRouter chat, xAI image |
+| Learning | `learning/` | CTR, CVR, ROAS, pairs, positive and negative lift |
+| Jobs | `jobs/sql-worker.ts`, `scripts/worker-entry.ts` | Lease, retry, dead letter. Not inside the page render |
+| Scheduler | `scripts/scheduler-entry.ts` | Inserts due schedules and heartbeats |
+| Semantic | `embeddings/semantic.ts`, `semantic/lexical.ts` | Local MiniLM, plus a labeled lexical hash |
+| Assets | `storage/`, `assets/` | Filesystem and S3-compatible clients. Database blobs are a migration source |
+| Experiments | `experiments/` | Allocation and sample floor. Not sent to an ad account by themselves |
+| Providers | `providers/meta.ts`, `tiktok.ts`, `google-ads.ts`, `connect.ts` | Live HTTP. Test provider is explicit |
 | Sources | `sources/` | Manual adapter, public-page fetch, SSRF checks |
 | API | `machine.ts` | Persistence and tenant checks |
 

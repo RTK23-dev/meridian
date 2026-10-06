@@ -38,3 +38,50 @@ export function videoQa(analysis: VideoAnalysis | null): {
   }
   return { decision: "HUMAN_REVIEW", reason: "Video evidence is stored. It does not auto-approve publishing." };
 }
+
+/** Reads duration from an MP4 mvhd box. Missing boxes return null. No transcript is invented. */
+export function readMp4Timing(bytes: Uint8Array): { durationMs: number; timescale: number } | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return walk(view, 0, bytes.byteLength, 0);
+}
+
+function walk(view: DataView, start: number, end: number, depth: number): { durationMs: number; timescale: number } | null {
+  if (depth > 6) return null;
+  let offset = start;
+  while (offset + 8 <= end) {
+    let size = view.getUint32(offset);
+    const type = String.fromCharCode(view.getUint8(offset + 4), view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
+    let header = 8;
+    if (size === 1) {
+      if (offset + 16 > end) return null;
+      size = view.getUint32(offset + 12);
+      header = 16;
+    }
+    if (size < header || offset + size > end) return null;
+    if (type === "mvhd") return readMvhd(view, offset + header, offset + size);
+    if (type === "moov" || type === "trak" || type === "mdia") {
+      const nested = walk(view, offset + header, offset + size, depth + 1);
+      if (nested) return nested;
+    }
+    offset += size;
+  }
+  return null;
+}
+
+function readMvhd(view: DataView, start: number, end: number): { durationMs: number; timescale: number } | null {
+  if (start + 20 > end) return null;
+  const version = view.getUint8(start);
+  if (version === 0) {
+    const timescale = view.getUint32(start + 12);
+    const duration = view.getUint32(start + 16);
+    if (timescale <= 0) return null;
+    return { durationMs: Math.round((duration / timescale) * 1000), timescale };
+  }
+  if (version === 1 && start + 32 <= end) {
+    const timescale = view.getUint32(start + 20);
+    const duration = view.getUint32(start + 28);
+    if (timescale <= 0) return null;
+    return { durationMs: Math.round((duration / timescale) * 1000), timescale };
+  }
+  return null;
+}

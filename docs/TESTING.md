@@ -12,8 +12,11 @@ Unit tests cover the decision math without a database:
 - `src/lib/meridian/workflow/templates.test.ts` — same stages, different variables
 - `src/lib/meridian/sources/public-url.test.ts` — private hosts blocked before fetch
 
+- `src/lib/meridian/blockers.test.ts` — semantic retrieval, negative learning, worker lease, storage, PDF extraction, logo pixels, calibration
+- `src/lib/meridian/providers/readiness.test.ts` — provider probes store only returned ids, campaign retry does not create a second campaign, test provider stays off, contrast ratios
+
 Run `npm test`.
 
 `evals/jev/` is the fixture set for the gate. `evals/acceptance/market.json` is the collected-creative fixture for the market-to-learning path. The acceptance test fails if a learned pattern stops changing the next opportunity or the next brief.
 
-What is not covered: a live model call, a live page fetch, a signed-in browser walk of the database, ad-library collection, and publishing. Tenant isolation for server functions is the membership check in `machine.ts`, plus `assertSameTenant` before ranking and learning. The job runner's retry and dead-letter behavior is tested in process. The database queue is drained only when someone recomputes learning. There is no separate worker process in this deployment.
+What is not covered: a live model call, a live page fetch against the public internet, a signed-in browser walk, and a real ad account. Provider tests use a scripted HTTP transport. The `test:` provider throws unless the test turns it on. The worker is covered in process by `blockers.test.ts`. It is not started by the unit test against a second machine.

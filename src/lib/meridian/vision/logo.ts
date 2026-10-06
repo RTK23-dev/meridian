@@ -113,3 +113,117 @@ export function compareLogoPng(approved: Uint8Array, creative: Uint8Array): Logo
         : `Approved logo hash distance is ${distance} of 64. The comparison is not decisive.`,
   };
 }
+
+function hashRegion(png: PNG, originX: number, originY: number, width: number, height: number): bigint | null {
+  if (width < 2 || height < 2) return null;
+  const cells = 8;
+  const values: number[] = [];
+  for (let y = 0; y < cells; y += 1) {
+    for (let x = 0; x < cells; x += 1) {
+      const sx = Math.min(png.width - 1, originX + Math.floor((x + 0.5) * (width / cells)));
+      const sy = Math.min(png.height - 1, originY + Math.floor((y + 0.5) * (height / cells)));
+      const index = (png.width * sy + sx) * 4;
+      values.push((png.data[index] ?? 0) * 0.3 + (png.data[index + 1] ?? 0) * 0.59 + (png.data[index + 2] ?? 0) * 0.11);
+    }
+  }
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  let hash = 0n;
+  values.forEach((value, index) => {
+    if (value >= mean) hash |= 1n << BigInt(index);
+  });
+  return hash;
+}
+
+export type LogoFind = {
+  outcome: "MATCH" | "MISMATCH" | "NOT_FOUND" | "UNCERTAIN";
+  decision: "CONTINUE" | "HUMAN_REVIEW" | "REJECT";
+  region: { x: number; y: number; width: number; height: number } | null;
+  distance: number | null;
+  confidence: number | null;
+  reason: string;
+};
+
+/** Region hash search. UNCERTAIN is never an approval. MATCH does not publish. */
+export function locateLogo(approved: Uint8Array, creative: Uint8Array, logoRequired: boolean): LogoFind {
+  let logo: PNG;
+  let frame: PNG;
+  try {
+    logo = PNG.sync.read(Buffer.from(approved));
+    frame = PNG.sync.read(Buffer.from(creative));
+  } catch {
+    return {
+      outcome: "UNCERTAIN",
+      decision: "HUMAN_REVIEW",
+      region: null,
+      distance: null,
+      confidence: null,
+      reason: "Logo search needs readable PNG bytes. Uncertain evidence is not an approval.",
+    };
+  }
+  const logoHash = hashRegion(logo, 0, 0, logo.width, logo.height);
+  if (!logoHash || frame.width < 2 || frame.height < 2) {
+    return {
+      outcome: "UNCERTAIN",
+      decision: "HUMAN_REVIEW",
+      region: null,
+      distance: null,
+      confidence: null,
+      reason: "The logo or the creative is too small to search. A person has to look.",
+    };
+  }
+  let best = { distance: 65, x: 0, y: 0, width: logo.width, height: logo.height };
+  const width = Math.min(logo.width, frame.width);
+  const height = Math.min(logo.height, frame.height);
+  const stepX = Math.max(1, Math.floor(width / 2));
+  const stepY = Math.max(1, Math.floor(height / 2));
+  let checked = 0;
+  for (let y = 0; y + height <= frame.height && checked < 24; y += stepY) {
+    for (let x = 0; x + width <= frame.width && checked < 24; x += stepX) {
+      const hash = hashRegion(frame, x, y, width, height);
+      checked += 1;
+      if (hash === null) continue;
+      const distance = hamming(logoHash, hash);
+      if (distance < best.distance) best = { distance, x, y, width, height };
+    }
+  }
+  const confidence = Math.round((1 - best.distance / 64) * 1000) / 1000;
+  const region = { x: best.x, y: best.y, width: best.width, height: best.height };
+  if (best.distance <= 10) {
+    return {
+      outcome: "MATCH",
+      decision: "CONTINUE",
+      region,
+      distance: best.distance,
+      confidence,
+      reason: `A region at ${best.x},${best.y} is within ${best.distance} hash bits of the approved logo. This is not a publish decision.`,
+    };
+  }
+  if (best.distance <= 18) {
+    return {
+      outcome: "UNCERTAIN",
+      decision: "HUMAN_REVIEW",
+      region,
+      distance: best.distance,
+      confidence,
+      reason: `The closest region is ${best.distance} hash bits away. Uncertain logo evidence stays in review.`,
+    };
+  }
+  if (logoRequired) {
+    return {
+      outcome: "NOT_FOUND",
+      decision: "HUMAN_REVIEW",
+      region: null,
+      distance: best.distance,
+      confidence,
+      reason: "This brand requires its logo, and no close region was found. A person has to decide.",
+    };
+  }
+  return {
+    outcome: "MISMATCH",
+    decision: "REJECT",
+    region: null,
+    distance: best.distance > 64 ? null : best.distance,
+    confidence,
+    reason: "No region matches the approved logo.",
+  };
+}

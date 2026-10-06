@@ -28,7 +28,7 @@ function Ready({ children }: { children: ReactNode }) {
 
 function Welcome() {
   return (
-    <main className="mx-auto grid min-h-screen max-w-3xl content-center gap-8 px-6 py-16">
+    <main id="main" className="mx-auto grid min-h-screen max-w-3xl content-center gap-8 px-6 py-16">
       <p className="text-sm font-semibold uppercase tracking-widest text-brass">Meridian</p>
       <h1 className="font-display text-5xl leading-tight text-ink">
         What should this brand make next?

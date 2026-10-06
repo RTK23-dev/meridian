@@ -9,20 +9,22 @@ This repository is original software under the MIT License. It is not a fork of 
 - Sign-in with email and password, or with Google or X.
 - Workspaces with roles. Checks run on the server.
 - Brands, Brand Brain, provenance, versions, and products.
-- Manual competitor observations and a guarded public-page fetch. No ad library.
+- Manual competitor observations, candidate discovery from stored names, and a guarded public-page fetch.
 - Opportunity scoring from that evidence, with JEV gates.
 - Briefs that carry learned patterns and past rejections.
 - Human-written scripts, plus text generation when a provider key is configured.
-- Text guardian and review queue. Images, if generated, are not visually approved.
-- Manual performance, learned patterns, and the next rank using those patterns.
-- An audit log and a decision log.
+- Text guardian, PNG logo comparison, and a review queue.
+- Manual performance, and a normalizer that a live feed must pass before learning.
+- A worker process and a scheduler process when `DATABASE_URL` is set on a long-lived host.
+- Provider clients that can probe and create paused campaigns when credentials exist and a request succeeds.
 
 ## What this version does not do
 
-- Scrape an ad library or invent competitor ads.
-- Read performance from an ad account.
-- Run a vision model.
-- Publish.
-- Treat an empty market as if it had been measured.
+- Invent competitor ads, metrics, or publish receipts.
+- Treat credentials as a connection before a provider request succeeds.
+- Run video generation.
+- Keep the worker alive on a serverless host.
+- Claim WCAG certification. The accessibility notes are in [ACCESSIBILITY.md](ACCESSIBILITY.md).
 
-Empty states say so.
+Empty states say so. Connection states are on the Integrations screen.
+

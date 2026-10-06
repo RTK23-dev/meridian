@@ -18,7 +18,7 @@ export function Shell({ children }: { children: ReactNode }) {
             Meridian
           </Link>
           {active ? (
-            <nav className="flex items-center gap-2 text-sm">
+            <nav aria-label="Workspace" className="flex items-center gap-2 text-sm">
               <NavLink to="/" current={path === "/"}>
                 Overview
               </NavLink>
@@ -58,7 +58,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <main id="main" className="mx-auto max-w-6xl px-4 py-8">{children}</main>
     </div>
   );
 }
@@ -67,6 +67,7 @@ function NavLink({ to, current, children }: { to: "/" | "/settings" | "/integrat
   return (
     <Link
       to={to}
+      aria-current={current ? "page" : undefined}
       className={`inline-flex min-h-11 items-center rounded-md px-3 ${current ? "bg-ink text-paper" : "text-ink hover:bg-paper"}`}
     >
       {children}

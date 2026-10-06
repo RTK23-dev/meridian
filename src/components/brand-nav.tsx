@@ -15,7 +15,7 @@ const LINKS = [
 export function BrandNav({ brandId }: { brandId: string }) {
   const path = useRouterState({ select: (state) => state.location.pathname.replace(/\/$/, "") });
   return (
-    <nav className="flex gap-2 overflow-x-auto pb-1">
+    <nav aria-label="Brand" className="flex gap-2 overflow-x-auto pb-1">
       {LINKS.map((link) => {
         const href = link.to.replace("$brandId", brandId);
         const current = path === href;
@@ -24,6 +24,7 @@ export function BrandNav({ brandId }: { brandId: string }) {
             key={link.to}
             to={link.to}
             params={{ brandId }}
+            aria-current={current ? "page" : undefined}
             className={`inline-flex min-h-11 shrink-0 items-center rounded-md px-3 text-sm font-semibold ${current ? "bg-ink text-paper" : "border border-line bg-panel text-ink"}`}
           >
             {link.label}

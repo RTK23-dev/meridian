@@ -2,21 +2,25 @@
 
 In this tree:
 
-1. Foundation — accounts, workspaces, roles, brands, Brand Brain, products, audit.
-2. Evidence — manual observations, public-page fetch, no fabricated market.
-3. JEV — typed questions, thresholds, persisted decisions, review.
-4. Opportunities and briefs from stored evidence.
-5. Text production through a provider interface, or a human script.
-6. Text guardian.
-7. Manual performance and learned patterns that change the next rank and the next brief.
+1. Accounts, workspaces, roles, brands, Brand Brain, products, audit.
+2. Manual observations, public-page fetch, competitor candidates that stay candidates until confirmed.
+3. JEV questions, thresholds, persisted decisions, review.
+4. Opportunities and briefs from stored evidence, including learned patterns.
+5. Text production when a model key exists, otherwise a human script.
+6. Text guardian. Logo search on PNG bytes. Missing vision stays in human review.
+7. Manual performance and a provider performance gate that rejects bad rows.
+8. A separate worker and a scheduler that only enqueues.
+9. Provider clients for Meta, TikTok, Google Ads, and Ad Library. They publish or list only after a real response. See [PROVIDERS.md](PROVIDERS.md).
+10. Filesystem and S3-compatible object storage clients.
+11. Local semantic embeddings. An external embedding vendor stays not connected without a key.
 
-Not in this tree:
+Not true yet, because the dependency is outside the repository:
 
-- Ad-library or ads-platform connectors.
-- Vision evidence from a real model.
+- A customer ad account and the permission to spend.
+- A verified S3 bucket in this environment.
 - Video generation.
-- Publishing.
-- Threshold calibration from reviewer outcomes.
-- A scheduler. The automation preference is stored and does not run jobs.
+- An always-on worker on serverless hosting.
+- A hosted OAuth consent screen. Tokens are supplied by the host.
+- A full WCAG 2.2 AA certification. See [ACCESSIBILITY.md](ACCESSIBILITY.md).
 
 Learning updates knowledge. It does not rewrite application source.

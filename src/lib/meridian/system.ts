@@ -6,6 +6,7 @@ import { INTEGRATIONS } from "@/lib/meridian/providers/integrations";
 import { externalObjectStorageStatus } from "@/lib/meridian/storage/object-store";
 import { publishingProviderStatus } from "@/lib/meridian/publishing/provider";
 import { accountProviderState } from "@/lib/meridian/providers/boundaries";
+import { isLiveProvider, phaseForProbe, providerConfigured, type LiveProvider } from "@/lib/meridian/providers/live";
 
 function ageMs(value: unknown, now: number): number | null {
   const time = value instanceof Date ? value.getTime() : Date.parse(String(value ?? ""));
@@ -14,9 +15,12 @@ function ageMs(value: unknown, now: number): number | null {
 }
 
 export const getSystemStatus = createServerFn({ method: "POST" })
-  .validator(() => ({}))
+  .validator((input: unknown) => {
+    const body = input && typeof input === "object" ? (input as { organizationId?: unknown }) : {};
+    return { organizationId: typeof body.organizationId === "string" ? body.organizationId : "" };
+  })
   .middleware([authMiddleware])
-  .handler(async () => {
+  .handler(async ({ context, data }) => {
     const embeddings = embeddingProviderState({ openRouterKey: process.env.OPENROUTER_API_KEY });
     const publishing = publishingProviderStatus();
     const objectStorage = externalObjectStorageStatus({
@@ -45,6 +49,50 @@ export const getSystemStatus = createServerFn({ method: "POST" })
     } catch {
       database = "down";
     }
+    const providers = (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => accountProviderState(provider));
+    let connections: { provider: LiveProvider; phase: string; detail: string; accountId: string; accountName: string; lastError: string }[] = [];
+    if (database === "up" && data.organizationId) {
+      try {
+        const sql = await getSql();
+        const members = await sql<{ role: string }>`
+          select role from memberships where user_id = ${context.userId} and organization_id = ${data.organizationId} limit 1
+        `;
+        if (members[0]) {
+          const rows = await sql<{ provider: string; status: string; account_id: string; account_name: string; last_error: string; last_success_at: unknown; disconnected_at: unknown }>`
+            select provider, status, account_id, account_name, last_error, last_success_at, disconnected_at
+            from provider_connections where organization_id = ${data.organizationId}
+          `;
+          connections = (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => {
+            const row = rows.find((item) => item.provider === provider);
+            const phase = phaseForProbe({
+              provider,
+              ok: row?.last_success_at ? true : row?.last_error ? false : null,
+              error: row?.last_error ?? "",
+              disconnected: Boolean(row?.disconnected_at),
+            });
+            if (!row && providerConfigured(provider)) {
+              return { provider, phase: phase.phase, detail: phase.detail, accountId: "", accountName: "", lastError: "" };
+            }
+            return {
+              provider,
+              phase: row ? phase.phase : phase.phase,
+              detail: phase.detail,
+              accountId: row?.account_id ?? "",
+              accountName: row?.account_name ?? "",
+              lastError: row?.last_error ?? "",
+            };
+          });
+        }
+      } catch {
+        connections = [];
+      }
+    }
+    if (connections.length === 0) {
+      connections = (["meta", "tiktok", "google", "ad_library"] as const).filter(isLiveProvider).map((provider) => {
+        const phase = phaseForProbe({ provider, ok: null, error: "", disconnected: false });
+        return { provider, phase: phase.phase, detail: phase.detail, accountId: "", accountName: "", lastError: "" };
+      });
+    }
     return {
       worker,
       scheduler,
@@ -58,7 +106,8 @@ export const getSystemStatus = createServerFn({ method: "POST" })
       embeddings,
       localSemantic: localSemanticModel(),
       publishing,
-      providers: (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => accountProviderState(provider)),
+      providers,
+      connections,
       integrations: INTEGRATIONS.map((item) => ({ id: item.id, status: item.status, detail: item.detail })),
     };
   });

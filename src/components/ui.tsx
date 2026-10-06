@@ -63,5 +63,9 @@ export function Panel({ children, className = "" }: { children: ReactNode; class
 }
 
 export function Notice({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-danger">{children}</p>;
+  return (
+    <p className="text-sm text-danger" role="alert">
+      {children}
+    </p>
+  );
 }

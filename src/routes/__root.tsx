@@ -31,6 +31,7 @@ export const Route = createRootRoute({
         <HeadContent />
       </head>
       <body>
+        <a className="skip-link" href="#main">Skip to main content</a>
         <PreviewHostBridge />
         <AuthProvider>
           <WorkspaceProvider>
