@@ -28,7 +28,7 @@ function routeKey(url) {
   return `${slug}-${digest}`;
 }
 
-async function discoverRoutes(page) {
+async function discoverRoutes(page, seededBrandId) {
   const pending = [baseUrl, ...explicitRoutes.map((path) => new URL(path, baseUrl).href)];
   const visited = new Set();
   while (pending.length) {
@@ -53,7 +53,7 @@ async function discoverRoutes(page) {
   }
   const brandId = [...visited]
     .map((url) => new URL(url).pathname.match(/^\/brands\/([^/]+)/)?.[1])
-    .find((value) => value && value !== "new");
+    .find((value) => value && value !== "new") || seededBrandId;
   const routeFiles = readdirSync("src/routes", { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && extname(entry.name) === ".tsx")
     .map((entry) => relative("src/routes", join(entry.parentPath, entry.name)))
@@ -99,13 +99,18 @@ async function prepareFixtureWorkspace(page) {
     await page.getByRole("link", { name: "New brand", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
   }
 
-  const homeText = await page.locator("body").innerText();
-  if (homeText.includes("No brands yet.")) {
+  await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  await page.waitForTimeout(700);
+  const linkedBrandId = await page.locator('a[href^="/brands/"]').evaluateAll((anchors) =>
+    anchors.map((anchor) => new URL(anchor.href).pathname.match(/^\/brands\/([^/]+)/)?.[1])
+      .find((value) => value && value !== "new"),
+  );
+  if (!linkedBrandId) {
     await page.goto(new URL("/brands/new", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.getByLabel("Brand name").fill("UI baseline fixture (not a real brand)");
     await page.getByLabel("What do you sell?").fill("Screenshot fixture only; no real product or business claim.");
     await page.getByRole("button", { name: "Create brand", exact: true }).click();
-    await page.getByText("UI baseline fixture (not a real brand)", { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+    await page.waitForURL(/\/brands\/[^/]+$/, { timeout: 15_000 });
   }
 
   const signedInText = await page.locator("body").innerText();
@@ -115,6 +120,9 @@ async function prepareFixtureWorkspace(page) {
   if (signedInText.includes("Name the workspace")) {
     throw new Error("UI baseline could not prepare its PGlite test workspace.");
   }
+
+  const currentBrandId = new URL(page.url()).pathname.match(/^\/brands\/([^/]+)/)?.[1];
+  return (currentBrandId && currentBrandId !== "new" ? currentBrandId : undefined) || linkedBrandId;
 }
 
 mkdirSync(outputDir, { recursive: true });
@@ -122,8 +130,8 @@ const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "
 try {
   const discoveryContext = await browser.newContext({ viewport: { width: 1440, height: 960 } });
   const discoveryPage = await discoveryContext.newPage();
-  await prepareFixtureWorkspace(discoveryPage);
-  const routes = await discoverRoutes(discoveryPage);
+  const seededBrandId = await prepareFixtureWorkspace(discoveryPage);
+  const routes = await discoverRoutes(discoveryPage, seededBrandId);
   const storageState = await discoveryContext.storageState();
   await discoveryContext.close();
 
