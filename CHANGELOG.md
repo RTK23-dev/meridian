@@ -1,20 +1,15 @@
 # Changelog
 
-## Unreleased
-
-- Forms: share typed validation between the browser and server for market collection, competitor records, creative observations, manual performance, paused publishing, and performance schedules; show field errors and unsaved state before submitting.
-- Studio generation choices now use the same explicit provider allow-list as the server and retain a local unsaved-changes warning.
-- Reject impossible calendar dates in manual performance entries and performance schedules.
-- Security: reject IPv4-mapped and translated private IPv6 targets, non-public IPv6 ranges, and reserved IPv4 ranges before public fetches; malformed address input fails closed.
-- Fix public-page text extraction to decode named and numeric HTML entities exactly once.
-- Keep long-running SQL jobs leased by renewing their heartbeat while work is active; `claimAndRun` now schedules retries with exponential backoff too.
-- Return success for webhook deliveries that lose a concurrent duplicate insert race.
-- Clarify that the existing request rate-limiter helper is not wired to routes.
-
 ## 0.1.0-beta.3 — 2026-10-06
 
 JEV Research now collects and analyzes external Meta video-ad evidence as a research layer. It does not replace or gate JEV decisions.
 
+- Forms share typed browser/server validation for market collection, competitor records, creative observations, manual performance, paused publishing, performance schedules, and Studio generation choices. Field errors and unsaved state appear before submission; invalid calendar dates are rejected.
+- Reject IPv4-mapped and translated private IPv6 targets, non-public IPv6 ranges, and reserved IPv4 ranges before public fetches; malformed address input fails closed.
+- Public-page text extraction decodes named and numeric HTML entities exactly once.
+- Long-running SQL jobs renew their lease heartbeat while work is active; `claimAndRun` also schedules retries with exponential backoff.
+- Webhook deliveries that lose a concurrent duplicate insert race return success.
+- The request rate-limiter helper is documented accurately as not wired to routes.
 - A tenant-scoped worker collects bounded, deduplicated Meta Ad Library video records with captured source provenance. A run stores at most 100 MB of source video and each video is capped at 24 MB.
 - Public Meta snapshot media is fetched only when an explicit video URL is exposed, validated against the existing SSRF protections, verified as MP4, and stored with a checksum. Unavailable media remains unavailable.
 - Local WhisperX transcription stores timestamped segments by content hash. OpenRouter produces versioned typed advertising analysis with evidence references and confidence; low-confidence results require review.
