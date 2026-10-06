@@ -89,7 +89,7 @@ function BrandHome({ brandId }: { brandId: string }) {
           <p className="text-muted">{known.filled} of {known.total} brain fields written. Version {detail.version || 1}.</p>
         </div>
       </div>
-      {machine ? <MachineStrip snapshot={machine} /> : null}
+      {machine ? <NextStep brandId={brandId} snapshot={machine} filled={known.filled} /> : null}
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
         <Field label="Name">
           <TextInput name="name" defaultValue={detail.identity.name} required disabled={!canEdit} />
@@ -139,29 +139,27 @@ function BrandHome({ brandId }: { brandId: string }) {
   );
 }
 
-function MachineStrip({ snapshot }: { snapshot: MachineSnapshot }) {
+function NextStep({ brandId, snapshot, filled }: { brandId: string; snapshot: MachineSnapshot; filled: number }) {
   const steps = [
-    ["Brain", "Open"],
-    ["Market", snapshot.counts.observations > 0 ? `${snapshot.counts.observations} observations` : "No observations"],
-    ["Opportunities", snapshot.counts.openOpportunities > 0 ? `${snapshot.counts.openOpportunities} open` : "Not scored"],
-    ["Reviews", snapshot.counts.reviews > 0 ? `${snapshot.counts.reviews} waiting` : "None waiting"],
-    ["Library", snapshot.counts.creatives > 0 ? `${snapshot.counts.creatives} creatives` : "Empty"],
-    ["Learning", snapshot.counts.patterns > 0 ? `${snapshot.counts.patterns} patterns` : snapshot.counts.performanceRows > 0 ? "Results not computed" : "No results"],
+    { done: filled >= 4, label: "Write positioning and claims", to: "/brands/$brandId/brain" as const },
+    { done: snapshot.counts.observations > 0, label: "Record a competitor ad you have seen", to: "/brands/$brandId/market" as const },
+    { done: snapshot.counts.openOpportunities > 0, label: "Score opportunities from those observations", to: "/brands/$brandId/opportunities" as const },
+    { done: snapshot.counts.creatives > 0, label: "Open the studio and make variants", to: "/brands/$brandId/studio" as const },
   ];
+  const next = steps.find((step) => !step.done);
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted">
-        Text model: {snapshot.providerConfigured ? snapshot.provider : "not configured"}. Local semantic embeddings run in this app. Ad library, live publishing, and video generation stay unconnected until a provider request succeeds.
-        {snapshot.usage.tokens > 0 ? ` Model tokens recorded: ${snapshot.usage.tokens}.` : ""} Cost is {snapshot.usage.costCents == null ? "not reported" : `${snapshot.usage.costCents} cents`}.
+        {snapshot.counts.observations} observations, {snapshot.counts.openOpportunities} open opportunities, {snapshot.counts.reviews} reviews, {snapshot.counts.patterns} learned patterns.
+        Text model: {snapshot.providerConfigured ? snapshot.provider : "not configured"}.
       </p>
-      <ol className="grid gap-3 md:grid-cols-3">
-        {steps.map(([title, state]) => (
-          <li key={title} className="rounded-lg border border-line bg-panel p-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-brass">{state}</p>
-            <h2 className="mt-2 font-display text-xl">{title}</h2>
-          </li>
-        ))}
-      </ol>
+      {next ? (
+        <p>
+          Next: <Link to={next.to} params={{ brandId }} className="font-semibold">{next.label}</Link>
+        </p>
+      ) : (
+        <p>Stored evidence is in place. The studio ranks what to make next. It does not invent ads.</p>
+      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 
 const LINKS = [
-  { to: "/brands/$brandId", label: "Brand" },
+  { to: "/brands/$brandId", label: "Overview" },
+  { to: "/brands/$brandId/studio", label: "Studio" },
   { to: "/brands/$brandId/brain", label: "Brain" },
   { to: "/brands/$brandId/products", label: "Products" },
   { to: "/brands/$brandId/market", label: "Market" },

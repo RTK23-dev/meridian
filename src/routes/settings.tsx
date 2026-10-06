@@ -141,23 +141,29 @@ function Settings() {
           </div>
         ) : null}
       </Panel>
-      <Panel>
-        <h2 className="font-display text-2xl">Opportunity weights</h2>
+      <details className="rounded-lg border border-line bg-panel p-5">
+        <summary className="cursor-pointer font-display text-2xl">Advanced — ranking diagnostics</summary>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Score = brand fit + historical evidence + market signal + novelty + reproducibility − saturation − risk.
-          Weights are configuration. No opportunity is scored until evidence exists.
+          These weights are not how Meridian finds an opportunity. They only scale a diagnostic score. Learning and evidence still decide the order.
         </p>
         <form
           className="mt-4 grid gap-3 sm:grid-cols-2"
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
+            for (const key of WEIGHT_KEYS) {
+              const number = Number(form.get(key));
+              if (!Number.isFinite(number) || number < 0 || number > 5) {
+                setMessage(`${LABELS[key]} must be a number from 0 to 5.`);
+                return;
+              }
+            }
             const weights = Object.fromEntries(
               WEIGHT_KEYS.map((key) => [key, Number(form.get(key))]),
             ) as ScoreWeights;
             void run(async () => {
               await updateWeights({ data: { organizationId: active.id, weights } });
-              setMessage("Weights saved.");
+              setMessage("Diagnostic weights saved. They do not create opportunities.");
               await reload();
             });
           }}
@@ -167,17 +173,20 @@ function Settings() {
               <TextInput
                 name={key}
                 type="number"
+                inputMode="decimal"
                 min={0}
                 max={5}
-                step="0.05"
+                step={0.05}
                 defaultValue={active.weights[key]}
+                required
+                aria-invalid={message?.includes(LABELS[key]) ? true : undefined}
                 disabled={!canAdmin}
               />
             </Field>
           ))}
-          {canAdmin ? <Button type="submit" disabled={pending}>Save weights</Button> : null}
+          {canAdmin ? <Button type="submit" disabled={pending}>Save diagnostic weights</Button> : <p className="text-sm text-muted">Only an admin can change these.</p>}
         </form>
-      </Panel>
+      </details>
       <Panel>
         <h2 className="font-display text-2xl">Another workspace</h2>
         <form

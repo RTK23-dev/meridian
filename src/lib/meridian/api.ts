@@ -18,7 +18,6 @@ import {
 } from "@/lib/meridian/brain";
 import {
   WEIGHT_KEYS,
-  clampWeight,
   type ScoreWeights,
 } from "@/lib/meridian/scoring";
 
@@ -544,8 +543,8 @@ export const updateWeights = createServerFn({ method: "POST" })
     for (const key of WEIGHT_KEYS) {
       const value = body[key];
       const number = typeof value === "number" ? value : Number(value);
-      if (!Number.isFinite(number)) throw new Error("Weights must be numbers.");
-      weights[key] = clampWeight(number);
+      if (!Number.isFinite(number) || number < 0 || number > 5) throw new Error(`${key} must be a number from 0 to 5.`);
+      weights[key] = number;
     }
     return { organizationId, weights };
   })
