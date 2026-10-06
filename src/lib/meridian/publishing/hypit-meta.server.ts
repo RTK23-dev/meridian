@@ -112,31 +112,89 @@ export async function publishHypitVideoToMeta(
   }
   const lineage = { hypitJobId, jevDecisionId, briefId, storageKey, sha256, byteLength };
   if (input.existingVideoId?.trim()) return { status: "stored", externalId: input.existingVideoId, reused: true, ...lineage };
+  const idempotencyKey = `${input.brandId}:${input.creativeId}:video`;
+  const uploadName = `${input.name.slice(0, 60) || "Hypit video"} [Meridian:${createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 32)}]`;
+  const inserted = await sql<{ status: string; external_id: string; upload_name: string; sha256: string; byte_length: number }>`
+    insert into meta_video_uploads (
+      organization_id, brand_id, creative_id, idempotency_key, upload_name, sha256, byte_length, status
+    ) values (
+      ${input.organizationId}, ${input.brandId}, ${input.creativeId}, ${idempotencyKey}, ${uploadName}, ${sha256}, ${byteLength}, 'ready'
+    ) on conflict (organization_id, idempotency_key) do nothing
+    returning status, external_id, upload_name, sha256, byte_length
+  `;
+  let isFirstAttempt = false;
+  let reservationRows = inserted.length ? inserted : await sql<{ status: string; external_id: string; upload_name: string; sha256: string; byte_length: number }>`
+    select status, external_id, upload_name, sha256, byte_length from meta_video_uploads
+    where organization_id = ${input.organizationId} and idempotency_key = ${idempotencyKey} limit 1
+  `;
+  if (reservationRows[0]?.status === "ready") {
+    const start = await sql<{ status: string; external_id: string; upload_name: string; sha256: string; byte_length: number }>`
+      update meta_video_uploads set status = 'pending', updated_at = now()
+      where organization_id = ${input.organizationId} and idempotency_key = ${idempotencyKey} and status = 'ready'
+      returning status, external_id, upload_name, sha256, byte_length
+    `;
+    isFirstAttempt = start.length > 0;
+    if (isFirstAttempt) reservationRows = start;
+    else reservationRows = await sql<{ status: string; external_id: string; upload_name: string; sha256: string; byte_length: number }>`
+      select status, external_id, upload_name, sha256, byte_length from meta_video_uploads
+      where organization_id = ${input.organizationId} and idempotency_key = ${idempotencyKey} limit 1
+    `;
+  }
+  const reservation = reservationRows[0];
+  if (!reservation || reservation.upload_name !== uploadName || reservation.sha256 !== sha256 || Number(reservation.byte_length) !== byteLength) {
+    return reject("The Meta video upload reservation does not match this artifact. Nothing was sent.");
+  }
+  if (reservation.status === "confirmed" && reservation.external_id.trim()) {
+    return await persistConfirmedVideo(sql, {
+      organizationId: input.organizationId, brandId: input.brandId, creativeId: input.creativeId,
+      actorId: input.actorId, externalId: reservation.external_id, idempotencyKey,
+      lineage, correlationId: input.correlationId, reused: true,
+    });
+  }
   const uploaded = await uploadMetaVideo(
     { accessToken: input.accessToken, adAccountId: input.adAccountId },
-    { adAccountId: input.adAccountId, bytes, name: input.name },
+    { adAccountId: input.adAccountId, bytes, uploadName, idempotencyKey, reconcileOnly: !isFirstAttempt },
     input.transport,
   );
   if (uploaded.status !== "stored") return uploaded;
-  const idempotencyKey = `${input.brandId}:${input.creativeId}:video`;
   await sql`
+    update meta_video_uploads set status = 'confirmed', external_id = ${uploaded.externalId}, updated_at = now()
+    where organization_id = ${input.organizationId} and idempotency_key = ${idempotencyKey}
+  `;
+  return persistConfirmedVideo(sql, {
+    organizationId: input.organizationId, brandId: input.brandId, creativeId: input.creativeId,
+    actorId: input.actorId, externalId: uploaded.externalId, idempotencyKey,
+    lineage, correlationId: input.correlationId, reused: uploaded.reused,
+  });
+}
+
+async function persistConfirmedVideo(
+  sql: Sql,
+  input: {
+    organizationId: string; brandId: string; creativeId: string; actorId: string; externalId: string;
+    idempotencyKey: string; lineage: Omit<StoredVideo, "status" | "externalId" | "reused">;
+    correlationId: string; reused: boolean;
+  },
+): Promise<StoredVideo> {
+  const inserted = await sql<{ id: string }>`
     insert into provider_objects (
       id, organization_id, brand_id, provider, object_type, idempotency_key, external_id, status, last_error, synced_at
     ) values (
-      ${crypto.randomUUID()}, ${input.organizationId}, ${input.brandId}, 'meta', 'video', ${idempotencyKey},
-      ${uploaded.externalId}, 'stored', '', now()
+      ${crypto.randomUUID()}, ${input.organizationId}, ${input.brandId}, 'meta', 'video', ${input.idempotencyKey},
+      ${input.externalId}, 'stored', '', now()
     )
     on conflict (organization_id, provider, object_type, idempotency_key) do update set synced_at = now()
     where provider_objects.external_id = excluded.external_id
+    returning id
   `;
-  await sql`
+  if (inserted.length) await sql`
     insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
     values (
       ${crypto.randomUUID()}, ${input.organizationId}, ${input.brandId}, ${input.actorId}, 'publishing.confirmed',
-      'video', ${uploaded.externalId}, ${JSON.stringify({ hypitJobId, jevDecisionId, briefId, storageKey, sha256, byteLength, correlationId: input.correlationId })}
+      'video', ${input.externalId}, ${JSON.stringify({ ...input.lineage, correlationId: input.correlationId })}
     )
   `;
-  return { status: "stored", externalId: uploaded.externalId, reused: false, ...lineage };
+  return { status: "stored", externalId: input.externalId, reused: input.reused, ...input.lineage };
 }
 
 function parseObject(value: unknown): Record<string, unknown> {

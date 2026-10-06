@@ -94,16 +94,24 @@ export type MetaPublishInput = {
 /** Uploads MP4 bytes once; callers persist the confirmed id before creating campaign objects. */
 export async function uploadMetaVideo(
   credentials: MetaCredentials,
-  input: { adAccountId: string; bytes: Uint8Array; name: string },
+  input: { adAccountId: string; bytes: Uint8Array; uploadName: string; idempotencyKey: string; reconcileOnly?: boolean },
   transport: Transport,
-): Promise<{ status: "stored"; externalId: string } | { status: "failed"; externalId: null; error: string }> {
+): Promise<{ status: "stored"; externalId: string; reused: boolean } | { status: "failed"; externalId: null; error: string }> {
   const account = input.adAccountId.startsWith("act_") ? input.adAccountId : "";
   if (!credentials.accessToken.trim() || !account) {
     return { status: "failed", externalId: null, error: "Meta video publishing is not connected. Configure an access token and ad account." };
   }
+  const name = input.uploadName;
+  const reconciled = await findUploadedMetaVideo(credentials, account, name, transport);
+  if (reconciled.status === "found") return { status: "stored", externalId: reconciled.externalId, reused: true };
+  if (reconciled.status === "failed") return { status: "failed", externalId: null, error: reconciled.error };
+  if (input.reconcileOnly) {
+    return { status: "failed", externalId: null, error: "Meta has not exposed the prior upload yet. The upload remains pending; no duplicate was sent." };
+  }
   const form = new FormData();
-  form.set("source", new Blob([input.bytes as BlobPart], { type: "video/mp4" }), `${input.name.slice(0, 100) || "hypit-video"}.mp4`);
-  form.set("name", input.name.slice(0, 100) || "Hypit video");
+  form.set("source", new Blob([input.bytes as BlobPart], { type: "video/mp4" }), `${name}.mp4`);
+  form.set("name", name);
+  form.set("title", name);
   const result = await sendWithRetry(transport, {
     method: "POST",
     url: `${GRAPH}/${account}/advideos`,
@@ -111,8 +119,47 @@ export async function uploadMetaVideo(
     body: form,
   }, { attempts: 1 });
   const id = textField(result.json, "id");
-  if (!result.ok || !id) return { status: "failed", externalId: null, error: result.error || "Meta did not confirm the video upload. Nothing was published." };
-  return { status: "stored", externalId: id };
+  if (result.ok && id) return { status: "stored", externalId: id, reused: false };
+  // A lost response or server error can follow an accepted upload. Reconcile by
+  // the stable name marker before returning; subsequent calls never POST again
+  // for an existing pending reservation.
+  const afterFailure = await findUploadedMetaVideo(credentials, account, name, transport);
+  if (afterFailure.status === "found") return { status: "stored", externalId: afterFailure.externalId, reused: true };
+  return {
+    status: "failed", externalId: null,
+    error: afterFailure.status === "failed"
+      ? afterFailure.error
+      : result.error || "Meta did not confirm the video upload. The outcome is pending reconciliation; no receipt was stored.",
+  };
+}
+
+async function findUploadedMetaVideo(
+  credentials: MetaCredentials,
+  account: string,
+  name: string,
+  transport: Transport,
+): Promise<{ status: "found"; externalId: string } | { status: "none" } | { status: "failed"; error: string }> {
+  let url: string | null = `${GRAPH}/${account}/advideos?fields=id,title&limit=100`;
+  const matches: string[] = [];
+  for (let page = 0; url && page < 100; page += 1) {
+    const result = await sendWithRetry(transport, {
+      method: "GET", url, headers: authHeaders(credentials.accessToken),
+    });
+    if (!result.ok) return { status: "failed", error: result.error || "Meta upload reconciliation failed. Nothing was published." };
+    const body = result.json && typeof result.json === "object" ? result.json as { data?: unknown; paging?: { next?: string } } : {};
+    if (Array.isArray(body.data)) {
+      for (const row of body.data) {
+        if (textField(row, "title") === name) {
+          const id = textField(row, "id");
+          if (id) matches.push(id);
+        }
+      }
+    }
+    url = body.paging?.next ?? null;
+    if (url && page === 99) return { status: "failed", error: "Meta upload reconciliation could not inspect every result. Nothing was published." };
+  }
+  if (matches.length > 1) return { status: "failed", error: "Meta returned multiple videos for this upload key. Nothing was published." };
+  return matches[0] ? { status: "found", externalId: matches[0] } : { status: "none" };
 }
 
 export type PublishStepResult =
@@ -238,6 +285,43 @@ export async function fetchMetaInsights(
     if (Array.isArray(data)) rows.push(...data);
   }
   return { ok: !collected.error, rows, error: collected.error };
+}
+
+/** Confirms the tenant token can access the external ad and its owning ad account. */
+export async function verifyMetaAdAccountAccess(
+  accessToken: string,
+  externalAdId: string,
+  transport: Transport,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const token = accessToken.trim();
+  if (!token || !externalAdId.trim()) return { ok: false, error: "Meta performance sync is not connected to an ad and credential. Nothing was stored." };
+  const ad = await sendWithRetry(transport, {
+    method: "GET", url: `${GRAPH}/${encodeURIComponent(externalAdId)}?fields=account_id`, headers: authHeaders(token),
+  });
+  const accountId = textField(ad.json, "account_id").replace(/^act_/, "");
+  if (!ad.ok || !accountId) return { ok: false, error: ad.error || "Meta did not confirm the ad's account. Nothing was stored." };
+  const accounts = await collectPages(
+    transport,
+    { method: "GET", url: `${GRAPH}/me/adaccounts?fields=id,account_id&limit=100`, headers: authHeaders(token) },
+    (json) => {
+      const paging = json && typeof json === "object" ? (json as { paging?: { next?: string } }).paging : undefined;
+      return paging?.next || null;
+    },
+    100,
+  );
+  if (accounts.error) return { ok: false, error: accounts.error };
+  const belongsToCredential = accounts.pages.some((page) => {
+    if (!page || typeof page !== "object") return false;
+    const rows = (page as { data?: unknown }).data;
+    return Array.isArray(rows) && rows.some((row) => {
+      const id = textField(row, "id").replace(/^act_/, "");
+      const rawAccountId = textField(row, "account_id").replace(/^act_/, "");
+      return id === accountId || rawAccountId === accountId;
+    });
+  });
+  return belongsToCredential
+    ? { ok: true }
+    : { ok: false, error: "The tenant Meta credential does not own the ad's account. No observations were stored." };
 }
 
 export async function probeAdLibrary(token: string, transport: Transport): Promise<ProbeResult> {

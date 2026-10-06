@@ -4,6 +4,7 @@ import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
 import { phaseForProbe, type LiveProvider } from "../providers/live.ts";
 import { planPerformanceSchedule } from "./schedule.ts";
+import { validatePerformanceOwnership } from "./ownership.ts";
 
 export const setPerformanceSchedule = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
@@ -33,6 +34,14 @@ export const setPerformanceSchedule = createServerFn({ method: "POST" })
     const role = members[0]?.role;
     if (!role || !isRole(role)) throw new Error("That brand is not in this workspace.");
     assertRole(role, "admin");
+    const ownership = await validatePerformanceOwnership(sql, {
+      organizationId: data.organizationId,
+      brandId: data.brandId,
+      creativeId: data.creativeId,
+      externalAdId: data.externalAdId,
+      provider: data.provider,
+    });
+    if (!ownership.ok) throw new Error(ownership.error);
     const connections = await sql<{ last_error: string; last_success_at: string | null; disconnected_at: string | null }>`
       select last_error, last_success_at, disconnected_at from provider_connections
       where organization_id = ${data.organizationId} and provider = ${data.provider}

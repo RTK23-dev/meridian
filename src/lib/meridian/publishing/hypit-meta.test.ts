@@ -18,7 +18,8 @@ const briefId = "brief-1";
 function fixture(overrides: { decision?: string; reviewer?: string; creativeStatus?: string; tenant?: string } = {}) {
   const requests: TransportRequest[] = [];
   const writes: string[] = [];
-  const sql = (async (strings: TemplateStringsArray) => {
+  let uploadReservation: { status: string; external_id: string; upload_name: string; sha256: string; byte_length: number } | null = null;
+  const sql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.join(" ").toLowerCase();
     if (text.includes("from creative_records c left join assets")) {
       return [{
@@ -36,7 +37,22 @@ function fixture(overrides: { decision?: string; reviewer?: string; creativeStat
     }];
     if (text.includes("from jev_decisions")) return [{ decision: overrides.decision ?? "AUTO_APPROVE", reviewer_decision: overrides.reviewer ?? "" }];
     if (text.includes("from asset_blobs")) return [{ body: Buffer.from(bytes).toString("base64"), mime_type: "video/mp4", checksum: sha, byte_size: bytes.byteLength }];
-    if (text.includes("insert into provider_objects")) writes.push("video");
+    if (text.includes("insert into meta_video_uploads")) {
+      if (uploadReservation) return [];
+      uploadReservation = { status: "ready", external_id: "", upload_name: String(values[4]), sha256: String(values[5]), byte_length: Number(values[6]) };
+      return [{ ...uploadReservation }];
+    }
+    if (text.includes("from meta_video_uploads")) return uploadReservation ? [uploadReservation] : [];
+    if (text.includes("update meta_video_uploads")) {
+      if (uploadReservation && text.includes("status = 'pending'")) {
+        if (uploadReservation.status !== "ready") return [];
+        uploadReservation.status = "pending";
+        return [{ ...uploadReservation }];
+      }
+      if (uploadReservation) { uploadReservation.status = "confirmed"; uploadReservation.external_id = String(values[0]); }
+      return [];
+    }
+    if (text.includes("insert into provider_objects")) { writes.push("video"); return [{ id: "provider-object-1" }]; }
     if (text.includes("insert into audit_log")) writes.push("audit");
     return [];
   }) as Sql;
@@ -61,8 +77,8 @@ test("approved stored Hypit MP4 uploads to Meta and its confirmed id enters the 
     status: "stored", externalId: "meta-video-1", reused: false,
     hypitJobId: jobId, jevDecisionId: decisionId, briefId, storageKey: "hypit/key", sha256: sha, byteLength: bytes.byteLength,
   });
-  assert.equal(f.requests.length, 1);
-  const body = f.requests[0]?.body;
+  assert.equal(f.requests.filter((request) => request.method === "POST").length, 1);
+  const body = f.requests.find((request) => request.method === "POST")?.body;
   assert.ok(body instanceof FormData);
   const uploadedBlob = body?.get("source");
   assert.ok(uploadedBlob instanceof Blob);
@@ -105,7 +121,7 @@ test("retry reuses the persisted Meta video id and does not upload a duplicate",
   const second = await input(f, { existingVideoId: first?.status === "stored" ? first.externalId : "" });
   assert.equal(second?.status, "stored");
   assert.equal(second?.status === "stored" && second.reused, true);
-  assert.equal(f.requests.length, 1);
+  assert.equal(f.requests.filter((request) => request.method === "POST").length, 1);
   let chainRequests = 0;
   const retriedStages = await publishPausedStages({
     provider: "meta", name: "Hypit test", dailyBudgetCents: 2000, countries: ["US"], pageId: "page-1",
@@ -126,14 +142,30 @@ test("missing Meta configuration returns NOT_CONNECTED without storing a receipt
   assert.equal(f.requests.length, 0);
 });
 
-test("failed Meta video upload returns failure and stores no publication receipt", async () => {
+test("an ambiguous Meta upload is reconciled on retry without creating a duplicate video", async () => {
   const f = fixture();
+  let acceptedName = "";
+  let showAcceptedVideo = false;
+  let postCount = 0;
   f.transport = async (request) => {
     f.requests.push(request);
-    return { status: 500, body: JSON.stringify({ error: { message: "upload failed" } }), headers: {} };
+    if (request.method === "GET") {
+      return { status: 200, body: JSON.stringify({ data: showAcceptedVideo ? [{ id: "meta-video-1", title: acceptedName }] : [] }), headers: {} };
+    }
+    postCount += 1;
+    acceptedName = String((request.body as FormData).get("name"));
+    if (postCount === 1) {
+      throw new Error("response lost after Meta accepted upload");
+    }
+    return { status: 200, body: JSON.stringify({ id: "duplicate-video" }), headers: {} };
   };
   const result = await input(f);
   assert.equal(result?.status, "failed");
   assert.deepEqual(f.writes, []);
-  assert.equal(f.requests.length, 1);
+  showAcceptedVideo = true;
+  const retried = await input(f);
+  assert.equal(retried?.status, "stored");
+  assert.equal(retried?.status === "stored" && retried.reused, true);
+  assert.equal(postCount, 1);
+  assert.deepEqual(f.writes, ["video", "audit"]);
 });
