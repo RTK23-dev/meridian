@@ -883,7 +883,7 @@ export const listOpportunities = createServerFn({ method: "POST" })
     };
   });
 
-async function persistLearnedPatterns(sql: Sql, organizationId: string, brandId: string, actorId: string): Promise<number> {
+export async function persistLearnedPatterns(sql: Sql, organizationId: string, brandId: string, actorId: string): Promise<number> {
   const loaded = await loadContext(sql, organizationId, brandId);
   const observationRows = await sql<Record<string, unknown>>`
     select creative_id, organization_id, brand_id, impressions, clicks, conversions, spend_cents, revenue_cents

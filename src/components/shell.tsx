@@ -25,6 +25,9 @@ export function Shell({ children }: { children: ReactNode }) {
               <NavLink to="/settings" current={path === "/settings"}>
                 Workspace
               </NavLink>
+              <NavLink to="/integrations" current={path === "/integrations"}>
+                Integrations
+              </NavLink>
             </nav>
           ) : null}
           <div className="ml-auto flex flex-wrap items-center gap-3">
@@ -60,7 +63,7 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-function NavLink({ to, current, children }: { to: "/" | "/settings"; current: boolean; children: ReactNode }) {
+function NavLink({ to, current, children }: { to: "/" | "/settings" | "/integrations"; current: boolean; children: ReactNode }) {
   return (
     <Link
       to={to}

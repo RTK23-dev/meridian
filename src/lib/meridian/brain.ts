@@ -35,8 +35,15 @@ export const BRAIN_FIELDS = [
   { key: "requiredDisclaimers", column: "required_disclaimers", label: "Required disclaimers", group: "Compliance" },
   { key: "prohibitedClaims", column: "prohibited_claims", label: "Prohibited claims", group: "Compliance" },
   { key: "personas", column: "personas", label: "Personas", group: "Audience" },
+  { key: "mission", column: "mission", label: "Mission", group: "Positioning" },
+  { key: "objectives", column: "objectives", label: "Objectives", group: "Positioning" },
+  { key: "proofPoints", column: "proof_points", label: "Proof points", group: "Positioning" },
+  { key: "offers", column: "offers", label: "Offers", group: "Advertising" },
   { key: "colors", column: "colors", label: "Colors", group: "Visual" },
   { key: "typography", column: "typography", label: "Typography", group: "Visual" },
+  { key: "imageryRules", column: "imagery_rules", label: "Imagery rules", group: "Visual" },
+  { key: "forbiddenImagery", column: "forbidden_imagery", label: "Forbidden imagery", group: "Visual" },
+  { key: "requiredClaims", column: "required_claims", label: "Required claims", group: "Compliance" },
 ] as const;
 
 export type BrainKey = (typeof BRAIN_FIELDS)[number]["key"];
@@ -67,8 +74,15 @@ export function emptyBrain(): BrainValues {
     requiredDisclaimers: "",
     prohibitedClaims: "",
     personas: "",
+    mission: "",
+    objectives: "",
+    proofPoints: "",
+    offers: "",
     colors: "",
     typography: "",
+    imageryRules: "",
+    forbiddenImagery: "",
+    requiredClaims: "",
   };
   return brain;
 }

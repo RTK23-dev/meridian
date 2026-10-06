@@ -1,4 +1,5 @@
 import type { DecisionQuestion, Evaluation, EvidenceRef } from "./engine.ts";
+import { duplicateRisk, promptSafety, publishingReadiness } from "./guards.ts";
 
 export type ClaimSafetyInput = {
   prohibitedHits: string[];
@@ -476,4 +477,7 @@ export const QUESTIONS = [
   opportunityGate,
   positioningFit,
   reproducibility,
+  duplicateRisk,
+  promptSafety,
+  publishingReadiness,
 ] as const;

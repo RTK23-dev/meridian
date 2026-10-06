@@ -161,10 +161,13 @@ async function createPgliteSql(): Promise<Sql> {
   globalRef.__pgliteMigrateChain__ = pass;
   await pass;
 
-  return toSql(async <T>(text: string, params: unknown[]) => {
+  const sql = toSql(async <T>(text: string, params: unknown[]) => {
     const result = await pg.query<T>(text, params);
     return result.rows;
   });
+  const { ensureDurableWorker } = await import("@/lib/meridian/jobs/boot.server.ts");
+  ensureDurableWorker(sql);
+  return sql;
 }
 
 let sqlPromise: Promise<Sql> | null = null;

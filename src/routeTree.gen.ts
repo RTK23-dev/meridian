@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as BrandsNewRouteImport } from './routes/brands/new'
@@ -27,6 +28,11 @@ import { Route as BrandsBrandIdReviewsRouteImport } from './routes/brands/$brand
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IntegrationsRoute = IntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -99,6 +105,7 @@ const BrandsBrandIdReviewsRoute = BrandsBrandIdReviewsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/integrations': typeof IntegrationsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/brands/new': typeof BrandsNewRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/integrations': typeof IntegrationsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/brands/new': typeof BrandsNewRoute
@@ -132,6 +140,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/integrations': typeof IntegrationsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/brands/new': typeof BrandsNewRoute
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/integrations'
     | '/login'
     | '/settings'
     | '/brands/new'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/integrations'
     | '/login'
     | '/settings'
     | '/brands/new'
@@ -182,6 +193,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/integrations'
     | '/login'
     | '/settings'
     | '/brands/new'
@@ -199,6 +211,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  IntegrationsRoute: typeof IntegrationsRoute
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
   BrandsNewRoute: typeof BrandsNewRoute
@@ -221,6 +234,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/integrations': {
+      id: '/integrations'
+      path: '/integrations'
+      fullPath: '/integrations'
+      preLoaderRoute: typeof IntegrationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -319,6 +339,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  IntegrationsRoute: IntegrationsRoute,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
   BrandsNewRoute: BrandsNewRoute,
