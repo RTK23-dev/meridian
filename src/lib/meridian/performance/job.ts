@@ -1,9 +1,15 @@
 import type { Sql } from "../learning/store.ts";
-import { fetchMetaInsights } from "../providers/meta.ts";
 import { liveTransport, type Transport } from "../providers/http.ts";
-import { ingestPerformanceRows, metaInsightEvent, performanceApiImplemented, type InsightRow } from "./sync.ts";
+import { startOperation } from "../observability/redact.ts";
+import { loadProviderInsights } from "./fetch.ts";
+import { ingestPerformanceRows } from "./sync.ts";
 
 type Job = { id: string; organization_id: string; brand_id: string | null };
+
+/** Learning runs only after at least one new observation is stored. */
+export function shouldEnqueueLearning(storedCount: number): boolean {
+  return storedCount > 0;
+}
 
 /** Fetches provider insights and stores only rows that pass the normalizer. */
 export async function runPerformanceSync(
@@ -13,30 +19,34 @@ export async function runPerformanceSync(
   transport: Transport = liveTransport(),
 ): Promise<string> {
   const provider = typeof payload.provider === "string" ? payload.provider : "meta";
-  if (!performanceApiImplemented(provider)) {
-    throw new Error(`${provider} performance sync is not implemented. No observations were stored.`);
-  }
+  const operation = startOperation({
+    provider,
+    operation: "performance.sync",
+    organizationId: job.organization_id,
+    brandId: job.brand_id ?? "",
+  });
   if (!job.brand_id) throw new Error("Performance sync needs a brand.");
   const creativeId = typeof payload.creativeId === "string" ? payload.creativeId : "";
   const externalAdId = typeof payload.externalAdId === "string" ? payload.externalAdId : "";
   const currency = typeof payload.currency === "string" ? payload.currency : "";
   const timezone = typeof payload.timezone === "string" ? payload.timezone : "";
-  if (!creativeId || !externalAdId || !currency || !timezone) {
-    throw new Error("Performance sync needs a creative, an external ad id, a currency, and a timezone. Nothing was stored.");
-  }
-  const token = process.env.META_ACCESS_TOKEN?.trim() ?? "";
-  if (!token) throw new Error("Meta performance sync has no access token. No observations were stored.");
-  const fetched = await fetchMetaInsights({ accessToken: token }, externalAdId, transport);
-  if (!fetched.ok) throw new Error(fetched.error || "Meta insights failed. No observations were stored.");
-  const events = fetched.rows.map((row, index) =>
-    metaInsightEvent({
-      row: row as InsightRow,
+  const loaded = await loadProviderInsights(
+    {
+      provider,
+      externalAdId,
       creativeId,
-      externalId: `${externalAdId}:${index}:${(row as InsightRow).date_start ?? ""}`,
       currency,
       timezone,
-    }),
+      startDate: typeof payload.startDate === "string" ? payload.startDate : "",
+      endDate: typeof payload.endDate === "string" ? payload.endDate : "",
+      env: process.env,
+    },
+    transport,
   );
+  if ("error" in loaded) {
+    operation.finish(false, 1, loaded.error);
+    throw new Error(loaded.error);
+  }
   const prior = await sql<{ external_id: string; creative_id: string; impressions: number; clicks: number; conversions: number; spend_cents: number; revenue_cents: number; observed_on: string }>`
     select external_id, creative_id, impressions, clicks, conversions, spend_cents, revenue_cents, observed_on
     from performance_observations
@@ -55,7 +65,8 @@ export async function runPerformanceSync(
     timezone,
     observedOn: String(row.observed_on).slice(0, 10),
   }));
-  const ingested = ingestPerformanceRows(existing, events);
+  const ingested = ingestPerformanceRows(existing, loaded.events);
+  const platform = provider === "tiktok" || provider === "google" ? provider : "meta";
   for (const event of ingested.stored) {
     await sql`
       insert into performance_observations (
@@ -63,16 +74,17 @@ export async function runPerformanceSync(
         spend_cents, revenue_cents, observed_on, source, created_by, external_id
       )
       select
-        ${crypto.randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${event.creativeId}, 'meta',
+        ${crypto.randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${event.creativeId}, ${platform},
         ${event.impressions}, ${event.clicks}, ${event.conversions ?? 0}, ${event.spendCents}, ${event.revenueCents},
-        ${event.observedOn}, 'meta', 'performance.sync', ${event.externalId}
+        ${event.observedOn}, ${platform}, 'performance.sync', ${event.externalId}
       where not exists (
         select 1 from performance_observations existing
         where existing.organization_id = ${job.organization_id} and existing.external_id = ${event.externalId}
       )
     `;
   }
-  if (ingested.stored.length === 0) return `stored:0;duplicates:${ingested.duplicates}`;
+  const record = operation.finish(true, 1, `stored:${ingested.stored.length}`);
+  if (!shouldEnqueueLearning(ingested.stored.length)) return `stored:0;duplicates:${ingested.duplicates};correlation:${record.correlationId}`;
   const learningId = crypto.randomUUID();
   await sql`
     insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload, depends_on)
@@ -90,5 +102,5 @@ export async function runPerformanceSync(
     )
     on conflict (organization_id, idempotency_key) do nothing
   `;
-  return `stored:${ingested.stored.length}`;
+  return `stored:${ingested.stored.length};correlation:${record.correlationId}`;
 }

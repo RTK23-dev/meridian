@@ -25,19 +25,27 @@ async function tick() {
     job_type: string;
     next_run: Date;
     every_seconds: number;
+    payload: string | null;
   }>(
-    `select id, organization_id, brand_id, job_type, next_run, every_seconds
+    `select id, organization_id, brand_id, job_type, next_run, every_seconds, payload
      from job_schedules
      where enabled = true and next_run <= now()`,
   );
   for (const schedule of due.rows) {
     const stamp = new Date(schedule.next_run).toISOString();
     const key = `schedule:${schedule.id}:${stamp}`;
+    let body: Record<string, unknown> = { scheduleId: schedule.id, organizationId: schedule.organization_id };
+    try {
+      const extra = JSON.parse(schedule.payload || "{}") as Record<string, unknown>;
+      body = { ...extra, scheduleId: schedule.id, organizationId: schedule.organization_id };
+    } catch {
+      body = { scheduleId: schedule.id, organizationId: schedule.organization_id };
+    }
     await pool.query(
       `insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload)
        values ($1, $2, $3, $4, $5, 'queued', $6)
        on conflict (organization_id, idempotency_key) do nothing`,
-      [crypto.randomUUID(), schedule.organization_id, schedule.brand_id, schedule.job_type, key, JSON.stringify({ scheduleId: schedule.id, organizationId: schedule.organization_id })],
+      [crypto.randomUUID(), schedule.organization_id, schedule.brand_id, schedule.job_type, key, JSON.stringify(body)],
     );
     await pool.query(
       `update job_schedules

@@ -186,10 +186,13 @@ test("unknown revenue does not become a zero-ROAS pattern", () => {
   assert.equal(patterns.some((pattern) => pattern.metric === "roas"), false);
 });
 
-test("performance sync is not scheduled for a disconnected or unimplemented provider", () => {
+test("performance sync is scheduled only for a healthy implemented provider", () => {
   assert.equal(performanceScheduleDecision({ provider: "meta", phase: "HEALTHY", disconnected: false }).enabled, true);
+  assert.equal(performanceScheduleDecision({ provider: "tiktok", phase: "HEALTHY", disconnected: false }).enabled, true);
+  assert.equal(performanceScheduleDecision({ provider: "google", phase: "CONNECTED", disconnected: false }).enabled, true);
   assert.equal(performanceScheduleDecision({ provider: "meta", phase: "HEALTHY", disconnected: true }).enabled, false);
-  assert.equal(performanceScheduleDecision({ provider: "tiktok", phase: "HEALTHY", disconnected: false }).enabled, false);
+  assert.equal(performanceScheduleDecision({ provider: "tiktok", phase: "NOT_CONFIGURED", disconnected: false }).enabled, false);
+  assert.equal(performanceScheduleDecision({ provider: "ad_library", phase: "HEALTHY", disconnected: false }).enabled, false);
 });
 
 test("oauth state must match and a token is sealed instead of returned in a URL", () => {

@@ -256,3 +256,33 @@ async function googleAd(
   if (!result.ok || !name) return { status: "failed", externalId: null, error: result.error || "Google Ads did not return an ad resource. Nothing was stored." };
   return { status: "stored", externalId: name, reused: false };
 }
+
+/** GAQL insights for one ad. The query is built only from a checked customer id, resource name, and dates. */
+export async function fetchGoogleInsights(
+  credentials: GoogleAdsCredentials,
+  input: { adResourceName: string; startDate: string; endDate: string },
+  transport: Transport,
+): Promise<{ ok: boolean; rows: Record<string, unknown>[]; error: string }> {
+  const customerId = credentials.customerId?.replaceAll("-", "") ?? "";
+  if (!credentials.accessToken.trim() || !credentials.developerToken.trim() || !/^\d+$/.test(customerId)) {
+    return { ok: false, rows: [], error: "Google Ads insights need a token, a developer token, and a customer id. Nothing was stored." };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(input.endDate)) {
+    return { ok: false, rows: [], error: "Google Ads insights need a YYYY-MM-DD range. Nothing was sent." };
+  }
+  if (!new RegExp(`^customers/${customerId}/adGroupAds/\\d+~\\d+$`).test(input.adResourceName)) {
+    return { ok: false, rows: [], error: "Google Ads insights need the ad's resource name. Nothing was sent." };
+  }
+  const query = `SELECT segments.date, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM ad_group_ad WHERE ad_group_ad.resource_name = '${input.adResourceName}' AND segments.date BETWEEN '${input.startDate}' AND '${input.endDate}'`;
+  const result = await sendWithRetry(transport, {
+    method: "POST",
+    url: `${ROOT}/customers/${customerId}/googleAds:search`,
+    headers: headers(credentials),
+    body: JSON.stringify({ query }),
+  });
+  const results = result.json && typeof result.json === "object" ? (result.json as { results?: unknown }).results : undefined;
+  if (!result.ok || !Array.isArray(results)) {
+    return { ok: false, rows: [], error: result.error || "Google Ads did not return insight rows. Nothing was stored." };
+  }
+  return { ok: true, rows: results.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object"), error: "" };
+}

@@ -105,6 +105,53 @@ export async function exchangeOauthCode(
   return { accessToken: token, refreshToken: text(result.json, "refresh_token"), expiresIn: numberOrNull(result.json, "expires_in") };
 }
 
+/** Exchanges a refresh token. A response without an access token is not stored by the caller. */
+export async function refreshOauthToken(
+  provider: OauthProvider,
+  input: { refreshToken: string; env: NodeJS.ProcessEnv },
+  transport: Transport,
+): Promise<{ accessToken: string; refreshToken: string; expiresIn: number | null } | { error: string }> {
+  if (!input.refreshToken.trim()) return { error: "No refresh token is stored. Nothing was rotated." };
+  if (provider === "meta") {
+    const url = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
+    url.searchParams.set("grant_type", "fb_exchange_token");
+    url.searchParams.set("client_id", input.env.META_APP_ID ?? "");
+    url.searchParams.set("client_secret", input.env.META_APP_SECRET ?? "");
+    url.searchParams.set("fb_exchange_token", input.refreshToken);
+    const result = await sendWithRetry(transport, { method: "GET", url: url.toString(), headers: {} });
+    const token = text(result.json, "access_token");
+    if (!result.ok || !token) return { error: "Meta did not return a refreshed access token. The stored token was not replaced." };
+    return { accessToken: token, refreshToken: text(result.json, "refresh_token") || input.refreshToken, expiresIn: numberOrNull(result.json, "expires_in") };
+  }
+  if (provider === "tiktok") {
+    const result = await sendWithRetry(transport, {
+      method: "POST",
+      url: "https://business-api.tiktok.com/open_api/v1.3/oauth2/refresh_token/",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ app_id: input.env.TIKTOK_APP_ID ?? "", secret: input.env.TIKTOK_APP_SECRET ?? "", refresh_token: input.refreshToken }),
+    });
+    const data = result.json && typeof result.json === "object" ? (result.json as { data?: unknown }).data : null;
+    const token = text(data, "access_token");
+    if (!result.ok || !token) return { error: "TikTok did not return a refreshed access token. The stored token was not replaced." };
+    return { accessToken: token, refreshToken: text(data, "refresh_token") || input.refreshToken, expiresIn: numberOrNull(data, "expires_in") };
+  }
+  const body = new URLSearchParams({
+    refresh_token: input.refreshToken,
+    client_id: input.env.GOOGLE_ADS_CLIENT_ID ?? "",
+    client_secret: input.env.GOOGLE_ADS_CLIENT_SECRET ?? "",
+    grant_type: "refresh_token",
+  });
+  const result = await sendWithRetry(transport, {
+    method: "POST",
+    url: "https://oauth2.googleapis.com/token",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+  const token = text(result.json, "access_token");
+  if (!result.ok || !token) return { error: "Google did not return a refreshed access token. The stored token was not replaced." };
+  return { accessToken: token, refreshToken: text(result.json, "refresh_token") || input.refreshToken, expiresIn: numberOrNull(result.json, "expires_in") };
+}
+
 export function sealSecret(plain: string, keyRaw: string): string | { error: string } {
   if (!keyRaw.trim()) return { error: "TOKEN_ENCRYPTION_KEY is not configured. The token was not stored." };
   const key = createHash("sha256").update(keyRaw).digest();

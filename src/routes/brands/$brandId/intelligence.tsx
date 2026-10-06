@@ -44,7 +44,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Creative intelligence</p>
         <h1 className="font-display text-4xl">What is in the stored record</h1>
         <p className="text-muted">
-          Clusters and whitespace on this screen are lexical unless a semantic vector was stored. Local semantic model: {data.neuralEmbedding}. Ad library is {data.adLibrary}. Publishing is {data.publishing}. Video is {data.video}. Performance feed is {data.performanceFeed}. Lexical similarity is not a neural embedding.
+          Clusters and whitespace on this screen are lexical unless a semantic vector was stored. Local semantic model: {data.neuralEmbedding}. Ad library, publishing, video generation, and the live performance feed are not connected in this workspace until a provider request succeeds. Lexical similarity is not that local model.
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-3">

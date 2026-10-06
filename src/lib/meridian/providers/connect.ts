@@ -3,6 +3,8 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { isLiveProvider, phaseForProbe, probeLive, providerConfigured, type LiveProvider } from "./live.ts";
+import { liveTransport } from "./http.ts";
+import { openAccessToken } from "./stages.ts";
 
 export type { LiveProvider };
 export { isLiveProvider, phaseForProbe, probeLive, providerConfigured, publishPausedCampaign } from "./live.ts";
@@ -33,12 +35,34 @@ function readRequest(input: unknown): { provider: LiveProvider; organizationId: 
 
 async function saveProbe(organizationId: string, provider: LiveProvider, userId: string) {
   const sql = await requireOrg(userId, organizationId, "admin");
-  const result = await probeLive(provider);
+  const secrets = await sql<{ sealed_token: string }>`
+    select sealed_token from provider_secrets
+    where organization_id = ${organizationId} and provider = ${provider}
+    limit 1
+  `;
+  const sealed = secrets[0]?.sealed_token ?? "";
+  let accessToken = "";
+  if (sealed.trim()) {
+    const opened = openAccessToken({ sealed, key: process.env.TOKEN_ENCRYPTION_KEY ?? "", envToken: "" });
+    if ("error" in opened) {
+      await sql`
+        insert into provider_connections (id, organization_id, provider, status, last_error, disconnected_at)
+        values (${id()}, ${organizationId}, ${provider}, 'FAILED', ${opened.error}, null)
+        on conflict (organization_id, provider) do update set
+          status = 'FAILED', last_error = excluded.last_error, disconnected_at = null, updated_at = now()
+      `;
+      return { phase: "FAILED" as const, detail: opened.error, accountId: "", accountName: "" };
+    }
+    accessToken = opened.token;
+  }
+  const result = await probeLive(provider, process.env, liveTransport(), accessToken);
+  const configured = providerConfigured(provider) || Boolean(accessToken);
   const phase = phaseForProbe({
     provider,
-    ok: providerConfigured(provider) ? result.ok : null,
+    ok: configured ? result.ok : null,
     error: result.error,
     disconnected: false,
+    configured,
   });
   await sql`
     insert into provider_connections (
@@ -86,10 +110,12 @@ export const disconnectProvider = createServerFn({ method: "POST" })
       on conflict (organization_id, provider) do update set
         status = 'DISCONNECTED', disconnected_at = now(), updated_at = now()
     `;
-    if (data.provider === "meta") {
+    if (data.provider === "meta" || data.provider === "tiktok" || data.provider === "google") {
       await sql`
         update job_schedules set enabled = false
-        where organization_id = ${data.organizationId} and job_type = 'performance.sync'
+        where organization_id = ${data.organizationId}
+          and job_type = 'performance.sync'
+          and id like ${`perf:${data.organizationId}:%:${data.provider}`}
       `;
     }
     return { phase: "DISCONNECTED" as const, detail: "Disconnected. Stored external ids were kept. No further requests are sent." };
@@ -104,5 +130,14 @@ export const reconnectProvider = createServerFn({ method: "POST" })
       update provider_connections set disconnected_at = null, updated_at = now()
       where organization_id = ${data.organizationId} and provider = ${data.provider}
     `;
-    return saveProbe(data.organizationId, data.provider, context.userId);
+    const saved = await saveProbe(data.organizationId, data.provider, context.userId);
+    if (saved.phase === "HEALTHY" || saved.phase === "CONNECTED") {
+      await sql`
+        update job_schedules set enabled = true
+        where organization_id = ${data.organizationId}
+          and job_type = 'performance.sync'
+          and id like ${`perf:${data.organizationId}:%:${data.provider}`}
+      `;
+    }
+    return saved;
   });

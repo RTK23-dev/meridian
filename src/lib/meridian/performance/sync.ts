@@ -61,7 +61,7 @@ export function ingestPerformanceRows(existing: PerformanceEvent[], incoming: Pe
 }
 
 export function performanceApiImplemented(provider: string): boolean {
-  return provider === "meta";
+  return provider === "meta" || provider === "tiktok" || provider === "google";
 }
 
 function count(value: unknown): number | null {
@@ -83,4 +83,67 @@ function conversionCount(actions: unknown): number | null {
   const match = actions.find((row) => row && typeof row === "object" && String((row as { action_type?: string }).action_type || "").includes("conversion"));
   if (!match || typeof match !== "object") return null;
   return count((match as { value?: unknown }).value);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+/** TikTok integrated report row. Missing metrics stay null. */
+export function tiktokInsightEvent(input: {
+  row: Record<string, unknown>;
+  creativeId: string;
+  externalId: string;
+  currency: string;
+  timezone: string;
+}): PerformanceEvent {
+  const dimensions = asRecord(input.row.dimensions);
+  const metrics = asRecord(input.row.metrics);
+  const day = typeof dimensions.stat_time_day === "string" ? dimensions.stat_time_day.slice(0, 10) : "";
+  return {
+    externalId: input.externalId,
+    creativeId: input.creativeId,
+    impressions: count(metrics.impressions),
+    reach: null,
+    clicks: count(metrics.clicks),
+    conversions: count(metrics.conversion),
+    spendCents: moneyCents(metrics.spend),
+    revenueCents: null,
+    currency: input.currency,
+    timezone: input.timezone,
+    observedOn: day,
+  };
+}
+
+/** Google Ads search row. cost_micros is converted to cents. A missing metric is not zero. */
+export function googleInsightEvent(input: {
+  row: Record<string, unknown>;
+  creativeId: string;
+  externalId: string;
+  currency: string;
+  timezone: string;
+}): PerformanceEvent {
+  const segments = asRecord(input.row.segments);
+  const metrics = asRecord(input.row.metrics);
+  const micros = metrics.costMicros ?? metrics.cost_micros;
+  return {
+    externalId: input.externalId,
+    creativeId: input.creativeId,
+    impressions: count(metrics.impressions),
+    reach: null,
+    clicks: count(metrics.clicks),
+    conversions: count(metrics.conversions),
+    spendCents: microsToCents(micros),
+    revenueCents: null,
+    currency: input.currency,
+    timezone: input.timezone,
+    observedOn: typeof segments.date === "string" ? segments.date.slice(0, 10) : "",
+  };
+}
+
+function microsToCents(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.round(number / 10_000);
 }

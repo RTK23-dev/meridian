@@ -4,7 +4,8 @@ import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
 import { Button, Notice, Panel, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { getCalibration, decideCalibration } from "@/lib/meridian/calibration/actions";
+import { getCalibration, decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
+import { setPerformanceSchedule } from "@/lib/meridian/performance/actions";
 import { getLearning, refreshLearning, setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
 import { StatusText } from "@/components/status";
 
@@ -133,6 +134,26 @@ function Learning({ brandId }: { brandId: string }) {
       <Panel>
         <h2 className="font-display text-2xl">Threshold versions</h2>
         <p className="mt-2 text-sm text-muted">A proposal does not change a gate. An admin has to approve it. The previous version stays in the log.</p>
+        {canAdmin ? (
+          <Button
+            className="mt-3"
+            variant="quiet"
+            disabled={busy.pending}
+            onClick={() => {
+              void busy.run(async () => {
+                const result = await proposeCalibration({ data: { brandId } });
+                setNote("detail" in result && result.detail
+                  ? result.detail
+                  : result.status === "proposed"
+                    ? `Proposal recorded from ${result.samples} reviews. Thresholds were not changed.`
+                    : "No proposal was stored.");
+                setCalibration(await getCalibration({ data: { brandId } }));
+              });
+            }}
+          >
+            Propose from reviewer outcomes
+          </Button>
+        ) : null}
         {calibration && calibration.versions.length > 0 ? (
           <ul className="mt-3 space-y-2 text-sm">
             {calibration.versions.map((version) => (
@@ -146,7 +167,12 @@ function Learning({ brandId }: { brandId: string }) {
         )}
         {calibration?.proposals.filter((item) => item.status === "proposed").map((proposal) => (
           <div key={proposal.id} className="mt-4 space-y-2">
-            <StatusText status="proposed" description={proposal.proposed} />
+            <StatusText
+              status="proposed"
+              description={proposal.samples != null
+                ? `${proposal.samples} reviewer outcomes. Disagreement ${proposal.disagreement ?? "not recorded"}. Current ${proposal.current}. Proposed ${proposal.proposedThresholds}.`
+                : proposal.proposed}
+            />
             {canAdmin ? (
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -183,6 +209,78 @@ function Learning({ brandId }: { brandId: string }) {
           </div>
         ))}
       </Panel>
+      {canAdmin && data.organizationId ? (
+        <Panel>
+          <h2 className="font-display text-2xl">Performance schedule</h2>
+          <p className="mt-2 text-sm text-muted">This only enqueues a sync after the provider has a successful connection. The worker fetches the metrics. Disconnect stops the schedule.</p>
+          <form
+            className="mt-4 grid gap-3 md:grid-cols-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              const provider = form.get("provider");
+              if (provider !== "meta" && provider !== "tiktok" && provider !== "google") return;
+              void busy.run(async () => {
+                const result = await setPerformanceSchedule({
+                  data: {
+                    organizationId: data.organizationId,
+                    brandId,
+                    provider,
+                    creativeId: String(form.get("creativeId") ?? ""),
+                    externalAdId: String(form.get("externalAdId") ?? ""),
+                    currency: String(form.get("currency") ?? ""),
+                    timezone: String(form.get("timezone") ?? ""),
+                    startDate: String(form.get("startDate") ?? ""),
+                    endDate: String(form.get("endDate") ?? ""),
+                    everySeconds: Number(form.get("everySeconds") ?? 3600),
+                  },
+                });
+                setNote(`${result.reason} Schedule ${result.id}.`);
+              });
+            }}
+          >
+            <label className="block text-sm font-semibold">
+              Provider
+              <select name="provider" className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" defaultValue="meta">
+                <option value="meta">Meta</option>
+                <option value="tiktok">TikTok</option>
+                <option value="google">Google Ads</option>
+              </select>
+            </label>
+            <label className="block text-sm font-semibold">
+              Cadence in seconds
+              <input name="everySeconds" type="number" min={30} defaultValue={3600} required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
+            </label>
+            <label className="block text-sm font-semibold">
+              Creative id
+              <input name="creativeId" required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
+            </label>
+            <label className="block text-sm font-semibold">
+              External ad id
+              <input name="externalAdId" required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
+            </label>
+            <label className="block text-sm font-semibold">
+              Currency
+              <input name="currency" required defaultValue="USD" className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
+            </label>
+            <label className="block text-sm font-semibold">
+              Timezone
+              <input name="timezone" required defaultValue="UTC" className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
+            </label>
+            <label className="block text-sm font-semibold">
+              Start date
+              <input name="startDate" type="date" required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
+            </label>
+            <label className="block text-sm font-semibold">
+              End date
+              <input name="endDate" type="date" required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
+            </label>
+            <div className="md:col-span-2">
+              <Button type="submit" disabled={busy.pending}>Save performance schedule</Button>
+            </div>
+          </form>
+        </Panel>
+      ) : null}
       <Panel>
         {data.rejections.length === 0 ? <p className="mt-2 text-muted">No stored rejections.</p> : (
           <ul className="mt-3 space-y-1 text-sm">

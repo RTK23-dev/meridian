@@ -18,11 +18,9 @@ The worker heartbeats on each tick, leases jobs for 120 seconds, recovers expire
 
 ## Secrets
 
-Set tokens in the host environment. Do not commit them. Supported names are listed in the README. Postgres stores connection status and external ids, not access tokens.
+Set tokens in the host environment. Do not commit them. Supported names are listed in the README. Postgres stores connection status, external ids, and access tokens only after they are sealed with `TOKEN_ENCRYPTION_KEY`. It does not store the token in plaintext, and the UI does not return it.
 
-## Migrations
-
-`migrations/*.sql` apply in order on startup and in `npm run build`. `0008_providers.sql` adds `provider_connections` and `provider_objects`. There is no seed data.
+`0009_completion.sql` adds OAuth state, sealed tokens, webhook receipts, and alert rows. `0010_activation.sql` adds the schedule payload, a sealed refresh token, delivery targets, and delivery attempts. There is no seed data. `migrations/*.sql` apply in order on startup and in `npm run build`.
 
 ## Rollback
 

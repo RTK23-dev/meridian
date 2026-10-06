@@ -6,6 +6,7 @@ import { StatusText } from "@/components/status";
 import { Button, Notice, Panel, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { beginOauth } from "@/lib/meridian/oauth/begin";
+import { refreshStoredToken } from "@/lib/meridian/oauth/refresh";
 import { disconnectProvider, probeProviderConnection, reconnectProvider } from "@/lib/meridian/providers/connect";
 import { getSystemStatus } from "@/lib/meridian/system";
 
@@ -130,6 +131,20 @@ function Integrations() {
                   }}
                 >
                   Disconnect
+                </Button>
+                <Button
+                  type="button"
+                  variant="quiet"
+                  disabled={busy.pending || (item.provider !== "meta" && item.provider !== "tiktok" && item.provider !== "google")}
+                  onClick={() => {
+                    if (item.provider !== "meta" && item.provider !== "tiktok" && item.provider !== "google") return;
+                    void busy.run(async () => {
+                      const result = await refreshStoredToken({ data: { organizationId, provider: item.provider } });
+                      setNote(`${item.provider}: ${result.detail}`);
+                    });
+                  }}
+                >
+                  Refresh token
                 </Button>
               </div>
             ) : (

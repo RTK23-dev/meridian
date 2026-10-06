@@ -69,6 +69,7 @@ export async function publishTikTokPaused(
       objective_type: "TRAFFIC",
       budget_mode: "BUDGET_MODE_DAY",
       budget: input.dailyBudget,
+      operation_status: "DISABLE",
     }),
   });
   const id = nested(result.json, "campaign_id");
@@ -147,12 +148,30 @@ export async function publishTikTokFlow(
     };
     return { campaign, ad_group: adGroup, creative: required, ad: required };
   }
-  if (input.existing?.creative?.trim() && input.existing?.ad?.trim()) {
+  const storedCreative = input.existing?.creative?.trim() ?? "";
+  const storedAd = input.existing?.ad?.trim() ?? "";
+  if (storedCreative && storedAd) {
     return {
       campaign,
       ad_group: adGroup,
-      creative: { status: "stored", externalId: input.existing.creative, reused: true },
-      ad: { status: "stored", externalId: input.existing.ad, reused: true },
+      creative: { status: "stored", externalId: storedCreative, reused: true },
+      ad: { status: "stored", externalId: storedAd, reused: true },
+    };
+  }
+  if (storedCreative || storedAd) {
+    return {
+      campaign,
+      ad_group: adGroup,
+      creative: storedCreative
+        ? { status: "stored", externalId: storedCreative, reused: true }
+        : { status: "failed", externalId: null, error: "The TikTok ad id is stored, but the creative id is not. The ad was not recreated and no creative id was invented." },
+      ad: storedAd
+        ? { status: "stored", externalId: storedAd, reused: true }
+        : {
+            status: "failed",
+            externalId: null,
+            error: "TikTok creates the creative and the ad in one request. The creative id is already stored, so the ad was not sent again.",
+          },
     };
   }
   if (!input.landingPageUrl.trim() || !input.adText.trim()) {
@@ -278,4 +297,38 @@ function firstAdId(value: unknown): string {
   if (!Array.isArray(list)) return "";
   const first = list[0];
   return typeof first === "string" || typeof first === "number" ? String(first) : "";
+}
+
+/** Integrated report for one ad. Rows are whatever TikTok returned. Missing metrics are not filled in. */
+export async function fetchTikTokInsights(
+  credentials: TikTokCredentials,
+  input: { adId: string; startDate: string; endDate: string },
+  transport: Transport,
+): Promise<{ ok: boolean; rows: Record<string, unknown>[]; error: string }> {
+  if (!credentials.accessToken.trim() || !credentials.advertiserId?.trim()) {
+    return { ok: false, rows: [], error: "TikTok insights need an access token and advertiser id. Nothing was stored." };
+  }
+  if (!/^[A-Za-z0-9_-]+$/.test(input.adId) || !/^\d{4}-\d{2}-\d{2}$/.test(input.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(input.endDate)) {
+    return { ok: false, rows: [], error: "TikTok insights need an ad id and a YYYY-MM-DD range. Nothing was sent." };
+  }
+  const params = new URLSearchParams({
+    advertiser_id: credentials.advertiserId,
+    report_type: "BASIC",
+    data_level: "AUCTION_AD",
+    dimensions: JSON.stringify(["ad_id", "stat_time_day"]),
+    metrics: JSON.stringify(["impressions", "clicks", "spend", "conversion"]),
+    start_date: input.startDate,
+    end_date: input.endDate,
+    filtering: JSON.stringify([{ field_name: "ad_ids", filter_type: "IN", filter_value: JSON.stringify([input.adId]) }]),
+    page_size: "100",
+  });
+  const result = await sendWithRetry(transport, {
+    method: "GET",
+    url: `${ROOT}/report/integrated/get/?${params.toString()}`,
+    headers: headers(credentials.accessToken),
+  });
+  if (!result.ok || numberField(result.json, "code") !== 0) {
+    return { ok: false, rows: [], error: textField(result.json, "message") || result.error || "TikTok did not return a report. Nothing was stored." };
+  }
+  return { ok: true, rows: nestedList(result.json), error: "" };
 }

@@ -20,15 +20,16 @@ Licensed under the [MIT License](LICENSE). Original code. Not a republication of
 
 | Need | Environment | Until then |
 | --- | --- | --- |
-| Meta ads | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID` | Not configured. Nothing is published. |
+| Meta ads | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, and for OAuth `META_APP_ID`, `META_APP_SECRET` | Not configured. Nothing is published. |
 | Meta Ad Library | `META_AD_LIBRARY_TOKEN` | No ads are collected. |
-| TikTok ads | `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID` | No campaign is created. |
-| Google Ads | `GOOGLE_ADS_ACCESS_TOKEN`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID` | No customer is listed. |
+| TikTok ads | `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, and for OAuth `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET` | No campaign is created. An ad also needs an uploaded image or video id. |
+| Google Ads | `GOOGLE_ADS_ACCESS_TOKEN`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, and for OAuth `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET` | No customer is listed. |
+| Token storage and webhooks | `TOKEN_ENCRYPTION_KEY`, `WEBHOOK_SECRET` | Tokens are not stored. Webhook posts are rejected. |
 | Object storage | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Files stay on the filesystem provider. |
 | Text or image models | `XAI_API_KEY` or `OPENROUTER_API_KEY` | Generation says the model is unavailable. |
 | Worker and scheduler | `DATABASE_URL` on a long-lived host | The web process does not run their loops. |
 
-Credentials stay in the host environment. They are not written into Postgres.
+App secrets stay in the host environment. OAuth access and refresh tokens are written to Postgres only as AES-256-GCM ciphertext when `TOKEN_ENCRYPTION_KEY` is set. The UI does not return them.
 
 ## Stack
 
@@ -63,12 +64,12 @@ npm run build
 | Decision loop, JEV, learning write-back | COMPLETE in code. Tests prove a stored result changes the next rank and brief |
 | Local semantic embeddings, worker, scheduler, filesystem storage | COMPLETE in this runtime. A second machine is DEPLOYMENT REQUIRED |
 | S3, Meta, TikTok, Google Ads, Ad Library | EXTERNAL CONNECTION REQUIRED. Clients store an id only after the response contains one |
-| Meta performance sync job | COMPLETE as a worker job. TikTok and Google performance clients are not implemented, so they are not scheduled |
-| OAuth callback and sealed token storage | COMPLETE in code. App ids and `TOKEN_ENCRYPTION_KEY` are EXTERNAL CONNECTION REQUIRED |
-| Signed webhooks | COMPLETE as verification and dedupe. A provider subscription is EXTERNAL CONNECTION REQUIRED |
-| Calibration approval | COMPLETE on the learning page. Nothing changes until an admin approves |
-| Alert delivery | COMPLETE in the product. An external page is not sent unless a webhook target accepts it |
-| Authenticated axe and screen-reader pass | MANUAL VERIFICATION REQUIRED |
+| Meta, TikTok, and Google performance sync | EXTERNAL CONNECTION REQUIRED. The worker fetches insights, rejects missing counts, dedupes, and enqueues learning only after a new row. A schedule is stored only after a healthy connection |
+| OAuth callback, refresh, and sealed token storage | EXTERNAL CONNECTION REQUIRED. The server exchanges the code and can rotate a stored refresh token. App ids and `TOKEN_ENCRYPTION_KEY` are still required |
+| Signed webhooks | EXTERNAL CONNECTION REQUIRED for the provider subscription. Signature, replay, duplicate, and unknown-account checks are implemented |
+| Calibration approval | COMPLETE in code. An admin proposes from stored reviewer outcomes and approves on the learning page. Nothing changes before that |
+| Alert delivery | EXTERNAL CONNECTION REQUIRED for paging. In-app alerts can be recorded, acknowledged, and queued to a webhook. Delivery is not claimed without a target response |
+| Authenticated axe and keyboard walk | The script is `node scripts/a11y-audit.mjs` against a running app. It uses the real sign-up form. A screen-reader pass is still MANUAL VERIFICATION REQUIRED |
 | Live ads and live metrics | Not running here. Do not read a client as a connected account |
 
 Not production-ready as a live media buyer while those external and manual items are open. The gap table is [docs/PRODUCT_GAP_ANALYSIS.md](docs/PRODUCT_GAP_ANALYSIS.md).

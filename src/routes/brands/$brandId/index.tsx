@@ -151,7 +151,7 @@ function MachineStrip({ snapshot }: { snapshot: MachineSnapshot }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted">
-        Text model: {snapshot.providerConfigured ? snapshot.provider : "not configured"}. Ad library, publishing, video, and neural embeddings: not connected.
+        Text model: {snapshot.providerConfigured ? snapshot.provider : "not configured"}. Local semantic embeddings run in this app. Ad library, live publishing, and video generation stay unconnected until a provider request succeeds.
         {snapshot.usage.tokens > 0 ? ` Model tokens recorded: ${snapshot.usage.tokens}.` : ""} Cost is {snapshot.usage.costCents == null ? "not reported" : `${snapshot.usage.costCents} cents`}.
       </p>
       <ol className="grid gap-3 md:grid-cols-3">

@@ -192,7 +192,7 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
       </Panel>
       <Panel>
         <h2 className="font-display text-2xl">Source material</h2>
-        <p className="mt-2 text-sm text-muted">Plain text and DOCX are stored as untrusted text. PDF extraction is not connected. Nothing here overwrites the brain.</p>
+        <p className="mt-2 text-sm text-muted">Plain text, DOCX, and PDF text can be stored. Instruction-like lines are dropped. An image-only PDF fails. Nothing here overwrites the brain.</p>
         {canEdit ? (
           <form
             className="mt-3 space-y-3"
@@ -206,30 +206,33 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
               });
             }}
           >
-            <TextArea name="material" placeholder="Paste brand or product text" />
+            <label className="block space-y-2 text-sm font-semibold">
+              Upload text, DOCX, or PDF
+              <input
+                className="block w-full text-sm font-normal"
+                type="file"
+                accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                aria-describedby="material-file-hint"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const raw = String(reader.result ?? "");
+                    const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
+                    void run(async () => {
+                      const saved = await storeMaterial({ data: { brandId, filename: file.name, mime: file.type || "application/octet-stream", text: "", base64 } });
+                      setNote(saved.detail);
+                    });
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+              <span id="material-file-hint" className="block font-normal text-muted">The file is stored as untrusted text. It does not change the brain.</span>
+            </label>
+            <TextArea name="material" aria-label="Pasted source text" placeholder="Or paste brand or product text" />
             <Button type="submit" disabled={pending}>Store pasted text</Button>
           </form>
-        ) : null}
-        {canEdit ? (
-          <input
-            className="mt-3 block"
-            type="file"
-            accept=".txt,.md,.docx,.pdf,text/plain,application/pdf"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              const reader = new FileReader();
-              reader.onload = () => {
-                const raw = String(reader.result ?? "");
-                const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
-                void run(async () => {
-                  const saved = await storeMaterial({ data: { brandId, filename: file.name, mime: file.type || "application/octet-stream", text: "", base64 } });
-                  setNote(saved.detail);
-                });
-              };
-              reader.readAsDataURL(file);
-            }}
-          />
         ) : null}
       </Panel>
       {error ? <Notice>{error}</Notice> : null}

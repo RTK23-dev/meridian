@@ -27,3 +27,27 @@ export function operationRecord(input: {
   }
   return { ...input, detail };
 }
+
+export function startOperation(input: { provider: string; operation: string; organizationId: string; brandId: string }): {
+  correlationId: string;
+  finish: (ok: boolean, attempts: number, detail: string) => Record<string, string | number | boolean>;
+} {
+  const correlationId = crypto.randomUUID();
+  const started = Date.now();
+  return {
+    correlationId,
+    finish(ok, attempts, detail) {
+      return operationRecord({
+        correlationId,
+        provider: input.provider,
+        operation: input.operation,
+        organizationId: input.organizationId,
+        brandId: input.brandId,
+        durationMs: Date.now() - started,
+        ok,
+        attempts,
+        detail,
+      });
+    },
+  };
+}

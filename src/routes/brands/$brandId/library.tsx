@@ -2,9 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
+import { StatusText } from "@/components/status";
 import { Button, Field, Notice, Panel, SelectInput, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { attachCreativeImage, getTrace, listLibrary, publishToPlatform, recordObservation, recordPerformance } from "@/lib/meridian/machine";
+import { attachCreativeImage, getTrace, listLibrary, recordObservation, recordPerformance } from "@/lib/meridian/machine";
+import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 
 export const Route = createFileRoute("/brands/$brandId/library")({ component: Page });
@@ -24,6 +26,7 @@ function Library({ brandId }: { brandId: string }) {
   const [trace, setTrace] = useState<Awaited<ReturnType<typeof getTrace>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [stages, setStages] = useState<{ objectType: string; status: string; externalId: string | null; detail: string }[]>([]);
   const busy = useBusy();
 
   async function reload() {
@@ -54,30 +57,118 @@ function Library({ brandId }: { brandId: string }) {
       <div className="max-w-2xl space-y-3">
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Library</p>
         <h1 className="font-display text-4xl">Creatives this brand owns</h1>
-        <p className="text-muted">Competitor observations stay on Market. Performance is something you enter. No ad account is connected.</p>
+        <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing stays paused and runs only when you submit the form below.</p>
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {busy.error ? <Notice>{busy.error}</Notice> : null}
       <Panel>
-        <h2 className="font-display text-2xl">Publishing</h2>
-        <p className="mt-2 text-sm text-muted">No platform is connected. This does not send a creative anywhere, and auto-publish stays off.</p>
+        <h2 className="font-display text-2xl">Paused publishing</h2>
+        <p className="mt-2 text-sm text-muted">
+          This creates paused objects and stores an id only when the provider returns one. Auto-publish stays off. A missing token, page, location, or uploaded asset stops the chain. Nothing is marked published from this form’s click alone.
+        </p>
         {hasRole(data.role, "admin") ? (
-          <Button
-            className="mt-3"
-            variant="quiet"
-            disabled={busy.pending}
-            onClick={() => {
+          <form
+            className="mt-4 grid gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              const provider = form.get("provider");
+              if (provider !== "meta" && provider !== "tiktok" && provider !== "google") return;
+              const split = (name: string) => String(form.get(name) ?? "").split(",").map((item) => item.trim()).filter(Boolean);
               void busy.run(async () => {
-                const result = await publishToPlatform({ data: { brandId } });
-                setNote("detail" in result && result.detail ? result.detail : "Publishing is not connected.");
+                const result = await publishPausedObjects({
+                  data: {
+                    brandId,
+                    provider,
+                    creativeId: String(form.get("creativeId") ?? ""),
+                    name: String(form.get("name") ?? ""),
+                    dailyBudgetCents: Number(form.get("dailyBudgetCents") ?? 0),
+                    countries: split("countries"),
+                    locationIds: split("locationIds"),
+                    pageId: String(form.get("pageId") ?? ""),
+                    link: String(form.get("link") ?? ""),
+                    message: String(form.get("message") ?? ""),
+                    scheduleStart: String(form.get("scheduleStart") ?? ""),
+                    imageIds: split("imageIds"),
+                    videoId: String(form.get("videoId") ?? ""),
+                    headlines: split("headlines"),
+                    descriptions: split("descriptions"),
+                    cpcBidCents: Number(form.get("cpcBidCents") ?? 0),
+                  },
+                });
+                setStages(result.stages);
+                setNote(`${result.detail} Correlation ${result.correlationId}.`);
               });
             }}
           >
-            Check publishing
-          </Button>
+            <Field label="Provider">
+              <SelectInput name="provider" defaultValue="meta">
+                <option value="meta">Meta</option>
+                <option value="tiktok">TikTok</option>
+                <option value="google">Google Ads</option>
+              </SelectInput>
+            </Field>
+            <Field label="Creative" hint="Used only to resume this brand’s stored ids. It is not sent as an external id.">
+              <SelectInput name="creativeId" required defaultValue={data.creatives[0]?.id ?? ""}>
+                {data.creatives.length === 0 ? <option value="">Create a creative first</option> : null}
+                {data.creatives.map((item) => (
+                  <option key={item.id} value={item.id}>{item.title || item.hook || item.id}</option>
+                ))}
+              </SelectInput>
+            </Field>
+            <Field label="Name">
+              <TextInput name="name" required maxLength={120} />
+            </Field>
+            <Field label="Daily budget (cents)">
+              <TextInput name="dailyBudgetCents" type="number" min={1} required defaultValue={1000} />
+            </Field>
+            <Field label="Link">
+              <TextInput name="link" type="url" placeholder="https://" />
+            </Field>
+            <Field label="Message">
+              <TextArea name="message" />
+            </Field>
+            <Field label="Meta countries" hint="Comma-separated, such as US. Used only for Meta.">
+              <TextInput name="countries" />
+            </Field>
+            <Field label="Meta page id">
+              <TextInput name="pageId" />
+            </Field>
+            <Field label="TikTok location ids" hint="Numeric location ids, not country codes. An ad also needs an uploaded image or video id.">
+              <TextInput name="locationIds" />
+            </Field>
+            <Field label="TikTok schedule start">
+              <TextInput name="scheduleStart" placeholder="2026-01-02 00:00:00" />
+            </Field>
+            <Field label="TikTok image ids">
+              <TextInput name="imageIds" />
+            </Field>
+            <Field label="TikTok video id">
+              <TextInput name="videoId" />
+            </Field>
+            <Field label="Google headlines" hint="Each headline is 30 characters or fewer.">
+              <TextInput name="headlines" />
+            </Field>
+            <Field label="Google descriptions" hint="Each description is 90 characters or fewer.">
+              <TextInput name="descriptions" />
+            </Field>
+            <Field label="Google CPC bid (cents)">
+              <TextInput name="cpcBidCents" type="number" min={0} defaultValue={0} />
+            </Field>
+            <Button type="submit" disabled={busy.pending || data.creatives.length === 0}>Create paused objects</Button>
+          </form>
         ) : (
-          <p className="mt-2 text-sm text-muted">An admin can confirm the provider state.</p>
+          <p className="mt-2 text-sm text-muted">An admin can send a paused publish.</p>
         )}
+        {stages.length > 0 ? (
+          <ul className="mt-4 space-y-2">
+            {stages.map((stage) => (
+              <li key={stage.objectType}>
+                <StatusText status={stage.status} label={stage.objectType} description={stage.externalId ? `Confirmed id ${stage.externalId}.` : stage.detail || "No id was stored."} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </Panel>
       {data.creatives.length === 0 ? <Panel>No brand creatives yet. Score an opportunity, brief it, and save a script. Or record one you already ran.</Panel> : (
         <ul className="space-y-3">

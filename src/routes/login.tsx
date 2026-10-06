@@ -10,7 +10,7 @@ function Login() {
   if (isPending) return <main id="main" className="grid min-h-screen place-items-center text-muted">Checking session…</main>;
   if (user) return <Navigate to="/" />;
   return (
-    <main id="main" className="mx-auto grid min-h-screen max-w-md content-center gap-6 px-6 py-10">
+    <main id="main" tabIndex={-1} className="mx-auto grid min-h-screen max-w-md content-center gap-6 px-6 py-10">
       <h1 className="font-display text-4xl">Sign in</h1>
       <EmailAuth />
       <div className="flex flex-col gap-3">

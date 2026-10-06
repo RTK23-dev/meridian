@@ -24,10 +24,15 @@ export const Route = createFileRoute("/api/oauth/callback")({
         if ("error" in exchanged) return new Response(exchanged.error, { status: 502 });
         const sealed = sealSecret(exchanged.accessToken, process.env.TOKEN_ENCRYPTION_KEY ?? "");
         if (typeof sealed !== "string") return new Response(sealed.error, { status: 500 });
+        const sealedRefresh = exchanged.refreshToken ? sealSecret(exchanged.refreshToken, process.env.TOKEN_ENCRYPTION_KEY ?? "") : "";
+        if (typeof sealedRefresh !== "string") return new Response(sealedRefresh.error, { status: 500 });
         await sql`
-          insert into provider_secrets (id, organization_id, provider, sealed_token)
-          values (${crypto.randomUUID()}, ${match.organization_id}, ${provider}, ${sealed})
-          on conflict (organization_id, provider) do update set sealed_token = excluded.sealed_token, updated_at = now()
+          insert into provider_secrets (id, organization_id, provider, sealed_token, sealed_refresh)
+          values (${crypto.randomUUID()}, ${match.organization_id}, ${provider}, ${sealed}, ${sealedRefresh})
+          on conflict (organization_id, provider) do update set
+            sealed_token = excluded.sealed_token,
+            sealed_refresh = excluded.sealed_refresh,
+            updated_at = now()
         `;
         await sql`update oauth_states set used_at = now() where state_hash = ${hashOauthState(state)}`;
         return new Response(null, { status: 302, headers: { location: "/integrations" } });

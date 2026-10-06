@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { Authed, useBusy } from "@/components/gate";
 import { AuditList } from "@/components/audit";
+import { AlertsPanel } from "@/components/alerts-panel";
 import { Button, Field, Notice, Panel, SelectInput, TextInput } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole, ROLES } from "@/lib/meridian/access";
@@ -201,6 +202,7 @@ function Settings() {
         <h2 className="font-display text-2xl">Audit</h2>
         <AuditList entries={data.audit} />
       </Panel>
+      {canAdmin ? <AlertsPanel organizationId={active.id} /> : null}
       <Panel>
         <h2 className="font-display text-2xl">What is and is not connected</h2>
         <ul className="mt-3 space-y-2 text-sm text-muted">

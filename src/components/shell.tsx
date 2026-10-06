@@ -58,7 +58,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main id="main" className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-8">{children}</main>
     </div>
   );
 }

@@ -1634,8 +1634,9 @@ export const getLearning = createServerFn({ method: "POST" })
     const flag = settingRows[0]?.use_organization_learning;
     return {
       role: access.role,
+      organizationId: access.organizationId,
       useOrganizationLearning: flag === true || flag === "t" || flag === "true",
-      policy: "A pattern is stored only after at least 3 creatives and 300 impressions in that bucket, and only when CTR, conversion rate, or ROAS differs from the brand baseline by 5% or more. Pairs such as angle+hook and visual style+format use the same floor. VALIDATED requires 4 creatives, 2000 impressions, and 15% absolute lift. OBSERVED patterns are discounted in the next rank. Organization patterns are ignored unless this brand opts in. Global patterns are never used. Recompute drains queued learning jobs. There is no separate worker, and thresholds are not moved.",
+      policy: "A pattern is stored only after at least 3 creatives and 300 impressions in that bucket, and only when CTR, conversion rate, or ROAS differs from the brand baseline by 5% or more. Pairs such as angle+hook and visual style+format use the same floor. VALIDATED requires 4 creatives, 2000 impressions, and 15% absolute lift. OBSERVED patterns are discounted in the next rank. Organization patterns are ignored unless this brand opts in. Global patterns are never used. A separate worker runs queued learning when it is deployed. Thresholds change only after an admin approves a proposal.",
       patterns: patterns.map((row) => ({
         id: asText(row.id),
         attribute: asText(row.attribute),
