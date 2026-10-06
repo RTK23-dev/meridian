@@ -150,25 +150,28 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
         {assetsQuery.error ? <ErrorState message={errorText(assetsQuery.error)} onRetry={() => void assetsQuery.refetch()} /> : null}
         {logos[0] ? <img src={`data:${logos[0].mime};base64,${logos[0].body}`} alt="Stored logo" className="mt-3 h-16 w-auto" /> : assetsQuery.error ? null : <p className="mt-3 text-muted">No logo stored.</p>}
         {canEdit ? (
-          <input
-            className="mt-3 block w-full min-w-0 text-sm"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              const reader = new FileReader();
-              reader.onload = () => {
-                const raw = String(reader.result ?? "");
-                const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
-                void run(async () => {
-                  const saved = await uploadLogo({ data: { brandId, base64 } });
-                  setNote(saved.status === "stored" ? "Logo stored." : saved.detail);
-                });
-              };
-              reader.readAsDataURL(file);
-            }}
-          />
+          <label className="mt-3 block space-y-2 text-sm font-semibold">
+            Upload brand logo
+            <input
+              className="block w-full min-w-0 text-sm font-normal"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const raw = String(reader.result ?? "");
+                  const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
+                  void run(async () => {
+                    const saved = await uploadLogo({ data: { brandId, base64 } });
+                    setNote(saved.status === "stored" ? "Logo stored." : saved.detail);
+                  });
+                };
+                reader.readAsDataURL(file);
+              }}
+            />
+          </label>
         ) : null}
       </Panel>
       <Panel>
