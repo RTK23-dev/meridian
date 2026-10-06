@@ -8,8 +8,10 @@ import {
   addCompetitor,
   fetchSourcePage,
   getMarket,
+  proposeCompetitors,
   recordObservation,
   resolveSuggestion,
+  reviewCompetitor,
   suggestFromDocument,
 } from "@/lib/meridian/machine";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
@@ -91,6 +93,29 @@ function MarketPage({ brandId }: { brandId: string }) {
             ))}
           </ul>
         )}
+        {market.competitors.some((item) => item.status === "candidate") ? (
+          <ul className="mt-4 space-y-2">
+            {market.competitors.filter((item) => item.status === "candidate").map((item) => (
+              <li key={item.id} className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-widest text-brass">Candidate</span>
+                <span className="font-semibold">{item.name}</span>
+                {canEdit ? (
+                  <>
+                    <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { await reviewCompetitor({ data: { brandId, competitorId: item.id, action: "confirm" } }); await reload(); }); }}>Confirm</Button>
+                    <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { await reviewCompetitor({ data: { brandId, competitorId: item.id, action: "reject" } }); await reload(); }); }}>Reject</Button>
+                  </>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-sm text-muted">No unconfirmed candidates. Discovery never marks a competitor confirmed on its own.</p>
+        )}
+        {canEdit ? (
+          <div className="mt-3">
+            <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { const result = await proposeCompetitors({ data: { brandId } }); setNote(result.created === 0 ? "No new competitor candidates from stored evidence." : `${result.created} candidate(s) stored. They stay unconfirmed until you accept them.`); await reload(); }); }}>Find candidates</Button>
+          </div>
+        ) : null}
         {canEdit ? (
           <form
             className="mt-4 grid gap-3 md:grid-cols-2"

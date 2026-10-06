@@ -10,7 +10,7 @@ export function quarantineExternalText(raw: string): { text: string; droppedLine
       droppedLines += 1;
       continue;
     }
-    kept.push(line.replace(/\u0000/g, ""));
+    kept.push(line.replaceAll("\u0000", ""));
   }
   return { text: kept.join("\n").trim(), droppedLines };
 }

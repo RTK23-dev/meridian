@@ -2,17 +2,16 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
-import { BRAIN_FIELDS, emptyBrain, type BrainKey, type ProvenanceMap } from "@/lib/meridian/brain";
+import { BRAIN_FIELDS, type BrainKey, type ProvenanceMap } from "@/lib/meridian/brain";
 import { buildBrief, renderGenerationPrompt, type BriefDraft } from "@/lib/meridian/brief/engine";
-import type { BrainSlice, LearnedPattern, ObservedCreative, PerformanceRow, ProductFact, RejectionFact } from "@/lib/meridian/domain";
 import { decide } from "@/lib/meridian/jev/engine";
 import { briefGate, opportunityGate, visualQa } from "@/lib/meridian/jev/questions";
-import { countRejections, learnPatterns } from "@/lib/meridian/learning/engine";
+import { countRejections } from "@/lib/meridian/learning/engine";
+import { applyLearnedPatterns } from "@/lib/meridian/learning/store";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { rankOpportunities, type OpportunityDraft } from "@/lib/meridian/opportunity/engine";
 import { assessCopy } from "@/lib/meridian/production/assess";
 import { promptById, PROMPTS } from "@/lib/meridian/prompts/registry";
-import { weightsFromUnknown, type ScoreWeights } from "@/lib/meridian/scoring";
 import { contentHash } from "@/lib/meridian/assets/lifecycle";
 import { designExperiment } from "@/lib/meridian/experiments/design";
 import { SOURCE_ADAPTERS } from "@/lib/meridian/sources/adapters";
@@ -25,6 +24,8 @@ import { summarizeIntelligence } from "@/lib/meridian/intelligence/summary";
 import { summarizeUsage } from "@/lib/meridian/observability/usage";
 import { quarantineExternalText } from "@/lib/meridian/ingestion/quarantine";
 import { inspectImage } from "@/lib/meridian/assets/images";
+import { discoverCompetitorCandidates } from "@/lib/meridian/competitors/discover";
+import { loadBrandContext } from "@/lib/meridian/context/load";
 import { publicUrlIssue } from "@/lib/meridian/sources/public-url";
 
 export const REVIEW_REASON_CODES = [
@@ -150,123 +151,8 @@ async function audit(
   `;
 }
 
-function sliceFromRow(row: Record<string, unknown> | undefined): BrainSlice {
-  const brain = emptyBrain();
-  if (row) {
-    for (const field of BRAIN_FIELDS) brain[field.key] = asText(row[field.column]);
-  }
-  return {
-    positioning: brain.positioning,
-    differentiators: brain.differentiators,
-    problems: brain.problems,
-    desires: brain.desires,
-    objections: brain.objections,
-    tone: brain.tone,
-    wordsToAvoid: brain.wordsToAvoid,
-    preferredFormats: brain.preferredFormats,
-    prohibitedClaims: brain.prohibitedClaims,
-    requiredDisclaimers: brain.requiredDisclaimers,
-    targetCustomers: brain.targetCustomers,
-    valueProposition: brain.valueProposition,
-  };
-}
-
-function creativeFromRow(row: Record<string, unknown>): ObservedCreative {
-  return {
-    id: asText(row.id),
-    organizationId: asText(row.organization_id),
-    brandId: asText(row.brand_id),
-    origin: asText(row.origin) as ObservedCreative["origin"],
-    angle: asText(row.angle),
-    hookType: asText(row.hook_type),
-    format: asText(row.format),
-    proofType: asText(row.proof_type),
-    offer: asText(row.offer),
-    cta: asText(row.cta),
-    visualStyle: asText(row.visual_style),
-    platform: asText(row.platform),
-    emotion: asText(row.emotion),
-    productName: asText(row.product_name),
-    claim: asText(row.claim),
-    text: asText(row.raw_text),
-  };
-}
-
-async function loadWeights(sql: Sql, organizationId: string): Promise<ScoreWeights> {
-  const rows = await sql<Record<string, unknown>>`
-    select brand_fit, historical_evidence, market_signal, novelty, reproducibility, saturation, risk
-    from organizations where id = ${organizationId} limit 1
-  `;
-  return weightsFromUnknown(rows[0]);
-}
-
 async function loadContext(sql: Sql, organizationId: string, brandId: string) {
-  const brainRows = await sql.query<Record<string, unknown>>(
-    `select ${BRAIN_FIELDS.map((field) => field.column).join(", ")} from brand_brains where brand_id = $1 limit 1`,
-    [brandId],
-  );
-  const productRows = await sql<Record<string, unknown>>`
-    select id, name, description, allowed_claims, prohibited_claims
-    from products where brand_id = ${brandId} and deleted_at is null order by created_at asc
-  `;
-  const creativeRows = await sql<Record<string, unknown>>`
-    select id, organization_id, brand_id, origin, angle, hook_type, format, proof_type, offer, cta,
-           visual_style, platform, emotion, product_name, claim, raw_text
-    from creative_records where brand_id = ${brandId} and organization_id = ${organizationId}
-  `;
-  const patternRows = await sql<Record<string, unknown>>`
-    select organization_id, brand_id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary, state, clicks, conversions, spend_cents, revenue_cents, scope
-    from learned_patterns
-    where organization_id = ${organizationId} and (brand_id = ${brandId} or scope = 'organization')
-  `;
-  const rejectionRows = await sql<{ reason_code: string; count: number }>`
-    select reason_code, count(*) as count from rejections
-    where brand_id = ${brandId} and organization_id = ${organizationId}
-    group by reason_code
-  `;
-  const products: ProductFact[] = productRows.map((row) => ({
-    id: asText(row.id),
-    name: asText(row.name),
-    description: asText(row.description),
-    allowedClaims: asText(row.allowed_claims),
-    prohibitedClaims: asText(row.prohibited_claims),
-  }));
-  const patterns: LearnedPattern[] = patternRows.map((row) => ({
-    attribute: asText(row.attribute),
-    value: asText(row.value),
-    metric: asText(row.metric) as LearnedPattern["metric"],
-    lift: asNumber(row.lift),
-    sampleSize: asNumber(row.sample_size),
-    baseline: asNumber(row.baseline),
-    observed: asNumber(row.observed),
-    impressions: asNumber(row.impressions),
-    summary: asText(row.summary),
-    state: asText(row.state) === "VALIDATED" || asText(row.state) === "OBSERVED" ? (asText(row.state) as LearnedPattern["state"]) : "INFERRED",
-    clicks: asNumber(row.clicks),
-    conversions: asNumber(row.conversions),
-    spendCents: asNumber(row.spend_cents),
-    revenueCents: asNumber(row.revenue_cents),
-    organizationId: asText(row.organization_id) || organizationId,
-    brandId: asText(row.brand_id) || brandId,
-    scope: asText(row.scope) === "global" || asText(row.scope) === "organization" ? (asText(row.scope) as LearnedPattern["scope"]) : "brand",
-  }));
-  const rejections: RejectionFact[] = rejectionRows.map((row) => ({
-    reasonCode: row.reason_code,
-    count: asNumber(row.count),
-  }));
-  const settingRows = await sql<Record<string, unknown>>`
-    select use_organization_learning from brand_brains where brand_id = ${brandId} limit 1
-  `;
-  const flag = settingRows[0]?.use_organization_learning;
-  return {
-    brain: sliceFromRow(brainRows[0]),
-    products,
-    creatives: creativeRows.map(creativeFromRow),
-    patterns,
-    rejections,
-    weights: await loadWeights(sql, organizationId),
-    useOrganizationLearning: flag === true || flag === "t" || flag === "true",
-  };
+  return loadBrandContext(sql, organizationId, brandId);
 }
 
 async function insertDecision(
@@ -520,6 +406,84 @@ export const addCompetitor = createServerFn({ method: "POST" })
     return { id: competitorId };
   });
 
+export const proposeCompetitors = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ brandId: clip(objectInput(input).brandId, 80, "Brand", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const access = await requireBrand(sql, context.userId, data.brandId, "member");
+    const brands = await sql<{ name: string; category: string }>`
+      select name, category from brands where id = ${data.brandId} and organization_id = ${access.organizationId} limit 1
+    `;
+    const brain = await sql<{ positioning: string }>`
+      select positioning from brand_brains where brand_id = ${data.brandId} limit 1
+    `;
+    const confirmed = await sql<{ name: string }>`
+      select name from competitors
+      where brand_id = ${data.brandId} and organization_id = ${access.organizationId} and status = 'confirmed'
+    `;
+    const advertisers = await sql<{ advertiser: string }>`
+      select distinct advertiser from raw_source_records
+      where brand_id = ${data.brandId} and organization_id = ${access.organizationId} and advertiser <> ''
+    `;
+    const candidates = discoverCompetitorCandidates({
+      brandName: brands[0]?.name ?? "",
+      category: brands[0]?.category ?? "",
+      positioning: brain[0]?.positioning ?? "",
+      confirmedNames: confirmed.map((row) => row.name),
+      advertisers: advertisers.map((row) => ({ name: row.advertiser, evidence: "Stored market row names this advertiser." })),
+    });
+    let created = 0;
+    for (const candidate of candidates) {
+      const existing = await sql<{ id: string }>`
+        select id from competitors
+        where brand_id = ${data.brandId} and organization_id = ${access.organizationId} and lower(name) = ${candidate.name.toLowerCase()}
+        limit 1
+      `;
+      if (existing[0]) continue;
+      await sql`
+        insert into competitors (
+          id, organization_id, brand_id, name, notes, status, kind, confidence, evidence, source, created_by
+        ) values (
+          ${id()}, ${access.organizationId}, ${data.brandId}, ${candidate.name}, ${candidate.evidence.join(" ")},
+          'candidate', ${candidate.relationship === "positioning" ? "adjacent" : "direct"}, ${candidate.confidence},
+          ${candidate.evidence.join(" ")}, ${candidate.source}, ${context.userId}
+        )
+      `;
+      created += 1;
+    }
+    return { created, candidates: candidates.length };
+  });
+
+export const reviewCompetitor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    const action = body.action === "confirm" || body.action === "reject" ? body.action : "";
+    if (!action) throw new Error("Confirm or reject the candidate.");
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      competitorId: clip(body.competitorId, 80, "Competitor", true),
+      action,
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const access = await requireBrand(sql, context.userId, data.brandId, "member");
+    const status = data.action === "confirm" ? "confirmed" : "rejected";
+    const rows = await sql<{ id: string }>`
+      update competitors
+      set status = ${status}
+      where id = ${data.competitorId}
+        and brand_id = ${data.brandId}
+        and organization_id = ${access.organizationId}
+        and status = 'candidate'
+      returning id
+    `;
+    if (!rows[0]) throw new Error("That candidate is not waiting for a decision.");
+    return { id: rows[0].id, status };
+  });
+
 export const recordObservation = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
@@ -554,7 +518,7 @@ export const recordObservation = createServerFn({ method: "POST" })
       if (!data.competitorId) throw new Error("Choose the competitor this came from.");
       const owned = await sql<{ id: string }>`
         select id from competitors
-        where id = ${data.competitorId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+        where id = ${data.competitorId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId} and status = 'confirmed'
         limit 1
       `;
       if (owned.length === 0) throw new Error("That competitor is not in this brand.");
@@ -884,50 +848,7 @@ export const listOpportunities = createServerFn({ method: "POST" })
   });
 
 export async function persistLearnedPatterns(sql: Sql, organizationId: string, brandId: string, actorId: string): Promise<number> {
-  const loaded = await loadContext(sql, organizationId, brandId);
-  const observationRows = await sql<Record<string, unknown>>`
-    select creative_id, organization_id, brand_id, impressions, clicks, conversions, spend_cents, revenue_cents
-    from performance_observations
-    where brand_id = ${brandId} and organization_id = ${organizationId}
-  `;
-  const observations: PerformanceRow[] = observationRows.map((row) => ({
-    creativeId: asText(row.creative_id),
-    organizationId: asText(row.organization_id),
-    brandId: asText(row.brand_id),
-    impressions: asNumber(row.impressions),
-    clicks: asNumber(row.clicks),
-    conversions: asNumber(row.conversions),
-    spendCents: asNumber(row.spend_cents),
-    revenueCents: asNumber(row.revenue_cents),
-  }));
-  const patterns = learnPatterns({
-    organizationId,
-    brandId,
-    creatives: loaded.creatives.filter((creative) => creative.origin !== "competitor"),
-    observations,
-  });
-  await sql`delete from learned_patterns where brand_id = ${brandId} and organization_id = ${organizationId} and scope = 'brand'`;
-  for (const pattern of patterns) {
-    await sql`
-      insert into learned_patterns (
-        id, organization_id, brand_id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary,
-        state, clicks, conversions, spend_cents, revenue_cents, scope
-      ) values (
-        ${id()}, ${organizationId}, ${brandId}, ${pattern.attribute}, ${pattern.value}, ${pattern.metric},
-        ${pattern.lift}, ${pattern.sampleSize}, ${pattern.baseline}, ${pattern.observed}, ${pattern.impressions}, ${pattern.summary},
-        ${pattern.state ?? "INFERRED"}, ${pattern.clicks ?? 0}, ${pattern.conversions ?? 0}, ${pattern.spendCents ?? 0}, ${pattern.revenueCents ?? 0},
-        ${pattern.scope ?? "brand"}
-      )
-    `;
-  }
-  await sql`
-    update jobs
-    set status = 'succeeded', attempts = attempts + 1, updated_at = now(), last_error = ''
-    where brand_id = ${brandId}
-      and organization_id = ${organizationId}
-      and job_type = 'learning.update'
-      and status in ('queued', 'retry')
-  `;
+  const patterns = await applyLearnedPatterns(sql, organizationId, brandId);
   await audit(sql, {
     organizationId,
     brandId,
@@ -935,10 +856,10 @@ export async function persistLearnedPatterns(sql: Sql, organizationId: string, b
     action: "learning.refreshed",
     objectType: "brand",
     objectId: brandId,
-    metadata: { patterns: String(patterns.length) },
+    metadata: { patterns: String(patterns) },
   });
-  await notify(sql, organizationId, brandId, "learning.update", `${patterns.length} pattern(s) stored from stored performance.`);
-  return patterns.length;
+  await notify(sql, organizationId, brandId, "learning.update", `${patterns} pattern(s) stored from stored performance.`);
+  return patterns;
 }
 
 export const refreshOpportunities = createServerFn({ method: "POST" })
@@ -947,13 +868,6 @@ export const refreshOpportunities = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    const queued = await sql<{ id: string }>`
-      select id from jobs
-      where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
-        and job_type = 'learning.update' and status in ('queued', 'retry')
-      limit 1
-    `;
-    if (queued[0]) await persistLearnedPatterns(sql, access.organizationId, data.brandId, context.userId);
     const loaded = await loadContext(sql, access.organizationId, data.brandId);
     const drafts = rankOpportunities({
       organizationId: access.organizationId,
@@ -1658,13 +1572,22 @@ export const recordPerformance = createServerFn({ method: "POST" })
         and status in ('queued', 'running', 'retry', 'succeeded')
       limit 1
     `;
+    const learningJobId = id();
     if (!queued[0]) {
       await sql`
         insert into jobs (
           id, organization_id, brand_id, job_type, idempotency_key, status, payload
         ) values (
-          ${id()}, ${access.organizationId}, ${data.brandId}, 'learning.update', ${idempotencyKey},
-          'queued', ${JSON.stringify({ observationId, creativeId: data.creativeId })}
+          ${learningJobId}, ${access.organizationId}, ${data.brandId}, 'learning.update', ${idempotencyKey},
+          'queued', ${JSON.stringify({ observationId, creativeId: data.creativeId, organizationId: access.organizationId })}
+        )
+      `;
+      await sql`
+        insert into jobs (
+          id, organization_id, brand_id, job_type, idempotency_key, status, payload, depends_on
+        ) values (
+          ${id()}, ${access.organizationId}, ${data.brandId}, 'opportunity.refresh', ${`opportunity.after:${observationId}`},
+          'queued', ${JSON.stringify({ observationId, organizationId: access.organizationId })}, ${learningJobId}
         )
       `;
     }
@@ -2000,7 +1923,7 @@ export const getIntelligence = createServerFn({ method: "POST" })
     return {
       role: access.role,
       ...summary,
-      neuralEmbedding: "NOT_CONNECTED" as const,
+      neuralEmbedding: "LOCAL_MINILM" as const,
       adLibrary: "NOT_CONNECTED" as const,
       publishing: "NOT_CONNECTED" as const,
       video: "NOT_CONNECTED" as const,
@@ -2032,8 +1955,8 @@ export const storeMaterial = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    const { parseMaterial } = await import("@/lib/meridian/ingestion/materials");
-    const parsed = parseMaterial({ filename: data.filename, mime: data.mime, text: data.text, base64: data.base64 });
+    const { parseMaterialDocument } = await import("@/lib/meridian/ingestion/materials");
+    const parsed = await parseMaterialDocument({ filename: data.filename, mime: data.mime, text: data.text, base64: data.base64 });
     const documentId = id();
     if (parsed.status === "failed") {
       await sql`

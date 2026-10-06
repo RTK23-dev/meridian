@@ -1,4 +1,5 @@
 import type { BrainSlice, LearnedPattern, RejectionFact } from "../domain.ts";
+import { influenceNotes } from "../knowledge/graph.ts";
 import type { OpportunityDraft } from "../opportunity/engine.ts";
 import { hypothesisById } from "../opportunity/catalog.ts";
 import { instantiateWorkflow, templateForAngle, type CreativeWorkflow } from "../workflow/templates.ts";
@@ -56,10 +57,13 @@ export function buildBrief(input: {
   const hypothesis = hypothesisById(input.opportunity.hypothesisId);
   const patterns = relevantPatterns(input.patterns, input.opportunity.angle, input.opportunity.hookType).slice(0, 6);
   const failures = input.rejections.filter((fact) => fact.count > 0).slice(0, 8);
+  const negative = patterns.filter((pattern) => pattern.lift < 0);
   const constraints = [
     input.brain.prohibitedClaims.trim() ? `Do not say: ${input.brain.prohibitedClaims.trim()}` : "",
     input.brain.requiredDisclaimers.trim() ? `Include: ${input.brain.requiredDisclaimers.trim()}` : "",
     input.brain.wordsToAvoid.trim() ? `Avoid these words: ${input.brain.wordsToAvoid.trim()}` : "",
+    ...negative.map((pattern) => `Do not prefer ${pattern.attribute}=${pattern.value}. ${pattern.summary}`),
+    ...failures.map((fact) => `Do not repeat work rejected for ${fact.reasonCode}.`),
   ]
     .filter(Boolean)
     .join("\n");
@@ -72,7 +76,16 @@ export function buildBrief(input: {
     cta: "",
     language: "en",
   });
-  const why = [input.opportunity.reason, ...input.opportunity.evidence.map((item) => item.summary)];
+  const why = [
+    input.opportunity.reason,
+    ...input.opportunity.evidence.map((item) => item.summary),
+    ...influenceNotes({
+      angle: input.opportunity.angle,
+      hookType: input.opportunity.hookType,
+      patterns: input.patterns,
+      rejections: input.rejections,
+    }),
+  ];
   return {
     title: `${input.opportunity.label}${input.opportunity.productName ? ` — ${input.opportunity.productName}` : ""}`,
     audience: input.opportunity.audience || input.brain.targetCustomers,

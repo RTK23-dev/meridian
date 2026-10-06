@@ -94,19 +94,19 @@ export function createMemoryObjectStore() {
   };
 }
 
-/** External object storage is not configured in this deployment. */
-export function externalObjectStorageStatus(env: { bucket?: string; accessKeyId?: string }): {
-  status: "NOT_CONNECTED";
+/** External bucket state. Credentials do not mean a successful upload. */
+export function externalObjectStorageStatus(env: { bucket?: string; accessKeyId?: string; endpoint?: string; secretAccessKey?: string } = {}): {
+  status: "NOT_CONNECTED" | "CONFIGURED";
   detail: string;
 } {
-  if (!env.bucket || !env.accessKeyId) {
+  if (!env.endpoint?.trim() || !env.bucket?.trim() || !env.accessKeyId?.trim() || !env.secretAccessKey?.trim()) {
     return {
       status: "NOT_CONNECTED",
-      detail: "No S3-compatible bucket is configured. Bytes are stored in the application database, not a fake bucket.",
+      detail: "No S3-compatible endpoint is configured. Development bytes use the local filesystem when that store is selected. Nothing is sent to a bucket.",
     };
   }
   return {
-    status: "NOT_CONNECTED",
-    detail: "Bucket credentials are present, but this build does not upload to S3. Nothing was sent.",
+    status: "CONFIGURED",
+    detail: "S3 credentials are present. An object is stored only after the bucket accepts the request.",
   };
 }

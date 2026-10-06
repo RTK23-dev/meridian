@@ -46,6 +46,23 @@ export function embeddingProviderState(env: { openRouterKey?: string }): {
   };
 }
 
+export function localSemanticModel(): {
+  status: "AVAILABLE";
+  provider: "local-minilm";
+  model: "Xenova/all-MiniLM-L6-v2";
+  kind: "SEMANTIC_EMBEDDING";
+  detail: string;
+} {
+  return {
+    status: "AVAILABLE",
+    provider: "local-minilm",
+    model: "Xenova/all-MiniLM-L6-v2",
+    kind: "SEMANTIC_EMBEDDING",
+    detail:
+      "Local MiniLM returns semantic vectors when a call succeeds. Lexical hashing is a separate mechanism and is never stored as this model. If the model fails, no hash is substituted.",
+  };
+}
+
 export function cosineSimilarity(left: number[], right: number[]): number {
   const length = Math.min(left.length, right.length);
   let dot = 0;

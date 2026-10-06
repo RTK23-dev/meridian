@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as BrandsNewRouteImport } from './routes/brands/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as BrandsBrandIdIndexRouteImport } from './routes/brands/$brandId/index'
@@ -43,6 +44,11 @@ const LoginRoute = LoginRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BrandsNewRoute = BrandsNewRouteImport.update({
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/integrations': typeof IntegrationsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
@@ -125,6 +132,7 @@ export interface FileRoutesByTo {
   '/integrations': typeof IntegrationsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
@@ -143,6 +151,7 @@ export interface FileRoutesById {
   '/integrations': typeof IntegrationsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
@@ -162,6 +171,7 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/login'
     | '/settings'
+    | '/api/health'
     | '/brands/new'
     | '/api/auth/$'
     | '/brands/$brandId/brain'
@@ -179,6 +189,7 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/login'
     | '/settings'
+    | '/api/health'
     | '/brands/new'
     | '/api/auth/$'
     | '/brands/$brandId/brain'
@@ -196,6 +207,7 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/login'
     | '/settings'
+    | '/api/health'
     | '/brands/new'
     | '/api/auth/$'
     | '/brands/$brandId/brain'
@@ -214,6 +226,7 @@ export interface RootRouteChildren {
   IntegrationsRoute: typeof IntegrationsRoute
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   BrandsNewRoute: typeof BrandsNewRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   BrandsBrandIdBrainRoute: typeof BrandsBrandIdBrainRoute
@@ -255,6 +268,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/brands/new': {
@@ -342,6 +362,7 @@ const rootRouteChildren: RootRouteChildren = {
   IntegrationsRoute: IntegrationsRoute,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
+  ApiHealthRoute: ApiHealthRoute,
   BrandsNewRoute: BrandsNewRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   BrandsBrandIdBrainRoute: BrandsBrandIdBrainRoute,

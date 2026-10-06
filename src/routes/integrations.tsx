@@ -48,17 +48,17 @@ function Integrations() {
         <Panel>
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">Worker</p>
           <p className="mt-2 font-display text-2xl">{data.worker}</p>
-          <p className="mt-2 text-sm text-muted">Learning and blocked jobs are claimed inside the running app. A separate process only recovers expired leases when a real database is configured.</p>
+          <p className="mt-2 text-sm text-muted">The worker is a separate process. This page only reads its heartbeat. Scheduler: {data.scheduler}. Database: {data.database}.</p>
         </Panel>
         <Panel>
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">Files</p>
-          <p className="mt-2 font-display text-2xl">{data.objectStorage.database}</p>
-          <p className="mt-2 text-sm text-muted">Brand files are stored in the database. External bucket: {data.objectStorage.external}.</p>
+          <p className="mt-2 font-display text-2xl">{data.objectStorage.active}</p>
+          <p className="mt-2 text-sm text-muted">Active store: {data.objectStorage.active}. External bucket: {data.objectStorage.external}. Database blobs are a migration source, not the production default.</p>
         </Panel>
         <Panel>
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">Embeddings</p>
-          <p className="mt-2 font-display text-2xl">{data.embeddings.status}</p>
-          <p className="mt-2 text-sm text-muted">{data.embeddings.detail}</p>
+          <p className="mt-2 font-display text-2xl">{data.localSemantic.kind}</p>
+          <p className="mt-2 text-sm text-muted">{data.localSemantic.detail} External API: {data.embeddings.status}.</p>
         </Panel>
       </div>
       <Panel>

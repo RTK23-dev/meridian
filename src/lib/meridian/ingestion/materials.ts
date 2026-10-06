@@ -38,7 +38,18 @@ export function parseMaterial(input: { filename: string; mime: string; base64?: 
   if (mime.startsWith("text/") || filename.endsWith(".txt") || filename.endsWith(".md")) {
     return finish(mime.startsWith("text/") ? mime : "text/plain", bytes.toString("utf8"));
   }
-  return { status: "failed", detail: "That file type is not supported. Use plain text or DOCX, or paste the text." };
+  return { status: "failed", detail: "That file type is not supported. Use plain text, DOCX, or PDF, or paste the text." };
+}
+
+/** PDF bytes go through the extractor. A pasted string named .pdf is still refused. */
+export async function parseMaterialDocument(input: { filename: string; mime: string; base64?: string; text?: string }): Promise<MaterialParse> {
+  const filename = input.filename.trim().toLowerCase();
+  const mime = input.mime.trim().toLowerCase();
+  if ((mime === "application/pdf" || filename.endsWith(".pdf")) && input.base64) {
+    const { extractPdf } = await import("./pdf.ts");
+    return extractPdf(Buffer.from(input.base64, "base64"));
+  }
+  return parseMaterial(input);
 }
 
 function finish(mime: string, raw: string): MaterialParse {

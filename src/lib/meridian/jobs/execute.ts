@@ -1,0 +1,149 @@
+import { createHash } from "node:crypto";
+import { assessCopy } from "../production/assess.ts";
+import { collectMarket, publishThrough } from "../providers/boundaries.ts";
+import { applyLearnedPatterns, type Sql } from "../learning/store.ts";
+import { collectAdLibrarySource } from "../market/pipeline.ts";
+import { rerankBrand } from "../opportunity/rerank.ts";
+import { syncPublishingStatus } from "../publishing/provider.ts";
+import { videoQa } from "../video/provider.ts";
+import { allocateTraffic, type TrafficVariant } from "../experiments/allocate.ts";
+
+export type ExecutableJob = {
+  id: string;
+  organization_id: string;
+  brand_id: string | null;
+  job_type: string;
+  payload: string;
+  attempts: number;
+  max_attempts: number;
+};
+
+function readPayload(job: ExecutableJob): Record<string, unknown> {
+  try {
+    const payload = JSON.parse(job.payload || "{}") as Record<string, unknown>;
+    if (payload.organizationId && payload.organizationId !== job.organization_id) {
+      throw new Error("Tenant scope violation.");
+    }
+    return payload;
+  } catch (error) {
+    if (error instanceof Error && error.message === "Tenant scope violation.") throw error;
+    return {};
+  }
+}
+
+/** Runs one claimed job. A string result means the work finished. It does not invent provider data. */
+export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> {
+  const payload = readPayload(job);
+  if (job.job_type === "learning.update") {
+    if (!job.brand_id) throw new Error("Learning needs a brand.");
+    const count = await applyLearnedPatterns(sql, job.organization_id, job.brand_id);
+    return `patterns:${count}`;
+  }
+  if (job.job_type === "opportunity.refresh") {
+    if (!job.brand_id) throw new Error("Ranking needs a brand.");
+    const count = await rerankBrand(sql, job.organization_id, job.brand_id);
+    return `opportunities:${count}`;
+  }
+  if (job.job_type === "embedding.generate") {
+    const text = typeof payload.text === "string" ? payload.text : "";
+    if (!text.trim()) throw new Error("Embedding needs text. No lexical hash was stored.");
+    const { semanticEmbed } = await import("../embeddings/semantic.ts");
+    const vector = await semanticEmbed(text);
+    const hash = createHash("sha256").update(text).digest("hex");
+    const creativeId = typeof payload.creativeId === "string" ? payload.creativeId : "";
+    if (creativeId && job.brand_id) {
+      await sql`
+        insert into creative_embeddings (
+          id, organization_id, brand_id, creative_id, provider, model, dimensions, vector
+        ) values (
+          ${`${creativeId}:${vector.provider}`}, ${job.organization_id}, ${job.brand_id}, ${creativeId},
+          ${vector.provider}, ${vector.model}, ${vector.dimensions}, ${JSON.stringify(vector.values)}
+        )
+        on conflict (creative_id, provider, model) do update set vector = excluded.vector, dimensions = excluded.dimensions
+      `;
+    } else {
+      await sql`
+        insert into embedding_cache (
+          organization_id, content_hash, provider, model, kind, dimensions, vector
+        ) values (
+          ${job.organization_id}, ${hash}, ${vector.provider}, ${vector.model}, ${vector.kind}, ${vector.dimensions}, ${JSON.stringify(vector.values)}
+        )
+        on conflict (organization_id, content_hash, provider, model) do update set vector = excluded.vector
+      `;
+    }
+    return `semantic:${vector.dimensions}`;
+  }
+  if (job.job_type === "market.collect") {
+    const library = collectAdLibrarySource();
+    const connection = collectMarket("ad_library");
+    if (job.brand_id) {
+      await sql`
+        insert into source_connections (id, organization_id, brand_id, source, status, last_error)
+        values (
+          ${`${job.organization_id}:${job.brand_id}:ad_library`}, ${job.organization_id}, ${job.brand_id},
+          'ad_library', ${connection.status}, ${library.detail ?? connection.detail}
+        )
+        on conflict (id) do update set status = excluded.status, last_error = excluded.last_error, updated_at = now()
+      `;
+    }
+    if (library.records.length !== 0) throw new Error("A disconnected ad library returned records.");
+    return library.status;
+  }
+  if (job.job_type === "publishing.sync") {
+    const synced = syncPublishingStatus();
+    if (synced.externalId !== null) throw new Error("A disconnected publisher returned an id.");
+    return synced.status;
+  }
+  if (job.job_type === "publishing.dispatch") {
+    const creativeId = typeof payload.creativeId === "string" ? payload.creativeId : "";
+    const provider = payload.provider === "test" ? "test" : "meta";
+    const result = publishThrough({
+      provider,
+      creativeId,
+      allowTestProvider: payload.allowTestProvider === true,
+    });
+    return result.externalId ? `${result.status}:${result.externalId}` : result.status;
+  }
+  if (job.job_type === "performance.ingest") {
+    return "NOT_CONNECTED";
+  }
+  if (job.job_type === "experiment.process") {
+    const variants = Array.isArray(payload.variants) ? (payload.variants as TrafficVariant[]) : [];
+    const bucket = typeof payload.bucketKey === "string" ? payload.bucketKey : job.id;
+    return allocateTraffic(variants, bucket);
+  }
+  if (job.job_type === "guardian.check") {
+    const text = typeof payload.text === "string" ? payload.text : "";
+    if (!text.trim()) return "HUMAN_REVIEW:missing-text";
+    const assessed = assessCopy({
+      text,
+      productName: typeof payload.productName === "string" ? payload.productName : "",
+      allowedClaims: typeof payload.allowedClaims === "string" ? payload.allowedClaims : "",
+      prohibitedClaims: typeof payload.prohibitedClaims === "string" ? payload.prohibitedClaims : "",
+      requiredDisclaimers: typeof payload.requiredDisclaimers === "string" ? payload.requiredDisclaimers : "",
+      wordsToAvoid: typeof payload.wordsToAvoid === "string" ? payload.wordsToAvoid : "",
+      hook: typeof payload.hook === "string" ? payload.hook : "",
+      cta: typeof payload.cta === "string" ? payload.cta : "",
+    });
+    return assessed.decision.decision;
+  }
+  if (job.job_type === "vision.analyze") {
+    return "HUMAN_REVIEW:missing-logo-bytes";
+  }
+  if (job.job_type === "video.analyze") {
+    return videoQa(null).decision;
+  }
+  if (job.job_type === "notification.dispatch") {
+    const title = typeof payload.title === "string" ? payload.title : "";
+    if (!title.trim()) throw new Error("Notification needs a title.");
+    await sql`
+      insert into notifications (id, organization_id, brand_id, kind, title, body)
+      values (${job.id}, ${job.organization_id}, ${job.brand_id}, 'job', ${title}, ${typeof payload.body === "string" ? payload.body : ""})
+    `;
+    return "dispatched";
+  }
+  if (job.job_type === "market.normalize" || job.job_type === "creative.analyze" || job.job_type === "cluster.refresh" || job.job_type === "asset.process") {
+    throw new Error(`${job.job_type} has no payload work in this claim. It was not marked done.`);
+  }
+  throw new Error(`No handler for ${job.job_type}.`);
+}
