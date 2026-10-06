@@ -94,6 +94,29 @@ export function patternInfluence(pattern: LearnedPattern): number {
   return 0.75;
 }
 
+export type LearningDirection = "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "INSUFFICIENT_EVIDENCE";
+
+/** Sample floor first. A small lift is not a direction. */
+export function learningDirection(pattern: {
+  lift: number;
+  sampleSize: number;
+  impressions: number;
+}): LearningDirection {
+  const impressions = Number(pattern.impressions);
+  const sampleSize = Number(pattern.sampleSize);
+  if (
+    !Number.isFinite(sampleSize) ||
+    !Number.isFinite(impressions) ||
+    sampleSize < DEFAULT_LEARNING_POLICY.minCreativesPerBucket ||
+    impressions < DEFAULT_LEARNING_POLICY.minImpressionsPerBucket
+  ) {
+    return "INSUFFICIENT_EVIDENCE";
+  }
+  if (!Number.isFinite(pattern.lift) || Math.abs(pattern.lift) < DEFAULT_LEARNING_POLICY.minAbsLift) return "NEUTRAL";
+  if (pattern.lift > 0) return "POSITIVE";
+  return "NEGATIVE";
+}
+
 type Policy = typeof DEFAULT_LEARNING_POLICY;
 
 function pushMetrics(

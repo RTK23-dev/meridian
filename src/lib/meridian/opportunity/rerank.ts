@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { loadBrandContext } from "../context/load.ts";
-import { decide } from "../jev/engine.ts";
+import { decideForTenant } from "../jev/engine.ts";
 import { opportunityGate } from "../jev/questions.ts";
+import { loadQuestionPolicy } from "../jev/policy.ts";
 import type { Sql } from "../learning/store.ts";
-import { approvedThresholds } from "../calibration/active.ts";
 import { readSemanticClusters } from "../embeddings/store.ts";
 import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { rankOpportunities } from "./engine.ts";
@@ -11,14 +11,7 @@ import { rankOpportunities } from "./engine.ts";
 /** Replace open opportunities from stored evidence. Does not learn and does not call a provider. */
 export async function rerankBrand(sql: Sql, organizationId: string, brandId: string): Promise<number> {
   const loaded = await loadBrandContext(sql, organizationId, brandId);
-  const versions = await sql<{ thresholds: string }>`
-    select thresholds from jev_threshold_versions
-    where organization_id = ${organizationId} and question_id = ${opportunityGate.id}
-    order by version desc
-    limit 1
-  `;
-  const thresholds = approvedThresholds(opportunityGate.thresholds, versions[0] ?? null);
-  const question = { ...opportunityGate, thresholds };
+  const active = await loadQuestionPolicy(sql, organizationId, opportunityGate);
   let clusters: MarketCluster[] = [];
   try {
     const semantic = await readSemanticClusters(
@@ -49,19 +42,30 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
   for (const draft of drafts) {
     const opportunityId = randomUUID();
     const decisionId = randomUUID();
-    const decision = decide(question, draft.gateInput);
+    const decision = decideForTenant(active.question, draft.gateInput, {
+      organizationId,
+      brandId,
+      evidence: loaded.creatives,
+    }, {
+      policyVersion: active.policy.policyVersion,
+      calibration: active.policy.calibration,
+      provider: "jev",
+      model: "opportunity-gate",
+    });
     const evidence = [...draft.evidence, ...decision.evidence];
     await sql`
       insert into jev_decisions (
         id, organization_id, brand_id, correlation_id, question_id, question_version,
         subject_type, subject_id, input, evidence, probability, confidence, thresholds,
-        decision, reasons
+        decision, reasons, provider, model, answer, schema_version, policy_version, calibration_version
       ) values (
         ${decisionId}, ${organizationId}, ${brandId}, ${correlationId},
         ${decision.questionId}, ${decision.questionVersion}, 'opportunity', ${opportunityId},
         ${JSON.stringify(draft.gateInput)}, ${JSON.stringify(evidence)},
         ${decision.probability}, ${decision.confidence}, ${JSON.stringify(decision.thresholds)},
-        ${decision.decision}, ${JSON.stringify(decision.reasons)}
+        ${decision.decision}, ${JSON.stringify(decision.reasons)},
+        ${decision.provider}, ${decision.model}, ${JSON.stringify(decision.answer)},
+        ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""}
       )
     `;
     const status = decision.decision === "REJECT" ? "rejected" : "open";

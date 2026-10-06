@@ -1,10 +1,12 @@
 import { hasWord } from "../domain.ts";
+import type { AppliedPolicy } from "../jev/policy.ts";
 import {
   PRIOR_JUDGMENT,
   QUESTION_SPECS,
   judgeFeatures,
   type AuditedDecision,
   type Feature,
+  type JudgeOptions,
 } from "../jev/judgment.ts";
 import type { DecisionState } from "../jev/engine.ts";
 
@@ -345,7 +347,7 @@ export function judgeBrief(input: {
   format: string;
   cta: string;
   angle: string;
-}): AuditedDecision {
+}, policy?: AppliedPolicy): AuditedDecision {
   const spec = QUESTION_SPECS.find((item) => item.id === "brief_completeness");
   if (!spec) throw new Error("Missing question brief_completeness.");
   const fields = [input.audience, input.hook, input.message, input.format, input.cta];
@@ -358,17 +360,28 @@ export function judgeBrief(input: {
     ],
     PRIOR_JUDGMENT,
     filled >= 3 && input.angle.trim().length > 0,
+    policyOptions(policy),
   );
 }
 
-export function judgeMedia(facts: MediaFacts): AuditedDecision[] {
+export function judgeMedia(facts: MediaFacts, policies?: ReadonlyMap<string, AppliedPolicy>): AuditedDecision[] {
   const ids = facts.kind === "video" ? VIDEO_QUESTIONS : IMAGE_QUESTIONS;
   return ids.map((id) => {
     const spec = QUESTION_SPECS.find((item) => item.id === id);
     if (!spec) throw new Error(`Missing question ${id}.`);
     const built = build(id, facts);
-    return judgeFeatures(spec, built.features, PRIOR_JUDGMENT, built.present);
+    return judgeFeatures(spec, built.features, PRIOR_JUDGMENT, built.present, policyOptions(policies?.get(id)));
   });
+}
+
+function policyOptions(policy?: AppliedPolicy): JudgeOptions | undefined {
+  if (!policy?.calibration) return undefined;
+  return {
+    thresholds: policy.thresholds,
+    policyVersion: policy.policyVersion,
+    calibration: policy.calibration,
+    provider: "logistic-prior",
+  };
 }
 
 /** Policy across questions. One rejection blocks. Missing evidence cannot auto-approve. */

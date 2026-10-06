@@ -111,6 +111,7 @@ export const claimSafety: DecisionQuestion<ClaimSafetyInput> = {
         confidence: 0.97,
         reasons: [summary],
         evidence: evidence("prohibited", "brand_rules", summary),
+        evidenceState: "violation",
       };
     }
     if (input.unsupportedClaimHits.length > 0) {
@@ -120,6 +121,7 @@ export const claimSafety: DecisionQuestion<ClaimSafetyInput> = {
         confidence: 0.9,
         reasons: [summary],
         evidence: evidence("unsupported", "claim_rules", summary),
+        evidenceState: "violation",
       };
     }
     if (input.missingDisclaimers.length > 0) {
@@ -201,6 +203,7 @@ export const visualQa: DecisionQuestion<VisionQaInput> = {
         confidence: 0.15,
         reasons: [summary],
         evidence: evidence("vision_absent", "vision", summary),
+        evidenceState: "missing",
       };
     }
     if (input.claimSupported === false) {
@@ -210,6 +213,7 @@ export const visualQa: DecisionQuestion<VisionQaInput> = {
         confidence: 0.86,
         reasons: [summary],
         evidence: evidence("vision_claim", "vision", summary),
+        evidenceState: "violation",
       };
     }
     if (input.logoPresent === false || (input.logoMatchProbability !== null && input.logoMatchProbability < 0.5)) {
@@ -219,6 +223,7 @@ export const visualQa: DecisionQuestion<VisionQaInput> = {
         confidence: 0.84,
         reasons: [summary],
         evidence: evidence("logo", "vision", summary),
+        evidenceState: "violation",
       };
     }
     if (input.productMatch === false) {
@@ -228,6 +233,7 @@ export const visualQa: DecisionQuestion<VisionQaInput> = {
         confidence: 0.84,
         reasons: [summary],
         evidence: evidence("product", "vision", summary),
+        evidenceState: "violation",
       };
     }
     const parts = [input.logoMatchProbability, input.paletteMatch, input.toneFit].filter(
@@ -408,6 +414,7 @@ export const reproducibility: DecisionQuestion<ReproducibilityInput> = {
         confidence: 0.9,
         reasons: [summary],
         evidence: evidence("ip", "workflow", summary),
+        evidenceState: "violation",
       };
     }
     const probability = input.templateCoverage >= 0.8 ? 0.93 : input.templateCoverage >= 0.5 ? 0.7 : 0.36;
@@ -453,15 +460,18 @@ export const opportunityGate: DecisionQuestion<OpportunityGateInput> = {
     let probability = parts.reduce((sum, part) => sum + part.weight * part.evaluation.probability, 0);
     const confidence = parts.reduce((sum, part) => sum + part.weight * part.evaluation.confidence, 0);
     const reasons = parts.map((part) => part.evaluation.reasons[0] ?? "").filter(Boolean);
+    let evidenceState: Evaluation["evidenceState"];
     if (input.reproducibility.copiesProtectedPhrasing || repro.probability < 0.15) {
       probability = Math.min(probability, 0.12);
       reasons.unshift("Protected phrasing blocks this candidate.");
+      evidenceState = "violation";
     } else if (safety.probability < 0.22) {
       probability = Math.min(probability, 0.2);
       reasons.unshift("Risk evidence caps this candidate below the reject line.");
+      evidenceState = "violation";
     }
     const refs = parts.flatMap((part) => part.evaluation.evidence);
-    return { probability, confidence, reasons, evidence: refs };
+    return { probability, confidence, reasons, evidence: refs, evidenceState };
   },
 };
 

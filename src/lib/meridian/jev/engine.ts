@@ -1,7 +1,9 @@
-import { clamp01 } from "../domain.ts";
+import { assertSameTenant, clamp01 } from "../domain.ts";
 
 export const DECISIONS = ["AUTO_APPROVE", "HUMAN_REVIEW", "REJECT"] as const;
 export type DecisionState = (typeof DECISIONS)[number];
+
+export const ANSWER_SCHEMA_VERSION = "jev.answer.v1";
 
 export type ThresholdConfig = {
   /** Probability at or above this can auto-approve, if confidence is also high enough. */
@@ -18,11 +20,19 @@ export type EvidenceRef = {
   summary: string;
 };
 
+/** What the evidence supports. Not a decision. */
+export type AnswerValue = "yes" | "no" | "uncertain" | "insufficient" | "violation";
+
+export type EvidenceState = "present" | "missing" | "contradictory" | "violation";
+
 export type Evaluation = {
   probability: number;
   confidence: number;
   reasons: string[];
   evidence: EvidenceRef[];
+  /** Set by the question when evidence is missing, contradictory, or a violation. */
+  evidenceState?: EvidenceState;
+  answer?: AnswerValue;
 };
 
 export type DecisionQuestion<TInput> = {
@@ -33,27 +43,72 @@ export type DecisionQuestion<TInput> = {
   evaluate: (input: TInput) => Evaluation;
 };
 
+export type ProbabilisticAnswer = {
+  schemaVersion: typeof ANSWER_SCHEMA_VERSION;
+  value: AnswerValue;
+  probability: number;
+  confidence: number;
+};
+
+/** Applied after the probabilistic answer and before the policy. Null means identity. */
+export type CalibrationStep = {
+  version: string;
+  apply: (probability: number) => number;
+};
+
+export type DecisionContext = {
+  calibration?: CalibrationStep | null;
+  model?: string;
+  provider?: string;
+  now?: string;
+  policyVersion?: string;
+};
+
 export type DecisionOutput = {
   decision: DecisionState;
   probability: number;
+  rawProbability: number;
   confidence: number;
   reasons: string[];
   evidence: EvidenceRef[];
   questionId: string;
   questionVersion: string;
+  schemaVersion: typeof ANSWER_SCHEMA_VERSION;
   thresholds: ThresholdConfig;
+  answer: ProbabilisticAnswer;
+  policyVersion: string;
+  calibrationVersion: string | null;
+  model: string;
+  provider: string;
+  decidedAt: string;
+  evidenceState: EvidenceState;
 };
 
 /**
- * Deterministic gate. The evaluator may be fed by a model, but the model does
- * not choose AUTO_APPROVE / HUMAN_REVIEW / REJECT. Thresholds do.
+ * Evidence → question → probability → calibration → policy → decision.
+ * The evaluator does not choose AUTO_APPROVE / HUMAN_REVIEW / REJECT.
+ * Missing or contradictory evidence cannot auto-approve.
+ * A violation cannot auto-approve or stay in review.
+ * Calibration, when supplied, changes this result only. It does not rewrite a previous result.
  */
-export function decide<TInput>(question: DecisionQuestion<TInput>, input: TInput): DecisionOutput {
+export function decide<TInput>(
+  question: DecisionQuestion<TInput>,
+  input: TInput,
+  context?: DecisionContext,
+): DecisionOutput {
   const evaluation = question.evaluate(input);
-  const probability = round3(clamp01(evaluation.probability));
+  const rawProbability = round3(clamp01(evaluation.probability));
+  const calibrated = context?.calibration ? context.calibration.apply(rawProbability) : rawProbability;
+  const probability = round3(clamp01(calibrated));
   const confidence = round3(clamp01(evaluation.confidence));
+  const evidenceState: EvidenceState =
+    evaluation.evidenceState ?? (evaluation.evidence.length === 0 ? "missing" : "present");
   let decision: DecisionState;
-  if (
+  if (evidenceState === "violation" || evaluation.answer === "violation") {
+    decision = "REJECT";
+  } else if (evidenceState === "missing" || evidenceState === "contradictory") {
+    decision = "HUMAN_REVIEW";
+  } else if (
     probability >= question.thresholds.autoApprove &&
     confidence >= question.thresholds.minConfidenceForAuto
   ) {
@@ -63,16 +118,55 @@ export function decide<TInput>(question: DecisionQuestion<TInput>, input: TInput
   } else {
     decision = "REJECT";
   }
+  const answerValue = answerFor(decision, evidenceState, evaluation.answer);
   return {
     decision,
     probability,
+    rawProbability,
     confidence,
     reasons: evaluation.reasons.length > 0 ? evaluation.reasons : ["No reason was recorded."],
     evidence: evaluation.evidence,
     questionId: question.id,
     questionVersion: question.version,
+    schemaVersion: ANSWER_SCHEMA_VERSION,
     thresholds: question.thresholds,
+    answer: {
+      schemaVersion: ANSWER_SCHEMA_VERSION,
+      value: answerValue,
+      probability,
+      confidence,
+    },
+    policyVersion: context?.policyVersion ?? `code:${question.id}.${question.version}`,
+    calibrationVersion: context?.calibration?.version ?? null,
+    model: context?.model ?? "deterministic",
+    provider: context?.provider ?? "jev",
+    decidedAt: context?.now ?? new Date().toISOString(),
+    evidenceState,
   };
+}
+
+/** Refuses another workspace's rows before a question runs. */
+export function decideForTenant<TInput>(
+  question: DecisionQuestion<TInput>,
+  input: TInput,
+  tenant: {
+    organizationId: string;
+    brandId: string;
+    evidence: { organizationId: string; brandId: string }[];
+  },
+  context?: DecisionContext,
+): DecisionOutput {
+  assertSameTenant(tenant.evidence, tenant.organizationId, tenant.brandId);
+  return decide(question, input, context);
+}
+
+function answerFor(decision: DecisionState, state: EvidenceState, explicit?: AnswerValue): AnswerValue {
+  if (explicit === "violation" || state === "violation") return "violation";
+  if (state === "missing" || state === "contradictory") return "insufficient";
+  if (explicit) return explicit;
+  if (decision === "AUTO_APPROVE") return "yes";
+  if (decision === "REJECT") return "no";
+  return "uncertain";
 }
 
 function round3(value: number): number {

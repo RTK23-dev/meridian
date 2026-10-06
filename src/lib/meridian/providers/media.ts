@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { buildFixtureClip, inspectVideo, solidFrame, videoFactsFromInspection } from "../video/inspect.ts";
 
 export type ImageResult =
   | {
@@ -119,23 +120,30 @@ export function startTestVideo(input: { prompt: string; seed: string; promptVers
 
 export function advanceTestVideo(job: VideoJob, allow: boolean): VideoJob {
   if (!allow || job.provider !== "test:video") throw new Error("The test video provider is not enabled.");
-  if (job.status === "failed" || job.status === "completed") return job;
+  if (job.status === "failed") return job;
+  if (job.status === "completed" && job.bytes && job.bytes.byteLength > 16) return job;
   const attempts = job.attempts + 1;
   if (job.status === "queued") return { ...job, status: "submitted", attempts };
   if (job.status === "submitted") return { ...job, status: "processing", attempts };
-  const bytes = minimalMp4();
+  const bytes = buildFixtureClip({
+    durationMs: 2500,
+    width: 64,
+    height: 64,
+    frames: [solidFrame(64, 64, [186, 154, 112]), solidFrame(64, 64, [36, 72, 64])],
+  });
+  const facts = videoFactsFromInspection(inspectVideo(bytes), bytes.byteLength);
   return {
     ...job,
     status: "completed",
     attempts,
     objectKey: `test/video/${job.providerJobId}.mp4`,
     bytes,
-    durationMs: 2500,
-    width: 64,
-    height: 64,
-    frameRate: 24,
-    transcript: job.prompt.slice(0, 280),
-    scenes: [{ atMs: 0, summary: "Opens on the briefed product. Test provider only." }],
+    durationMs: facts.durationMs,
+    width: facts.width,
+    height: facts.height,
+    frameRate: null,
+    transcript: "",
+    scenes: [{ atMs: 0, summary: `test:video fixture, not a camera recording. ${facts.scene}` }],
     error: "",
   };
 }
@@ -148,17 +156,4 @@ export function runUntilSettled<T>(attempt: () => { ok: boolean; value?: T; erro
     error = result.error || "The provider failed.";
   }
   return { status: "dead", attempts: maxAttempts, error };
-}
-
-function minimalMp4(): Uint8Array {
-  const bytes = new Uint8Array(32);
-  const view = new DataView(bytes.buffer);
-  view.setUint32(0, 32);
-  bytes[4] = 109;
-  bytes[5] = 118;
-  bytes[6] = 104;
-  bytes[7] = 100;
-  view.setUint32(20, 1000);
-  view.setUint32(24, 2500);
-  return bytes;
 }

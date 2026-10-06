@@ -2,25 +2,37 @@ import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { buildBrief } from "@/lib/meridian/brief/engine";
 import { loadBrandContext } from "@/lib/meridian/context/load";
+import { assertSameTenant } from "@/lib/meridian/domain";
 import type { Sql } from "@/lib/meridian/learning/store";
 import { applyLearnedPatterns } from "@/lib/meridian/learning/store";
+import { learningDirection } from "@/lib/meridian/learning/engine";
 import { fingerprintCreative } from "@/lib/meridian/intelligence/fingerprint";
 import { findWhitespace } from "@/lib/meridian/intelligence/whitespace";
 import { hypothesisById } from "@/lib/meridian/opportunity/catalog";
-import { rankOpportunities, type OpportunityDraft } from "@/lib/meridian/opportunity/engine";
+import { rankOpportunities, recommendationPosture, type OpportunityDraft } from "@/lib/meridian/opportunity/engine";
 import { rerankBrand } from "@/lib/meridian/opportunity/rerank";
 import { publishThrough } from "@/lib/meridian/providers/boundaries";
 import { testProviderPerformance } from "@/lib/meridian/providers/test-provider";
 import { claimAndRun } from "@/lib/meridian/jobs/sql-worker";
+import { decide } from "@/lib/meridian/jev/engine";
+import { publishingReadiness } from "@/lib/meridian/jev/guards";
+import { loadAppliedPolicies } from "@/lib/meridian/jev/policy";
+import { generationAllowed } from "@/lib/meridian/security/budget";
 import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features";
 import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store";
 import { assessPublishing, type AccountSnapshot } from "../publishing/readiness";
-import { measureLogo, measurePalette } from "../vision/measure";
+import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure";
 import type { MarketCluster } from "../intelligence/whitespace";
 
-function clip(value: unknown): string {
-  return typeof value === "string" ? value.trim().slice(0, 80) : "";
+function answerValue(raw: unknown): string {
+  if (typeof raw !== "string" || !raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as { value?: unknown };
+    return typeof parsed.value === "string" ? parsed.value : "";
+  } catch {
+    return "";
+  }
 }
 
 function asText(value: unknown): string {
@@ -124,6 +136,14 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
     ? stored.find((row) => asText(row.angle) === top.angle && asText(row.status) === "open") ??
       stored.find((row) => asText(row.angle) === top.angle)
     : undefined;
+  const posture = top
+    ? recommendationPosture({
+        source: top.source,
+        historicalEvidence: top.historicalEvidence,
+        confidence: top.confidence,
+        novelty: top.novelty,
+      })
+    : null;
   const briefs = await sql<Record<string, unknown>>`
     select id, title, audience, angle, hook, message, offer, cta, format, proof_type, constraints, why,
            learning_notes, failure_notes, status, opportunity_id, created_at
@@ -146,7 +166,7 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
   const creativeIds = assets.map((row) => asText(row.creative_id)).filter(Boolean);
   const decisions = creativeIds.length
     ? await sql<Record<string, unknown>>`
-        select id, subject_id, question_id, decision, probability, confidence, reasons, evidence
+        select id, subject_id, question_id, decision, probability, confidence, reasons, evidence, answer
         from jev_decisions
         where brand_id = ${brandId} and organization_id = ${organizationId} and subject_type = 'creative'
       `
@@ -203,6 +223,9 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
           decision: match ? asText(match.decision) : "",
           probability: match ? asNumber(match.probability) : 0,
           reviewId: match ? asText(match.review_id) : "",
+          posture: posture?.posture ?? "exploration",
+          because: posture?.because ?? "",
+          uncertainty: posture?.uncertainty ?? "",
         }
       : null,
     exploration: exploration
@@ -226,8 +249,15 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
           confidence: asNumber(item.confidence),
           reasons: asJson<string[]>(item.reasons, []),
           evidence: asJson<{ summary: string }[]>(item.evidence, []).map((entry) => entry.summary),
+          answer: answerValue(item.answer),
         }));
       const review = reviews.find((item) => asText(item.creative_id) === creativeId && asText(item.status) === "open");
+      const storageKey = asText(row.storage_key);
+      const frames = blobs
+        .filter((blob) => storageKey && blob.storage_key.startsWith(`${storageKey}.frame.`) && blob.mime_type.startsWith("image/"))
+        .sort((left, right) => left.storage_key.localeCompare(right.storage_key))
+        .slice(0, 3)
+        .map((blob) => `data:${blob.mime_type};base64,${blob.body}`);
       return {
         creativeId,
         assetId: asText(row.asset_id),
@@ -251,6 +281,7 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
         byteSize: asNumber(row.byte_size),
         title: asText(row.title),
         preview,
+        frames,
         error: asText(row.error),
         questions,
       };
@@ -260,6 +291,10 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
       lift: pattern.lift,
       attribute: pattern.attribute,
       value: pattern.value,
+      sampleSize: pattern.sampleSize,
+      impressions: pattern.impressions,
+      state: pattern.state ?? "INFERRED",
+      direction: learningDirection(pattern),
     })),
     rejections: loaded.rejections.map((fact) => `${fact.reasonCode} × ${fact.count}`),
     semantic,
@@ -290,6 +325,7 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
     await rerankBrand(sql, access.organizationId, data.brandId);
     const loaded = await loadBrandContext(sql, access.organizationId, data.brandId);
+    assertSameTenant(loaded.creatives, access.organizationId, data.brandId);
     let clusters: MarketCluster[] = [];
     try {
       clusters = (
@@ -388,6 +424,7 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       brief.why.push("Success would test whether this direction beats this brand's stored baseline without copying a competitor line.");
       const briefId = crypto.randomUUID();
       const decisionId = crypto.randomUUID();
+      const policies = await loadAppliedPolicies(sql, access.organizationId);
       const gate = judgeBrief({
         audience: brief.audience,
         hook: brief.hook,
@@ -395,19 +432,21 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
         format: brief.format,
         cta: brief.cta,
         angle: brief.angle,
-      });
+      }, policies.get("brief_completeness"));
       if (gate.decision === "REJECT") {
         throw new Error("The brief gate rejected this. A person was not asked to ignore a stored rejection.");
       }
       await sql`
         insert into jev_decisions (
           id, organization_id, brand_id, correlation_id, question_id, question_version,
-          subject_type, subject_id, input, evidence, probability, confidence, thresholds, decision, reasons
+          subject_type, subject_id, input, evidence, probability, confidence, thresholds, decision, reasons,
+          provider, model, answer, schema_version, policy_version, calibration_version
         ) values (
           ${decisionId}, ${access.organizationId}, ${data.brandId}, ${crypto.randomUUID()},
           ${gate.questionId}, ${gate.questionVersion}, 'brief', ${briefId}, ${JSON.stringify(gate.features)},
           ${JSON.stringify(gate.evidence)}, ${gate.probability}, ${gate.confidence}, ${JSON.stringify(gate.policy)},
-          ${gate.decision}, ${JSON.stringify(gate.reasons)}
+          ${gate.decision}, ${JSON.stringify(gate.reasons)}, ${gate.provider}, ${gate.modelVersion},
+          ${JSON.stringify(gate.answer)}, ${gate.schemaVersion}, ${gate.policyVersion}, ${gate.calibrationVersion ?? ""}
         )
       `;
       await sql`
@@ -426,6 +465,46 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       await sql`update opportunities set status = 'briefed' where id = ${opportunityId}`;
     }
     return loadSession(sql, access.organizationId, data.brandId, access.role);
+}
+
+function frameLike(storageKey: string): string {
+  return `${storageKey.replace(/[\\%_]/g, (char) => `\\${char}`)}.frame.%`;
+}
+
+async function measuredVideoFrames(sql: Sql, organizationId: string, brandId: string, storageKey: string) {
+  const missingLogo = {
+    similarity: null,
+    confidence: null,
+    outcome: "ABSENT" as const,
+    evidence: storageKey && !storageKey.startsWith("pending/")
+      ? "The stored container had no extractable frame. Vision was not run and nothing was treated as a match."
+      : "Video bytes are not stored yet. Vision was not run.",
+  };
+  const missingPalette = {
+    distance: null,
+    confidence: null,
+    outcome: "ABSENT" as const,
+    extracted: [] as string[],
+    evidence: missingLogo.evidence,
+  };
+  if (!storageKey || storageKey.startsWith("pending/")) {
+    return { measuredLogo: missingLogo, measuredPalette: missingPalette };
+  }
+  const rows = await sql<{ body: string }>`
+    select body from asset_blobs
+    where organization_id = ${organizationId} and brand_id = ${brandId}
+      and storage_key like ${frameLike(storageKey)} escape '\\'
+    order by storage_key asc
+  `;
+  const logos = [];
+  const palettes = [];
+  for (const row of rows) {
+    const visual = await visualFacts(sql, organizationId, brandId, new Uint8Array(Buffer.from(row.body, "base64")));
+    logos.push(visual.measuredLogo);
+    palettes.push(visual.measuredPalette);
+  }
+  if (logos.length === 0) return { measuredLogo: missingLogo, measuredPalette: missingPalette };
+  return { measuredLogo: combineLogoFrames(logos), measuredPalette: combinePaletteFrames(palettes) };
 }
 
 async function visualFacts(sql: Sql, organizationId: string, brandId: string, bytes: Uint8Array) {
@@ -491,7 +570,8 @@ async function writeJudgment(
   sql: Sql,
   input: { organizationId: string; brandId: string; creativeId: string; facts: MediaFacts },
 ): Promise<{ rollup: string; decisionId: string }> {
-  const decisions = judgeMedia(input.facts);
+  const policies = await loadAppliedPolicies(sql, input.organizationId);
+  const decisions = judgeMedia(input.facts, policies);
   const rollup = rollupDecision(decisions);
   let pointed = "";
   for (const decision of decisions) {
@@ -500,13 +580,15 @@ async function writeJudgment(
     await sql`
       insert into jev_decisions (
         id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,
-        input, evidence, probability, confidence, thresholds, decision, reasons, provider, model
+        input, evidence, probability, confidence, thresholds, decision, reasons, provider, model,
+        answer, schema_version, policy_version, calibration_version
       ) values (
         ${id}, ${input.organizationId}, ${input.brandId}, ${input.creativeId}, ${decision.questionId},
         ${decision.questionVersion}, 'creative', ${input.creativeId}, ${JSON.stringify(decision.features)},
         ${JSON.stringify(decision.evidence)}, ${decision.probability}, ${decision.confidence},
         ${JSON.stringify(decision.policy)}, ${decision.decision}, ${JSON.stringify(decision.reasons)},
-        'logistic-prior', ${decision.modelVersion}
+        ${decision.provider}, ${decision.modelVersion},
+        ${JSON.stringify(decision.answer)}, ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""}
       )
     `;
   }
@@ -528,6 +610,36 @@ export async function generateStudioVariants(
     const brief = briefs[0];
     if (!brief || asText(brief.status) === "rejected") throw new Error("Brief not found.");
     const loaded = await loadBrandContext(sql, access.organizationId, data.brandId);
+    assertSameTenant(loaded.creatives, access.organizationId, data.brandId);
+    const usage = await sql<{ runs_today: number; running: number; brand_runs_today: number; brand_running: number }>`
+      select
+        count(*) filter (where created_at > now() - interval '1 day' and status in ('running', 'completed'))::int as runs_today,
+        count(*) filter (where status = 'running')::int as running,
+        count(*) filter (where brand_id = ${data.brandId} and created_at > now() - interval '1 day' and status in ('running', 'completed'))::int as brand_runs_today,
+        count(*) filter (where brand_id = ${data.brandId} and status = 'running')::int as brand_running
+      from generation_runs
+      where organization_id = ${access.organizationId}
+    `;
+    const orgGate = generationAllowed({
+      runsToday: asNumber(usage[0]?.runs_today),
+      running: asNumber(usage[0]?.running),
+    });
+    const brandGate = generationAllowed({
+      runsToday: asNumber(usage[0]?.brand_runs_today),
+      running: asNumber(usage[0]?.brand_running),
+    });
+    const blocked = !orgGate.allowed ? orgGate : !brandGate.allowed ? brandGate : null;
+    if (blocked) {
+      await sql`
+        insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
+        values (
+          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${context.userId},
+          'generation.blocked', 'brand', ${data.brandId},
+          ${JSON.stringify({ reason: blocked.reason, estimatedCostCents: blocked.estimatedCostCents })}
+        )
+      `;
+      throw new Error(blocked.reason);
+    }
     const runId = crypto.randomUUID();
     await sql`
       insert into generation_runs (
@@ -537,6 +649,7 @@ export async function generateStudioVariants(
         ${STUDIO_PROMPT_VERSION}, ${data.imageProvider}, ${data.videoProvider}, 'running', ${context.userId}
       )
     `;
+    try {
     const { generateImageBytes } = await import("@/lib/meridian/providers/image-bytes.server");
     const productName = loaded.products[0]?.name || "";
     const basePrompt = {
@@ -710,7 +823,7 @@ export async function generateStudioVariants(
       for (const job of due) await claimAndRun(sql, job.id);
     }
     const videos = await sql<Record<string, unknown>>`
-      select a.id, a.creative_id, a.media_status, a.byte_size, a.width, a.height, a.duration_ms, a.transcript,
+      select a.id, a.creative_id, a.storage_key, a.media_status, a.byte_size, a.width, a.height, a.duration_ms, a.transcript,
              a.scenes, a.checksum, a.mime_type, a.prompt_version, c.raw_text, c.angle
       from assets a
       join creative_records c on c.id = a.creative_id
@@ -730,6 +843,7 @@ export async function generateStudioVariants(
         byteSize: asNumber(video.byte_size),
         destinationUrl: "",
       });
+      const visual = await measuredVideoFrames(sql, access.organizationId, data.brandId, asText(video.storage_key));
       const facts = factsFor(loaded, {
         kind: "video",
         productName,
@@ -744,12 +858,12 @@ export async function generateStudioVariants(
         durationMs: video.duration_ms == null ? null : asNumber(video.duration_ms),
         transcript: asText(video.transcript),
         sceneCount: scenes.length,
-        logoSimilarity: null,
-        logoOutcome: "ABSENT",
-        logoEvidence: "Logo search uses image bytes. This video has no frame image stored.",
-        paletteDistance: null,
-        paletteOutcome: "ABSENT",
-        paletteEvidence: "Palette measurement uses image bytes. This video has no frame image stored.",
+        logoSimilarity: visual.measuredLogo.similarity,
+        logoOutcome: visual.measuredLogo.outcome,
+        logoEvidence: visual.measuredLogo.evidence,
+        paletteDistance: visual.measuredPalette.distance,
+        paletteOutcome: visual.measuredPalette.outcome,
+        paletteEvidence: visual.measuredPalette.evidence,
         semanticSimilarity: await semanticNearest(copy, competitorCopy(loaded)).catch(() => null),
         ownSemanticSimilarity: ownSemantic,
         publishing,
@@ -776,6 +890,13 @@ export async function generateStudioVariants(
     await sql`update briefs set status = 'used' where id = ${data.briefId}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
     return loadSession(sql, access.organizationId, data.brandId, access.role);
+    } catch (error) {
+      await sql`
+        update generation_runs set status = 'failed'
+        where id = ${runId} and organization_id = ${access.organizationId} and status = 'running'
+      `;
+      throw error;
+    }
 }
 
 export async function reviewStudioVariant(
@@ -864,17 +985,29 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
       limit 1
     `;
     if (!existing[0]) {
+      const decision = decide(publishingReadiness, {
+        providerConnected: data.publisher === "test" || readiness.state === "READY",
+        creativeApproved: true,
+        policyAllowsAutoPublish: false,
+      }, {
+        provider: data.publisher === "test" ? "test:publisher" : data.publisher,
+        model: "account-v1",
+      });
+      const reasons = decision.reasons.some((line) => line === readiness.summary)
+        ? decision.reasons
+        : [...decision.reasons, readiness.summary];
       await sql`
         insert into jev_decisions (
           id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,
-          input, evidence, probability, confidence, thresholds, decision, reasons, provider, model
+          input, evidence, probability, confidence, thresholds, decision, reasons, provider, model,
+          answer, schema_version, policy_version, calibration_version
         ) values (
-          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${data.creativeId}, 'publishing_readiness',
-          'v1', 'creative', ${data.creativeId}, ${JSON.stringify({ state: readiness.state })},
-          ${JSON.stringify([{ id: "publish", source: "provider_connections", summary: readiness.summary }])},
-          ${readiness.state === "READY" ? 0.9 : 0.55}, 0.8,
-          ${JSON.stringify({ autoApprove: 0.82, humanReview: 0.45, minConfidenceForAuto: 0.7 })},
-          'HUMAN_REVIEW', ${JSON.stringify([readiness.summary])}, 'readiness', 'account-v1'
+          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${data.creativeId}, ${decision.questionId},
+          ${decision.questionVersion}, 'creative', ${data.creativeId}, ${JSON.stringify({ state: readiness.state })},
+          ${JSON.stringify(decision.evidence.length > 0 ? decision.evidence : [{ id: "publish", source: "provider_connections", summary: readiness.summary }])},
+          ${decision.probability}, ${decision.confidence}, ${JSON.stringify(decision.thresholds)},
+          ${decision.decision}, ${JSON.stringify(reasons)}, ${decision.provider}, ${decision.model},
+          ${JSON.stringify(decision.answer)}, ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""}
         )
       `;
       const result = publishThrough({ provider: "test", creativeId: data.creativeId, allowTestProvider: true });

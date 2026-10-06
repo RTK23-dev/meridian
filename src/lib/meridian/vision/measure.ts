@@ -264,3 +264,31 @@ export function measurePalette(brandColors: string, creative: Uint8Array): Palet
     evidence: `Mean CIE76 distance is ${mean.toFixed(1)} with spread ${spread.toFixed(1)}. The palette is not decisive.`,
   };
 }
+
+function strictest<T extends { outcome: string; evidence: string }>(frames: T[], empty: T): T {
+  if (frames.length === 0) return empty;
+  const order = ["MISMATCH", "UNCERTAIN", "ABSENT", "MATCH"];
+  const chosen = order.map((outcome) => frames.find((item) => item.outcome === outcome)).find((item) => item != null) ?? frames[0];
+  if (!chosen) return empty;
+  return { ...chosen, evidence: `${frames.length} frame(s) measured. ${chosen.evidence}` };
+}
+
+/** A mismatch or an uncertain frame blocks a match on another frame. */
+export function combineLogoFrames(frames: LogoMeasurement[]): LogoMeasurement {
+  return strictest(frames, {
+    similarity: null,
+    confidence: null,
+    outcome: "ABSENT",
+    evidence: "No sampled frame was stored. Logo presence was not invented.",
+  });
+}
+
+export function combinePaletteFrames(frames: PaletteMeasurement[]): PaletteMeasurement {
+  return strictest(frames, {
+    distance: null,
+    confidence: null,
+    outcome: "ABSENT",
+    extracted: [],
+    evidence: "No sampled frame was stored. Palette distance was not invented.",
+  });
+}

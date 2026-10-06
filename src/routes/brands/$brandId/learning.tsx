@@ -249,7 +249,7 @@ function Learning({ brandId }: { brandId: string }) {
             </label>
             <label className="block text-sm font-semibold">
               Cadence in seconds
-              <input name="everySeconds" type="number" min={30} defaultValue={3600} required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
+              <input name="everySeconds" type="text" inputMode="decimal" defaultValue={3600} required autoComplete="off" className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
             </label>
             <label className="block text-sm font-semibold">
               Creative id

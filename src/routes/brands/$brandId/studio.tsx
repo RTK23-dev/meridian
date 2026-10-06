@@ -48,7 +48,7 @@ function Studio({ brandId }: { brandId: string }) {
   }, [brandId]);
 
   if (error) return <Notice>{error}</Notice>;
-  if (!session) return <p className="text-muted">Loading studio…</p>;
+  if (!session) return <p className="text-muted" role="status">Loading studio…</p>;
   const canEdit = hasRole(session.role, "member");
   const brief = session.briefs.find((item) => item.status === "ready") ?? session.brief;
   const previous = session.briefs[1];
@@ -67,11 +67,14 @@ function Studio({ brandId }: { brandId: string }) {
         </p>
       </div>
       {busy.error ? <Notice>{busy.error}</Notice> : null}
+      {busy.pending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
       {recommendation ? (
         <Panel>
-          <p className="text-xs font-semibold uppercase tracking-widest text-brass">Discovered · {recommendation.angle}</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-brass">Discovered · {recommendation.posture === "exploitation" ? "Exploitation" : "Exploration"} · {recommendation.angle}</p>
           <h2 className="mt-2 font-display text-3xl">{recommendation.label}</h2>
           <p className="mt-3">{recommendation.reason}</p>
+          <p className="mt-2 text-sm">{recommendation.because}</p>
+          <p className="mt-2 text-sm text-muted">{recommendation.uncertainty}</p>
           <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
             <div><dt className="text-muted">Market density</dt><dd>{recommendation.marketSignal.toFixed(2)} signal, {recommendation.saturation.toFixed(2)} saturation</dd></div>
             <div><dt className="text-muted">Brand fit</dt><dd>{recommendation.brandFit.toFixed(2)}</dd></div>
@@ -153,12 +156,12 @@ function Studio({ brandId }: { brandId: string }) {
           <h3 className="mt-4 font-semibold">What not to do</h3>
           <p className="mt-2 whitespace-pre-wrap text-sm" data-testid="brief-constraints">{brief.constraints || "No stored constraint."}</p>
           <h3 className="mt-4 font-semibold">Learned positives</h3>
-          {session.learned.some((pattern) => pattern.lift > 0) ? (
-            <ul className="mt-2 text-sm">{session.learned.filter((pattern) => pattern.lift > 0).map((pattern) => <li key={`${pattern.attribute}:${pattern.value}:up`}>+ {pattern.summary}</li>)}</ul>
+          {session.learned.some((pattern) => pattern.direction === "POSITIVE") ? (
+            <ul className="mt-2 text-sm">{session.learned.filter((pattern) => pattern.direction === "POSITIVE").map((pattern) => <li key={`${pattern.attribute}:${pattern.value}:up`}>POSITIVE · {pattern.summary}</li>)}</ul>
           ) : <p className="mt-2 text-sm text-muted">No positive pattern is stored.</p>}
           <h3 className="mt-4 font-semibold">Learned negatives</h3>
-          {session.learned.some((pattern) => pattern.lift < 0) ? (
-            <ul className="mt-2 text-sm">{session.learned.filter((pattern) => pattern.lift < 0).map((pattern) => <li key={`${pattern.attribute}:${pattern.value}:down`}>− {pattern.summary}</li>)}</ul>
+          {session.learned.some((pattern) => pattern.direction === "NEGATIVE") ? (
+            <ul className="mt-2 text-sm">{session.learned.filter((pattern) => pattern.direction === "NEGATIVE").map((pattern) => <li key={`${pattern.attribute}:${pattern.value}:down`}>NEGATIVE · {pattern.summary}</li>)}</ul>
           ) : <p className="mt-2 text-sm text-muted">No negative pattern is stored.</p>}
           {session.rejections.length > 0 ? (
             <>
@@ -203,6 +206,7 @@ function Studio({ brandId }: { brandId: string }) {
               </Field>
               <div className="md:col-span-2">
                 <Button type="submit" disabled={busy.pending || brief.status !== "ready"}>Generate 3 image + 3 video variants</Button>
+                <p className="mt-2 text-sm text-muted">Estimated generation cost is not shown until a provider returns one. A run is blocked when the daily or concurrency limit is already used.</p>
               </div>
             </form>
           ) : null}
@@ -232,10 +236,20 @@ function Studio({ brandId }: { brandId: string }) {
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">{variant.kind} {variant.index + 1} · {variant.provider || "no provider"}</p>
               <h3 className="font-display text-xl">{variant.title}</h3>
               {variant.preview ? <img className="mt-3 h-24 w-24 border border-line" src={variant.preview} alt={`${variant.provider} ${variant.kind} variant ${variant.index + 1}`} /> : null}
+              {variant.frames.length > 0 ? (
+                <div className="mt-3 flex gap-2">
+                  {variant.frames.map((src, index) => (
+                    <img key={`${variant.assetId}-frame-${index}`} className="h-16 w-16 border border-line" src={src} alt={`Sampled frame ${index + 1} from the stored ${variant.kind} bytes`} />
+                  ))}
+                </div>
+              ) : null}
               {variant.kind === "video" ? (
-                <p className="mt-3 text-sm">
+                <p className="mt-3 text-sm" role="status">
+                  {variant.provider === "test:video" ? "Fixture, not a camera recording. " : ""}
                   {variant.mediaStatus || "queued"}. {variant.durationMs ? `${(variant.durationMs / 1000).toFixed(1)}s. ` : "Duration not stored. "}
-                  {variant.transcript || "No transcript stored."}
+                  {variant.width ? `${variant.width}×${variant.height}. ` : "Dimensions not stored. "}
+                  {variant.transcript || "No transcript stored. "}
+                  {variant.scenes[0]?.summary ?? "No scene note stored."}
                 </p>
               ) : null}
               <p className="mt-2 text-sm text-muted">
@@ -266,7 +280,7 @@ function Studio({ brandId }: { brandId: string }) {
                 <ul className="mt-3 space-y-2 text-sm">
                   {variant.questions.length === 0 ? <li>No JEV row is stored for this variant.</li> : variant.questions.map((question) => (
                     <li key={question.id}>
-                      <span className="font-semibold">{question.id}</span> {question.decision} · p {question.probability.toFixed(2)} · confidence {question.confidence.toFixed(2)}
+                      <span className="font-semibold">{question.id}</span> {question.decision} · answer {question.answer || "unrecorded"} · p {question.probability.toFixed(2)} · confidence {question.confidence.toFixed(2)}
                       <span className="block text-muted">{question.reasons[0]}</span>
                     </li>
                   ))}
@@ -303,7 +317,7 @@ function Studio({ brandId }: { brandId: string }) {
           <ul className="mt-3 space-y-2 text-sm">
             {session.learned.map((pattern) => (
               <li key={`${pattern.attribute}:${pattern.value}`}>
-                {pattern.lift >= 0 ? "+" : "−"} {pattern.summary}
+                {pattern.direction} · {pattern.state} · n={pattern.sampleSize} · {pattern.impressions} impressions · {pattern.summary}
               </li>
             ))}
           </ul>

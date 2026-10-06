@@ -46,6 +46,37 @@ export function clampWeight(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
+/** Rejects blank and non-numeric text. An empty string is not zero. */
+export function parseWeight(value: unknown, label: string): number {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!text || text === "undefined" || text === "NaN") {
+    throw new Error(`${label} must be a number from 0 to 5.`);
+  }
+  if (!/^\d+(\.\d+)?$/.test(text)) {
+    throw new Error(`${label} must be a number from 0 to 5.`);
+  }
+  const number = Number(text);
+  if (!Number.isFinite(number) || number < 0 || number > 5) {
+    throw new Error(`${label} must be a number from 0 to 5.`);
+  }
+  return number;
+}
+
+/** Whole counts. A blank required field is not zero. A blank optional field is zero. */
+export function parseCount(value: unknown, label: string, optional = false): number {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!text) {
+    if (optional) return 0;
+    throw new Error(`${label} must be a whole number.`);
+  }
+  if (!/^\d+$/.test(text)) throw new Error(`${label} must be a whole number.`);
+  const number = Number(text);
+  if (!Number.isInteger(number) || number < 0 || number > 1_000_000_000) {
+    throw new Error(`${label} must be a whole number.`);
+  }
+  return number;
+}
+
 export function weightsFromUnknown(row: Record<string, unknown> | undefined): ScoreWeights {
   if (!row) return { ...DEFAULT_WEIGHTS };
   const next = { ...DEFAULT_WEIGHTS };

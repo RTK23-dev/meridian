@@ -4,8 +4,9 @@ import { getSql, type Sql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { BRAIN_FIELDS, type BrainKey, type ProvenanceMap } from "@/lib/meridian/brain";
 import { buildBrief, renderGenerationPrompt, type BriefDraft } from "@/lib/meridian/brief/engine";
-import { decide } from "@/lib/meridian/jev/engine";
-import { briefGate, opportunityGate, visualQa } from "@/lib/meridian/jev/questions";
+import { decideForTenant } from "@/lib/meridian/jev/engine";
+import { briefGate, creativeQa, opportunityGate, visualQa } from "@/lib/meridian/jev/questions";
+import { loadQuestionPolicy } from "@/lib/meridian/jev/policy";
 import { countRejections } from "@/lib/meridian/learning/engine";
 import { applyLearnedPatterns } from "@/lib/meridian/learning/store";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
@@ -72,6 +73,11 @@ function asJson<T>(value: unknown, fallback: T): T {
   return fallback;
 }
 
+function storedAnswer(value: unknown): string {
+  const parsed = asJson<{ value?: unknown }>(value, {});
+  return typeof parsed.value === "string" ? parsed.value : "";
+}
+
 function clip(value: unknown, max: number, label: string, required = false): string {
   if (typeof value !== "string") {
     if (!required && (value === undefined || value === null)) return "";
@@ -89,6 +95,7 @@ function objectInput(input: unknown): Record<string, unknown> {
 }
 
 function whole(value: unknown, label: string): number {
+  if (typeof value === "string" && value.trim() === "") throw new Error(`${label} must be a whole number.`);
   const number = typeof value === "number" ? value : Number(value);
   if (!Number.isInteger(number) || number < 0 || number > 1_000_000_000) {
     throw new Error(`${label} must be a whole number.`);
@@ -176,20 +183,26 @@ async function insertDecision(
     provider?: string;
     model?: string;
     modelResponse?: string;
+    answer?: unknown;
+    schemaVersion?: string;
+    policyVersion?: string;
+    calibrationVersion?: string | null;
   },
 ): Promise<void> {
   await sql`
     insert into jev_decisions (
       id, organization_id, brand_id, correlation_id, question_id, question_version,
       subject_type, subject_id, input, evidence, probability, confidence, thresholds,
-      decision, reasons, provider, model, model_response
+      decision, reasons, provider, model, model_response,
+      answer, schema_version, policy_version, calibration_version
     ) values (
       ${entry.id}, ${entry.organizationId}, ${entry.brandId}, ${entry.correlationId},
       ${entry.questionId}, ${entry.questionVersion}, ${entry.subjectType}, ${entry.subjectId},
       ${JSON.stringify(entry.input)}, ${JSON.stringify(entry.evidence)},
       ${entry.probability}, ${entry.confidence}, ${JSON.stringify(entry.thresholds)},
       ${entry.decision}, ${JSON.stringify(entry.reasons)},
-      ${entry.provider ?? ""}, ${entry.model ?? ""}, ${(entry.modelResponse ?? "").slice(0, 8000)}
+      ${entry.provider ?? ""}, ${entry.model ?? ""}, ${(entry.modelResponse ?? "").slice(0, 8000)},
+      ${JSON.stringify(entry.answer ?? {})}, ${entry.schemaVersion ?? ""}, ${entry.policyVersion ?? ""}, ${entry.calibrationVersion ?? ""}
     )
   `;
 }
@@ -924,10 +937,20 @@ export const refreshOpportunities = createServerFn({ method: "POST" })
       await sql`delete from opportunities where id = ${row.id}`;
     }
     const correlationId = id();
+    const active = await loadQuestionPolicy(sql, access.organizationId, opportunityGate);
     for (const draft of drafts) {
       const opportunityId = id();
       const decisionId = id();
-      const decision = decide(opportunityGate, draft.gateInput);
+      const decision = decideForTenant(active.question, draft.gateInput, {
+        organizationId: access.organizationId,
+        brandId: data.brandId,
+        evidence: loaded.creatives,
+      }, {
+        policyVersion: active.policy.policyVersion,
+        calibration: active.policy.calibration,
+        provider: "jev",
+        model: "opportunity-gate",
+      });
       const evidence = [...draft.evidence, ...decision.evidence];
       await insertDecision(sql, {
         id: decisionId,
@@ -945,6 +968,12 @@ export const refreshOpportunities = createServerFn({ method: "POST" })
         thresholds: decision.thresholds,
         decision: decision.decision,
         reasons: decision.reasons,
+        provider: decision.provider,
+        model: decision.model,
+        answer: decision.answer,
+        schemaVersion: decision.schemaVersion,
+        policyVersion: decision.policyVersion,
+        calibrationVersion: decision.calibrationVersion,
       });
       const status = decision.decision === "REJECT" ? "rejected" : "open";
       await sql`
@@ -1036,13 +1065,23 @@ export const createBriefFromOpportunity = createServerFn({ method: "POST" })
       rejections: loaded.rejections,
       observations,
     });
-    const gate = decide(briefGate, {
+    const briefPolicy = await loadQuestionPolicy(sql, access.organizationId, briefGate);
+    const gate = decideForTenant(briefPolicy.question, {
       hasAudience: brief.audience.trim().length > 1,
       hasProduct: brief.workflow.variables.product.trim().length > 1 || draft.productName.trim().length > 1,
       hasHook: brief.hook.trim().length > 1,
       hasAngle: brief.angle.trim().length > 1,
       hasCta: brief.cta.trim().length > 1,
       hasFormat: brief.format.trim().length > 1,
+    }, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      evidence: loaded.creatives,
+    }, {
+      policyVersion: briefPolicy.policy.policyVersion,
+      calibration: briefPolicy.policy.calibration,
+      provider: "jev",
+      model: "brief-gate",
     });
     const briefId = id();
     const decisionId = id();
@@ -1063,6 +1102,12 @@ export const createBriefFromOpportunity = createServerFn({ method: "POST" })
       thresholds: gate.thresholds,
       decision: gate.decision,
       reasons: gate.reasons,
+      provider: gate.provider,
+      model: gate.model,
+      answer: gate.answer,
+      schemaVersion: gate.schemaVersion,
+      policyVersion: gate.policyVersion,
+      calibrationVersion: gate.calibrationVersion,
     });
     await sql`
       insert into briefs (
@@ -1174,6 +1219,17 @@ async function produceCreative(
     hook: input.hook,
     cta: input.cta,
   });
+  const textPolicy = await loadQuestionPolicy(sql, input.organizationId, creativeQa);
+  const decision = decideForTenant(textPolicy.question, assessed.evidence, {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    evidence: loaded.creatives,
+  }, {
+    policyVersion: textPolicy.policy.policyVersion,
+    calibration: textPolicy.policy.calibration,
+    provider: input.provider || "jev",
+    model: input.model || "creative-qa",
+  });
   const creativeId = id();
   const decisionId = id();
   const correlationId = id();
@@ -1190,24 +1246,28 @@ async function produceCreative(
     organizationId: input.organizationId,
     brandId: input.brandId,
     correlationId,
-    questionId: assessed.decision.questionId,
-    questionVersion: assessed.decision.questionVersion,
+    questionId: decision.questionId,
+    questionVersion: decision.questionVersion,
     subjectType: "creative",
     subjectId: creativeId,
     input: assessed.evidence,
-    evidence: assessed.decision.evidence,
-    probability: assessed.decision.probability,
-    confidence: assessed.decision.confidence,
-    thresholds: assessed.decision.thresholds,
-    decision: assessed.decision.decision,
-    reasons: assessed.decision.reasons,
+    evidence: decision.evidence,
+    probability: decision.probability,
+    confidence: decision.confidence,
+    thresholds: decision.thresholds,
+    decision: decision.decision,
+    reasons: decision.reasons,
     provider: input.provider,
     model: input.model,
     modelResponse: input.modelResponse,
+    answer: decision.answer,
+    schemaVersion: decision.schemaVersion,
+    policyVersion: decision.policyVersion,
+    calibrationVersion: decision.calibrationVersion,
   });
-  const status = assessed.decision.decision === "AUTO_APPROVE"
+  const status = decision.decision === "AUTO_APPROVE"
     ? "approved"
-    : assessed.decision.decision === "HUMAN_REVIEW"
+    : decision.decision === "HUMAN_REVIEW"
       ? "in_review"
       : "rejected";
   await sql`
@@ -1231,19 +1291,19 @@ async function produceCreative(
     proofType: asText(briefRow.proof_type),
     productName: product?.name || productName,
   });
-  if (assessed.decision.decision === "HUMAN_REVIEW") {
+  if (decision.decision === "HUMAN_REVIEW") {
     await sql`
       insert into reviews (id, organization_id, brand_id, decision_id, creative_id, subject_label)
       values (${id()}, ${input.organizationId}, ${input.brandId}, ${decisionId}, ${creativeId}, ${asText(briefRow.title)})
     `;
     await notify(sql, input.organizationId, input.brandId, "review.required", asText(briefRow.title));
   }
-  if (assessed.decision.decision === "REJECT") {
+  if (decision.decision === "REJECT") {
     await sql`
       insert into rejections (id, organization_id, brand_id, creative_id, decision_id, reason_code, note, rejected_by)
       values (
         ${id()}, ${input.organizationId}, ${input.brandId}, ${creativeId}, ${decisionId},
-        ${assessed.reasonCode || "other"}, ${assessed.decision.reasons.join(" ").slice(0, 500)}, ${"jev"}
+        ${assessed.reasonCode || "other"}, ${decision.reasons.join(" ").slice(0, 500)}, ${"jev"}
       )
     `;
   }
@@ -1270,7 +1330,7 @@ async function produceCreative(
       )
     `;
   }
-  return { creativeId, decision: assessed.decision.decision, reasons: assessed.decision.reasons };
+  return { creativeId, decision: decision.decision, reasons: decision.reasons };
 }
 
 export const composeCreative = createServerFn({ method: "POST" })
@@ -1714,7 +1774,7 @@ export const listReviews = createServerFn({ method: "POST" })
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
     const rows = await sql<Record<string, unknown>>`
       select r.id, r.subject_label, r.status, r.creative_id, r.opportunity_id, r.created_at,
-             d.decision, d.probability, d.confidence, d.reasons, d.question_id, d.question_version
+             d.decision, d.probability, d.confidence, d.reasons, d.question_id, d.question_version, d.answer, d.policy_version
       from reviews r
       join jev_decisions d on d.id = r.decision_id
       where r.brand_id = ${data.brandId} and r.organization_id = ${access.organizationId}
@@ -1733,6 +1793,8 @@ export const listReviews = createServerFn({ method: "POST" })
         confidence: asNumber(row.confidence),
         question: `${asText(row.question_id)}.${asText(row.question_version)}`,
         reasons: asJson<string[]>(row.reasons, []),
+        answer: storedAnswer(row.answer),
+        policyVersion: asText(row.policy_version),
         createdAt: asText(row.created_at),
       })),
     };
@@ -1870,7 +1932,17 @@ export const attachCreativeImage = createServerFn({ method: "POST" })
           claimSupported: null,
           toneFit: null,
         };
-    const visual = decide(visualQa, visualInput);
+    const visualPolicy = await loadQuestionPolicy(sql, access.organizationId, visualQa);
+    const visual = decideForTenant(visualPolicy.question, visualInput, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      evidence: loaded.creatives,
+    }, {
+      policyVersion: visualPolicy.policy.policyVersion,
+      calibration: visualPolicy.policy.calibration,
+      provider: reading.ok ? reading.provider : "jev",
+      model: reading.ok ? reading.model : "visual-qa",
+    });
     const decisionId = id();
     const correlationId = id();
     await insertDecision(sql, {
@@ -1889,9 +1961,13 @@ export const attachCreativeImage = createServerFn({ method: "POST" })
       thresholds: visual.thresholds,
       decision: visual.decision,
       reasons: visual.reasons,
-      provider: reading.ok ? reading.provider : "",
-      model: reading.ok ? reading.model : "",
+      provider: reading.ok ? reading.provider : visual.provider,
+      model: reading.ok ? reading.model : visual.model,
       modelResponse: reading.ok ? reading.raw : "",
+      answer: visual.answer,
+      schemaVersion: visual.schemaVersion,
+      policyVersion: visual.policyVersion,
+      calibrationVersion: visual.calibrationVersion,
     });
     if (reading.ok) {
       const promptAsset = promptById("visual_evidence");

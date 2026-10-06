@@ -6,6 +6,7 @@ import { StatusText } from "@/components/status";
 import { Button, Field, Notice, Panel, SelectInput, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { attachCreativeImage, getTrace, listLibrary, recordObservation, recordPerformance } from "@/lib/meridian/machine";
+import { parseCount } from "@/lib/meridian/scoring";
 import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 
@@ -82,7 +83,7 @@ function Library({ brandId }: { brandId: string }) {
                     provider,
                     creativeId: String(form.get("creativeId") ?? ""),
                     name: String(form.get("name") ?? ""),
-                    dailyBudgetCents: Number(form.get("dailyBudgetCents") ?? 0),
+                    dailyBudgetCents: parseCount(form.get("dailyBudgetCents"), "Daily budget"),
                     countries: split("countries"),
                     locationIds: split("locationIds"),
                     pageId: String(form.get("pageId") ?? ""),
@@ -93,7 +94,7 @@ function Library({ brandId }: { brandId: string }) {
                     videoId: String(form.get("videoId") ?? ""),
                     headlines: split("headlines"),
                     descriptions: split("descriptions"),
-                    cpcBidCents: Number(form.get("cpcBidCents") ?? 0),
+                    cpcBidCents: parseCount(form.get("cpcBidCents"), "CPC bid", true),
                   },
                 });
                 setStages(result.stages);
@@ -120,7 +121,7 @@ function Library({ brandId }: { brandId: string }) {
               <TextInput name="name" required maxLength={120} />
             </Field>
             <Field label="Daily budget (cents)">
-              <TextInput name="dailyBudgetCents" type="number" min={1} required defaultValue={1000} />
+              <TextInput name="dailyBudgetCents" type="text" inputMode="decimal" min={1} required defaultValue={1000} />
             </Field>
             <Field label="Link">
               <TextInput name="link" type="url" placeholder="https://" />
@@ -153,7 +154,7 @@ function Library({ brandId }: { brandId: string }) {
               <TextInput name="descriptions" />
             </Field>
             <Field label="Google CPC bid (cents)">
-              <TextInput name="cpcBidCents" type="number" min={0} defaultValue={0} />
+              <TextInput name="cpcBidCents" type="text" inputMode="decimal" min={0} defaultValue={0} />
             </Field>
             <Button type="submit" disabled={busy.pending || data.creatives.length === 0}>Create paused objects</Button>
           </form>
@@ -253,12 +254,12 @@ function Library({ brandId }: { brandId: string }) {
                       brandId,
                       creativeId: traceId,
                       platform: String(form.get("platform") ?? ""),
-                      impressions: Number(form.get("impressions") ?? 0),
-                      clicks: Number(form.get("clicks") ?? 0),
-                      conversions: Number(form.get("conversions") ?? 0),
-                      spendCents: Number(form.get("spendCents") ?? 0),
-                      revenueCents: Number(form.get("revenueCents") ?? 0),
-                      reach: Number(form.get("reach") ?? 0),
+                      impressions: parseCount(form.get("impressions"), "Impressions"),
+                      clicks: parseCount(form.get("clicks"), "Clicks"),
+                      conversions: parseCount(form.get("conversions"), "Conversions"),
+                      spendCents: parseCount(form.get("spendCents"), "Spend"),
+                      revenueCents: parseCount(form.get("revenueCents"), "Revenue"),
+                      reach: parseCount(form.get("reach"), "Reach", true),
                       observedOn: String(form.get("observedOn") ?? ""),
                     },
                   });
@@ -270,12 +271,12 @@ function Library({ brandId }: { brandId: string }) {
             >
               <Field label="Date"><TextInput name="observedOn" type="date" required /></Field>
               <Field label="Platform"><TextInput name="platform" /></Field>
-              <Field label="Reach"><TextInput name="reach" type="number" min={0} defaultValue={0} /></Field>
-              <Field label="Impressions"><TextInput name="impressions" type="number" min={0} required defaultValue={0} /></Field>
-              <Field label="Clicks"><TextInput name="clicks" type="number" min={0} required defaultValue={0} /></Field>
-              <Field label="Conversions"><TextInput name="conversions" type="number" min={0} required defaultValue={0} /></Field>
-              <Field label="Spend (cents)"><TextInput name="spendCents" type="number" min={0} required defaultValue={0} /></Field>
-              <Field label="Revenue (cents)"><TextInput name="revenueCents" type="number" min={0} required defaultValue={0} /></Field>
+              <Field label="Reach"><TextInput name="reach" type="text" inputMode="decimal" min={0} defaultValue={0} /></Field>
+              <Field label="Impressions"><TextInput name="impressions" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
+              <Field label="Clicks"><TextInput name="clicks" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
+              <Field label="Conversions"><TextInput name="conversions" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
+              <Field label="Spend (cents)"><TextInput name="spendCents" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
+              <Field label="Revenue (cents)"><TextInput name="revenueCents" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
               <div className="md:col-span-2 flex flex-wrap gap-2">
                 <Button type="submit" disabled={busy.pending}>Record performance</Button>
                 <Button

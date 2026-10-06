@@ -2,9 +2,12 @@ import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { advanceTestVideo, startTestVideo, type VideoJob } from "../providers/media.ts";
 import { pollXaiVideo, submitXaiVideo, type XaiVideoState } from "../video/xai.ts";
+import { inspectVideo, videoFactsFromInspection } from "../video/inspect.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 
 export const STUDIO_PROMPT_VERSION = "studio-media-v1";
+export const TEST_VIDEO_MAX_POLLS = 4;
+export const XAI_VIDEO_MAX_POLLS = 8;
 
 export function variantPrompt(input: {
   productName: string;
@@ -54,6 +57,54 @@ export async function storeBlob(
       updated_at = now()
   `;
   return { checksum, byteSize: input.bytes.byteLength };
+}
+
+/** Stores the container and only the frames that are actually inside it. */
+export async function persistVideoBytes(
+  sql: Sql,
+  input: {
+    organizationId: string;
+    brandId: string;
+    assetId: string;
+    key: string;
+    bytes: Uint8Array;
+    providerJobId: string;
+    reportedDurationMs: number | null;
+    scenes: { atMs: number; summary: string }[];
+  },
+): Promise<{ frameCount: number; durationMs: number | null; width: number | null; height: number | null }> {
+  const inspected = inspectVideo(input.bytes);
+  const facts = videoFactsFromInspection(inspected, input.bytes.byteLength);
+  const stored = await storeBlob(sql, {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    key: input.key,
+    mime: "video/mp4",
+    bytes: input.bytes,
+  });
+  for (let index = 0; index < inspected.frames.length; index += 1) {
+    const frame = inspected.frames[index];
+    if (!frame) continue;
+    await storeBlob(sql, {
+      organizationId: input.organizationId,
+      brandId: input.brandId,
+      key: `${input.key}.frame.${index}.png`,
+      mime: "image/png",
+      bytes: frame,
+    });
+  }
+  const scenes = input.scenes.length > 0 ? input.scenes : [{ atMs: 0, summary: facts.scene }];
+  const durationMs = facts.durationMs ?? input.reportedDurationMs;
+  await sql`
+    update assets set
+      storage_key = ${input.key}, content_hash = ${stored.checksum}, checksum = ${stored.checksum},
+      mime_type = 'video/mp4', byte_size = ${stored.byteSize}, width = ${facts.width}, height = ${facts.height},
+      duration_ms = ${durationMs}, frame_rate = ${null}, transcript = '',
+      scenes = ${JSON.stringify(scenes)}, media_status = 'completed', status = 'stored', lifecycle = 'stored',
+      provider_job_id = ${input.providerJobId}
+    where id = ${input.assetId} and organization_id = ${input.organizationId}
+  `;
+  return { frameCount: inspected.frames.length, durationMs, width: facts.width, height: facts.height };
 }
 
 async function enqueue(
@@ -135,7 +186,7 @@ export async function runVideoJob(sql: Sql, job: ExecutableJob, payload: Record<
   `;
   await sql`update assets set media_status = ${next.status} where id = ${assetId}`;
   if (next.status !== "completed" || !next.bytes) {
-    if (step >= 4) throw new Error("Test video did not finish.");
+    if (step >= TEST_VIDEO_MAX_POLLS) throw new Error("Test video did not finish.");
     await enqueue(sql, {
       id: crypto.randomUUID(),
       organizationId: job.organization_id,
@@ -147,22 +198,16 @@ export async function runVideoJob(sql: Sql, job: ExecutableJob, payload: Record<
     return next.status;
   }
   const key = `${job.organization_id}/${row.brand_id}/runs/${row.generation_run_id}/${assetId}.mp4`;
-  const stored = await storeBlob(sql, {
+  await persistVideoBytes(sql, {
     organizationId: job.organization_id,
     brandId: String(row.brand_id),
+    assetId,
     key,
-    mime: "video/mp4",
     bytes: next.bytes,
+    providerJobId: next.providerJobId,
+    reportedDurationMs: next.durationMs,
+    scenes: next.scenes,
   });
-  await sql`
-    update assets set
-      storage_key = ${key}, content_hash = ${stored.checksum}, checksum = ${stored.checksum},
-      mime_type = 'video/mp4', byte_size = ${stored.byteSize}, width = ${next.width}, height = ${next.height},
-      duration_ms = ${next.durationMs}, frame_rate = ${next.frameRate}, transcript = ${next.transcript},
-      scenes = ${JSON.stringify(next.scenes)}, media_status = 'completed', status = 'stored', lifecycle = 'stored',
-      provider_job_id = ${next.providerJobId}
-    where id = ${assetId} and organization_id = ${job.organization_id}
-  `;
   return `completed:${next.providerJobId}`;
 }
 
@@ -214,7 +259,7 @@ async function runXaiVideo(
   `;
   await sql`update assets set media_status = ${next.status}, error = ${next.error} where id = ${assetId}`;
   if (next.status === "processing") {
-    if (step >= 8) throw new Error("xAI video did not finish.");
+    if (step >= XAI_VIDEO_MAX_POLLS) throw new Error("xAI video did not finish.");
     await enqueue(sql, {
       id: crypto.randomUUID(),
       organizationId: job.organization_id,
@@ -229,19 +274,15 @@ async function runXaiVideo(
     return next.status === "not_connected" ? "EXTERNAL_CONNECTION_REQUIRED" : "failed";
   }
   const key = `${job.organization_id}/${row.brand_id}/runs/${row.generation_run_id}/${assetId}.mp4`;
-  const stored = await storeBlob(sql, {
+  await persistVideoBytes(sql, {
     organizationId: job.organization_id,
     brandId: String(row.brand_id),
+    assetId,
     key,
-    mime: "video/mp4",
     bytes: next.bytes,
+    providerJobId: next.providerJobId,
+    reportedDurationMs: next.durationMs,
+    scenes: [],
   });
-  await sql`
-    update assets set
-      storage_key = ${key}, content_hash = ${stored.checksum}, checksum = ${stored.checksum},
-      mime_type = 'video/mp4', byte_size = ${stored.byteSize}, duration_ms = ${next.durationMs},
-      media_status = 'completed', status = 'stored', lifecycle = 'stored', provider_job_id = ${next.providerJobId}
-    where id = ${assetId} and organization_id = ${job.organization_id}
-  `;
   return `completed:${next.providerJobId}`;
 }

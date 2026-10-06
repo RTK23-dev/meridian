@@ -1,5 +1,14 @@
 import { clamp01 } from "../domain.ts";
-import { decide, type DecisionState, type EvidenceRef, type ThresholdConfig } from "./engine.ts";
+import {
+  decide,
+  type AnswerValue,
+  type CalibrationStep,
+  type DecisionState,
+  type EvidenceRef,
+  type EvidenceState,
+  type ProbabilisticAnswer,
+  type ThresholdConfig,
+} from "./engine.ts";
 
 /** A versioned linear model. It scores features. It does not choose a decision. */
 export type JudgmentModel = {
@@ -88,11 +97,27 @@ export type AuditedDecision = {
   modelVersion: string;
   features: { name: string; value: number }[];
   probability: number;
+  rawProbability: number;
   confidence: number;
   decision: DecisionState;
   reasons: string[];
   evidence: EvidenceRef[];
   policy: ThresholdConfig;
+  answer: ProbabilisticAnswer;
+  policyVersion: string;
+  calibrationVersion: string | null;
+  provider: string;
+  schemaVersion: string;
+  decidedAt: string;
+  evidenceState: EvidenceState;
+};
+
+export type JudgeOptions = {
+  thresholds?: ThresholdConfig;
+  policyVersion?: string;
+  calibration?: CalibrationStep | null;
+  provider?: string;
+  now?: string;
 };
 
 export function sigmoid(value: number): number {
@@ -107,6 +132,7 @@ export function judgeFeatures(
   features: Feature[],
   model: JudgmentModel,
   evidencePresent: boolean,
+  options?: JudgeOptions,
 ): AuditedDecision {
   let score = model.bias;
   for (const feature of features) {
@@ -116,6 +142,12 @@ export function judgeFeatures(
   }
   let probability = sigmoid(score);
   let confidence = features.length === 0 ? 0.25 : Math.min(0.93, 0.45 + features.length * 0.08);
+  const violation = features.some((feature) => feature.name === "violation" && feature.value >= 0.99);
+  const contradictory =
+    !violation &&
+    features.some((feature) => feature.name === "aligned" && feature.value >= 0.8) &&
+    features.some((feature) => feature.name === "violation" && feature.value >= 0.5);
+  const evidenceState: EvidenceState = !evidencePresent ? "missing" : violation ? "violation" : contradictory ? "contradictory" : "present";
   if (!evidencePresent) {
     probability = Math.min(spec.thresholds.autoApprove - 0.05, Math.max(spec.thresholds.humanReview, probability));
     confidence = Math.min(confidence, spec.thresholds.minConfidenceForAuto - 0.05);
@@ -125,6 +157,8 @@ export function judgeFeatures(
     confidence,
     reasons: features.map((feature) => feature.summary).slice(0, 6),
     evidence: features.map((feature) => ({ id: feature.evidenceId, source: feature.source, summary: feature.summary })),
+    evidenceState,
+    answer: (violation ? "violation" : undefined) as AnswerValue | undefined,
   };
   if (!evidencePresent) {
     evaluation.reasons.unshift("Evidence is missing. The policy keeps this in review.");
@@ -134,15 +168,23 @@ export function judgeFeatures(
       summary: "A required feature was not observed. Approval is not available.",
     });
   }
+  const thresholds = options?.thresholds ?? spec.thresholds;
   const decision = decide(
     {
       id: spec.id,
       version: spec.version,
       description: spec.description,
-      thresholds: spec.thresholds,
+      thresholds,
       evaluate: () => evaluation,
     },
     null,
+    {
+      calibration: options?.calibration ?? null,
+      policyVersion: options?.policyVersion,
+      model: model.version,
+      provider: options?.provider ?? model.id,
+      now: options?.now,
+    },
   );
   return {
     questionId: spec.id,
@@ -150,11 +192,19 @@ export function judgeFeatures(
     modelVersion: model.version,
     features: features.map((feature) => ({ name: feature.name, value: round3(clamp01(feature.value)) })),
     probability: decision.probability,
+    rawProbability: decision.rawProbability,
     confidence: decision.confidence,
     decision: decision.decision,
     reasons: decision.reasons,
     evidence: decision.evidence,
-    policy: { ...spec.thresholds },
+    policy: { ...thresholds },
+    answer: decision.answer,
+    policyVersion: decision.policyVersion,
+    calibrationVersion: decision.calibrationVersion,
+    provider: decision.provider,
+    schemaVersion: decision.schemaVersion,
+    decidedAt: decision.decidedAt,
+    evidenceState: decision.evidenceState,
   };
 }
 

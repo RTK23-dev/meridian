@@ -5,17 +5,18 @@ JEV is the deterministic gate around evidence. It is not a prompt and it does no
 ## Path
 
 ```
-text or vision description
-  → structured evidence
-  → typed question (id + version + evaluator)
-  → probability and confidence
-  → thresholds
+stored evidence
+  → versioned question (id + schema version + evaluator)
+  → probabilistic answer (yes, no, uncertain, insufficient, or violation)
+  → calibration, only when an admin has approved a version
+  → policy thresholds
   → AUTO_APPROVE | HUMAN_REVIEW | REJECT
   → jev_decisions row
-  → review queue or rejection row, when required
 ```
 
-Code: `src/lib/meridian/jev/engine.ts` and `src/lib/meridian/jev/questions.ts`.
+Missing evidence and contradictory evidence stay in human review. A violation is a reject. Neither case can auto-approve. Calibration changes the next decision only. It does not rewrite a stored decision, and it does not move thresholds until an admin approves a proposal.
+
+Code: `src/lib/meridian/jev/engine.ts`, `src/lib/meridian/jev/questions.ts`, `src/lib/meridian/jev/judgment.ts`, and `src/lib/meridian/jev/policy.ts`.
 
 `decide()` clamps probability and confidence, then:
 
@@ -45,9 +46,9 @@ Creative QA thresholds are 0.90 / 0.60 / 0.75. Opportunity thresholds are 0.88 /
 
 ## Persistence
 
-Every decision stores input, evidence, question version, probability, confidence, thresholds, reasons, optional provider and model response, reviewer id, reviewer decision, note, time, brand, and correlation id.
+Every decision stores the question version, answer schema version, model, provider, raw and calibrated probability, answer, evidence identifiers, policy version, calibration version, decision, and time. Reviewer outcomes are written beside the decision. They do not replace it.
 
-Reviewer outcomes are written back onto the same row. They do not yet move the thresholds. That would be calibration, and it is not implied by the column existing.
+Approved threshold versions are read on the next opportunity, brief, creative, image, and video judgment. Studio, opportunity refresh, and rerank use that loader. A proposal that has not been approved does not change a decision.
 
 ## Tests
 

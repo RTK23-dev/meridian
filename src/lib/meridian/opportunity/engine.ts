@@ -51,6 +51,29 @@ export type RankedOpportunity = OpportunityDraft & {
   gateInput: OpportunityGateInput;
 };
 
+export function recommendationPosture(input: {
+  source: "prior" | "discovered";
+  historicalEvidence: number;
+  confidence: number;
+  novelty: number;
+}): { posture: "exploitation" | "exploration"; because: string; uncertainty: string } {
+  if (input.source === "discovered" && input.historicalEvidence > 0) {
+    return {
+      posture: "exploitation",
+      because: "Exploitation. This direction was discovered in stored evidence and already has historical support.",
+      uncertainty: `Confidence is ${input.confidence.toFixed(2)}. A learned lift is not a causal proof.`,
+    };
+  }
+  return {
+    posture: "exploration",
+    because:
+      input.source === "discovered"
+        ? "Exploration. The direction is in the stored evidence, but there is no positive historical support yet."
+        : "Exploration. This is an under-tested prior, not a validated winner.",
+    uncertainty: `Confidence is ${input.confidence.toFixed(2)}. Novelty is ${input.novelty.toFixed(2)}. Missing performance stays missing.`,
+  };
+}
+
 const BRAIN_KEYS: (keyof BrainSlice)[] = [
   "positioning",
   "differentiators",

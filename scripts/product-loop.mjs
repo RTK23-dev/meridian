@@ -109,6 +109,7 @@ try {
   if (!discovered.toLowerCase().includes("lather")) throw new Error(`Studio did not show the lather evidence. ${discovered.slice(0, 500)}`);
   await page.getByRole("button", { name: "Accept direction and write the brief" }).click();
   await page.getByRole("heading", { name: "Brief" }).waitFor();
+  await page.locator("dd").filter({ hasText: /AUTO_APPROVE|HUMAN_REVIEW|REJECT/ }).first().waitFor();
   const firstConstraints = await page.getByTestId("brief-constraints").innerText();
   await page.locator("select[name='imageProvider']").selectOption("test:image");
   await page.locator("select[name='videoProvider']").selectOption("test:video");
@@ -131,6 +132,7 @@ try {
   }
   await page.getByRole("button", { name: "Inspect evidence" }).first().click();
   await page.getByText("logo_match").first().waitFor();
+  await page.getByText(/answer (yes|no|uncertain|insufficient|violation)/).first().waitFor();
   await page.getByRole("button", { name: "Reject" }).first().focus();
   await page.keyboard.press("Enter");
   await page.getByRole("button", { name: "Request revision" }).first().focus();

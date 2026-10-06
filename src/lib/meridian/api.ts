@@ -18,6 +18,7 @@ import {
 } from "@/lib/meridian/brain";
 import {
   WEIGHT_KEYS,
+  parseWeight,
   type ScoreWeights,
 } from "@/lib/meridian/scoring";
 
@@ -542,10 +543,7 @@ export const updateWeights = createServerFn({ method: "POST" })
     const source = objectInput(body.weights);
     const weights = {} as ScoreWeights;
     for (const key of WEIGHT_KEYS) {
-      const value = source[key];
-      const number = typeof value === "number" ? value : Number(value);
-      if (!Number.isFinite(number) || number < 0 || number > 5) throw new Error(`${key} must be a number from 0 to 5.`);
-      weights[key] = number;
+      weights[key] = parseWeight(source[key], key);
     }
     return { organizationId, weights };
   })

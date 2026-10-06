@@ -28,8 +28,22 @@ export function Button({
 const control =
   "w-full rounded-md border border-line bg-panel px-3 py-3 text-base text-ink outline-none placeholder:text-muted focus:border-brass";
 
-export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${control} ${props.className ?? ""}`} />;
+export function TextInput({ onWheel, type, step, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  const numeric = type === "number";
+  return (
+    <input
+      {...props}
+      type={type}
+      step={numeric ? (step ?? "any") : step}
+      onWheel={(event) => {
+        if (numeric && document.activeElement === event.currentTarget) {
+          event.currentTarget.blur();
+        }
+        onWheel?.(event);
+      }}
+      className={`${control} ${props.className ?? ""}`}
+    />
+  );
 }
 
 export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {

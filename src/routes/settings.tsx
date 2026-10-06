@@ -7,7 +7,7 @@ import { Button, Field, Notice, Panel, SelectInput, TextInput } from "@/componen
 import { useWorkspace } from "@/components/workspace";
 import { hasRole, ROLES } from "@/lib/meridian/access";
 import { addMember, changeMemberRole, createOrganization, renameOrganization, updateWeights } from "@/lib/meridian/api";
-import { WEIGHT_KEYS, type ScoreWeights } from "@/lib/meridian/scoring";
+import { WEIGHT_KEYS, parseWeight, type ScoreWeights } from "@/lib/meridian/scoring";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
@@ -45,7 +45,7 @@ function Settings() {
         <p className="text-muted">You are {active.role}. Permission checks run on the server, not only in this screen.</p>
       </div>
       {error ? <Notice>{error}</Notice> : null}
-      {message ? <p className="text-sm">{message}</p> : null}
+      {message ? <p className="text-sm" role="status">{message}</p> : null}
       <Panel>
         <form
           className="flex flex-wrap items-end gap-3"
@@ -150,16 +150,15 @@ function Settings() {
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
+            const weights = {} as ScoreWeights;
             for (const key of WEIGHT_KEYS) {
-              const number = Number(form.get(key));
-              if (!Number.isFinite(number) || number < 0 || number > 5) {
-                setMessage(`${LABELS[key]} must be a number from 0 to 5.`);
+              try {
+                weights[key] = parseWeight(form.get(key), LABELS[key]);
+              } catch (caught) {
+                setMessage(caught instanceof Error ? caught.message : `${LABELS[key]} must be a number from 0 to 5.`);
                 return;
               }
             }
-            const weights = Object.fromEntries(
-              WEIGHT_KEYS.map((key) => [key, Number(form.get(key))]),
-            ) as ScoreWeights;
             void run(async () => {
               await updateWeights({ data: { organizationId: active.id, weights } });
               setMessage("Diagnostic weights saved. They do not create opportunities.");
