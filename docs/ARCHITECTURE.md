@@ -17,13 +17,15 @@ organization → brand → brand brain / products
         → human script or text provider
         → text guardian → JEV creative QA
         → library, review, or rejection
+        → approved stored Hypit MP4 → verified tenant/JEV lineage → confirmed Meta video upload
+        → paused Meta campaign / ad set / video creative / ad
         → manual performance or a provider sync that passed the normalizer
         → learning job on the worker
         → learned patterns
         → next rank and next brief
 ```
 
-The web process does not execute the worker loop. `scripts/worker-entry.ts` claims jobs. `scripts/scheduler-entry.ts` only enqueues. Both need `DATABASE_URL`.
+The web process does not execute the worker loop. `scripts/worker-entry.ts` claims jobs. `scripts/scheduler-entry.ts` only enqueues. Both need `DATABASE_URL`. Meta video uploads persist a per-organization idempotency reservation and reconcile ambiguous outcomes before retrying; Meta's confirmed video id and artifact lineage are persisted before the paused campaign chain continues. Meta performance jobs revalidate tenant/brand ownership and the tenant credential's access to the selected ad account.
 
 ## Modules
 

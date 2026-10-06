@@ -1,6 +1,6 @@
 # Meridian
 
-Beta **0.1.0-beta.3**. Multi-tenant advertising operating system.
+Beta **0.1.0-beta.3**. Evidence-led advertising research, JEV decisions, Hypit video production, and paused Meta publishing for multi-tenant brands.
 
 You add a brand. Meridian ranks what to make from evidence you store, generates image and video variants, checks them, and writes results back into the next decision.
 
@@ -44,7 +44,9 @@ Open the app, create an account, and add a brand. Without `DATABASE_URL`, the pr
 - JEV uses OpenRouter as its only external model gateway. Optional Studio images can use Google AI Studio / Nano Banana. Studio production video uses Hypit after JEV approval.
 - A Hypit MP4 is stored only after the separate process returns bytes. Missing vision evidence does not auto-approve.
 - Manual performance and learning that changes the next rank and the next brief.
-- Provider clients for Meta, TikTok, Google Ads, and the Meta Ad Library. They store an id only after the response contains one.
+- Provider clients for Meta, TikTok, Google Ads, and the Meta Ad Library. Confirmed provider ids are stored only after a real response.
+- Approved, tenant-scoped Hypit MP4s can be uploaded to Meta and used in a paused campaign/ad-set/ad chain. Upload retries reconcile the prior upload; publishing is not activated automatically.
+- Tenant-scoped Meta performance jobs verify the selected ad and account before storing observations.
 - A separate worker and scheduler, filesystem storage, and an S3-compatible client.
 - Invite email when `EMAIL_API_URL` and `EMAIL_API_KEY` are set. Otherwise the invite is stored and nobody is notified.
 
@@ -52,7 +54,7 @@ Open the app, create an account, and add a brand. Without `DATABASE_URL`, the pr
 
 | Need | Environment | Until then |
 | --- | --- | --- |
-| Meta ads | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, and for OAuth `META_APP_ID`, `META_APP_SECRET` | Not configured. Nothing is published. |
+| Meta ads | A successful tenant Meta connection and ad-account selection; `META_ACCESS_TOKEN` / `META_AD_ACCOUNT_ID` can provide host-configured access, and OAuth uses `META_APP_ID`, `META_APP_SECRET`, `TOKEN_ENCRYPTION_KEY` | Without a usable connection/account, live video upload, paused publication, and Meta performance sync remain `NOT_CONNECTED`. Campaign objects remain paused. |
 | Meta Ad Library | `META_AD_LIBRARY_TOKEN` | No ads are collected. |
 | JEV model gateway | `OPENROUTER_API_KEY` | Model-backed JEV actions report not configured. |
 | JEV Research transcription | local WhisperX; `ffmpeg` and `ffprobe` on the worker | Research transcription reports `NOT_CONNECTED`; no hosted API fallback is used. |
@@ -104,12 +106,12 @@ GitHub Actions runs the same checks on `main` and on a published release. This a
 
 | Area | Status |
 | --- | --- |
-| Decision loop, JEV, learning write-back | In this beta. A stored result can change the next rank and brief. |
-| Hypit video | In this beta as a handoff. The runtime is a separate process. This repo does not include Hypit source. |
+| Decision loop, JEV, learning write-back | In this beta. Stored external advertising evidence and validated performance observations can inform later ranks and briefs. |
+| Hypit video and Meta publishing | In this beta: approved briefs can produce stored MP4s through a separate Hypit process; configured Meta connections can publish the verified artifact into a paused campaign chain. This repo does not include Hypit source. |
 | Local semantic embeddings, worker, scheduler, filesystem storage | In this beta. |
 | Optional Nano Banana images | Google AI Studio integration is optional. No image credentials are required for JEV or Hypit. |
-| S3, Meta, TikTok, Google Ads, Ad Library | External connection required. |
+| S3, Meta, TikTok, Google Ads, Ad Library | External connection required. Meta video publishing and performance sync remain `NOT_CONNECTED` until the tenant credential and ad account are configured and verified. |
 | Invite email | Stored always. Sent only when the email API answers. |
-| Live ads and live metrics | Not running from this repository. Test performance is labeled `test:performance`. |
+| Live delivery and live metrics | Meta video publishing and provider performance sync are implemented, but require real tenant credentials/accounts and remain paused until separately activated. Test performance is labeled `test:performance` and is not live delivery data. |
 
 Not a live media buyer while those external accounts are absent. See [docs/PRODUCT_GAP_ANALYSIS.md](docs/PRODUCT_GAP_ANALYSIS.md).

@@ -73,7 +73,7 @@ On a host that is not your laptop, run the worker and the scheduler as long-live
 4. Record market observations, or fetch one public page.
 5. Open Studio. Rank an opportunity, accept the brief, and generate variants.
 
-JEV model calls use OpenRouter (`OPENROUTER_API_KEY` and `OPENROUTER_MODEL`). Studio images are optional and can use Google AI Studio / Nano Banana when `GOOGLE_AI_STUDIO_API_KEY` is set. An image provider is not required for JEV or Hypit. Studio sends an approved JEV brief to a separate Hypit process. Without `HYPIT_BASE_URL`, generation stops at `HYPIT_NOT_CONNECTED` and stores no file.
+JEV model calls use OpenRouter (`OPENROUTER_API_KEY` and `OPENROUTER_MODEL`). Studio images are optional and can use Google AI Studio / Nano Banana when `GOOGLE_AI_STUDIO_API_KEY` is set. An image provider is not required for JEV or Hypit. Studio sends an approved JEV brief to a separate Hypit process. Without `HYPIT_BASE_URL`, generation stops at `HYPIT_NOT_CONNECTED` and stores no file. A verified stored Hypit MP4 can enter the Meta publishing flow only after the approved JEV decision and tenant/brand lineage are revalidated.
 
 ## 5. Hypit video
 
@@ -99,6 +99,8 @@ HYPIT_BASE_URL=http://127.0.0.1:8766
 
 The bridge shells out to the Hypit CLI. It does not copy Hypit source into Meridian. A rejected or unapproved JEV decision never becomes a job. `scripts/hypit-product-loop.mjs` is a live smoke test against that process. It is not part of `npm test`.
 
+When the tenant has a working Meta credential and matching `META_AD_ACCOUNT_ID`, Studio publishing uploads the verified MP4 through Meta, records Meta's confirmed video id, and then creates the existing campaign/ad-set/creative/ad chain in `PAUSED` state. Upload reservations and reconciliation prevent a normal retry from posting a second video when the first response is ambiguous. Ads are not activated. Without valid Meta credentials/account configuration, the flow reports `NOT_CONNECTED`; no live receipt is created. See [PROVIDERS.md](PROVIDERS.md) for behavior and external requirements.
+
 ## 6. Optional connections
 
 Leave a variable blank to keep that provider not connected.
@@ -117,7 +119,7 @@ Research is available only when these connections are configured. Missing creden
 | S3-compatible files | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | The active store switches after the client is configured. `S3_REGION` defaults to `us-east-1`. |
 | Invite email | `EMAIL_API_URL`, `EMAIL_API_KEY` | The API receives JSON `{ to, subject, text }` with a bearer token. A failure leaves the invite pending. |
 | External embeddings | `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY` | OpenAI-compatible `POST` with `{ model, input }`. Local MiniLM is used when these are blank. |
-| Meta, TikTok, Google | The tokens in `.env.example` | An admin uses Integrations, tests the connection, and publishes only after the probe succeeds. |
+| Meta, TikTok, Google | The tokens in `.env.example`; Meta video publishing also needs the tenant's intended `META_AD_ACCOUNT_ID` and a usable Meta ad account | An admin uses Integrations, tests the connection, and publishes only after the probe succeeds. Meta Hypit video publication creates a paused chain; it does not activate it. |
 | JEV Research collection | `META_AD_LIBRARY_TOKEN`, `OPENROUTER_API_KEY`, local WhisperX, `ffmpeg`/`ffprobe` on the worker | Research stays `NOT_CONNECTED` without source/model/runtime connections. Ads whose snapshots expose no downloadable MP4 stay unavailable. |
 | OAuth and webhooks | App ids, `TOKEN_ENCRYPTION_KEY`, `WEBHOOK_SECRET` | Tokens are sealed. Webhook posts without a valid signature are rejected. |
 
@@ -146,6 +148,7 @@ npm run build
 - Worker and scheduler are `running` only while those processes are up.
 - Integrations show Meta, TikTok, Google, and Ad Library as not configured.
 - Video is `HYPIT_NOT_CONNECTED` until `HYPIT_BASE_URL` answers. A configured URL is not a generated clip.
+- Meta Hypit video publishing and Meta performance sync remain `NOT_CONNECTED` until a valid tenant credential and matching ad account are connected. No live provider receipt or observation is substituted.
 - Creating a brand, storing an observation, and ranking it does not require any ad account.
 
 ## Troubleshooting

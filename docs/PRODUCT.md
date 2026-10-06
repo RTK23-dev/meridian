@@ -14,18 +14,20 @@ This repository is original software under the MIT License. It is not a fork of 
 - Observed cross-ad patterns can inform existing opportunities. Pattern summaries report frequency rather than advertising effectiveness; organization summaries are aggregate-only and require the existing brand opt-in.
 - Opportunity scoring from that evidence, with JEV gates.
 - Briefs that carry learned patterns and past rejections.
-- Approved briefs can be handed to the separate Hypit video process.
+- Approved JEV briefs can be handed to the separate Hypit video process. Verified stored Hypit MP4s can be uploaded through the existing Meta provider and placed in a paused campaign/ad-set/ad chain after tenant and JEV lineage checks.
 - Human-written scripts, plus text generation when a provider key is configured.
 - Text guardian, PNG logo comparison, and a review queue.
 - Manual performance, and a normalizer that a live feed must pass before learning.
 - A worker process and a scheduler process when `DATABASE_URL` is set on a long-lived host.
-- Provider clients that can probe and create paused campaigns when credentials exist and a request succeeds.
+- Provider clients that can probe and create paused campaigns when credentials exist and a request succeeds. Meta Hypit-video upload retries reconcile the prior upload; no success is recorded before Meta confirms an id.
+- Tenant-scoped Meta performance sync that validates creative/ad ownership and the selected ad account before storing observations for learning.
 
 ## What this version does not do
 
 - Invent competitor ads, metrics, or publish receipts.
 - Treat credentials as a connection before a provider request succeeds.
 - Bundle a video-generation runtime; Studio video uses the separately configured Hypit process.
+- Automatically activate Meta campaigns, ad sets, or ads; Hypit video publishing leaves them paused.
 - Keep the worker alive on a serverless host.
 - Claim WCAG certification. The accessibility notes are in [ACCESSIBILITY.md](ACCESSIBILITY.md).
 

@@ -2,7 +2,7 @@
 
 JEV is the deterministic gate around evidence. It is not a prompt and it does not see pixels.
 
-JEV Research is a separate upstream intelligence layer. It collects public Meta Ad Library video records, transcribes available audio, and stores typed, confidence-rated transcript analysis with source evidence. It discovers recurring patterns but makes no approval decision and does not claim that frequency predicts performance. Its patterns become evidence for the existing opportunity ranker and JEV decision questions; an approved decision can continue through the existing brief and Hypit handoff.
+JEV Research is a separate upstream intelligence layer. It collects public Meta Ad Library video records, transcribes available audio, and stores typed, confidence-rated transcript analysis with source evidence. It discovers recurring patterns but makes no approval decision and does not claim that frequency predicts performance. Its patterns become evidence for the existing opportunity ranker and JEV decision questions; an approved decision can continue through the brief and Hypit handoff. A verified stored Hypit MP4 may then be uploaded to Meta and published only as a paused campaign chain after the tenant, approval, lineage, and artifact checks pass.
 
 ## Path
 
