@@ -1,5 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { chromium } from "playwright";
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 
 const base = process.env.PRODUCT_BASE_URL ?? "http://127.0.0.1:8080";
 const stamp = Date.now();
@@ -8,6 +10,12 @@ const context = await browser.newContext({ viewport: { width: 1280, height: 900 
 const page = await context.newPage();
 page.setDefaultTimeout(30000);
 const failures = [];
+const artifactDir = resolve(process.env.E2E_ARTIFACT_DIR || "artifacts/e2e");
+mkdirSync(artifactDir, { recursive: true });
+const tracePath = resolve(artifactDir, "product-loop-trace.zip");
+const screenshotPath = resolve(artifactDir, "product-loop-failure.png");
+await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+let exitCode = 0;
 
 function serious(results) {
   return results.violations.filter((item) => item.impact === "serious" || item.impact === "critical");
@@ -34,7 +42,7 @@ try {
   await page.getByRole("heading", { name: "Name the workspace" }).waitFor({ timeout: 20000 });
   await page.getByLabel("Workspace name").fill(`Loop ${stamp}`);
   await page.getByRole("button", { name: "Create workspace" }).click();
-  await page.getByRole("heading", { name: "What should we make next?" }).waitFor();
+  await page.getByRole("heading", { name: "Workspace overview" }).waitFor();
   await page.goto(`${base}/brands/new`, { waitUntil: "networkidle" });
   await page.getByLabel("Brand name").fill("Lather Co");
   await page.getByLabel("What do you sell?").fill("A plain soap bar.");
@@ -43,8 +51,8 @@ try {
   const brandUrl = page.url().replace(/\/$/, "");
 
   await page.goto(`${brandUrl}/products`, { waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: "Add product" }).waitFor();
-  const productForm = page.locator("form").filter({ has: page.getByRole("heading", { name: "Add product" }) });
+  await page.getByRole("button", { name: "Add product" }).click();
+  const productForm = page.getByRole("dialog").filter({ hasText: "Add product" }).locator("form");
   await productForm.getByLabel("Name").fill("Lather bar");
   await productForm.getByLabel("Description").fill("A plain bar with a visible lather.");
   await productForm.getByRole("button", { name: "Add product" }).click();
@@ -82,6 +90,10 @@ try {
     await observe("", "lather proof", `Lather hook ${index}`, `A competitor shows lather and proof without a discount, note ${index}.`);
   }
 
+  await page.goto(`${brandUrl}/opportunities`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Score from evidence" }).click();
+  await page.getByText(/candidates scored/).waitFor();
+
   await page.goto(`${brandUrl}/library`, { waitUntil: "networkidle" });
   for (let index = 1; index <= 3; index += 1) {
     await page.locator("select[name='angle']").last().selectOption("offer");
@@ -107,16 +119,18 @@ try {
   await page.getByText("Discovered").first().waitFor({ timeout: 60000 });
   const discovered = await page.locator("body").innerText();
   if (!discovered.toLowerCase().includes("lather")) throw new Error(`Studio did not show the lather evidence. ${discovered.slice(0, 500)}`);
-  await page.getByRole("button", { name: "Accept direction and write the brief" }).click();
-  await page.getByRole("heading", { name: "Brief" }).waitFor();
   await page.locator("dd").filter({ hasText: /AUTO_APPROVE|HUMAN_REVIEW|REJECT/ }).first().waitFor();
+  await page.getByRole("button", { name: "Accept direction and write the brief" }).click();
+  await page.getByRole("tab", { name: "2. Brief" }).click();
+  await page.getByRole("heading", { name: "Brief" }).waitFor();
   const firstConstraints = await page.getByTestId("brief-constraints").innerText();
+  await page.getByRole("tab", { name: "3. Generate" }).click();
   await page.locator("select[name='imageProvider']").selectOption("test:image");
-  await page.locator("select[name='videoProvider']").selectOption("hypit");
-  await page.getByRole("button", { name: "Generate 3 image + 3 video variants" }).click();
-  await page.getByRole("img", { name: /test:image/ }).first().waitFor({ timeout: 60000 });
-  await page.getByText("2.5s").first().waitFor();
-  const previewCount = await page.getByRole("img", { name: /test:image/ }).count();
+  await page.locator("select[name='videoProvider']").selectOption("none");
+  await page.getByRole("button", { name: "Generate variants" }).click();
+  await page.getByRole("tab", { name: "4. Review" }).click();
+  await page.getByRole("img", { name: /test:image image variant/ }).first().waitFor({ timeout: 60000 });
+  const previewCount = await page.getByRole("img", { name: /test:image image variant/ }).count();
   if (previewCount < 3) throw new Error(`Expected 3 image previews, saw ${previewCount}.`);
 
   const approve = page.getByRole("button", { name: "Approve" });
@@ -125,18 +139,15 @@ try {
   await approve.first().focus();
   await page.keyboard.press("Enter");
   await page.getByRole("button", { name: "Publish with test publisher" }).first().waitFor();
-  for (let index = 0; index < 2; index += 1) {
-    await page.getByRole("button", { name: "Approve" }).first().focus();
-    await page.keyboard.press("Enter");
-    await page.waitForTimeout(300);
-  }
   await page.getByRole("button", { name: "Inspect evidence" }).first().click();
   await page.getByText("logo_match").first().waitFor();
   await page.getByText(/answer (yes|no|uncertain|insufficient|violation)/).first().waitFor();
-  await page.getByRole("button", { name: "Reject" }).first().focus();
-  await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: "Request revision" }).first().focus();
-  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Reject" }).first().click();
+  await page.getByLabel("Reviewer note").fill("Reject this test fixture variant.");
+  await page.getByRole("button", { name: "Confirm rejection" }).click();
+  await page.getByRole("button", { name: "Request revision" }).first().click();
+  await page.getByLabel("Reviewer note").fill("Request a clearer product demonstration.");
+  await page.getByRole("button", { name: "Send revision request" }).click();
   await page.getByLabel("Compare").selectOption({ index: 1 });
   await page.getByLabel("With").selectOption({ index: 2 });
   await page.getByRole("button", { name: "Publish with test publisher" }).first().click();
@@ -150,6 +161,7 @@ try {
   }
   await page.getByRole("button", { name: "Record test-provider performance and learn" }).click();
   await page.getByText(/angle=offer:/).first().waitFor({ timeout: 30000 });
+  await page.getByRole("tab", { name: "2. Brief" }).click();
   await page.getByRole("button", { name: "Write the next brief" }).click();
   await page.waitForFunction((previous) => {
     const node = document.querySelector("[data-testid='brief-constraints']");
@@ -178,11 +190,19 @@ try {
   await scan("/integrations");
 
   console.log(JSON.stringify({ ok: true, failures, firstConstraints: firstConstraints.slice(0, 180), secondConstraints: secondConstraints.slice(0, 240) }, null, 2));
-  if (failures.length) process.exit(1);
+  if (failures.length) exitCode = 1;
 } catch (error) {
   const text = await page.locator("body").innerText().catch(() => "");
   console.log(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error), url: page.url(), text: text.slice(0, 1500), failures }, null, 2));
-  process.exit(1);
+  exitCode = 1;
 } finally {
+  if (exitCode) {
+    await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+    await context.tracing.stop({ path: tracePath }).catch(() => {});
+    console.error(JSON.stringify({ e2eArtifacts: { screenshot: screenshotPath, trace: tracePath } }));
+  } else {
+    await context.tracing.stop().catch(() => {});
+  }
   await browser.close();
 }
+process.exitCode = exitCode;

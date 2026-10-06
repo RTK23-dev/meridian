@@ -217,7 +217,7 @@ function Studio({ brandId }: { brandId: string }) {
               });
             }}>
               <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently."><SelectInput name="imageProvider" defaultValue="none" required><option value="none">No images</option><option value="test:image">Test image</option><option value="google:nano-banana">Google AI Studio · Nano Banana</option></SelectInput></Field>
-              <Field label="Video" hint="Hypit renders the approved brief. It is not connected until HYPIT_BASE_URL is set. No clip is invented."><SelectInput name="videoProvider" defaultValue="hypit" required><option value="" disabled>Choose</option><option value="hypit">Hypit video</option></SelectInput></Field>
+              <Field label="Video" hint="Hypit renders the approved brief. It is not connected until HYPIT_BASE_URL is set. No clip is invented."><SelectInput name="videoProvider" defaultValue="hypit" required><option value="" disabled>Choose</option><option value="hypit">Hypit video</option><option value="none">No video in this run</option></SelectInput></Field>
               <div className="md:col-span-2"><Button type="submit" disabled={generationAction.pending || brief.status !== "ready"}>Generate variants</Button><p className="mt-2 text-sm text-muted">Estimated cost appears only when a provider returns one. Daily or concurrency limits can block a run.</p></div>
             </form> : null}
           </Panel>

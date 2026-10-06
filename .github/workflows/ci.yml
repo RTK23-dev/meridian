@@ -61,3 +61,43 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+
+  e2e:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start the local app for product-loop e2e
+        run: |
+          mkdir -p artifacts/e2e
+          npm run dev > artifacts/e2e/dev-server.log 2>&1 &
+          server_pid=$!
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8080/ > /dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat artifacts/e2e/dev-server.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat artifacts/e2e/dev-server.log
+          exit 1
+      - name: Run full product-loop e2e
+        run: npm run e2e
+        env:
+          PRODUCT_BASE_URL: http://127.0.0.1:8080
+          E2E_ARTIFACT_DIR: artifacts/e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: product-loop-e2e-failure
+          path: artifacts/e2e/
+          if-no-files-found: ignore

@@ -408,7 +408,11 @@ export const getMarket = createServerFn({ method: "POST" })
       order by a.captured_at desc limit 100
     `;
       const organizationResearchOptIn = await sql<{ use_organization_learning: boolean }>`
-        select use_organization_learning from brand_brains where organization_id = ${access.organizationId} and brand_id = ${data.brandId} limit 1
+        select bb.use_organization_learning
+        from brand_brains bb
+        join brands b on b.id = bb.brand_id and b.organization_id = ${access.organizationId}
+        where bb.brand_id = ${data.brandId}
+        limit 1
       `;
       const shareOrganizationResearch = organizationResearchOptIn[0]?.use_organization_learning === true;
       const researchPatternRows = await sql<Record<string, unknown>>`

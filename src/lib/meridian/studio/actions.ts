@@ -41,7 +41,7 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
     if (imageProvider !== "none" && imageProvider !== "test:image" && imageProvider !== "google:nano-banana") {
       throw new Error("Choose no image provider or an optional supported image provider.");
     }
-    if (videoProvider !== "hypit") {
+    if (videoProvider !== "hypit" && videoProvider !== "none") {
       throw new Error("Video generation uses the separate Hypit runtime.");
     }
     return { brandId, briefId, imageProvider, videoProvider };

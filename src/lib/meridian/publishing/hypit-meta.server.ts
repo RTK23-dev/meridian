@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import type { Transport } from "../providers/http.ts";
 import { uploadMetaVideo } from "../providers/meta.ts";
+import { normalizeReviewerDecision } from "../jev/reviewer-decision.ts";
 
 type StoredVideo = {
   status: "stored"; externalId: string; reused: boolean;
@@ -92,7 +93,7 @@ export async function publishHypitVideoToMeta(
   `;
   const decision = decisions[0];
   if (!decision || !(decision.decision === "AUTO_APPROVE" ||
-      (decision.decision === "HUMAN_REVIEW" && decision.reviewer_decision === "approved"))) {
+      (decision.decision === "HUMAN_REVIEW" && normalizeReviewerDecision(asText(decision.reviewer_decision)) === "approved"))) {
     return reject("JEV has not approved this creative. Nothing was sent.");
   }
   const blobs = await sql<Record<string, unknown>>`

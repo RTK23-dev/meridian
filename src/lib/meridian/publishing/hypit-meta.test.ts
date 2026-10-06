@@ -109,6 +109,13 @@ test("unapproved and rejected Hypit artifacts are rejected before a Meta upload"
   assert.equal(pending.requests.length + rejected.requests.length, 0);
 });
 
+test("human-approved Hypit artifacts accept the persisted approve reviewer action", async () => {
+  const f = fixture({ decision: "HUMAN_REVIEW", reviewer: "approve" });
+  const result = await input(f);
+  assert.equal(result?.status, "stored");
+  assert.equal(f.requests.filter((request) => request.method === "POST").length, 1);
+});
+
 test("cross-tenant Hypit artifacts are rejected without contacting Meta", async () => {
   const f = fixture({ tenant: "other-org" });
   assert.equal((await input(f))?.status, "failed");

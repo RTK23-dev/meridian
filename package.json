@@ -25,7 +25,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "ui:baseline": "node scripts/ui-baseline.mjs",
-    "ui:design-smoke": "node scripts/design-system-smoke.mjs"
+    "ui:design-smoke": "node scripts/design-system-smoke.mjs",
+    "e2e": "node scripts/product-loop.mjs"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.13.0",

@@ -4,6 +4,7 @@ import { sqlHypitLedger, storeHypitArtifact } from "../hypit/store.ts";
 import type { HypitDecisionSnapshot, HypitHandoffInput } from "../hypit/contract.ts";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { publishStoredHypitAsset, sqlPublishLedger } from "../publishing/hypit-asset.ts";
+import { normalizeReviewerDecision } from "../jev/reviewer-decision.ts";
 
 export async function generateHypitStudioVideo(
   sql: Sql,
@@ -128,7 +129,8 @@ export async function publishStudioHypitVideo(
   `;
   const decision = decisions[0];
   if (!decision) throw new Error("JEV has not approved this creative. Nothing was published.");
-  const approved = decision.decision === "AUTO_APPROVE" || (decision.decision === "HUMAN_REVIEW" && decision.reviewer_decision === "approved");
+  const reviewerDecision = normalizeReviewerDecision(decision.reviewer_decision);
+  const approved = decision.decision === "AUTO_APPROVE" || (decision.decision === "HUMAN_REVIEW" && reviewerDecision === "approved");
   if (!approved) throw new Error("JEV has not approved this creative. Nothing was published.");
   const blobs = await sql<{ body: string }>`
     select body from asset_blobs
@@ -146,7 +148,7 @@ export async function publishStudioHypitVideo(
       hypitJobId: String(job.id),
       hypitStatus: "succeeded",
       decision: decision.decision as "AUTO_APPROVE" | "HUMAN_REVIEW",
-      reviewerDecision: decision.reviewer_decision === "approved" ? "approved" : "",
+      reviewerDecision,
       decisionOrganizationId: input.organizationId,
       decisionBrandId: input.brandId,
       storageKey: artifact.storageKey,

@@ -21,6 +21,7 @@ import { generationAllowed } from "@/lib/meridian/security/budget";
 import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features";
 import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work";
 import { generateHypitStudioVideo, publishStudioHypitVideo } from "./hypit-run";
+import { normalizeReviewerDecision } from "../jev/reviewer-decision.ts";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store";
 import { assessPublishing, type AccountSnapshot } from "../publishing/readiness";
 import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure";
@@ -654,7 +655,7 @@ export async function generateStudioVariants(
         id, organization_id, brand_id, opportunity_id, brief_id, prompt_version, image_provider, video_provider, status, created_by
       ) values (
         ${runId}, ${access.organizationId}, ${data.brandId}, ${asText(brief.opportunity_id) || null}, ${data.briefId},
-        ${STUDIO_PROMPT_VERSION}, ${data.imageProvider}, 'hypit', 'running', ${context.userId}
+        ${STUDIO_PROMPT_VERSION}, ${data.imageProvider}, ${data.videoProvider}, 'running', ${context.userId}
       )
     `;
     try {
@@ -785,6 +786,7 @@ export async function generateStudioVariants(
         )
       `;
     }
+    if (data.videoProvider === "hypit") {
     const decisionRows = await sql<{
       id: string;
       organization_id: string;
@@ -831,7 +833,7 @@ export async function generateStudioVariants(
         questionId: decisionRow.question_id,
         policyVersion: decisionRow.policy_version,
         decision: decisionValue,
-        reviewerDecision: decisionRow.reviewer_decision === "approved" || decisionRow.reviewer_decision === "rejected" ? decisionRow.reviewer_decision : "",
+        reviewerDecision: normalizeReviewerDecision(decisionRow.reviewer_decision),
         reasons: asJson<string[]>(decisionRow.reasons, []),
         evidence: asJson<{ id: string; source: string; summary: string }[]>(decisionRow.evidence, []),
       },
@@ -901,6 +903,7 @@ export async function generateStudioVariants(
           values (${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${judged.decisionId}, ${asText(video.creative_id)}, 'Video')
         `;
       }
+    }
     }
     await sql`update briefs set status = 'used' where id = ${data.briefId}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
