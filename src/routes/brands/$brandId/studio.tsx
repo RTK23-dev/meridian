@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
 import { Button, Field, Notice, Panel, SelectInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
@@ -57,13 +56,14 @@ function Studio({ brandId }: { brandId: string }) {
   const recommendation = session.recommendation;
 
   return (
-    <div className="space-y-8">
-      <BrandNav brandId={brandId} />
-      <div className="max-w-2xl space-y-3">
-        <p className="text-sm font-semibold uppercase tracking-widest text-brass">Studio</p>
-        <h1 className="font-display text-4xl">Make the next ads from evidence</h1>
-        <p className="text-muted">
-          {session.observationCount} competitor observations. A discovered direction is one the stored ads support. Exploration seeds are not findings. Image and video appear only after a provider stores bytes.
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-brass">Studio</p>
+          <h1 className="font-display text-3xl">Make the next ads from evidence</h1>
+        </div>
+        <p className="max-w-md text-sm text-muted">
+          {session.observationCount} competitor observations. Image and video appear only after a provider stores bytes.
         </p>
       </div>
       {busy.error ? <Notice>{busy.error}</Notice> : null}
@@ -194,10 +194,11 @@ function Studio({ brandId }: { brandId: string }) {
                   <option value="xai:image">xai:image</option>
                 </SelectInput>
               </Field>
-              <Field label="Video provider" hint="test:video completes in the worker. No production video vendor is connected.">
+              <Field label="Video provider" hint="test:video is a fixture. xai:video stores a clip only after xAI returns one.">
                 <SelectInput name="videoProvider" defaultValue="" required>
                   <option value="" disabled>Choose</option>
                   <option value="test:video">test:video</option>
+                  <option value="xai:video">xai:video</option>
                 </SelectInput>
               </Field>
               <div className="md:col-span-2">

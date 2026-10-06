@@ -131,11 +131,10 @@ function Settings() {
         ) : null}
         {data.invites.length > 0 ? (
           <div className="mt-4">
-            <h3 className="text-sm font-semibold">Recorded invites</h3>
-            <p className="text-sm text-muted">These were not emailed. Delivery is not configured.</p>
+            <h3 className="text-sm font-semibold">Invitations</h3>
             <ul className="mt-2 text-sm">
               {data.invites.map((invite) => (
-                <li key={invite.id}>{invite.email} · {invite.role}</li>
+                <li key={invite.id}>{invite.email} · {invite.role} · {invite.status}</li>
               ))}
             </ul>
           </div>

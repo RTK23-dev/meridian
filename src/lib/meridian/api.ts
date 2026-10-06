@@ -373,7 +373,7 @@ export const bootstrap = createServerFn({ method: "GET" })
     }>`
       select id, email, role, status, created_at
       from invites
-      where organization_id = ${activeOrg.id} and status = 'recorded'
+      where organization_id = ${activeOrg.id} and status in ('recorded', 'pending', 'sent')
       order by created_at desc
       limit 20
     `;
@@ -598,22 +598,28 @@ export const addMember = createServerFn({ method: "POST" })
     const existingUser = users[0]?.id;
     if (!existingUser) {
       const inviteId = id();
-      await sql`
-        insert into invites (id, organization_id, email, role, status, created_by)
-        values (${inviteId}, ${data.organizationId}, ${data.email}, ${data.role}, 'recorded', ${context.userId})
-      `;
+      const orgs = await sql<{ name: string }>`select name from organizations where id = ${data.organizationId} limit 1`;
+      const { createInvitation, selectEmailProvider } = await import("@/lib/meridian/notifications/invite");
+      const origin = process.env.BETTER_AUTH_URL?.trim() || "http://127.0.0.1:8080";
+      const result = await createInvitation(sql, {
+        id: inviteId,
+        organizationId: data.organizationId,
+        email: data.email,
+        role: data.role,
+        createdBy: context.userId,
+        workspaceName: orgs[0]?.name ?? "",
+        origin,
+        provider: selectEmailProvider(),
+      });
       await writeAudit(sql, {
         organizationId: data.organizationId,
         actorId: context.userId,
-        action: "invite.recorded",
+        action: "invite.created",
         objectType: "invite",
         objectId: inviteId,
-        metadata: { email: data.email, role: data.role },
+        metadata: { email: data.email, role: data.role, delivery: result.status },
       });
-      return {
-        status: "recorded" as const,
-        message: "Saved as a pending invite. Email delivery is not set up, so nobody is notified.",
-      };
+      return { status: result.status, message: result.message };
     }
     const already = await sql<{ role: string }>`
       select role from memberships
@@ -639,6 +645,30 @@ export const addMember = createServerFn({ method: "POST" })
       metadata: { email: data.email, role: data.role },
     });
     return { status: "added" as const, message: "Added to the workspace." };
+  });
+
+export const acceptInvite = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const token = clip(objectInput(input).token, 200, "Invitation", true);
+    return { token };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const users = await sql<{ email: string }>`select email from "user" where id = ${context.userId} limit 1`;
+    const email = users[0]?.email ?? "";
+    if (!email) throw new Error("Your account has no email.");
+    const { acceptInvitation } = await import("@/lib/meridian/notifications/invite");
+    const accepted = await acceptInvitation(sql, { token: data.token, userId: context.userId, userEmail: email });
+    await writeAudit(sql, {
+      organizationId: accepted.organizationId,
+      actorId: context.userId,
+      action: "invite.accepted",
+      objectType: "invite",
+      objectId: accepted.organizationId,
+      metadata: {},
+    });
+    return { status: "accepted" as const, message: "Invitation accepted." };
   });
 
 export const changeMemberRole = createServerFn({ method: "POST" })

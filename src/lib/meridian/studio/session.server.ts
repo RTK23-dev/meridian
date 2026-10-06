@@ -14,7 +14,10 @@ import { testProviderPerformance } from "@/lib/meridian/providers/test-provider"
 import { claimAndRun } from "@/lib/meridian/jobs/sql-worker";
 import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features";
 import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work";
-import { ensureLocalSemantic, semanticNearest } from "../embeddings/store";
+import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store";
+import { assessPublishing, type AccountSnapshot } from "../publishing/readiness";
+import { measureLogo, measurePalette } from "../vision/measure";
+import type { MarketCluster } from "../intelligence/whitespace";
 
 function clip(value: unknown): string {
   return typeof value === "string" ? value.trim().slice(0, 80) : "";
@@ -62,12 +65,8 @@ function hookFor(hypothesisId: string): string {
 
 async function loadSession(sql: Sql, organizationId: string, brandId: string, role: Role) {
   const loaded = await loadBrandContext(sql, organizationId, brandId);
-  const ranked = rankOpportunities({ organizationId, brandId, ...loaded });
-  const discovered = ranked.filter((item) => item.source === "discovered");
-  const top = discovered[0] ?? null;
-  const exploration = ranked.find((item) => item.source === "prior") ?? null;
-  const fingerprints = loaded.creatives.map((creative) => fingerprintCreative(creative, loaded.brain));
-  let semantic: { note: string; clusters: { label: string; summary: string; competitorCount: number; ownCount: number }[] } = {
+  let clusters: MarketCluster[] = [];
+  let semantic: { note: string; clusters: { id: string; label: string; summary: string; competitorCount: number; ownCount: number }[] } = {
     note: "local:semantic did not run.",
     clusters: [],
   };
@@ -83,9 +82,11 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
         text: creative.text,
       })),
     );
+    clusters = embedded.clusters;
     semantic = {
       note: embedded.note,
       clusters: embedded.clusters.map((cluster) => ({
+        id: cluster.id,
         label: cluster.label,
         summary: cluster.summary,
         competitorCount: cluster.competitorCount,
@@ -98,10 +99,16 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
       clusters: [],
     };
   }
+  const ranked = rankOpportunities({ organizationId, brandId, ...loaded, clusters });
+  const discovered = ranked.filter((item) => item.source === "discovered");
+  const top = discovered[0] ?? null;
+  const exploration = ranked.find((item) => item.source === "prior") ?? null;
+  const fingerprints = loaded.creatives.map((creative) => fingerprintCreative(creative, loaded.brain));
   const whitespace = findWhitespace({
     fingerprints,
     origins: loaded.creatives.map((creative) => ({ id: creative.id, origin: creative.origin })),
     brandText: `${loaded.brain.positioning} ${loaded.brain.valueProposition}`,
+    clusters,
   });
   const stored = await sql<Record<string, unknown>>`
     select o.id, o.hypothesis_id, o.status, o.angle, d.decision, d.probability,
@@ -283,7 +290,25 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
     await rerankBrand(sql, access.organizationId, data.brandId);
     const loaded = await loadBrandContext(sql, access.organizationId, data.brandId);
-    const ranked = rankOpportunities({ organizationId: access.organizationId, brandId: data.brandId, ...loaded });
+    let clusters: MarketCluster[] = [];
+    try {
+      clusters = (
+        await readSemanticClusters(
+          sql,
+          access.organizationId,
+          data.brandId,
+          loaded.creatives.map((creative) => ({
+            id: creative.id,
+            origin: creative.origin,
+            angle: creative.angle,
+            text: creative.text,
+          })),
+        )
+      ).clusters;
+    } catch {
+      clusters = [];
+    }
+    const ranked = rankOpportunities({ organizationId: access.organizationId, brandId: data.brandId, ...loaded, clusters });
     const top = ranked.find((item) => item.source === "discovered");
     if (!top) throw new Error("No discovered opportunity. Stored observations do not show a direction outside the exploration seeds.");
     const rows = await sql<Record<string, unknown>>`
@@ -403,6 +428,46 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
     return loadSession(sql, access.organizationId, data.brandId, access.role);
 }
 
+async function visualFacts(sql: Sql, organizationId: string, brandId: string, bytes: Uint8Array) {
+  const logos = await sql<{ body: string }>`
+    select body from assets
+    where brand_id = ${brandId} and organization_id = ${organizationId} and label = 'logo' and status = 'stored'
+    order by created_at desc
+    limit 1
+  `;
+  const colors = await sql<{ colors: string }>`
+    select colors from brand_brains where brand_id = ${brandId} limit 1
+  `;
+  const logo = logos[0]?.body ? Buffer.from(logos[0].body, "base64") : null;
+  const measuredLogo = measureLogo(logo, bytes);
+  const measuredPalette = measurePalette(colors[0]?.colors ?? "", bytes);
+  return { measuredLogo, measuredPalette };
+}
+
+async function accountSnapshots(sql: Sql, organizationId: string): Promise<AccountSnapshot[]> {
+  const rows = await sql<{ provider: string; status: string; account_id: string; permissions: string }>`
+    select provider, status, account_id, permissions from provider_connections
+    where organization_id = ${organizationId}
+  `;
+  return rows.map((row) => {
+    let permissions: string[] = [];
+    try {
+      const parsed = JSON.parse(row.permissions) as unknown;
+      permissions = Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    } catch {
+      permissions = [];
+    }
+    return {
+      provider: row.provider,
+      status: row.status,
+      accountId: row.account_id,
+      permissions,
+      pageId: "",
+      destinationUrl: "",
+    };
+  });
+}
+
 function competitorCopy(loaded: Awaited<ReturnType<typeof loadBrandContext>>): string[] {
   return loaded.creatives.filter((item) => item.origin === "competitor").map((item) => item.text);
 }
@@ -502,6 +567,19 @@ export async function generateStudioVariants(
         bytes: image.bytes,
       });
       const copy = `${productName}. ${prompt}`;
+      const visual = await visualFacts(sql, access.organizationId, data.brandId, image.bytes);
+      const ownSemantic = await semanticNearest(copy, loaded.creatives.filter((item) => item.origin !== "competitor").map((item) => item.text)).catch(() => null);
+      const accounts = await accountSnapshots(sql, access.organizationId);
+      const publishing = assessPublishing({
+        accounts,
+        provider: "test:publisher",
+        kind: "image",
+        mime: image.mediaType,
+        width: image.width,
+        height: image.height,
+        byteSize: stored.byteSize,
+        destinationUrl: "",
+      });
       const facts = factsFor(loaded, {
         kind: "image",
         productName,
@@ -516,9 +594,15 @@ export async function generateStudioVariants(
         durationMs: null,
         transcript: "",
         sceneCount: 0,
-        logoSimilarity: null,
-        paletteDistance: null,
+        logoSimilarity: visual.measuredLogo.similarity,
+        logoOutcome: visual.measuredLogo.outcome,
+        logoEvidence: visual.measuredLogo.evidence,
+        paletteDistance: visual.measuredPalette.distance,
+        paletteOutcome: visual.measuredPalette.outcome,
+        paletteEvidence: visual.measuredPalette.evidence,
         semanticSimilarity: await semanticNearest(copy, competitorCopy(loaded)).catch(() => null),
+        ownSemanticSimilarity: ownSemantic,
+        publishing,
       });
       const judged = await writeJudgment(sql, {
         organizationId: access.organizationId,
@@ -593,7 +677,7 @@ export async function generateStudioVariants(
           media_status, variant_index, provenance
         ) values (
           ${assetId}, ${access.organizationId}, ${data.brandId}, ${creativeId}, 1, ${`pending/${assetId}`}, '',
-          'video/mp4', ${data.videoProvider}, 'unavailable', 'requested', ${data.videoProvider}, 'test-video-v1',
+          'video/mp4', ${data.videoProvider}, 'unavailable', 'requested', ${data.videoProvider}, ${data.videoProvider === "xai:video" ? "grok-imagine-video-1.5" : "test-video-v1"},
           ${`${STUDIO_PROMPT_VERSION}#video-${index + 1}`}, ${runId}, 'video', '', 'in_review', 'queued', ${index}, 'generated'
         )
       `;
@@ -602,7 +686,7 @@ export async function generateStudioVariants(
           id, organization_id, brand_id, asset_id, creative_id, generation_run_id, provider, model, prompt, prompt_version, status
         ) values (
           ${mediaJobId}, ${access.organizationId}, ${data.brandId}, ${assetId}, ${creativeId}, ${runId},
-          ${data.videoProvider}, 'test-video-v1', ${prompt}, ${`${STUDIO_PROMPT_VERSION}#video-${index + 1}`}, 'queued'
+          ${data.videoProvider}, ${data.videoProvider === "xai:video" ? "grok-imagine-video-1.5" : "test-video-v1"}, ${prompt}, ${`${STUDIO_PROMPT_VERSION}#video-${index + 1}`}, 'queued'
         )
       `;
       const jobId = crypto.randomUUID();
@@ -610,7 +694,7 @@ export async function generateStudioVariants(
         insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload, max_attempts)
         values (
           ${jobId}, ${access.organizationId}, ${data.brandId}, 'video.generate', ${`video.generate:${mediaJobId}`},
-          'queued', ${JSON.stringify({ mediaJobId, allowTest: true, organizationId: access.organizationId })}, 4
+          'queued', ${JSON.stringify({ mediaJobId, allowTest: data.videoProvider === "test:video", organizationId: access.organizationId })}, 4
         )
       `;
     }
@@ -635,6 +719,17 @@ export async function generateStudioVariants(
     for (const video of videos) {
       const scenes = asJson<{ summary: string }[]>(video.scenes, []);
       const copy = asText(video.raw_text);
+      const ownSemantic = await semanticNearest(copy, loaded.creatives.filter((item) => item.origin !== "competitor").map((item) => item.text)).catch(() => null);
+      const publishing = assessPublishing({
+        accounts: await accountSnapshots(sql, access.organizationId),
+        provider: "test:publisher",
+        kind: "video",
+        mime: asText(video.mime_type) || "video/mp4",
+        width: video.width == null ? null : asNumber(video.width),
+        height: video.height == null ? null : asNumber(video.height),
+        byteSize: asNumber(video.byte_size),
+        destinationUrl: "",
+      });
       const facts = factsFor(loaded, {
         kind: "video",
         productName,
@@ -650,8 +745,14 @@ export async function generateStudioVariants(
         transcript: asText(video.transcript),
         sceneCount: scenes.length,
         logoSimilarity: null,
+        logoOutcome: "ABSENT",
+        logoEvidence: "Logo search uses image bytes. This video has no frame image stored.",
         paletteDistance: null,
+        paletteOutcome: "ABSENT",
+        paletteEvidence: "Palette measurement uses image bytes. This video has no frame image stored.",
         semanticSimilarity: await semanticNearest(copy, competitorCopy(loaded)).catch(() => null),
+        ownSemanticSimilarity: ownSemantic,
+        publishing,
       });
       const judged = await writeJudgment(sql, {
         organizationId: access.organizationId,
@@ -739,12 +840,43 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
     `;
     if (!rows[0]) throw new Error("Variant not found.");
     if (rows[0].status !== "approved") throw new Error("Publish only an approved asset.");
+    const asset = await sql<{ mime_type: string; width: number | null; height: number | null; byte_size: number | null; kind: string }>`
+      select mime_type, width, height, byte_size, kind from assets
+      where creative_id = ${data.creativeId} and organization_id = ${access.organizationId}
+      order by created_at desc limit 1
+    `;
+    const readiness = assessPublishing({
+      accounts: await accountSnapshots(sql, access.organizationId),
+      provider: data.publisher === "test" ? "test:publisher" : data.publisher,
+      kind: asset[0]?.kind === "video" ? "video" : "image",
+      mime: asset[0]?.mime_type ?? "",
+      width: asset[0]?.width ?? null,
+      height: asset[0]?.height ?? null,
+      byteSize: asset[0]?.byte_size ?? 0,
+      destinationUrl: "",
+    });
+    if (data.publisher !== "test" && readiness.state !== "READY") {
+      throw new Error(`${readiness.state}. ${readiness.summary}`);
+    }
     const existing = await sql<{ external_id: string }>`
       select external_id from provider_objects
       where organization_id = ${access.organizationId} and provider = 'test' and object_type = 'ad' and idempotency_key = ${data.creativeId}
       limit 1
     `;
     if (!existing[0]) {
+      await sql`
+        insert into jev_decisions (
+          id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,
+          input, evidence, probability, confidence, thresholds, decision, reasons, provider, model
+        ) values (
+          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${data.creativeId}, 'publishing_readiness',
+          'v1', 'creative', ${data.creativeId}, ${JSON.stringify({ state: readiness.state })},
+          ${JSON.stringify([{ id: "publish", source: "provider_connections", summary: readiness.summary }])},
+          ${readiness.state === "READY" ? 0.9 : 0.55}, 0.8,
+          ${JSON.stringify({ autoApprove: 0.82, humanReview: 0.45, minConfidenceForAuto: 0.7 })},
+          'HUMAN_REVIEW', ${JSON.stringify([readiness.summary])}, 'readiness', 'account-v1'
+        )
+      `;
       const result = publishThrough({ provider: "test", creativeId: data.creativeId, allowTestProvider: true });
       if (!result.externalId) throw new Error("The publisher did not return an id. Nothing was stored.");
       await sql`

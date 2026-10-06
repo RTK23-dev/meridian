@@ -12,6 +12,7 @@ import {
 import type { OpportunityGateInput } from "../jev/questions.ts";
 import { patternInfluence } from "../learning/engine.ts";
 import { eligiblePatterns } from "../knowledge/scope.ts";
+import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { strategyCandidates, type StrategyCandidate } from "./candidates.ts";
 import { DEFAULT_WEIGHTS, opportunityScore, type ScoreWeights } from "../scoring.ts";
 
@@ -96,6 +97,8 @@ export function rankOpportunities(input: {
   patterns: LearnedPattern[];
   rejections: RejectionFact[];
   weights?: ScoreWeights;
+  /** Stored semantic clusters. Underserved clusters can become discovered opportunities. */
+  clusters?: MarketCluster[];
   /** Off unless this brand explicitly opted in. Global patterns are never used. */
   useOrganizationLearning?: boolean;
 }): RankedOpportunity[] {
@@ -118,7 +121,10 @@ export function rankOpportunities(input: {
   const aggressiveRejections = input.rejections
     .filter((fact) => fact.reasonCode === "unsupported_claim" || fact.reasonCode === "prohibited_claim" || fact.reasonCode === "too_aggressive")
     .reduce((sum, fact) => sum + fact.count, 0);
-  const candidates = strategyCandidates(input.creatives, patterns);
+  const candidates = strategyCandidates(input.creatives, patterns, {
+    clusters: input.clusters,
+    brandText: `${input.brain.positioning} ${input.brain.valueProposition}`,
+  });
 
   const drafts: RankedOpportunity[] = [];
   for (const product of productList) {
@@ -156,15 +162,28 @@ function scoreOne(input: {
   const evidence: OpportunityDraft["evidence"] = [];
   const competitorHits = input.competitors.filter((creative) => same(creative.angle, candidate.angle));
   const ownHits = input.own.filter((creative) => same(creative.angle, candidate.angle));
-  const marketSignal = input.competitors.length === 0 ? 0 : competitorHits.length / input.competitors.length;
+  let marketSignal = input.competitors.length === 0 ? 0 : competitorHits.length / input.competitors.length;
+  if (candidate.clusterId && (candidate.clusterCompetitorCount ?? 0) > 0) {
+    const denom = Math.max(input.competitors.length, candidate.clusterCompetitorCount ?? 0, 1);
+    marketSignal = (candidate.clusterCompetitorCount ?? 0) / denom;
+  }
   const saturation = input.competitors.length >= 3 ? marketSignal : 0;
   const novelty = input.own.length === 0 ? 0.55 : clamp01(1 - ownHits.length / input.own.length);
 
+  if (candidate.clusterId) {
+    evidence.push({
+      id: candidate.clusterId,
+      source: "creative_embeddings",
+      summary: `Semantic cluster ${candidate.clusterId} has ${candidate.clusterCompetitorCount ?? 0} competitor creatives and ${candidate.clusterOwnCount ?? 0} from this brand.`,
+    });
+  }
   if (candidate.source === "discovered") {
     evidence.push({
       id: "discovery",
       source: "creative_records",
-      summary: "This angle is not a prior. It was added because stored competitor observations or a positive learned pattern contain it.",
+      summary: candidate.clusterId
+        ? "This direction came from an underserved semantic cluster, not from a preset hypothesis."
+        : "This angle is not a prior. It was added because stored competitor observations or a positive learned pattern contain it.",
     });
   }
 
@@ -352,7 +371,7 @@ function scoreOne(input: {
     reason: `${lead} ${candidate.label} for ${input.product?.name || "an unspecified product"}.`,
     evidence,
     evidenceBasis,
-    supportingCreativeIds: competitorHits.slice(0, 8).map((creative) => creative.id),
+    supportingCreativeIds: (candidate.clusterMemberIds?.length ? candidate.clusterMemberIds : competitorHits.map((creative) => creative.id)).slice(0, 8),
     confidence: round3(confidence),
     hookDirection: candidate.hookLine,
     gateInput,

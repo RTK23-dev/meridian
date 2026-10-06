@@ -4,6 +4,8 @@ import { decide } from "../jev/engine.ts";
 import { opportunityGate } from "../jev/questions.ts";
 import type { Sql } from "../learning/store.ts";
 import { approvedThresholds } from "../calibration/active.ts";
+import { readSemanticClusters } from "../embeddings/store.ts";
+import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { rankOpportunities } from "./engine.ts";
 
 /** Replace open opportunities from stored evidence. Does not learn and does not call a provider. */
@@ -17,7 +19,24 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
   `;
   const thresholds = approvedThresholds(opportunityGate.thresholds, versions[0] ?? null);
   const question = { ...opportunityGate, thresholds };
-  const drafts = rankOpportunities({ organizationId, brandId, ...loaded });
+  let clusters: MarketCluster[] = [];
+  try {
+    const semantic = await readSemanticClusters(
+      sql,
+      organizationId,
+      brandId,
+      loaded.creatives.map((creative) => ({
+        id: creative.id,
+        origin: creative.origin,
+        angle: creative.angle,
+        text: creative.text,
+      })),
+    );
+    clusters = semantic.clusters;
+  } catch {
+    clusters = [];
+  }
+  const drafts = rankOpportunities({ organizationId, brandId, ...loaded, clusters });
   const open = await sql<{ id: string }>`
     select id from opportunities
     where brand_id = ${brandId} and organization_id = ${organizationId} and status = 'open'

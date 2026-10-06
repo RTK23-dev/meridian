@@ -30,9 +30,17 @@ export type MediaFacts = {
   transcript: string;
   sceneCount: number;
   logoSimilarity: number | null;
+  /** Set when bytes were measured. Unset means the measurement was not run. */
+  logoOutcome?: "MATCH" | "MISMATCH" | "UNCERTAIN" | "ABSENT";
+  logoEvidence?: string;
   paletteDistance: number | null;
-  /** local:semantic cosine. Null means the model did not return a vector. Not a token-overlap score. */
+  paletteOutcome?: "MATCH" | "MISMATCH" | "UNCERTAIN" | "ABSENT";
+  paletteEvidence?: string;
+  /** local:semantic cosine to competitor copy. Null means the model did not return a vector. */
   semanticSimilarity: number | null;
+  /** Cosine to this brand's earlier creatives. Null means no vector was returned. */
+  ownSemanticSimilarity?: number | null;
+  publishing?: { state: "READY" | "NOT_READY" | "EXTERNAL_CONNECTION_REQUIRED" | "HUMAN_REVIEW"; summary: string } | null;
 };
 
 const IMAGE_QUESTIONS = [
@@ -69,7 +77,15 @@ function feat(name: string, value: number, id: string, source: string, summary: 
   return { name, value, evidenceId: id, source, summary };
 }
 
-/** Long shared wording. This is an exact copy check, not a semantic embedding. */
+/** Exact phrase plus semantic band. Semantic similarity alone does not reject a legitimate variation. */
+export function classifyDuplicate(copy: string, ownTexts: string[], ownSemanticSimilarity: number | null): "exact" | "near" | "paraphrase" | "related" | "novel" | "unchecked" {
+  if (sharedPhrase(copy, ownTexts)) return "exact";
+  if (ownSemanticSimilarity == null) return ownTexts.some((text) => text.trim().length >= 8) ? "unchecked" : "novel";
+  if (ownSemanticSimilarity >= 0.94) return "near";
+  if (ownSemanticSimilarity >= 0.82) return "paraphrase";
+  if (ownSemanticSimilarity >= 0.68) return "related";
+  return "novel";
+}
 export function sharedPhrase(copy: string, others: string[]): string {
   const hay = copy.toLowerCase();
   let best = "";
@@ -142,27 +158,43 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
     };
   }
   if (id === "logo_match") {
-    if (facts.logoSimilarity == null) {
+    const outcome = facts.logoOutcome;
+    const evidence = facts.logoEvidence || "Logo evidence was not measured from stored bytes.";
+    if (!outcome || outcome === "ABSENT" || outcome === "UNCERTAIN" || facts.logoSimilarity == null) {
       return {
         present: false,
-        features: [feat("missing", 1, "logo", "asset", "No logo similarity was measured on the stored bytes.")],
+        features: [feat("missing", 1, "logo", "asset", evidence)],
+      };
+    }
+    if (outcome === "MISMATCH") {
+      return {
+        present: true,
+        features: [feat("violation", 1, "logo", "asset", evidence)],
       };
     }
     return {
       present: true,
-      features: [feat("mismatch", 1 - facts.logoSimilarity, "logo", "asset", `Stored logo similarity is ${facts.logoSimilarity.toFixed(2)}.`)],
+      features: [feat("aligned", facts.logoSimilarity, "logo", "asset", evidence)],
     };
   }
   if (id === "palette_match") {
-    if (facts.paletteDistance == null) {
+    const outcome = facts.paletteOutcome;
+    const evidence = facts.paletteEvidence || "Palette evidence was not measured from stored bytes.";
+    if (!outcome || outcome === "ABSENT" || outcome === "UNCERTAIN" || facts.paletteDistance == null) {
       return {
         present: false,
-        features: [feat("missing", 1, "palette", "asset", "No palette distance was measured on the stored bytes.")],
+        features: [feat("missing", 1, "palette", "asset", evidence)],
+      };
+    }
+    if (outcome === "MISMATCH") {
+      return {
+        present: true,
+        features: [feat("violation", 1, "palette", "asset", evidence)],
       };
     }
     return {
       present: true,
-      features: [feat("mismatch", facts.paletteDistance, "palette", "asset", `Stored palette distance is ${facts.paletteDistance.toFixed(2)}.`)],
+      features: [feat("aligned", 1 - facts.paletteDistance, "palette", "asset", evidence)],
     };
   }
   if (id === "product_match") {
@@ -205,12 +237,50 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
     };
   }
   if (id === "duplicate_risk") {
-    const phrase = sharedPhrase(text, facts.ownTexts);
+    const kind = classifyDuplicate(text, facts.ownTexts, facts.ownSemanticSimilarity ?? null);
+    if (kind === "unchecked") {
+      return {
+        present: false,
+        features: [feat("missing", 1, "duplicate", "creative_embeddings", "Exact wording was checked. No embedding was returned, so semantic duplicate risk stays in review.")],
+      };
+    }
+    if (kind === "exact" || kind === "near") {
+      const phrase = sharedPhrase(text, facts.ownTexts);
+      return {
+        present: true,
+        features: [
+          feat(
+            "violation",
+            1,
+            "duplicate",
+            kind === "exact" ? "creative_records" : "creative_embeddings",
+            kind === "exact"
+              ? `Exact duplicate of stored brand wording: “${phrase}”.`
+              : `Near-duplicate. Cosine to an earlier creative is ${(facts.ownSemanticSimilarity ?? 0).toFixed(2)}.`,
+          ),
+        ],
+      };
+    }
+    if (kind === "paraphrase" || kind === "related") {
+      return {
+        present: true,
+        features: [
+          feat(
+            "coverage",
+            kind === "paraphrase" ? 0.35 : 0.55,
+            "duplicate",
+            "creative_embeddings",
+            kind === "paraphrase"
+              ? `Paraphrase band. Cosine ${(facts.ownSemanticSimilarity ?? 0).toFixed(2)} is not an automatic rejection.`
+              : `Related concept. Cosine ${(facts.ownSemanticSimilarity ?? 0).toFixed(2)} is not the same creative.`,
+          ),
+        ],
+      };
+    }
     return {
       present: true,
       features: [
-        feat("aligned", phrase ? 0 : 1, "duplicate", "creative_records", phrase ? "The variant repeats this brand." : facts.ownTexts.length === 0 ? "This brand has no earlier creative text to duplicate." : "No long phrase from this brand's earlier creatives appears here."),
-        feat("violation", phrase ? 1 : 0, "duplicate", "creative_records", phrase ? `The variant repeats this brand's wording: “${phrase}”.` : "Duplicate phrase check ran on stored brand copy."),
+        feat("aligned", 1, "duplicate", "creative_records", facts.ownTexts.length === 0 ? "This brand has no earlier creative text to duplicate." : "No exact or near-duplicate of this brand's stored creatives."),
       ],
     };
   }
@@ -247,9 +317,22 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
     };
   }
   if (id === "publishing_readiness") {
+    const publishing = facts.publishing;
+    if (!publishing) {
+      return {
+        present: false,
+        features: [feat("missing", 1, "publish", "provider_connections", "Publishing readiness was not evaluated against a stored ad account.")],
+      };
+    }
+    if (publishing.state === "READY") {
+      return {
+        present: true,
+        features: [feat("aligned", 1, "publish", "provider_connections", publishing.summary)],
+      };
+    }
     return {
       present: false,
-      features: [feat("missing", 1, "publish", "provider_objects", "This variant has no approved publisher configuration stored yet.")],
+      features: [feat("missing", 1, "publish", "provider_connections", `${publishing.state}. ${publishing.summary}`)],
     };
   }
   return { present: false, features: [feat("missing", 1, id, "unknown", "This question has no stored evidence.")] };

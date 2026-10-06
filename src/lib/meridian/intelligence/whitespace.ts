@@ -1,4 +1,5 @@
 import { cosineSimilarity, type EmbeddingVector } from "../embeddings/provider.ts";
+import { whitespaceFromClusters } from "./semantic-gap.ts";
 import type { CreativeFingerprint } from "./fingerprint.ts";
 
 export type MarketCluster = {
@@ -88,6 +89,18 @@ export function clusterFingerprints(
  * Whitespace is a gap in stored observations. An empty set is not a gap.
  */
 export function findWhitespace(input: {
+  fingerprints: CreativeFingerprint[];
+  origins: { id: string; origin: string }[];
+  brandText: string;
+  clusters?: MarketCluster[];
+}): WhitespaceFinding[] {
+  const fromClusters = whitespaceFromClusters({ clusters: input.clusters ?? [], brandText: input.brandText });
+  const fromAngles = angleWhitespace(input);
+  const seen = new Set(fromClusters.map((item) => item.underused));
+  return [...fromClusters, ...fromAngles.filter((item) => !seen.has(item.underused))];
+}
+
+function angleWhitespace(input: {
   fingerprints: CreativeFingerprint[];
   origins: { id: string; origin: string }[];
   brandText: string;

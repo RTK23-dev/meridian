@@ -1,5 +1,7 @@
+import { embedExternal, type ExternalSemanticEnv } from "./external.ts";
 import { SEMANTIC_MODEL, semanticEmbedBatch } from "./semantic.ts";
 import { testEmbedding, type EmbeddingVector } from "./provider.ts";
+import type { Transport } from "../providers/http.ts";
 
 /** Provider ids the product can select. Domain code asks for an id. It does not import a vendor SDK. */
 export const EMBEDDING_PROVIDER_IDS = ["test:embedding", "local:semantic", "external:semantic"] as const;
@@ -7,12 +9,13 @@ export type EmbeddingProviderId = (typeof EMBEDDING_PROVIDER_IDS)[number];
 
 /**
  * test:embedding is off unless a test passes allowTest.
- * local:semantic is MiniLM. external:semantic stays unconnected and stores nothing.
+ * local:semantic is MiniLM.
+ * external:semantic calls the configured HTTP embeddings API and stores nothing on failure.
  */
 export async function embedWithProvider(
   provider: EmbeddingProviderId,
   texts: string[],
-  options?: { allowTest?: boolean },
+  options?: { allowTest?: boolean; transport?: Transport; env?: ExternalSemanticEnv },
 ): Promise<EmbeddingVector[]> {
   if (texts.length === 0) return [];
   if (provider === "test:embedding") {
@@ -23,7 +26,7 @@ export async function embedWithProvider(
     });
   }
   if (provider === "external:semantic") {
-    throw new Error("external:semantic is not connected. No vector was stored.");
+    return embedExternal(texts, { transport: options?.transport, env: options?.env });
   }
   const vectors = await semanticEmbedBatch(texts);
   return vectors.map((vector) => ({
