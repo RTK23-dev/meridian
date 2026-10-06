@@ -7,6 +7,45 @@ on:
   workflow_dispatch:
 
 jobs:
+  ui-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start the local app for browser smoke
+        run: |
+          mkdir -p artifacts
+          npm run dev > artifacts/dev-server.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8080/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat artifacts/dev-server.log
+          exit 1
+      - name: Capture UI baseline
+        env:
+          UI_BASELINE_DIR: artifacts/ui-baseline
+          UI_BASELINE_OUTPUT_ROOT: ${{ github.workspace }}
+        run: npm run ui:baseline
+      - name: Run browser smoke
+        run: |
+          BROWSER_SMOKE_OUTPUT_ROOT="$GITHUB_WORKSPACE" \
+            node scripts/browser-smoke.mjs http://127.0.0.1:8080/ "$GITHUB_WORKSPACE/artifacts/ui-smoke.png"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-smoke-screenshots
+          path: artifacts/
+          if-no-files-found: ignore
+
   check:
     runs-on: ubuntu-latest
     steps:
