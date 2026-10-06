@@ -1,12 +1,31 @@
-import { assertSameTenant, type LearnedPattern, type ObservedCreative, type PerformanceRow } from "../domain.ts";
+import {
+  assertSameTenant,
+  type LearnedPattern,
+  type LearningState,
+  type ObservedCreative,
+  type PerformanceRow,
+} from "../domain.ts";
 
 export const DEFAULT_LEARNING_POLICY = {
   minCreativesPerBucket: 3,
   minImpressionsPerBucket: 300,
   minAbsLift: 0.05,
+  /** Below this, a pattern that already met the sample floor stays OBSERVED. */
+  inferredMinImpressions: 800,
+  /** Validated requires a larger sample. It is not a statistical certificate. */
+  validatedMinCreatives: 4,
+  validatedMinImpressions: 2000,
+  validatedMinAbsLift: 0.15,
 };
 
 const ATTRIBUTES = ["angle", "hookType", "format", "proofType", "visualStyle", "platform", "offer", "cta"] as const;
+
+const PAIRS = [
+  ["angle", "hookType"],
+  ["angle", "format"],
+  ["hookType", "format"],
+  ["productName", "angle"],
+] as const;
 
 type Totals = {
   impressions: number;
@@ -42,9 +61,138 @@ function rate(numerator: number, denominator: number): number | null {
   return numerator / denominator;
 }
 
+function learningState(
+  sampleSize: number,
+  impressions: number,
+  absLift: number,
+  policy: typeof DEFAULT_LEARNING_POLICY,
+): LearningState {
+  if (
+    sampleSize >= policy.validatedMinCreatives &&
+    impressions >= policy.validatedMinImpressions &&
+    absLift >= policy.validatedMinAbsLift
+  ) {
+    return "VALIDATED";
+  }
+  if (impressions >= policy.inferredMinImpressions) return "INFERRED";
+  return "OBSERVED";
+}
+
+/**
+ * How much a stored pattern may move a future score.
+ * OBSERVED is recorded but discounted. VALIDATED is still not a causal proof.
+ */
+export function patternInfluence(pattern: LearnedPattern): number {
+  if (pattern.state === "VALIDATED") return 1;
+  if (pattern.state === "OBSERVED") return 0.45;
+  return 0.75;
+}
+
+type Policy = typeof DEFAULT_LEARNING_POLICY;
+
+function pushMetrics(
+  patterns: LearnedPattern[],
+  input: {
+    organizationId: string;
+    brandId: string;
+    attribute: string;
+    value: string;
+    bucket: Totals;
+    baseline: Totals;
+    baselineCtr: number;
+    policy: Policy;
+  },
+): void {
+  const { bucket, baseline, policy } = input;
+  const observedCtr = rate(bucket.clicks, bucket.impressions);
+  if (observedCtr !== null && input.baselineCtr !== 0) {
+    const lift = (observedCtr - input.baselineCtr) / input.baselineCtr;
+    if (Math.abs(lift) >= policy.minAbsLift) {
+      patterns.push(
+        patternRow(input, "ctr", lift, observedCtr, input.baselineCtr, ctrSummary(input.attribute, input.value, observedCtr, input.baselineCtr, lift, bucket)),
+      );
+    }
+  }
+  const observedCvr = rate(bucket.conversions, bucket.clicks);
+  const baselineCvr = rate(baseline.conversions, baseline.clicks);
+  if (observedCvr !== null && baselineCvr !== null && baselineCvr > 0 && bucket.clicks >= 50 && baseline.clicks >= 50) {
+    const cvrLift = (observedCvr - baselineCvr) / baselineCvr;
+    if (Math.abs(cvrLift) >= policy.minAbsLift) {
+      patterns.push(
+        patternRow(
+          input,
+          "cvr",
+          cvrLift,
+          observedCvr,
+          baselineCvr,
+          `${input.attribute}=${input.value}: conversion rate ${(observedCvr * 100).toFixed(1)}% vs baseline ${(baselineCvr * 100).toFixed(1)}% (lift ${(cvrLift * 100).toFixed(0)}%, n=${bucket.creativeIds.size}).`,
+        ),
+      );
+    }
+  }
+  const observedRoas = rate(bucket.revenueCents, bucket.spendCents);
+  const baselineRoas = rate(baseline.revenueCents, baseline.spendCents);
+  if (
+    observedRoas !== null &&
+    baselineRoas !== null &&
+    baselineRoas > 0 &&
+    bucket.spendCents >= 1000 &&
+    baseline.spendCents >= 3000
+  ) {
+    const roasLift = (observedRoas - baselineRoas) / baselineRoas;
+    if (Math.abs(roasLift) >= policy.minAbsLift) {
+      patterns.push(
+        patternRow(
+          input,
+          "roas",
+          roasLift,
+          observedRoas,
+          baselineRoas,
+          `${input.attribute}=${input.value}: ROAS ${observedRoas.toFixed(2)} vs baseline ${baselineRoas.toFixed(2)} (lift ${(roasLift * 100).toFixed(0)}%, n=${bucket.creativeIds.size}, spend ${bucket.spendCents} cents).`,
+        ),
+      );
+    }
+  }
+}
+
+function patternRow(
+  input: {
+    organizationId: string;
+    brandId: string;
+    attribute: string;
+    value: string;
+    bucket: Totals;
+    policy: Policy;
+  },
+  metric: LearnedPattern["metric"],
+  lift: number,
+  observed: number,
+  baseline: number,
+  summary: string,
+): LearnedPattern {
+  return {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    attribute: input.attribute,
+    value: input.value,
+    metric,
+    lift: round4(lift),
+    sampleSize: input.bucket.creativeIds.size,
+    baseline: round4(baseline),
+    observed: round4(observed),
+    impressions: input.bucket.impressions,
+    clicks: input.bucket.clicks,
+    conversions: input.bucket.conversions,
+    spendCents: input.bucket.spendCents,
+    revenueCents: input.bucket.revenueCents,
+    state: learningState(input.bucket.creativeIds.size, input.bucket.impressions, Math.abs(lift), input.policy),
+    summary,
+  };
+}
+
 /**
  * Aggregate stored observations. Patterns are withheld until the sample
- * policy is met. Nothing here is a canned lift.
+ * policy is met. Pair attributes use the same floor. Nothing here is a canned lift.
  */
 export function learnPatterns(
   input: {
@@ -85,87 +233,45 @@ export function learnPatterns(
   if (baselineCtr === null || baseline.impressions < policy.minImpressionsPerBucket) return [];
 
   const patterns: LearnedPattern[] = [];
-  for (const attribute of ATTRIBUTES) {
+  const emit = (attribute: string, valueOf: (creative: ObservedCreative) => string) => {
     const buckets = new Map<string, Totals>();
     for (const row of totalsByCreative.values()) {
       const creative = byId.get(row.creativeId);
       if (!creative) continue;
-      const value = creative[attribute].trim();
-      if (!value) continue;
-      const bucket = buckets.get(value.toLowerCase()) ?? emptyTotals();
+      const value = valueOf(creative).trim().toLowerCase();
+      if (!value || value === "+" || value.startsWith("+") || value.endsWith("+")) continue;
+      const bucket = buckets.get(value) ?? emptyTotals();
       add(bucket, row);
-      buckets.set(value.toLowerCase(), bucket);
+      buckets.set(value, bucket);
     }
     for (const [value, bucket] of buckets) {
       if (bucket.creativeIds.size < policy.minCreativesPerBucket) continue;
       if (bucket.impressions < policy.minImpressionsPerBucket) continue;
-      const observedCtr = rate(bucket.clicks, bucket.impressions);
-      if (observedCtr !== null && baselineCtr !== 0) {
-        const lift = (observedCtr - baselineCtr) / baselineCtr;
-        if (Math.abs(lift) >= policy.minAbsLift) {
-          patterns.push({
-            attribute,
-            value,
-            metric: "ctr",
-            lift: round4(lift),
-            sampleSize: bucket.creativeIds.size,
-            baseline: round4(baselineCtr),
-            observed: round4(observedCtr),
-            impressions: bucket.impressions,
-            summary: ctrSummary(attribute, value, observedCtr, baselineCtr, lift, bucket),
-          });
-        }
-      }
-      const observedCvr = rate(bucket.conversions, bucket.clicks);
-      const baselineCvr = rate(baseline.conversions, baseline.clicks);
-      if (
-        observedCvr !== null &&
-        baselineCvr !== null &&
-        baselineCvr > 0 &&
-        bucket.clicks >= 50 &&
-        baseline.clicks >= 50
-      ) {
-        const cvrLift = (observedCvr - baselineCvr) / baselineCvr;
-        if (Math.abs(cvrLift) >= policy.minAbsLift) {
-          patterns.push({
-            attribute,
-            value,
-            metric: "cvr",
-            lift: round4(cvrLift),
-            sampleSize: bucket.creativeIds.size,
-            baseline: round4(baselineCvr),
-            observed: round4(observedCvr),
-            impressions: bucket.impressions,
-            summary: `${attribute}=${value}: conversion rate ${(observedCvr * 100).toFixed(1)}% vs baseline ${(baselineCvr * 100).toFixed(1)}% (lift ${(cvrLift * 100).toFixed(0)}%, n=${bucket.creativeIds.size}).`,
-          });
-        }
-      }
-      const observedRoas = rate(bucket.revenueCents, bucket.spendCents);
-      const baselineRoas = rate(baseline.revenueCents, baseline.spendCents);
-      if (
-        observedRoas !== null &&
-        baselineRoas !== null &&
-        baselineRoas > 0 &&
-        bucket.spendCents >= 1000 &&
-        baseline.spendCents >= 3000
-      ) {
-        const roasLift = (observedRoas - baselineRoas) / baselineRoas;
-        if (Math.abs(roasLift) >= policy.minAbsLift) {
-          patterns.push({
-            attribute,
-            value,
-            metric: "roas",
-            lift: round4(roasLift),
-            sampleSize: bucket.creativeIds.size,
-            baseline: round4(baselineRoas),
-            observed: round4(observedRoas),
-            impressions: bucket.impressions,
-            summary: `${attribute}=${value}: ROAS ${observedRoas.toFixed(2)} vs baseline ${baselineRoas.toFixed(2)} (lift ${(roasLift * 100).toFixed(0)}%, n=${bucket.creativeIds.size}, spend ${bucket.spendCents} cents).`,
-          });
-        }
-      }
+      pushMetrics(patterns, {
+        organizationId: input.organizationId,
+        brandId: input.brandId,
+        attribute,
+        value,
+        bucket,
+        baseline,
+        baselineCtr,
+        policy,
+      });
     }
+  };
+
+  for (const attribute of ATTRIBUTES) {
+    emit(attribute, (creative) => creative[attribute]);
   }
+  for (const [left, right] of PAIRS) {
+    emit(`${left}+${right}`, (creative) => {
+      const a = creative[left].trim().toLowerCase();
+      const b = creative[right].trim().toLowerCase();
+      if (!a || !b) return "";
+      return `${a}+${b}`;
+    });
+  }
+
   return patterns.sort((a, b) => Math.abs(b.lift) - Math.abs(a.lift));
 }
 

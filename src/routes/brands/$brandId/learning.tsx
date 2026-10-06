@@ -57,8 +57,8 @@ function Learning({ brandId }: { brandId: string }) {
               void busy.run(async () => {
                 const result = await refreshLearning({ data: { brandId } });
                 setNote(result.patterns === 0
-                  ? "No pattern met the sample rule. Nothing was invented."
-                  : `${result.patterns} pattern${result.patterns === 1 ? "" : "s"} stored. Score opportunities again to use them.`);
+                  ? "No pattern met the sample rule. Queued learning jobs for this brand were still closed. Nothing was invented."
+                  : `${result.patterns} pattern${result.patterns === 1 ? "" : "s"} stored. Queued learning jobs were drained. Score opportunities again to use them.`);
                 setData(await getLearning({ data: { brandId } }));
               });
             }}
@@ -75,7 +75,7 @@ function Learning({ brandId }: { brandId: string }) {
         <ul className="space-y-3">
           {data.patterns.map((pattern) => (
             <li key={`${pattern.attribute}-${pattern.value}-${pattern.metric}`} className="rounded-lg border border-line bg-panel p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">{pattern.metric} · n={pattern.sampleSize}</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-brass">{pattern.state} · {pattern.metric} · n={pattern.sampleSize}</p>
               <p className="mt-2">{pattern.summary}</p>
             </li>
           ))}

@@ -13,6 +13,8 @@ import { rankOpportunities, type OpportunityDraft } from "@/lib/meridian/opportu
 import { assessCopy } from "@/lib/meridian/production/assess";
 import { promptById, PROMPTS } from "@/lib/meridian/prompts/registry";
 import { weightsFromUnknown, type ScoreWeights } from "@/lib/meridian/scoring";
+import { contentHash } from "@/lib/meridian/assets/lifecycle";
+import { designExperiment } from "@/lib/meridian/experiments/design";
 import { SOURCE_ADAPTERS } from "@/lib/meridian/sources/adapters";
 import { publicUrlIssue } from "@/lib/meridian/sources/public-url";
 
@@ -204,7 +206,7 @@ async function loadContext(sql: Sql, organizationId: string, brandId: string) {
     from creative_records where brand_id = ${brandId} and organization_id = ${organizationId}
   `;
   const patternRows = await sql<Record<string, unknown>>`
-    select attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary
+    select attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary, state, clicks, conversions, spend_cents, revenue_cents
     from learned_patterns where brand_id = ${brandId} and organization_id = ${organizationId}
   `;
   const rejectionRows = await sql<{ reason_code: string; count: number }>`
@@ -229,6 +231,13 @@ async function loadContext(sql: Sql, organizationId: string, brandId: string) {
     observed: asNumber(row.observed),
     impressions: asNumber(row.impressions),
     summary: asText(row.summary),
+    state: asText(row.state) === "VALIDATED" || asText(row.state) === "OBSERVED" ? (asText(row.state) as LearnedPattern["state"]) : "INFERRED",
+    clicks: asNumber(row.clicks),
+    conversions: asNumber(row.conversions),
+    spendCents: asNumber(row.spend_cents),
+    revenueCents: asNumber(row.revenue_cents),
+    organizationId,
+    brandId,
   }));
   const rejections: RejectionFact[] = rejectionRows.map((row) => ({
     reasonCode: row.reason_code,
@@ -1085,6 +1094,14 @@ async function produceCreative(
     `;
   }
   await sql`update briefs set status = 'used' where id = ${input.briefId}`;
+  await sql`
+    insert into assets (
+      id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status
+    ) values (
+      ${id()}, ${input.organizationId}, ${input.brandId}, ${creativeId}, 1,
+      ${`creative/${creativeId}/v1.txt`}, ${contentHash(input.script)}, 'text/plain', 'composed_text', 'stored'
+    )
+  `;
   const prompt = promptById("creative_script");
   if (prompt && input.provider) {
     await ensurePromptRows(sql);
@@ -1369,8 +1386,8 @@ export const recordPerformance = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    const creatives = await sql<{ id: string; status: string; origin: string; angle: string }>`
-      select id, status, origin, angle from creative_records
+    const creatives = await sql<{ id: string; status: string; origin: string; angle: string; product_name: string }>`
+      select id, status, origin, angle, product_name from creative_records
       where id = ${data.creativeId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
       limit 1
     `;
@@ -1386,9 +1403,20 @@ export const recordPerformance = createServerFn({ method: "POST" })
       experimentId = running[0].id;
     } else {
       experimentId = id();
+      const design = designExperiment({
+        angle: creative.angle,
+        productName: creative.product_name,
+        audience: "",
+      });
       await sql`
-        insert into experiments (id, organization_id, brand_id, creative_id, hypothesis, status, created_by)
-        values (${experimentId}, ${access.organizationId}, ${data.brandId}, ${data.creativeId}, ${creative.angle}, 'running', ${context.userId})
+        insert into experiments (
+          id, organization_id, brand_id, creative_id, hypothesis, status, created_by,
+          audience, platform, success_metric, expected_learning
+        ) values (
+          ${experimentId}, ${access.organizationId}, ${data.brandId}, ${data.creativeId},
+          ${design.hypothesis}, 'running', ${context.userId},
+          ${design.audience}, ${data.platform}, ${design.successMetric}, ${design.expectedLearning}
+        )
       `;
     }
     const observationId = id();
@@ -1414,6 +1442,24 @@ export const recordPerformance = createServerFn({ method: "POST" })
       objectId: data.creativeId,
       metadata: { impressions: String(data.impressions), clicks: String(data.clicks) },
     });
+    const idempotencyKey = `performance.recorded:${observationId}`;
+    const queued = await sql<{ id: string }>`
+      select id from jobs
+      where organization_id = ${access.organizationId}
+        and idempotency_key = ${idempotencyKey}
+        and status in ('queued', 'running', 'retry', 'succeeded')
+      limit 1
+    `;
+    if (!queued[0]) {
+      await sql`
+        insert into jobs (
+          id, organization_id, brand_id, job_type, idempotency_key, status, payload
+        ) values (
+          ${id()}, ${access.organizationId}, ${data.brandId}, 'learning.update', ${idempotencyKey},
+          'queued', ${JSON.stringify({ observationId, creativeId: data.creativeId })}
+        )
+      `;
+    }
     return { id: observationId };
   });
 
@@ -1449,13 +1495,23 @@ export const refreshLearning = createServerFn({ method: "POST" })
     for (const pattern of patterns) {
       await sql`
         insert into learned_patterns (
-          id, organization_id, brand_id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary
+          id, organization_id, brand_id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary,
+          state, clicks, conversions, spend_cents, revenue_cents
         ) values (
           ${id()}, ${access.organizationId}, ${data.brandId}, ${pattern.attribute}, ${pattern.value}, ${pattern.metric},
-          ${pattern.lift}, ${pattern.sampleSize}, ${pattern.baseline}, ${pattern.observed}, ${pattern.impressions}, ${pattern.summary}
+          ${pattern.lift}, ${pattern.sampleSize}, ${pattern.baseline}, ${pattern.observed}, ${pattern.impressions}, ${pattern.summary},
+          ${pattern.state ?? "INFERRED"}, ${pattern.clicks ?? 0}, ${pattern.conversions ?? 0}, ${pattern.spendCents ?? 0}, ${pattern.revenueCents ?? 0}
         )
       `;
     }
+    await sql`
+      update jobs
+      set status = 'succeeded', attempts = attempts + 1, updated_at = now(), last_error = ''
+      where brand_id = ${data.brandId}
+        and organization_id = ${access.organizationId}
+        and job_type = 'learning.update'
+        and status in ('queued', 'retry')
+    `;
     await audit(sql, {
       organizationId: access.organizationId,
       brandId: data.brandId,
@@ -1475,7 +1531,7 @@ export const getLearning = createServerFn({ method: "POST" })
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
     const patterns = await sql<Record<string, unknown>>`
-      select attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary, created_at
+      select attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary, state, created_at
       from learned_patterns
       where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
       order by created_at desc
@@ -1493,7 +1549,7 @@ export const getLearning = createServerFn({ method: "POST" })
     `;
     return {
       role: access.role,
-      policy: "A pattern is stored only after at least 3 creatives and 300 impressions in that bucket, and only when CTR, conversion rate, or ROAS differs from the brand baseline by 5% or more. Conversion rate also needs 50 clicks. ROAS also needs spend.",
+      policy: "A pattern is stored only after at least 3 creatives and 300 impressions in that bucket, and only when CTR, conversion rate, or ROAS differs from the brand baseline by 5% or more. Pairs such as angle+hook use the same floor. VALIDATED requires 4 creatives, 2000 impressions, and 15% absolute lift. OBSERVED patterns are discounted in the next rank. Recompute drains queued learning jobs. There is no separate worker, and thresholds are not moved.",
       patterns: patterns.map((row) => ({
         attribute: asText(row.attribute),
         value: asText(row.value),
@@ -1504,6 +1560,7 @@ export const getLearning = createServerFn({ method: "POST" })
         observed: asNumber(row.observed),
         impressions: asNumber(row.impressions),
         summary: asText(row.summary),
+        state: asText(row.state) || "INFERRED",
       })),
       rejections: countRejections(rejections.flatMap((row) => Array.from({ length: asNumber(row.count) }, () => row.reason_code))),
       decisions: decisions.map((row) => ({

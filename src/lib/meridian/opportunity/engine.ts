@@ -10,6 +10,7 @@ import {
   type RejectionFact,
 } from "../domain.ts";
 import type { OpportunityGateInput } from "../jev/questions.ts";
+import { patternInfluence } from "../learning/engine.ts";
 import { strategyCandidates, type StrategyCandidate } from "./candidates.ts";
 import { DEFAULT_WEIGHTS, opportunityScore, type ScoreWeights } from "../scoring.ts";
 
@@ -73,11 +74,16 @@ function brainFilled(brain: BrainSlice): number {
 }
 
 function relatedPatterns(patterns: LearnedPattern[], angle: string, hookType: string): LearnedPattern[] {
-  return patterns.filter(
-    (pattern) =>
-      (pattern.attribute === "angle" && same(pattern.value, angle)) ||
-      (pattern.attribute === "hookType" && same(pattern.value, hookType)),
-  );
+  const angleKey = angle.trim().toLowerCase();
+  const hookKey = hookType.trim().toLowerCase();
+  return patterns.filter((pattern) => {
+    const value = pattern.value.trim().toLowerCase();
+    if (pattern.attribute === "angle" && value === angleKey) return true;
+    if (pattern.attribute === "hookType" && value === hookKey) return true;
+    if (pattern.attribute.startsWith("angle+") && value.startsWith(`${angleKey}+`)) return true;
+    if (pattern.attribute.includes("+") && pattern.attribute.includes("hookType") && value.includes(hookKey)) return true;
+    return false;
+  });
 }
 
 export function rankOpportunities(input: {
@@ -91,6 +97,14 @@ export function rankOpportunities(input: {
   weights?: ScoreWeights;
 }): RankedOpportunity[] {
   assertSameTenant(input.creatives, input.organizationId, input.brandId);
+  for (const pattern of input.patterns) {
+    if (
+      (pattern.organizationId && pattern.organizationId !== input.organizationId) ||
+      (pattern.brandId && pattern.brandId !== input.brandId)
+    ) {
+      throw new Error("Tenant scope violation.");
+    }
+  }
   const weights = input.weights ?? DEFAULT_WEIGHTS;
   const competitors = input.creatives.filter((creative) => creative.origin === "competitor");
   const own = input.creatives.filter((creative) => creative.origin !== "competitor");
@@ -120,7 +134,7 @@ export function rankOpportunities(input: {
       );
     }
   }
-  return drafts.sort((a, b) => b.expectedValue - a.expectedValue || b.rawScore - a.rawScore);
+  return diversifyByAngle(drafts.sort((a, b) => b.expectedValue - a.expectedValue || b.rawScore - a.rawScore));
 }
 
 function scoreOne(input: {
@@ -184,8 +198,12 @@ function scoreOne(input: {
     });
   }
   if (positive) {
-    historicalEvidence = clamp01(positive.lift);
-    evidence.push({ id: "history", source: "learned_pattern", summary: positive.summary });
+    historicalEvidence = clamp01(positive.lift * patternInfluence(positive));
+    evidence.push({
+      id: "history",
+      source: "learned_pattern",
+      summary: `${positive.summary} Influence is ${patternInfluence(positive)} because the pattern is ${positive.state ?? "INFERRED"}.`,
+    });
   }
   if (negative) {
     risk = clamp01(risk + clamp01(-negative.lift) * 0.5);
@@ -297,7 +315,7 @@ function scoreOne(input: {
     },
     reproducibility: {
       templateCoverage: reproducibility,
-      copiesProtectedPhrasing: false,
+      copiesProtectedPhrasing: competitorCopiesLine(candidate.hookLine, input.competitors),
     },
   };
 
@@ -334,6 +352,48 @@ function scoreOne(input: {
     confidence: round3(confidence),
     hookDirection: candidate.hookLine,
     gateInput,
+  };
+}
+
+function competitorCopiesLine(hookLine: string, competitors: ObservedCreative[]): boolean {
+  const line = hookLine.trim().toLowerCase();
+  if (line.length < 24) return false;
+  return competitors.some((creative) => creative.text.toLowerCase().includes(line));
+}
+
+/** One recommendation per angle. Extra product copies of the same strategy are dropped. */
+export function diversifyByAngle(drafts: RankedOpportunity[]): RankedOpportunity[] {
+  const picked: RankedOpportunity[] = [];
+  const seen = new Set<string>();
+  for (const draft of drafts) {
+    const key = draft.angle.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    picked.push(draft);
+  }
+  return picked;
+}
+
+export function explainOpportunity(draft: OpportunityDraft): {
+  whatIsHappening: string;
+  whyThisBrand: string;
+  whatWorked: string;
+  whatFailed: string;
+  saturation: string;
+  risk: string;
+  whatToMake: string;
+  evidence: string[];
+} {
+  const find = (id: string) => draft.evidence.find((item) => item.id === id)?.summary ?? "";
+  return {
+    whatIsHappening: find("market") || draft.reason,
+    whyThisBrand: find("brand"),
+    whatWorked: find("history"),
+    whatFailed: find("history_negative") || find("rejections") || "No stored failure is attached to this candidate.",
+    saturation: find("saturation") || `Saturation score is ${draft.saturation}.`,
+    risk: `Risk score is ${draft.risk}.`,
+    whatToMake: `${draft.label} in ${draft.format || "an unspecified format"} for ${draft.productName || "an unspecified product"}.`,
+    evidence: draft.evidence.map((item) => item.summary),
   };
 }
 

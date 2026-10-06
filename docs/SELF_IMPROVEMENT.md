@@ -4,14 +4,13 @@ The system is self-improving only where this path actually runs:
 
 1. A creative is stored with angle, hook type, format, and the other attributes.
 2. A person records performance against that creative. The source column is `manual`. Nothing is imputed.
-3. Recompute patterns. `learnPatterns` sums observations, computes brand-baseline CTR, and emits a pattern only when a bucket has at least 3 creatives, 300 impressions, and absolute lift of at least 5%.
-4. The pattern row is stored on the brand.
-5. The next opportunity refresh reads it. Positive lift raises historical evidence for that angle or hook. Negative lift raises risk.
-6. The next brief copies the pattern summary into `learningNotes` and into the generation context.
-7. Generation, when a model is configured, receives that context. A human-written script is still checked by the guardian.
+3. Recompute patterns. `learnPatterns` sums observations, computes brand-baseline CTR, conversion rate, and ROAS, and emits a pattern only when a bucket has at least 3 creatives, 300 impressions, and absolute lift of at least 5%. The same floor applies to pairs: angle+hook, angle+format, hook+format, and product+angle.
+4. Each stored pattern has a state. OBSERVED meets the floor but is thin. INFERRED has at least 800 impressions. VALIDATED has at least 4 creatives, 2000 impressions, and 15% absolute lift. VALIDATED is not a causal certificate. OBSERVED patterns move the next score less than VALIDATED ones.
+5. The pattern row is stored on the brand, including the state. Another brand's pattern is refused.
+6. Recording performance inserts a `learning.update` job. Recompute marks queued jobs for that brand succeeded. Nothing runs them on a timer.
+7. The next opportunity refresh reads the pattern. Positive lift raises historical evidence for that angle, hook, or pair. Negative lift raises risk.
+8. The next brief copies matching pattern summaries, including pairs, into `learningNotes` and into the generation context.
 
-`src/lib/meridian/loop.test.ts` stores four curiosity creatives and four offer creatives. Curiosity CTR is higher. Before learning, the offer-shaped hypothesis ranks above curiosity because the sample brand talks about price and deals. After learning, curiosity ranks above offer, and the curiosity brief contains the computed pattern. The lift is not hard-coded.
+`src/lib/meridian/acceptance.test.ts` is the cycle check. It loads competitor rows from `evals/acceptance/market.json`, discovers `unboxing` only because those rows exist, ranks offer above curiosity before any performance, then stores curiosity performance and checks that curiosity outranks offer and that the next brief contains both the angle pattern and the angle+hook pair. A copied hook line is rejected. Missing vision evidence stays in human review. A calibration report is computed and does not change thresholds.
 
-Rejections are the other write-back. A rejected creative stores a reason code. The next rank penalizes high-claim angles after repeated unsupported or prohibited rejections.
-
-What this is not: the app does not rewrite its own source, move JEV thresholds, or publish a winner.
+What this is not: the app does not rewrite its own source, move JEV thresholds, publish a winner, or call a neural embedding model.

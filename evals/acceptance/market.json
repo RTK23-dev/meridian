@@ -1,0 +1,29 @@
+{
+  "note": "Fixture of already-collected competitor creatives. These rows are the evidence. The engine must not add creatives that are not here.",
+  "competitors": [
+    {
+      "id": "market-unbox-1",
+      "angle": "unboxing",
+      "hookType": "reveal",
+      "format": "short_ugc",
+      "proofType": "demonstration",
+      "text": "Hands open a plain box and take out the soap. No claim beyond what is visible."
+    },
+    {
+      "id": "market-unbox-2",
+      "angle": "unboxing",
+      "hookType": "reveal",
+      "format": "short_ugc",
+      "proofType": "demonstration",
+      "text": "A second unboxing from another brand. Same structure, different wording."
+    },
+    {
+      "id": "market-offer-1",
+      "angle": "offer",
+      "hookType": "offer",
+      "format": "static",
+      "proofType": "offer",
+      "text": "A price card. The number is theirs, not ours."
+    }
+  ]
+}

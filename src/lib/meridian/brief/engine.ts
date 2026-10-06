@@ -33,12 +33,17 @@ export type BriefDraft = {
 };
 
 export function relevantPatterns(patterns: LearnedPattern[], angle: string, hookType: string): LearnedPattern[] {
-  return patterns.filter(
-    (pattern) =>
-      (pattern.attribute === "angle" && pattern.value.toLowerCase() === angle.toLowerCase()) ||
-      (pattern.attribute === "hookType" && pattern.value.toLowerCase() === hookType.toLowerCase()) ||
-      (pattern.attribute === "format" && pattern.lift > 0),
-  );
+  const angleKey = angle.toLowerCase();
+  const hookKey = hookType.toLowerCase();
+  return patterns.filter((pattern) => {
+    const value = pattern.value.toLowerCase();
+    if (pattern.attribute === "angle" && value === angleKey) return true;
+    if (pattern.attribute === "hookType" && value === hookKey) return true;
+    if (pattern.attribute === "format" && pattern.lift > 0) return true;
+    if (pattern.attribute.startsWith("angle+") && value.startsWith(`${angleKey}+`)) return true;
+    if (pattern.attribute.includes("+") && pattern.attribute.includes("hookType") && value.includes(hookKey)) return true;
+    return false;
+  });
 }
 
 export function buildBrief(input: {

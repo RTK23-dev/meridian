@@ -14,7 +14,8 @@ organization → brand → brand brain / products
         → text guardian → JEV creative QA
         → library, review, or rejection
         → manual performance
-        → learned patterns
+        → learning job (queued, not a background worker)
+        → learned patterns, including attribute pairs
         → next rank and next brief
 ```
 
@@ -29,7 +30,11 @@ organization → brand → brand brain / products
 | JEV | `jev/` | Threshold gate |
 | Guardian | `guardian/text.ts` | Text evidence only |
 | Brief and workflow | `brief/`, `workflow/` | Context pack and templates |
-| Learning | `learning/engine.ts` | Pattern aggregation |
+| Learning | `learning/engine.ts` | Single attributes and pairs. States are OBSERVED, INFERRED, VALIDATED |
+| Jobs | `jobs/runner.ts`, `jobs` table | Retry, backoff, dead letter, idempotency. Drained by recompute, not a daemon |
+| Semantic | `semantic/lexical.ts` | Token-hash similarity. Neural embeddings are not connected |
+| Assets | `assets/lifecycle.ts`, `assets` table | Hash of composed text. No object store |
+| Experiments | `experiments/design.ts` | Hypothesis, CTR as the success metric, expected learning |
 | Providers | `providers/` | xAI and OpenRouter chat, xAI image |
 | Sources | `sources/` | Manual adapter, public-page fetch, SSRF checks |
 | API | `machine.ts` | Persistence and tenant checks |

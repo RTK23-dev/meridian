@@ -35,6 +35,8 @@ export type PerformanceRow = {
   revenueCents: number;
 };
 
+export type LearningState = "OBSERVED" | "INFERRED" | "VALIDATED";
+
 export type LearnedPattern = {
   attribute: string;
   value: string;
@@ -45,6 +47,14 @@ export type LearnedPattern = {
   observed: number;
   summary: string;
   impressions: number;
+  /** Absent on older rows. Treated as INFERRED, not as validated. */
+  state?: LearningState;
+  clicks?: number;
+  conversions?: number;
+  spendCents?: number;
+  revenueCents?: number;
+  organizationId?: string;
+  brandId?: string;
 };
 
 export type RejectionFact = {
