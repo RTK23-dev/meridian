@@ -201,7 +201,7 @@ function Settings() {
           <Button type="submit" variant="quiet" disabled={pending}>Create</Button>
         </form>
       </Panel>
-      <Panel>
+      <Panel id="workspace-audit">
         <h2 className="font-display text-2xl">Audit</h2>
         <AuditList entries={data.audit} />
       </Panel>
