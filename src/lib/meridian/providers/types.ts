@@ -11,7 +11,7 @@ export type ChatResult =
   | { ok: false; error: string; status: "unavailable" | "failed"; provider: string };
 
 export type ChatProvider = {
-  id: "xai" | "openrouter";
+  id: "openrouter";
   configured(): boolean;
   complete(request: ChatRequest): Promise<ChatResult>;
 };

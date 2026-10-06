@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { advanceTestVideo, startTestVideo, type VideoJob } from "../providers/media.ts";
-import { pollXaiVideo, submitXaiVideo, type XaiVideoState } from "../video/xai.ts";
 import { inspectVideo, videoFactsFromInspection } from "../video/inspect.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 
 export const STUDIO_PROMPT_VERSION = "studio-media-v1";
 export const TEST_VIDEO_MAX_POLLS = 4;
-export const XAI_VIDEO_MAX_POLLS = 8;
 
 export function variantPrompt(input: {
   productName: string;
@@ -133,9 +131,6 @@ export async function runVideoJob(sql: Sql, job: ExecutableJob, payload: Record<
   if (!row) throw new Error("Video job not found.");
   const provider = String(row.provider ?? "");
   const assetId = String(row.asset_id ?? "");
-  if (provider === "xai:video") {
-    return runXaiVideo(sql, job, row, payload, mediaJobId, assetId);
-  }
   if (provider !== "test:video") {
     await sql`
       update media_jobs set status = 'failed', error = 'No video vendor adapter is connected.', updated_at = now()
@@ -207,82 +202,6 @@ export async function runVideoJob(sql: Sql, job: ExecutableJob, payload: Record<
     providerJobId: next.providerJobId,
     reportedDurationMs: next.durationMs,
     scenes: next.scenes,
-  });
-  return `completed:${next.providerJobId}`;
-}
-
-async function runXaiVideo(
-  sql: Sql,
-  job: ExecutableJob,
-  row: Record<string, unknown>,
-  payload: Record<string, unknown>,
-  mediaJobId: string,
-  assetId: string,
-): Promise<string> {
-  if (job.job_type === "video.generate") {
-    const submitted = await submitXaiVideo({ prompt: String(row.prompt ?? "") });
-    if (submitted.status !== "submitted") {
-      await sql`
-        update media_jobs set status = 'failed', error = ${submitted.error}, updated_at = now()
-        where id = ${mediaJobId}
-      `;
-      await sql`update assets set media_status = 'failed', error = ${submitted.error} where id = ${assetId}`;
-      return submitted.status === "not_connected" ? "EXTERNAL_CONNECTION_REQUIRED" : "failed";
-    }
-    const state: XaiVideoState = submitted;
-    await sql`
-      update media_jobs set
-        status = 'submitted', provider_job_id = ${state.providerJobId}, model = ${state.model},
-        state = ${JSON.stringify({ ...state, bytes: null })}, attempts = attempts + 1, updated_at = now()
-      where id = ${mediaJobId}
-    `;
-    await sql`
-      update assets set media_status = 'submitted', provider = 'xai:video', provider_job_id = ${state.providerJobId}, model = ${state.model}
-      where id = ${assetId}
-    `;
-    await enqueue(sql, {
-      id: crypto.randomUUID(),
-      organizationId: job.organization_id,
-      brandId: String(row.brand_id),
-      type: "video.poll",
-      key: `video.poll:${mediaJobId}:1`,
-      payload: { mediaJobId, organizationId: job.organization_id, step: 1 },
-    });
-    return `submitted:${state.providerJobId}`;
-  }
-  const current = JSON.parse(String(row.state || "{}")) as XaiVideoState;
-  const next = await pollXaiVideo(current, {});
-  const step = typeof payload.step === "number" ? payload.step : Number(payload.step) || 1;
-  await sql`
-    update media_jobs set status = ${next.status}, error = ${next.error}, state = ${JSON.stringify({ ...next, bytes: null })}, attempts = attempts + 1, updated_at = now()
-    where id = ${mediaJobId}
-  `;
-  await sql`update assets set media_status = ${next.status}, error = ${next.error} where id = ${assetId}`;
-  if (next.status === "processing") {
-    if (step >= XAI_VIDEO_MAX_POLLS) throw new Error("xAI video did not finish.");
-    await enqueue(sql, {
-      id: crypto.randomUUID(),
-      organizationId: job.organization_id,
-      brandId: String(row.brand_id),
-      type: "video.poll",
-      key: `video.poll:${mediaJobId}:${step + 1}`,
-      payload: { mediaJobId, organizationId: job.organization_id, step: step + 1 },
-    });
-    return next.status;
-  }
-  if (next.status !== "completed" || !next.bytes) {
-    return next.status === "not_connected" ? "EXTERNAL_CONNECTION_REQUIRED" : "failed";
-  }
-  const key = `${job.organization_id}/${row.brand_id}/runs/${row.generation_run_id}/${assetId}.mp4`;
-  await persistVideoBytes(sql, {
-    organizationId: job.organization_id,
-    brandId: String(row.brand_id),
-    assetId,
-    key,
-    bytes: next.bytes,
-    providerJobId: next.providerJobId,
-    reportedDurationMs: next.durationMs,
-    scenes: [],
   });
   return `completed:${next.providerJobId}`;
 }

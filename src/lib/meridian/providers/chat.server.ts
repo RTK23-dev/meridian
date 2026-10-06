@@ -61,31 +61,20 @@ async function postChat(
   }
 }
 
-export const xaiProvider: ChatProvider = {
-  id: "xai",
-  configured: () => Boolean(key("XAI_API_KEY")),
-  complete: (request) => {
-    const apiKey = key("XAI_API_KEY");
-    if (!apiKey) return Promise.resolve({ ok: false, status: "unavailable", provider: "xai", error: "Text generation is not configured." });
-    return postChat("xai", "https://api.x.ai/v1/chat/completions", apiKey, {}, request, request.user);
-  },
-};
-
 export const openRouterProvider: ChatProvider = {
   id: "openrouter",
-  configured: () => Boolean(key("OPENROUTER_API_KEY")),
+  configured: () => Boolean(key("OPENROUTER_API_KEY") && key("OPENROUTER_MODEL")),
   complete: (request) => {
     const apiKey = key("OPENROUTER_API_KEY");
-    if (!apiKey) {
-      return Promise.resolve({ ok: false, status: "unavailable", provider: "openrouter", error: "OpenRouter is not configured." });
+    if (!apiKey || !key("OPENROUTER_MODEL")) {
+      return Promise.resolve({ ok: false, status: "unavailable", provider: "openrouter", error: "OPENROUTER_API_KEY and OPENROUTER_MODEL are required." });
     }
     return postChat("openrouter", "https://openrouter.ai/api/v1/chat/completions", apiKey, {}, request, request.user);
   },
 };
 
-/** Prefer the platform xAI key when it is present. OpenRouter is the other adapter, not a fallback that invents text. */
+/** OpenRouter is the sole external model gateway for JEV and vision tasks. */
 export function activeChatProvider(): ChatProvider | null {
-  if (xaiProvider.configured()) return xaiProvider;
   if (openRouterProvider.configured()) return openRouterProvider;
   return null;
 }
@@ -93,7 +82,7 @@ export function activeChatProvider(): ChatProvider | null {
 export function providerStatus(): { configured: boolean; provider: string; model: string } {
   const provider = activeChatProvider();
   if (!provider) return { configured: false, provider: "none", model: "" };
-  const model = provider.id === "openrouter" ? key("OPENROUTER_MODEL") || "openai/gpt-4.1-mini" : "grok-4.5";
+  const model = key("OPENROUTER_MODEL") || "";
   return { configured: true, provider: provider.id, model };
 }
 
@@ -134,11 +123,6 @@ export async function completeWithImage(request: {
     { type: "text", text: request.text },
     { type: "image_url", image_url: { url: request.imageUrl } },
   ];
-  if (provider.id === "xai") {
-    const apiKey = key("XAI_API_KEY");
-    if (!apiKey) return { ok: false, status: "unavailable", provider: "xai", error: "No vision model is configured." };
-    return postChat("xai", "https://api.x.ai/v1/chat/completions", apiKey, {}, payload, parts);
-  }
   const apiKey = key("OPENROUTER_API_KEY");
   if (!apiKey) return { ok: false, status: "unavailable", provider: "openrouter", error: "No vision model is configured." };
   return postChat("openrouter", "https://openrouter.ai/api/v1/chat/completions", apiKey, {}, payload, parts);

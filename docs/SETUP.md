@@ -73,7 +73,7 @@ On a host that is not your laptop, run the worker and the scheduler as long-live
 4. Record market observations, or fetch one public page.
 5. Open Studio. Rank an opportunity, accept the brief, and generate variants.
 
-Images can use xAI when `XAI_API_KEY` is set. Video does not. Studio sends an approved JEV brief to a separate Hypit process. Without `HYPIT_BASE_URL`, generation stops at `HYPIT_NOT_CONNECTED` and stores no file.
+JEV model calls use OpenRouter (`OPENROUTER_API_KEY` and `OPENROUTER_MODEL`). Studio images are optional and can use Google AI Studio / Nano Banana when `GOOGLE_AI_STUDIO_API_KEY` is set. An image provider is not required for JEV or Hypit. Studio sends an approved JEV brief to a separate Hypit process. Without `HYPIT_BASE_URL`, generation stops at `HYPIT_NOT_CONNECTED` and stores no file.
 
 ## 5. Hypit video
 
@@ -105,19 +105,20 @@ Leave a variable blank to keep that provider not connected.
 
 ### JEV Research collection
 
-The first research source is Meta Ad Library video ads. Configure `META_AD_LIBRARY_TOKEN`, `OPENAI_API_KEY`, and the existing JEV chat connection (`XAI_API_KEY` or `OPENROUTER_API_KEY`). The long-lived worker also needs `ffmpeg` and `ffprobe` on `PATH`; set `FFMPEG_PATH` and `FFPROBE_PATH` when they are installed elsewhere. `OPENAI_TRANSCRIPTION_MODEL` defaults to `whisper-1`. A Meta snapshot that does not expose an explicit downloadable MP4 remains unavailable and is not transcribed or analyzed.
+The first research source is Meta Ad Library video ads. Configure `META_AD_LIBRARY_TOKEN` and `OPENROUTER_API_KEY`. The long-lived worker needs local WhisperX plus `ffmpeg` and `ffprobe`; set `WHISPERX_PATH`, `WHISPERX_MODEL` (defaults to `small`), `WHISPERX_DEVICE` (defaults to `cpu`), `FFMPEG_PATH`, and `FFPROBE_PATH` when installed outside `PATH`. A Meta snapshot that does not expose an explicit downloadable MP4 remains unavailable and is not transcribed or analyzed. No hosted transcription key is required.
 
 Research is available only when these connections are configured. Missing credentials produce `NOT_CONNECTED`. Low-confidence structured analyses are retained with review status. Pattern summaries report observed corpus frequency only. Cross-brand organization summaries have no examples and are consumed only by brands that explicitly opt into organization learning in Learning settings.
 
 | You want | Set | Then |
 | --- | --- | --- |
 | Hypit video | `HYPIT_BASE_URL` | Studio video. A file is stored only after Hypit returns MP4 bytes. |
-| xAI images | `XAI_API_KEY` | Image generation. Video does not use this key. |
+| OpenRouter / JEV | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | JEV's model-backed analysis and decisions. |
+| Optional Nano Banana images | `GOOGLE_AI_STUDIO_API_KEY`, optional `GOOGLE_NANO_BANANA_MODEL` | Image generation. Missing configuration skips optional images. |
 | S3-compatible files | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | The active store switches after the client is configured. `S3_REGION` defaults to `us-east-1`. |
 | Invite email | `EMAIL_API_URL`, `EMAIL_API_KEY` | The API receives JSON `{ to, subject, text }` with a bearer token. A failure leaves the invite pending. |
 | External embeddings | `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY` | OpenAI-compatible `POST` with `{ model, input }`. Local MiniLM is used when these are blank. |
 | Meta, TikTok, Google | The tokens in `.env.example` | An admin uses Integrations, tests the connection, and publishes only after the probe succeeds. |
-| JEV Research collection | `META_AD_LIBRARY_TOKEN`, `OPENAI_API_KEY`, and an existing JEV chat provider key; `ffmpeg`/`ffprobe` on the worker | Research stays `NOT_CONNECTED` without keys. Ads whose snapshots expose no downloadable MP4 stay unavailable. |
+| JEV Research collection | `META_AD_LIBRARY_TOKEN`, `OPENROUTER_API_KEY`, local WhisperX, `ffmpeg`/`ffprobe` on the worker | Research stays `NOT_CONNECTED` without source/model/runtime connections. Ads whose snapshots expose no downloadable MP4 stay unavailable. |
 | OAuth and webhooks | App ids, `TOKEN_ENCRYPTION_KEY`, `WEBHOOK_SECRET` | Tokens are sealed. Webhook posts without a valid signature are rejected. |
 
 `TOKEN_ENCRYPTION_KEY` is a secret you generate, for example:
@@ -154,7 +155,7 @@ npm run build
 | Migrations say `DATABASE_URL not set` | `npm run db:migrate` reads `.env` and does not override a variable already in the shell. Put the URL in `.env`, or export it. |
 | Health says the worker is stopped | Start `npm run worker` on a machine that can reach the same database. |
 | Studio says Hypit is not connected | `HYPIT_BASE_URL` is empty, or the bridge is not running. No video was stored. |
-| Studio says the image model is unavailable | `XAI_API_KEY` is missing or the provider rejected the request. No image was stored. |
+| Studio skips optional images | `GOOGLE_AI_STUDIO_API_KEY` is missing or the provider rejected the request. JEV and Hypit video are unaffected. |
 | Invite says nobody was notified | `EMAIL_API_URL` or `EMAIL_API_KEY` is missing, or the provider returned an error. The row is still in `invites`. |
 | Publish button does not create a campaign | The account is not healthy, or a required id (page, budget, country, link, or uploaded media id) is missing. |
 | Build works and the site is blank | Confirm `/assets/*` is served as JavaScript, not HTML. See [DEPLOYMENT.md](DEPLOYMENT.md). |

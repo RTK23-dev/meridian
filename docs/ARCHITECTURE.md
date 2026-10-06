@@ -51,7 +51,7 @@ AI output is parsed into fields and then checked by deterministic code. Retrieve
 
 Creative production uses original workflow stages. It does not embed another product's runtime.
 
-JEV Research analyzes external advertising evidence; it is not an approval gate. It uses the existing configured JEV chat provider for structured analysis and OpenAI Whisper for transcript extraction. Missing media, transcription, or model configuration is recorded explicitly. Research frequency is not an effectiveness claim. Organization summaries are used only for brands with the existing organization-learning opt-in and contain aggregate counts without examples or source ids.
+JEV Research analyzes external advertising evidence; it is not an approval gate. It uses OpenRouter for structured analysis and local WhisperX for transcript extraction. Missing media, transcription, or model configuration is recorded explicitly. Research frequency is not an effectiveness claim. Organization summaries are used only for brands with the existing organization-learning opt-in and contain aggregate counts without examples or source ids.
 
 ## Request path
 

@@ -12,7 +12,7 @@ DATABASE     DATABASE_URL (Postgres)
 OBJECT STORE S3-compatible bucket, or the filesystem provider in development
 ```
 
-For JEV Research, the worker also needs `META_AD_LIBRARY_TOKEN`, `OPENAI_API_KEY`, one existing JEV chat key (`XAI_API_KEY` or `OPENROUTER_API_KEY`), and `ffmpeg`/`ffprobe` installed. `FFMPEG_PATH` and `FFPROBE_PATH` can select non-default executable paths. Missing keys remain `NOT_CONNECTED`; transient errors retry through the normal job policy and are dead-lettered after the configured attempts.
+For JEV Research, the worker also needs `META_AD_LIBRARY_TOKEN`, `OPENROUTER_API_KEY`, local WhisperX, and `ffmpeg`/`ffprobe` installed. `WHISPERX_PATH`, `WHISPERX_MODEL`, `WHISPERX_DEVICE`, `FFMPEG_PATH`, and `FFPROBE_PATH` configure local runtimes. Missing connections remain `NOT_CONNECTED`; transient errors retry through the normal job policy and are dead-lettered after the configured attempts. Google AI Studio image generation is optional and uses `GOOGLE_AI_STUDIO_API_KEY`.
 
 ## Health
 

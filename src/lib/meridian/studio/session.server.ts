@@ -667,7 +667,7 @@ export async function generateStudioVariants(
       audience: asText(brief.audience),
       constraints: asText(brief.constraints),
     };
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; data.imageProvider !== "none" && index < 3; index += 1) {
       const prompt = variantPrompt({ ...basePrompt, index, kind: "image" });
       const creativeId = crypto.randomUUID();
       const assetId = crypto.randomUUID();
@@ -678,7 +678,19 @@ export async function generateStudioVariants(
         promptVersion: `${STUDIO_PROMPT_VERSION}#image-${index + 1}`,
         allowTest: data.imageProvider === "test:image",
       });
-      if (image.status !== "ready") throw new Error(image.error);
+      if (image.status !== "ready") {
+        await sql`
+          insert into generation_jobs (
+            id, organization_id, brand_id, brief_id, correlation_id, provider, model, prompt_id, prompt_version,
+            status, error, created_by
+          ) values (
+            ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${data.briefId}, ${runId},
+            ${image.provider}, '', 'studio_media', ${`${STUDIO_PROMPT_VERSION}#image-${index + 1}`},
+            ${image.status}, ${image.error.slice(0, 500)}, ${context.userId}
+          )
+        `;
+        break;
+      }
       const key = `${access.organizationId}/${data.brandId}/runs/${runId}/${assetId}.img`;
       const stored = await storeBlob(sql, {
         organizationId: access.organizationId,
@@ -741,7 +753,7 @@ export async function generateStudioVariants(
           ${copy}, ${productName}, ${asText(brief.hook)}, ${"demonstration"}, ${asText(brief.angle)},
           ${copy}, ${asText(brief.cta)}, ${asText(brief.format)}, ${asText(brief.proof_type)},
           ${asText(brief.opportunity_id) || null}, ${data.briefId}, ${status}, ${context.userId},
-          ${JSON.stringify({ generationRunId: runId, provider: image.provider, model: image.model, promptVersion: image.promptVersion, kind: "image", variant: index + 1 })}
+          ${JSON.stringify({ generationRunId: runId, jevDecisionId: asText(brief.decision_id), provider: image.provider, model: image.model, promptVersion: image.promptVersion, kind: "image", variant: index + 1 })}
         )
       `;
       await sql`

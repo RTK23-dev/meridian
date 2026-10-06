@@ -7,6 +7,6 @@
 - Page text and competitor copy are stored as data. Prompts wrap them in `untrusted_source` and tell the model not to follow instructions inside.
 - Website fields on the brand and competitor are validated as http(s) and are not fetched by themselves.
 - Invites are not email. The UI says delivery is not configured.
-- Secrets are not committed. `XAI_API_KEY` and `OPENROUTER_API_KEY` are read only in server modules. Model logs do not include the key.
+- Secrets are not committed. `OPENROUTER_API_KEY` and optional `GOOGLE_AI_STUDIO_API_KEY` are read only in server modules. Model logs do not include the keys.
 - Generated JSON is validated before a creative row is written. Claim checks run after generation, not instead of it.
 - Audit rows record workspace, brand, brain, product, membership, weight, observation, opportunity, review, performance, and learning changes. JEV rows record the decision itself.

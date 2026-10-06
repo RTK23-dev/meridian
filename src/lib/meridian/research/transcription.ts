@@ -11,12 +11,27 @@ const MAX_VIDEO_BYTES = 80_000_000;
 const MAX_AUDIO_BYTES = 24_000_000;
 
 export type TranscriptionResult =
-  | { status: "transcribed"; transcript: string; segments: ResearchSegment[]; provider: "openai"; model: string; contentHash: string; durationMs: number | null }
-  | { status: "no_speech"; transcript: ""; segments: []; provider: "openai"; model: string; contentHash: string; durationMs: number | null }
+  | { status: "transcribed"; transcript: string; segments: ResearchSegment[]; provider: "local:whisperx"; model: string; contentHash: string; durationMs: number | null }
+  | { status: "no_speech"; transcript: ""; segments: []; provider: "local:whisperx"; model: string; contentHash: string; durationMs: number | null }
   | { status: "NOT_CONNECTED"; error: string; contentHash: string }
   | { status: "failed"; error: string; contentHash: string };
 
 export type AudioExtractor = (videoBytes: Uint8Array, ffmpegPath?: string) => Promise<{ bytes: Uint8Array; durationMs: number | null }>;
+export type LocalTranscriber = (audioBytes: Uint8Array, options: { model: string; device: string; executable: string }) => Promise<unknown>;
+
+async function runWhisperX(audioBytes: Uint8Array, options: { model: string; device: string; executable: string }): Promise<unknown> {
+  const folder = await mkdtemp(join(tmpdir(), "meridian-whisperx-"));
+  const audioPath = join(folder, "audio.mp3");
+  await writeFile(audioPath, audioBytes);
+  try {
+    await execFile(options.executable, [audioPath, "--model", options.model, "--device", options.device, "--output_dir", folder, "--output_format", "json"], {
+      timeout: 30 * 60_000, maxBuffer: 2 * 1024 * 1024,
+    });
+    return JSON.parse(await readFile(join(folder, "audio.json"), "utf8")) as unknown;
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+}
 
 export async function extractAudioWithFfmpeg(videoBytes: Uint8Array, ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg"): Promise<{ bytes: Uint8Array; durationMs: number | null }> {
   if (!videoBytes.byteLength || videoBytes.byteLength > MAX_VIDEO_BYTES) throw new Error("The video is empty or larger than 80 MB.");
@@ -83,36 +98,26 @@ function transcriptSegments(body: unknown): { text: string; segments: ResearchSe
 export async function transcribeVideo(
   videoBytes: Uint8Array,
   options: {
-    env?: { OPENAI_API_KEY?: string; OPENAI_TRANSCRIPTION_MODEL?: string; FFMPEG_PATH?: string };
+    env?: { WHISPERX_PATH?: string; WHISPERX_MODEL?: string; WHISPERX_DEVICE?: string; FFMPEG_PATH?: string };
     extractAudio?: AudioExtractor;
-    fetchImpl?: typeof fetch;
+    transcribeLocal?: LocalTranscriber;
   } = {},
 ): Promise<TranscriptionResult> {
   const contentHash = createHash("sha256").update(videoBytes).digest("hex");
   const env = options.env ?? process.env;
-  const key = env.OPENAI_API_KEY?.trim() ?? "";
-  if (!key) return { status: "NOT_CONNECTED", error: "OPENAI_API_KEY is not configured. No transcript was created.", contentHash };
   if (!videoBytes.byteLength || videoBytes.byteLength > MAX_VIDEO_BYTES) return { status: "failed", error: "The video is empty or larger than 80 MB.", contentHash };
-  const model = env.OPENAI_TRANSCRIPTION_MODEL?.trim() || "whisper-1";
+  const model = env.WHISPERX_MODEL?.trim() || "small";
+  const device = env.WHISPERX_DEVICE?.trim() || "cpu";
+  const executable = env.WHISPERX_PATH?.trim() || "whisperx";
   try {
     const audio = await (options.extractAudio ?? extractAudioWithFfmpeg)(videoBytes, env.FFMPEG_PATH);
     if (!audio.bytes.byteLength || audio.bytes.byteLength > MAX_AUDIO_BYTES) throw new Error("Extracted audio is empty or larger than 24 MB.");
-    const form = new FormData();
-    form.set("file", new Blob([audio.bytes as BlobPart], { type: "audio/mpeg" }), "research-audio.mp3");
-    form.set("model", model);
-    form.set("response_format", "verbose_json");
-    form.append("timestamp_granularities[]", "segment");
-    const response = await (options.fetchImpl ?? fetch)("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { authorization: `Bearer ${key}` },
-      body: form,
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!response.ok) return { status: "failed", error: `OpenAI transcription returned ${response.status}.`, contentHash };
-    const parsed = transcriptSegments(await response.json());
-    if (!parsed.text.trim()) return { status: "no_speech", transcript: "", segments: [], provider: "openai", model, contentHash, durationMs: audio.durationMs };
-    return { status: "transcribed", transcript: parsed.text, segments: parsed.segments, provider: "openai", model, contentHash, durationMs: audio.durationMs };
+    const result = await (options.transcribeLocal ?? runWhisperX)(audio.bytes, { model, device, executable });
+    const parsed = transcriptSegments(result);
+    if (!parsed.text.trim()) return { status: "no_speech", transcript: "", segments: [], provider: "local:whisperx", model, contentHash, durationMs: audio.durationMs };
+    return { status: "transcribed", transcript: parsed.text, segments: parsed.segments, provider: "local:whisperx", model, contentHash, durationMs: audio.durationMs };
   } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return { status: "NOT_CONNECTED", error: `${executable} is not installed or WHISPERX_PATH is incorrect. No transcript was created.`, contentHash };
     return { status: "failed", error: error instanceof Error ? error.message : "Transcription failed.", contentHash };
   }
 }

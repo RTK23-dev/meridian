@@ -207,10 +207,10 @@ test("experiments allocate traffic and disconnected providers invent nothing", (
   assert.equal(performance.status, "NOT_CONNECTED");
   assert.equal(performance.events.length, 0);
   assert.equal(videoGenerationStatus().status, "NOT_CONNECTED");
-  assert.match(videoGenerationStatus().detail, /XAI_API_KEY/);
-  const configuredVideo = videoGenerationStatus({ videoKey: "present" });
+  assert.match(videoGenerationStatus().detail, /HYPIT_BASE_URL/);
+  const configuredVideo = videoGenerationStatus({ baseUrl: "https://hypit.example" });
   assert.equal(configuredVideo.status, "CONFIGURED");
-  assert.equal(configuredVideo.provider, "xai:video");
+  assert.equal(configuredVideo.provider, "hypit");
   assert.match(configuredVideo.detail, /bytes/);
   assert.equal(videoQa(null).decision, "HUMAN_REVIEW");
   assert.equal(s3ConnectionState({}).status, "NOT_CONNECTED");

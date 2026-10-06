@@ -2008,8 +2008,8 @@ export const attachCreativeImage = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    const creatives = await sql<{ title: string; raw_text: string; hook: string; status: string }>`
-      select title, raw_text, hook, status from creative_records
+    const creatives = await sql<{ title: string; raw_text: string; hook: string; status: string; brief_id: string | null }>`
+      select title, raw_text, hook, status, brief_id from creative_records
       where id = ${data.creativeId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
         and origin <> 'competitor'
       limit 1
@@ -2017,16 +2017,39 @@ export const attachCreativeImage = createServerFn({ method: "POST" })
     const creative = creatives[0];
     if (!creative) throw new Error("Creative not found.");
     if (creative.status === "rejected") throw new Error("Rejected creatives are not illustrated.");
-    const { generateImage } = await import("@/lib/meridian/providers/image.server");
+    const briefRows = creative.brief_id ? await sql<{ decision_id: string }>`
+      select decision_id from briefs
+      where id = ${creative.brief_id} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
+      limit 1
+    ` : [];
+    const jevDecisionId = briefRows[0]?.decision_id ?? "";
+    const { generateNanoBananaImage } = await import("@/lib/meridian/providers/nano-banana.server");
     const prompt = `Advertising still for ${creative.title}. ${creative.hook}. ${creative.raw_text}`.slice(0, 1800);
-    const image = await generateImage(prompt);
-    if (!image.ok) return { status: image.status, message: image.error };
-    await sql`update creative_records set asset_url = ${image.url}, updated_at = now() where id = ${data.creativeId}`;
+    const image = await generateNanoBananaImage({ prompt, promptVersion: "creative-image-v1" });
+    if (image.status !== "ready") return { status: image.status, message: image.error };
+    const assetId = id();
+    const storageKey = `${access.organizationId}/${data.brandId}/creative/${data.creativeId}/${assetId}.png`;
+    await sql`
+      insert into asset_blobs (storage_key, organization_id, brand_id, body, mime_type, checksum, byte_size, version, lifecycle)
+      values (${storageKey}, ${access.organizationId}, ${data.brandId}, ${Buffer.from(image.bytes).toString("base64")}, 'image/png', ${image.sha256}, ${image.bytes.byteLength}, 1, 'stored')
+      on conflict (storage_key) do nothing
+    `;
+    await sql`
+      insert into assets (
+        id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
+        lifecycle, checksum, width, height, byte_size, provider, model, prompt_version, kind, media_status, provenance
+      ) values (
+        ${assetId}, ${access.organizationId}, ${data.brandId}, ${data.creativeId}, 1, ${storageKey}, ${image.sha256},
+        'image/png', 'google:nano-banana', 'stored', 'stored', ${image.sha256}, ${image.width}, ${image.height},
+        ${image.bytes.byteLength}, ${image.provider}, ${image.model}, ${image.promptVersion}, 'image', 'completed', ${`jev-creative-image:${jevDecisionId || "no-decision"}`}
+      )
+    `;
+    await sql`update creative_records set asset_url = ${storageKey}, updated_at = now() where id = ${data.creativeId} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}`;
     const loaded = await loadContext(sql, access.organizationId, data.brandId);
     const product = loaded.products.find((item) => creative.raw_text.includes(item.name) || creative.title.includes(item.name)) ?? loaded.products[0];
     const { readCreativeImage } = await import("@/lib/meridian/providers/vision.server");
     const reading = await readCreativeImage({
-      imageUrl: image.url,
+      imageUrl: `data:image/png;base64,${Buffer.from(image.bytes).toString("base64")}`,
       productName: product?.name ?? "",
       allowedClaims: product?.allowedClaims ?? "",
       prohibitedClaims: [loaded.brain.prohibitedClaims, product?.prohibitedClaims ?? ""].filter(Boolean).join("\n"),

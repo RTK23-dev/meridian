@@ -17,10 +17,10 @@ export type ImageResult =
       latencyMs: number;
       costCents: number | null;
     }
-  | { status: "failed"; provider: string; error: string };
+  | { status: "failed" | "NOT_CONNECTED"; provider: string; error: string };
 
 export type ImageProvider = {
-  id: "test:image" | "xai" | "unconfigured";
+  id: "test:image" | "unconfigured";
   generate: (input: { prompt: string; seed: string; promptVersion: string }) => ImageResult;
 };
 
@@ -78,16 +78,8 @@ export function testImageProvider(allow: boolean, failuresLeft = 0): ImageProvid
 }
 
 /** A live image adapter is selected only when that vendor is configured. A text key is not an image model. */
-export function selectImageProvider(env: { imageProvider?: string; xaiKey?: string }, allowTest: boolean): ImageProvider {
+export function selectImageProvider(env: { imageProvider?: string }, allowTest: boolean): ImageProvider {
   if (env.imageProvider === "test:image") return testImageProvider(allowTest);
-  if (env.xaiKey?.trim() && env.imageProvider === "xai") {
-    return {
-      id: "xai",
-      generate() {
-        return { status: "failed", provider: "xai", error: "The xAI image adapter must be called from the server. No image was invented." };
-      },
-    };
-  }
   return {
     id: "unconfigured",
     generate() {

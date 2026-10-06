@@ -37,18 +37,16 @@ async function recordAdFailure(sql: Sql, input: { organizationId: string; brandI
 
 async function transcriptForVideo(sql: Sql, videoBytes: Uint8Array, input: { organizationId: string; brandId: string; adId: string }): Promise<TranscriptionResult> {
   const hash = sha256(videoBytes);
-  const model = process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() || "whisper-1";
-  const key = process.env.OPENAI_API_KEY?.trim() ?? "";
-  if (!key) return { status: "NOT_CONNECTED", error: "OPENAI_API_KEY is not configured.", contentHash: hash };
+  const model = process.env.WHISPERX_MODEL?.trim() || "small";
   const cached = await sql<{ id: string; status: string; transcript: string; segments: string; duration_ms: number | null }>`
     select id, status, transcript, segments, duration_ms from research_transcript_cache
-    where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and content_hash = ${hash} and provider = 'openai' and model = ${model}
+    where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and content_hash = ${hash} and provider = 'local:whisperx' and model = ${model}
     limit 1
   `;
   if (cached[0]) {
     const row = cached[0];
-    if (row.status === "no_speech") return { status: "no_speech", transcript: "", segments: [], provider: "openai", model, contentHash: hash, durationMs: row.duration_ms };
-    return { status: "transcribed", transcript: row.transcript, segments: parseSegments(row.segments), provider: "openai", model, contentHash: hash, durationMs: row.duration_ms };
+    if (row.status === "no_speech") return { status: "no_speech", transcript: "", segments: [], provider: "local:whisperx", model, contentHash: hash, durationMs: row.duration_ms };
+    return { status: "transcribed", transcript: row.transcript, segments: parseSegments(row.segments), provider: "local:whisperx", model, contentHash: hash, durationMs: row.duration_ms };
   }
   return transcribeVideo(videoBytes);
 }

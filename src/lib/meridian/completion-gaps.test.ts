@@ -12,7 +12,6 @@ import { assessPublishing } from "./publishing/readiness.ts";
 import { classifyDuplicate, judgeMedia } from "./studio/features.ts";
 import type { Sql } from "./learning/store.ts";
 import { measureLogo, measurePalette } from "./vision/measure.ts";
-import { pollXaiVideo, submitXaiVideo } from "./video/xai.ts";
 import type { BrainSlice, ObservedCreative } from "./domain.ts";
 
 function png(width: number, height: number, paint: (x: number, y: number) => [number, number, number]): Uint8Array {
@@ -305,49 +304,6 @@ test("external semantic does not invent a vector", async () => {
   });
   assert.equal(vectors[0]?.provider, "external:semantic");
   assert.equal(vectors[0]?.kind, "semantic");
-});
-
-test("xai video stores bytes only after the provider returns them", async () => {
-  const missing = await submitXaiVideo({ prompt: "bar", apiKey: "" });
-  assert.equal(missing.status, "not_connected");
-  assert.equal(missing.bytes, null);
-  const calls: string[] = [];
-  const submitted = await submitXaiVideo({
-    prompt: "bar",
-    apiKey: "key",
-    transport: async (request) => {
-      calls.push(request.url);
-      return { status: 200, body: JSON.stringify({ request_id: "req-1" }), headers: {} };
-    },
-  });
-  assert.equal(submitted.providerJobId, "req-1");
-  assert.equal(submitted.bytes, null);
-  const pending = await pollXaiVideo(submitted, {
-    apiKey: "key",
-    transport: async () => ({ status: 200, body: JSON.stringify({ status: "pending" }), headers: {} }),
-  });
-  assert.equal(pending.status, "processing");
-  assert.equal(pending.bytes, null);
-  const clip = new Uint8Array(32);
-  clip.set([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70], 0);
-  const done = await pollXaiVideo(submitted, {
-    apiKey: "key",
-    transport: async () => ({
-      status: 200,
-      body: JSON.stringify({ status: "done", video: { url: "https://vidgen.x.ai/clip.mp4", duration: 6 } }),
-      headers: {},
-    }),
-    download: async () => clip,
-  });
-  assert.equal(done.status, "completed");
-  assert.equal(done.bytes?.byteLength, 32);
-  const broken = await pollXaiVideo(submitted, {
-    apiKey: "key",
-    transport: async () => ({ status: 200, body: JSON.stringify({ status: "done", video: {} }), headers: {} }),
-  });
-  assert.equal(broken.status, "failed");
-  assert.equal(broken.bytes, null);
-  assert.ok(calls.every((url) => url.startsWith("https://api.x.ai/")));
 });
 
 test("an invitation email is one-time and does not keep the raw token", async () => {

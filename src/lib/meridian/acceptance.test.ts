@@ -104,16 +104,16 @@ test("external advertising evidence flows through JEV Research, opportunity, dec
   if (collected.status !== "CONNECTED") return;
   const videoBytes = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50]);
   const transcript = await transcribeVideo(videoBytes, {
-    env: { OPENAI_API_KEY: "configured-for-test" },
+    env: {},
     extractAudio: async () => ({ bytes: new Uint8Array([1, 2, 3]), durationMs: 5000 }),
-    fetchImpl: async () => new Response(JSON.stringify({
+    transcribeLocal: async () => ({
       text: "Dry hands? Try gentle soap. Shop now.",
       segments: [
         { start: 0, end: 1.5, text: "Dry hands?" },
         { start: 1.5, end: 4, text: "Try gentle soap." },
         { start: 4, end: 5, text: "Shop now." },
       ],
-    }), { status: 200 }),
+    }),
   });
   assert.equal(transcript.status, "transcribed");
   if (transcript.status !== "transcribed") return;
@@ -295,22 +295,22 @@ test("Meta snapshot media extraction accepts only explicit public Meta-hosted vi
 
 test("JEV Research transcription is explicit, timestamped, and content-hash reusable", async () => {
   const video = new Uint8Array([1, 2, 3, 4]);
-  const unavailable = await transcribeVideo(video, { env: {}, extractAudio: async () => { throw new Error("must not extract"); } });
-  assert.equal(unavailable.status, "NOT_CONNECTED");
+  let usedLocalRunner = false;
   const result = await transcribeVideo(video, {
-    env: { OPENAI_API_KEY: "fixture-key" },
+    env: { WHISPERX_MODEL: "small" },
     extractAudio: async () => ({ bytes: new Uint8Array([9, 8, 7]), durationMs: 4200 }),
-    fetchImpl: async (_url, init) => {
-      assert.match(String(init?.headers && new Headers(init.headers).get("authorization")), /^Bearer fixture-key$/);
-      const form = init?.body as FormData;
-      assert.equal(form.get("model"), "whisper-1");
-      return new Response(JSON.stringify({ text: "Dry hands? Try this soap. Shop now.", segments: [{ text: "Dry hands?", start: 0, end: 1.2 }, { text: "Try this soap. Shop now.", start: 1.2, end: 4.2 }] }), { status: 200 });
+    transcribeLocal: async (bytes, options) => {
+      usedLocalRunner = true;
+      assert.deepEqual([...bytes], [9, 8, 7]);
+      assert.equal(options.model, "small");
+      return { text: "Dry hands? Try this soap. Shop now.", segments: [{ text: "Dry hands?", start: 0, end: 1.2 }, { text: "Try this soap. Shop now.", start: 1.2, end: 4.2 }] };
     },
   });
+  assert.equal(usedLocalRunner, true);
   assert.equal(result.status, "transcribed");
   if (result.status !== "transcribed") throw new Error("expected transcript");
-  assert.equal(result.provider, "openai");
-  assert.equal(result.model, "whisper-1");
+  assert.equal(result.provider, "local:whisperx");
+  assert.equal(result.model, "small");
   assert.equal(result.contentHash.length, 64);
   assert.equal(result.segments[1]?.startMs, 1200);
   assert.equal(result.segments[1]?.endMs, 4200);

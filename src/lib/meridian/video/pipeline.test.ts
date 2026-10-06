@@ -5,8 +5,6 @@ import { judgeMedia, rollupDecision } from "../studio/features.ts";
 import { TEST_VIDEO_MAX_POLLS } from "../studio/media-work.ts";
 import { inspectVideo, videoFactsFromInspection } from "./inspect.ts";
 import { readMp4Timing, videoQa } from "./provider.ts";
-import { pollXaiVideo, submitXaiVideo } from "./xai.ts";
-import type { Transport } from "../providers/http.ts";
 
 const prompt = "Show the lather. Do not invent a cure. secret-prompt-line";
 
@@ -42,34 +40,8 @@ test("the test fixture stores timing and frames and does not copy the prompt int
   assert.equal(stripped.transcript, "");
 });
 
-test("a disabled test provider and a missing xAI key do not invent a clip", async () => {
+test("a disabled test provider does not invent a clip", () => {
   assert.throws(() => startTestVideo({ prompt, seed: "x", promptVersion: "v" }, false), /not enabled/);
-  const missing = await submitXaiVideo({ prompt, apiKey: "" });
-  assert.equal(missing.status, "not_connected");
-  assert.equal(missing.bytes, null);
-  assert.match(missing.error, /EXTERNAL_CONNECTION_REQUIRED/);
-});
-
-test("a video provider failure is retried, and a malformed response is not stored", async () => {
-  let calls = 0;
-  const recovered = await submitXaiVideo({
-    prompt,
-    apiKey: "test-key",
-    transport: (async () => {
-      calls += 1;
-      if (calls === 1) return { status: 503, body: "", headers: { "retry-after": "0" } };
-      return { status: 200, body: JSON.stringify({ request_id: "req-9" }), headers: { "retry-after": "0" } };
-    }) satisfies Transport,
-  });
-  assert.equal(recovered.status, "submitted");
-  assert.equal(recovered.providerJobId, "req-9");
-  assert.ok(calls >= 2);
-  const malformed = await pollXaiVideo(
-    { ...recovered, status: "submitted" },
-    { apiKey: "test-key", transport: async () => ({ status: 200, body: "{", headers: {} }) },
-  );
-  assert.equal(malformed.status, "failed");
-  assert.equal(malformed.bytes, null);
   assert.equal(TEST_VIDEO_MAX_POLLS, 4);
 });
 

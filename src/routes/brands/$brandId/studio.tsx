@@ -190,11 +190,11 @@ function Studio({ brandId }: { brandId: string }) {
                 });
               }}
             >
-              <Field label="Image provider" hint="test:image is not a live account. xai:image runs only when that key can return bytes.">
-                <SelectInput name="imageProvider" defaultValue="" required>
-                  <option value="" disabled>Choose</option>
+              <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently.">
+                <SelectInput name="imageProvider" defaultValue="none" required>
+                  <option value="none">No images</option>
                   <option value="test:image">test:image</option>
-                  <option value="xai:image">xai:image</option>
+                  <option value="google:nano-banana">Google AI Studio · Nano Banana</option>
                 </SelectInput>
               </Field>
               <Field label="Video" hint="Hypit renders the approved brief. It is not connected until HYPIT_BASE_URL is set. No clip is invented.">
@@ -204,7 +204,7 @@ function Studio({ brandId }: { brandId: string }) {
                 </SelectInput>
               </Field>
               <div className="md:col-span-2">
-                <Button type="submit" disabled={busy.pending || brief.status !== "ready"}>Generate 3 image + 3 video variants</Button>
+                <Button type="submit" disabled={busy.pending || brief.status !== "ready"}>Generate optional images + Hypit video</Button>
                 <p className="mt-2 text-sm text-muted">Estimated generation cost is not shown until a provider returns one. A run is blocked when the daily or concurrency limit is already used.</p>
               </div>
             </form>

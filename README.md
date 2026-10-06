@@ -40,7 +40,7 @@ Open the app, create an account, and add a brand. Without `DATABASE_URL`, the pr
 - Manual market observations, public-page fetch, and semantic clustering with a local MiniLM model.
 - Meta Ad Library video-ad collection, verified source media storage, timestamped transcription, confidence-rated structured JEV Research, and observed cross-ad pattern summaries. Research does not assert effectiveness from frequency.
 - Opportunity ranking, JEV decisions, briefs, text QA, and human review.
-- Studio image jobs still use the image provider you select. Studio video uses Hypit after JEV approval. `test:video` and `xai:video` are not the production video path.
+- JEV uses OpenRouter as its only external model gateway. Optional Studio images can use Google AI Studio / Nano Banana. Studio production video uses Hypit after JEV approval.
 - A Hypit MP4 is stored only after the separate process returns bytes. Missing vision evidence does not auto-approve.
 - Manual performance and learning that changes the next rank and the next brief.
 - Provider clients for Meta, TikTok, Google Ads, and the Meta Ad Library. They store an id only after the response contains one.
@@ -53,13 +53,14 @@ Open the app, create an account, and add a brand. Without `DATABASE_URL`, the pr
 | --- | --- | --- |
 | Meta ads | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, and for OAuth `META_APP_ID`, `META_APP_SECRET` | Not configured. Nothing is published. |
 | Meta Ad Library | `META_AD_LIBRARY_TOKEN` | No ads are collected. |
-| JEV Research transcription | `OPENAI_API_KEY`; `ffmpeg` and `ffprobe` on the worker | No transcript is created. |
+| JEV model gateway | `OPENROUTER_API_KEY` | Model-backed JEV actions report not configured. |
+| JEV Research transcription | local WhisperX; `ffmpeg` and `ffprobe` on the worker | Research transcription reports `NOT_CONNECTED`; no hosted API fallback is used. |
 | TikTok ads | `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, and for OAuth `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET` | No campaign is created. |
 | Google Ads | `GOOGLE_ADS_ACCESS_TOKEN`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, and for OAuth `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET` | No customer is listed. |
 | Token storage and webhooks | `TOKEN_ENCRYPTION_KEY`, `WEBHOOK_SECRET` | Tokens are not stored. Webhook posts are rejected. |
 | Object storage | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Files stay on the filesystem provider. |
 | Video | `HYPIT_BASE_URL` on a separate Hypit 0.2.17 process, with `ffmpeg` and `ffprobe` | Studio reports `HYPIT_NOT_CONNECTED`. No clip is stored. |
-| Images and optional chat | `XAI_API_KEY` | Image generation says the model is unavailable. |
+| Optional images | `GOOGLE_AI_STUDIO_API_KEY` | Images are skipped; JEV and Hypit video continue. |
 | External embeddings | `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY` | Local MiniLM is used. No vector is invented for the missing API. |
 | Invite email | `EMAIL_API_URL`, `EMAIL_API_KEY` | The invitation is stored. Nobody is emailed. |
 | Worker and scheduler | `DATABASE_URL` on a long-lived host | The web process does not run their loops. |
@@ -105,7 +106,7 @@ GitHub Actions runs the same checks on `main` and on a published release. This a
 | Decision loop, JEV, learning write-back | In this beta. A stored result can change the next rank and brief. |
 | Hypit video | In this beta as a handoff. The runtime is a separate process. This repo does not include Hypit source. |
 | Local semantic embeddings, worker, scheduler, filesystem storage | In this beta. |
-| xAI images | Adapter remains. A file is stored only after bytes come back. Video does not use xAI. |
+| Optional Nano Banana images | Google AI Studio integration is optional. No image credentials are required for JEV or Hypit. |
 | S3, Meta, TikTok, Google Ads, Ad Library | External connection required. |
 | Invite email | Stored always. Sent only when the email API answers. |
 | Live ads and live metrics | Not running from this repository. Test performance is labeled `test:performance`. |

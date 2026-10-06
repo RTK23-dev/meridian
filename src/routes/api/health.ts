@@ -23,7 +23,7 @@ export const Route = createFileRoute("/api/health")({
           localSemantic: localSemanticModel().kind,
           externalEmbeddings: embeddingProviderState({ openRouterKey: process.env.OPENROUTER_API_KEY }).status,
           providers: (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => accountProviderState(provider).status),
-          video: videoGenerationStatus({ videoKey: process.env.XAI_API_KEY }).status,
+          video: videoGenerationStatus({ baseUrl: process.env.HYPIT_BASE_URL }).status,
           jobs: null,
         };
         try {

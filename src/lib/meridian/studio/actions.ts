@@ -38,11 +38,11 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
     const imageProvider = clip(body.imageProvider);
     const videoProvider = clip(body.videoProvider);
     if (!brandId || !briefId) throw new Error("Choose a brief.");
-    if (imageProvider !== "test:image" && imageProvider !== "xai:image") {
-      throw new Error("Choose an image provider. test:image is explicit and off until you select it.");
+    if (imageProvider !== "none" && imageProvider !== "test:image" && imageProvider !== "google:nano-banana") {
+      throw new Error("Choose no image provider or an optional supported image provider.");
     }
     if (videoProvider !== "hypit") {
-      throw new Error("Video generation uses the separate Hypit runtime. xAI and test:video are not this path.");
+      throw new Error("Video generation uses the separate Hypit runtime.");
     }
     return { brandId, briefId, imageProvider, videoProvider };
   })

@@ -10,6 +10,8 @@ Credentials without a successful request stay `NOT_CONFIGURED`. `HEALTHY` means 
 
 ## Live clients
 
+JEV uses OpenRouter as its only external LLM gateway (`OPENROUTER_API_KEY` and `OPENROUTER_MODEL`). Research transcription runs locally through WhisperX after local ffmpeg extraction. Optional Google AI Studio / Nano Banana image generation uses `GOOGLE_AI_STUDIO_API_KEY`; missing configuration does not block JEV or Hypit. Hypit is the only production video engine.
+
 | Provider | Probe | Publish |
 | --- | --- | --- |
 | Meta | `GET /me`, ad accounts, granted permissions | Paused campaign, ad set, creative, and ad on Graph API v21.0 |
@@ -30,7 +32,8 @@ Rate limits: HTTP 429 and 5xx are retried up to three times, honoring `Retry-Aft
 - OAuth starts at `/api/oauth/callback`. The server checks state, exchanges the code, and seals the access token and any refresh token. `META_APP_ID`, `META_APP_SECRET`, `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, and `TOKEN_ENCRYPTION_KEY` have to exist or nothing is stored. The token is not put in the redirect.
 - `POST /api/webhooks/receive` verifies `WEBHOOK_SECRET`, a timestamp window, the signature, JSON, a new event id, and a known account, then enqueues `webhook.received`. Creating the subscription in Meta, TikTok, or Google is still an external step.
 - Performance sync is a worker job. The learning page can save a schedule only after a connection probe has succeeded. Disconnect disables that provider's schedule. Reconnect enables it again only if the probe succeeds.
-- Studio video uses a separate Hypit process. Set `HYPIT_BASE_URL`. Meridian does not vendor Hypit and does not fall back to xAI or `test:video`. The job is stored only after the process returns MP4 bytes. `HYPIT_NOT_CONNECTED` means no bytes were requested. Missing vision evidence stays in human review. No transcript is invented. The xAI video adapter remains in the tree and is not the Studio path.
+- Studio video uses a separate Hypit process. Set `HYPIT_BASE_URL`. Meridian does not vendor Hypit and does not fall back to another video provider. The job is stored only after the process returns MP4 bytes. `HYPIT_NOT_CONNECTED` means no bytes were requested. Missing vision evidence stays in human review. No transcript is invented.
 - JEV Research uses the Meta Ad Library as its first external advertising source. `META_AD_LIBRARY_TOKEN` is required; requests are bounded to 100 video records and are deduplicated. A snapshot is only ingested when it exposes an explicit downloadable video URL on an allowed public Meta media host. Missing media is marked unavailable, not substituted. Stored MP4 bytes are verified and checksummed; each source video is limited to 24 MB and each run to 100 MB of media.
-- JEV Research transcription uses OpenAI audio transcription (`OPENAI_API_KEY`, default model `whisper-1`) after `ffprobe` validation and `ffmpeg` audio extraction on the worker host. JEV structured analysis uses the already configured `XAI_API_KEY` or `OPENROUTER_API_KEY` chat provider; no new JEV chat provider is added. Without either connection, transcript/analysis states remain not connected.
+- JEV Research transcription uses local WhisperX (`WHISPERX_PATH`, default executable `whisperx`; `WHISPERX_MODEL` defaults to `small`; `WHISPERX_DEVICE` defaults to `cpu`) after `ffprobe` validation and `ffmpeg` audio extraction on the worker host. JEV structured analysis uses OpenRouter. Missing local transcription runtime or OpenRouter credentials remain explicit `NOT_CONNECTED` states; no hosted transcription fallback is used.
+- Optional image generation uses Google AI Studio / Nano Banana (`GOOGLE_AI_STUDIO_API_KEY`, default model `gemini-3.1-flash-image`). Missing image configuration skips optional image creation and does not block JEV or Hypit.
 - No live call is made by the unit tests. Parser tests use a scripted transport in the test file.

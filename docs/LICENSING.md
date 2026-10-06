@@ -21,6 +21,6 @@ Allowed usage for the MIT and Apache-2.0 packages is the ordinary dependency use
 - MPL-2.0 on Lightning CSS: modifications to Lightning CSS itself would need to stay under MPL. We have not modified it.
 - Nothing in this list grants the right to copy a proprietary ad platform, a closed model, or another product's source.
 
-Provider calls go to xAI or OpenRouter under those vendors' API terms when a key is configured. That is not a source dependency.
+JEV model calls go to OpenRouter under its API terms when configured. Optional images go to Google AI Studio only when configured. These are runtime API calls, not source dependencies.
 
 `package.json` is the inventory. Re-read a package's `license` field before adding another one.
