@@ -1,10 +1,10 @@
-# Meridian is an application, not an npm library.
-# Releases are GitHub Releases. This workflow only checks the tagged commit.
-name: Release check
+name: CI
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   check:

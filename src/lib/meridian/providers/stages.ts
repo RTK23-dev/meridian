@@ -1,4 +1,4 @@
-import { openSecret } from "../oauth/flow.ts";
+import { openSecret } from "../oauth/flow.server.ts";
 import { stageAuditRecord } from "./evidence.ts";
 import { reusableExternalId, type StoredExternalId } from "./ownership.ts";
 

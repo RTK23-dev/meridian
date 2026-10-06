@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
-import { exchangeOauthCode, hashOauthState, oauthStateMatches, sealSecret } from "@/lib/meridian/oauth/flow";
+import { exchangeOauthCode, hashOauthState, oauthStateMatches, sealSecret } from "@/lib/meridian/oauth/flow.server";
 import { liveTransport } from "@/lib/meridian/providers/http";
 
 export const Route = createFileRoute("/api/oauth/callback")({

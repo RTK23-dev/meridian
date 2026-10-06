@@ -1,5 +1,7 @@
 # Deployment
 
+Local install steps are in [SETUP.md](SETUP.md). This page is the process split for a host.
+
 Meridian is a web process plus two long-lived processes. A serverless request must not be the worker.
 
 ```

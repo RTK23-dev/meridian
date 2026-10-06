@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
-import { authorizationUrl, hashOauthState, newOauthState, type OauthProvider } from "./flow.ts";
 
 export const beginOauth = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
@@ -15,6 +14,7 @@ export const beginOauth = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { authorizationUrl, hashOauthState, newOauthState } = await import("./flow.server.ts");
     const sql = await getSql();
     const members = await sql<{ role: string }>`
       select role from memberships where user_id = ${context.userId} and organization_id = ${data.organizationId} limit 1
@@ -24,7 +24,9 @@ export const beginOauth = createServerFn({ method: "POST" })
     assertRole(role, "admin");
     const state = newOauthState();
     const redirectUri = `${data.origin}/api/oauth/callback?provider=${data.provider}`;
-    const built = authorizationUrl(data.provider as OauthProvider, { state, redirectUri, env: process.env });
+    const provider = data.provider === "meta" || data.provider === "tiktok" || data.provider === "google" ? data.provider : null;
+    if (!provider) throw new Error("Unknown provider.");
+    const built = authorizationUrl(provider, { state, redirectUri, env: process.env });
     if ("error" in built) throw new Error(built.error);
     await sql`
       insert into oauth_states (state_hash, organization_id, provider, expires_at)

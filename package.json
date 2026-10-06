@@ -1,6 +1,8 @@
 {
-  "name": "app-builder-workspace",
+  "name": "meridian",
+  "version": "0.1.0-beta.1",
   "private": true,
+  "description": "Meridian is a multi-tenant advertising operating system.",
   "sideEffects": false,
   "type": "module",
   "overrides": {
@@ -9,7 +11,10 @@
   "scripts": {
     "dev": "node scripts/with-app-env.mjs vite dev --host 0.0.0.0 --port 8080",
     "build": "node scripts/with-app-env.mjs vite build && node scripts/copy-pglite-assets.mjs && npm run db:migrate",
-    "db:migrate": "node scripts/migrate.mjs",
+    "db:migrate": "node scripts/with-dotenv.mjs node scripts/migrate.mjs",
+    "db:local": "node scripts/with-dotenv.mjs node scripts/database.mjs",
+    "worker": "node scripts/with-dotenv.mjs node --experimental-strip-types scripts/worker-entry.ts",
+    "scheduler": "node scripts/with-dotenv.mjs node --experimental-strip-types scripts/scheduler-entry.ts",
     "build:dev": "node scripts/with-app-env.mjs vite build --mode development",
     "preview": "node scripts/with-app-env.mjs vite preview",
     "preview:restart": "node scripts/preview.mjs restart",

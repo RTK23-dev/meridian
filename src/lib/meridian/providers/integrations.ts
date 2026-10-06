@@ -5,7 +5,7 @@ export const INTEGRATIONS = [
   {
     id: "ad_library",
     status: "NOT_CONNECTED" as const,
-    detail: "No ad-library connector is implemented. Competitor rows come only from what a person records.",
+    detail: "Meta Ad Library client is implemented. It stays not connected until META_AD_LIBRARY_TOKEN is set and a request succeeds. No ads are collected before that.",
   },
   {
     id: "meta_publish",
@@ -19,8 +19,8 @@ export const INTEGRATIONS = [
   },
   {
     id: "neural_embedding",
-    status: "NOT_CONNECTED" as const,
-    detail: "No neural embedding model is configured.",
+    status: "AVAILABLE" as const,
+    detail: "local:semantic (MiniLM) runs in process. An external embeddings API stays not connected until EXTERNAL_SEMANTIC_URL and EXTERNAL_SEMANTIC_KEY are set.",
   },
   {
     id: "lexical_similarity",
@@ -30,11 +30,11 @@ export const INTEGRATIONS = [
   {
     id: "performance_feed",
     status: "NOT_CONNECTED" as const,
-    detail: "Performance is entered by hand into the same observation table a connector would use.",
+    detail: "Manual performance entry is available. Meta, TikTok, and Google insight sync stay not connected until a healthy account exists. No metrics are invented.",
   },
   {
     id: "video",
     status: "NOT_CONNECTED" as const,
-    detail: "No video provider is connected. No clip is generated.",
+    detail: "The xAI video adapter is implemented. It stays not connected until XAI_API_KEY is set and a job returns bytes. test:video is off unless a test enables it. No clip is invented.",
   },
 ] as const satisfies readonly { id: string; status: IntegrationStatus; detail: string }[];

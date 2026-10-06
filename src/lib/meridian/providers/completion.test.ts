@@ -4,7 +4,7 @@ import { learnPatterns } from "../learning/engine.ts";
 import { deliverAlert, dedupeAlert } from "../alerts/deliver.ts";
 import { approvedThresholds } from "../calibration/active.ts";
 import { approveThresholdChange, proposeThresholdChange } from "../calibration/propose.ts";
-import { authorizationUrl, exchangeOauthCode, hashOauthState, oauthStateMatches, openSecret, sealSecret } from "../oauth/flow.ts";
+import { authorizationUrl, exchangeOauthCode, hashOauthState, oauthStateMatches, openSecret, sealSecret } from "../oauth/flow.server.ts";
 import { operationRecord, redactSecrets } from "../observability/redact.ts";
 import { ingestPerformanceRows, metaInsightEvent } from "../performance/sync.ts";
 import { performanceScheduleDecision } from "../performance/schedule.ts";

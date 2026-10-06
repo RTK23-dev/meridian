@@ -7,6 +7,7 @@ dist
 .vercel
 .env
 .env.*
+!.env.example
 *.log
 screenshots
 artifacts

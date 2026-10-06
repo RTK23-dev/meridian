@@ -3,7 +3,6 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
 import { liveTransport } from "../providers/http.ts";
-import { openSecret, refreshOauthToken, sealSecret, type OauthProvider } from "./flow.ts";
 
 export const refreshStoredToken = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
@@ -15,6 +14,7 @@ export const refreshStoredToken = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { openSecret, refreshOauthToken, sealSecret } = await import("./flow.server.ts");
     const sql = await getSql();
     const members = await sql<{ role: string }>`
       select role from memberships where user_id = ${context.userId} and organization_id = ${data.organizationId} limit 1
@@ -31,7 +31,9 @@ export const refreshStoredToken = createServerFn({ method: "POST" })
     if (!sealed) return { status: "missing" as const, detail: "No refresh token is stored. Connect again. Nothing was rotated." };
     const opened = openSecret(sealed, process.env.TOKEN_ENCRYPTION_KEY ?? "");
     if (typeof opened !== "string") return { status: "missing" as const, detail: opened.error };
-    const refreshed = await refreshOauthToken(data.provider as OauthProvider, { refreshToken: opened, env: process.env }, liveTransport());
+    const provider = data.provider === "meta" || data.provider === "tiktok" || data.provider === "google" ? data.provider : null;
+    if (!provider) throw new Error("Unknown provider.");
+    const refreshed = await refreshOauthToken(provider, { refreshToken: opened, env: process.env }, liveTransport());
     if ("error" in refreshed) return { status: "failed" as const, detail: refreshed.error };
     const next = sealSecret(refreshed.accessToken, process.env.TOKEN_ENCRYPTION_KEY ?? "");
     const nextRefresh = sealSecret(refreshed.refreshToken, process.env.TOKEN_ENCRYPTION_KEY ?? "");

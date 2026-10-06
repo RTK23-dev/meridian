@@ -4,7 +4,6 @@ import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { isLiveProvider, phaseForProbe, probeLive, providerConfigured, type LiveProvider } from "./live.ts";
 import { liveTransport } from "./http.ts";
-import { openAccessToken } from "./stages.ts";
 
 export type { LiveProvider };
 export { isLiveProvider, phaseForProbe, probeLive, providerConfigured, publishPausedCampaign } from "./live.ts";
@@ -43,6 +42,7 @@ async function saveProbe(organizationId: string, provider: LiveProvider, userId:
   const sealed = secrets[0]?.sealed_token ?? "";
   let accessToken = "";
   if (sealed.trim()) {
+    const { openAccessToken } = await import("./stages.ts");
     const opened = openAccessToken({ sealed, key: process.env.TOKEN_ENCRYPTION_KEY ?? "", envToken: "" });
     if ("error" in opened) {
       await sql`

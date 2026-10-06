@@ -5,7 +5,7 @@ import { calibrationVisible, proposalCreateDecision, reviewerRowsFromStored } fr
 import { buildBrief } from "../brief/engine.ts";
 import type { BrainSlice, ObservedCreative, PerformanceRow } from "../domain.ts";
 import { learnPatterns } from "../learning/engine.ts";
-import { refreshOauthToken } from "../oauth/flow.ts";
+import { refreshOauthToken } from "../oauth/flow.server.ts";
 import { rankOpportunities } from "../opportunity/engine.ts";
 import { loadProviderInsights } from "../performance/fetch.ts";
 import { shouldEnqueueLearning } from "../performance/job.ts";

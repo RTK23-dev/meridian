@@ -26,7 +26,7 @@ export function generateVideo(): ProviderOutcome<{ url: string }> {
   return {
     status: "NOT_CONNECTED",
     value: null,
-    detail: "No video provider is connected. No clip was generated.",
+    detail: "This function does not call a video model. Studio uses the xAI adapter only when XAI_API_KEY is set, and stores a clip only after bytes return. No clip was generated.",
   };
 }
 
