@@ -2,6 +2,7 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-r
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { WorkspaceProvider } from "@/components/workspace";
+import { ThemeProvider, themeBootstrap, Toaster } from "@/components/ui";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -9,6 +10,7 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "color-scheme", content: "light dark" },
       { title: "Meridian" },
       { name: "theme-color", content: "#f3f0e7" },
     ],
@@ -17,12 +19,6 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Source+Sans+3:wght@400;600;700&display=swap",
-      },
     ],
   }),
   component: () => (
@@ -31,13 +27,17 @@ export const Route = createRootRoute({
         <HeadContent />
       </head>
       <body>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
         <a className="skip-link" href="#main">Skip to main content</a>
         <PreviewHostBridge />
-        <AuthProvider>
-          <WorkspaceProvider>
-            <Outlet />
-          </WorkspaceProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <WorkspaceProvider>
+              <Outlet />
+            </WorkspaceProvider>
+          </AuthProvider>
+          <Toaster />
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>

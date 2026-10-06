@@ -1,4 +1,18 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { cn } from "@/lib/cn";
+import { Button as DesignButton } from "./ui/button";
+import { Card } from "./ui/card";
+import { Field as DesignField, useFieldIds } from "./ui/field";
+import { ErrorNotice } from "./ui/feedback";
+import { Input, Textarea } from "./ui/controls";
+import type { ButtonProps } from "./ui/button";
+
+export * from "./ui/index";
+export function Button(props: ButtonProps) {
+  return <DesignButton {...props} />;
+}
+export const Field = DesignField;
+export { Card as Panel };
 
 export function errorText(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -6,80 +20,21 @@ export function errorText(error: unknown): string {
   return "Something went wrong.";
 }
 
-export function Button({
-  variant = "primary",
-  className = "",
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "quiet" | "danger" }) {
-  const look =
-    variant === "primary"
-      ? "bg-brass text-paper hover:opacity-90"
-      : variant === "danger"
-        ? "border border-danger bg-panel text-danger hover:bg-paper"
-        : "border border-line bg-panel text-ink hover:bg-paper";
-  return (
-    <button
-      {...props}
-      className={`inline-flex min-h-11 items-center justify-center rounded-md px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${look} ${className}`}
-    />
-  );
-}
-
-const control =
-  "w-full rounded-md border border-line bg-panel px-3 py-3 text-base text-ink outline-none placeholder:text-muted focus:border-brass";
-
-export function TextInput({ onWheel, type, step, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  const numeric = type === "number";
-  return (
-    <input
-      {...props}
-      type={type}
-      step={numeric ? (step ?? "any") : step}
-      onWheel={(event) => {
-        if (numeric && document.activeElement === event.currentTarget) {
-          event.currentTarget.blur();
-        }
-        onWheel?.(event);
-      }}
-      className={`${control} ${props.className ?? ""}`}
-    />
-  );
+export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  return <Input {...props} />;
 }
 
 export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`${control} min-h-28 ${props.className ?? ""}`} />;
+  return <Textarea {...props} />;
 }
 
-export function SelectInput(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`${control} ${props.className ?? ""}`} />;
-}
-
-export function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <label className="block space-y-2">
-      <span className="block text-sm font-semibold">{label}</span>
-      {children}
-      {hint ? <span className="block text-sm text-muted">{hint}</span> : null}
-    </label>
-  );
-}
-
-export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-lg border border-line bg-panel p-5 ${className}`}>{children}</section>;
+export function SelectInput({ className, id, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  const ids = useFieldIds(id, undefined, undefined);
+  return <select {...props} id={ids.controlId} aria-describedby={ids.describedBy} aria-invalid={ids.invalid || undefined} className={cn("w-full rounded-md border border-border-strong bg-surface px-3 py-3 text-base text-fg outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-55", className)} />;
 }
 
 export function Notice({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-sm text-danger" role="alert">
-      {children}
-    </p>
-  );
+  return <ErrorNotice>{children}</ErrorNotice>;
 }
+
+export { cn };

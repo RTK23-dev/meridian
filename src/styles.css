@@ -1,70 +1,93 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/fraunces";
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
-  --color-ink: #121612;
-  --color-paper: #f3f0e7;
-  --color-panel: #fbf9f4;
-  --color-line: #ddd6c8;
-  --color-muted: #6d675c;
-  --color-brass: #8f6232;
-  --color-danger: #9c3b2e;
+  --font-sans: "Inter Variable", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces Variable", Georgia, serif;
+  --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, monospace;
+
+  --color-bg: #f6f4ee;
+  --color-surface: #ffffff;
+  --color-surface-2: #faf8f3;
+  --color-border: #e4ded1;
+  --color-border-strong: #8f8674;
+  --color-fg: #14170f;
+  --color-fg-muted: #5f5a4e;
+  --color-accent: #8f6232;
+  --color-accent-fg: #ffffff;
+  --color-accent-soft: #f1e6d4;
+  --color-success: #2f6b3f;
+  --color-success-soft: #e3f0e6;
+  --color-warning: #8a5a00;
+  --color-warning-soft: #fbefd2;
+  --color-danger: #a1362a;
+  --color-danger-soft: #f8e1dd;
+  --color-info: #2a5b87;
+  --color-info-soft: #e1ecf6;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgb(20 23 15 / 0.06);
+  --shadow-md: 0 4px 16px rgb(20 23 15 / 0.08);
+
+  /* Backward-compatible aliases while existing screens migrate. */
+  --color-ink: var(--color-fg);
+  --color-paper: var(--color-bg);
+  --color-panel: var(--color-surface);
+  --color-line: var(--color-border);
+  --color-muted: var(--color-fg-muted);
+}
+
+.dark {
+  --color-bg: #0f110d;
+  --color-surface: #171a14;
+  --color-surface-2: #1d2118;
+  --color-border: #2b3025;
+  --color-border-strong: #75806b;
+  --color-fg: #f0ede4;
+  --color-fg-muted: #a9a496;
+  --color-accent: #d6a064;
+  --color-accent-fg: #1a1208;
+  --color-accent-soft: #2e2415;
+  --color-success: #6fbf86;
+  --color-success-soft: #14261a;
+  --color-warning: #e0b04d;
+  --color-warning-soft: #2a2110;
+  --color-danger: #ef8a7c;
+  --color-danger-soft: #2d1814;
+  --color-info: #7fb2e0;
+  --color-info-soft: #14212d;
 }
 
 @layer base {
-  html {
-    color-scheme: light;
-  }
+  html { color-scheme: light; }
+  html.dark { color-scheme: dark; }
   body {
-    background: var(--color-paper);
-    color: var(--color-ink);
+    background: var(--color-bg);
+    color: var(--color-fg);
     font-family: var(--font-sans);
+    font-size: 14px;
     line-height: 1.5;
   }
-  button:not(:disabled),
-  [role="button"]:not(:disabled) {
-    cursor: pointer;
-  }
-  :focus-visible {
-    outline: 2px solid var(--color-ink);
-    outline-offset: 3px;
-  }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
   .skip-link {
-    position: absolute;
-    left: 1rem;
-    top: 1rem;
-    z-index: 50;
-    transform: translateY(-200%);
-    border-radius: 0.375rem;
-    background: var(--color-ink);
-    color: var(--color-paper);
-    padding: 0.75rem 1rem;
-    font-weight: 600;
+    position: absolute; left: 1rem; top: 1rem; z-index: 50; transform: translateY(-200%);
+    border-radius: 0.375rem; background: var(--color-fg); color: var(--color-bg); padding: 0.75rem 1rem; font-weight: 600;
   }
-  .skip-link:focus {
-    transform: none;
-  }
-  img,
-  svg,
-  video {
-    max-width: 100%;
-    height: auto;
-  }
-  h1,
-  h2,
-  h3,
-  .font-display {
-    font-family: var(--font-display);
-    letter-spacing: -0.02em;
+  .skip-link:focus { transform: none; }
+  img, svg, video { max-width: 100%; height: auto; }
+  h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
+  @media (max-width: 639px) {
+    input, select, textarea, [role="combobox"] { font-size: 16px; }
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

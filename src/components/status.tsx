@@ -1,29 +1,16 @@
-export function StatusText({
-  status,
-  description,
-  label = "Status",
-}: {
-  status: string;
-  description?: string;
-  label?: string;
-}) {
-  return (
-    <p>
-      <span className="text-xs font-semibold uppercase tracking-widest">
-        <span aria-hidden="true">{marker(status)} </span>
-        <span>
-          {label}: {status}
-        </span>
-      </span>
-      {description ? <span className="mt-1 block text-sm text-muted">{description}</span> : null}
-    </p>
-  );
-}
+import { Activity, AlertCircle, CheckCircle2, Clock3, Info, PlugZap } from "lucide-react";
+import { statusPresentation } from "./ui/status-map";
 
-function marker(status: string): string {
-  const key = status.toUpperCase();
-  if (key.includes("FAIL") || key.includes("REJECT") || key.includes("DEAD")) return "Fail";
-  if (key.includes("HEALTH") || key.includes("APPROV") || key.includes("SENT") || key.includes("CONNECTED")) return "Ok";
-  if (key.includes("REVIEW") || key.includes("PAUSE") || key.includes("PROPOS") || key.includes("WARN")) return "Wait";
-  return "Note";
+const icons = { check: CheckCircle2, clock: Clock3, alert: AlertCircle, activity: Activity, plug: PlugZap, info: Info };
+
+export function StatusText({ status, description, label = "Status" }: { status: string; description?: string; label?: string }) {
+  const presentation = statusPresentation(status);
+  const Icon = icons[presentation.icon];
+  return <p>
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-fg">
+      <Icon aria-hidden="true" className="size-4" />
+      <span>{label}: {presentation.label}</span>
+    </span>
+    {description ? <span className="mt-1 block text-sm text-fg-muted">{description}</span> : null}
+  </p>;
 }
