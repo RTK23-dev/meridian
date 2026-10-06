@@ -6,6 +6,39 @@ import { phaseForProbe, type LiveProvider } from "../providers/live.ts";
 import { planPerformanceSchedule } from "./schedule.ts";
 import { validatePerformanceOwnership } from "./ownership.ts";
 
+export const getPerformanceRowsForExport = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const brandId = input && typeof input === "object" && typeof (input as { brandId?: unknown }).brandId === "string" ? (input as { brandId: string }).brandId.trim() : "";
+    if (!brandId || brandId.length > 100) throw new Error("Choose a brand.");
+    return { brandId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const members = await sql<{ organization_id: string; role: string }>`
+      select b.organization_id, m.role from brands b
+      join memberships m on m.organization_id = b.organization_id and m.user_id = ${context.userId}
+      where b.id = ${data.brandId} and b.deleted_at is null limit 1
+    `;
+    const membership = members[0];
+    if (!membership || !isRole(membership.role)) throw new Error("That brand is not available to you.");
+    assertRole(membership.role, "member");
+    const rows = await sql<Record<string, unknown>>`
+      select o.id, o.creative_id, o.experiment_id, o.platform, o.impressions, o.reach, o.clicks,
+        o.conversions, o.spend_cents, o.revenue_cents, o.observed_on, o.source, o.created_at
+      from performance_observations o
+      join creative_records c on c.id = o.creative_id and c.brand_id = o.brand_id and c.organization_id = o.organization_id
+      where o.organization_id = ${membership.organization_id} and o.brand_id = ${data.brandId}
+      order by o.observed_on desc, o.created_at desc limit 10_000
+    `;
+    return rows.map((row) => ({
+      id: String(row.id), creativeId: String(row.creative_id), experimentId: row.experiment_id == null ? "" : String(row.experiment_id),
+      platform: String(row.platform), impressions: Number(row.impressions), reach: Number(row.reach), clicks: Number(row.clicks),
+      conversions: Number(row.conversions), spendCents: Number(row.spend_cents), revenueCents: Number(row.revenue_cents),
+      observedOn: String(row.observed_on), source: String(row.source), createdAt: String(row.created_at),
+    }));
+  });
+
 export const setPerformanceSchedule = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {};

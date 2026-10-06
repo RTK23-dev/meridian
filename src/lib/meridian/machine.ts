@@ -2190,6 +2190,13 @@ export const getIntelligence = createServerFn({ method: "POST" })
     const notifications = await sql<Record<string, unknown>>`
       select kind, title, body, created_at from notifications
       where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+        and not exists (
+          select 1 from notification_preferences preference
+          where preference.organization_id = ${access.organizationId}
+            and preference.user_id = ${context.userId}
+            and preference.kind = notifications.kind
+            and preference.enabled = false
+        )
       order by created_at desc limit 8
     `;
     return {

@@ -11,6 +11,7 @@ import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { useLibraryQuery, useTraceQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { downloadCsv } from "@/lib/csv";
 
 export const Route = createFileRoute("/brands/$brandId/library")({ component: Page });
 
@@ -60,6 +61,10 @@ function Library({ brandId }: { brandId: string }) {
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {busy.error ? <Notice>{busy.error}</Notice> : null}
+      <Button type="button" variant="quiet" disabled={!visibleCreatives.length} onClick={() => downloadCsv("meridian-library.csv", [
+        { key: "id", label: "Creative ID" }, { key: "title", label: "Title" }, { key: "hook", label: "Hook" },
+        { key: "angle", label: "Angle" }, { key: "status", label: "Status" }, { key: "origin", label: "Origin" }, { key: "createdAt", label: "Created at" },
+      ], visibleCreatives)}>Export visible library</Button>
       <Panel>
         <h2 className="font-display text-2xl">Paused publishing</h2>
         <p className="mt-2 text-sm text-muted">

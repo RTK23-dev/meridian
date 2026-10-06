@@ -45,7 +45,7 @@ function Integrations() {
           A credential in the environment is not a connection. Status changes only after a provider request succeeds, fails, or someone disconnects.
         </p>
       </div>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Panel>
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">Worker</p>
           <p className="mt-2 font-display text-2xl">{data.worker}</p>

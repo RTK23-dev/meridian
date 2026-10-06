@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
 import { Activity, AlertCircle, ArrowRight, BarChart3, CircleCheck, Clock3, Plus, Search, ServerCrash, Sparkles } from "lucide-react";
@@ -9,6 +9,7 @@ import { useWorkspace } from "@/components/workspace";
 import { useIntegrationsQuery, useMachinesQuery } from "@/lib/query/hooks";
 import { hasRole } from "@/lib/meridian/access";
 import { createOrganization } from "@/lib/meridian/api";
+import { getOnboardingSteps } from "@/lib/onboarding";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -18,6 +19,7 @@ function Home() {
   const { data, reload } = useWorkspace();
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortMode>("activity");
+  const [dismissedChecklist, setDismissedChecklist] = useState<string | null>(null);
   const brandIds = data?.brands.map((brand) => brand.id) ?? [];
   const machines = useMachinesQuery(brandIds);
   const integrations = useIntegrationsQuery(data?.active?.id ?? "", !!data?.active);
@@ -25,6 +27,11 @@ function Home() {
   const machinesError = machines.find((query) => query.isError);
   const retryMachines = () => { void Promise.all(machines.map((query) => query.refetch())); };
   const machineByBrand = useMemo(() => new Map(machines.map((query) => [query.brandId, query.data])), [machines]);
+  useEffect(() => {
+    if (!data?.active?.id) return;
+    try { setDismissedChecklist(localStorage.getItem(`meridian-onboarding-dismissed:${data.active.id}`) === "true" ? data.active.id : null); }
+    catch { setDismissedChecklist(null); }
+  }, [data?.active?.id]);
 
   if (!data?.active) return <CreateWorkspace onCreated={reload} />;
 
@@ -44,6 +51,16 @@ function Home() {
         ? right.completeness - left.completeness
         : Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
   const canCreate = hasRole(data.active.role, "member");
+  const hasConnectedProvider = (integrations.data?.connections ?? []).some((connection) => ["HEALTHY", "CONNECTED"].includes(connection.phase));
+  const hasReviewedCreative = data.audit.some((entry) => entry.action === "review.approved" || entry.action === "review.rejected");
+  const setupSteps = getOnboardingSteps({
+    brands: data.brands.map((brand) => ({ id: brand.id, completeness: brand.completeness,
+      competitors: machineByBrand.get(brand.id)?.counts.competitors ?? 0,
+      opportunities: machineByBrand.get(brand.id)?.counts.openOpportunities ?? 0,
+      creatives: machineByBrand.get(brand.id)?.counts.creatives ?? 0 })),
+    providerConnected: hasConnectedProvider,
+    reviewedCreative: hasReviewedCreative,
+  });
 
   return <div className="space-y-8">
     <PageHeader
@@ -73,6 +90,12 @@ function Home() {
       </ul>
     </section>
 
+    {dismissedChecklist !== data.active.id ? <section aria-labelledby="setup-title" className="rounded-xl border border-line bg-panel p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id="setup-title" className="font-display text-2xl">Workspace setup</h2><p className="mt-1 text-sm text-muted">Progress reflects saved workspace and brand records.</p></div><Button type="button" variant="quiet" onClick={() => { try { localStorage.setItem(`meridian-onboarding-dismissed:${data.active!.id}`, "true"); } catch { /* Keep dismissal for this page view when storage is unavailable. */ } setDismissedChecklist(data.active!.id); }}>Dismiss checklist</Button></div>
+      <ol className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{setupSteps.map((step) => <li key={step.label}><Link to={step.to as never} params={step.brandId ? { brandId: step.brandId } as never : undefined} className="flex min-h-12 items-center gap-3 rounded-md border border-line px-3 py-2 text-sm hover:border-brass"><CircleCheck aria-hidden="true" className={`size-4 shrink-0 ${step.done ? "text-success" : "text-muted"}`} /><span className={step.done ? "text-muted" : "font-medium"}>{step.label}</span>{step.done ? <span className="ml-auto text-xs text-success">Done</span> : <ArrowRight aria-hidden="true" className="ml-auto size-4 text-muted" />}</Link></li>)}</ol>
+      {setupSteps.every((step) => step.done) ? <p className="mt-3 text-sm text-success">Each setup step has a matching stored record.</p> : null}
+    </section> : null}
+
     <section aria-labelledby="brands-title" className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div><h2 id="brands-title" className="font-display text-2xl">Brands</h2><p className="mt-1 text-sm text-muted">Open a brand to continue its research and creative work.</p></div>
@@ -82,7 +105,7 @@ function Home() {
         </div>
       </div>
       {data.brands.length === 0 ? <EmptyState title="No brands yet" reason="Add a brand you actually work on. Meridian will not fill this list with guessed information." action={canCreate ? <Button asChild><Link to="/brands/new">Create a brand</Link></Button> : undefined} /> : visibleBrands.length === 0 ? <EmptyState title="No matching brands" reason="Try another name, industry, or product description." /> : (
-        <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+        <ul className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
           {visibleBrands.map((brand) => {
             const snapshot = machineByBrand.get(brand.id);
             return <li key={brand.id}><Link to="/brands/$brandId" params={{ brandId: brand.id }} className="group block h-full rounded-xl border border-line bg-panel p-5 transition hover:border-brass hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-brass">

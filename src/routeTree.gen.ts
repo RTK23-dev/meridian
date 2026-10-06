@@ -11,12 +11,16 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as Char91_designChar93RouteImport } from './routes/[_design]'
+import { Route as AlertsRouteImport } from './routes/alerts'
+import { Route as AuditRouteImport } from './routes/audit'
 import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as InviteRouteImport } from './routes/invite'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as UsageRouteImport } from './routes/usage'
+import { Route as WebhooksRouteImport } from './routes/webhooks'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as BrandsNewRouteImport } from './routes/brands/new'
 import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$assetId'
@@ -25,6 +29,7 @@ import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callbac
 import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
 import { Route as BrandsBrandIdIndexRouteImport } from './routes/brands/$brandId/index'
 import { Route as BrandsBrandIdBrainRouteImport } from './routes/brands/$brandId/brain'
+import { Route as BrandsBrandIdCalibrationRouteImport } from './routes/brands/$brandId/calibration'
 import { Route as BrandsBrandIdIntelligenceRouteImport } from './routes/brands/$brandId/intelligence'
 import { Route as BrandsBrandIdLearningRouteImport } from './routes/brands/$brandId/learning'
 import { Route as BrandsBrandIdLibraryRouteImport } from './routes/brands/$brandId/library'
@@ -42,6 +47,16 @@ const IndexRoute = IndexRouteImport.update({
 const Char91_designChar93Route = Char91_designChar93RouteImport.update({
   id: '/_design',
   path: '/_design',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AlertsRoute = AlertsRouteImport.update({
+  id: '/alerts',
+  path: '/alerts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationsRoute = IntegrationsRouteImport.update({
@@ -64,6 +79,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -72,6 +92,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const UsageRoute = UsageRouteImport.update({
   id: '/usage',
   path: '/usage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WebhooksRoute = WebhooksRouteImport.update({
+  id: '/webhooks',
+  path: '/webhooks',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
@@ -114,6 +139,12 @@ const BrandsBrandIdBrainRoute = BrandsBrandIdBrainRouteImport.update({
   path: '/brands/$brandId/brain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BrandsBrandIdCalibrationRoute =
+  BrandsBrandIdCalibrationRouteImport.update({
+    id: '/brands/$brandId/calibration',
+    path: '/brands/$brandId/calibration',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const BrandsBrandIdIntelligenceRoute =
   BrandsBrandIdIntelligenceRouteImport.update({
     id: '/brands/$brandId/intelligence',
@@ -160,12 +191,16 @@ const BrandsBrandIdStudioRoute = BrandsBrandIdStudioRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/_design': typeof Char91_designChar93Route
+  '/alerts': typeof AlertsRoute
+  '/audit': typeof AuditRoute
   '/integrations': typeof IntegrationsRoute
   '/invite': typeof InviteRoute
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
+  '/notifications': typeof NotificationsRoute
   '/settings': typeof SettingsRoute
   '/usage': typeof UsageRoute
+  '/webhooks': typeof WebhooksRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -173,6 +208,7 @@ export interface FileRoutesByFullPath {
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
+  '/brands/$brandId/calibration': typeof BrandsBrandIdCalibrationRoute
   '/brands/$brandId/intelligence': typeof BrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
   '/brands/$brandId/library': typeof BrandsBrandIdLibraryRoute
@@ -186,12 +222,16 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/_design': typeof Char91_designChar93Route
+  '/alerts': typeof AlertsRoute
+  '/audit': typeof AuditRoute
   '/integrations': typeof IntegrationsRoute
   '/invite': typeof InviteRoute
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
+  '/notifications': typeof NotificationsRoute
   '/settings': typeof SettingsRoute
   '/usage': typeof UsageRoute
+  '/webhooks': typeof WebhooksRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -199,6 +239,7 @@ export interface FileRoutesByTo {
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
+  '/brands/$brandId/calibration': typeof BrandsBrandIdCalibrationRoute
   '/brands/$brandId/intelligence': typeof BrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
   '/brands/$brandId/library': typeof BrandsBrandIdLibraryRoute
@@ -213,12 +254,16 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_design': typeof Char91_designChar93Route
+  '/alerts': typeof AlertsRoute
+  '/audit': typeof AuditRoute
   '/integrations': typeof IntegrationsRoute
   '/invite': typeof InviteRoute
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
+  '/notifications': typeof NotificationsRoute
   '/settings': typeof SettingsRoute
   '/usage': typeof UsageRoute
+  '/webhooks': typeof WebhooksRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -226,6 +271,7 @@ export interface FileRoutesById {
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
+  '/brands/$brandId/calibration': typeof BrandsBrandIdCalibrationRoute
   '/brands/$brandId/intelligence': typeof BrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
   '/brands/$brandId/library': typeof BrandsBrandIdLibraryRoute
@@ -241,12 +287,16 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/_design'
+    | '/alerts'
+    | '/audit'
     | '/integrations'
     | '/invite'
     | '/jobs'
     | '/login'
+    | '/notifications'
     | '/settings'
     | '/usage'
+    | '/webhooks'
     | '/api/health'
     | '/brands/new'
     | '/api/assets/$assetId'
@@ -254,6 +304,7 @@ export interface FileRouteTypes {
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/brands/$brandId/brain'
+    | '/brands/$brandId/calibration'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
     | '/brands/$brandId/library'
@@ -267,12 +318,16 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/_design'
+    | '/alerts'
+    | '/audit'
     | '/integrations'
     | '/invite'
     | '/jobs'
     | '/login'
+    | '/notifications'
     | '/settings'
     | '/usage'
+    | '/webhooks'
     | '/api/health'
     | '/brands/new'
     | '/api/assets/$assetId'
@@ -280,6 +335,7 @@ export interface FileRouteTypes {
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/brands/$brandId/brain'
+    | '/brands/$brandId/calibration'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
     | '/brands/$brandId/library'
@@ -293,12 +349,16 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_design'
+    | '/alerts'
+    | '/audit'
     | '/integrations'
     | '/invite'
     | '/jobs'
     | '/login'
+    | '/notifications'
     | '/settings'
     | '/usage'
+    | '/webhooks'
     | '/api/health'
     | '/brands/new'
     | '/api/assets/$assetId'
@@ -306,6 +366,7 @@ export interface FileRouteTypes {
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/brands/$brandId/brain'
+    | '/brands/$brandId/calibration'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
     | '/brands/$brandId/library'
@@ -320,12 +381,16 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   Char91_designChar93Route: typeof Char91_designChar93Route
+  AlertsRoute: typeof AlertsRoute
+  AuditRoute: typeof AuditRoute
   IntegrationsRoute: typeof IntegrationsRoute
   InviteRoute: typeof InviteRoute
   JobsRoute: typeof JobsRoute
   LoginRoute: typeof LoginRoute
+  NotificationsRoute: typeof NotificationsRoute
   SettingsRoute: typeof SettingsRoute
   UsageRoute: typeof UsageRoute
+  WebhooksRoute: typeof WebhooksRoute
   ApiHealthRoute: typeof ApiHealthRoute
   BrandsNewRoute: typeof BrandsNewRoute
   ApiAssetsAssetIdRoute: typeof ApiAssetsAssetIdRoute
@@ -333,6 +398,7 @@ export interface RootRouteChildren {
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
   BrandsBrandIdBrainRoute: typeof BrandsBrandIdBrainRoute
+  BrandsBrandIdCalibrationRoute: typeof BrandsBrandIdCalibrationRoute
   BrandsBrandIdIntelligenceRoute: typeof BrandsBrandIdIntelligenceRoute
   BrandsBrandIdLearningRoute: typeof BrandsBrandIdLearningRoute
   BrandsBrandIdLibraryRoute: typeof BrandsBrandIdLibraryRoute
@@ -358,6 +424,20 @@ declare module '@tanstack/react-router' {
       path: '/_design'
       fullPath: '/_design'
       preLoaderRoute: typeof Char91_designChar93RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/alerts': {
+      id: '/alerts'
+      path: '/alerts'
+      fullPath: '/alerts'
+      preLoaderRoute: typeof AlertsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integrations': {
@@ -388,6 +468,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -400,6 +487,13 @@ declare module '@tanstack/react-router' {
       path: '/usage'
       fullPath: '/usage'
       preLoaderRoute: typeof UsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/webhooks': {
+      id: '/webhooks'
+      path: '/webhooks'
+      fullPath: '/webhooks'
+      preLoaderRoute: typeof WebhooksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/health': {
@@ -456,6 +550,13 @@ declare module '@tanstack/react-router' {
       path: '/brands/$brandId/brain'
       fullPath: '/brands/$brandId/brain'
       preLoaderRoute: typeof BrandsBrandIdBrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/brands/$brandId/calibration': {
+      id: '/brands/$brandId/calibration'
+      path: '/brands/$brandId/calibration'
+      fullPath: '/brands/$brandId/calibration'
+      preLoaderRoute: typeof BrandsBrandIdCalibrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/brands/$brandId/intelligence': {
@@ -520,12 +621,16 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   Char91_designChar93Route: Char91_designChar93Route,
+  AlertsRoute: AlertsRoute,
+  AuditRoute: AuditRoute,
   IntegrationsRoute: IntegrationsRoute,
   InviteRoute: InviteRoute,
   JobsRoute: JobsRoute,
   LoginRoute: LoginRoute,
+  NotificationsRoute: NotificationsRoute,
   SettingsRoute: SettingsRoute,
   UsageRoute: UsageRoute,
+  WebhooksRoute: WebhooksRoute,
   ApiHealthRoute: ApiHealthRoute,
   BrandsNewRoute: BrandsNewRoute,
   ApiAssetsAssetIdRoute: ApiAssetsAssetIdRoute,
@@ -533,6 +638,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,
   BrandsBrandIdBrainRoute: BrandsBrandIdBrainRoute,
+  BrandsBrandIdCalibrationRoute: BrandsBrandIdCalibrationRoute,
   BrandsBrandIdIntelligenceRoute: BrandsBrandIdIntelligenceRoute,
   BrandsBrandIdLearningRoute: BrandsBrandIdLearningRoute,
   BrandsBrandIdLibraryRoute: BrandsBrandIdLibraryRoute,

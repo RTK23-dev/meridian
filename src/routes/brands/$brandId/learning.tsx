@@ -5,12 +5,11 @@ import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Notice, Panel, Skeleton, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
-import { setPerformanceSchedule } from "@/lib/meridian/performance/actions";
+import { getPerformanceRowsForExport, setPerformanceSchedule } from "@/lib/meridian/performance/actions";
 import { refreshLearning, setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
-import { StatusText } from "@/components/status";
-import { useCalibrationQuery, useLearningQuery } from "@/lib/query/hooks";
+import { useLearningQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { downloadCsv } from "@/lib/csv";
 
 export const Route = createFileRoute("/brands/$brandId/learning")({ component: Page });
 
@@ -23,14 +22,11 @@ function Page() {
 
 function Learning({ brandId }: { brandId: string }) {
   const learningQuery = useLearningQuery(brandId);
-  const calibrationQuery = useCalibrationQuery(brandId);
   const data = learningQuery.data ?? null;
-  const calibration = calibrationQuery.data ?? null;
   const [note, setNote] = useState<string | null>(null);
   const busy = useBusy([qk.learning(brandId), qk.studio(brandId), qk.opportunities(brandId)]);
 
   if (learningQuery.error) return <ErrorState message={errorText(learningQuery.error)} onRetry={() => void learningQuery.refetch()} />;
-  if (calibrationQuery.error) return <ErrorState message={`Threshold versions could not be loaded: ${errorText(calibrationQuery.error)}`} onRetry={() => void calibrationQuery.refetch()} />;
   if (!data) return <div role="status" aria-label="Loading learning" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(data.role, "member");
   const canAdmin = hasRole(data.role, "admin");
@@ -45,6 +41,19 @@ function Learning({ brandId }: { brandId: string }) {
           <p className="text-muted">{data.policy}</p>
         </div>
         {canEdit ? (
+          <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="quiet" disabled={busy.pending} onClick={() => void busy.run(async () => {
+            const rows = await getPerformanceRowsForExport({ data: { brandId } });
+            if (!rows.length) { setNote("No performance rows are stored for this brand."); return; }
+            downloadCsv("meridian-performance.csv", [
+              { key: "id", label: "Observation ID" }, { key: "creativeId", label: "Creative ID" }, { key: "experimentId", label: "Experiment ID" },
+              { key: "platform", label: "Platform" }, { key: "impressions", label: "Impressions" }, { key: "reach", label: "Reach" },
+              { key: "clicks", label: "Clicks" }, { key: "conversions", label: "Conversions" }, { key: "spendCents", label: "Spend cents" },
+              { key: "revenueCents", label: "Revenue cents" }, { key: "observedOn", label: "Observed on" }, { key: "source", label: "Source" },
+              { key: "createdAt", label: "Recorded at" },
+            ], rows);
+            setNote(`Exported ${rows.length} stored performance rows.`);
+          })}>Export performance rows</Button>
           <Button
             disabled={busy.pending}
             onClick={() => {
@@ -58,6 +67,7 @@ function Learning({ brandId }: { brandId: string }) {
           >
             Recompute patterns
           </Button>
+          </div>
         ) : null}
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
@@ -127,81 +137,6 @@ function Learning({ brandId }: { brandId: string }) {
         </ul>
         </>
       )}
-      <Panel>
-        <h2 className="font-display text-2xl">Threshold versions</h2>
-        <p className="mt-2 text-sm text-muted">A proposal does not change a gate. An admin has to approve it. The previous version stays in the log.</p>
-        {canAdmin ? (
-          <Button
-            className="mt-3"
-            variant="quiet"
-            disabled={busy.pending}
-            onClick={() => {
-              void busy.run(async () => {
-                const result = await proposeCalibration({ data: { brandId } });
-                setNote("detail" in result && result.detail
-                  ? result.detail
-                  : result.status === "proposed"
-                    ? `Proposal recorded from ${result.samples} reviews. Thresholds were not changed.`
-                    : "No proposal was stored.");
-              });
-            }}
-          >
-            Propose from reviewer outcomes
-          </Button>
-        ) : null}
-        {calibration && calibration.versions.length > 0 ? (
-          <ul className="mt-3 space-y-2 text-sm">
-            {calibration.versions.map((version) => (
-              <li key={version.id}>
-                <StatusText status={`version ${version.version}`} description={`${version.questionId} approved by ${version.approvedBy}. ${version.thresholds}`} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-sm text-muted">No approved threshold version. The code defaults are still in use.</p>
-        )}
-        {calibration?.proposals.filter((item) => item.status === "proposed").map((proposal) => (
-          <div key={proposal.id} className="mt-4 space-y-2">
-            <StatusText
-              status="proposed"
-              description={proposal.samples != null
-                ? `${proposal.samples} reviewer outcomes. Disagreement ${proposal.disagreement ?? "not recorded"}. Current ${proposal.current}. Proposed ${proposal.proposedThresholds}.`
-                : proposal.proposed}
-            />
-            {canAdmin ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  disabled={busy.pending}
-                  onClick={() => {
-                    void busy.run(async () => {
-                      const result = await decideCalibration({ data: { brandId, proposalId: proposal.id, decision: "approved" } });
-                      setNote(result.status === "approved" ? `Approved threshold version ${result.version}.` : "The proposal was not approved.");
-                    });
-                  }}
-                >
-                  Approve thresholds
-                </Button>
-                <Button
-                  type="button"
-                  variant="quiet"
-                  disabled={busy.pending}
-                  onClick={() => {
-                    void busy.run(async () => {
-                      await decideCalibration({ data: { brandId, proposalId: proposal.id, decision: "rejected" } });
-                      setNote("The proposal was rejected. Thresholds were not changed.");
-                    });
-                  }}
-                >
-                  Reject proposal
-                </Button>
-              </div>
-            ) : (
-              <p className="text-sm text-muted">An admin approves or rejects this proposal.</p>
-            )}
-          </div>
-        ))}
-      </Panel>
       {canAdmin && data.organizationId ? (
         <Panel>
           <h2 className="font-display text-2xl">Performance schedule</h2>

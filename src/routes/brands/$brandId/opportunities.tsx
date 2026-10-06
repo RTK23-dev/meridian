@@ -11,6 +11,7 @@ import {
 } from "@/lib/meridian/machine";
 import { useOpportunitiesQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { downloadCsv } from "@/lib/csv";
 
 export const Route = createFileRoute("/brands/$brandId/opportunities")({ component: Page });
 
@@ -79,6 +80,11 @@ function Opportunities({ brandId }: { brandId: string }) {
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Category"><SelectInput value={category} onChange={(event) => setCategory(event.currentTarget.value)}><option value="all">All categories</option><option value="discovered">Discovered</option><option value="supported">Supported</option><option value="hypothesis">Prior</option></SelectInput></Field>
           <Field label="Sort by"><SelectInput value={sortBy} onChange={(event) => setSortBy(event.currentTarget.value)}><option value="rank">Rank</option><option value="confidence">Confidence</option><option value="risk">Risk</option><option value="status">Status</option></SelectInput></Field>
+          <Button type="button" variant="quiet" disabled={!visibleRows.length} onClick={() => downloadCsv("meridian-opportunities.csv", [
+            { key: "label", label: "Opportunity" }, { key: "category", label: "Evidence category" }, { key: "status", label: "Status" },
+            { key: "expectedValue", label: "Rank score" }, { key: "decision", label: "JEV decision" }, { key: "probability", label: "Probability" },
+            { key: "confidence", label: "Evidence confidence" }, { key: "risk", label: "Risk" }, { key: "reason", label: "Reason" },
+          ], visibleRows)}>Export visible opportunities</Button>
           {canEdit && selectedIds.length ? <Button disabled={busy.pending} variant="secondary" onClick={() => void busy.run(async () => { for (const opportunityId of selectedIds) await dismissOpportunity({ data: { brandId, opportunityId } }); setSelectedIds([]); })}>Dismiss selected ({selectedIds.length})</Button> : null}
           <p className="text-sm text-muted">{visibleRows.length} of {rows.length} opportunities</p>
         </div>

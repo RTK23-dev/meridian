@@ -151,7 +151,7 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
         {logos[0] ? <img src={`data:${logos[0].mime};base64,${logos[0].body}`} alt="Stored logo" className="mt-3 h-16 w-auto" /> : assetsQuery.error ? null : <p className="mt-3 text-muted">No logo stored.</p>}
         {canEdit ? (
           <input
-            className="mt-3 block"
+            className="mt-3 block w-full min-w-0 text-sm"
             type="file"
             accept="image/png,image/jpeg,image/webp"
             onChange={(event) => {
