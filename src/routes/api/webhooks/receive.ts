@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { verifyWebhook } from "@/lib/meridian/webhooks/verify";
+import { storeWebhookEvent } from "@/lib/meridian/webhooks/receive-store";
 
 export const Route = createFileRoute("/api/webhooks/receive")({
   server: {
@@ -34,10 +35,8 @@ export const Route = createFileRoute("/api/webhooks/receive")({
         if (decision.status === "rejected") return new Response(decision.reason, { status: 401 });
         const organizationId = known[0]?.organization_id;
         if (!organizationId) return new Response("Unknown account.", { status: 401 });
-        await sql`
-          insert into webhook_events (id, organization_id, provider, event_id)
-          values (${crypto.randomUUID()}, ${organizationId}, ${provider}, ${decision.eventId})
-        `;
+        const stored = await storeWebhookEvent(sql, { organizationId, provider, eventId: decision.eventId });
+        if (!stored) return new Response("This event id was already stored.", { status: 200 });
         await sql`
           insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload)
           values (

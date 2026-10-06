@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fetchPublicHtml, fetchPublicMedia, resolveAndPinHost } from "./fetch-page.server.ts";
+import { fetchPublicHtml, fetchPublicMedia, htmlToText, resolveAndPinHost } from "./fetch-page.server.ts";
 
 test("the connection lookup stays pinned to the address that passed validation", async () => {
   let resolutions = 0;
@@ -39,4 +39,11 @@ test("private addresses remain blocked during DNS validation", async () => {
 test("research snapshot and media fetchers reject private destinations before connecting", async () => {
   await assert.rejects(fetchPublicHtml("http://127.0.0.1/snapshot"), /not a public host/);
   await assert.rejects(fetchPublicMedia("http://169.254.169.254/latest/meta-data"), /not a public host/);
+});
+
+test("HTML text decodes common named and numeric entities once", () => {
+  const text = htmlToText("<p>Tom &amp; Jerry &lt;3 &gt; all &quot;x&quot; &apos;y&apos; &#x41;&nbsp;ok</p>");
+  assert.equal(text, `Tom & Jerry <3 > all "x" 'y' A ok`);
+  assert.equal(htmlToText("&amp;lt;b&amp;gt;"), "&lt;b&gt;");
+  assert.equal(htmlToText("a&#0;b&#xD800;c&#99999999;d"), "a b c d");
 });

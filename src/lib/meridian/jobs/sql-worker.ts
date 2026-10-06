@@ -2,6 +2,28 @@ import type { Sql } from "../learning/store.ts";
 import { executeJob, type ExecutableJob } from "./execute.ts";
 
 let stopping = false;
+const LEASE_SECONDS = 120;
+const HEARTBEAT_MS = 30_000;
+
+export async function executeWithLease(
+  sql: Sql,
+  job: ExecutableJob,
+  execute: (sql: Sql, job: ExecutableJob) => Promise<string> = executeJob,
+  heartbeatMs = HEARTBEAT_MS,
+): Promise<string> {
+  const heartbeat = setInterval(() => {
+    void sql`
+      update jobs
+      set lease_until = now() + ${LEASE_SECONDS}::int * interval '1 second', heartbeat_at = now()
+      where id = ${job.id} and status = 'running'
+    `.catch(() => undefined);
+  }, heartbeatMs);
+  try {
+    return await execute(sql, job);
+  } finally {
+    clearInterval(heartbeat);
+  }
+}
 
 export function requestWorkerStop(): void {
   stopping = true;
@@ -46,7 +68,7 @@ export async function tickSqlJobs(sql: Sql): Promise<{ claimed: number; stopped:
       update jobs
       set status = 'running',
           attempts = attempts + 1,
-          lease_until = now() + interval '120 seconds',
+          lease_until = now() + ${LEASE_SECONDS}::int * interval '1 second',
           heartbeat_at = now(),
           updated_at = now()
       where id = ${job.id} and status in ('queued', 'retry')
@@ -55,7 +77,7 @@ export async function tickSqlJobs(sql: Sql): Promise<{ claimed: number; stopped:
     if (!locked[0]) continue;
     claimed += 1;
     try {
-      const result = await executeJob(sql, job);
+      const result = await executeWithLease(sql, job);
       await sql`
         update jobs
         set status = 'succeeded', result = ${result}, lease_until = null, last_error = '', updated_at = now()
@@ -91,14 +113,14 @@ export async function claimAndRun(sql: Sql, jobId: string): Promise<string> {
   if (!job) return "skipped";
   const locked = await sql<{ id: string }>`
     update jobs
-    set status = 'running', attempts = attempts + 1, lease_until = now() + interval '120 seconds',
+    set status = 'running', attempts = attempts + 1, lease_until = now() + ${LEASE_SECONDS}::int * interval '1 second',
         heartbeat_at = now(), updated_at = now()
     where id = ${job.id} and status in ('queued', 'retry')
     returning id
   `;
   if (!locked[0]) return "skipped";
   try {
-    const result = await executeJob(sql, job);
+    const result = await executeWithLease(sql, job);
     await sql`
       update jobs set status = 'succeeded', result = ${result}, lease_until = null, last_error = '', updated_at = now()
       where id = ${job.id} and status = 'running'
@@ -110,7 +132,8 @@ export async function claimAndRun(sql: Sql, jobId: string): Promise<string> {
     const dead = attempts >= job.max_attempts;
     await sql`
       update jobs
-      set status = ${dead ? "dead" : "retry"}, last_error = ${message.slice(0, 500)}, lease_until = null, updated_at = now()
+      set status = ${dead ? "dead" : "retry"}, last_error = ${message.slice(0, 500)}, lease_until = null,
+          run_after = now() + (power(2, least(${attempts}, 6)) * interval '1 second'), updated_at = now()
       where id = ${job.id} and status = 'running'
     `;
     return dead ? `dead:${message}` : `retry:${message}`;

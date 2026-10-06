@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Security: reject IPv4-mapped and translated private IPv6 targets, non-public IPv6 ranges, and reserved IPv4 ranges before public fetches; malformed address input fails closed.
+- Fix public-page text extraction to decode named and numeric HTML entities exactly once.
+- Keep long-running SQL jobs leased by renewing their heartbeat while work is active; `claimAndRun` now schedules retries with exponential backoff too.
+- Return success for webhook deliveries that lose a concurrent duplicate insert race.
+- Clarify that the existing request rate-limiter helper is not wired to routes.
+
 ## 0.1.0-beta.3 — 2026-10-06
 
 JEV Research now collects and analyzes external Meta video-ad evidence as a research layer. It does not replace or gate JEV decisions.

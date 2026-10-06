@@ -8,15 +8,25 @@ const MAX_BYTES = 200_000;
 const MAX_MEDIA_BYTES = 80_000_000;
 const MAX_HOPS = 2;
 
+function codePointText(code: number): string {
+  if (!Number.isInteger(code) || code < 1 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return " ";
+  return String.fromCodePoint(code);
+}
+
 export function htmlToText(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
-    .replace(/&/gi, "&")
-    .replace(/</gi, "<")
-    .replace(/>/gi, ">")
+    .replace(/&#(\d{1,8});/g, (_match, code: string) => codePointText(Number(code)))
+    .replace(/&#x([0-9a-f]{1,6});/gi, (_match, code: string) => codePointText(parseInt(code, 16)))
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    // Decode ampersand last: nested encodings are decoded only once.
+    .replace(/&amp;/gi, "&")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 12_000);
