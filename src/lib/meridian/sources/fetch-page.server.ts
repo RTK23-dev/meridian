@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { ipIsBlocked, publicUrlIssue } from "./public-url.ts";
 
 const MAX_BYTES = 200_000;
+const MAX_MEDIA_BYTES = 80_000_000;
 const MAX_HOPS = 2;
 
 export function htmlToText(html: string): string {
@@ -63,7 +64,7 @@ export async function fetchPublicText(rawUrl: string, hops = 0): Promise<{ url: 
   if (issue) throw new Error(issue);
   const url = new URL(rawUrl);
   const pinnedLookup = await resolveAndPinHost(url.hostname);
-  const response = await requestPage(url, pinnedLookup);
+  const response = await requestPage(url, pinnedLookup, "text/html,text/plain;q=0.9");
   const statusCode = response.statusCode;
   if (statusCode != null && statusCode >= 300 && statusCode < 400) {
     const location = response.headers.location;
@@ -95,14 +96,83 @@ export async function fetchPublicText(rawUrl: string, hops = 0): Promise<{ url: 
   return { url: url.toString(), text };
 }
 
-function requestPage(url: URL, pinnedLookup: NonNullable<RequestOptions["lookup"]>): Promise<IncomingMessage> {
+/** Fetches bounded public video bytes using the same DNS-pinned connection as page collection. */
+export async function fetchPublicMedia(rawUrl: string, hops = 0, maxBytes = MAX_MEDIA_BYTES): Promise<{ url: string; mimeType: string; bytes: Uint8Array }> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_MEDIA_BYTES) throw new Error("The media byte limit is invalid.");
+  const issue = publicUrlIssue(rawUrl);
+  if (issue) throw new Error(issue);
+  const url = new URL(rawUrl);
+  const pinnedLookup = await resolveAndPinHost(url.hostname);
+  const response = await requestPage(url, pinnedLookup, "video/*,application/octet-stream;q=0.9", 120_000);
+  const statusCode = response.statusCode;
+  if (statusCode != null && statusCode >= 300 && statusCode < 400) {
+    const location = response.headers.location;
+    const redirect = Array.isArray(location) ? location[0] : location;
+    if (!redirect || hops >= MAX_HOPS) throw new Error("The media redirected too many times.");
+    return fetchPublicMedia(new URL(redirect, url).toString(), hops + 1, maxBytes);
+  }
+  if (statusCode == null || statusCode < 200 || statusCode >= 300) throw new Error(`The media returned ${statusCode ?? "an invalid status"}.`);
+  const contentType = response.headers["content-type"];
+  const mimeType = (Array.isArray(contentType) ? contentType[0] : contentType ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!mimeType.startsWith("video/")) throw new Error("The source did not return a video file.");
+  const contentLength = Number(response.headers["content-length"]);
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) throw new Error(`The source video is larger than the ${Math.ceil(maxBytes / 1_000_000)} MB research limit.`);
+  const reader = Readable.toWeb(response).getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (received <= maxBytes) {
+    const step = await reader.read();
+    if (step.done) break;
+    received += step.value.byteLength;
+    if (received > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error(`The source video is larger than the ${Math.ceil(maxBytes / 1_000_000)} MB research limit.`);
+    }
+    chunks.push(step.value);
+  }
+  if (received === 0) throw new Error("The source video is empty.");
+  return { url: url.toString(), mimeType, bytes: concat(chunks) };
+}
+
+/** Reads a small public HTML snapshot while preserving the same DNS and redirect checks. */
+export async function fetchPublicHtml(rawUrl: string, hops = 0): Promise<{ url: string; html: string }> {
+  const issue = publicUrlIssue(rawUrl);
+  if (issue) throw new Error(issue);
+  const url = new URL(rawUrl);
+  const pinnedLookup = await resolveAndPinHost(url.hostname);
+  const response = await requestPage(url, pinnedLookup, "text/html;q=0.9");
+  const statusCode = response.statusCode;
+  if (statusCode != null && statusCode >= 300 && statusCode < 400) {
+    const location = response.headers.location;
+    const redirect = Array.isArray(location) ? location[0] : location;
+    if (!redirect || hops >= MAX_HOPS) throw new Error("The snapshot redirected too many times.");
+    return fetchPublicHtml(new URL(redirect, url).toString(), hops + 1);
+  }
+  if (statusCode == null || statusCode < 200 || statusCode >= 300) throw new Error(`The snapshot returned ${statusCode ?? "an invalid status"}.`);
+  const contentType = response.headers["content-type"];
+  const type = Array.isArray(contentType) ? contentType.join(",") : contentType ?? "";
+  if (type && !type.includes("text/html") && !type.includes("application/xhtml")) throw new Error("The ad snapshot did not return HTML.");
+  const reader = Readable.toWeb(response).getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (received < MAX_BYTES) {
+    const step = await reader.read();
+    if (step.done) break;
+    received += step.value.byteLength;
+    chunks.push(step.value);
+  }
+  await reader.cancel().catch(() => undefined);
+  return { url: url.toString(), html: new TextDecoder().decode(concat(chunks)).slice(0, MAX_BYTES) };
+}
+
+function requestPage(url: URL, pinnedLookup: NonNullable<RequestOptions["lookup"]>, accept: string, timeoutMs = 8_000): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const request = (url.protocol === "https:" ? httpsRequest : httpRequest)(
       url,
       {
         method: "GET",
-        signal: AbortSignal.timeout(8000),
-        headers: { accept: "text/html,text/plain;q=0.9" },
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { accept },
         lookup: pinnedLookup,
       },
       resolve,

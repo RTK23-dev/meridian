@@ -1,6 +1,6 @@
 # Database
 
-Migrations: `migrations/0001_auth.sql`, `migrations/0002_meridian.sql`, `migrations/0003_machine.sql`.
+Migrations are applied in filename order from `migrations/`, including `0016_jev_research.sql`.
 
 ## Tenant root
 
@@ -20,6 +20,8 @@ Every machine table below also stores `organization_id` and `brand_id`. Server f
 - `source_documents` — public page fetch, stored or failed, excerpt marked untrusted by the application
 - `creative_records` — competitor observations and this brand's creatives, with attributes, workflow JSON, optional asset URL, links to opportunity and brief
 - Unique `(brand_id, source_identifier)` when the identifier is set, for dedupe
+- `research_collection_runs`, `research_ads`, `research_transcript_cache`, `research_analysis_runs`, `research_analysis_fields`, `research_segments`, `research_patterns` — tenant-scoped public ad provenance, verified media references/checksums, content-hash transcript reuse, typed confidence/evidence, and observed cross-ad patterns
+- Organization-level research patterns contain aggregate counts only; a brand uses them only when `use_organization_learning` is enabled
 
 ## Decisions and production
 

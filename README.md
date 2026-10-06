@@ -1,11 +1,11 @@
 # Meridian
 
-Beta **0.1.0-beta.2**. Multi-tenant advertising operating system.
+Beta **0.1.0-beta.3**. Multi-tenant advertising operating system.
 
 You add a brand. Meridian ranks what to make from evidence you store, generates image and video variants, checks them, and writes results back into the next decision.
 
 ```
-market → brand brain → opportunity → JEV → brief → studio
+market → JEV Research → advertising patterns → opportunity → JEV → brief → studio
   → image / video → QA → review → publish → performance → learning
 ```
 
@@ -38,6 +38,7 @@ Open the app, create an account, and add a brand. Without `DATABASE_URL`, the pr
 
 - Workspaces, roles, invites, brands, Brand Brain, and products.
 - Manual market observations, public-page fetch, and semantic clustering with a local MiniLM model.
+- Meta Ad Library video-ad collection, verified source media storage, timestamped transcription, confidence-rated structured JEV Research, and observed cross-ad pattern summaries. Research does not assert effectiveness from frequency.
 - Opportunity ranking, JEV decisions, briefs, text QA, and human review.
 - Studio image jobs still use the image provider you select. Studio video uses Hypit after JEV approval. `test:video` and `xai:video` are not the production video path.
 - A Hypit MP4 is stored only after the separate process returns bytes. Missing vision evidence does not auto-approve.
@@ -52,6 +53,7 @@ Open the app, create an account, and add a brand. Without `DATABASE_URL`, the pr
 | --- | --- | --- |
 | Meta ads | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, and for OAuth `META_APP_ID`, `META_APP_SECRET` | Not configured. Nothing is published. |
 | Meta Ad Library | `META_AD_LIBRARY_TOKEN` | No ads are collected. |
+| JEV Research transcription | `OPENAI_API_KEY`; `ffmpeg` and `ffprobe` on the worker | No transcript is created. |
 | TikTok ads | `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, and for OAuth `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET` | No campaign is created. |
 | Google Ads | `GOOGLE_ADS_ACCESS_TOKEN`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, and for OAuth `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET` | No customer is listed. |
 | Token storage and webhooks | `TOKEN_ENCRYPTION_KEY`, `WEBHOOK_SECRET` | Tokens are not stored. Webhook posts are rejected. |

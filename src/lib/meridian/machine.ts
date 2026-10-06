@@ -391,9 +391,46 @@ export const getMarket = createServerFn({ method: "POST" })
       where brand_id = ${data.brandId} and organization_id = ${access.organizationId} and origin = 'competitor'
       order by created_at desc limit 40
     `;
+    const researchRuns = await sql<Record<string, unknown>>`
+      select id, search_terms, country, status, collected_count, analyzed_count, error, created_at
+      from research_collection_runs where organization_id = ${access.organizationId} and brand_id = ${data.brandId}
+      order by created_at desc limit 12
+    `;
+    const researchRows = await sql<Record<string, unknown>>`
+      select a.id, a.external_id, a.advertiser, a.original_url, a.captured_at, a.published_at, a.copy, a.headline,
+        a.description, a.media_type, a.media_status, a.media_storage_key, a.media_bytes, a.media_duration_ms,
+        a.transcript_status, a.analysis_status, a.last_error, a.creative_id, t.transcript, t.segments,
+        r.result as analysis, r.confidence, r.review_required, r.provider, r.model, r.schema_version
+      from research_ads a
+      left join research_transcript_cache t on t.id = a.transcript_cache_id and t.organization_id = a.organization_id and t.brand_id = a.brand_id
+      left join research_analysis_runs r on r.id = a.analysis_id and r.organization_id = a.organization_id and r.brand_id = a.brand_id
+      where a.organization_id = ${access.organizationId} and a.brand_id = ${data.brandId}
+      order by a.captured_at desc limit 100
+    `;
+      const organizationResearchOptIn = await sql<{ use_organization_learning: boolean }>`
+        select use_organization_learning from brand_brains where organization_id = ${access.organizationId} and brand_id = ${data.brandId} limit 1
+      `;
+      const shareOrganizationResearch = organizationResearchOptIn[0]?.use_organization_learning === true;
+      const researchPatternRows = await sql<Record<string, unknown>>`
+        select dimension, value, state, sample_count, corpus_size, prevalence, confidence, analysis_ids, example_creative_ids, summary, scope
+        from research_patterns where organization_id = ${access.organizationId}
+          and (brand_id = ${data.brandId} or (scope = 'organization' and ${shareOrganizationResearch}))
+        order by sample_count desc, dimension asc limit 100
+      `;
+    const libraryConnectionRows = await sql<{ status: string; last_error: string }>`
+      select status, last_error from source_connections
+      where organization_id = ${access.organizationId} and brand_id = ${data.brandId} and source = 'ad_library' limit 1
+    `;
+    const libraryConnection = libraryConnectionRows[0];
     return {
       role: access.role,
-      adapters: SOURCE_ADAPTERS.map((adapter) => ({ ...adapter })),
+      adapters: SOURCE_ADAPTERS.map((adapter) => ({
+        ...adapter,
+        status: adapter.id === "ad_library"
+          ? asText(libraryConnection?.status) || (process.env.META_AD_LIBRARY_TOKEN?.trim() ? "AVAILABLE" : "NOT_CONNECTED")
+          : adapter.implemented ? "AVAILABLE" : "NOT_CONNECTED",
+        connectionError: adapter.id === "ad_library" ? asText(libraryConnection?.last_error) : "",
+      })),
       competitors: competitors.map((row) => ({
         id: asText(row.id),
         name: asText(row.name),
@@ -425,7 +462,73 @@ export const getMarket = createServerFn({ method: "POST" })
         message: asText(row.message) || asText(row.raw_text).slice(0, 280),
         createdAt: asText(row.created_at),
       })),
+      researchRuns: researchRuns.map((row) => ({
+        id: asText(row.id), searchTerms: asText(row.search_terms), country: asText(row.country), status: asText(row.status),
+        collectedCount: asNumber(row.collected_count), analyzedCount: asNumber(row.analyzed_count), error: asText(row.error), createdAt: asText(row.created_at),
+      })),
+      researchAds: researchRows.map((row) => ({
+        id: asText(row.id), externalId: asText(row.external_id), advertiser: asText(row.advertiser), url: asText(row.original_url),
+        capturedAt: asText(row.captured_at), publishedAt: asText(row.published_at) || null, copy: asText(row.copy), headline: asText(row.headline),
+        description: asText(row.description), mediaType: asText(row.media_type), mediaStatus: asText(row.media_status),
+        mediaStorageKey: asText(row.media_storage_key), mediaBytes: asNumber(row.media_bytes), durationMs: asNumber(row.media_duration_ms),
+        transcriptStatus: asText(row.transcript_status), transcript: asText(row.transcript).slice(0, 12000),
+        segments: asText(row.segments),
+        analysisStatus: asText(row.analysis_status), analysis: asText(row.analysis),
+        confidence: asNumber(row.confidence), reviewRequired: row.review_required === true || row.review_required === "t" || row.review_required === "true",
+        provider: asText(row.provider), model: asText(row.model), schemaVersion: asText(row.schema_version), error: asText(row.last_error),
+        creativeId: asText(row.creative_id),
+      })),
+      researchPatterns: researchPatternRows.map((row) => ({
+        dimension: asText(row.dimension), value: asText(row.value), state: asText(row.state), sampleCount: asNumber(row.sample_count),
+        corpusSize: asNumber(row.corpus_size), prevalence: asNumber(row.prevalence), confidence: asNumber(row.confidence),
+        scope: asText(row.scope),
+        analysisIds: asText(row.scope) === "organization" ? [] : (() => { try { const value = JSON.parse(asText(row.analysis_ids)) as unknown; return Array.isArray(value) ? value.map(asText) : []; } catch { return []; } })(),
+        exampleCreativeIds: asText(row.scope) === "organization" ? [] : (() => { try { const value = JSON.parse(asText(row.example_creative_ids)) as unknown; return Array.isArray(value) ? value.map(asText) : []; } catch { return []; } })(),
+        summary: asText(row.summary),
+      })),
     };
+  });
+
+export const startResearchCollection = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    const country = clip(body.country, 2, "Country", true).toUpperCase();
+    const limit = Number(body.limit ?? 50);
+    if (!/^[A-Z]{2}$/.test(country)) throw new Error("Enter a two-letter country code.");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Collection limit must be from 1 to 100 ads.");
+    return { brandId: clip(body.brandId, 80, "Brand", true), searchTerms: clip(body.searchTerms, 100, "Search terms", true), country, limit };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const access = await requireBrand(sql, context.userId, data.brandId, "member");
+    if (!process.env.META_AD_LIBRARY_TOKEN?.trim()) {
+      return { status: "NOT_CONNECTED" as const, error: "META_AD_LIBRARY_TOKEN is not configured. No ads were collected." };
+    }
+    const runId = id();
+    const queryKey = contentHash(`${data.searchTerms.toLowerCase()}|${data.country}|${data.limit}|${new Date().toISOString().slice(0, 10)}`);
+    const idempotencyKey = `research:${data.brandId}:${queryKey}`;
+    const jobs = await sql<{ id: string }>`
+      insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload, max_attempts)
+      values (${id()}, ${access.organizationId}, ${data.brandId}, 'research.collect', ${idempotencyKey}, 'queued',
+        ${JSON.stringify({ runId, organizationId: access.organizationId, searchTerms: data.searchTerms, country: data.country, limit: data.limit })}, 5)
+      on conflict (organization_id, idempotency_key) do nothing returning id
+    `;
+    const actualJobId = jobs[0]?.id ?? (await sql<{ id: string }>`select id from jobs where organization_id = ${access.organizationId} and idempotency_key = ${idempotencyKey} limit 1`)[0]?.id;
+    if (!actualJobId) throw new Error("Research collection job could not be queued.");
+    const previous = await sql<{ id: string }>`select id from research_collection_runs where organization_id = ${access.organizationId} and job_id = ${actualJobId} limit 1`;
+    if (previous[0]) return { status: "queued" as const, id: previous[0].id, reused: true };
+    if (!jobs[0]) throw new Error("A matching research run is being created. Retry shortly.");
+    await sql`
+      insert into research_collection_runs (id, organization_id, brand_id, job_id, search_terms, country, status, created_by)
+      values (${runId}, ${access.organizationId}, ${data.brandId}, ${actualJobId}, ${data.searchTerms}, ${data.country}, 'queued', ${context.userId})
+    `;
+    await audit(sql, {
+      organizationId: access.organizationId, brandId: data.brandId, actorId: context.userId,
+      action: "research.collection.queued", objectType: "research_collection", objectId: runId,
+      metadata: { source: "meta_ad_library", country: data.country, limit: String(data.limit) },
+    });
+    return { status: "queued" as const, id: runId, reused: false };
   });
 
 export const addCompetitor = createServerFn({ method: "POST" })
@@ -875,6 +978,11 @@ function opportunityView(row: Record<string, unknown>, decision: string, probabi
     evidenceBasis: asText(row.evidence_basis) as OpportunityDraft["evidenceBasis"],
     supportingCreativeIds: asJson<string[]>(row.supporting_ids, []),
     confidence: asNumber(row.confidence),
+    researchSampleCount: asNumber(row.research_sample_count),
+    researchState: asText(row.research_state),
+    researchSourceIds: asJson<string[]>(row.research_source_ids, []),
+    researchAnalysisIds: asJson<string[]>(row.research_analysis_ids, []),
+    researchConfidence: asNumber(row.research_confidence),
     hookDirection: "",
     status: asText(row.status),
     decision,
@@ -982,6 +1090,7 @@ export const refreshOpportunities = createServerFn({ method: "POST" })
           format, proof_type, product_id, product_name, market_signal, novelty_score, brand_fit_score,
           reproducibility_score, risk_score, saturation_score, historical_score, expected_value, raw_score,
           confidence, reason, evidence, evidence_basis, supporting_ids, status, decision_id
+          , research_sample_count, research_state, research_source_ids, research_analysis_ids, research_confidence
         ) values (
           ${opportunityId}, ${access.organizationId}, ${data.brandId}, ${draft.hypothesisId}, ${draft.label},
           ${draft.category}, ${draft.angle}, ${draft.hookType}, ${draft.audience}, ${draft.format},
@@ -989,7 +1098,9 @@ export const refreshOpportunities = createServerFn({ method: "POST" })
           ${draft.brandFit}, ${draft.reproducibility}, ${draft.risk}, ${draft.saturation},
           ${draft.historicalEvidence}, ${draft.expectedValue}, ${draft.rawScore}, ${draft.confidence},
           ${draft.reason}, ${JSON.stringify(evidence)}, ${draft.evidenceBasis},
-          ${JSON.stringify(draft.supportingCreativeIds)}, ${status}, ${decisionId}
+          ${JSON.stringify(draft.supportingCreativeIds)}, ${status}, ${decisionId}, ${draft.researchSampleCount},
+          ${draft.researchState ?? ""}, ${JSON.stringify(draft.researchSourceIds ?? [])},
+          ${JSON.stringify(draft.researchAnalysisIds ?? [])}, ${draft.researchConfidence ?? 0}
         )
       `;
       if (decision.decision === "HUMAN_REVIEW") {

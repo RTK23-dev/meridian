@@ -1,6 +1,6 @@
 # Setup
 
-Meridian 0.1.0-beta.2. Node.js 22 and a Postgres database.
+Meridian 0.1.0-beta.3. Node.js 22 and a Postgres database.
 
 ## 1. Install
 
@@ -103,6 +103,12 @@ The bridge shells out to the Hypit CLI. It does not copy Hypit source into Merid
 
 Leave a variable blank to keep that provider not connected.
 
+### JEV Research collection
+
+The first research source is Meta Ad Library video ads. Configure `META_AD_LIBRARY_TOKEN`, `OPENAI_API_KEY`, and the existing JEV chat connection (`XAI_API_KEY` or `OPENROUTER_API_KEY`). The long-lived worker also needs `ffmpeg` and `ffprobe` on `PATH`; set `FFMPEG_PATH` and `FFPROBE_PATH` when they are installed elsewhere. `OPENAI_TRANSCRIPTION_MODEL` defaults to `whisper-1`. A Meta snapshot that does not expose an explicit downloadable MP4 remains unavailable and is not transcribed or analyzed.
+
+Research is available only when these connections are configured. Missing credentials produce `NOT_CONNECTED`. Low-confidence structured analyses are retained with review status. Pattern summaries report observed corpus frequency only. Cross-brand organization summaries have no examples and are consumed only by brands that explicitly opt into organization learning in Learning settings.
+
 | You want | Set | Then |
 | --- | --- | --- |
 | Hypit video | `HYPIT_BASE_URL` | Studio video. A file is stored only after Hypit returns MP4 bytes. |
@@ -111,6 +117,7 @@ Leave a variable blank to keep that provider not connected.
 | Invite email | `EMAIL_API_URL`, `EMAIL_API_KEY` | The API receives JSON `{ to, subject, text }` with a bearer token. A failure leaves the invite pending. |
 | External embeddings | `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY` | OpenAI-compatible `POST` with `{ model, input }`. Local MiniLM is used when these are blank. |
 | Meta, TikTok, Google | The tokens in `.env.example` | An admin uses Integrations, tests the connection, and publishes only after the probe succeeds. |
+| JEV Research collection | `META_AD_LIBRARY_TOKEN`, `OPENAI_API_KEY`, and an existing JEV chat provider key; `ffmpeg`/`ffprobe` on the worker | Research stays `NOT_CONNECTED` without keys. Ads whose snapshots expose no downloadable MP4 stay unavailable. |
 | OAuth and webhooks | App ids, `TOKEN_ENCRYPTION_KEY`, `WEBHOOK_SECRET` | Tokens are sealed. Webhook posts without a valid signature are rejected. |
 
 `TOKEN_ENCRYPTION_KEY` is a secret you generate, for example:

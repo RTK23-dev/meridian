@@ -7,6 +7,10 @@ TanStack Start application. Postgres (Neon when deployed, embedded Postgres in p
 ```
 organization → brand → brand brain / products
         → observations and public-page documents
+        → Meta Ad Library collection job
+        → verified source MP4 → timestamped transcript → typed JEV Research analysis
+        → durable ad evidence and observed corpus patterns
+        → external pattern opportunity
         → opportunity ranker
         → JEV opportunity gate
         → brief
@@ -40,11 +44,14 @@ The web process does not execute the worker loop. `scripts/worker-entry.ts` clai
 | Experiments | `experiments/` | Allocation and sample floor. Not sent to an ad account by themselves |
 | Providers | `providers/meta.ts`, `tiktok.ts`, `google-ads.ts`, `connect.ts` | Live HTTP. Test provider is explicit |
 | Sources | `sources/` | Manual adapter, public-page fetch, SSRF checks |
+| JEV Research | `research/`, `providers/meta-research.ts` | Tenant-scoped Ad Library collection, verified media, transcript, evidence-grounded analysis, and corpus summaries |
 | API | `machine.ts` | Persistence and tenant checks |
 
 AI output is parsed into fields and then checked by deterministic code. Retrieved page text is wrapped as `untrusted_source` and is not allowed to act as instructions.
 
 Creative production uses original workflow stages. It does not embed another product's runtime.
+
+JEV Research analyzes external advertising evidence; it is not an approval gate. It uses the existing configured JEV chat provider for structured analysis and OpenAI Whisper for transcript extraction. Missing media, transcription, or model configuration is recorded explicitly. Research frequency is not an effectiveness claim. Organization summaries are used only for brands with the existing organization-learning opt-in and contain aggregate counts without examples or source ids.
 
 ## Request path
 

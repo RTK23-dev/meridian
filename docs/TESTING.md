@@ -6,7 +6,7 @@ Unit tests cover the decision math without a database:
 - `src/lib/meridian/access.test.ts` — roles
 - `src/lib/meridian/brain.test.ts` — completeness
 - `src/lib/meridian/loop.test.ts` — learning changes the next rank and the next brief; empty market does not invent a signal; foreign brand ids throw; thin samples emit nothing; guardian evidence maps to approve, review, and reject; missing vision evidence cannot auto-approve
-- `src/lib/meridian/acceptance.test.ts` — reads `evals/acceptance/market.json`, discovers an opportunity from those rows, refuses a copied hook line, routes missing vision to human review, retries a learning job, proves a learned pair changes the next brief, and checks that calibration does not move thresholds
+- `src/lib/meridian/acceptance.test.ts` — includes the external advertising research-to-Hypit acceptance path: bounded Meta collection, transcript extraction, typed analysis, corpus pattern, opportunity, JEV, brief, and Hypit lineage; it also checks evidence confidence, source dedupe, and no causal performance claims
 - `src/lib/meridian/jev/fixtures.test.ts` — reads `evals/jev/cases.json`
 - `src/lib/meridian/knowledge/model.test.ts` — attribute query and near-duplicate filter
 - `src/lib/meridian/workflow/templates.test.ts` — same stages, different variables

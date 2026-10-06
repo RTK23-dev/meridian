@@ -75,6 +75,7 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
         format, proof_type, product_id, product_name, market_signal, novelty_score, brand_fit_score,
         reproducibility_score, risk_score, saturation_score, historical_score, expected_value, raw_score,
         confidence, reason, evidence, evidence_basis, supporting_ids, status, decision_id
+        , research_sample_count, research_state, research_source_ids, research_analysis_ids, research_confidence
       ) values (
         ${opportunityId}, ${organizationId}, ${brandId}, ${draft.hypothesisId}, ${draft.label},
         ${draft.category}, ${draft.angle}, ${draft.hookType}, ${draft.audience}, ${draft.format},
@@ -82,7 +83,9 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
         ${draft.brandFit}, ${draft.reproducibility}, ${draft.risk}, ${draft.saturation},
         ${draft.historicalEvidence}, ${draft.expectedValue}, ${draft.rawScore}, ${draft.confidence},
         ${draft.reason}, ${JSON.stringify(evidence)}, ${draft.evidenceBasis},
-        ${JSON.stringify(draft.supportingCreativeIds)}, ${status}, ${decisionId}
+        ${JSON.stringify(draft.supportingCreativeIds)}, ${status}, ${decisionId}, ${draft.researchSampleCount},
+        ${draft.researchState ?? ""}, ${JSON.stringify(draft.researchSourceIds ?? [])},
+        ${JSON.stringify(draft.researchAnalysisIds ?? [])}, ${draft.researchConfidence ?? 0}
       )
     `;
     if (decision.decision === "HUMAN_REVIEW") {

@@ -2,6 +2,8 @@
 
 JEV is the deterministic gate around evidence. It is not a prompt and it does not see pixels.
 
+JEV Research is a separate upstream intelligence layer. It collects public Meta Ad Library video records, transcribes available audio, and stores typed, confidence-rated transcript analysis with source evidence. It discovers recurring patterns but makes no approval decision and does not claim that frequency predicts performance. Its patterns become evidence for the existing opportunity ranker and JEV decision questions; an approved decision can continue through the existing brief and Hypit handoff.
+
 ## Path
 
 ```
@@ -49,6 +51,8 @@ Creative QA thresholds are 0.90 / 0.60 / 0.75. Opportunity thresholds are 0.88 /
 Every decision stores the question version, answer schema version, model, provider, raw and calibrated probability, answer, evidence identifiers, policy version, calibration version, decision, and time. Reviewer outcomes are written beside the decision. They do not replace it.
 
 Approved threshold versions are read on the next opportunity, brief, creative, image, and video judgment. Studio, opportunity refresh, and rerank use that loader. A proposal that has not been approved does not change a decision.
+
+Research records are separate from `jev_decisions`: source ads, media hashes, transcript-cache entries, analysis runs and fields, transcript segments, and observed patterns live in the research tables. Analysis records identify provider, model, prompt/schema version, latency, token count, and representative analysis ids. Identical source/transcript/schema/model analyses are reused on retry. The source transcript is the only evidence the research analyst may classify; it may not infer visuals or outcomes. Transient job failures retry through the shared worker and eventually dead-letter; missing credentials and unavailable source media retain explicit statuses.
 
 ## Tests
 

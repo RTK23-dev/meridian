@@ -14,6 +14,7 @@ import { patternInfluence } from "../learning/engine.ts";
 import { eligiblePatterns } from "../knowledge/scope.ts";
 import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { strategyCandidates, type StrategyCandidate } from "./candidates.ts";
+import type { ResearchPattern } from "../research/patterns.ts";
 import { DEFAULT_WEIGHTS, opportunityScore, type ScoreWeights } from "../scoring.ts";
 
 export type EvidenceBasis = "none" | "brand_only" | "market" | "performance" | "mixed";
@@ -45,6 +46,11 @@ export type OpportunityDraft = {
   supportingCreativeIds: string[];
   confidence: number;
   hookDirection: string;
+  researchSampleCount?: number;
+  researchState?: string;
+  researchSourceIds?: string[];
+  researchAnalysisIds?: string[];
+  researchConfidence?: number;
 };
 
 export type RankedOpportunity = OpportunityDraft & {
@@ -124,6 +130,7 @@ export function rankOpportunities(input: {
   clusters?: MarketCluster[];
   /** Off unless this brand explicitly opted in. Global patterns are never used. */
   useOrganizationLearning?: boolean;
+  researchPatterns?: ResearchPattern[];
 }): RankedOpportunity[] {
   assertSameTenant(input.creatives, input.organizationId, input.brandId);
   for (const pattern of input.patterns) {
@@ -147,6 +154,7 @@ export function rankOpportunities(input: {
   const candidates = strategyCandidates(input.creatives, patterns, {
     clusters: input.clusters,
     brandText: `${input.brain.positioning} ${input.brain.valueProposition}`,
+    researchPatterns: input.researchPatterns,
   });
 
   const drafts: RankedOpportunity[] = [];
@@ -198,6 +206,13 @@ function scoreOne(input: {
       id: candidate.clusterId,
       source: "creative_embeddings",
       summary: `Semantic cluster ${candidate.clusterId} has ${candidate.clusterCompetitorCount ?? 0} competitor creatives and ${candidate.clusterOwnCount ?? 0} from this brand.`,
+    });
+  }
+  if (candidate.researchPattern) {
+    evidence.push({
+      id: `research-pattern:${candidate.id}`,
+      source: "jev_research",
+      summary: `${candidate.researchPattern.summary} Pattern confidence ${candidate.researchPattern.confidence.toFixed(2)}. Representative creative records: ${candidate.researchPattern.exampleAdIds.join(", ") || "not shared"}. Research analysis records: ${(candidate.researchPattern.exampleAnalysisIds ?? []).join(", ") || "not shared"}. No outcome or causal claim is implied.`,
     });
   }
   if (candidate.source === "discovered") {
@@ -397,6 +412,11 @@ function scoreOne(input: {
     supportingCreativeIds: (candidate.clusterMemberIds?.length ? candidate.clusterMemberIds : competitorHits.map((creative) => creative.id)).slice(0, 8),
     confidence: round3(confidence),
     hookDirection: candidate.hookLine,
+    researchSampleCount: candidate.researchPattern?.sampleCount ?? 0,
+    researchState: candidate.researchPattern?.state ?? "",
+    researchSourceIds: candidate.researchPattern?.exampleAdIds ?? [],
+    researchAnalysisIds: candidate.researchPattern?.exampleAnalysisIds ?? [],
+    researchConfidence: candidate.researchPattern?.confidence ?? 0,
     gateInput,
   };
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveAndPinHost } from "./fetch-page.server.ts";
+import { fetchPublicHtml, fetchPublicMedia, resolveAndPinHost } from "./fetch-page.server.ts";
 
 test("the connection lookup stays pinned to the address that passed validation", async () => {
   let resolutions = 0;
@@ -34,4 +34,9 @@ test("private addresses remain blocked during DNS validation", async () => {
     ]),
     /That host does not resolve to a public address\./,
   );
+});
+
+test("research snapshot and media fetchers reject private destinations before connecting", async () => {
+  await assert.rejects(fetchPublicHtml("http://127.0.0.1/snapshot"), /not a public host/);
+  await assert.rejects(fetchPublicMedia("http://169.254.169.254/latest/meta-data"), /not a public host/);
 });

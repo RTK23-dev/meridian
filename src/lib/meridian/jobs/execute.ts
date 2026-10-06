@@ -37,6 +37,10 @@ function readPayload(job: ExecutableJob): Record<string, unknown> {
 /** Runs one claimed job. A string result means the work finished. It does not invent provider data. */
 export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> {
   const payload = readPayload(job);
+  if (job.job_type === "research.collect") {
+    const { executeResearchCollection } = await import("../research/worker.ts");
+    return executeResearchCollection(sql, job, payload);
+  }
   if (job.job_type === "learning.update") {
     if (!job.brand_id) throw new Error("Learning needs a brand.");
     const count = await applyLearnedPatterns(sql, job.organization_id, job.brand_id);

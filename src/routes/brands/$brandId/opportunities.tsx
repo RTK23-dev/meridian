@@ -120,6 +120,7 @@ function Opportunities({ brandId }: { brandId: string }) {
                     <Metric label="Risk" value={item.risk} />
                     <Metric label="Basis" value={item.evidenceBasis} />
                   </dl>
+                  {item.researchSampleCount ? <p className="text-sm text-muted">JEV Research: {item.researchState} pattern · {item.researchSampleCount} source ads · confidence {(item.researchConfidence ?? 0).toFixed(2)} · creative ids {(item.researchSourceIds ?? []).join(", ") || "not shared"} · analysis ids {(item.researchAnalysisIds ?? []).join(", ") || "not shared"}</p> : null}
                   <div>
                     <h3 className="font-semibold">Why</h3>
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">

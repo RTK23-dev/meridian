@@ -16,9 +16,305 @@ import { assessCopy } from "./production/assess.ts";
 import { routeApproval } from "./production/route.ts";
 import { INTEGRATIONS } from "./providers/integrations.ts";
 import { classifyAgainst, clusterBy, NEURAL_EMBEDDING, whitespaceAngles } from "./semantic/lexical.ts";
+import { aggregateResearchPatterns } from "./research/patterns.ts";
+import { validateResearchAnalysis } from "./research/schema.ts";
+import { collectMetaAdLibrary } from "./providers/meta-research.ts";
+import { analyzeResearchTranscript, researchAnalysisKey } from "./research/analyzer.ts";
+import { isMp4, metaSnapshotVideoUrl } from "./research/media.ts";
+import { transcribeVideo } from "./research/transcription.ts";
+import { handoffToHypit, memoryHypitLedger } from "./hypit/handoff.ts";
+import { buildFixtureClip } from "./video/inspect.ts";
+import { loadReusableResearchAnalysis } from "./research/store.ts";
 
 const org = "org-acceptance";
 const brand = "brand-acceptance";
+
+test("JEV Research validates typed, evidence-backed analyses and flags uncertain results", () => {
+  const parsed = validateResearchAnalysis({
+    topic: { value: "hand care", confidence: 0.88, evidence: ["seg-1"] },
+    openingMove: { value: "problem", confidence: 0.83, evidence: ["seg-1"] },
+    hookMechanism: { value: "pain_point", confidence: 0.81, evidence: ["seg-1"] },
+    hook: { value: "Dry hands after washing?", confidence: 0.92, evidence: ["seg-1"] },
+    structure: { value: "problem_solution", confidence: 0.78, evidence: ["seg-1", "seg-2"] },
+    evidenceOffered: { value: "demonstration", confidence: 0.7, evidence: ["seg-2"] },
+    emotionalAppeal: { value: "relief", confidence: 0.64, evidence: ["seg-1"] },
+    adviceSpecificity: { value: "actionable", confidence: 0.71, evidence: ["seg-2"] },
+    cta: { value: "shop_now", confidence: 0.87, evidence: ["seg-3"] },
+    segments: [
+      { id: "seg-1", text: "Dry hands after washing?", startMs: 0, endMs: 1800, role: "hook", confidence: 0.92 },
+      { id: "seg-2", text: "Try this unscented soap.", startMs: 1800, endMs: 4100, role: "advice", confidence: 0.7 },
+      { id: "seg-3", text: "Shop now.", startMs: 4100, endMs: 5000, role: "cta", confidence: 0.87 },
+    ],
+    claims: [],
+  });
+  assert.equal(parsed.reviewRequired, true);
+  assert.equal(parsed.schemaVersion, "jev.research-ad.v1");
+  assert.throws(() => validateResearchAnalysis({ ...parsed, openingMove: { value: "invented", confidence: 0.8, evidence: ["seg-1"] } }));
+});
+
+test("JEV Research patterns are corpus counts with provenance, not performance claims", () => {
+  const make = (adId: string, hookMechanism: string) => ({ adId, analysisId: `analysis-${adId}`, analysis: validateResearchAnalysis({
+    topic: { value: "hand care", confidence: 0.9, evidence: ["seg-1"] },
+    openingMove: { value: "problem", confidence: 0.8, evidence: ["seg-1"] },
+    hookMechanism: { value: hookMechanism, confidence: 0.8, evidence: ["seg-1"] },
+    hook: { value: "Dry hands?", confidence: 0.9, evidence: ["seg-1"] },
+    structure: { value: "problem_solution", confidence: 0.8, evidence: ["seg-1"] },
+    evidenceOffered: { value: "demonstration", confidence: 0.8, evidence: ["seg-1"] },
+    emotionalAppeal: { value: "relief", confidence: 0.8, evidence: ["seg-1"] },
+    adviceSpecificity: { value: "actionable", confidence: 0.8, evidence: ["seg-1"] },
+    cta: { value: "shop_now", confidence: 0.8, evidence: ["seg-1"] },
+    segments: [{ id: "seg-1", text: "Dry hands?", startMs: null, endMs: null, role: "hook", confidence: 0.8 }],
+    claims: [],
+  }) });
+  const patterns = aggregateResearchPatterns([make("ad-a", "pain_point"), make("ad-b", "pain_point"), make("ad-c", "curiosity")]);
+  const repeatedHook = patterns.find((pattern) => pattern.dimension === "hookMechanism" && pattern.value === "pain_point");
+  assert.equal(repeatedHook?.sampleCount, 2);
+  assert.equal(repeatedHook?.state, "OBSERVED");
+  assert.deepEqual(repeatedHook?.exampleAdIds, ["ad-a", "ad-b"]);
+  assert.deepEqual(repeatedHook?.exampleAnalysisIds, ["analysis-ad-a", "analysis-ad-b"]);
+  assert.match(repeatedHook?.summary ?? "", /frequency only/i);
+  const opportunities = rankOpportunities({
+    organizationId: org, brandId: brand, brain: brain(), products: [], creatives: [], patterns: [], rejections: [],
+    researchPatterns: patterns,
+  });
+  const researchOpportunity = opportunities.find((candidate) => candidate.hypothesisId.startsWith("research:"));
+  assert.ok(researchOpportunity);
+  assert.equal(researchOpportunity.researchSampleCount, 2);
+  assert.equal(researchOpportunity.researchState, "OBSERVED");
+  assert.ok(researchOpportunity.evidence.some((item) => item.source === "jev_research"));
+  const brief = buildBrief({ opportunity: researchOpportunity, brain: brain(), patterns: [], rejections: [], observations: [] });
+  assert.ok(brief.why.some((item) => /frequency only/i.test(item)));
+});
+
+test("external advertising evidence flows through JEV Research, opportunity, decision, brief, and Hypit", async () => {
+  const collected = await collectMetaAdLibrary({
+    token: "research-token",
+    searchTerms: "hand soap",
+    country: "US",
+    transport: async () => ({
+      status: 200,
+      headers: {},
+      body: JSON.stringify({ data: [
+        { id: "external-1", page_name: "Soap One", ad_snapshot_url: "https://www.facebook.com/ads/archive/?id=external-1", ad_creative_bodies: ["Dry hands? Try gentle soap. Shop now."] },
+        { id: "external-2", page_name: "Soap Two", ad_snapshot_url: "https://www.facebook.com/ads/archive/?id=external-2", ad_creative_bodies: ["Dry hands? Use gentle soap. Shop now."] },
+      ] }),
+    }),
+  });
+  assert.equal(collected.status, "CONNECTED");
+  if (collected.status !== "CONNECTED") return;
+  const videoBytes = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50]);
+  const transcript = await transcribeVideo(videoBytes, {
+    env: { OPENAI_API_KEY: "configured-for-test" },
+    extractAudio: async () => ({ bytes: new Uint8Array([1, 2, 3]), durationMs: 5000 }),
+    fetchImpl: async () => new Response(JSON.stringify({
+      text: "Dry hands? Try gentle soap. Shop now.",
+      segments: [
+        { start: 0, end: 1.5, text: "Dry hands?" },
+        { start: 1.5, end: 4, text: "Try gentle soap." },
+        { start: 4, end: 5, text: "Shop now." },
+      ],
+    }), { status: 200 }),
+  });
+  assert.equal(transcript.status, "transcribed");
+  if (transcript.status !== "transcribed") return;
+  const analyzed = await analyzeResearchTranscript({
+    sourceId: collected.ads[0]!.externalId,
+    transcript: transcript.transcript,
+    segments: transcript.segments,
+    provider: "fixture-chat",
+    model: "fixture-model",
+    complete: async (request) => ({
+      ok: true,
+      provider: "fixture-chat",
+      model: request.model,
+      content: JSON.stringify({
+        topic: { value: "hand care", confidence: 0.91, evidence: ["t1"] },
+        openingMove: { value: "problem", confidence: 0.9, evidence: ["t1"] },
+        hookMechanism: { value: "pain_point", confidence: 0.9, evidence: ["t1"] },
+        hook: { value: "Dry hands?", confidence: 0.92, evidence: ["t1"] },
+        structure: { value: "problem_solution", confidence: 0.88, evidence: ["t1", "t2"] },
+        evidenceOffered: { value: "none", confidence: 0.8, evidence: ["t2"] },
+        emotionalAppeal: { value: "relief", confidence: 0.84, evidence: ["t1"] },
+        adviceSpecificity: { value: "general", confidence: 0.8, evidence: ["t2"] },
+        cta: { value: "shop_now", confidence: 0.9, evidence: ["t3"] },
+        segments: transcript.segments.map((segment) => ({ ...segment, role: segment.id === "t1" ? "hook" : segment.id === "t3" ? "cta" : "advice", confidence: 0.9 })),
+        claims: [],
+      }),
+      latencyMs: 8,
+      tokens: 400,
+    }),
+  });
+  assert.equal(analyzed.status, "analyzed");
+  if (analyzed.status !== "analyzed") return;
+  const patterns = aggregateResearchPatterns(collected.ads.map((ad) => ({ adId: ad.externalId, analysis: analyzed.analysis })));
+  const competitors: ObservedCreative[] = collected.ads.map((ad) => ({
+    ...own(0, "soap demonstration"), id: ad.externalId, origin: "competitor", hookType: "pain_point", format: "video", proofType: "problem_solution", text: ad.copy,
+  }));
+  const ranked = rankOpportunities({
+    organizationId: org,
+    brandId: brand,
+    brain: { ...brain(), problems: "hand care dry hands", positioning: "gentle hand soap", valueProposition: "North Soap is gentle hand soap." },
+    products: [{ id: "product-1", name: "North Soap", description: "", allowedClaims: "gentle hand soap", prohibitedClaims: "cures eczema" }],
+    creatives: competitors,
+    patterns: [],
+    rejections: [],
+    researchPatterns: patterns,
+  });
+  const opportunity = ranked.find((candidate) => candidate.researchSampleCount === 2);
+  assert.ok(opportunity, "collected advertising patterns become a JEV opportunity");
+  assert.equal(opportunity.researchSampleCount, 2);
+  const jev = decide(opportunityGate, opportunity.gateInput);
+  assert.notEqual(jev.decision, "REJECT");
+  const brief = buildBrief({ opportunity, brain: brain(), patterns: [], rejections: [] });
+  assert.ok(brief.why.some((item) => /frequency only/i.test(item)));
+  const handoff = await handoffToHypit({
+    organizationId: org,
+    brandId: brand,
+    product: "North Soap",
+    objective: "Test an original hand-care video built from observed advertising patterns.",
+    angle: brief.angle,
+    visualDirection: "Use original product shots and no unsupported claims.",
+    tone: "plain",
+    cta: "Shop now",
+    format: "short_ugc",
+    aspectRatio: "9:16",
+    durationSeconds: 10,
+    requiredClaims: [],
+    prohibitedClaims: ["cures eczema"],
+    brandAssets: [],
+    briefId: "brief-research-e2e",
+    decision: {
+      id: "decision-research-e2e", organizationId: org, brandId: brand, questionId: jev.questionId,
+      policyVersion: jev.policyVersion, decision: jev.decision,
+      reviewerDecision: jev.decision === "HUMAN_REVIEW" ? "approved" : "",
+      reasons: jev.reasons, evidence: jev.evidence,
+    },
+  }, {
+    env: { baseUrl: "https://hypit.example" },
+    ledger: memoryHypitLedger(),
+    transport: async (request) => request.url.endsWith("/artifact")
+      ? { status: 200, headers: {}, body: JSON.stringify({ mime: "video/mp4", base64: Buffer.from(buildFixtureClip({ durationMs: 2500, width: 64, height: 64, frames: [] })).toString("base64"), durationMs: 2500, width: 64, height: 64 }) }
+      : { status: 200, headers: {}, body: JSON.stringify({ providerJobId: "hypit-e2e", status: "succeeded" }) },
+  });
+  assert.equal(handoff.ok, true);
+  assert.equal(handoff.job.contract.lineage.jevDecisionId, "decision-research-e2e");
+  assert.equal(handoff.job.contract.lineage.briefId, "brief-research-e2e");
+  assert.ok(handoff.artifactBytes?.byteLength);
+});
+
+test("Meta Ad Library collection is explicit when disconnected and bounded/deduplicated when connected", async () => {
+  const disconnected = await collectMetaAdLibrary({ searchTerms: "soap", country: "US", transport: async () => { throw new Error("must not call"); } });
+  assert.equal(disconnected.status, "NOT_CONNECTED");
+  if (disconnected.status !== "NOT_CONNECTED") throw new Error("expected disconnected source");
+  assert.deepEqual(disconnected.ads, []);
+
+  const requests: string[] = [];
+  const connected = await collectMetaAdLibrary({
+    token: "secret",
+    searchTerms: "soap",
+    country: "US",
+    limit: 1000,
+    capturedAt: "2026-10-06T00:00:00.000Z",
+    transport: async (request) => {
+      requests.push(request.url);
+      if (request.url.includes("after=cursor")) return { status: 200, headers: {}, body: JSON.stringify({ data: [] }) };
+      return { status: 200, headers: {}, body: JSON.stringify({ data: [
+        { id: "a1", page_id: "p1", page_name: "Soap Co", ad_snapshot_url: "https://www.facebook.com/ads/archive/render_ad/?id=a1&access_token=secret", ad_creative_bodies: ["Observed copy"] },
+        { id: "a1", page_id: "p1", page_name: "Soap Co", ad_snapshot_url: "https://www.facebook.com/ads/archive/render_ad/?id=a1&access_token=secret", ad_creative_bodies: ["Observed copy"] },
+        { id: "bad", page_name: "Bad", ad_snapshot_url: "http://127.0.0.1/video", media_type: "VIDEO" },
+      ], paging: { cursors: { after: "cursor" } } }) };
+    },
+  });
+  assert.equal(connected.status, "CONNECTED");
+  if (connected.status !== "CONNECTED") throw new Error("expected connected source");
+  assert.equal(connected.ads.length, 1);
+  assert.equal(connected.ads[0]?.externalId, "a1");
+  assert.equal(connected.ads[0]?.capturedAt, "2026-10-06T00:00:00.000Z");
+  assert.equal(connected.ads[0]?.snapshotUrl.includes("access_token"), false);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0]?.includes("limit=25"), true);
+  assert.equal(requests[0]?.includes("secret"), false);
+});
+
+test("JEV Research analysis is idempotent by source/transcript/schema/model and rejects changed evidence", async () => {
+  const segments = [{ id: "t0", text: "Try this soap. Shop now.", startMs: 0, endMs: 3000, role: "other" as const, confidence: 1 }];
+  const response = {
+    topic: { value: "hand care", confidence: 0.9, evidence: ["t0"] },
+    openingMove: { value: "problem", confidence: 0.8, evidence: ["t0"] },
+    hookMechanism: { value: "pain_point", confidence: 0.8, evidence: ["t0"] },
+    hook: { value: "Try this soap.", confidence: 0.9, evidence: ["t0"] },
+    structure: { value: "problem_solution", confidence: 0.8, evidence: ["t0"] },
+    evidenceOffered: { value: "unclear", confidence: 0.4, evidence: ["t0"] },
+    emotionalAppeal: { value: "unclear", confidence: 0.4, evidence: ["t0"] },
+    adviceSpecificity: { value: "not_applicable", confidence: 0.8, evidence: ["t0"] },
+    cta: { value: "shop_now", confidence: 0.9, evidence: ["t0"] },
+    segments,
+    claims: [],
+  };
+  const complete = async () => ({ ok: true as const, content: JSON.stringify(response), provider: "fixture", model: "fixture-v1", latencyMs: 1, tokens: 10 });
+  const result = await analyzeResearchTranscript({ sourceId: "source-a", transcript: segments[0]!.text, segments, provider: "fixture", model: "fixture-v1", complete });
+  assert.equal(result.status, "analyzed");
+  if (result.status !== "analyzed") throw new Error("expected analysis");
+  assert.equal(result.analysis.reviewRequired, true);
+  assert.equal(result.key, researchAnalysisKey({ sourceId: "source-a", transcript: segments[0]!.text, provider: "fixture", model: "fixture-v1" }));
+  assert.notEqual(result.key, researchAnalysisKey({ sourceId: "source-b", transcript: segments[0]!.text, provider: "fixture", model: "fixture-v1" }));
+  const fabricated = { ...response, segments: [{ ...segments[0], text: "Invented claim" }] };
+  const rejected = await analyzeResearchTranscript({
+    sourceId: "source-a", transcript: segments[0]!.text, segments, provider: "fixture", model: "fixture-v1",
+    complete: async () => ({ ok: true, content: JSON.stringify(fabricated), provider: "fixture", model: "fixture-v1", latencyMs: 1, tokens: null }),
+  });
+  assert.equal(rejected.status, "failed");
+});
+
+test("stored JEV Research analysis is reusable only through its tenant, brand, ad, and video hash", async () => {
+  const parameters: unknown[] = [];
+  let statement = "";
+  const sql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    statement = strings.join(" ");
+    parameters.push(...values);
+    return [{
+      result: JSON.stringify({ schemaVersion: "jev.research-ad.v1" }),
+      cache_key: "cache-key", provider: "fixture", model: "model-1", prompt_version: "jev.research-ad.v1", latency_ms: 12, tokens: 30,
+    }];
+  }) as unknown as import("./learning/store.ts").Sql;
+  const cached = await loadReusableResearchAnalysis(sql, { organizationId: "org-a", brandId: "brand-a", researchAdId: "ad-a", videoHash: "hash-a" });
+  assert.equal(cached?.cacheKey, "cache-key");
+  assert.equal(cached?.analysis.schemaVersion, "jev.research-ad.v1");
+  assert.match(statement, /t\.content_hash/);
+  assert.match(statement, /r\.schema_version/);
+  assert.deepEqual(parameters.slice(0, 4), ["ad-a", "org-a", "brand-a", "hash-a"]);
+});
+
+test("Meta snapshot media extraction accepts only explicit public Meta-hosted video URLs", () => {
+  assert.equal(metaSnapshotVideoUrl('<meta property="og:video" content="https://video.xx.fbcdn.net/creative.mp4?sig=1&amp;x=2">'), "https://video.xx.fbcdn.net/creative.mp4?sig=1&x=2");
+  assert.equal(metaSnapshotVideoUrl('<video src="http://127.0.0.1/private.mp4"></video>'), null);
+  assert.equal(metaSnapshotVideoUrl('<video src="https://example.com/not-meta.mp4"></video>'), null);
+  assert.equal(isMp4(new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109])), true);
+  assert.equal(isMp4(new Uint8Array([1, 2, 3, 4])), false);
+});
+
+test("JEV Research transcription is explicit, timestamped, and content-hash reusable", async () => {
+  const video = new Uint8Array([1, 2, 3, 4]);
+  const unavailable = await transcribeVideo(video, { env: {}, extractAudio: async () => { throw new Error("must not extract"); } });
+  assert.equal(unavailable.status, "NOT_CONNECTED");
+  const result = await transcribeVideo(video, {
+    env: { OPENAI_API_KEY: "fixture-key" },
+    extractAudio: async () => ({ bytes: new Uint8Array([9, 8, 7]), durationMs: 4200 }),
+    fetchImpl: async (_url, init) => {
+      assert.match(String(init?.headers && new Headers(init.headers).get("authorization")), /^Bearer fixture-key$/);
+      const form = init?.body as FormData;
+      assert.equal(form.get("model"), "whisper-1");
+      return new Response(JSON.stringify({ text: "Dry hands? Try this soap. Shop now.", segments: [{ text: "Dry hands?", start: 0, end: 1.2 }, { text: "Try this soap. Shop now.", start: 1.2, end: 4.2 }] }), { status: 200 });
+    },
+  });
+  assert.equal(result.status, "transcribed");
+  if (result.status !== "transcribed") throw new Error("expected transcript");
+  assert.equal(result.provider, "openai");
+  assert.equal(result.model, "whisper-1");
+  assert.equal(result.contentHash.length, 64);
+  assert.equal(result.segments[1]?.startMs, 1200);
+  assert.equal(result.segments[1]?.endMs, 4200);
+});
 
 function brain(): BrainSlice {
   return {

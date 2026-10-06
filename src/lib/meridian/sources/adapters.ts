@@ -13,8 +13,8 @@ export const SOURCE_ADAPTERS = [
   },
   {
     id: "ad_library",
-    label: "Ad library",
-    implemented: false,
-    note: "Not connected. Competitor ads are not scraped, and none are fabricated.",
+    label: "Meta Ad Library",
+    implemented: true,
+    note: "Bounded, job-backed video-ad collection. Requires META_AD_LIBRARY_TOKEN; records without a public downloadable video stay unavailable and are not analyzed.",
   },
 ] as const;

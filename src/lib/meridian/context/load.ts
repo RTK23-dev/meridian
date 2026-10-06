@@ -3,6 +3,7 @@ import type { BrainSlice, LearnedPattern, ObservedCreative, ProductFact, Rejecti
 import type { ScoreWeights } from "../scoring.ts";
 import { weightsFromUnknown } from "../scoring.ts";
 import type { Sql } from "../learning/store.ts";
+import type { ResearchPattern } from "../research/patterns.ts";
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -42,6 +43,7 @@ export type BrandContext = {
   rejections: RejectionFact[];
   weights: ScoreWeights;
   useOrganizationLearning: boolean;
+  researchPatterns: ResearchPattern[];
 };
 
 /** Brand rows for ranking. Relative imports only, so the worker can load it. */
@@ -73,6 +75,26 @@ export async function loadBrandContext(sql: Sql, organizationId: string, brandId
     select use_organization_learning from brand_brains where brand_id = ${brandId} limit 1
   `;
   const flag = settingRows[0]?.use_organization_learning;
+  const useOrganizationLearning = flag === true || flag === "t" || flag === "true";
+  const researchRows = await sql<Record<string, unknown>>`
+    select dimension, value, state, sample_count, corpus_size, prevalence, confidence, analysis_ids, example_creative_ids, summary, scope
+    from research_patterns where organization_id = ${organizationId}
+      and (brand_id = ${brandId} or (scope = 'organization' and ${useOrganizationLearning}))
+    order by sample_count desc, dimension asc limit 200
+  `;
+  const researchPatterns: ResearchPattern[] = researchRows.map((row) => ({
+    dimension: asText(row.dimension) as ResearchPattern["dimension"],
+    scope: asText(row.scope) === "organization" ? "organization" : "brand",
+    value: asText(row.value),
+    state: asText(row.state) === "INFERRED" || asText(row.state) === "VALIDATED" ? asText(row.state) as ResearchPattern["state"] : "OBSERVED",
+    sampleCount: asNumber(row.sample_count),
+    corpusSize: asNumber(row.corpus_size),
+    prevalence: asNumber(row.prevalence),
+    confidence: asNumber(row.confidence),
+    exampleAnalysisIds: asText(row.scope) === "organization" ? [] : (() => { try { const value = JSON.parse(asText(row.analysis_ids)) as unknown; return Array.isArray(value) ? value.map(asText).filter(Boolean) : []; } catch { return []; } })(),
+    exampleAdIds: asText(row.scope) === "organization" ? [] : (() => { try { const value = JSON.parse(asText(row.example_creative_ids)) as unknown; return Array.isArray(value) ? value.map(asText).filter(Boolean) : []; } catch { return []; } })(),
+    summary: asText(row.summary),
+  }));
   const patterns: LearnedPattern[] = patternRows.map((row) => ({
     attribute: asText(row.attribute),
     value: asText(row.value),
@@ -120,11 +142,12 @@ export async function loadBrandContext(sql: Sql, organizationId: string, brandId
       text: asText(row.raw_text),
     })),
     patterns,
+    researchPatterns,
     rejections: rejectionRows.map((row) => ({ reasonCode: row.reason_code, count: asNumber(row.count) })),
     weights: weightsFromUnknown((await sql<Record<string, unknown>>`
       select brand_fit, historical_evidence, market_signal, novelty, reproducibility, saturation, risk
       from organizations where id = ${organizationId} limit 1
     `)[0]),
-    useOrganizationLearning: flag === true || flag === "t" || flag === "true",
+    useOrganizationLearning,
   };
 }
