@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({ component: Home });
 type SortMode = "activity" | "name" | "completeness";
 
 function Home() {
-  const { data, reload } = useWorkspace();
+  const { data, loading, reload } = useWorkspace();
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortMode>("activity");
   const [dismissedChecklist, setDismissedChecklist] = useState<string | null>(null);
@@ -36,6 +36,7 @@ function Home() {
     catch { setDismissedChecklist(null); }
   }, [data?.active?.id]);
 
+  if (loading) return <div role="status" aria-label="Loading workspace" className="space-y-4"><Skeleton variant="card" /></div>;
   if (!data?.active) return <CreateWorkspace onCreated={reload} />;
 
   const totalReviews = machines.reduce((count, query) => count + (query.data?.counts.reviews ?? 0), 0);

@@ -94,33 +94,42 @@ async function prepareFixtureWorkspace(page) {
   }
   await page.getByRole("button", { name: "Account and appearance settings", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
 
+  const onboardingHeading = page.getByRole("heading", { name: "Name the workspace", exact: true });
+  const overviewHeading = page.getByRole("heading", { name: "Workspace overview", exact: true });
+  await page.waitForFunction(() => {
+    const headings = [...document.querySelectorAll("h1, h2")].map((heading) => heading.textContent?.trim());
+    return headings.includes("Name the workspace") || headings.includes("Workspace overview");
+  }, undefined, { timeout: 15_000 });
+
   let createdFixtureWorkspace = false;
-  if (await page.getByRole("button", { name: "Create workspace", exact: true }).count()) {
+  if (await onboardingHeading.isVisible()) {
     await page.locator("form input").first().fill("Meridian UI baseline fixture");
     await page.getByRole("button", { name: "Create workspace", exact: true }).click();
     try {
-      await page.getByRole("heading", { name: "Workspace overview", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await onboardingHeading.waitFor({ state: "detached", timeout: 20_000 });
+      await overviewHeading.waitFor({ state: "visible", timeout: 15_000 });
       createdFixtureWorkspace = true;
     } catch {
       const bodyText = await page.locator("body").innerText().catch(() => "<page body unavailable>");
-      throw new Error(`UI baseline could not create its fixture workspace. Page content: ${bodyText.slice(0, 1_200)}`);
+      const alertText = await page.getByRole("alert").allInnerTexts().catch(() => []);
+      throw new Error(`UI baseline could not create its fixture workspace. Alerts: ${alertText.join(" | ") || "none"}. Page content: ${bodyText.slice(-1_200)}`);
     }
   }
 
   // Creating the workspace awaits the refreshed bootstrap data and waits for the
   // overview above. Keep that confirmed page state instead of issuing a second
   // bootstrap request that can race the just-completed onboarding mutation.
-  if (!createdFixtureWorkspace) {
+  if (!createdFixtureWorkspace && !(await overviewHeading.isVisible())) {
     await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
   }
-  const overviewHeading = page.getByRole("heading", { name: "Workspace overview", exact: true });
   try {
+    await onboardingHeading.waitFor({ state: "detached", timeout: 15_000 });
     await overviewHeading.waitFor({ state: "visible", timeout: 15_000 });
   } catch {
-    // Workspace creation can complete before the bootstrap query finishes refreshing
-    // its signed-in cache. A full navigation asks for the persisted workspace again.
+    // A full navigation asks for the persisted workspace again if bootstrap was stale.
     await page.reload({ waitUntil: "domcontentloaded", timeout: 45_000 });
     try {
+      await onboardingHeading.waitFor({ state: "detached", timeout: 15_000 });
       await overviewHeading.waitFor({ state: "visible", timeout: 15_000 });
     } catch {
       const bodyText = await page.locator("body").innerText().catch(() => "<page body unavailable>");
