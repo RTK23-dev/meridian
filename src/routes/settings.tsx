@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { useBusy } from "@/components/gate";
 import { AuditList } from "@/components/audit";
 import { AlertsPanel } from "@/components/alerts-panel";
@@ -7,7 +9,8 @@ import { Button, Field, Notice, Panel, SelectInput, TextInput } from "@/componen
 import { useWorkspace } from "@/components/workspace";
 import { hasRole, ROLES } from "@/lib/meridian/access";
 import { addMember, changeMemberRole, createOrganization, renameOrganization, updateWeights } from "@/lib/meridian/api";
-import { WEIGHT_KEYS, parseWeight, type ScoreWeights } from "@/lib/meridian/scoring";
+import { WEIGHT_KEYS, type ScoreWeights } from "@/lib/meridian/scoring";
+import { memberInviteSchema, scoringWeightsSchema, workspaceNameSchema, type MemberInviteInput, type ScoringWeightsInput, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
@@ -29,11 +32,64 @@ function SettingsPage() {
 
 function Settings() {
   const { data, reload } = useWorkspace();
+  const activeWorkspace = data?.active;
   const { pending, error, run } = useBusy();
   const [message, setMessage] = useState<string | null>(null);
-  if (!data?.active) return <p className="text-muted">Create a workspace first.</p>;
-  const active = data.active;
+  const renameForm = useForm<WorkspaceNameInput>({ resolver: zodResolver(workspaceNameSchema), defaultValues: { name: "" }, mode: "onBlur" });
+  const inviteForm = useForm<MemberInviteInput>({ resolver: zodResolver(memberInviteSchema), defaultValues: { email: "", role: "member" }, mode: "onBlur" });
+  const weightsForm = useForm<ScoringWeightsInput, unknown, ScoreWeights>({ resolver: zodResolver(scoringWeightsSchema), defaultValues: { brandFit: "", historicalEvidence: "", marketSignal: "", novelty: "", reproducibility: "", saturation: "", risk: "" }, mode: "onBlur" });
+  const createForm = useForm<WorkspaceNameInput>({ resolver: zodResolver(workspaceNameSchema), defaultValues: { name: "" }, mode: "onBlur" });
+  const hasUnsavedChanges = renameForm.formState.isDirty || inviteForm.formState.isDirty || weightsForm.formState.isDirty || createForm.formState.isDirty;
+  useEffect(() => {
+    if (!activeWorkspace) return;
+    if (!renameForm.formState.isDirty) renameForm.reset({ name: activeWorkspace.name });
+    if (!weightsForm.formState.isDirty) weightsForm.reset(Object.fromEntries(WEIGHT_KEYS.map((key) => [key, String(activeWorkspace.weights[key])])) as ScoringWeightsInput);
+  }, [activeWorkspace, renameForm, weightsForm]);
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [hasUnsavedChanges]);
+  if (!activeWorkspace) return <p className="text-muted">Create a workspace first.</p>;
+  const active = activeWorkspace;
   const canAdmin = hasRole(active.role, "admin");
+
+  async function rename(values: WorkspaceNameInput) {
+    const saved = await run(async () => {
+      await renameOrganization({ data: { organizationId: active.id, ...values } });
+      setMessage("Workspace renamed.");
+      await reload();
+    });
+    if (saved) renameForm.reset(values);
+  }
+
+  async function invite(values: MemberInviteInput) {
+    const saved = await run(async () => {
+      const result = await addMember({ data: { organizationId: active.id, ...values } });
+      setMessage(result.message);
+      await reload();
+    });
+    if (saved) inviteForm.reset({ email: "", role: "member" });
+  }
+
+  async function saveWeights(values: ScoreWeights) {
+    const saved = await run(async () => {
+      await updateWeights({ data: { organizationId: active.id, weights: values } });
+      setMessage("Diagnostic weights saved. They do not create opportunities.");
+      await reload();
+    });
+    if (saved) weightsForm.reset(Object.fromEntries(WEIGHT_KEYS.map((key) => [key, String(values[key])])) as ScoringWeightsInput);
+  }
+
+  async function createWorkspace(values: WorkspaceNameInput) {
+    const saved = await run(async () => {
+      await createOrganization({ data: values });
+      setMessage("Workspace created and selected.");
+      await reload();
+    });
+    if (saved) createForm.reset();
+  }
 
   return (
     <div className="space-y-8">
@@ -47,20 +103,13 @@ function Settings() {
       <Panel>
         <form
           className="flex flex-wrap items-end gap-3"
-          onSubmit={(event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-            const name = String(new FormData(event.currentTarget).get("name") ?? "");
-            void run(async () => {
-              await renameOrganization({ data: { organizationId: active.id, name } });
-              setMessage("Workspace renamed.");
-              await reload();
-            });
-          }}
+          onSubmit={renameForm.handleSubmit(rename)}
         >
-          <Field label="Name">
-            <TextInput name="name" defaultValue={active.name} disabled={!canAdmin} required />
+          <Field label="Name" error={renameForm.formState.errors.name?.message} required>
+            <TextInput {...renameForm.register("name")} maxLength={80} disabled={!canAdmin} required />
           </Field>
-          {canAdmin ? <Button type="submit" disabled={pending}>Rename</Button> : null}
+          {renameForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => renameForm.reset({ name: active.name })}>Discard</Button> : null}
+          {canAdmin ? <Button type="submit" disabled={pending || renameForm.formState.isSubmitting}>Rename</Button> : null}
         </form>
       </Panel>
       <Panel>
@@ -101,30 +150,16 @@ function Settings() {
         {canAdmin ? (
           <form
             className="mt-4 grid gap-3 md:grid-cols-[1fr_10rem_auto]"
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              void run(async () => {
-                const result = await addMember({
-                  data: {
-                    organizationId: active.id,
-                    email: String(form.get("email") ?? ""),
-                    role: String(form.get("role") ?? "member"),
-                  },
-                });
-                setMessage(result.message);
-                event.currentTarget.reset();
-                await reload();
-              });
-            }}
+            onSubmit={inviteForm.handleSubmit(invite)}
           >
-            <TextInput name="email" type="email" required placeholder="Email" aria-label="Email" />
-            <SelectInput name="role" aria-label="Role" defaultValue="member">
+            <Field label="Email" error={inviteForm.formState.errors.email?.message} required><TextInput {...inviteForm.register("email")} type="email" required maxLength={200} placeholder="Email" /></Field>
+            <Field label="Role" error={inviteForm.formState.errors.role?.message} required><SelectInput {...inviteForm.register("role")} aria-label="Role">
               <option value="admin">admin</option>
               <option value="member">member</option>
               <option value="viewer">viewer</option>
-            </SelectInput>
-            <Button type="submit" disabled={pending}>Add</Button>
+            </SelectInput></Field>
+            {inviteForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => inviteForm.reset({ email: "", role: "member" })}>Discard</Button> : null}
+            <Button type="submit" disabled={pending || inviteForm.formState.isSubmitting}>Add</Button>
           </form>
         ) : null}
         {data.invites.length > 0 ? (
@@ -145,60 +180,35 @@ function Settings() {
         </p>
         <form
           className="mt-4 grid gap-3 sm:grid-cols-2"
-          onSubmit={(event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            const weights = {} as ScoreWeights;
-            for (const key of WEIGHT_KEYS) {
-              try {
-                weights[key] = parseWeight(form.get(key), LABELS[key]);
-              } catch (caught) {
-                setMessage(caught instanceof Error ? caught.message : `${LABELS[key]} must be a number from 0 to 5.`);
-                return;
-              }
-            }
-            void run(async () => {
-              await updateWeights({ data: { organizationId: active.id, weights } });
-              setMessage("Diagnostic weights saved. They do not create opportunities.");
-              await reload();
-            });
-          }}
+          onSubmit={weightsForm.handleSubmit(saveWeights)}
         >
           {WEIGHT_KEYS.map((key) => (
-            <Field key={key} label={LABELS[key]}>
+            <Field key={key} label={LABELS[key]} error={weightsForm.formState.errors[key]?.message}>
               <TextInput
-                name={key}
+                {...weightsForm.register(key)}
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                defaultValue={String(active.weights[key])}
                 required
-                aria-invalid={message?.includes(LABELS[key]) ? true : undefined}
                 disabled={!canAdmin}
               />
             </Field>
           ))}
-          {canAdmin ? <Button type="submit" disabled={pending}>Save diagnostic weights</Button> : <p className="text-sm text-muted">Only an admin can change these.</p>}
+          {weightsForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => weightsForm.reset(Object.fromEntries(WEIGHT_KEYS.map((key) => [key, String(active.weights[key])])) as ScoringWeightsInput)}>Discard</Button> : null}
+          {canAdmin ? <Button type="submit" disabled={pending || weightsForm.formState.isSubmitting}>Save diagnostic weights</Button> : <p className="text-sm text-muted">Only an admin can change these.</p>}
         </form>
       </details>
       <Panel>
         <h2 className="font-display text-2xl">Another workspace</h2>
         <form
           className="mt-4 flex flex-wrap items-end gap-3"
-          onSubmit={(event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-            const name = String(new FormData(event.currentTarget).get("workspace") ?? "");
-            void run(async () => {
-              await createOrganization({ data: { name } });
-              setMessage("Workspace created and selected.");
-              await reload();
-            });
-          }}
+          onSubmit={createForm.handleSubmit(createWorkspace)}
         >
-          <Field label="Name">
-            <TextInput name="workspace" required />
+          <Field label="Name" error={createForm.formState.errors.name?.message} required>
+            <TextInput {...createForm.register("name")} maxLength={80} required />
           </Field>
-          <Button type="submit" variant="quiet" disabled={pending}>Create</Button>
+          {createForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => createForm.reset()}>Discard</Button> : null}
+          <Button type="submit" variant="quiet" disabled={pending || createForm.formState.isSubmitting}>Create</Button>
         </form>
       </Panel>
       <Panel id="workspace-audit">

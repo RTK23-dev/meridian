@@ -1,5 +1,7 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
@@ -15,6 +17,7 @@ import type { MachineSnapshot } from "@/lib/meridian/machine";
 import { errorText } from "@/components/ui";
 import { useBrandQuery, useMachineQuery, useOpportunitiesQuery, useReviewsQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { brandIdentitySchema, type BrandIdentity, type BrandIdentityInput } from "@/lib/meridian/schemas/brand";
 
 export const Route = createFileRoute("/brands/$brandId/")({ component: BrandPage });
 
@@ -34,7 +37,24 @@ function BrandHome({ brandId }: { brandId: string }) {
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
+  const { register, handleSubmit, reset, formState: { errors, isDirty, isSubmitting } } = useForm<BrandIdentityInput, unknown, BrandIdentity>({
+    resolver: zodResolver(brandIdentitySchema),
+    defaultValues: { name: "", description: "", category: "", industry: "", website: "", country: "", sells: "", targetCustomers: "" },
+    mode: "onBlur",
+  });
   const { pending, error: saveError, run } = useBusy([qk.brand(brandId), qk.machine(brandId)]);
+
+  useEffect(() => {
+    if (!detail || isDirty) return;
+    reset({ ...detail.identity, targetCustomers: detail.brain.targetCustomers });
+  }, [detail, isDirty, reset]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [isDirty]);
 
   if (detailQuery.error) return <ErrorState message={errorText(detailQuery.error)} onRetry={() => void detailQuery.refetch()} />;
   if (!detail) return <div role="status" aria-label="Loading brand" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
@@ -42,25 +62,17 @@ function BrandHome({ brandId }: { brandId: string }) {
   const canEdit = hasRole(detail.identity.role, "member");
   const canDelete = hasRole(detail.identity.role, "admin");
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    void run(async () => {
+  async function submit(values: BrandIdentity) {
+    const saved = await run(async () => {
       await updateBrand({
         data: {
           brandId,
-          name: String(form.get("name") ?? ""),
-          description: String(form.get("description") ?? ""),
-          category: String(form.get("category") ?? ""),
-          industry: String(form.get("industry") ?? ""),
-          website: String(form.get("website") ?? ""),
-          country: String(form.get("country") ?? ""),
-          sells: String(form.get("sells") ?? ""),
-          targetCustomers: detail?.brain.targetCustomers ?? "",
+          ...values,
         },
       });
       await reload();
     });
+    if (saved) reset(values);
   }
 
   return (
@@ -89,16 +101,17 @@ function BrandHome({ brandId }: { brandId: string }) {
 
       <details className="rounded-xl border border-border bg-surface p-4">
         <summary className="cursor-pointer font-semibold">Brand details</summary>
-        <form onSubmit={submit} className="mt-4 grid gap-4 md:grid-cols-2">
-          <Field label="Name"><TextInput name="name" defaultValue={detail.identity.name} required disabled={!canEdit} /></Field>
-          <Field label="Website"><TextInput name="website" defaultValue={detail.identity.website} disabled={!canEdit} /></Field>
-          <Field label="Industry"><TextInput name="industry" defaultValue={detail.identity.industry} disabled={!canEdit} /></Field>
-          <Field label="Category"><TextInput name="category" defaultValue={detail.identity.category} disabled={!canEdit} /></Field>
-          <Field label="Country or market"><TextInput name="country" defaultValue={detail.identity.country} disabled={!canEdit} /></Field>
-          <div className="md:col-span-2"><Field label="What you sell"><TextArea name="sells" defaultValue={detail.identity.sells} disabled={!canEdit} /></Field></div>
-          <div className="md:col-span-2"><Field label="Description"><TextArea name="description" defaultValue={detail.identity.description} disabled={!canEdit} /></Field></div>
+        <form onSubmit={handleSubmit(submit)} className="mt-4 grid gap-4 md:grid-cols-2">
+          <Field label="Name" error={errors.name?.message} required><TextInput {...register("name")} maxLength={120} required disabled={!canEdit} /></Field>
+          <Field label="Website" error={errors.website?.message}><TextInput {...register("website")} maxLength={500} disabled={!canEdit} /></Field>
+          <Field label="Industry" error={errors.industry?.message}><TextInput {...register("industry")} maxLength={120} disabled={!canEdit} /></Field>
+          <Field label="Category" error={errors.category?.message}><TextInput {...register("category")} maxLength={120} disabled={!canEdit} /></Field>
+          <Field label="Country or market" error={errors.country?.message}><TextInput {...register("country")} maxLength={80} disabled={!canEdit} /></Field>
+          <div className="md:col-span-2"><Field label="What you sell" error={errors.sells?.message}><TextArea {...register("sells")} maxLength={500} disabled={!canEdit} /></Field></div>
+          <div className="md:col-span-2"><Field label="Description" error={errors.description?.message}><TextArea {...register("description")} maxLength={2000} disabled={!canEdit} /></Field></div>
           {saveError ? <div className="md:col-span-2"><Notice>{saveError}</Notice></div> : null}
-          {canEdit ? <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save brand details"}</Button> : null}
+          {isDirty ? <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning bg-warning-soft p-3 text-sm" role="status"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => reset({ ...detail.identity, targetCustomers: detail.brain.targetCustomers })}>Discard changes</Button></div> : null}
+          {canEdit ? <Button type="submit" disabled={pending || isSubmitting}>{pending || isSubmitting ? "Saving…" : "Save brand details"}</Button> : null}
         </form>
       </details>
 

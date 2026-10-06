@@ -1,5 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea } from "@/components/ui";
@@ -16,6 +18,7 @@ import {
 } from "@/lib/meridian/brain";
 import { useAssetsQuery, useBrandQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { brainValuesSchema, type BrainFieldsInput } from "@/lib/meridian/schemas/brain";
 
 export const Route = createFileRoute("/brands/$brandId/brain")({ component: BrainPage });
 
@@ -29,12 +32,25 @@ function BrainPage() {
 function BrainEditor({ brandId }: { brandId: string }) {
   const query = useBrandQuery(brandId);
   const detail = query.data ?? null;
-  const [brain, setBrain] = useState<BrainValues>(emptyBrain());
+  const [discardRequested, setDiscardRequested] = useState(false);
+  const { register, handleSubmit, reset, watch, formState: { errors, isDirty, isSubmitting } } = useForm<BrainFieldsInput>({
+    resolver: zodResolver(brainValuesSchema),
+    defaultValues: emptyBrain(),
+    mode: "onBlur",
+  });
+  const brain = watch();
   const { pending, error: saveError, run } = useBusy([qk.brand(brandId)]);
 
   useEffect(() => {
-    if (detail) setBrain(detail.brain);
-  }, [detail]);
+    if (detail && !isDirty) reset(detail.brain);
+  }, [detail, isDirty, reset]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [isDirty]);
 
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!detail) return <div role="status" aria-label="Loading brand brain" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
@@ -43,17 +59,25 @@ function BrainEditor({ brandId }: { brandId: string }) {
   const filledFields = BRAIN_FIELDS.filter((field) => brain[field.key].trim()).length;
   const completeness = Math.round((filledFields / BRAIN_FIELDS.length) * 100);
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    void run(async () => {
-      await saveBrain({ data: { brandId, ...brain } });
+  async function submit(values: BrainValues) {
+    const saved = await run(async () => {
+      await saveBrain({ data: { brandId, ...values } });
     });
+    if (saved) {
+      reset(values);
+      setDiscardRequested(false);
+    }
   }
 
   return (
     <div className="space-y-8">
       <BrandNav brandId={brandId} />
-      <form onSubmit={submit} className="space-y-8">
+      <form onSubmit={handleSubmit(submit)} className="space-y-8" onKeyDown={(event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+          event.preventDefault();
+          event.currentTarget.requestSubmit();
+        }
+      }}>
       <div className="space-y-2">
         <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-muted">
           {detail.identity.name}
@@ -82,13 +106,12 @@ function BrainEditor({ brandId }: { brandId: string }) {
                   key={field.key}
                   label={field.label}
                   hint={brain[field.key].trim() && source ? provenanceLabel(source) : "Empty. Not inferred."}
+                  error={errors[field.key]?.message}
                 >
                   <TextArea
-                    value={brain[field.key]}
+                    {...register(field.key)}
                     disabled={!canEdit}
-                    onChange={(event) =>
-                      setBrain((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
+                    maxLength={4000}
                   />
                 </Field>
               );
@@ -101,14 +124,8 @@ function BrainEditor({ brandId }: { brandId: string }) {
         hint="Stored only. Nothing is published or approved because this preference is set."
       >
         <SelectInput
-          value={brain.automationLevel}
+          {...register("automationLevel")}
           disabled={!canEdit}
-          onChange={(event) =>
-            setBrain((current) => ({
-              ...current,
-              automationLevel: event.target.value as BrainValues["automationLevel"],
-            }))
-          }
         >
           {AUTOMATION_LEVELS.map((level) => (
             <option key={level} value={level}>
@@ -117,8 +134,10 @@ function BrainEditor({ brandId }: { brandId: string }) {
           ))}
         </SelectInput>
       </Field>
+      {errors.automationLevel?.message ? <p role="alert" className="text-sm text-danger">{errors.automationLevel.message}</p> : null}
       {saveError ? <Notice>{saveError}</Notice> : null}
-      {canEdit ? <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save brain"}</Button> : null}
+      {isDirty ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning bg-warning-soft p-3 text-sm" role="status"><span>{discardRequested ? "Discard your unsaved brain changes?" : "Unsaved changes"}</span>{discardRequested ? <div className="flex gap-2"><Button type="button" variant="quiet" onClick={() => setDiscardRequested(false)}>Continue editing</Button><Button type="button" variant="danger" onClick={() => { reset(detail.brain); setDiscardRequested(false); }}>Discard changes</Button></div> : <Button type="button" variant="quiet" onClick={() => setDiscardRequested(true)}>Discard changes</Button>}</div> : null}
+      {canEdit ? <Button type="submit" disabled={pending || isSubmitting}>{pending || isSubmitting ? "Saving…" : "Save brain"}</Button> : null}
       <Panel>
         <h2 className="font-display text-xl">Versions</h2>
         <ul className="mt-3 space-y-2 text-sm">
@@ -182,11 +201,12 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
             className="mt-3 space-y-3"
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault();
-              const text = String(new FormData(event.currentTarget).get("material") ?? "");
+              const form = event.currentTarget;
+              const text = String(new FormData(form).get("material") ?? "");
               void run(async () => {
                 const saved = await storeMaterial({ data: { brandId, filename: "pasted.txt", mime: "text/plain", text, base64: "" } });
                 setNote(saved.detail);
-                event.currentTarget.reset();
+                form.reset();
               });
             }}
           >

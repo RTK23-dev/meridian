@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { forwardRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 import { Button as DesignButton } from "./ui/button";
 import { Card } from "./ui/card";
@@ -20,13 +20,13 @@ export function errorText(error: unknown): string {
   return "Something went wrong.";
 }
 
-export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <Input {...props} />;
-}
+export const TextInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function TextInput(props, ref) {
+  return <Input ref={ref} {...props} />;
+});
 
-export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <Textarea {...props} />;
-}
+export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function TextArea(props, ref) {
+  return <Textarea ref={ref} {...props} />;
+});
 
 export function SelectInput({ className, id, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   const ids = useFieldIds(id, undefined, undefined);

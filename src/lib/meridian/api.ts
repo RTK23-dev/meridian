@@ -18,9 +18,12 @@ import {
 } from "@/lib/meridian/brain";
 import {
   WEIGHT_KEYS,
-  parseWeight,
   type ScoreWeights,
 } from "@/lib/meridian/scoring";
+import { productFieldsSchema } from "@/lib/meridian/schemas/product";
+import { brandIdentitySchema } from "@/lib/meridian/schemas/brand";
+import { brainValuesSchema } from "@/lib/meridian/schemas/brain";
+import { memberInviteSchema, scoringWeightsSchema, workspaceNameSchema } from "@/lib/meridian/schemas/settings";
 
 export type OrgSummary = {
   id: string;
@@ -164,21 +167,6 @@ function clip(value: unknown, max: number, label: string, required = false): str
   if (required && !trimmed) throw new Error(`${label} is required.`);
   if (trimmed.length > max) throw new Error(`${label} is too long.`);
   return trimmed;
-}
-
-function optionalUrl(value: unknown, label: string): string {
-  const raw = clip(value, 500, label, false);
-  if (!raw) return "";
-  let url: URL;
-  try {
-    url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
-  } catch {
-    throw new Error(`${label} must be a valid URL.`);
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error(`${label} must use http or https.`);
-  }
-  return url.toString();
 }
 
 function objectInput(input: unknown): Record<string, unknown> {
@@ -488,7 +476,7 @@ async function uniqueSlug(sql: Sql, name: string): Promise<string> {
 export const createOrganization = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    return { name: clip(body.name, 80, "Workspace name", true) };
+    return workspaceNameSchema.parse(body);
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -541,7 +529,7 @@ export const renameOrganization = createServerFn({ method: "POST" })
     const body = objectInput(input);
     return {
       organizationId: clip(body.organizationId, 80, "Workspace", true),
-      name: clip(body.name, 80, "Workspace name", true),
+      ...workspaceNameSchema.parse(body),
     };
   })
   .middleware([authMiddleware])
@@ -568,10 +556,7 @@ export const updateWeights = createServerFn({ method: "POST" })
     const body = objectInput(input);
     const organizationId = clip(body.organizationId, 80, "Workspace", true);
     const source = objectInput(body.weights);
-    const weights = {} as ScoreWeights;
-    for (const key of WEIGHT_KEYS) {
-      weights[key] = parseWeight(source[key], key);
-    }
+    const weights = scoringWeightsSchema.parse(Object.fromEntries(WEIGHT_KEYS.map((key) => [key, String(source[key] ?? "")] )));
     return { organizationId, weights };
   })
   .middleware([authMiddleware])
@@ -605,12 +590,10 @@ export const updateWeights = createServerFn({ method: "POST" })
 export const addMember = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    const role = clip(body.role, 20, "Role", true);
-    if (!isRole(role) || role === "owner") throw new Error("Choose admin, member, or viewer.");
+    const invite = memberInviteSchema.parse({ email: body.email, role: body.role });
     return {
       organizationId: clip(body.organizationId, 80, "Workspace", true),
-      email: clip(body.email, 200, "Email", true).toLowerCase(),
-      role,
+      ...invite,
     };
   })
   .middleware([authMiddleware])
@@ -751,16 +734,13 @@ export const changeMemberRole = createServerFn({ method: "POST" })
   });
 
 function identityInput(body: Record<string, unknown>, requireName: boolean) {
-  return {
-    name: clip(body.name, 120, "Brand name", requireName),
-    description: clip(body.description, 2000, "Description"),
-    category: clip(body.category, 120, "Category"),
-    industry: clip(body.industry, 120, "Industry"),
-    website: optionalUrl(body.website, "Website"),
-    country: clip(body.country, 80, "Country"),
-    sells: clip(body.sells, 500, "What you sell"),
-    targetCustomers: clip(body.targetCustomers, 1000, "Target customer"),
-  };
+  const candidate = { ...body };
+  for (const key of ["description", "category", "industry", "website", "country", "sells", "targetCustomers"] as const) {
+    if (candidate[key] == null) candidate[key] = "";
+  }
+  const parsed = brandIdentitySchema.parse(candidate);
+  if (requireName && !parsed.name) throw new Error("Brand name is required.");
+  return parsed;
 }
 
 export const createBrand = createServerFn({ method: "POST" })
@@ -952,14 +932,12 @@ export const getBrand = createServerFn({ method: "POST" })
   });
 
 function readBrain(body: Record<string, unknown>): BrainValues {
-  const brain = emptyBrain();
+  const candidate = { ...emptyBrain(), ...body };
   for (const field of BRAIN_FIELDS) {
-    brain[field.key] = clip(body[field.key], 4000, field.label);
+    if (candidate[field.key] == null) candidate[field.key] = "";
   }
-  const level = clip(body.automationLevel, 20, "Automation", false) || "manual";
-  if (!isAutomationLevel(level)) throw new Error("Unknown automation level.");
-  brain.automationLevel = level;
-  return brain;
+  if (candidate.automationLevel == null) candidate.automationLevel = "manual";
+  return brainValuesSchema.parse(candidate);
 }
 
 export const saveBrain = createServerFn({ method: "POST" })
@@ -1047,19 +1025,6 @@ export const saveBrain = createServerFn({ method: "POST" })
     return { version: nextVersion };
   });
 
-function productInput(body: Record<string, unknown>) {
-  return {
-    name: clip(body.name, 160, "Product name", true),
-    description: clip(body.description, 4000, "Description"),
-    features: clip(body.features, 4000, "Features"),
-    benefits: clip(body.benefits, 4000, "Benefits"),
-    price: clip(body.price, 80, "Price"),
-    url: optionalUrl(body.url, "Product URL"),
-    allowedClaims: clip(body.allowedClaims, 2000, "Allowed claims"),
-    prohibitedClaims: clip(body.prohibitedClaims, 2000, "Prohibited claims"),
-  };
-}
-
 export const saveProduct = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
@@ -1067,7 +1032,16 @@ export const saveProduct = createServerFn({ method: "POST" })
     return {
       brandId: clip(body.brandId, 80, "Brand", true),
       productId,
-      product: productInput(body),
+      product: productFieldsSchema.parse({
+        ...body,
+        description: body.description ?? "",
+        features: body.features ?? "",
+        benefits: body.benefits ?? "",
+        price: body.price ?? "",
+        url: body.url ?? "",
+        allowedClaims: body.allowedClaims ?? "",
+        prohibitedClaims: body.prohibitedClaims ?? "",
+      }),
     };
   })
   .middleware([authMiddleware])

@@ -71,12 +71,14 @@ export function useBusy(invalidate: readonly QueryKey[] = []) {
     },
     onError: (caught) => toast.error(errorText(caught)),
   });
-  async function run(task: () => Promise<void>) {
+  async function run(task: () => Promise<void>): Promise<boolean> {
     setError(null);
     try {
       await mutation.mutateAsync(task);
+      return true;
     } catch (caught) {
       setError(errorText(caught));
+      return false;
     }
   }
   return { pending: mutation.isPending, error, run };
