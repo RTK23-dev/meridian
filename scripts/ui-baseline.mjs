@@ -96,7 +96,7 @@ async function prepareFixtureWorkspace(page) {
 
   let createdFixtureWorkspace = false;
   if (await page.getByRole("button", { name: "Create workspace", exact: true }).count()) {
-    await page.getByLabel("Workspace name", { exact: true }).fill("Meridian UI baseline fixture");
+    await page.locator("form input").first().fill("Meridian UI baseline fixture");
     await page.getByRole("button", { name: "Create workspace", exact: true }).click();
     try {
       await page.getByRole("heading", { name: "Workspace overview", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
