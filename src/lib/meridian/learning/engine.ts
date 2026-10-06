@@ -25,6 +25,7 @@ const PAIRS = [
   ["angle", "format"],
   ["hookType", "format"],
   ["productName", "angle"],
+  ["visualStyle", "format"],
 ] as const;
 
 type Totals = {
@@ -173,6 +174,7 @@ function patternRow(
   return {
     organizationId: input.organizationId,
     brandId: input.brandId,
+    scope: "brand",
     attribute: input.attribute,
     value: input.value,
     metric,

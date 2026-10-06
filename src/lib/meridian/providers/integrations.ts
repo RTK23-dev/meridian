@@ -32,4 +32,9 @@ export const INTEGRATIONS = [
     status: "NOT_CONNECTED" as const,
     detail: "Performance is entered by hand into the same observation table a connector would use.",
   },
+  {
+    id: "video",
+    status: "NOT_CONNECTED" as const,
+    detail: "No video provider is connected. No clip is generated.",
+  },
 ] as const satisfies readonly { id: string; status: IntegrationStatus; detail: string }[];

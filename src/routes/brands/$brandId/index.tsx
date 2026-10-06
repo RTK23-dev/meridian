@@ -151,7 +151,8 @@ function MachineStrip({ snapshot }: { snapshot: MachineSnapshot }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted">
-        Text model: {snapshot.providerConfigured ? snapshot.provider : "not configured"}. Ad library: not connected.
+        Text model: {snapshot.providerConfigured ? snapshot.provider : "not configured"}. Ad library, publishing, video, and neural embeddings: not connected.
+        {snapshot.usage.tokens > 0 ? ` Model tokens recorded: ${snapshot.usage.tokens}.` : ""} Cost is {snapshot.usage.costCents == null ? "not reported" : `${snapshot.usage.costCents} cents`}.
       </p>
       <ol className="grid gap-3 md:grid-cols-3">
         {steps.map(([title, state]) => (

@@ -5,6 +5,7 @@ const LINKS = [
   { to: "/brands/$brandId/brain", label: "Brain" },
   { to: "/brands/$brandId/products", label: "Products" },
   { to: "/brands/$brandId/market", label: "Market" },
+  { to: "/brands/$brandId/intelligence", label: "Intelligence" },
   { to: "/brands/$brandId/opportunities", label: "Opportunities" },
   { to: "/brands/$brandId/library", label: "Library" },
   { to: "/brands/$brandId/reviews", label: "Reviews" },

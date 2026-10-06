@@ -16,6 +16,7 @@ import { Route as BrandsNewRouteImport } from './routes/brands/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as BrandsBrandIdIndexRouteImport } from './routes/brands/$brandId/index'
 import { Route as BrandsBrandIdBrainRouteImport } from './routes/brands/$brandId/brain'
+import { Route as BrandsBrandIdIntelligenceRouteImport } from './routes/brands/$brandId/intelligence'
 import { Route as BrandsBrandIdLearningRouteImport } from './routes/brands/$brandId/learning'
 import { Route as BrandsBrandIdLibraryRouteImport } from './routes/brands/$brandId/library'
 import { Route as BrandsBrandIdMarketRouteImport } from './routes/brands/$brandId/market'
@@ -58,6 +59,12 @@ const BrandsBrandIdBrainRoute = BrandsBrandIdBrainRouteImport.update({
   path: '/brands/$brandId/brain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BrandsBrandIdIntelligenceRoute =
+  BrandsBrandIdIntelligenceRouteImport.update({
+    id: '/brands/$brandId/intelligence',
+    path: '/brands/$brandId/intelligence',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const BrandsBrandIdLearningRoute = BrandsBrandIdLearningRouteImport.update({
   id: '/brands/$brandId/learning',
   path: '/brands/$brandId/learning',
@@ -97,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
+  '/brands/$brandId/intelligence': typeof BrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
   '/brands/$brandId/library': typeof BrandsBrandIdLibraryRoute
   '/brands/$brandId/market': typeof BrandsBrandIdMarketRoute
@@ -112,6 +120,7 @@ export interface FileRoutesByTo {
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
+  '/brands/$brandId/intelligence': typeof BrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
   '/brands/$brandId/library': typeof BrandsBrandIdLibraryRoute
   '/brands/$brandId/market': typeof BrandsBrandIdMarketRoute
@@ -128,6 +137,7 @@ export interface FileRoutesById {
   '/brands/new': typeof BrandsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
+  '/brands/$brandId/intelligence': typeof BrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof BrandsBrandIdLearningRoute
   '/brands/$brandId/library': typeof BrandsBrandIdLibraryRoute
   '/brands/$brandId/market': typeof BrandsBrandIdMarketRoute
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
     | '/brands/new'
     | '/api/auth/$'
     | '/brands/$brandId/brain'
+    | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
     | '/brands/$brandId/library'
     | '/brands/$brandId/market'
@@ -160,6 +171,7 @@ export interface FileRouteTypes {
     | '/brands/new'
     | '/api/auth/$'
     | '/brands/$brandId/brain'
+    | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
     | '/brands/$brandId/library'
     | '/brands/$brandId/market'
@@ -175,6 +187,7 @@ export interface FileRouteTypes {
     | '/brands/new'
     | '/api/auth/$'
     | '/brands/$brandId/brain'
+    | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
     | '/brands/$brandId/library'
     | '/brands/$brandId/market'
@@ -191,6 +204,7 @@ export interface RootRouteChildren {
   BrandsNewRoute: typeof BrandsNewRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   BrandsBrandIdBrainRoute: typeof BrandsBrandIdBrainRoute
+  BrandsBrandIdIntelligenceRoute: typeof BrandsBrandIdIntelligenceRoute
   BrandsBrandIdLearningRoute: typeof BrandsBrandIdLearningRoute
   BrandsBrandIdLibraryRoute: typeof BrandsBrandIdLibraryRoute
   BrandsBrandIdMarketRoute: typeof BrandsBrandIdMarketRoute
@@ -251,6 +265,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BrandsBrandIdBrainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/brands/$brandId/intelligence': {
+      id: '/brands/$brandId/intelligence'
+      path: '/brands/$brandId/intelligence'
+      fullPath: '/brands/$brandId/intelligence'
+      preLoaderRoute: typeof BrandsBrandIdIntelligenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/brands/$brandId/learning': {
       id: '/brands/$brandId/learning'
       path: '/brands/$brandId/learning'
@@ -303,6 +324,7 @@ const rootRouteChildren: RootRouteChildren = {
   BrandsNewRoute: BrandsNewRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   BrandsBrandIdBrainRoute: BrandsBrandIdBrainRoute,
+  BrandsBrandIdIntelligenceRoute: BrandsBrandIdIntelligenceRoute,
   BrandsBrandIdLearningRoute: BrandsBrandIdLearningRoute,
   BrandsBrandIdLibraryRoute: BrandsBrandIdLibraryRoute,
   BrandsBrandIdMarketRoute: BrandsBrandIdMarketRoute,

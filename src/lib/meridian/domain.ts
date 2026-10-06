@@ -55,6 +55,8 @@ export type LearnedPattern = {
   revenueCents?: number;
   organizationId?: string;
   brandId?: string;
+  /** Brand scope is used by default. Organization scope applies only after an explicit opt-in. Global never applies. */
+  scope?: "brand" | "organization" | "global";
 };
 
 export type RejectionFact = {

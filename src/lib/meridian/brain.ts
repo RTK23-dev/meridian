@@ -34,6 +34,9 @@ export const BRAIN_FIELDS = [
   { key: "preferredChannels", column: "preferred_channels", label: "Preferred channels", group: "Advertising" },
   { key: "requiredDisclaimers", column: "required_disclaimers", label: "Required disclaimers", group: "Compliance" },
   { key: "prohibitedClaims", column: "prohibited_claims", label: "Prohibited claims", group: "Compliance" },
+  { key: "personas", column: "personas", label: "Personas", group: "Audience" },
+  { key: "colors", column: "colors", label: "Colors", group: "Visual" },
+  { key: "typography", column: "typography", label: "Typography", group: "Visual" },
 ] as const;
 
 export type BrainKey = (typeof BRAIN_FIELDS)[number]["key"];
@@ -63,6 +66,9 @@ export function emptyBrain(): BrainValues {
     preferredChannels: "",
     requiredDisclaimers: "",
     prohibitedClaims: "",
+    personas: "",
+    colors: "",
+    typography: "",
   };
   return brain;
 }

@@ -85,6 +85,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             {market.competitors.filter((item) => item.status === "confirmed").map((item) => (
               <li key={item.id}>
                 <span className="font-semibold">{item.name}</span>
+                <span className="text-muted"> · {item.kind}</span>
                 {item.website ? <span className="text-muted"> · {item.website}</span> : null}
               </li>
             ))}
@@ -103,6 +104,7 @@ function MarketPage({ brandId }: { brandId: string }) {
                     name: String(form.get("name") ?? ""),
                     website: String(form.get("website") ?? ""),
                     notes: String(form.get("notes") ?? ""),
+                    kind: String(form.get("kind") ?? "direct"),
                   },
                 });
                 event.currentTarget.reset();
@@ -115,6 +117,13 @@ function MarketPage({ brandId }: { brandId: string }) {
             </Field>
             <Field label="Website" hint="Optional. Stored, not crawled.">
               <TextInput name="website" />
+            </Field>
+            <Field label="Kind">
+              <SelectInput name="kind" defaultValue="direct">
+                <option value="direct">Direct</option>
+                <option value="adjacent">Adjacent</option>
+                <option value="inspirational">Inspirational</option>
+              </SelectInput>
             </Field>
             <div className="md:col-span-2">
               <Button type="submit" disabled={busy.pending}>Add competitor</Button>

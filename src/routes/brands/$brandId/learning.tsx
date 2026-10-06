@@ -4,7 +4,7 @@ import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
 import { Button, Notice, Panel, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { getLearning, refreshLearning } from "@/lib/meridian/machine";
+import { getLearning, refreshLearning, setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
 
 export const Route = createFileRoute("/brands/$brandId/learning")({ component: Page });
 
@@ -40,6 +40,7 @@ function Learning({ brandId }: { brandId: string }) {
   if (error) return <Notice>{error}</Notice>;
   if (!data) return <p className="text-muted">Loading learning…</p>;
   const canEdit = hasRole(data.role, "member");
+  const canAdmin = hasRole(data.role, "admin");
 
   return (
     <div className="space-y-8">
@@ -69,14 +70,52 @@ function Learning({ brandId }: { brandId: string }) {
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {busy.error ? <Notice>{busy.error}</Notice> : null}
+      <Panel>
+        <h2 className="font-display text-2xl">Whose results count</h2>
+        <p className="mt-2 text-sm text-muted">
+          This brand's own patterns are always used. Patterns another brand in this workspace explicitly shared are used only if you turn that on. Global patterns are never used.
+        </p>
+        {canEdit ? (
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={data.useOrganizationLearning}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                void busy.run(async () => {
+                  await setOrganizationLearning({ data: { brandId, enabled } });
+                  setData(await getLearning({ data: { brandId } }));
+                });
+              }}
+            />
+            Use shared workspace patterns
+          </label>
+        ) : null}
+      </Panel>
       {data.patterns.length === 0 ? (
         <Panel>No learned patterns. Enter performance on at least three creatives that share an attribute, with 300 impressions in that bucket, then recompute. CTR, conversion rate, and ROAS are calculated from those rows. Nothing is filled in for you.</Panel>
       ) : (
         <ul className="space-y-3">
           {data.patterns.map((pattern) => (
-            <li key={`${pattern.attribute}-${pattern.value}-${pattern.metric}`} className="rounded-lg border border-line bg-panel p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">{pattern.state} · {pattern.metric} · n={pattern.sampleSize}</p>
+            <li key={pattern.id} className="rounded-lg border border-line bg-panel p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-brass">{pattern.scope} · {pattern.state} · {pattern.metric} · n={pattern.sampleSize}</p>
               <p className="mt-2">{pattern.summary}</p>
+              {canAdmin && pattern.scope === "brand" ? (
+                <Button
+                  className="mt-3"
+                  variant="quiet"
+                  disabled={busy.pending}
+                  onClick={() => {
+                    void busy.run(async () => {
+                      const result = await sharePatternWithOrganization({ data: { brandId, patternId: pattern.id } });
+                      setNote(result.status === "shared" ? "Shared with this workspace. Other brands still ignore it until they opt in." : "That pattern was already shared.");
+                      setData(await getLearning({ data: { brandId } }));
+                    });
+                  }}
+                >
+                  Share with workspace
+                </Button>
+              ) : null}
             </li>
           ))}
         </ul>

@@ -4,7 +4,7 @@ import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
 import { Button, Field, Notice, Panel, SelectInput, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { attachCreativeImage, getTrace, listLibrary, recordObservation, recordPerformance } from "@/lib/meridian/machine";
+import { attachCreativeImage, getTrace, listLibrary, publishToPlatform, recordObservation, recordPerformance } from "@/lib/meridian/machine";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 
 export const Route = createFileRoute("/brands/$brandId/library")({ component: Page });
@@ -58,6 +58,27 @@ function Library({ brandId }: { brandId: string }) {
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {busy.error ? <Notice>{busy.error}</Notice> : null}
+      <Panel>
+        <h2 className="font-display text-2xl">Publishing</h2>
+        <p className="mt-2 text-sm text-muted">No platform is connected. This does not send a creative anywhere, and auto-publish stays off.</p>
+        {hasRole(data.role, "admin") ? (
+          <Button
+            className="mt-3"
+            variant="quiet"
+            disabled={busy.pending}
+            onClick={() => {
+              void busy.run(async () => {
+                const result = await publishToPlatform({ data: { brandId } });
+                setNote("detail" in result && result.detail ? result.detail : "Publishing is not connected.");
+              });
+            }}
+          >
+            Check publishing
+          </Button>
+        ) : (
+          <p className="mt-2 text-sm text-muted">An admin can confirm the provider state.</p>
+        )}
+      </Panel>
       {data.creatives.length === 0 ? <Panel>No brand creatives yet. Score an opportunity, brief it, and save a script. Or record one you already ran.</Panel> : (
         <ul className="space-y-3">
           {data.creatives.map((item) => (
@@ -115,7 +136,12 @@ function Library({ brandId }: { brandId: string }) {
             {trace.observations.length === 0 ? <p className="text-sm text-muted">No performance entered.</p> : (
               <ul className="mt-2 text-sm">
                 {trace.observations.map((item) => (
-                  <li key={`${item.observedOn}-${item.impressions}`}>{item.observedOn}: {item.impressions} impressions, {item.clicks} clicks, {item.conversions} conversions. Source: {item.source}.</li>
+                  <li key={`${item.observedOn}-${item.impressions}`}>
+                    {item.observedOn}: {item.impressions} impressions, {item.clicks} clicks, {item.conversions} conversions.
+                    {item.ctr === null ? " CTR not computable." : ` CTR ${(item.ctr * 100).toFixed(1)}%.`}
+                    {item.cpmCents === null ? "" : ` CPM ${item.cpmCents} cents.`}
+                    {" "}Source: {item.source}.
+                  </li>
                 ))}
               </ul>
             )}
@@ -141,10 +167,11 @@ function Library({ brandId }: { brandId: string }) {
                       conversions: Number(form.get("conversions") ?? 0),
                       spendCents: Number(form.get("spendCents") ?? 0),
                       revenueCents: Number(form.get("revenueCents") ?? 0),
+                      reach: Number(form.get("reach") ?? 0),
                       observedOn: String(form.get("observedOn") ?? ""),
                     },
                   });
-                  setNote("Performance stored. Learning does not update until you recompute it.");
+                  setNote("Performance stored and a learning job was queued. Scoring opportunities drains that job. No ad account is connected.");
                   setTrace(await getTrace({ data: { brandId, creativeId: traceId } }));
                   await reload();
                 });
@@ -152,6 +179,7 @@ function Library({ brandId }: { brandId: string }) {
             >
               <Field label="Date"><TextInput name="observedOn" type="date" required /></Field>
               <Field label="Platform"><TextInput name="platform" /></Field>
+              <Field label="Reach"><TextInput name="reach" type="number" min={0} defaultValue={0} /></Field>
               <Field label="Impressions"><TextInput name="impressions" type="number" min={0} required defaultValue={0} /></Field>
               <Field label="Clicks"><TextInput name="clicks" type="number" min={0} required defaultValue={0} /></Field>
               <Field label="Conversions"><TextInput name="conversions" type="number" min={0} required defaultValue={0} /></Field>

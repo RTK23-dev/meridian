@@ -1,3 +1,5 @@
+import { nextJobState } from "./transitions.ts";
+
 export type JobStatus = "queued" | "running" | "succeeded" | "retry" | "dead";
 
 export type Job = {
@@ -41,27 +43,33 @@ export function createJobQueue() {
       jobs.push(job);
       return { created: true as const, job };
     },
-    drain(handlers: Record<string, (payload: unknown) => void>, clock: number) {
-      const ready = jobs.filter((job) => (job.status === "queued" || job.status === "retry") && job.runAfter <= clock);
+    drain(handlers: Record<string, (payload: unknown) => void>, clock: number, options?: { maxConcurrent?: number }) {
+      const limit = options?.maxConcurrent ?? Number.POSITIVE_INFINITY;
+      const ready = jobs
+        .filter((job) => (job.status === "queued" || job.status === "retry") && job.runAfter <= clock)
+        .slice(0, limit);
       const results: { id: string; status: JobStatus }[] = [];
       for (const job of ready) {
         job.status = "running";
-        job.attempts += 1;
+        let failed = false;
         try {
           const handler = handlers[job.type];
           if (!handler) throw new Error(`No handler for ${job.type}.`);
           handler(job.payload);
-          job.status = "succeeded";
           job.lastError = "";
         } catch (error) {
+          failed = true;
           job.lastError = error instanceof Error ? error.message : "Job failed.";
-          if (job.attempts >= job.maxAttempts) {
-            job.status = "dead";
-          } else {
-            job.status = "retry";
-            job.runAfter = clock + 1000 * 2 ** (job.attempts - 1);
-          }
         }
+        const next = nextJobState({
+          attempts: job.attempts,
+          maxAttempts: job.maxAttempts,
+          failed,
+          clock,
+        });
+        job.attempts = next.attempts;
+        job.status = next.status;
+        job.runAfter = next.runAfter;
         results.push({ id: job.id, status: job.status });
       }
       return results;

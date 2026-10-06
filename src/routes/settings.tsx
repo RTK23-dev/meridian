@@ -202,12 +202,12 @@ function Settings() {
         <AuditList entries={data.audit} />
       </Panel>
       <Panel>
-        <h2 className="font-display text-2xl">Not connected</h2>
+        <h2 className="font-display text-2xl">What is and is not connected</h2>
         <ul className="mt-3 space-y-2 text-sm text-muted">
-          <li>Website and document ingestion — not connected. URLs are stored only.</li>
-          <li>Competitor collection — not connected. No ads are invented.</li>
-          <li>Model generation, vision QA, and video — not connected.</li>
-          <li>Performance import and learning write-back — not connected.</li>
+          <li>A public page you name can be fetched and stored as untrusted text. It does not change the brand brain until you accept a suggestion, and only if a text model is configured.</li>
+          <li>Plain text and DOCX can be stored the same way. PDF extraction is not connected.</li>
+          <li>Ad library, platform publishing, neural embeddings, video, and performance feeds are not connected. They return that state and invent nothing.</li>
+          <li>Learning is computed from performance rows you enter. There is no always-on worker, and calibration does not move thresholds.</li>
         </ul>
       </Panel>
     </div>

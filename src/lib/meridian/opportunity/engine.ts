@@ -11,6 +11,7 @@ import {
 } from "../domain.ts";
 import type { OpportunityGateInput } from "../jev/questions.ts";
 import { patternInfluence } from "../learning/engine.ts";
+import { eligiblePatterns } from "../knowledge/scope.ts";
 import { strategyCandidates, type StrategyCandidate } from "./candidates.ts";
 import { DEFAULT_WEIGHTS, opportunityScore, type ScoreWeights } from "../scoring.ts";
 
@@ -95,16 +96,19 @@ export function rankOpportunities(input: {
   patterns: LearnedPattern[];
   rejections: RejectionFact[];
   weights?: ScoreWeights;
+  /** Off unless this brand explicitly opted in. Global patterns are never used. */
+  useOrganizationLearning?: boolean;
 }): RankedOpportunity[] {
   assertSameTenant(input.creatives, input.organizationId, input.brandId);
   for (const pattern of input.patterns) {
-    if (
-      (pattern.organizationId && pattern.organizationId !== input.organizationId) ||
-      (pattern.brandId && pattern.brandId !== input.brandId)
-    ) {
+    if (pattern.organizationId && pattern.organizationId !== input.organizationId) {
+      throw new Error("Tenant scope violation.");
+    }
+    if (pattern.brandId && pattern.brandId !== input.brandId && pattern.scope !== "organization") {
       throw new Error("Tenant scope violation.");
     }
   }
+  const patterns = eligiblePatterns(input.patterns, input.useOrganizationLearning === true);
   const weights = input.weights ?? DEFAULT_WEIGHTS;
   const competitors = input.creatives.filter((creative) => creative.origin === "competitor");
   const own = input.creatives.filter((creative) => creative.origin !== "competitor");
@@ -114,7 +118,7 @@ export function rankOpportunities(input: {
   const aggressiveRejections = input.rejections
     .filter((fact) => fact.reasonCode === "unsupported_claim" || fact.reasonCode === "prohibited_claim" || fact.reasonCode === "too_aggressive")
     .reduce((sum, fact) => sum + fact.count, 0);
-  const candidates = strategyCandidates(input.creatives, input.patterns);
+  const candidates = strategyCandidates(input.creatives, patterns);
 
   const drafts: RankedOpportunity[] = [];
   for (const product of productList) {
@@ -127,7 +131,7 @@ export function rankOpportunities(input: {
           filled,
           competitors,
           own,
-          patterns: input.patterns,
+          patterns,
           aggressiveRejections,
           weights,
         }),
