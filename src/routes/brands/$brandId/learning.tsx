@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Notice, Panel, errorText } from "@/components/ui";
+import { Button, ErrorState, Notice, Panel, Skeleton, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { getCalibration, decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
+import { decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
 import { setPerformanceSchedule } from "@/lib/meridian/performance/actions";
-import { getLearning, refreshLearning, setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
+import { refreshLearning, setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
 import { StatusText } from "@/components/status";
+import { useCalibrationQuery, useLearningQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/learning")({ component: Page });
 
@@ -21,35 +23,16 @@ function Page() {
 }
 
 function Learning({ brandId }: { brandId: string }) {
-  const [data, setData] = useState<Awaited<ReturnType<typeof getLearning>> | null>(null);
-  const [calibration, setCalibration] = useState<Awaited<ReturnType<typeof getCalibration>> | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const learningQuery = useLearningQuery(brandId);
+  const calibrationQuery = useCalibrationQuery(brandId);
+  const data = learningQuery.data ?? null;
+  const calibration = calibrationQuery.data ?? null;
   const [note, setNote] = useState<string | null>(null);
-  const busy = useBusy();
+  const busy = useBusy([qk.learning(brandId), qk.studio(brandId), qk.opportunities(brandId)]);
 
-  useEffect(() => {
-    let cancelled = false;
-    getLearning({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setData(next);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    getCalibration({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setCalibration(next);
-      })
-      .catch(() => {
-        if (!cancelled) setCalibration({ proposals: [], versions: [] });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!data) return <p className="text-muted">Loading learning…</p>;
+  if (learningQuery.error) return <ErrorState message={errorText(learningQuery.error)} onRetry={() => void learningQuery.refetch()} />;
+  if (calibrationQuery.error) return <ErrorState message={`Threshold versions could not be loaded: ${errorText(calibrationQuery.error)}`} onRetry={() => void calibrationQuery.refetch()} />;
+  if (!data) return <div role="status" aria-label="Loading learning" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(data.role, "member");
   const canAdmin = hasRole(data.role, "admin");
 
@@ -71,7 +54,6 @@ function Learning({ brandId }: { brandId: string }) {
                 setNote(result.patterns === 0
                   ? "No pattern met the sample rule. Queued learning jobs for this brand were still closed. Nothing was invented."
                   : `${result.patterns} pattern${result.patterns === 1 ? "" : "s"} stored. Queued learning jobs were drained. Score opportunities again to use them.`);
-                setData(await getLearning({ data: { brandId } }));
               });
             }}
           >
@@ -95,7 +77,6 @@ function Learning({ brandId }: { brandId: string }) {
                 const enabled = event.target.checked;
                 void busy.run(async () => {
                   await setOrganizationLearning({ data: { brandId, enabled } });
-                  setData(await getLearning({ data: { brandId } }));
                 });
               }}
             />
@@ -120,7 +101,6 @@ function Learning({ brandId }: { brandId: string }) {
                     void busy.run(async () => {
                       const result = await sharePatternWithOrganization({ data: { brandId, patternId: pattern.id } });
                       setNote(result.status === "shared" ? "Shared with this workspace. Other brands still ignore it until they opt in." : "That pattern was already shared.");
-                      setData(await getLearning({ data: { brandId } }));
                     });
                   }}
                 >
@@ -147,7 +127,6 @@ function Learning({ brandId }: { brandId: string }) {
                   : result.status === "proposed"
                     ? `Proposal recorded from ${result.samples} reviews. Thresholds were not changed.`
                     : "No proposal was stored.");
-                setCalibration(await getCalibration({ data: { brandId } }));
               });
             }}
           >
@@ -182,7 +161,6 @@ function Learning({ brandId }: { brandId: string }) {
                     void busy.run(async () => {
                       const result = await decideCalibration({ data: { brandId, proposalId: proposal.id, decision: "approved" } });
                       setNote(result.status === "approved" ? `Approved threshold version ${result.version}.` : "The proposal was not approved.");
-                      setCalibration(await getCalibration({ data: { brandId } }));
                     });
                   }}
                 >
@@ -196,7 +174,6 @@ function Learning({ brandId }: { brandId: string }) {
                     void busy.run(async () => {
                       await decideCalibration({ data: { brandId, proposalId: proposal.id, decision: "rejected" } });
                       setNote("The proposal was rejected. Thresholds were not changed.");
-                      setCalibration(await getCalibration({ data: { brandId } }));
                     });
                   }}
                 >

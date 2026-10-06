@@ -2,11 +2,11 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Field, Notice, Panel, SelectInput, TextArea } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea } from "@/components/ui";
 import { errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { getBrand, saveBrain, type BrandDetail } from "@/lib/meridian/api";
-import { listBrandAssets, storeMaterial, uploadLogo } from "@/lib/meridian/machine";
+import { saveBrain } from "@/lib/meridian/api";
+import { storeMaterial, uploadLogo } from "@/lib/meridian/machine";
 import {
   AUTOMATION_LEVELS,
   BRAIN_FIELDS,
@@ -14,6 +14,8 @@ import {
   provenanceLabel,
   type BrainValues,
 } from "@/lib/meridian/brain";
+import { useAssetsQuery, useBrandQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/brain")({ component: BrainPage });
 
@@ -27,29 +29,17 @@ function BrainPage() {
 }
 
 function BrainEditor({ brandId }: { brandId: string }) {
-  const [detail, setDetail] = useState<BrandDetail | null>(null);
+  const query = useBrandQuery(brandId);
+  const detail = query.data ?? null;
   const [brain, setBrain] = useState<BrainValues>(emptyBrain());
-  const [error, setError] = useState<string | null>(null);
-  const { pending, error: saveError, run } = useBusy();
+  const { pending, error: saveError, run } = useBusy([qk.brand(brandId)]);
 
   useEffect(() => {
-    let cancelled = false;
-    getBrand({ data: { brandId } })
-      .then((next) => {
-        if (cancelled) return;
-        setDetail(next);
-        setBrain(next.brain);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
+    if (detail) setBrain(detail.brain);
+  }, [detail]);
 
-  if (error) return <Notice>{error}</Notice>;
-  if (!detail) return <p className="text-muted">Loading the brand brain…</p>;
+  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!detail) return <div role="status" aria-label="Loading brand brain" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(detail.identity.role, "member");
   const groups = [...new Set(BRAIN_FIELDS.map((field) => field.group))];
 
@@ -57,9 +47,6 @@ function BrainEditor({ brandId }: { brandId: string }) {
     event.preventDefault();
     void run(async () => {
       await saveBrain({ data: { brandId, ...brain } });
-      const next = await getBrand({ data: { brandId } });
-      setDetail(next);
-      setBrain(next.brain);
     });
   }
 
@@ -144,29 +131,17 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
 function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) {
   const [note, setNote] = useState<string | null>(null);
-  const [logos, setLogos] = useState<{ id: string; mime: string; body: string }[]>([]);
-  const { pending, error, run } = useBusy();
-
-  useEffect(() => {
-    let cancelled = false;
-    listBrandAssets({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setLogos(next.logos);
-      })
-      .catch(() => {
-        if (!cancelled) setLogos([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
+  const assetsQuery = useAssetsQuery(brandId);
+  const logos = assetsQuery.data?.logos ?? [];
+  const { pending, error, run } = useBusy([qk.assets(brandId)]);
 
   return (
     <div className="space-y-4">
       <Panel>
         <h2 className="font-display text-2xl">Logo</h2>
         <p className="mt-2 text-sm text-muted">PNG, JPEG, or WEBP, checked from the file bytes and stored with this brand. There is no separate object store.</p>
-        {logos[0] ? <img src={`data:${logos[0].mime};base64,${logos[0].body}`} alt="Stored logo" className="mt-3 h-16 w-auto" /> : <p className="mt-3 text-muted">No logo stored.</p>}
+        {assetsQuery.error ? <ErrorState message={errorText(assetsQuery.error)} onRetry={() => void assetsQuery.refetch()} /> : null}
+        {logos[0] ? <img src={`data:${logos[0].mime};base64,${logos[0].body}`} alt="Stored logo" className="mt-3 h-16 w-auto" /> : assetsQuery.error ? null : <p className="mt-3 text-muted">No logo stored.</p>}
         {canEdit ? (
           <input
             className="mt-3 block"
@@ -182,7 +157,6 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
                 void run(async () => {
                   const saved = await uploadLogo({ data: { brandId, base64 } });
                   setNote(saved.status === "stored" ? "Logo stored." : saved.detail);
-                  if (saved.status === "stored") setLogos((await listBrandAssets({ data: { brandId } })).logos);
                 });
               };
               reader.readAsDataURL(file);

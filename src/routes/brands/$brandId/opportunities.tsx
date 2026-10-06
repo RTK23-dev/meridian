@@ -1,15 +1,15 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Notice, Panel, errorText } from "@/components/ui";
+import { Button, ErrorState, Notice, Panel, Skeleton, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import {
   dismissOpportunity,
-  listOpportunities,
   refreshOpportunities,
-  type OpportunityView,
 } from "@/lib/meridian/machine";
+import { useOpportunitiesQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/opportunities")({ component: Page });
 
@@ -23,37 +23,15 @@ function Page() {
 }
 
 function Opportunities({ brandId }: { brandId: string }) {
-  const [rows, setRows] = useState<OpportunityView[] | null>(null);
-  const [role, setRole] = useState<"viewer" | "member" | "admin" | "owner">("viewer");
-  const [error, setError] = useState<string | null>(null);
+  const query = useOpportunitiesQuery(brandId);
+  const rows = query.data?.opportunities ?? null;
+  const role = query.data?.role ?? "viewer";
   const [note, setNote] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
-  const busy = useBusy();
+  const busy = useBusy([qk.opportunities(brandId), qk.studio(brandId)]);
 
-  async function reload() {
-    const next = await listOpportunities({ data: { brandId } });
-    setRole(next.role);
-    setRows(next.opportunities);
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    listOpportunities({ data: { brandId } })
-      .then((next) => {
-        if (cancelled) return;
-        setRole(next.role);
-        setRows(next.opportunities);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!rows) return <p className="text-muted">Loading opportunities…</p>;
+  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!rows) return <div role="status" aria-label="Loading opportunities" className="space-y-3"><Skeleton variant="card" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(role, "member");
 
   return (
@@ -75,7 +53,6 @@ function Opportunities({ brandId }: { brandId: string }) {
               void busy.run(async () => {
                 const result = await refreshOpportunities({ data: { brandId } });
                 setNote(`${result.count} candidates scored. Priors stay labeled as priors. An angle is added only when stored observations or a learned pattern contain it.`);
-                await reload();
               });
             }}
           >
@@ -136,7 +113,6 @@ function Opportunities({ brandId }: { brandId: string }) {
                       </Link>
                       <Button variant="quiet" disabled={busy.pending} onClick={() => void busy.run(async () => {
                         await dismissOpportunity({ data: { brandId, opportunityId: item.id } });
-                        await reload();
                       })}>
                         Dismiss
                       </Button>

@@ -1,13 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Field, Notice, Panel, SelectInput, TextArea, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import {
   addCompetitor,
   fetchSourcePage,
-  getMarket,
   proposeCompetitors,
   recordObservation,
   resolveSuggestion,
@@ -16,10 +15,11 @@ import {
   startResearchCollection,
 } from "@/lib/meridian/machine";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
+import { useMarketQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/market")({ component: Page });
 
-type Market = Awaited<ReturnType<typeof getMarket>>;
 type AnalysisFieldView = { value?: string; confidence?: number; evidence?: string[] };
 type AnalysisView = {
   topic?: AnalysisFieldView;
@@ -49,8 +49,8 @@ function Page() {
 }
 
 function MarketPage({ brandId }: { brandId: string }) {
-  const [market, setMarket] = useState<Market | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const query = useMarketQuery(brandId);
+  const market = query.data ?? null;
   const [note, setNote] = useState<string | null>(null);
   const [researchText, setResearchText] = useState("");
   const [researchField, setResearchField] = useState("all");
@@ -59,28 +59,10 @@ function MarketPage({ brandId }: { brandId: string }) {
   const [captureBefore, setCaptureBefore] = useState("");
   const [minimumDuration, setMinimumDuration] = useState("");
   const [maximumDuration, setMaximumDuration] = useState("");
-  const busy = useBusy();
+  const busy = useBusy([qk.market(brandId), qk.intelligence(brandId), qk.opportunities(brandId), qk.studio(brandId)]);
 
-  async function reload() {
-    setMarket(await getMarket({ data: { brandId } }));
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    getMarket({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setMarket(next);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!market) return <p className="text-muted">Loading market…</p>;
+  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!market) return <div role="status" aria-label="Loading market" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(market.role, "member");
   const visibleResearch = market.researchAds.filter((ad) => {
     const analysis = parseAnalysis(ad.analysis);
@@ -142,7 +124,6 @@ function MarketPage({ brandId }: { brandId: string }) {
                 brandId, searchTerms: String(form.get("research-terms") ?? ""), country: String(form.get("research-country") ?? "US"), limit: Number(form.get("research-limit") ?? 50),
               } });
               setNote(result.status === "NOT_CONNECTED" ? result.error : `Research collection ${result.reused ? "already queued" : "queued"}. Refresh this page to see worker progress.`);
-              await reload();
             });
           }}>
             <Field label="Search ads"><TextInput name="research-terms" required maxLength={100} placeholder="Brand, product, or category" /></Field>
@@ -213,8 +194,8 @@ function MarketPage({ brandId }: { brandId: string }) {
                 <span className="font-semibold">{item.name}</span>
                 {canEdit ? (
                   <>
-                    <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { await reviewCompetitor({ data: { brandId, competitorId: item.id, action: "confirm" } }); await reload(); }); }}>Confirm</Button>
-                    <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { await reviewCompetitor({ data: { brandId, competitorId: item.id, action: "reject" } }); await reload(); }); }}>Reject</Button>
+                    <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { await reviewCompetitor({ data: { brandId, competitorId: item.id, action: "confirm" } }); }); }}>Confirm</Button>
+                    <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { await reviewCompetitor({ data: { brandId, competitorId: item.id, action: "reject" } }); }); }}>Reject</Button>
                   </>
                 ) : null}
               </li>
@@ -225,7 +206,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         )}
         {canEdit ? (
           <div className="mt-3">
-            <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { const result = await proposeCompetitors({ data: { brandId } }); setNote(result.created === 0 ? "No new competitor candidates from stored evidence." : `${result.created} candidate(s) stored. They stay unconfirmed until you accept them.`); await reload(); }); }}>Find candidates</Button>
+            <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { const result = await proposeCompetitors({ data: { brandId } }); setNote(result.created === 0 ? "No new competitor candidates from stored evidence." : `${result.created} candidate(s) stored. They stay unconfirmed until you accept them.`); }); }}>Find candidates</Button>
           </div>
         ) : null}
         {canEdit ? (
@@ -246,7 +227,6 @@ function MarketPage({ brandId }: { brandId: string }) {
                   },
                 });
                 form.reset();
-                await reload();
               });
             }}
           >
@@ -314,7 +294,6 @@ function MarketPage({ brandId }: { brandId: string }) {
                 });
                 setNote(saved.duplicate ? "That observation was already stored." : "Observation stored.");
                 if (!saved.duplicate) form.reset();
-                await reload();
               });
             }}
           >
@@ -371,7 +350,6 @@ function MarketPage({ brandId }: { brandId: string }) {
               void busy.run(async () => {
                 const result = await fetchSourcePage({ data: { brandId, url: String(form.get("url") ?? "") } });
                 setNote(result.status === "stored" ? "Page text stored. It is not part of the brand brain." : result.error);
-                await reload();
               });
             }}
           >
@@ -394,7 +372,6 @@ function MarketPage({ brandId }: { brandId: string }) {
                     void busy.run(async () => {
                       const result = await suggestFromDocument({ data: { brandId, documentId: doc.id } });
                       setNote(result.message);
-                      await reload();
                     });
                   }}
                 >
@@ -417,7 +394,6 @@ function MarketPage({ brandId }: { brandId: string }) {
                       disabled={busy.pending}
                       onClick={() => void busy.run(async () => {
                         await resolveSuggestion({ data: { brandId, suggestionId: item.id, action: "accept" } });
-                        await reload();
                       })}
                     >
                       Accept
@@ -427,7 +403,6 @@ function MarketPage({ brandId }: { brandId: string }) {
                       disabled={busy.pending}
                       onClick={() => void busy.run(async () => {
                         await resolveSuggestion({ data: { brandId, suggestionId: item.id, action: "dismiss" } });
-                        await reload();
                       })}
                     >
                       Dismiss

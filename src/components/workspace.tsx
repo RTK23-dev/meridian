@@ -1,7 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { bootstrap, type Bootstrap } from "@/lib/meridian/api";
 import { errorText } from "@/components/ui";
+import { qk } from "@/lib/query/keys";
 
 type WorkspaceState = {
   data: Bootstrap | null;
@@ -14,32 +16,25 @@ const WorkspaceContext = createContext<WorkspaceState | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user, isPending } = useCurrentUserState();
-  const [data, setData] = useState<Bootstrap | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const userId = user?.id ?? null;
-
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: qk.workspace(userId ?? "signed-out"),
+    queryFn: bootstrap,
+    enabled: !isPending && !!userId,
+  });
   const reload = useCallback(async () => {
-    setLoading(true);
+    if (!userId || isPending) return;
     try {
-      const next = await bootstrap();
-      setData(next);
-      setError(null);
-    } catch (caught) {
-      setError(errorText(caught));
-    } finally {
-      setLoading(false);
+      await queryClient.fetchQuery({ queryKey: qk.workspace(userId), queryFn: bootstrap, staleTime: 0 });
+    } catch {
+      // Query state retains the normalized error for the existing context API.
     }
-  }, []);
-
-  useEffect(() => {
-    if (isPending || !userId) return;
-    void reload();
-  }, [isPending, userId, reload]);
+  }, [isPending, queryClient, userId]);
+  const error = query.error ? errorText(query.error) : null;
 
   return (
-    <WorkspaceContext.Provider value={{ data, loading, error, reload }}>
+    <WorkspaceContext.Provider value={{ data: query.data ?? null, loading: isPending || (!!userId && query.isPending), error, reload }}>
       {children}
     </WorkspaceContext.Provider>
   );

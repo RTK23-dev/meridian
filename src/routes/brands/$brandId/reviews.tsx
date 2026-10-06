@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Field, Notice, Panel, SelectInput, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { REVIEW_REASON_CODES, listReviews, resolveReview } from "@/lib/meridian/machine";
+import { useReviewsQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/reviews")({ component: Page });
 
@@ -18,30 +20,12 @@ function Page() {
 }
 
 function Reviews({ brandId }: { brandId: string }) {
-  const [data, setData] = useState<Awaited<ReturnType<typeof listReviews>> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const busy = useBusy();
+  const query = useReviewsQuery(brandId);
+  const data = query.data ?? null;
+  const busy = useBusy([qk.reviews(brandId), qk.opportunities(brandId), qk.studio(brandId)]);
 
-  async function reload() {
-    setData(await listReviews({ data: { brandId } }));
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    listReviews({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setData(next);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!data) return <p className="text-muted">Loading reviews…</p>;
+  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!data) return <div role="status" aria-label="Loading reviews" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(data.role, "member");
   const open = data.reviews.filter((item) => item.status === "open");
 
@@ -65,7 +49,6 @@ function Reviews({ brandId }: { brandId: string }) {
                 onResolve={(action, reasonCode, note) => {
                   void busy.run(async () => {
                     await resolveReview({ data: { brandId, reviewId: item.id, action, reasonCode, note } });
-                    await reload();
                   });
                 }}
               />

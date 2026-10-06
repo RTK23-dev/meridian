@@ -1,14 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
 import { StatusText } from "@/components/status";
-import { Button, Field, Notice, Panel, SelectInput, TextArea, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { attachCreativeImage, getTrace, listLibrary, recordObservation, recordPerformance } from "@/lib/meridian/machine";
+import { attachCreativeImage, recordObservation, recordPerformance } from "@/lib/meridian/machine";
 import { parseCount } from "@/lib/meridian/scoring";
 import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
+import { useLibraryQuery, useTraceQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/library")({ component: Page });
 
@@ -22,34 +24,17 @@ function Page() {
 }
 
 function Library({ brandId }: { brandId: string }) {
-  const [data, setData] = useState<Awaited<ReturnType<typeof listLibrary>> | null>(null);
+  const query = useLibraryQuery(brandId);
+  const data = query.data ?? null;
   const [traceId, setTraceId] = useState<string | null>(null);
-  const [trace, setTrace] = useState<Awaited<ReturnType<typeof getTrace>> | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const traceQuery = useTraceQuery(brandId, traceId);
+  const trace = traceQuery.data ?? null;
   const [note, setNote] = useState<string | null>(null);
   const [stages, setStages] = useState<{ objectType: string; status: string; externalId: string | null; detail: string }[]>([]);
-  const busy = useBusy();
+  const busy = useBusy([qk.library(brandId), qk.trace(brandId), qk.learning(brandId)]);
 
-  async function reload() {
-    setData(await listLibrary({ data: { brandId } }));
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    listLibrary({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setData(next);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!data) return <p className="text-muted">Loading library…</p>;
+  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!data) return <div role="status" aria-label="Loading library" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(data.role, "member");
 
   return (
@@ -186,9 +171,6 @@ function Library({ brandId }: { brandId: string }) {
                 variant="quiet"
                 onClick={() => {
                   setTraceId(item.id);
-                  void busy.run(async () => {
-                    setTrace(await getTrace({ data: { brandId, creativeId: item.id } }));
-                  });
                 }}
               >
                 Trace
@@ -264,8 +246,6 @@ function Library({ brandId }: { brandId: string }) {
                     },
                   });
                   setNote("Performance stored and a learning job was queued. Scoring opportunities drains that job. No ad account is connected.");
-                  setTrace(await getTrace({ data: { brandId, creativeId: traceId } }));
-                  await reload();
                 });
               }}
             >
@@ -297,6 +277,7 @@ function Library({ brandId }: { brandId: string }) {
           ) : null}
         </Panel>
       ) : null}
+      {traceId && traceQuery.error ? <ErrorState message={errorText(traceQuery.error)} onRetry={() => void traceQuery.refetch()} /> : null}
       {canEdit ? (
         <Panel>
           <h2 className="font-display text-2xl">Record a creative we already ran</h2>
@@ -330,7 +311,6 @@ function Library({ brandId }: { brandId: string }) {
                 });
                 setNote("Creative recorded.");
                 form.reset();
-                await reload();
               });
             }}
           >

@@ -1,10 +1,12 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Field, Notice, Panel, TextArea, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { deleteProduct, getBrand, saveProduct, type BrandDetail, type ProductRow } from "@/lib/meridian/api";
+import { deleteProduct, saveProduct, type ProductRow } from "@/lib/meridian/api";
+import { useBrandQuery } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/products")({ component: ProductsPage });
 
@@ -29,33 +31,14 @@ function ProductsPage() {
 }
 
 function Products({ brandId }: { brandId: string }) {
-  const [detail, setDetail] = useState<BrandDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const query = useBrandQuery(brandId);
+  const detail = query.data ?? null;
   const [draft, setDraft] = useState(blank);
   const [editing, setEditing] = useState<string | null>(null);
-  const { pending, error: saveError, run } = useBusy();
+  const { pending, error: saveError, run } = useBusy([qk.brand(brandId)]);
 
-  async function refresh() {
-    const next = await getBrand({ data: { brandId } });
-    setDetail(next);
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    getBrand({ data: { brandId } })
-      .then((next) => {
-        if (!cancelled) setDetail(next);
-      })
-      .catch((caught) => {
-        if (!cancelled) setError(errorText(caught));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
-  if (error) return <Notice>{error}</Notice>;
-  if (!detail) return <p className="text-muted">Loading products…</p>;
+  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!detail) return <div role="status" aria-label="Loading products" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(detail.identity.role, "member");
 
   function submit(event: FormEvent) {
@@ -64,7 +47,6 @@ function Products({ brandId }: { brandId: string }) {
       await saveProduct({ data: { brandId, productId: editing ?? "", ...draft } });
       setDraft(blank);
       setEditing(null);
-      await refresh();
     });
   }
 
@@ -107,7 +89,6 @@ function Products({ brandId }: { brandId: string }) {
                       onClick={() => {
                         void run(async () => {
                           await deleteProduct({ data: { brandId, productId: product.id } });
-                          await refresh();
                         });
                       }}
                     >

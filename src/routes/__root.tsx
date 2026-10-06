@@ -3,6 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { WorkspaceProvider } from "@/components/workspace";
 import { ThemeProvider, themeBootstrap, Toaster } from "@/components/ui";
+import { AppQueryProvider } from "@/lib/query/client";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -31,12 +32,14 @@ export const Route = createRootRoute({
         <a className="skip-link" href="#main">Skip to main content</a>
         <PreviewHostBridge />
         <ThemeProvider>
-          <AuthProvider>
-            <WorkspaceProvider>
-              <Outlet />
-            </WorkspaceProvider>
-          </AuthProvider>
-          <Toaster />
+          <AppQueryProvider>
+            <AuthProvider>
+              <WorkspaceProvider>
+                <Outlet />
+              </WorkspaceProvider>
+            </AuthProvider>
+            <Toaster />
+          </AppQueryProvider>
         </ThemeProvider>
         <Scripts />
       </body>
