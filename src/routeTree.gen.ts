@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as Char91_designChar93RouteImport } from './routes/[_design]'
 import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as InviteRouteImport } from './routes/invite'
+import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
@@ -50,6 +51,11 @@ const IntegrationsRoute = IntegrationsRouteImport.update({
 const InviteRoute = InviteRouteImport.update({
   id: '/invite',
   path: '/invite',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JobsRoute = JobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -150,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/_design': typeof Char91_designChar93Route
   '/integrations': typeof IntegrationsRoute
   '/invite': typeof InviteRoute
+  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/api/health': typeof ApiHealthRoute
@@ -174,6 +181,7 @@ export interface FileRoutesByTo {
   '/_design': typeof Char91_designChar93Route
   '/integrations': typeof IntegrationsRoute
   '/invite': typeof InviteRoute
+  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/api/health': typeof ApiHealthRoute
@@ -199,6 +207,7 @@ export interface FileRoutesById {
   '/_design': typeof Char91_designChar93Route
   '/integrations': typeof IntegrationsRoute
   '/invite': typeof InviteRoute
+  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/api/health': typeof ApiHealthRoute
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/_design'
     | '/integrations'
     | '/invite'
+    | '/jobs'
     | '/login'
     | '/settings'
     | '/api/health'
@@ -249,6 +259,7 @@ export interface FileRouteTypes {
     | '/_design'
     | '/integrations'
     | '/invite'
+    | '/jobs'
     | '/login'
     | '/settings'
     | '/api/health'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/_design'
     | '/integrations'
     | '/invite'
+    | '/jobs'
     | '/login'
     | '/settings'
     | '/api/health'
@@ -298,6 +310,7 @@ export interface RootRouteChildren {
   Char91_designChar93Route: typeof Char91_designChar93Route
   IntegrationsRoute: typeof IntegrationsRoute
   InviteRoute: typeof InviteRoute
+  JobsRoute: typeof JobsRoute
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
   ApiHealthRoute: typeof ApiHealthRoute
@@ -346,6 +359,13 @@ declare module '@tanstack/react-router' {
       path: '/invite'
       fullPath: '/invite'
       preLoaderRoute: typeof InviteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jobs': {
+      id: '/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof JobsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -482,6 +502,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91_designChar93Route: Char91_designChar93Route,
   IntegrationsRoute: IntegrationsRoute,
   InviteRoute: InviteRoute,
+  JobsRoute: JobsRoute,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
   ApiHealthRoute: ApiHealthRoute,

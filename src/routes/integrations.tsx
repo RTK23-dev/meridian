@@ -10,6 +10,7 @@ import { refreshStoredToken } from "@/lib/meridian/oauth/refresh";
 import { disconnectProvider, probeProviderConnection, reconnectProvider } from "@/lib/meridian/providers/connect";
 import { useIntegrationsQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { providerLabel } from "@/lib/copy";
 
 export const Route = createFileRoute("/integrations")({ component: Page });
 
@@ -69,7 +70,7 @@ function Integrations() {
         return connections.length ? <section key={group.label} className="space-y-3"><h2 className="font-display text-2xl">{group.label}</h2><ul className="space-y-3">
         {connections.map((item) => (
           <li key={item.provider} className="rounded-lg border border-line bg-panel px-4 py-3">
-            <p className="font-semibold">{item.provider.replaceAll("_", " ")}</p>
+            <p className="font-semibold">{providerLabel(item.provider)}</p>
             <StatusText status={item.phase} description={item.detail} />
             {item.accountName || item.accountId ? (
               <p className="text-sm">Account {item.accountName || "unnamed"} {item.accountId ? `· ${item.accountId}` : ""}</p>

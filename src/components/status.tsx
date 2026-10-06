@@ -7,7 +7,7 @@ export function StatusText({ status, description, label = "Status" }: { status: 
   const presentation = statusPresentation(status);
   const Icon = icons[presentation.icon];
   return <p>
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-fg">
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-fg">
       <Icon aria-hidden="true" className="size-4" />
       <span>{label}: {presentation.label}</span>
     </span>

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { ProtectedApp } from "@/components/gate";
 
-const protectedRoots = ["/", "/brands", "/settings", "/integrations", "/invite"];
+const protectedRoots = ["/", "/brands", "/settings", "/integrations", "/jobs", "/invite"];
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });

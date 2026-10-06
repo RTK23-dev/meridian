@@ -17,10 +17,11 @@ type NavLink = { label: string; to: string; icon: LucideIcon; badge?: number };
 const PAGE_NAMES: Record<string, string> = {
   "": "Overview", market: "Market research", intelligence: "Intelligence", opportunities: "Opportunities",
   reviews: "Reviews", studio: "Studio", library: "Library", learning: "Learning", brain: "Brand brain", products: "Products",
-  integrations: "Integrations", settings: "Settings", new: "New brand",
+  integrations: "Integrations", settings: "Settings", jobs: "Jobs & health", new: "New brand",
 };
 
 const WORKSPACE_LINKS: NavLink[] = [
+  { label: "Jobs & health", to: "/jobs", icon: Activity },
   { label: "Integrations", to: "/integrations", icon: Activity },
   { label: "Settings", to: "/settings", icon: Settings },
 ];

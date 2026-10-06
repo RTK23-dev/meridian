@@ -8,6 +8,7 @@ import { hasRole } from "@/lib/meridian/access";
 import { REVIEW_REASON_CODES, listReviews, resolveReview } from "@/lib/meridian/machine";
 import { useReviewsQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { Term } from "@/components/term";
 
 export const Route = createFileRoute("/brands/$brandId/reviews")({ component: Page });
 
@@ -84,7 +85,7 @@ function ReviewCard({
   const [note, setNote] = useState("");
   return (
     <Panel aria-label="Selected review">
-      <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.question} · {item.decision} · answer {item.answer || "unrecorded"} · p {item.probability.toFixed(2)} · confidence {item.confidence.toFixed(2)}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.question} · {item.decision} · answer {item.answer || "unrecorded"} · p {item.probability.toFixed(2)} · <Term id="confidence" /> {item.confidence.toFixed(2)}</p>
       <h2 className="mt-2 font-display text-2xl">{item.label || "Untitled"}</h2>
       <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted">
         {item.reasons.map((reasonLine) => <li key={reasonLine}>{reasonLine}</li>)}

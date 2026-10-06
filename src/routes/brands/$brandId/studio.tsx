@@ -4,6 +4,8 @@ import { useBusy } from "@/components/gate";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
 import { BrandNav } from "@/components/brand-nav";
 import { MediaPlayer } from "@/components/media-player";
+import { Term } from "@/components/term";
+import { providerLabel, statusLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import {
   generateStudioVariants,
@@ -60,7 +62,7 @@ function Studio({ brandId }: { brandId: string }) {
           <h1 className="font-display text-3xl">Make the next ads from evidence</h1>
         </div>
         <p className="max-w-md text-sm text-muted">
-          {session.observationCount} competitor observations. Image and video appear only after a provider stores bytes.
+          {session.observationCount} competitor observations. <Term id="jev" /> evaluates the evidence; <Term id="hypit" /> renders approved briefs. Media appears only after a provider stores bytes.
         </p>
       </div>
       <Stepper steps={[
@@ -227,7 +229,7 @@ function Studio({ brandId }: { brandId: string }) {
         <ul className="grid gap-4 lg:grid-cols-2">
           {session.variants.map((variant) => (
             <li key={variant.assetId} className="rounded-lg border border-line bg-panel p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">{variant.kind} {variant.index + 1} · {variant.provider || "no provider"}</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-brass">{variant.kind} {variant.index + 1} · {variant.provider ? providerLabel(variant.provider) : "No provider"}</p>
               <h3 className="font-display text-xl">{variant.title}</h3>
               {variant.kind === "video" ? <MediaPlayer className="mt-3" assetId={variant.assetId} poster={variant.frames[0]} durationMs={variant.durationMs} width={variant.width} height={variant.height} /> : variant.preview ? <img className="mt-3 max-h-72 max-w-full border border-line object-contain" src={variant.preview} alt={`${variant.provider} ${variant.kind} variant ${variant.index + 1}`} /> : null}
               {variant.frames.length > 0 ? (
@@ -251,7 +253,7 @@ function Studio({ brandId }: { brandId: string }) {
                 {variant.width ? ` · ${variant.width}×${variant.height}` : ""}
                 {variant.checksum ? ` · ${variant.checksum.slice(0, 8)}` : ""}
               </p>
-              <p className="text-sm">QA {variant.qaDecision || "pending"} · review {variant.reviewStatus} · {variant.creativeStatus}</p>
+              <p className="text-sm">QA {statusLabel(variant.qaDecision || "pending")} · review {statusLabel(variant.reviewStatus)} · {statusLabel(variant.creativeStatus)}</p>
               {variant.error ? <p className="text-sm text-danger">{variant.error}</p> : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button type="button" variant="quiet" aria-expanded={inspectId === variant.creativeId} onClick={() => setInspectId(inspectId === variant.creativeId ? null : variant.creativeId)}>

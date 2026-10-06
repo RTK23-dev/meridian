@@ -96,7 +96,12 @@ async function prepareFixtureWorkspace(page) {
   if (await page.getByRole("button", { name: "Create workspace", exact: true }).count()) {
     await page.locator("form input").first().fill("Meridian UI baseline fixture");
     await page.getByRole("button", { name: "Create workspace", exact: true }).click();
-    await page.getByRole("link", { name: "New brand", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+    try {
+      await page.getByRole("heading", { name: "Workspace overview", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+    } catch {
+      const bodyText = await page.locator("body").innerText().catch(() => "<page body unavailable>");
+      throw new Error(`UI baseline could not create its fixture workspace. Page content: ${bodyText.slice(0, 1_200)}`);
+    }
   }
 
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
