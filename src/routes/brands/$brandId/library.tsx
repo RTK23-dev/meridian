@@ -1,17 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
 import { StatusText } from "@/components/status";
 import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { attachCreativeImage, recordObservation, recordPerformance } from "@/lib/meridian/machine";
-import { parseCount } from "@/lib/meridian/scoring";
 import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { useLibraryQuery, useTraceQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
+import { manualPerformanceSchema, type ManualPerformance, type ManualPerformanceFields } from "@/lib/meridian/schemas/performance";
+import { observationFieldsSchema, type ObservationFields, type ObservationFieldsOutput } from "@/lib/meridian/schemas/observation";
+import { pausedPublishingSchema, type PausedPublishing, type PausedPublishingFields } from "@/lib/meridian/schemas/paused-publishing";
 
 export const Route = createFileRoute("/brands/$brandId/library")({ component: Page });
 
@@ -33,6 +37,34 @@ function Library({ brandId }: { brandId: string }) {
   const [createdBefore, setCreatedBefore] = useState("");
   const traceQuery = useTraceQuery(brandId, traceId);
   const trace = traceQuery.data ?? null;
+  const performanceForm = useForm<ManualPerformanceFields, unknown, ManualPerformance>({
+    resolver: zodResolver(manualPerformanceSchema),
+    defaultValues: { observedOn: "", platform: "", reach: "0", impressions: "0", clicks: "0", conversions: "0", spendCents: "0", revenueCents: "0" },
+    mode: "onBlur",
+  });
+  const observationForm = useForm<ObservationFields, unknown, ObservationFieldsOutput>({
+    resolver: zodResolver(observationFieldsSchema),
+    defaultValues: { origin: "own", competitorId: "", angle: "curiosity", observedAngle: "", hookType: "", format: "", proofType: "", title: "", hook: "", message: "", offer: "", cta: "", claim: "", platform: "", productName: "", sourceUrl: "" },
+    mode: "onBlur",
+  });
+  const publishForm = useForm<PausedPublishingFields, unknown, PausedPublishing>({
+    resolver: zodResolver(pausedPublishingSchema),
+    defaultValues: { provider: "meta", creativeId: "", name: "", dailyBudgetCents: "1000", countries: "", locationIds: "", pageId: "", link: "", message: "", scheduleStart: "", imageIds: "", videoId: "", headlines: "", descriptions: "", cpcBidCents: "0" },
+    mode: "onBlur",
+  });
+  const formsDirty = performanceForm.formState.isDirty || observationForm.formState.isDirty || publishForm.formState.isDirty;
+  useEffect(() => {
+    if (!formsDirty) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [formsDirty]);
+  useEffect(() => {
+    const firstCreative = data?.creatives[0]?.id;
+    if (firstCreative && !publishForm.getValues("creativeId")) {
+      publishForm.setValue("creativeId", firstCreative, { shouldDirty: false });
+    }
+  }, [data?.creatives, publishForm]);
   const [note, setNote] = useState<string | null>(null);
   const [stages, setStages] = useState<{ objectType: string; status: string; externalId: string | null; detail: string }[]>([]);
   const busy = useBusy([qk.library(brandId), qk.trace(brandId), qk.learning(brandId)]);
@@ -40,6 +72,30 @@ function Library({ brandId }: { brandId: string }) {
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!data) return <div role="status" aria-label="Loading library" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(data.role, "member");
+
+  async function savePerformance(values: ManualPerformance) {
+    const saved = await busy.run(async () => {
+      await recordPerformance({ data: { brandId, creativeId: traceId ?? "", ...values } });
+      setNote("Performance stored and a learning job was queued. Scoring opportunities drains that job. No ad account is connected.");
+    });
+    if (saved) performanceForm.reset({ observedOn: "", platform: "", reach: "0", impressions: "0", clicks: "0", conversions: "0", spendCents: "0", revenueCents: "0" });
+  }
+
+  async function saveOwnCreative(values: ObservationFieldsOutput) {
+    const saved = await busy.run(async () => {
+      await recordObservation({ data: { brandId, ...values } });
+      setNote("Creative recorded.");
+    });
+    if (saved) observationForm.reset();
+  }
+  async function savePausedObjects(values: PausedPublishing) {
+    const saved = await busy.run(async () => {
+      const result = await publishPausedObjects({ data: { brandId, ...values } });
+      setStages(result.stages);
+      setNote(`${result.detail} Correlation ${result.correlationId}.`);
+    });
+    if (saved) publishForm.reset({ ...publishForm.getValues(), name: "" });
+  }
   const visibleCreatives = data.creatives.filter((item) => {
     const queryText = `${item.title} ${item.hook} ${item.angle}`.toLowerCase();
     if (creativeSearch.trim() && !queryText.includes(creativeSearch.trim().toLowerCase())) return false;
@@ -73,93 +129,66 @@ function Library({ brandId }: { brandId: string }) {
         {hasRole(data.role, "admin") ? (
           <form
             className="mt-4 grid gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              const provider = form.get("provider");
-              if (provider !== "meta" && provider !== "tiktok" && provider !== "google") return;
-              const split = (name: string) => String(form.get(name) ?? "").split(",").map((item) => item.trim()).filter(Boolean);
-              void busy.run(async () => {
-                const result = await publishPausedObjects({
-                  data: {
-                    brandId,
-                    provider,
-                    creativeId: String(form.get("creativeId") ?? ""),
-                    name: String(form.get("name") ?? ""),
-                    dailyBudgetCents: parseCount(form.get("dailyBudgetCents"), "Daily budget"),
-                    countries: split("countries"),
-                    locationIds: split("locationIds"),
-                    pageId: String(form.get("pageId") ?? ""),
-                    link: String(form.get("link") ?? ""),
-                    message: String(form.get("message") ?? ""),
-                    scheduleStart: String(form.get("scheduleStart") ?? ""),
-                    imageIds: split("imageIds"),
-                    videoId: String(form.get("videoId") ?? ""),
-                    headlines: split("headlines"),
-                    descriptions: split("descriptions"),
-                    cpcBidCents: parseCount(form.get("cpcBidCents"), "CPC bid", true),
-                  },
-                });
-                setStages(result.stages);
-                setNote(`${result.detail} Correlation ${result.correlationId}.`);
-              });
-            }}
+            onSubmit={publishForm.handleSubmit(savePausedObjects)}
+            onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); event.currentTarget.requestSubmit(); } }}
           >
-            <Field label="Provider">
-              <SelectInput name="provider" defaultValue="meta">
+            <Field label="Provider" error={publishForm.formState.errors.provider?.message}>
+              <SelectInput {...publishForm.register("provider")}>
                 <option value="meta">Meta</option>
                 <option value="tiktok">TikTok</option>
                 <option value="google">Google Ads</option>
               </SelectInput>
             </Field>
-            <Field label="Creative" hint="Used only to resume this brand’s stored ids. It is not sent as an external id.">
-              <SelectInput name="creativeId" required defaultValue={data.creatives[0]?.id ?? ""}>
+            <Field label="Creative" hint="Used only to resume this brand’s stored ids. It is not sent as an external id." error={publishForm.formState.errors.creativeId?.message}>
+              <SelectInput {...publishForm.register("creativeId")} required>
+                <option value="">Choose a creative</option>
                 {data.creatives.length === 0 ? <option value="">Create a creative first</option> : null}
                 {data.creatives.map((item) => (
                   <option key={item.id} value={item.id}>{item.title || item.hook || item.id}</option>
                 ))}
               </SelectInput>
             </Field>
-            <Field label="Name">
-              <TextInput name="name" required maxLength={120} />
+            <Field label="Name" error={publishForm.formState.errors.name?.message}>
+              <TextInput {...publishForm.register("name")} required maxLength={120} />
             </Field>
-            <Field label="Daily budget (cents)">
-              <TextInput name="dailyBudgetCents" type="text" inputMode="decimal" min={1} required defaultValue={1000} />
+            <Field label="Daily budget (cents)" error={publishForm.formState.errors.dailyBudgetCents?.message}>
+              <TextInput {...publishForm.register("dailyBudgetCents")} type="text" inputMode="decimal" required />
             </Field>
             <Field label="Link">
-              <TextInput name="link" type="url" placeholder="https://" />
+              <TextInput {...publishForm.register("link")} type="url" placeholder="https://" />
             </Field>
             <Field label="Message">
-              <TextArea name="message" />
+              <TextArea {...publishForm.register("message")} />
             </Field>
             <Field label="Meta countries" hint="Comma-separated, such as US. Used only for Meta.">
-              <TextInput name="countries" />
+              <TextInput {...publishForm.register("countries")} />
             </Field>
             <Field label="Meta page id">
-              <TextInput name="pageId" />
+              <TextInput {...publishForm.register("pageId")} />
             </Field>
             <Field label="TikTok location ids" hint="Numeric location ids, not country codes. An ad also needs an uploaded image or video id.">
-              <TextInput name="locationIds" />
+              <TextInput {...publishForm.register("locationIds")} />
             </Field>
             <Field label="TikTok schedule start">
-              <TextInput name="scheduleStart" placeholder="2026-01-02 00:00:00" />
+              <TextInput {...publishForm.register("scheduleStart")} placeholder="2026-01-02 00:00:00" />
             </Field>
             <Field label="TikTok image ids">
-              <TextInput name="imageIds" />
+              <TextInput {...publishForm.register("imageIds")} />
             </Field>
             <Field label="TikTok video id">
-              <TextInput name="videoId" />
+              <TextInput {...publishForm.register("videoId")} />
             </Field>
             <Field label="Google headlines" hint="Each headline is 30 characters or fewer.">
-              <TextInput name="headlines" />
+              <TextInput {...publishForm.register("headlines")} />
             </Field>
             <Field label="Google descriptions" hint="Each description is 90 characters or fewer.">
-              <TextInput name="descriptions" />
+              <TextInput {...publishForm.register("descriptions")} />
             </Field>
             <Field label="Google CPC bid (cents)">
-              <TextInput name="cpcBidCents" type="text" inputMode="decimal" min={0} defaultValue={0} />
+              <TextInput {...publishForm.register("cpcBidCents")} type="text" inputMode="decimal" />
             </Field>
-            <Button type="submit" disabled={busy.pending || data.creatives.length === 0}>Create paused objects</Button>
+            {publishForm.formState.isDirty ? <div role="status" className="flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => publishForm.reset()}>Discard</Button></div> : null}
+            <Button type="submit" disabled={busy.pending || publishForm.formState.isSubmitting || data.creatives.length === 0}>{publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
           </form>
         ) : (
           <p className="mt-2 text-sm text-muted">An admin can send a paused publish.</p>
@@ -256,38 +285,19 @@ function Library({ brandId }: { brandId: string }) {
           {canEdit ? (
             <form
               className="mt-4 grid gap-3 md:grid-cols-2"
-              onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                event.preventDefault();
-                const form = new FormData(event.currentTarget);
-                void busy.run(async () => {
-                  await recordPerformance({
-                    data: {
-                      brandId,
-                      creativeId: traceId,
-                      platform: String(form.get("platform") ?? ""),
-                      impressions: parseCount(form.get("impressions"), "Impressions"),
-                      clicks: parseCount(form.get("clicks"), "Clicks"),
-                      conversions: parseCount(form.get("conversions"), "Conversions"),
-                      spendCents: parseCount(form.get("spendCents"), "Spend"),
-                      revenueCents: parseCount(form.get("revenueCents"), "Revenue"),
-                      reach: parseCount(form.get("reach"), "Reach", true),
-                      observedOn: String(form.get("observedOn") ?? ""),
-                    },
-                  });
-                  setNote("Performance stored and a learning job was queued. Scoring opportunities drains that job. No ad account is connected.");
-                });
-              }}
+              onSubmit={performanceForm.handleSubmit(savePerformance)}
             >
-              <Field label="Date"><TextInput name="observedOn" type="date" required /></Field>
-              <Field label="Platform"><TextInput name="platform" /></Field>
-              <Field label="Reach"><TextInput name="reach" type="text" inputMode="decimal" min={0} defaultValue={0} /></Field>
-              <Field label="Impressions"><TextInput name="impressions" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
-              <Field label="Clicks"><TextInput name="clicks" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
-              <Field label="Conversions"><TextInput name="conversions" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
-              <Field label="Spend (cents)"><TextInput name="spendCents" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
-              <Field label="Revenue (cents)"><TextInput name="revenueCents" type="text" inputMode="decimal" min={0} required defaultValue={0} /></Field>
+              <Field label="Date" error={performanceForm.formState.errors.observedOn?.message}><TextInput {...performanceForm.register("observedOn")} type="date" required /></Field>
+              <Field label="Platform" error={performanceForm.formState.errors.platform?.message}><TextInput {...performanceForm.register("platform")} maxLength={80} /></Field>
+              <Field label="Reach" error={performanceForm.formState.errors.reach?.message}><TextInput {...performanceForm.register("reach")} type="text" inputMode="numeric" /></Field>
+              <Field label="Impressions" error={performanceForm.formState.errors.impressions?.message}><TextInput {...performanceForm.register("impressions")} type="text" inputMode="numeric" required /></Field>
+              <Field label="Clicks" error={performanceForm.formState.errors.clicks?.message}><TextInput {...performanceForm.register("clicks")} type="text" inputMode="numeric" required /></Field>
+              <Field label="Conversions" error={performanceForm.formState.errors.conversions?.message}><TextInput {...performanceForm.register("conversions")} type="text" inputMode="numeric" required /></Field>
+              <Field label="Spend (cents)" error={performanceForm.formState.errors.spendCents?.message}><TextInput {...performanceForm.register("spendCents")} type="text" inputMode="numeric" required /></Field>
+              <Field label="Revenue (cents)" error={performanceForm.formState.errors.revenueCents?.message}><TextInput {...performanceForm.register("revenueCents")} type="text" inputMode="numeric" required /></Field>
+              {performanceForm.formState.isDirty ? <div className="md:col-span-2 flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm" role="status"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => performanceForm.reset()}>Discard</Button></div> : null}
               <div className="md:col-span-2 flex flex-wrap gap-2">
-                <Button type="submit" disabled={busy.pending}>Record performance</Button>
+                <Button type="submit" disabled={busy.pending || performanceForm.formState.isSubmitting}>Record performance</Button>
                 <Button
                   type="button"
                   variant="quiet"
@@ -313,54 +323,27 @@ function Library({ brandId }: { brandId: string }) {
           <p className="mt-2 text-sm text-muted">Use this for history the system did not generate. It can receive performance and feed learning.</p>
           <form
             className="mt-4 grid gap-3"
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-              const form = event.currentTarget;
-              const data = new FormData(form);
-              void busy.run(async () => {
-                await recordObservation({
-                  data: {
-                    brandId,
-                    origin: "own",
-                    competitorId: "",
-                    angle: String(data.get("angle") ?? ""),
-                    observedAngle: String(data.get("observedAngle") ?? ""),
-                    hookType: String(data.get("hookType") ?? ""),
-                    format: String(data.get("format") ?? ""),
-                    title: String(data.get("title") ?? ""),
-                    hook: String(data.get("hook") ?? ""),
-                    message: String(data.get("message") ?? ""),
-                    offer: "",
-                    cta: String(data.get("cta") ?? ""),
-                    claim: "",
-                    platform: "",
-                    productName: String(data.get("productName") ?? ""),
-                    sourceUrl: "",
-                  },
-                });
-                setNote("Creative recorded.");
-                form.reset();
-              });
-            }}
+            onSubmit={observationForm.handleSubmit(saveOwnCreative)}
           >
-            <Field label="Angle preset">
-              <SelectInput name="angle" defaultValue="curiosity">
+            <Field label="Angle preset" error={observationForm.formState.errors.observedAngle?.message}>
+              <SelectInput {...observationForm.register("angle")}>
                 <option value="">Not in the list</option>
                 {HYPOTHESES.map((item) => <option key={item.id} value={item.angle}>{item.label}</option>)}
               </SelectInput>
             </Field>
             <Field label="Observed angle, if it is not in the list">
-              <TextInput name="observedAngle" placeholder="unboxing" />
+              <TextInput {...observationForm.register("observedAngle")} placeholder="unboxing" maxLength={48} />
             </Field>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Hook type"><TextInput name="hookType" /></Field>
-              <Field label="Format"><TextInput name="format" /></Field>
+              <Field label="Hook type" error={observationForm.formState.errors.hookType?.message}><TextInput {...observationForm.register("hookType")} maxLength={48} /></Field>
+              <Field label="Format" error={observationForm.formState.errors.format?.message}><TextInput {...observationForm.register("format")} maxLength={48} /></Field>
             </div>
-            <Field label="Hook"><TextInput name="hook" required /></Field>
-            <Field label="Script"><TextArea name="message" required /></Field>
-            <Field label="Call to action"><TextInput name="cta" /></Field>
-            <Field label="Product"><TextInput name="productName" /></Field>
-            <Button type="submit" disabled={busy.pending}>Save to library</Button>
+            <Field label="Hook" error={observationForm.formState.errors.hook?.message} required><TextInput {...observationForm.register("hook")} required maxLength={400} /></Field>
+            <Field label="Script" error={observationForm.formState.errors.message?.message} required><TextArea {...observationForm.register("message")} required maxLength={4000} /></Field>
+            <Field label="Call to action" error={observationForm.formState.errors.cta?.message}><TextInput {...observationForm.register("cta")} maxLength={240} /></Field>
+            <Field label="Product" error={observationForm.formState.errors.productName?.message}><TextInput {...observationForm.register("productName")} maxLength={160} /></Field>
+            {observationForm.formState.isDirty ? <div className="flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm" role="status"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => observationForm.reset()}>Discard</Button></div> : null}
+            <Button type="submit" disabled={busy.pending || observationForm.formState.isSubmitting}>Save to library</Button>
           </form>
         </Panel>
       ) : null}

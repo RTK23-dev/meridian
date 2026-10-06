@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Field, Notice, Panel, SelectInput, Sheet, SheetContent, SheetDescription, SheetTitle, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
@@ -17,6 +19,8 @@ import {
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { useMarketQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { competitorFieldsSchema, publicPageSchema, researchCollectionSchema, type CompetitorFields, type CompetitorFieldsOutput, type PublicPageFields, type ResearchCollection, type ResearchCollectionFields } from "@/lib/meridian/schemas/market";
+import { observationFieldsSchema, type ObservationFields, type ObservationFieldsOutput } from "@/lib/meridian/schemas/observation";
 
 export const Route = createFileRoute("/brands/$brandId/market")({ component: Page });
 
@@ -70,6 +74,21 @@ function MarketPage({ brandId }: { brandId: string }) {
   const [advertiserFilter, setAdvertiserFilter] = useState("");
   const [selectedAdId, setSelectedAdId] = useState<string | null>(null);
   const busy = useBusy([qk.market(brandId), qk.intelligence(brandId), qk.opportunities(brandId), qk.studio(brandId)]);
+  const researchForm = useForm<ResearchCollectionFields, unknown, ResearchCollection>({ resolver: zodResolver(researchCollectionSchema), defaultValues: { searchTerms: "", country: "US", limit: 50 }, mode: "onBlur" });
+  const competitorForm = useForm<CompetitorFields, unknown, CompetitorFieldsOutput>({ resolver: zodResolver(competitorFieldsSchema), defaultValues: { name: "", website: "", notes: "", kind: "direct" }, mode: "onBlur" });
+  const pageForm = useForm<PublicPageFields, unknown, { url: string }>({ resolver: zodResolver(publicPageSchema), defaultValues: { url: "" }, mode: "onBlur" });
+  const observationForm = useForm<ObservationFields, unknown, ObservationFieldsOutput>({
+    resolver: zodResolver(observationFieldsSchema),
+    defaultValues: { origin: "competitor", competitorId: "", angle: "demonstration", observedAngle: "", hookType: "", format: "", proofType: "", title: "", hook: "", message: "", offer: "", cta: "", claim: "", platform: "", productName: "", sourceUrl: "" },
+    mode: "onBlur",
+  });
+  const hasUnsavedChanges = researchForm.formState.isDirty || competitorForm.formState.isDirty || pageForm.formState.isDirty || observationForm.formState.isDirty;
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [hasUnsavedChanges]);
 
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!market) return <div role="status" aria-label="Loading market" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
@@ -102,6 +121,37 @@ function MarketPage({ brandId }: { brandId: string }) {
   const selectedAd = market.researchAds.find((ad) => ad.id === selectedAdId) ?? null;
   const selectedAnalysis = selectedAd ? parseAnalysis(selectedAd.analysis) : null;
 
+  async function collectResearch(values: ResearchCollection) {
+    let queued = false;
+    const saved = await busy.run(async () => {
+      const result = await startResearchCollection({ data: { brandId, ...values } });
+      setNote(result.status === "NOT_CONNECTED" ? result.error : `Research collection ${result.reused ? "already queued" : "queued"}. Refresh this page to see worker progress.`);
+      queued = result.status !== "NOT_CONNECTED";
+    });
+    if (saved && queued) researchForm.reset(values);
+  }
+
+  async function saveCompetitor(values: CompetitorFieldsOutput) {
+    const saved = await busy.run(async () => { await addCompetitor({ data: { brandId, ...values } }); });
+    if (saved) competitorForm.reset({ name: "", website: "", notes: "", kind: "direct" });
+  }
+
+  async function fetchPage(values: { url: string }) {
+    const saved = await busy.run(async () => {
+      const result = await fetchSourcePage({ data: { brandId, url: values.url } });
+      setNote(result.status === "stored" ? "Page text stored. It is not part of the brand brain." : result.error);
+    });
+    if (saved) pageForm.reset({ url: "" });
+  }
+
+  async function storeObservation(values: ObservationFieldsOutput) {
+    const saved = await busy.run(async () => {
+      const result = await recordObservation({ data: { brandId, ...values } });
+      setNote(result.duplicate ? "That observation was already stored." : "Observation stored.");
+    });
+    if (saved) observationForm.reset();
+  }
+
   return (
     <div className="space-y-8">
       <BrandNav brandId={brandId} />
@@ -131,20 +181,11 @@ function MarketPage({ brandId }: { brandId: string }) {
           <p className="mt-2 text-sm text-muted">Meta Ad Library collection is capped at 100 ads and 100 MB of stored source video per run. Each video is capped at 24 MB. Media, transcript and analysis each retain their own status. Ads without a public downloadable video are not analyzed.</p>
         </div>
         {canEdit ? (
-          <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={(event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            void busy.run(async () => {
-              const result = await startResearchCollection({ data: {
-                brandId, searchTerms: String(form.get("research-terms") ?? ""), country: String(form.get("research-country") ?? "US"), limit: Number(form.get("research-limit") ?? 50),
-              } });
-              setNote(result.status === "NOT_CONNECTED" ? result.error : `Research collection ${result.reused ? "already queued" : "queued"}. Refresh this page to see worker progress.`);
-            });
-          }}>
-            <Field label="Search ads"><TextInput name="research-terms" required maxLength={100} placeholder="Brand, product, or category" /></Field>
-            <Field label="Country"><TextInput name="research-country" defaultValue="US" required maxLength={2} /></Field>
-            <Field label="Maximum ads"><SelectInput name="research-limit" defaultValue="50"><option value="25">25</option><option value="50">50</option><option value="100">100</option></SelectInput></Field>
-            <div className="flex items-end"><Button type="submit" disabled={busy.pending}>Start collection</Button></div>
+          <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={researchForm.handleSubmit(collectResearch)}>
+            <Field label="Search ads" error={researchForm.formState.errors.searchTerms?.message} required><TextInput {...researchForm.register("searchTerms")} required maxLength={100} placeholder="Brand, product, or category" /></Field>
+            <Field label="Country" error={researchForm.formState.errors.country?.message} required><TextInput {...researchForm.register("country")} required maxLength={2} /></Field>
+            <Field label="Maximum ads" error={researchForm.formState.errors.limit?.message} required><SelectInput {...researchForm.register("limit", { valueAsNumber: true })}><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></SelectInput></Field>
+            <div className="flex items-end gap-2">{researchForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => researchForm.reset()}>Clear</Button> : null}<Button type="submit" disabled={busy.pending || researchForm.formState.isSubmitting}>Start collection</Button></div>
           </form>
         ) : null}
         <div className="mt-5">
@@ -240,39 +281,24 @@ function MarketPage({ brandId }: { brandId: string }) {
         {canEdit ? (
           <form
             className="mt-4 grid gap-3 md:grid-cols-2"
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-              const form = event.currentTarget;
-              const data = new FormData(form);
-              void busy.run(async () => {
-                await addCompetitor({
-                  data: {
-                    brandId,
-                    name: String(data.get("name") ?? ""),
-                    website: String(data.get("website") ?? ""),
-                    notes: String(data.get("notes") ?? ""),
-                    kind: String(data.get("kind") ?? "direct"),
-                  },
-                });
-                form.reset();
-              });
-            }}
+            onSubmit={competitorForm.handleSubmit(saveCompetitor)}
           >
-            <Field label="Name">
-              <TextInput name="name" required maxLength={120} />
+            <Field label="Name" error={competitorForm.formState.errors.name?.message} required>
+              <TextInput {...competitorForm.register("name")} required maxLength={120} />
             </Field>
-            <Field label="Website" hint="Optional. Stored, not crawled.">
-              <TextInput name="website" />
+            <Field label="Website" hint="Optional. Stored, not crawled." error={competitorForm.formState.errors.website?.message}>
+              <TextInput {...competitorForm.register("website")} maxLength={500} />
             </Field>
-            <Field label="Kind">
-              <SelectInput name="kind" defaultValue="direct">
+            <Field label="Kind" error={competitorForm.formState.errors.kind?.message}>
+              <SelectInput {...competitorForm.register("kind")}>
                 <option value="direct">Direct</option>
                 <option value="adjacent">Adjacent</option>
                 <option value="inspirational">Inspirational</option>
               </SelectInput>
             </Field>
             <div className="md:col-span-2">
-              <Button type="submit" disabled={busy.pending}>Add competitor</Button>
+              <Button type="submit" disabled={busy.pending || competitorForm.formState.isSubmitting}>Add competitor</Button>
+              {competitorForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => competitorForm.reset()}>Clear</Button> : null}
             </div>
           </form>
         ) : null}
@@ -294,47 +320,18 @@ function MarketPage({ brandId }: { brandId: string }) {
         {canEdit ? (
           <form
             className="mt-4 grid gap-3"
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-              const form = event.currentTarget;
-              const data = new FormData(form);
-              void busy.run(async () => {
-                const saved = await recordObservation({
-                  data: {
-                    brandId,
-                    origin: "competitor",
-                    competitorId: String(data.get("competitorId") ?? ""),
-                    angle: String(data.get("angle") ?? ""),
-                    observedAngle: String(data.get("observedAngle") ?? ""),
-                    hookType: String(data.get("hookType") ?? ""),
-                    format: String(data.get("format") ?? ""),
-                    proofType: String(data.get("proofType") ?? ""),
-                    title: String(data.get("title") ?? ""),
-                    hook: String(data.get("hook") ?? ""),
-                    message: String(data.get("message") ?? ""),
-                    offer: String(data.get("offer") ?? ""),
-                    cta: String(data.get("cta") ?? ""),
-                    claim: String(data.get("claim") ?? ""),
-                    platform: String(data.get("platform") ?? ""),
-                    productName: "",
-                    sourceUrl: String(data.get("sourceUrl") ?? ""),
-                  },
-                });
-                setNote(saved.duplicate ? "That observation was already stored." : "Observation stored.");
-                if (!saved.duplicate) form.reset();
-              });
-            }}
+            onSubmit={observationForm.handleSubmit(storeObservation)}
           >
-            <Field label="Competitor">
-              <SelectInput name="competitorId" required defaultValue="">
+            <Field label="Competitor" error={observationForm.formState.errors.competitorId?.message} required>
+              <SelectInput {...observationForm.register("competitorId")} required>
                 <option value="" disabled>Choose</option>
                 {market.competitors.filter((item) => item.status === "confirmed").map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </SelectInput>
             </Field>
-            <Field label="Angle preset">
-              <SelectInput name="angle" defaultValue="demonstration">
+            <Field label="Angle preset" error={observationForm.formState.errors.observedAngle?.message}>
+              <SelectInput {...observationForm.register("angle")}>
                 <option value="">Not in the list</option>
                 {HYPOTHESES.map((item) => (
                   <option key={item.id} value={item.angle}>{item.label}</option>
@@ -342,27 +339,27 @@ function MarketPage({ brandId }: { brandId: string }) {
               </SelectInput>
             </Field>
             <Field label="Observed angle, if it is not in the list">
-              <TextInput name="observedAngle" placeholder="unboxing" />
+              <TextInput {...observationForm.register("observedAngle")} placeholder="unboxing" maxLength={48} />
             </Field>
             <div className="grid gap-3 md:grid-cols-3">
-              <Field label="Hook type"><TextInput name="hookType" placeholder="defaults from the preset" /></Field>
-              <Field label="Format"><TextInput name="format" placeholder="short_ugc" /></Field>
-              <Field label="Proof"><TextInput name="proofType" placeholder="demonstration" /></Field>
+              <Field label="Hook type" error={observationForm.formState.errors.hookType?.message}><TextInput {...observationForm.register("hookType")} placeholder="defaults from the preset" maxLength={48} /></Field>
+              <Field label="Format" error={observationForm.formState.errors.format?.message}><TextInput {...observationForm.register("format")} placeholder="short_ugc" maxLength={48} /></Field>
+              <Field label="Proof" error={observationForm.formState.errors.proofType?.message}><TextInput {...observationForm.register("proofType")} placeholder="demonstration" maxLength={48} /></Field>
             </div>
-            <Field label="Hook">
-              <TextInput name="hook" required maxLength={400} />
+            <Field label="Hook" error={observationForm.formState.errors.hook?.message} required>
+              <TextInput {...observationForm.register("hook")} required maxLength={400} />
             </Field>
-            <Field label="What the creative says">
-              <TextArea name="message" required />
+            <Field label="What the creative says" error={observationForm.formState.errors.message?.message} required>
+              <TextArea {...observationForm.register("message")} required maxLength={4000} />
             </Field>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Offer"><TextInput name="offer" /></Field>
-              <Field label="Call to action"><TextInput name="cta" /></Field>
-              <Field label="Claim you saw"><TextInput name="claim" /></Field>
-              <Field label="Platform"><TextInput name="platform" /></Field>
-              <Field label="Source URL"><TextInput name="sourceUrl" /></Field>
+              <Field label="Offer" error={observationForm.formState.errors.offer?.message}><TextInput {...observationForm.register("offer")} maxLength={400} /></Field>
+              <Field label="Call to action" error={observationForm.formState.errors.cta?.message}><TextInput {...observationForm.register("cta")} maxLength={240} /></Field>
+              <Field label="Claim you saw" error={observationForm.formState.errors.claim?.message}><TextInput {...observationForm.register("claim")} maxLength={400} /></Field>
+              <Field label="Platform" error={observationForm.formState.errors.platform?.message}><TextInput {...observationForm.register("platform")} maxLength={80} /></Field>
+              <Field label="Source URL" error={observationForm.formState.errors.sourceUrl?.message}><TextInput {...observationForm.register("sourceUrl")} maxLength={500} /></Field>
             </div>
-            <Button type="submit" disabled={busy.pending}>Store observation</Button>
+            <div className="flex flex-wrap gap-2"><Button type="submit" disabled={busy.pending || observationForm.formState.isSubmitting}>Store observation</Button>{observationForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => observationForm.reset()}>Discard changes</Button> : null}</div>
           </form>
         ) : null}
       </Panel>
@@ -372,17 +369,12 @@ function MarketPage({ brandId }: { brandId: string }) {
         {canEdit ? (
           <form
             className="mt-4 flex flex-wrap gap-3"
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              void busy.run(async () => {
-                const result = await fetchSourcePage({ data: { brandId, url: String(form.get("url") ?? "") } });
-                setNote(result.status === "stored" ? "Page text stored. It is not part of the brand brain." : result.error);
-              });
-            }}
+            onSubmit={pageForm.handleSubmit(fetchPage)}
           >
-            <TextInput name="url" placeholder="https://" className="max-w-md" required />
-            <Button type="submit" disabled={busy.pending}>Fetch page</Button>
+            <Field label="Public page URL" error={pageForm.formState.errors.url?.message} required className="min-w-64 flex-1">
+              <TextInput {...pageForm.register("url")} placeholder="https://" className="max-w-md" required maxLength={500} />
+            </Field>
+            <div className="flex items-end gap-2">{pageForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => pageForm.reset()}>Clear</Button> : null}<Button type="submit" disabled={busy.pending || pageForm.formState.isSubmitting}>Fetch page</Button></div>
           </form>
         ) : null}
         <ul className="mt-4 space-y-3">

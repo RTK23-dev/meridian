@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { useBusy } from "@/components/gate";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
 import { BrandNav } from "@/components/brand-nav";
@@ -18,6 +20,7 @@ import {
 import { useStudioQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
+import { studioGenerationSchema, type StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
 
 export const Route = createFileRoute("/brands/$brandId/studio")({ component: Page });
 
@@ -42,6 +45,18 @@ function Studio({ brandId }: { brandId: string }) {
   const reviewAction = useBusy([qk.studio(brandId), qk.reviews(brandId)]);
   const publishAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
   const performanceAction = useBusy([qk.studio(brandId), qk.learning(brandId)]);
+  const generationForm = useForm<StudioGeneration>({
+    resolver: zodResolver(studioGenerationSchema),
+    defaultValues: { imageProvider: "none", videoProvider: "hypit" },
+    mode: "onBlur",
+  });
+  const generationDirty = generationForm.formState.isDirty;
+  useEffect(() => {
+    if (!generationDirty) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [generationDirty]);
   const actionErrors = [briefAction.error, generationAction.error, reviewAction.error, publishAction.error, performanceAction.error].filter(Boolean);
   const anyActionPending = briefAction.pending || generationAction.pending || reviewAction.pending || publishAction.pending || performanceAction.pending;
 
@@ -52,6 +67,14 @@ function Studio({ brandId }: { brandId: string }) {
   const previous = session.briefs[1];
   const changed = Boolean(brief && previous && brief.constraints !== previous.constraints);
   const recommendation = session.recommendation;
+
+  async function generate(values: StudioGeneration) {
+    if (!brief) return;
+    const saved = await generationAction.run(async () => {
+      await generateStudioVariants({ data: { brandId, briefId: brief.id, ...values } });
+    });
+    if (saved) generationForm.reset(values);
+  }
 
   return (
     <div className="space-y-6">
@@ -209,16 +232,10 @@ function Studio({ brandId }: { brandId: string }) {
           <Panel>
             <h2 className="font-display text-2xl">Generate from the approved brief</h2>
             {brief ? <p className="mt-2 text-sm text-muted">Current brief: {brief.title}. A non-ready brief cannot be used for generation.</p> : <p className="mt-2 text-sm text-muted">Write or accept a brief before generating.</p>}
-            {canEdit && brief ? <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              void generationAction.run(async () => {
-                await generateStudioVariants({ data: { brandId, briefId: brief.id, imageProvider: String(form.get("imageProvider") ?? ""), videoProvider: String(form.get("videoProvider") ?? "") } });
-              });
-            }}>
-              <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently."><SelectInput name="imageProvider" defaultValue="none" required><option value="none">No images</option><option value="test:image">Test image</option><option value="google:nano-banana">Google AI Studio · Nano Banana</option></SelectInput></Field>
-              <Field label="Video" hint="Hypit renders the approved brief. It is not connected until HYPIT_BASE_URL is set. No clip is invented."><SelectInput name="videoProvider" defaultValue="hypit" required><option value="" disabled>Choose</option><option value="hypit">Hypit video</option><option value="none">No video in this run</option></SelectInput></Field>
-              <div className="md:col-span-2"><Button type="submit" disabled={generationAction.pending || brief.status !== "ready"}>Generate variants</Button><p className="mt-2 text-sm text-muted">Estimated cost appears only when a provider returns one. Daily or concurrency limits can block a run.</p></div>
+            {canEdit && brief ? <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={generationForm.handleSubmit(generate)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); event.currentTarget.requestSubmit(); } }}>
+              <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently." error={generationForm.formState.errors.imageProvider?.message}><SelectInput {...generationForm.register("imageProvider")} required><option value="none">No images</option><option value="test:image">Test image</option><option value="google:nano-banana">Google AI Studio · Nano Banana</option></SelectInput></Field>
+              <Field label="Video" hint="Hypit renders the approved brief. It is not connected until HYPIT_BASE_URL is set. No clip is invented." error={generationForm.formState.errors.videoProvider?.message}><SelectInput {...generationForm.register("videoProvider")} required><option value="hypit">Hypit video</option><option value="none">No video in this run</option></SelectInput></Field>
+              <div className="md:col-span-2">{generationDirty ? <div role="status" className="mb-3 flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => generationForm.reset()}>Discard</Button></div> : null}<Button type="submit" disabled={generationAction.pending || generationForm.formState.isSubmitting || brief.status !== "ready"}>{generationForm.formState.isSubmitting ? "Generating…" : "Generate variants"}</Button><p className="mt-2 text-sm text-muted">Estimated cost appears only when a provider returns one. Daily or concurrency limits can block a run.</p></div>
             </form> : null}
           </Panel>
         </TabsContent>

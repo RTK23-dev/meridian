@@ -1,15 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
-import { Button, ErrorState, Notice, Panel, Skeleton, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { getPerformanceRowsForExport, setPerformanceSchedule } from "@/lib/meridian/performance/actions";
 import { refreshLearning, setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
 import { useLearningQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
+import { performanceScheduleSchema, type PerformanceSchedule, type PerformanceScheduleFields } from "@/lib/meridian/schemas/performance-schedule";
 
 export const Route = createFileRoute("/brands/$brandId/learning")({ component: Page });
 
@@ -25,6 +28,27 @@ function Learning({ brandId }: { brandId: string }) {
   const data = learningQuery.data ?? null;
   const [note, setNote] = useState<string | null>(null);
   const busy = useBusy([qk.learning(brandId), qk.studio(brandId), qk.opportunities(brandId)]);
+  const scheduleForm = useForm<PerformanceScheduleFields, unknown, PerformanceSchedule>({
+    resolver: zodResolver(performanceScheduleSchema),
+    defaultValues: { provider: "meta", creativeId: "", externalAdId: "", currency: "USD", timezone: "UTC", startDate: "", endDate: "", everySeconds: "3600" },
+    mode: "onBlur",
+  });
+  const scheduleDirty = scheduleForm.formState.isDirty;
+  useEffect(() => {
+    if (!scheduleDirty) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [scheduleDirty]);
+
+  async function saveSchedule(values: PerformanceSchedule) {
+    if (!data?.organizationId) return;
+    const saved = await busy.run(async () => {
+      const result = await setPerformanceSchedule({ data: { organizationId: data.organizationId!, brandId, ...values } });
+      setNote(`${result.reason} Schedule ${result.id}.`);
+    });
+    if (saved) scheduleForm.reset();
+  }
 
   if (learningQuery.error) return <ErrorState message={errorText(learningQuery.error)} onRetry={() => void learningQuery.refetch()} />;
   if (!data) return <div role="status" aria-label="Loading learning" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
@@ -143,68 +167,26 @@ function Learning({ brandId }: { brandId: string }) {
           <p className="mt-2 text-sm text-muted">This only enqueues a sync after the provider has a successful connection. The worker fetches the metrics. Disconnect stops the schedule.</p>
           <form
             className="mt-4 grid gap-3 md:grid-cols-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              const provider = form.get("provider");
-              if (provider !== "meta" && provider !== "tiktok" && provider !== "google") return;
-              void busy.run(async () => {
-                const result = await setPerformanceSchedule({
-                  data: {
-                    organizationId: data.organizationId,
-                    brandId,
-                    provider,
-                    creativeId: String(form.get("creativeId") ?? ""),
-                    externalAdId: String(form.get("externalAdId") ?? ""),
-                    currency: String(form.get("currency") ?? ""),
-                    timezone: String(form.get("timezone") ?? ""),
-                    startDate: String(form.get("startDate") ?? ""),
-                    endDate: String(form.get("endDate") ?? ""),
-                    everySeconds: Number(form.get("everySeconds") ?? 3600),
-                  },
-                });
-                setNote(`${result.reason} Schedule ${result.id}.`);
-              });
-            }}
+            onSubmit={scheduleForm.handleSubmit(saveSchedule)}
+            onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); event.currentTarget.requestSubmit(); } }}
           >
-            <label className="block text-sm font-semibold">
-              Provider
-              <select name="provider" className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" defaultValue="meta">
+            <Field label="Provider" error={scheduleForm.formState.errors.provider?.message}>
+              <SelectInput {...scheduleForm.register("provider")}>
                 <option value="meta">Meta</option>
                 <option value="tiktok">TikTok</option>
                 <option value="google">Google Ads</option>
-              </select>
-            </label>
-            <label className="block text-sm font-semibold">
-              Cadence in seconds
-              <input name="everySeconds" type="text" inputMode="decimal" defaultValue={3600} required autoComplete="off" className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
-            </label>
-            <label className="block text-sm font-semibold">
-              Creative id
-              <input name="creativeId" required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
-            </label>
-            <label className="block text-sm font-semibold">
-              External ad id
-              <input name="externalAdId" required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
-            </label>
-            <label className="block text-sm font-semibold">
-              Currency
-              <input name="currency" required defaultValue="USD" className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
-            </label>
-            <label className="block text-sm font-semibold">
-              Timezone
-              <input name="timezone" required defaultValue="UTC" className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
-            </label>
-            <label className="block text-sm font-semibold">
-              Start date
-              <input name="startDate" type="date" required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
-            </label>
-            <label className="block text-sm font-semibold">
-              End date
-              <input name="endDate" type="date" required className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-3" />
-            </label>
+              </SelectInput>
+            </Field>
+            <Field label="Cadence in seconds" error={scheduleForm.formState.errors.everySeconds?.message}><TextInput {...scheduleForm.register("everySeconds")} type="text" inputMode="numeric" required /></Field>
+            <Field label="Creative id" error={scheduleForm.formState.errors.creativeId?.message}><TextInput {...scheduleForm.register("creativeId")} required /></Field>
+            <Field label="External ad id" error={scheduleForm.formState.errors.externalAdId?.message}><TextInput {...scheduleForm.register("externalAdId")} required /></Field>
+            <Field label="Currency" error={scheduleForm.formState.errors.currency?.message}><TextInput {...scheduleForm.register("currency")} required maxLength={3} /></Field>
+            <Field label="Timezone" error={scheduleForm.formState.errors.timezone?.message}><TextInput {...scheduleForm.register("timezone")} required /></Field>
+            <Field label="Start date" error={scheduleForm.formState.errors.startDate?.message}><TextInput {...scheduleForm.register("startDate")} type="date" required /></Field>
+            <Field label="End date" error={scheduleForm.formState.errors.endDate?.message}><TextInput {...scheduleForm.register("endDate")} type="date" required /></Field>
+            {scheduleDirty ? <div role="status" className="md:col-span-2 flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => scheduleForm.reset()}>Discard</Button></div> : null}
             <div className="md:col-span-2">
-              <Button type="submit" disabled={busy.pending}>Save performance schedule</Button>
+              <Button type="submit" disabled={busy.pending || scheduleForm.formState.isSubmitting}>{scheduleForm.formState.isSubmitting ? "Saving…" : "Save performance schedule"}</Button>
             </div>
           </form>
         </Panel>

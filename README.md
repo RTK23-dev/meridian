@@ -40,6 +40,7 @@ Open the app, create an account, and add a brand. Without `DATABASE_URL`, the pr
 - Manual market observations, public-page fetch, and semantic clustering with a local MiniLM model.
 - Meta Ad Library video-ad collection, verified source media storage, timestamped transcription, confidence-rated structured JEV Research, and observed cross-ad pattern summaries. Research does not assert effectiveness from frequency.
 - Opportunity ranking, JEV decisions, briefs, text QA, and human review.
+- Shared browser/server validation on market, creative, performance, publishing, and schedule forms, with field-level errors and unsaved-change feedback.
 - JEV uses OpenRouter as its only external model gateway. Optional Studio images can use Google AI Studio / Nano Banana. Studio production video uses Hypit after JEV approval.
 - A Hypit MP4 is stored only after the separate process returns bytes. Missing vision evidence does not auto-approve.
 - Manual performance and learning that changes the next rank and the next brief.

@@ -28,6 +28,9 @@ import { inspectImage } from "@/lib/meridian/assets/images";
 import { discoverCompetitorCandidates } from "@/lib/meridian/competitors/discover";
 import { loadBrandContext } from "@/lib/meridian/context/load";
 import { publicUrlIssue } from "@/lib/meridian/sources/public-url";
+import { competitorFieldsSchema, publicPageSchema, researchCollectionSchema } from "@/lib/meridian/schemas/market";
+import { manualPerformanceSchema } from "@/lib/meridian/schemas/performance";
+import { observationFieldsSchema } from "@/lib/meridian/schemas/observation";
 
 export const REVIEW_REASON_CODES = [
   "wrong_logo",
@@ -94,27 +97,10 @@ function objectInput(input: unknown): Record<string, unknown> {
   return input as Record<string, unknown>;
 }
 
-function whole(value: unknown, label: string): number {
-  if (typeof value === "string" && value.trim() === "") throw new Error(`${label} must be a whole number.`);
-  const number = typeof value === "number" ? value : Number(value);
-  if (!Number.isInteger(number) || number < 0 || number > 1_000_000_000) {
-    throw new Error(`${label} must be a whole number.`);
-  }
-  return number;
-}
-
 function fingerprint(value: string): string {
   let hash = 5381;
   for (let index = 0; index < value.length; index += 1) hash = (hash * 33) ^ value.charCodeAt(index);
   return (hash >>> 0).toString(16);
-}
-
-function optionalUrl(value: unknown, label: string): string {
-  const raw = clip(value, 500, label, false);
-  if (!raw) return "";
-  const issue = publicUrlIssue(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
-  if (issue) throw new Error(issue);
-  return new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).toString();
 }
 
 async function requireBrand(
@@ -496,11 +482,7 @@ export const getMarket = createServerFn({ method: "POST" })
 export const startResearchCollection = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    const country = clip(body.country, 2, "Country", true).toUpperCase();
-    const limit = Number(body.limit ?? 50);
-    if (!/^[A-Z]{2}$/.test(country)) throw new Error("Enter a two-letter country code.");
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Collection limit must be from 1 to 100 ads.");
-    return { brandId: clip(body.brandId, 80, "Brand", true), searchTerms: clip(body.searchTerms, 100, "Search terms", true), country, limit };
+    return { brandId: clip(body.brandId, 80, "Brand", true), ...researchCollectionSchema.parse(body) };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -538,13 +520,7 @@ export const startResearchCollection = createServerFn({ method: "POST" })
 export const addCompetitor = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    return {
-      brandId: clip(body.brandId, 80, "Brand", true),
-      name: clip(body.name, 120, "Competitor", true),
-      website: optionalUrl(body.website, "Website"),
-      notes: clip(body.notes, 1000, "Notes"),
-      kind: body.kind === "adjacent" || body.kind === "inspirational" ? body.kind : "direct",
-    };
+    return { brandId: clip(body.brandId, 80, "Brand", true), ...competitorFieldsSchema.parse(body) };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -648,27 +624,26 @@ export const reviewCompetitor = createServerFn({ method: "POST" })
 export const recordObservation = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    const origin = clip(body.origin, 20, "Origin", true);
-    if (origin !== "competitor" && origin !== "own") throw new Error("Origin must be competitor or own.");
-    const angle = attributeToken(body.observedAngle, "Observed angle") || angleOrThrow(body.angle);
+    const fields = observationFieldsSchema.parse(body);
+    const angle = fields.observedAngle || angleOrThrow(fields.angle);
     const preset = HYPOTHESES.find((item) => item.angle === angle);
     return {
       brandId: clip(body.brandId, 80, "Brand", true),
-      origin,
-      competitorId: clip(body.competitorId, 80, "Competitor"),
-      title: clip(body.title, 160, "Title"),
-      hook: clip(body.hook, 400, "Hook", true),
-      message: clip(body.message, 4000, "Message", true),
-      offer: clip(body.offer, 400, "Offer"),
-      cta: clip(body.cta, 240, "Call to action"),
-      claim: clip(body.claim, 400, "Claim"),
-      platform: clip(body.platform, 80, "Platform"),
-      productName: clip(body.productName, 160, "Product"),
-      sourceUrl: optionalUrl(body.sourceUrl, "Source URL"),
+      origin: fields.origin,
+      competitorId: fields.competitorId,
+      title: fields.title,
+      hook: fields.hook,
+      message: fields.message,
+      offer: fields.offer,
+      cta: fields.cta,
+      claim: fields.claim,
+      platform: fields.platform,
+      productName: fields.productName,
+      sourceUrl: fields.sourceUrl,
       angle,
-      hookType: attributeToken(body.hookType, "Hook type") || preset?.hookType || "unspecified",
-      format: attributeToken(body.format, "Format") || preset?.format || "unspecified",
-      proofType: attributeToken(body.proofType, "Proof") || preset?.proofType || "unspecified",
+      hookType: fields.hookType || preset?.hookType || "unspecified",
+      format: fields.format || preset?.format || "unspecified",
+      proofType: fields.proofType || preset?.proofType || "unspecified",
     };
   })
   .middleware([authMiddleware])
@@ -773,8 +748,7 @@ export const recordObservation = createServerFn({ method: "POST" })
 export const fetchSourcePage = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    const raw = clip(body.url, 500, "URL", true);
-    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const { url } = publicPageSchema.parse(body);
     const issue = publicUrlIssue(url);
     if (issue) throw new Error(issue);
     return { brandId: clip(body.brandId, 80, "Brand", true), url };
@@ -1699,24 +1673,11 @@ export const getTrace = createServerFn({ method: "POST" })
 export const recordPerformance = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    const impressions = whole(body.impressions, "Impressions");
-    const clicks = whole(body.clicks, "Clicks");
-    const conversions = whole(body.conversions, "Conversions");
-    if (clicks > impressions) throw new Error("Clicks cannot exceed impressions.");
-    if (conversions > clicks) throw new Error("Conversions cannot exceed clicks.");
-    const observedOn = clip(body.observedOn, 10, "Date", true);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(observedOn)) throw new Error("Use a YYYY-MM-DD date.");
+    const metrics = manualPerformanceSchema.parse({ ...body, reach: body.reach ?? 0, platform: body.platform ?? "" });
     return {
       brandId: clip(body.brandId, 80, "Brand", true),
       creativeId: clip(body.creativeId, 80, "Creative", true),
-      platform: clip(body.platform, 80, "Platform"),
-      impressions,
-      clicks,
-      conversions,
-      spendCents: whole(body.spendCents, "Spend"),
-      revenueCents: whole(body.revenueCents, "Revenue"),
-      reach: whole(body.reach ?? 0, "Reach"),
-      observedOn,
+      ...metrics,
     };
   })
   .middleware([authMiddleware])

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Forms: share typed validation between the browser and server for market collection, competitor records, creative observations, manual performance, paused publishing, and performance schedules; show field errors and unsaved state before submitting.
+- Studio generation choices now use the same explicit provider allow-list as the server and retain a local unsaved-changes warning.
+- Reject impossible calendar dates in manual performance entries and performance schedules.
 - Security: reject IPv4-mapped and translated private IPv6 targets, non-public IPv6 ranges, and reserved IPv4 ranges before public fetches; malformed address input fails closed.
 - Fix public-page text extraction to decode named and numeric HTML entities exactly once.
 - Keep long-running SQL jobs leased by renewing their heartbeat while work is active; `claimAndRun` now schedules retries with exponential backoff too.
