@@ -27,6 +27,10 @@ function Integrations() {
   const data = query.data ?? null;
   const [note, setNote] = useState<string | null>(null);
   const busy = useBusy([qk.integrations(organizationId)]);
+  const providerGroups = [
+    { label: "Advertising accounts", providers: ["meta", "tiktok", "google"] },
+    { label: "Research sources", providers: ["ad_library"] },
+  ];
 
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!data) return <div role="status" aria-label="Loading integration status" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
@@ -59,8 +63,11 @@ function Integrations() {
       </div>
       {note ? <p className="text-sm" role="status">{note}</p> : null}
       {busy.error ? <Notice>{busy.error}</Notice> : null}
-      <ul className="space-y-3">
-        {data.connections.map((item) => (
+      <div className="space-y-6">
+      {providerGroups.map((group) => {
+        const connections = data.connections.filter((item) => group.providers.includes(item.provider));
+        return connections.length ? <section key={group.label} className="space-y-3"><h2 className="font-display text-2xl">{group.label}</h2><ul className="space-y-3">
+        {connections.map((item) => (
           <li key={item.provider} className="rounded-lg border border-line bg-panel px-4 py-3">
             <p className="font-semibold">{item.provider.replaceAll("_", " ")}</p>
             <StatusText status={item.phase} description={item.detail} />
@@ -131,7 +138,9 @@ function Integrations() {
             )}
           </li>
         ))}
-      </ul>
+      </ul></section> : null;
+      })}
+      </div>
       <Panel>
         <h2 className="font-display text-2xl">Publishing</h2>
         <p className="mt-2 text-sm">{data.publishing.status}. {data.publishing.detail}</p>

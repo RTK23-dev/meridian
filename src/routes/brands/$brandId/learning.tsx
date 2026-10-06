@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Notice, Panel, Skeleton, errorText } from "@/components/ui";
@@ -85,6 +86,22 @@ function Learning({ brandId }: { brandId: string }) {
       {data.patterns.length === 0 ? (
         <Panel>No learned patterns. Enter performance on at least three creatives that share an attribute, with 300 impressions in that bucket, then recompute. CTR, conversion rate, and ROAS are calculated from those rows. Nothing is filled in for you.</Panel>
       ) : (
+        <>
+        <Panel>
+          <h2 className="font-display text-2xl">Stored pattern lift</h2>
+          <p className="mt-1 text-sm text-muted">Values use the stored lift field as-is; no confidence interval is shown because this data does not contain one.</p>
+          <div role="img" aria-label={`Stored pattern lift values: ${data.patterns.slice(0, 8).map((pattern) => `${pattern.attribute} ${pattern.value}: ${pattern.lift}`).join("; ")}`} className="mt-4 h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.patterns.slice(0, 8).map((pattern) => ({ label: `${pattern.attribute}: ${pattern.value}`, lift: pattern.lift }))} margin={{ left: 8, right: 12, bottom: 42 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" angle={-24} textAnchor="end" interval={0} height={64} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="lift" name="Stored lift" fill="var(--color-accent)" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
         <ul className="space-y-3">
           {data.patterns.map((pattern) => (
             <li key={pattern.id} className="rounded-lg border border-line bg-panel p-4">
@@ -108,6 +125,7 @@ function Learning({ brandId }: { brandId: string }) {
             </li>
           ))}
         </ul>
+        </>
       )}
       <Panel>
         <h2 className="font-display text-2xl">Threshold versions</h2>

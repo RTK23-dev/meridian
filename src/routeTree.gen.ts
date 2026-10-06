@@ -17,6 +17,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as BrandsNewRouteImport } from './routes/brands/new'
+import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$assetId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
 import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
@@ -69,6 +70,11 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
 const BrandsNewRoute = BrandsNewRouteImport.update({
   id: '/brands/new',
   path: '/brands/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAssetsAssetIdRoute = ApiAssetsAssetIdRouteImport.update({
+  id: '/api/assets/$assetId',
+  path: '/api/assets/$assetId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
+  '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
@@ -171,6 +178,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
+  '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
@@ -195,6 +203,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
+  '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
@@ -220,6 +229,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/health'
     | '/brands/new'
+    | '/api/assets/$assetId'
     | '/api/auth/$'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
@@ -243,6 +253,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/health'
     | '/brands/new'
+    | '/api/assets/$assetId'
     | '/api/auth/$'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
@@ -266,6 +277,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/health'
     | '/brands/new'
+    | '/api/assets/$assetId'
     | '/api/auth/$'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
@@ -290,6 +302,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   ApiHealthRoute: typeof ApiHealthRoute
   BrandsNewRoute: typeof BrandsNewRoute
+  ApiAssetsAssetIdRoute: typeof ApiAssetsAssetIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
@@ -361,6 +374,13 @@ declare module '@tanstack/react-router' {
       path: '/brands/new'
       fullPath: '/brands/new'
       preLoaderRoute: typeof BrandsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/assets/$assetId': {
+      id: '/api/assets/$assetId'
+      path: '/api/assets/$assetId'
+      fullPath: '/api/assets/$assetId'
+      preLoaderRoute: typeof ApiAssetsAssetIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -466,6 +486,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   ApiHealthRoute: ApiHealthRoute,
   BrandsNewRoute: BrandsNewRoute,
+  ApiAssetsAssetIdRoute: ApiAssetsAssetIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,

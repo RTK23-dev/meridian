@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { formatDistanceToNowStrict } from "date-fns";
 import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextInput, errorText } from "@/components/ui";
@@ -21,11 +22,27 @@ function Reviews({ brandId }: { brandId: string }) {
   const query = useReviewsQuery(brandId);
   const data = query.data ?? null;
   const busy = useBusy([qk.reviews(brandId), qk.opportunities(brandId), qk.studio(brandId)]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const canEdit = data ? hasRole(data.role, "member") : false;
+  const open = useMemo(() => data?.reviews.filter((item) => item.status === "open") ?? [], [data?.reviews]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, textarea, select, [contenteditable='true']") || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === "j") { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(open.length - 1, 0))); }
+      if (event.key === "k") { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)); }
+      const item = open[selectedIndex];
+      if (!item || !canEdit) return;
+      if (event.key.toLowerCase() === "a") void busy.run(async () => { await resolveReview({ data: { brandId, reviewId: item.id, action: "approve", reasonCode: "other", note: "" } }); });
+      if (event.key.toLowerCase() === "r") void busy.run(async () => { await resolveReview({ data: { brandId, reviewId: item.id, action: "reject", reasonCode: REVIEW_REASON_CODES[0] ?? "other", note: "" } }); });
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, selectedIndex, canEdit, busy, brandId]);
 
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!data) return <div role="status" aria-label="Loading reviews" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
-  const canEdit = hasRole(data.role, "member");
-  const open = data.reviews.filter((item) => item.status === "open");
 
   return (
     <div className="space-y-8">
@@ -33,26 +50,20 @@ function Reviews({ brandId }: { brandId: string }) {
       <div className="max-w-2xl space-y-3">
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Reviews</p>
         <h1 className="font-display text-4xl">Holds a person has to clear</h1>
-        <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote.</p>
+        <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject.</p>
       </div>
       {busy.error ? <Notice>{busy.error}</Notice> : null}
       {open.length === 0 ? <Panel>No open reviews.</Panel> : (
-        <ul className="space-y-4">
-          {open.map((item) => (
-            <li key={item.id}>
-              <ReviewCard
-                item={item}
-                canEdit={canEdit}
-                pending={busy.pending}
-                onResolve={(action, reasonCode, note) => {
-                  void busy.run(async () => {
-                    await resolveReview({ data: { brandId, reviewId: item.id, action, reasonCode, note } });
-                  });
-                }}
-              />
-            </li>
-          ))}
-        </ul>
+        <div className="grid gap-4 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.6fr)]">
+          <nav aria-label="Review inbox" className="space-y-2">
+            {open.map((item, index) => <button key={item.id} type="button" aria-current={index === selectedIndex ? "true" : undefined} onClick={() => setSelectedIndex(index)} className={`w-full rounded-lg border p-3 text-left ${index === selectedIndex ? "border-brass bg-panel" : "border-line"}`}>
+              <span className="block truncate font-semibold">{item.label || "Untitled review"}</span>
+              <span className="mt-1 block text-xs text-muted">{formatDistanceToNowStrict(new Date(item.createdAt), { addSuffix: true })} · {item.decision} · {item.question}</span>
+              <span className="mt-2 inline-flex rounded-full border border-line px-2 py-0.5 text-xs">{item.confidence >= 0.8 ? "High confidence" : item.confidence >= 0.5 ? "Review" : "Low confidence"}</span>
+            </button>)}
+          </nav>
+          {open[selectedIndex] ? <ReviewCard item={open[selectedIndex]} canEdit={canEdit} pending={busy.pending} onResolve={(action, reasonCode, note) => { void busy.run(async () => { await resolveReview({ data: { brandId, reviewId: open[selectedIndex].id, action, reasonCode, note } }); }); }} /> : null}
+        </div>
       )}
     </div>
   );
@@ -72,7 +83,7 @@ function ReviewCard({
   const [reason, setReason] = useState<string>(REVIEW_REASON_CODES[0] ?? "other");
   const [note, setNote] = useState("");
   return (
-    <Panel>
+    <Panel aria-label="Selected review">
       <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.question} · {item.decision} · answer {item.answer || "unrecorded"} · p {item.probability.toFixed(2)} · confidence {item.confidence.toFixed(2)}</p>
       <h2 className="mt-2 font-display text-2xl">{item.label || "Untitled"}</h2>
       <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted">

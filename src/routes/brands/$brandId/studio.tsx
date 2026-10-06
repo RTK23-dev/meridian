@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useBusy } from "@/components/gate";
-import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, errorText } from "@/components/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
+import { BrandNav } from "@/components/brand-nav";
+import { MediaPlayer } from "@/components/media-player";
 import { hasRole } from "@/lib/meridian/access";
 import {
   generateStudioVariants,
@@ -13,6 +15,7 @@ import {
 
 import { useStudioQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
 
 export const Route = createFileRoute("/brands/$brandId/studio")({ component: Page });
 
@@ -29,6 +32,9 @@ function Studio({ brandId }: { brandId: string }) {
   const [inspectId, setInspectId] = useState<string | null>(null);
   const [compareA, setCompareA] = useState("");
   const [compareB, setCompareB] = useState("");
+  const [reviewTarget, setReviewTarget] = useState<{ creativeId: string; mode: "reject" | "revision" } | null>(null);
+  const [reviewReason, setReviewReason] = useState("other");
+  const [reviewNote, setReviewNote] = useState("");
   const briefAction = useBusy([qk.studio(brandId), qk.opportunities(brandId)]);
   const generationAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
   const reviewAction = useBusy([qk.studio(brandId), qk.reviews(brandId)]);
@@ -47,6 +53,7 @@ function Studio({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-6">
+      <BrandNav brandId={brandId} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">Studio</p>
@@ -56,8 +63,22 @@ function Studio({ brandId }: { brandId: string }) {
           {session.observationCount} competitor observations. Image and video appear only after a provider stores bytes.
         </p>
       </div>
+      <Stepper steps={[
+        { label: "Direction", state: recommendation ? "done" : "current", description: recommendation ? "Evidence-backed opportunity" : "Waiting for evidence" },
+        { label: "Brief", state: brief?.status === "ready" ? "done" : recommendation ? "current" : "upcoming", description: brief?.status === "ready" ? "Approved for production" : "JEV decision to brief" },
+        { label: "Generate", state: session.variants.length ? "done" : brief?.status === "ready" ? "current" : "upcoming", description: `${session.variants.length} stored variants` },
+        { label: "Review", state: session.variants.some((variant) => variant.reviewStatus === "open" || variant.creativeStatus === "in_review") ? "current" : session.variants.length ? "done" : "upcoming", description: `${session.variants.filter((variant) => variant.creativeStatus === "in_review").length} awaiting review` },
+      ]} className="grid grid-cols-2 lg:grid-cols-4" />
       {actionErrors.map((error) => <Notice key={error}>{error}</Notice>)}
       {anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
+      <Tabs defaultValue="direction" className="space-y-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4">
+          <TabsTrigger value="direction">1. Direction</TabsTrigger>
+          <TabsTrigger value="brief">2. Brief</TabsTrigger>
+          <TabsTrigger value="generate">3. Generate</TabsTrigger>
+          <TabsTrigger value="review">4. Review</TabsTrigger>
+        </TabsList>
+        <TabsContent value="direction" className="space-y-5">
       {recommendation ? (
         <Panel>
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">Discovered · {recommendation.posture === "exploitation" ? "Exploitation" : "Exploration"} · {recommendation.angle}</p>
@@ -123,6 +144,8 @@ function Studio({ brandId }: { brandId: string }) {
           </ul>
         </Panel>
       ) : null}
+        </TabsContent>
+        <TabsContent value="brief" className="space-y-5">
       {brief ? (
         <Panel>
           <h2 className="font-display text-2xl">Brief</h2>
@@ -162,43 +185,6 @@ function Studio({ brandId }: { brandId: string }) {
           {brief.learningNotes.length > 0 ? (
             <ul className="mt-3 text-sm">{brief.learningNotes.map((line) => <li key={line}>Learned: {line}</li>)}</ul>
           ) : <p className="mt-3 text-sm text-muted">No learned pattern is attached to this brief yet.</p>}
-          {canEdit ? (
-            <form
-              className="mt-4 grid gap-3 md:grid-cols-2"
-              onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                event.preventDefault();
-                const form = new FormData(event.currentTarget);
-                void generationAction.run(async () => {
-                  await generateStudioVariants({
-                    data: {
-                      brandId,
-                      briefId: brief.id,
-                      imageProvider: String(form.get("imageProvider") ?? ""),
-                      videoProvider: String(form.get("videoProvider") ?? ""),
-                    },
-                  });
-                });
-              }}
-            >
-              <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently.">
-                <SelectInput name="imageProvider" defaultValue="none" required>
-                  <option value="none">No images</option>
-                  <option value="test:image">test:image</option>
-                  <option value="google:nano-banana">Google AI Studio · Nano Banana</option>
-                </SelectInput>
-              </Field>
-              <Field label="Video" hint="Hypit renders the approved brief. It is not connected until HYPIT_BASE_URL is set. No clip is invented.">
-                <SelectInput name="videoProvider" defaultValue="hypit" required>
-                  <option value="" disabled>Choose</option>
-                  <option value="hypit">hypit</option>
-                </SelectInput>
-              </Field>
-              <div className="md:col-span-2">
-                <Button type="submit" disabled={generationAction.pending || brief.status !== "ready"}>Generate optional images + Hypit video</Button>
-                <p className="mt-2 text-sm text-muted">Estimated generation cost is not shown until a provider returns one. A run is blocked when the daily or concurrency limit is already used.</p>
-              </div>
-            </form>
-          ) : null}
           {canEdit && brief.status !== "ready" ? (
             <Button
               className="mt-3"
@@ -216,6 +202,25 @@ function Studio({ brandId }: { brandId: string }) {
           ) : null}
         </Panel>
       ) : null}
+        </TabsContent>
+        <TabsContent value="generate" className="space-y-5">
+          <Panel>
+            <h2 className="font-display text-2xl">Generate from the approved brief</h2>
+            {brief ? <p className="mt-2 text-sm text-muted">Current brief: {brief.title}. A non-ready brief cannot be used for generation.</p> : <p className="mt-2 text-sm text-muted">Write or accept a brief before generating.</p>}
+            {canEdit && brief ? <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={(event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              void generationAction.run(async () => {
+                await generateStudioVariants({ data: { brandId, briefId: brief.id, imageProvider: String(form.get("imageProvider") ?? ""), videoProvider: String(form.get("videoProvider") ?? "") } });
+              });
+            }}>
+              <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently."><SelectInput name="imageProvider" defaultValue="none" required><option value="none">No images</option><option value="test:image">Test image</option><option value="google:nano-banana">Google AI Studio · Nano Banana</option></SelectInput></Field>
+              <Field label="Video" hint="Hypit renders the approved brief. It is not connected until HYPIT_BASE_URL is set. No clip is invented."><SelectInput name="videoProvider" defaultValue="hypit" required><option value="" disabled>Choose</option><option value="hypit">Hypit video</option></SelectInput></Field>
+              <div className="md:col-span-2"><Button type="submit" disabled={generationAction.pending || brief.status !== "ready"}>Generate variants</Button><p className="mt-2 text-sm text-muted">Estimated cost appears only when a provider returns one. Daily or concurrency limits can block a run.</p></div>
+            </form> : null}
+          </Panel>
+        </TabsContent>
+        <TabsContent value="review" className="space-y-5">
       <section className="space-y-4" aria-label="Variants">
         <h2 className="font-display text-2xl">Variants</h2>
         {session.variants.length === 0 ? <p className="text-sm text-muted">No media yet.</p> : null}
@@ -224,7 +229,7 @@ function Studio({ brandId }: { brandId: string }) {
             <li key={variant.assetId} className="rounded-lg border border-line bg-panel p-4">
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">{variant.kind} {variant.index + 1} · {variant.provider || "no provider"}</p>
               <h3 className="font-display text-xl">{variant.title}</h3>
-              {variant.preview ? <img className="mt-3 h-24 w-24 border border-line" src={variant.preview} alt={`${variant.provider} ${variant.kind} variant ${variant.index + 1}`} /> : null}
+              {variant.kind === "video" ? <MediaPlayer className="mt-3" assetId={variant.assetId} poster={variant.frames[0]} durationMs={variant.durationMs} width={variant.width} height={variant.height} /> : variant.preview ? <img className="mt-3 max-h-72 max-w-full border border-line object-contain" src={variant.preview} alt={`${variant.provider} ${variant.kind} variant ${variant.index + 1}`} /> : null}
               {variant.frames.length > 0 ? (
                 <div className="mt-3 flex gap-2">
                   {variant.frames.map((src, index) => (
@@ -255,8 +260,8 @@ function Studio({ brandId }: { brandId: string }) {
                 {canEdit && variant.creativeStatus === "in_review" ? (
                   <>
                     <Button type="button" disabled={reviewAction.pending} onClick={() => { void reviewAction.run(async () => { await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "approve", reasonCode: "", note: "" } }); }); }}>Approve</Button>
-                    <Button type="button" variant="danger" disabled={reviewAction.pending} onClick={() => { void reviewAction.run(async () => { await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "reject", reasonCode: "too_similar", note: "Does not earn the angle." } }); }); }}>Reject</Button>
-                    <Button type="button" variant="quiet" disabled={reviewAction.pending} onClick={() => { void reviewAction.run(async () => { await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "revision", reasonCode: "", note: "Revise the opening. Keep the product." } }); }); }}>Request revision</Button>
+                    <Button type="button" variant="danger" disabled={reviewAction.pending} onClick={() => { setReviewReason("other"); setReviewNote(""); setReviewTarget({ creativeId: variant.creativeId, mode: "reject" }); }}>Reject</Button>
+                    <Button type="button" variant="quiet" disabled={reviewAction.pending} onClick={() => { setReviewReason("other"); setReviewNote(""); setReviewTarget({ creativeId: variant.creativeId, mode: "revision" }); }}>Request revision</Button>
                   </>
                 ) : null}
                 {canEdit && (variant.creativeStatus === "approved" || variant.creativeStatus === "testing") ? (
@@ -331,6 +336,27 @@ function Studio({ brandId }: { brandId: string }) {
           </Button>
         ) : null}
       </Panel>
+      <Dialog open={!!reviewTarget} onOpenChange={(open) => { if (!open && !reviewAction.pending) setReviewTarget(null); }}>
+        <DialogContent aria-describedby="variant-review-description">
+          <DialogTitle>{reviewTarget?.mode === "reject" ? "Reject this variant" : "Request a revision"}</DialogTitle>
+          <DialogDescription id="variant-review-description">Record the reviewer’s reason and note. These details remain attached to the review lineage.</DialogDescription>
+          <div className="mt-4 space-y-4">
+            {reviewTarget?.mode === "reject" ? <Field label="Reason"><SelectInput value={reviewReason} onChange={(event) => setReviewReason(event.currentTarget.value)}>{REVIEW_REASON_CODES.map((code) => <option key={code} value={code}>{code.replaceAll("_", " ")}</option>)}</SelectInput></Field> : null}
+            <Field label="Reviewer note"><TextArea value={reviewNote} onChange={(event) => setReviewNote(event.currentTarget.value)} required maxLength={400} /></Field>
+            <Button disabled={!reviewTarget || !reviewNote.trim() || reviewAction.pending} onClick={() => {
+              if (!reviewTarget || !reviewNote.trim()) return;
+              const target = reviewTarget;
+              void reviewAction.run(async () => {
+                await reviewStudioVariant({ data: { brandId, creativeId: target.creativeId, action: target.mode, reasonCode: target.mode === "reject" ? reviewReason : "", note: reviewNote.trim() } });
+                setReviewTarget(null);
+                setReviewNote("");
+              });
+            }}>{reviewTarget?.mode === "reject" ? "Confirm rejection" : "Send revision request"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

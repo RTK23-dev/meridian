@@ -40,6 +40,8 @@ function BrainEditor({ brandId }: { brandId: string }) {
   if (!detail) return <div role="status" aria-label="Loading brand brain" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(detail.identity.role, "member");
   const groups = [...new Set(BRAIN_FIELDS.map((field) => field.group))];
+  const filledFields = BRAIN_FIELDS.filter((field) => brain[field.key].trim()).length;
+  const completeness = Math.round((filledFields / BRAIN_FIELDS.length) * 100);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -62,8 +64,15 @@ function BrainEditor({ brandId }: { brandId: string }) {
           Page suggestions, when a model is configured, stay pending until you accept them.
         </p>
       </div>
+      <div className="flex flex-wrap items-center gap-5 rounded-lg border border-line bg-panel p-4">
+        <div role="img" aria-label={`Brand brain ${completeness}% complete`} className="grid size-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(var(--color-accent) ${completeness}%, var(--color-line) 0)` }}>
+          <span className="grid size-12 place-items-center rounded-full bg-panel text-sm font-semibold">{completeness}%</span>
+        </div>
+        <div className="min-w-40 flex-1"><p className="font-semibold">Brand profile completeness</p><p className="text-sm text-muted">{filledFields} of {BRAIN_FIELDS.length} fields currently have content. Save to store changes; empty fields are not inferred.</p></div>
+        <nav aria-label="Brand brain sections" className="flex flex-wrap gap-2">{groups.map((group) => <a key={group} href={`#brain-${group.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`} className="rounded-full border border-line px-3 py-1 text-sm hover:bg-surface-2">{group}</a>)}</nav>
+      </div>
       {groups.map((group) => (
-        <section key={group} className="space-y-4">
+        <section id={`brain-${group.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`} key={group} className="scroll-mt-6 space-y-4">
           <h2 className="font-display text-2xl">{group}</h2>
           <div className="grid gap-4">
             {BRAIN_FIELDS.filter((field) => field.group === group).map((field) => {
