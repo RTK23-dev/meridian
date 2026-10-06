@@ -178,7 +178,7 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
   `;
   const blobs = await sql<{ storage_key: string; body: string; mime_type: string }>`
     select storage_key, body, mime_type from asset_blobs
-    where brand_id = ${brandId} and organization_id = ${organizationId}
+    where brand_id = ${brandId} and organization_id = ${organizationId} and mime_type like 'image/%'
   `;
   const blobByKey = new Map(blobs.map((row) => [row.storage_key, row]));
   const publications = await sql<{ external_id: string; idempotency_key: string; provider: string }>`

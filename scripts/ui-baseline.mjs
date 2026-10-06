@@ -3,13 +3,14 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync } from "node:fs";
 import { resolve, join, relative, extname, sep } from "node:path";
 import { chromium } from "playwright";
+import AxeBuilder from "@axe-core/playwright";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
 
 const baseUrl = checkedUrl(process.env.UI_BASELINE_URL || "http://127.0.0.1:8080/");
 const root = resolve(process.env.UI_BASELINE_DIR || "docs/ui-baseline");
 const outputRoot = resolve(process.env.UI_BASELINE_OUTPUT_ROOT || process.cwd());
 const outputDir = checkedOutputPath(root, [outputRoot], "baseline output");
-const widths = [390, 768, 1440];
+const widths = [360, 390, 768, 1024, 1440];
 const themes = ["light", "dark"];
 const explicitRoutes = (process.env.UI_BASELINE_ROUTES || "")
   .split(",")
@@ -74,7 +75,7 @@ async function discoverRoutes(page, seededBrandId) {
 async function prepareFixtureWorkspace(page) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
   await page.waitForFunction(
-    () => document.body.innerText.includes("Create account") || document.body.innerText.includes("Sign out"),
+    () => document.body.innerText.includes("Create account") || Boolean(document.querySelector('[aria-label="Account and appearance settings"]')),
     undefined,
     { timeout: 15_000 },
   );
@@ -91,18 +92,34 @@ async function prepareFixtureWorkspace(page) {
       await page.getByRole("button", { name: "Sign in with email" }).click();
     }
   }
-  await page.getByText("Sign out", { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+  await page.getByRole("button", { name: "Account and appearance settings", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
 
   if (await page.getByRole("button", { name: "Create workspace", exact: true }).count()) {
     await page.locator("form input").first().fill("Meridian UI baseline fixture");
     await page.getByRole("button", { name: "Create workspace", exact: true }).click();
-    await page.getByRole("link", { name: "New brand", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+    try {
+      await page.getByRole("heading", { name: "Workspace overview", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+    } catch {
+      const bodyText = await page.locator("body").innerText().catch(() => "<page body unavailable>");
+      throw new Error(`UI baseline could not create its fixture workspace. Page content: ${bodyText.slice(0, 1_200)}`);
+    }
   }
 
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
-  await page.waitForTimeout(700);
-  await page.getByRole("heading", { name: "Workspace overview", exact: true })
-    .waitFor({ state: "visible", timeout: 10_000 });
+  const overviewHeading = page.getByRole("heading", { name: "Workspace overview", exact: true });
+  try {
+    await overviewHeading.waitFor({ state: "visible", timeout: 15_000 });
+  } catch {
+    // Workspace creation can complete before the bootstrap query finishes refreshing
+    // its signed-in cache. A full navigation asks for the persisted workspace again.
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 45_000 });
+    try {
+      await overviewHeading.waitFor({ state: "visible", timeout: 15_000 });
+    } catch {
+      const bodyText = await page.locator("body").innerText().catch(() => "<page body unavailable>");
+      throw new Error(`UI baseline could not load the workspace overview after creating the fixture workspace. Page content: ${bodyText.slice(0, 600)}`);
+    }
+  }
   const linkedBrandId = await page.locator('a[href^="/brands/"]').evaluateAll((anchors) =>
     anchors.map((anchor) => new URL(anchor.href).pathname.match(/^\/brands\/([^/]+)/)?.[1])
       .find((value) => value && value !== "new"),
@@ -116,7 +133,7 @@ async function prepareFixtureWorkspace(page) {
   }
 
   const signedInText = await page.locator("body").innerText();
-  if (!signedInText.includes("Sign out")) {
+  if (!(await page.getByRole("button", { name: "Account and appearance settings", exact: true }).count())) {
     throw new Error(`UI baseline could not sign in with the local test account: ${signedInText.slice(0, 300)}`);
   }
   if (signedInText.includes("Name the workspace")) {
@@ -133,11 +150,17 @@ try {
   const discoveryContext = await browser.newContext({ viewport: { width: 1440, height: 960 } });
   const discoveryPage = await discoveryContext.newPage();
   const seededBrandId = await prepareFixtureWorkspace(discoveryPage);
-  const routes = await discoverRoutes(discoveryPage, seededBrandId);
+  const discoveredRoutes = await discoverRoutes(discoveryPage, seededBrandId);
+  const captureFilter = (process.env.UI_BASELINE_CAPTURE_ROUTES || "").split(",").map((route) => route.trim()).filter(Boolean);
+  const routes = captureFilter.length
+    ? discoveredRoutes.filter((url) => captureFilter.some((route) => new URL(url).pathname === route || new URL(url).pathname.startsWith(`${route}/`)))
+    : discoveredRoutes;
+  if (!routes.length) throw new Error("The UI baseline route filter did not match a discovered route.");
   const storageState = await discoveryContext.storageState();
   await discoveryContext.close();
 
   const captures = [];
+  const accessibility = [];
   for (const theme of themes) {
     const context = await browser.newContext({ colorScheme: theme, storageState });
     const page = await context.newPage();
@@ -147,6 +170,31 @@ try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 }).catch(() => undefined);
         await page.waitForTimeout(700);
         await page.waitForFunction(() => document.body.innerText.trim().length > 0, undefined, { timeout: 10_000 }).catch(() => undefined);
+        const overflow = await page.evaluate(() => {
+          const viewport = document.documentElement.clientWidth;
+          const elements = [...document.querySelectorAll("body *")]
+            .filter((element) => {
+              const rect = element.getBoundingClientRect();
+              return rect.right > viewport + 1 || rect.left < -1 || element.scrollWidth > element.clientWidth + 2;
+            })
+            .slice(0, 12)
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              return `${element.tagName.toLowerCase()}.${String(element.className ?? "").split(/\s+/).slice(0, 3).join(".")} [${Math.round(rect.left)}..${Math.round(rect.right)}; ${element.clientWidth}/${element.scrollWidth}]`;
+            });
+          return { horizontal: document.documentElement.scrollWidth > viewport + 1, elements };
+        });
+        if (overflow.horizontal) throw new Error(`Route ${new URL(url).pathname} overflows horizontally at ${width}px (${theme}). Elements: ${overflow.elements.join("; ")}`);
+        if (width === 1440) {
+          const { violations } = await new AxeBuilder({ page })
+            .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+            .analyze();
+          const serious = violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical");
+          accessibility.push({ url, theme, violations: violations.length, serious: serious.length });
+          if (serious.length) {
+            throw new Error(`Route ${new URL(url).pathname} has ${serious.length} serious accessibility violations (${theme}):\n${serious.map((item) => `${item.id}: ${item.help}\n${item.nodes.map((node) => `  ${node.target.join(" ")}: ${node.failureSummary}`).join("\n")}`).join("\n")}`);
+          }
+        }
         const routeDir = join(outputDir, routeKey(url));
         mkdirSync(routeDir, { recursive: true });
         const path = join(routeDir, `${width}-${theme}.png`);
@@ -156,7 +204,7 @@ try {
     }
     await context.close();
   }
-  console.log(JSON.stringify({ ok: true, routes: routes.length, captureCount: captures.length, outputDir, captures }, null, 2));
+  console.log(JSON.stringify({ ok: true, routes: routes.length, captureCount: captures.length, accessibility, outputDir, captures }, null, 2));
 } finally {
   await browser.close();
 }

@@ -12,7 +12,8 @@ const groups: Record<StatusTone, { labels: string[]; icon: StatusKind }> = {
 export function statusPresentation(status: string): { variant: StatusTone; icon: StatusKind; label: string } {
   const normalized = status.trim().toLowerCase().replaceAll("-", "_");
   for (const [variant, group] of Object.entries(groups) as Array<[StatusTone, typeof groups[StatusTone]]>) {
-    if (group.labels.includes(normalized)) return { variant, icon: group.icon, label: status.replaceAll("_", " ") };
+    if (group.labels.includes(normalized)) return { variant, icon: group.icon, label: statusLabel(status) };
   }
-  return { variant: "neutral", icon: "info", label: status.replaceAll("_", " ") || "Unknown" };
+  return { variant: "neutral", icon: "info", label: statusLabel(status) };
 }
+import { statusLabel } from "../../lib/copy.ts";

@@ -91,7 +91,7 @@ export function SignInButtons() {
 export function UserButton() {
   const user = useCurrentUser();
   const { theme, setTheme } = useTheme();
-  // Sign-out can take a moment (and can fail when deployed), so the control
+  // Sign-out can take a moment (and can fail when deployed), so the menu item
   // shows it is working and cannot be fired twice.
   const [signingOut, setSigningOut] = useState(false);
   const gateSession = useSyncExternalStore(
@@ -105,10 +105,11 @@ export function UserButton() {
     <div className="flex items-center gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" aria-label="Appearance settings" className="min-h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-fg">Appearance</button>
+          <button type="button" aria-label="Account and appearance settings" className="min-h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-fg">Appearance</button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" aria-label="Appearance">
           {(["system", "light", "dark"] as const).map((choice) => <DropdownMenuItem key={choice} role="menuitemradio" aria-checked={theme === choice} onSelect={() => setTheme(choice)}>{choice[0].toUpperCase() + choice.slice(1)}{theme === choice ? " (current)" : ""}</DropdownMenuItem>)}
+          {authEnabled && !gateSession ? <DropdownMenuItem disabled={signingOut} onSelect={() => { setSigningOut(true); void signOut().catch(() => setSigningOut(false)); }}>{signingOut ? "Signing out…" : "Sign out"}</DropdownMenuItem> : null}
         </DropdownMenuContent>
       </DropdownMenu>
       {user.profileImageUrl ? (
@@ -122,21 +123,7 @@ export function UserButton() {
           {label.charAt(0).toUpperCase()}
         </span>
       )}
-      <span className="text-sm font-medium">{label}</span>
-      {authEnabled && !gateSession && (
-        <button
-          type="button"
-          disabled={signingOut}
-          onClick={() => {
-            setSigningOut(true);
-            // Success navigates away; on failure re-enable so it can be retried.
-            void signOut().catch(() => setSigningOut(false));
-          }}
-          className="cursor-pointer text-sm underline-offset-4 opacity-70 hover:underline disabled:cursor-wait disabled:no-underline"
-        >
-          {signingOut ? "Signing out…" : "Sign out"}
-        </button>
-      )}
+      <span className="hidden max-w-32 truncate text-sm font-medium md:inline" title={label}>{label}</span>
     </div>
   );
 }

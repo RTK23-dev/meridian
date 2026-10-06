@@ -1,6 +1,6 @@
 import { createHmac, createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ASSET_LIFECYCLE, safeStorageKey, type AssetLifecycle } from "./object-store.ts";
 
 export type ObjectMeta = {
@@ -29,7 +29,10 @@ export function createFilesystemObjectStore(root: string, secret = "meridian-dev
   const pathFor = (organizationId: string, key: string) => {
     const safe = safeStorageKey(key);
     const full = resolve(base, organizationId, safe);
-    if (!full.startsWith(`${base}/`) && full !== base) throw new Error("Storage key is not allowed.");
+    const fromBase = relative(base, full);
+    if (fromBase === ".." || fromBase.startsWith(`..${sep}`) || isAbsolute(fromBase)) {
+      throw new Error("Storage key is not allowed.");
+    }
     return full;
   };
 

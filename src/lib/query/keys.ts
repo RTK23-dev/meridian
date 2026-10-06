@@ -13,6 +13,11 @@ export const qk = {
   learning: (brandId: string) => ["learning", brandId] as const,
   calibration: (brandId: string) => ["calibration", brandId] as const,
   integrations: (organizationId: string) => ["integrations", organizationId] as const,
+  jobs: (organizationId: string) => ["jobs", organizationId] as const,
+  usage: (organizationId: string) => ["usage", organizationId] as const,
+  audit: (organizationId: string) => ["audit", organizationId] as const,
+  webhooks: (organizationId: string) => ["webhooks", organizationId] as const,
+  notifications: (organizationId: string) => ["notification-preferences", organizationId] as const,
 };
 
 export function userScopedQueryKey(userId: string | null | undefined, key: readonly unknown[]) {

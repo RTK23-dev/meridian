@@ -10,6 +10,7 @@ import { refreshStoredToken } from "@/lib/meridian/oauth/refresh";
 import { disconnectProvider, probeProviderConnection, reconnectProvider } from "@/lib/meridian/providers/connect";
 import { useIntegrationsQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { providerLabel } from "@/lib/copy";
 
 export const Route = createFileRoute("/integrations")({ component: Page });
 
@@ -27,6 +28,10 @@ function Integrations() {
   const data = query.data ?? null;
   const [note, setNote] = useState<string | null>(null);
   const busy = useBusy([qk.integrations(organizationId)]);
+  const providerGroups = [
+    { label: "Advertising accounts", providers: ["meta", "tiktok", "google"] },
+    { label: "Research sources", providers: ["ad_library"] },
+  ];
 
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!data) return <div role="status" aria-label="Loading integration status" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
@@ -40,7 +45,7 @@ function Integrations() {
           A credential in the environment is not a connection. Status changes only after a provider request succeeds, fails, or someone disconnects.
         </p>
       </div>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Panel>
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">Worker</p>
           <p className="mt-2 font-display text-2xl">{data.worker}</p>
@@ -59,10 +64,13 @@ function Integrations() {
       </div>
       {note ? <p className="text-sm" role="status">{note}</p> : null}
       {busy.error ? <Notice>{busy.error}</Notice> : null}
-      <ul className="space-y-3">
-        {data.connections.map((item) => (
+      <div className="space-y-6">
+      {providerGroups.map((group) => {
+        const connections = data.connections.filter((item) => group.providers.includes(item.provider));
+        return connections.length ? <section key={group.label} className="space-y-3"><h2 className="font-display text-2xl">{group.label}</h2><ul className="space-y-3">
+        {connections.map((item) => (
           <li key={item.provider} className="rounded-lg border border-line bg-panel px-4 py-3">
-            <p className="font-semibold">{item.provider.replaceAll("_", " ")}</p>
+            <p className="font-semibold">{providerLabel(item.provider)}</p>
             <StatusText status={item.phase} description={item.detail} />
             {item.accountName || item.accountId ? (
               <p className="text-sm">Account {item.accountName || "unnamed"} {item.accountId ? `· ${item.accountId}` : ""}</p>
@@ -131,7 +139,9 @@ function Integrations() {
             )}
           </li>
         ))}
-      </ul>
+      </ul></section> : null;
+      })}
+      </div>
       <Panel>
         <h2 className="font-display text-2xl">Publishing</h2>
         <p className="mt-2 text-sm">{data.publishing.status}. {data.publishing.detail}</p>

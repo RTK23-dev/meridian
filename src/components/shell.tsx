@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
-import { Activity, Bell, Brain, ChevronDown, FlaskConical, House, Layers3, Menu, Moon, Package, Search, Settings, Sparkles, Sun, WandSparkles, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, Bell, Brain, ChevronDown, FileClock, FlaskConical, House, Layers3, Menu, Moon, Package, Search, Settings, Sparkles, Sun, WandSparkles, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { useWorkspace } from "@/components/workspace";
@@ -10,17 +10,22 @@ import { useMachineQuery } from "@/lib/query/hooks";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
 import { useTheme, Sheet, SheetContent, SheetTitle } from "@/components/ui";
-import { AlertsPanel } from "@/components/alerts-panel";
 
 type NavLink = { label: string; to: string; icon: LucideIcon; badge?: number };
 
 const PAGE_NAMES: Record<string, string> = {
   "": "Overview", market: "Market research", intelligence: "Intelligence", opportunities: "Opportunities",
-  reviews: "Reviews", studio: "Studio", library: "Library", learning: "Learning", brain: "Brand brain", products: "Products",
-  integrations: "Integrations", settings: "Settings", new: "New brand",
+  reviews: "Reviews", studio: "Studio", library: "Library", learning: "Learning", calibration: "Calibration", brain: "Brand brain", products: "Products",
+  integrations: "Integrations", settings: "Settings", jobs: "Jobs & health", usage: "Usage & cost", alerts: "Alerts center", audit: "Audit log", webhooks: "Webhook events", notifications: "Notification preferences", new: "New brand",
 };
 
 const WORKSPACE_LINKS: NavLink[] = [
+  { label: "Jobs & health", to: "/jobs", icon: Activity },
+  { label: "Usage & cost", to: "/usage", icon: BarChart3 },
+  { label: "Alerts center", to: "/alerts", icon: Bell },
+  { label: "Audit log", to: "/audit", icon: FileClock },
+  { label: "Webhook events", to: "/webhooks", icon: FileClock },
+  { label: "Notification preferences", to: "/notifications", icon: Bell },
   { label: "Integrations", to: "/integrations", icon: Activity },
   { label: "Settings", to: "/settings", icon: Settings },
 ];
@@ -33,7 +38,7 @@ function navGroups(brandId: string | undefined, reviews: number): { label: strin
     { label: "Research", links: [{ label: "Market", to: `${b}/market`, icon: FlaskConical }, { label: "Intelligence", to: `${b}/intelligence`, icon: Sparkles }] },
     { label: "Decide", links: [{ label: "Opportunities", to: `${b}/opportunities`, icon: Layers3 }, { label: "Reviews", to: `${b}/reviews`, icon: Bell, ...(reviews ? { badge: reviews } : {}) }] },
     { label: "Create", links: [{ label: "Studio", to: `${b}/studio`, icon: WandSparkles }, { label: "Library", to: `${b}/library`, icon: Package }] },
-    { label: "Learn", links: [{ label: "Learning", to: `${b}/learning`, icon: Activity }] },
+    { label: "Learn", links: [{ label: "Learning", to: `${b}/learning`, icon: Activity }, { label: "Calibration", to: `${b}/calibration`, icon: BarChart3 }] },
     { label: "Brand", links: [{ label: "Brand brain", to: `${b}/brain`, icon: Brain }, { label: "Products", to: `${b}/products`, icon: Package }] },
     { label: "Workspace", links: WORKSPACE_LINKS },
   ];
@@ -56,10 +61,10 @@ export function Shell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [alertsOpen, setAlertsOpen] = useState(false);
   const page = pageName(path);
 
   useEffect(() => {
+    document.title = `${page} · Meridian`;
     const focusHeading = () => {
       const heading = document.querySelector<HTMLElement>("#main h1");
       if (heading) {
@@ -69,7 +74,7 @@ export function Shell({ children }: { children: ReactNode }) {
     };
     const frame = requestAnimationFrame(focusHeading);
     return () => cancelAnimationFrame(frame);
-  }, [path]);
+  }, [page, path]);
 
   useEffect(() => {
     let gPressedAt = 0;
@@ -103,6 +108,11 @@ export function Shell({ children }: { children: ReactNode }) {
     setPaletteOpen(false);
     if (to === "/") { void navigate({ to: "/" }); return; }
     if (to === "/integrations") { void navigate({ to: "/integrations" }); return; }
+    if (to === "/usage") { void navigate({ to: "/usage" }); return; }
+    if (to === "/alerts") { void navigate({ to: "/alerts" }); return; }
+    if (to === "/audit") { void navigate({ to: "/audit" }); return; }
+    if (to === "/webhooks") { void navigate({ to: "/webhooks" }); return; }
+    if (to === "/notifications") { void navigate({ to: "/notifications" }); return; }
     if (to === "/settings") { void navigate({ to: "/settings" }); return; }
     if (to === "/brands/new") { void navigate({ to: "/brands/new" }); return; }
     const match = to.match(/^\/brands\/([^/]+)(?:\/(.*))?$/);
@@ -162,12 +172,11 @@ export function Shell({ children }: { children: ReactNode }) {
             </select> : null}
             {active ? <span className="hidden text-xs uppercase tracking-wide text-muted xl:inline">{active.role}</span> : null}
             <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-line px-3 text-sm text-muted hover:bg-paper" aria-label="Search and commands"><Search className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-line px-1 text-[10px] sm:inline">⌘K</kbd></button>
-            <button type="button" aria-label="Open alerts" title="Alerts" onClick={() => setAlertsOpen((value) => !value)} className="grid size-10 place-items-center rounded-md text-muted hover:bg-paper"><Bell className="size-4" /></button>
+            <Link to="/alerts" aria-label="Open alerts" title="Alerts" className="grid size-10 place-items-center rounded-md text-muted hover:bg-paper"><Bell className="size-4" /></Link>
             <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-md text-muted hover:bg-paper">{theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}</button>
             <UserButton />
           </div>
         </div>
-        {alertsOpen && active ? <div className="absolute right-4 top-full z-30 w-[min(34rem,calc(100vw-2rem))] rounded-lg border border-line bg-panel p-3 shadow-lg"><AlertsPanel organizationId={active.id} /></div> : null}
       </header>
       <div className="border-b border-line px-4 py-2 text-sm text-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{page}</div>
       <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-8">{children}</main>
@@ -184,6 +193,11 @@ export function Shell({ children }: { children: ReactNode }) {
             {[["Overview", `/brands/${brandId}`], ["Market", `/brands/${brandId}/market`], ["Intelligence", `/brands/${brandId}/intelligence`], ["Opportunities", `/brands/${brandId}/opportunities`], ["Reviews", `/brands/${brandId}/reviews`], ["Studio", `/brands/${brandId}/studio`], ["Library", `/brands/${brandId}/library`], ["Learning", `/brands/${brandId}/learning`], ["Brand brain", `/brands/${brandId}/brain`], ["Products", `/brands/${brandId}/products`]].map(([label, to]) => <Command.Item key={to} value={label} onSelect={() => go(to)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">{label}</Command.Item>)}
           </> : null}
           <Command.Item value="Workspace overview" onSelect={() => go("/")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Workspace overview</Command.Item>
+          <Command.Item value="Usage and cost" onSelect={() => go("/usage")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Usage &amp; cost</Command.Item>
+          <Command.Item value="Alerts center" onSelect={() => go("/alerts")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Alerts center</Command.Item>
+          <Command.Item value="Audit log" onSelect={() => go("/audit")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Audit log</Command.Item>
+          <Command.Item value="Webhook events" onSelect={() => go("/webhooks")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Webhook events</Command.Item>
+          <Command.Item value="Notification preferences" onSelect={() => go("/notifications")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Notification preferences</Command.Item>
           <Command.Item value="New brand" onSelect={() => go("/brands/new")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">New brand</Command.Item>
           <Command.Item value="Settings" onSelect={() => go("/settings")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Settings</Command.Item>
           <Command.Item value="Integrations" onSelect={() => go("/integrations")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Integrations</Command.Item>

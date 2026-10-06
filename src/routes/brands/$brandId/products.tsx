@@ -2,7 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
-import { Button, ErrorState, Field, Notice, Panel, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { deleteProduct, saveProduct, type ProductRow } from "@/lib/meridian/api";
 import { useBrandQuery } from "@/lib/query/hooks";
@@ -33,6 +33,7 @@ function Products({ brandId }: { brandId: string }) {
   const detail = query.data ?? null;
   const [draft, setDraft] = useState(blank);
   const [editing, setEditing] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const { pending, error: saveError, run } = useBusy([qk.brand(brandId)]);
 
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
@@ -45,11 +46,13 @@ function Products({ brandId }: { brandId: string }) {
       await saveProduct({ data: { brandId, productId: editing ?? "", ...draft } });
       setDraft(blank);
       setEditing(null);
+      setFormOpen(false);
     });
   }
 
   function edit(product: ProductRow) {
     setEditing(product.id);
+    setFormOpen(true);
     setDraft({
       name: product.name,
       description: product.description,
@@ -67,7 +70,7 @@ function Products({ brandId }: { brandId: string }) {
       <BrandNav brandId={brandId} />
       <div>
         <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-muted">{detail.identity.name}</Link>
-        <h1 className="font-display text-4xl">Products</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="font-display text-4xl">Products</h1>{canEdit ? <Button type="button" onClick={() => { setDraft(blank); setEditing(null); setFormOpen(true); }}>Add product</Button> : null}</div>
         <p className="max-w-2xl text-muted">Allowed and prohibited claims are checked when a creative is saved. The guardian reports evidence. JEV applies the threshold.</p>
       </div>
       {detail.products.length === 0 ? (
@@ -102,8 +105,11 @@ function Products({ brandId }: { brandId: string }) {
         </ul>
       )}
       {canEdit ? (
-        <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-          <h2 className="font-display text-2xl md:col-span-2">{editing ? "Edit product" : "Add product"}</h2>
+        <Dialog open={formOpen} onOpenChange={(open) => { setFormOpen(open); if (!open) { setEditing(null); setDraft(blank); } }}>
+        <DialogContent aria-describedby="product-form-description" className="max-h-[90vh] overflow-y-auto">
+        <DialogTitle>{editing ? "Edit product" : "Add product"}</DialogTitle>
+        <DialogDescription id="product-form-description">Product details and claim rules are used when creative evidence is checked.</DialogDescription>
+        <form onSubmit={submit} className="mt-4 grid gap-4 md:grid-cols-2">
           <Field label="Name">
             <TextInput required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
           </Field>
@@ -134,12 +140,14 @@ function Products({ brandId }: { brandId: string }) {
           <div className="flex gap-2">
             <Button type="submit" disabled={pending}>{pending ? "Saving…" : editing ? "Update product" : "Add product"}</Button>
             {editing ? (
-              <Button type="button" variant="quiet" onClick={() => { setEditing(null); setDraft(blank); }}>
+              <Button type="button" variant="quiet" onClick={() => { setFormOpen(false); setEditing(null); setDraft(blank); }}>
                 Cancel
               </Button>
             ) : null}
           </div>
         </form>
+        </DialogContent>
+        </Dialog>
       ) : null}
     </div>
   );
