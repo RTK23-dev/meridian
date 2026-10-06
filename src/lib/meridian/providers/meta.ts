@@ -87,8 +87,33 @@ export type MetaPublishInput = {
   pageId: string;
   message: string;
   link: string;
+  videoId?: string;
   existing?: Partial<Record<PublishStep, string>>;
 };
+
+/** Uploads MP4 bytes once; callers persist the confirmed id before creating campaign objects. */
+export async function uploadMetaVideo(
+  credentials: MetaCredentials,
+  input: { adAccountId: string; bytes: Uint8Array; name: string },
+  transport: Transport,
+): Promise<{ status: "stored"; externalId: string } | { status: "failed"; externalId: null; error: string }> {
+  const account = input.adAccountId.startsWith("act_") ? input.adAccountId : "";
+  if (!credentials.accessToken.trim() || !account) {
+    return { status: "failed", externalId: null, error: "Meta video publishing is not connected. Configure an access token and ad account." };
+  }
+  const form = new FormData();
+  form.set("source", new Blob([input.bytes as BlobPart], { type: "video/mp4" }), `${input.name.slice(0, 100) || "hypit-video"}.mp4`);
+  form.set("name", input.name.slice(0, 100) || "Hypit video");
+  const result = await sendWithRetry(transport, {
+    method: "POST",
+    url: `${GRAPH}/${account}/advideos`,
+    headers: { Authorization: `Bearer ${credentials.accessToken}` },
+    body: form,
+  }, { attempts: 1 });
+  const id = textField(result.json, "id");
+  if (!result.ok || !id) return { status: "failed", externalId: null, error: result.error || "Meta did not confirm the video upload. Nothing was published." };
+  return { status: "stored", externalId: id };
+}
 
 export type PublishStepResult =
   | { status: "stored"; externalId: string; reused: boolean }
@@ -138,7 +163,9 @@ export async function publishMetaPaused(
   }
   const creative = await createOrReuse(credentials, transport, "creative", input.existing?.creative, `${GRAPH}/${account}/adcreatives`, {
     name: input.name,
-    object_story_spec: { page_id: input.pageId, link_data: { message: input.message, link: input.link, name: input.name } },
+    object_story_spec: input.videoId
+      ? { page_id: input.pageId, video_data: { video_id: input.videoId, message: input.message, title: input.name, call_to_action: { type: "LEARN_MORE", value: { link: input.link } } } }
+      : { page_id: input.pageId, link_data: { message: input.message, link: input.link, name: input.name } },
   });
   if (creative.status !== "stored") {
     return { campaign, ad_set: adSet, creative, ad: failed(creative.error) };

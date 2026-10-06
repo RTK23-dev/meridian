@@ -75,7 +75,12 @@ export async function publishPausedForBrand(
   });
   if ("error" in opened) {
     const record = operation.finish(false, 0, opened.error);
-    return { correlationId: String(record.correlationId), detail: opened.error, stages: [] };
+    const notConnected = input.provider === "meta";
+    return {
+      correlationId: String(record.correlationId),
+      detail: opened.error,
+      stages: notConnected ? [{ objectType: "video", status: "NOT_CONNECTED", externalId: null, detail: opened.error }] : [],
+    };
   }
   const disconnected = await sql<{ disconnected_at: string | null }>`
     select disconnected_at from provider_connections
@@ -109,7 +114,42 @@ export async function publishPausedForBrand(
     bodies.push(redactSecrets(response.body).slice(0, 500));
     return response;
   };
-  const stages: PausedStage[] = await publishPausedStages({
+  let confirmedVideo: {
+    status: "stored"; externalId: string; reused: boolean; hypitJobId: string; jevDecisionId: string;
+    briefId: string; storageKey: string; sha256: string; byteLength: number;
+  } | null = null;
+  if (input.provider === "meta") {
+    const { publishHypitVideoToMeta } = await import("../publishing/hypit-meta.server.ts");
+    const video = await publishHypitVideoToMeta(sql, {
+      organizationId: input.organizationId,
+      brandId: input.brandId,
+      creativeId: input.creativeId,
+      actorId: input.actorId,
+      name: input.name,
+      accessToken: opened.token,
+      adAccountId: env.META_AD_ACCOUNT_ID ?? "",
+      existingVideoId: existing.video,
+      transport: recording,
+      correlationId: operation.correlationId,
+    });
+    if (video && video.status !== "stored") {
+      const status = video.status === "NOT_CONNECTED" ? "NOT_CONNECTED" : "failed";
+      const record = operation.finish(false, 1, video.error);
+      return {
+        correlationId: String(record.correlationId),
+        detail: video.error,
+        stages: [{ objectType: "video", status, externalId: null, detail: video.error }],
+      };
+    }
+    if (video?.status === "stored") {
+      confirmedVideo = video;
+      existing.video = video.externalId;
+      if (!stored.some((row) => row.idempotency_key === `${input.brandId}:${input.creativeId}:video`)) {
+        stored.push({ organization_id: input.organizationId, idempotency_key: `${input.brandId}:${input.creativeId}:video`, external_id: video.externalId });
+      }
+    }
+  }
+  let stages: PausedStage[] = await publishPausedStages({
     provider: input.provider,
     name: input.name,
     dailyBudgetCents: input.dailyBudgetCents,
@@ -120,7 +160,7 @@ export async function publishPausedForBrand(
     message: input.message,
     scheduleStart: input.scheduleStart,
     imageIds: input.imageIds,
-    videoId: input.videoId,
+    videoId: input.provider === "meta" ? confirmedVideo?.externalId : input.videoId,
     headlines: input.headlines,
     descriptions: input.descriptions,
     cpcBidCents: input.cpcBidCents,
@@ -129,6 +169,7 @@ export async function publishPausedForBrand(
     env,
     transport: recording,
   });
+  if (confirmedVideo) stages = [{ objectType: "video", status: "stored", externalId: confirmedVideo.externalId, reused: confirmedVideo.reused, error: "" }, ...stages];
   const evidence = redactSecrets(bodies.join("\n")).slice(0, 2000);
   const writes = stageWrites({
     organizationId: input.organizationId,
@@ -164,7 +205,19 @@ export async function publishPausedForBrand(
       values (
         ${crypto.randomUUID()}, ${input.organizationId}, ${input.brandId}, ${input.actorId},
         'publishing.confirmed', ${write.objectType}, ${write.externalId},
-        ${JSON.stringify({ response: write.responseText, correlationId: operation.correlationId })}
+        ${JSON.stringify({
+          response: write.responseText,
+          correlationId: operation.correlationId,
+          ...(confirmedVideo ? { hypitLineage: {
+            videoId: confirmedVideo.externalId,
+            hypitJobId: confirmedVideo.hypitJobId,
+            jevDecisionId: confirmedVideo.jevDecisionId,
+            briefId: confirmedVideo.briefId,
+            storageKey: confirmedVideo.storageKey,
+            sha256: confirmedVideo.sha256,
+            byteLength: confirmedVideo.byteLength,
+          } } : {}),
+        })}
       )
     `;
   }
