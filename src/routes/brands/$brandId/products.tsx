@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Field, Notice, Panel, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { deleteProduct, saveProduct, type ProductRow } from "@/lib/meridian/api";
@@ -24,9 +24,7 @@ const blank = {
 function ProductsPage() {
   const { brandId } = Route.useParams();
   return (
-    <Authed>
-      <Products brandId={brandId} />
-    </Authed>
+    <Products brandId={brandId} />
   );
 }
 

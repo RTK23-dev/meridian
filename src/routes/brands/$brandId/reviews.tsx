@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { BrandNav } from "@/components/brand-nav";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { REVIEW_REASON_CODES, listReviews, resolveReview } from "@/lib/meridian/machine";
@@ -13,9 +13,7 @@ export const Route = createFileRoute("/brands/$brandId/reviews")({ component: Pa
 function Page() {
   const { brandId } = Route.useParams();
   return (
-    <Authed>
-      <Reviews brandId={brandId} />
-    </Authed>
+    <Reviews brandId={brandId} />
   );
 }
 

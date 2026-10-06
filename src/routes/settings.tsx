@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { AuditList } from "@/components/audit";
 import { AlertsPanel } from "@/components/alerts-panel";
 import { Button, Field, Notice, Panel, SelectInput, TextInput } from "@/components/ui";
@@ -23,9 +23,7 @@ const LABELS: Record<keyof ScoreWeights, string> = {
 
 function SettingsPage() {
   return (
-    <Authed>
-      <Settings />
-    </Authed>
+    <Settings />
   );
 }
 

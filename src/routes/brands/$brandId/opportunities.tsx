@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { BrandNav } from "@/components/brand-nav";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Notice, Panel, Skeleton, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import {
@@ -16,9 +16,7 @@ export const Route = createFileRoute("/brands/$brandId/opportunities")({ compone
 function Page() {
   const { brandId } = Route.useParams();
   return (
-    <Authed>
-      <Opportunities brandId={brandId} />
-    </Authed>
+    <Opportunities brandId={brandId} />
   );
 }
 

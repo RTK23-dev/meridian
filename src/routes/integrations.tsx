@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { useWorkspace } from "@/components/workspace";
 import { StatusText } from "@/components/status";
 import { Button, ErrorState, Notice, Panel, Skeleton, errorText } from "@/components/ui";
@@ -15,9 +15,7 @@ export const Route = createFileRoute("/integrations")({ component: Page });
 
 function Page() {
   return (
-    <Authed>
-      <Integrations />
-    </Authed>
+    <Integrations />
   );
 }
 

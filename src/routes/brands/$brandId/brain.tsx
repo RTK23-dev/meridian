@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea } from "@/components/ui";
 import { errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
@@ -22,9 +22,7 @@ export const Route = createFileRoute("/brands/$brandId/brain")({ component: Brai
 function BrainPage() {
   const { brandId } = Route.useParams();
   return (
-    <Authed>
-      <BrainEditor brandId={brandId} />
-    </Authed>
+    <BrainEditor brandId={brandId} />
   );
 }
 

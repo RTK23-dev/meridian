@@ -4,6 +4,7 @@ import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { WorkspaceProvider } from "@/components/workspace";
 import { ThemeProvider, themeBootstrap, Toaster } from "@/components/ui";
 import { AppQueryProvider } from "@/lib/query/client";
+import { AppFrame } from "@/components/app-frame";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -35,7 +36,7 @@ export const Route = createRootRoute({
           <AppQueryProvider>
             <AuthProvider>
               <WorkspaceProvider>
-                <Outlet />
+                <AppFrame><Outlet /></AppFrame>
               </WorkspaceProvider>
             </AuthProvider>
             <Toaster />

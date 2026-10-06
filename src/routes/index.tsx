@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { AuditList } from "@/components/audit";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { Button, Field, Notice, Panel, TextInput } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
@@ -11,9 +11,7 @@ export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
   return (
-    <Authed>
-      <Overview />
-    </Authed>
+    <Overview />
   );
 }
 

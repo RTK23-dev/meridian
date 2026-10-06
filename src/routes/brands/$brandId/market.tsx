@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
-import { Authed, useBusy } from "@/components/gate";
+import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import {
@@ -42,9 +42,7 @@ function parseAnalysis(value: string): AnalysisView | null {
 function Page() {
   const { brandId } = Route.useParams();
   return (
-    <Authed>
-      <MarketPage brandId={brandId} />
-    </Authed>
+    <MarketPage brandId={brandId} />
   );
 }
 
