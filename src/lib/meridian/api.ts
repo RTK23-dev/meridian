@@ -43,6 +43,7 @@ export type BrandSummary = {
 export type AuditEntry = {
   id: string;
   action: string;
+  actorName: string;
   objectType: string;
   objectId: string;
   brandId: string | null;
@@ -72,6 +73,11 @@ export type Bootstrap = {
   members: MemberRow[];
   invites: InviteRow[];
   audit: AuditEntry[];
+  overviewMetrics: {
+    failedJobs: number;
+    livePublications: number;
+    lastPerformanceSync: string | null;
+  } | null;
 };
 
 export type BrandIdentity = {
@@ -125,6 +131,11 @@ function asText(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return "";
+}
+
+function asCount(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
 }
 
 function asRecord(value: unknown): Record<string, string> {
@@ -311,6 +322,7 @@ export const bootstrap = createServerFn({ method: "GET" })
         members: [],
         invites: [],
         audit: [],
+        overviewMetrics: null,
       };
     }
     const settings = await sql<{ active_organization_id: string | null }>`
@@ -319,7 +331,7 @@ export const bootstrap = createServerFn({ method: "GET" })
     const preferred = settings[0]?.active_organization_id;
     const activeOrg = orgs.find((org) => org.id === preferred) ?? orgs[0];
     if (!activeOrg) {
-      return { organizations: orgs, active: null, brands: [], members: [], invites: [], audit: [] };
+      return { organizations: orgs, active: null, brands: [], members: [], invites: [], audit: [], overviewMetrics: null };
     }
     if (preferred !== activeOrg.id) {
       await sql`
@@ -379,6 +391,15 @@ export const bootstrap = createServerFn({ method: "GET" })
       limit 20
     `;
     const audit = await loadAudit(sql, activeOrg.id, null, 12);
+    const overviewRows = await sql<{ failed_jobs: unknown; live_publications: unknown; last_performance_sync: unknown }>`
+      select
+        (select count(*) from jobs where organization_id = ${activeOrg.id} and status = 'dead') as failed_jobs,
+        (select count(*) from provider_objects
+          where organization_id = ${activeOrg.id} and provider in ('meta', 'tiktok', 'google')
+            and object_type = 'ad' and status in ('stored', 'published')) as live_publications,
+        (select max(created_at) from performance_observations
+          where organization_id = ${activeOrg.id} and source in ('meta', 'tiktok', 'google')) as last_performance_sync
+    `;
     return {
       organizations: orgs,
       active: { ...activeOrg, weights },
@@ -396,6 +417,11 @@ export const bootstrap = createServerFn({ method: "GET" })
           : [],
       ),
       audit,
+      overviewMetrics: overviewRows[0] ? {
+        failedJobs: asCount(overviewRows[0].failed_jobs),
+        livePublications: asCount(overviewRows[0].live_publications),
+        lastPerformanceSync: overviewRows[0].last_performance_sync ? asText(overviewRows[0].last_performance_sync) : null,
+      } : null,
     };
   });
 
@@ -422,22 +448,23 @@ async function loadAudit(
 ): Promise<AuditEntry[]> {
   const rows = brandId
     ? await sql<Record<string, unknown>>`
-        select id, action, object_type, object_id, brand_id, metadata, created_at
-        from audit_log
-        where organization_id = ${organizationId} and brand_id = ${brandId}
-        order by created_at desc
+        select a.id, a.action, a.object_type, a.object_id, a.brand_id, a.metadata, a.created_at, u.name as actor_name
+        from audit_log a left join "user" u on u.id = a.actor_id
+        where a.organization_id = ${organizationId} and a.brand_id = ${brandId}
+        order by a.created_at desc
         limit ${limit}
       `
     : await sql<Record<string, unknown>>`
-        select id, action, object_type, object_id, brand_id, metadata, created_at
-        from audit_log
-        where organization_id = ${organizationId}
-        order by created_at desc
+        select a.id, a.action, a.object_type, a.object_id, a.brand_id, a.metadata, a.created_at, u.name as actor_name
+        from audit_log a left join "user" u on u.id = a.actor_id
+        where a.organization_id = ${organizationId}
+        order by a.created_at desc
         limit ${limit}
       `;
   return rows.map((row) => ({
     id: asText(row.id),
     action: asText(row.action),
+    actorName: asText(row.actor_name) || "System",
     objectType: asText(row.object_type),
     objectId: asText(row.object_id),
     brandId: row.brand_id ? asText(row.brand_id) : null,

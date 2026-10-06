@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBrand } from "@/lib/meridian/api";
 import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, listLibrary, listOpportunities, listReviews, getTrace } from "@/lib/meridian/machine";
@@ -20,6 +20,17 @@ export const useMachineQuery = (brandId: string, enabled = true) => {
   const scope = useUserScopedKey(qk.machine(brandId));
   return useQuery({ ...scope, queryFn: () => getMachine({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
 };
+export function useMachinesQuery(brandIds: string[]) {
+  const { user, isPending } = useCurrentUserState();
+  const queries = useQueries({
+    queries: brandIds.map((brandId) => ({
+      queryKey: userScopedQueryKey(user?.id, qk.machine(brandId)),
+      queryFn: () => getMachine({ data: { brandId } }),
+      enabled: !isPending && !!user && !!brandId,
+    })),
+  });
+  return queries.map((query, index) => ({ brandId: brandIds[index], ...query }));
+}
 export const useIntelligenceQuery = (brandId: string, enabled = true) => {
   const scope = useUserScopedKey(qk.intelligence(brandId));
   return useQuery({ ...scope, queryFn: () => getIntelligence({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });

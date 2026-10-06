@@ -101,6 +101,8 @@ async function prepareFixtureWorkspace(page) {
 
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
   await page.waitForTimeout(700);
+  await page.getByRole("heading", { name: "Workspace overview", exact: true })
+    .waitFor({ state: "visible", timeout: 10_000 });
   const linkedBrandId = await page.locator('a[href^="/brands/"]').evaluateAll((anchors) =>
     anchors.map((anchor) => new URL(anchor.href).pathname.match(/^\/brands\/([^/]+)/)?.[1])
       .find((value) => value && value !== "new"),
