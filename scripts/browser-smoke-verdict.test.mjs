@@ -377,10 +377,11 @@ test("browser-smoke wires the guard and verdict helpers", () => {
   assert.match(src, /from "\.\/browser-smoke-verdict\.mjs"/);
   assert.match(src, /const args = parseSmokeArgs\(process\.argv\.slice\(2\), process\.env\)/);
   assert.match(src, /const url = checkedUrl\(args\.url\)/);
-  assert.match(src, /const outPng = checkedOutputPath\(args\.outPng, \["\/workspace"\]\)/);
-  assert.match(src, /const mobilePng = checkedOutputPath\(derived\.mobilePng, \["\/workspace"\]\)/);
-  assert.match(src, /const outJson = checkedOutputPath\(derived\.verdictJson, \["\/workspace"\]/);
-  assert.match(src, /checkedOutputPath\(realpathSync\(args\.baseline\), \["\/workspace"\]/);
+  assert.match(src, /const outputRoot = resolve\(process\.env\.BROWSER_SMOKE_OUTPUT_ROOT \|\| "\/workspace"\)/);
+  assert.match(src, /checkedOutputPath\(args\.outPng, \[outputRoot\]\)/);
+  assert.match(src, /checkedOutputPath\(derived\.mobilePng, \[outputRoot\]\)/);
+  assert.match(src, /checkedOutputPath\(derived\.verdictJson, \[outputRoot\]/);
+  assert.match(src, /checkedOutputPath\(realpathSync\(args\.baseline\), \[outputRoot\]/);
   assert.match(src, /baselinePath === outJson/);
   assert.match(src, /normalizedBodyTextHash\(/);
   assert.match(src, /bodyTextPrefix\(/);
