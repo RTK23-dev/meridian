@@ -304,30 +304,31 @@ function Library({ brandId }: { brandId: string }) {
             className="mt-4 grid gap-3"
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault();
-              const form = new FormData(event.currentTarget);
+              const form = event.currentTarget;
+              const data = new FormData(form);
               void busy.run(async () => {
                 await recordObservation({
                   data: {
                     brandId,
                     origin: "own",
                     competitorId: "",
-                    angle: String(form.get("angle") ?? ""),
-                    observedAngle: String(form.get("observedAngle") ?? ""),
-                    hookType: String(form.get("hookType") ?? ""),
-                    format: String(form.get("format") ?? ""),
-                    title: String(form.get("title") ?? ""),
-                    hook: String(form.get("hook") ?? ""),
-                    message: String(form.get("message") ?? ""),
+                    angle: String(data.get("angle") ?? ""),
+                    observedAngle: String(data.get("observedAngle") ?? ""),
+                    hookType: String(data.get("hookType") ?? ""),
+                    format: String(data.get("format") ?? ""),
+                    title: String(data.get("title") ?? ""),
+                    hook: String(data.get("hook") ?? ""),
+                    message: String(data.get("message") ?? ""),
                     offer: "",
-                    cta: String(form.get("cta") ?? ""),
+                    cta: String(data.get("cta") ?? ""),
                     claim: "",
                     platform: "",
-                    productName: String(form.get("productName") ?? ""),
+                    productName: String(data.get("productName") ?? ""),
                     sourceUrl: "",
                   },
                 });
                 setNote("Creative recorded.");
-                event.currentTarget.reset();
+                form.reset();
                 await reload();
               });
             }}

@@ -61,7 +61,9 @@ export function strategyCandidates(
       format,
       proofType,
       claimIntensity: 0.35,
-      keywords: [angle, hookType, format, proofType].filter((item) => item.length >= 3 && item !== "unspecified"),
+      keywords: [angle, hookType, format, proofType, ...angle.split(/[^a-z0-9]+/)].filter(
+        (item, index, all) => item.length >= 3 && item !== "unspecified" && all.indexOf(item) === index,
+      ),
       hookLine: "Keep the observed structure. Do not copy the competitor's wording.",
     });
     if (discovered.length >= 8) break;

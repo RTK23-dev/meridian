@@ -3,9 +3,8 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
 import { startOperation, redactSecrets } from "../observability/redact.ts";
-import { liveTransport, type Transport } from "./http.ts";
-import { publishPausedStages, type PausedStage } from "./live.ts";
-import { openAccessToken, stageWrites } from "./stages.ts";
+import type { Transport } from "./http.ts";
+import type { PausedStage } from "./live.ts";
 
 function clip(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -54,6 +53,9 @@ export async function publishPausedForBrand(
     transport?: Transport;
   },
 ): Promise<PublishView> {
+  const { liveTransport } = await import("./http.ts");
+  const { publishPausedStages } = await import("./live.ts");
+  const { openAccessToken, stageWrites } = await import("./stages.ts");
   const operation = startOperation({
     provider: input.provider,
     operation: "publishing.paused",

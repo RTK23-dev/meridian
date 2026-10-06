@@ -44,7 +44,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Creative intelligence</p>
         <h1 className="font-display text-4xl">What is in the stored record</h1>
         <p className="text-muted">
-          Clusters and whitespace on this screen are lexical unless a semantic vector was stored. Local semantic model: {data.neuralEmbedding}. Ad library, publishing, video generation, and the live performance feed are not connected in this workspace until a provider request succeeds. Lexical similarity is not that local model.
+          {data.semanticNote} Structured angle counts below are fingerprints. They are not a substitute for local:semantic vectors.
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
@@ -61,13 +61,20 @@ function Intelligence({ brandId }: { brandId: string }) {
           <p className="mt-2">{data.whitespace.length === 0 ? "No competitor angle is missing from this brand." : data.whitespace.join(", ")}</p>
         </Panel>
       </div>
+      {data.semanticClusters.length > 0 ? (
+        <ul className="space-y-2">
+          {data.semanticClusters.map((group) => (
+            <li key={group.summary} className="rounded-lg border border-line bg-panel px-4 py-3 text-sm">{group.summary}</li>
+          ))}
+        </ul>
+      ) : null}
       {data.angleClusters.length === 0 ? (
-        <Panel>No creative rows yet, so there is nothing to cluster.</Panel>
+        <Panel>No creative rows yet, so there is nothing to group by angle.</Panel>
       ) : (
         <ul className="space-y-2">
           {data.angleClusters.map((group) => (
             <li key={group.key} className="rounded-lg border border-line bg-panel px-4 py-3 text-sm">
-              {group.key} · {group.count}
+              Fingerprint {group.key} · {group.count}
             </li>
           ))}
         </ul>

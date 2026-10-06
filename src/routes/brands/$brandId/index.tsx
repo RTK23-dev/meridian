@@ -2,7 +2,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Field, Notice, TextArea, TextInput } from "@/components/ui";
+import { Button, Field, Notice, Panel, TextArea, TextInput } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 import { deleteBrand, getBrand, updateBrand, type BrandDetail } from "@/lib/meridian/api";
@@ -141,25 +141,81 @@ function BrandHome({ brandId }: { brandId: string }) {
 
 function NextStep({ brandId, snapshot, filled }: { brandId: string; snapshot: MachineSnapshot; filled: number }) {
   const steps = [
-    { done: filled >= 4, label: "Write positioning and claims", to: "/brands/$brandId/brain" as const },
+    { done: filled >= 4, label: "Write positioning, audience, and voice", to: "/brands/$brandId/brain" as const },
     { done: snapshot.counts.observations > 0, label: "Record a competitor ad you have seen", to: "/brands/$brandId/market" as const },
-    { done: snapshot.counts.openOpportunities > 0, label: "Score opportunities from those observations", to: "/brands/$brandId/opportunities" as const },
-    { done: snapshot.counts.creatives > 0, label: "Open the studio and make variants", to: "/brands/$brandId/studio" as const },
+    { done: snapshot.operating.generationRuns > 0, label: "Open Studio and make image and video variants", to: "/brands/$brandId/studio" as const },
   ];
   const next = steps.find((step) => !step.done);
+  const recommendation = snapshot.operating.recommendation;
+  const missing = [
+    filled < 4 ? "Brand brain is thin. Positioning, audience, and voice are not written." : "",
+    snapshot.counts.observations === 0 ? "No competitor ad is stored. An empty market is not a whitespace finding." : "",
+    snapshot.operating.generationRuns === 0 ? "No generation run is stored." : "",
+    snapshot.counts.reviews === 0 ? "Nothing is waiting in review." : "",
+    snapshot.operating.publishedTests === 0 ? "Nothing has a stored publisher id." : "",
+    snapshot.counts.performanceRows === 0 ? "No performance row is stored." : "",
+    snapshot.counts.patterns === 0 ? "No learned pattern has met the sample rule." : "",
+  ].filter(Boolean);
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <p className="text-sm text-muted">
-        {snapshot.counts.observations} observations, {snapshot.counts.openOpportunities} open opportunities, {snapshot.counts.reviews} reviews, {snapshot.counts.patterns} learned patterns.
-        Text model: {snapshot.providerConfigured ? snapshot.provider : "not configured"}.
+        {snapshot.counts.observations} competitor observations, {snapshot.counts.openOpportunities} open opportunities, {snapshot.counts.reviews} reviews, {snapshot.counts.patterns} learned patterns.
       </p>
       {next ? (
-        <p>
-          Next: <Link to={next.to} params={{ brandId }} className="font-semibold">{next.label}</Link>
-        </p>
+        <p>Next: <Link to={next.to} params={{ brandId }} className="font-semibold">{next.label}</Link></p>
       ) : (
-        <p>Stored evidence is in place. The studio ranks what to make next. It does not invent ads.</p>
+        <p>Stored evidence is in place. <Link to="/brands/$brandId/studio" params={{ brandId }} className="font-semibold">Studio</Link> ranks what to make next.</p>
       )}
+      <div className="grid gap-3 md:grid-cols-2">
+        <Panel>
+          <h2 className="font-display text-xl">What Meridian recommends</h2>
+          {recommendation ? (
+            <>
+              <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-brass">{recommendation.category || "stored"} · {recommendation.angle}</p>
+              <p className="mt-2 font-semibold">{recommendation.label}</p>
+              <p className="mt-2 text-sm">{recommendation.reason}</p>
+              <p className="mt-2 text-sm text-muted">Rank {recommendation.expectedValue.toFixed(2)}</p>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-muted">No opportunity is stored yet. Scoring waits for a brand brain and observations.</p>
+          )}
+        </Panel>
+        <Panel>
+          <h2 className="font-display text-xl">What needs review</h2>
+          <p className="mt-2 text-sm">{snapshot.counts.reviews === 0 ? "The review queue is empty." : `${snapshot.counts.reviews} open review${snapshot.counts.reviews === 1 ? "" : "s"}.`}</p>
+          {snapshot.counts.reviews > 0 ? <Link className="mt-2 inline-block text-sm font-semibold" to="/brands/$brandId/studio" params={{ brandId }}>Review in Studio</Link> : null}
+        </Panel>
+        <Panel>
+          <h2 className="font-display text-xl">What is being made</h2>
+          <p className="mt-2 text-sm">{snapshot.operating.generationRuns === 0 ? "No generation run is stored." : `${snapshot.operating.generationRuns} generation run${snapshot.operating.generationRuns === 1 ? "" : "s"} stored.`}</p>
+        </Panel>
+        <Panel>
+          <h2 className="font-display text-xl">What is live</h2>
+          <p className="mt-2 text-sm">{snapshot.operating.publishedTests === 0 ? "No publisher id is stored for this brand." : `${snapshot.operating.publishedTests} stored publication id${snapshot.operating.publishedTests === 1 ? "" : "s"}.`}</p>
+        </Panel>
+        <Panel>
+          <h2 className="font-display text-xl">What happened</h2>
+          <p className="mt-2 text-sm">{snapshot.counts.performanceRows === 0 ? "No performance row is stored." : `${snapshot.counts.performanceRows} performance row${snapshot.counts.performanceRows === 1 ? "" : "s"} tied to creatives.`}</p>
+        </Panel>
+        <Panel>
+          <h2 className="font-display text-xl">What Meridian learned</h2>
+          {snapshot.operating.learning.length === 0 ? (
+            <p className="mt-2 text-sm text-muted">No pattern has met the sample rule.</p>
+          ) : (
+            <ul className="mt-2 space-y-2 text-sm">
+              {snapshot.operating.learning.map((pattern) => (
+                <li key={pattern.summary}>{pattern.lift >= 0 ? "+" : "−"} {pattern.summary}</li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
+      {missing.length > 0 ? (
+        <Panel>
+          <h2 className="font-display text-xl">What is missing</h2>
+          <ul className="mt-2 space-y-1 text-sm">{missing.map((line) => <li key={line}>{line}</li>)}</ul>
+        </Panel>
+      ) : null}
     </div>
   );
 }

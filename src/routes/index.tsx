@@ -29,27 +29,10 @@ function Overview() {
         <h1 className="font-display text-4xl">What should we make next?</h1>
         <p className="text-lg text-muted">{recommendation(data.brands.length, best, understood?.name)}</p>
       </div>
-      <ol className="grid gap-3 md:grid-cols-3">
-        <Stage
-          title="Brand"
-          state={data.brands.length > 0 ? "Recorded" : "Needed"}
-          body={data.brands.length > 0 ? `${data.brands.length} in this workspace` : "No brand yet. Nothing is assumed."}
-        />
-        <Stage
-          title="Understand"
-          state={best >= 0.5 ? "Started" : "Thin"}
-          body={
-            understood
-              ? `${understood.name} is ${Math.round(best * 100)}% written.`
-              : "The brand brain is still empty."
-          }
-        />
-        <Stage
-          title="Decide"
-          state="Per brand"
-          body="Open a brand. Opportunities are scored only from evidence stored there. Empty evidence stays empty."
-        />
-      </ol>
+      <Panel>
+        <h2 className="font-display text-2xl">What is missing</h2>
+        <p className="mt-2 text-muted">{recommendation(data.brands.length, best, understood?.name)}</p>
+      </Panel>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h2 className="font-display text-2xl">Brands</h2>
         {hasRole(data.active.role, "member") ? (
@@ -95,16 +78,6 @@ function recommendation(brands: number, completeness: number, name?: string): st
     return `${name ?? "This brand"} is only partly described. Creative decisions wait until audience, positioning, and voice are written.`;
   }
   return `${name ?? "The brand"} has a usable brain. Open it to record what you have seen, score opportunities from that evidence, and write results back.`;
-}
-
-function Stage({ title, state, body }: { title: string; state: string; body: string }) {
-  return (
-    <li className="rounded-lg border border-line bg-panel p-4">
-      <p className="text-xs font-semibold uppercase tracking-widest text-brass">{state}</p>
-      <h2 className="mt-2 font-display text-xl">{title}</h2>
-      <p className="mt-2 text-sm text-muted">{body}</p>
-    </li>
-  );
 }
 
 function CreateWorkspace({ onCreated }: { onCreated: () => Promise<void> }) {

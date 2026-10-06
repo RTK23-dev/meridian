@@ -539,9 +539,10 @@ export const updateWeights = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
     const organizationId = clip(body.organizationId, 80, "Workspace", true);
+    const source = objectInput(body.weights);
     const weights = {} as ScoreWeights;
     for (const key of WEIGHT_KEYS) {
-      const value = body[key];
+      const value = source[key];
       const number = typeof value === "number" ? value : Number(value);
       if (!Number.isFinite(number) || number < 0 || number > 5) throw new Error(`${key} must be a number from 0 to 5.`);
       weights[key] = number;

@@ -50,8 +50,9 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   if (job.job_type === "embedding.generate") {
     const text = typeof payload.text === "string" ? payload.text : "";
     if (!text.trim()) throw new Error("Embedding needs text. No lexical hash was stored.");
-    const { semanticEmbed } = await import("../embeddings/semantic.ts");
-    const vector = await semanticEmbed(text);
+    const { embedWithProvider } = await import("../embeddings/select.ts");
+    const [vector] = await embedWithProvider("local:semantic", [text]);
+    if (!vector) throw new Error("The embedding model returned no vector. No lexical hash was stored.");
     const hash = createHash("sha256").update(text).digest("hex");
     const creativeId = typeof payload.creativeId === "string" ? payload.creativeId : "";
     if (creativeId && job.brand_id) {
@@ -186,6 +187,10 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     }
     await sql`update alert_events set delivery_status = 'sent' where id = ${alertId} and organization_id = ${job.organization_id}`;
     return "sent";
+  }
+  if (job.job_type === "video.generate" || job.job_type === "video.poll") {
+    const { runVideoJob } = await import("../studio/media-work.ts");
+    return runVideoJob(sql, job, payload);
   }
   if (job.job_type === "notification.dispatch") {
     const title = typeof payload.title === "string" ? payload.title : "";

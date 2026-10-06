@@ -172,12 +172,10 @@ function Settings() {
             <Field key={key} label={LABELS[key]}>
               <TextInput
                 name={key}
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min={0}
-                max={5}
-                step={0.05}
-                defaultValue={active.weights[key]}
+                autoComplete="off"
+                defaultValue={String(active.weights[key])}
                 required
                 aria-invalid={message?.includes(LABELS[key]) ? true : undefined}
                 disabled={!canAdmin}

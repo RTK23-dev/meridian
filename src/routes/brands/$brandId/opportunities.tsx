@@ -1,14 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { Authed, useBusy } from "@/components/gate";
-import { Button, Field, Notice, Panel, TextArea, TextInput, errorText } from "@/components/ui";
+import { Button, Notice, Panel, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import {
-  composeCreative,
-  createBriefFromOpportunity,
   dismissOpportunity,
-  generateCreative,
   listOpportunities,
   refreshOpportunities,
   type OpportunityView,
@@ -31,7 +28,6 @@ function Opportunities({ brandId }: { brandId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [briefId, setBriefId] = useState<string | null>(null);
   const busy = useBusy();
 
   async function reload() {
@@ -69,6 +65,7 @@ function Opportunities({ brandId }: { brandId: string }) {
           <h1 className="font-display text-4xl">What to make next</h1>
           <p className="text-muted">
             Each card is ranked from stored evidence. A hypothesis is not a market finding. Refresh replaces open cards. Accepted work is kept.
+            Make image and video variants in <Link className="font-semibold" to="/brands/$brandId/studio" params={{ brandId }}>Studio</Link>, not from a script form.
           </p>
         </div>
         {canEdit ? (
@@ -78,7 +75,6 @@ function Opportunities({ brandId }: { brandId: string }) {
               void busy.run(async () => {
                 const result = await refreshOpportunities({ data: { brandId } });
                 setNote(`${result.count} candidates scored. Priors stay labeled as priors. An angle is added only when stored observations or a learned pattern contain it.`);
-                setBriefId(null);
                 await reload();
               });
             }}
@@ -132,35 +128,11 @@ function Opportunities({ brandId }: { brandId: string }) {
                       ))}
                     </ul>
                   </div>
-                  {briefId && openId === item.id ? (
-                    <Compose
-                      brandId={brandId}
-                      briefId={briefId}
-                      pending={busy.pending}
-                      onRun={busy.run}
-                      onDone={(message) => setNote(message)}
-                    />
-                  ) : null}
                   {canEdit && item.status !== "rejected" && item.status !== "dismissed" ? (
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        disabled={busy.pending}
-                        onClick={() => {
-                          void busy.run(async () => {
-                            const brief = await createBriefFromOpportunity({ data: { brandId, opportunityId: item.id } });
-                            if (brief.decision === "REJECT") {
-                              setBriefId(null);
-                              setNote("The brief gate rejected this. Fill the missing brand or product fields and score again.");
-                            } else {
-                              setBriefId(brief.id);
-                              setNote("Brief stored. Write the script below, or generate one if a model is configured.");
-                            }
-                            await reload();
-                          });
-                        }}
-                      >
-                        Build brief
-                      </Button>
+                      <Link to="/brands/$brandId/studio" params={{ brandId }} className="inline-flex min-h-11 items-center rounded-md bg-brass px-4 text-sm font-semibold text-paper">
+                        Make image and video variants in Studio
+                      </Link>
                       <Button variant="quiet" disabled={busy.pending} onClick={() => void busy.run(async () => {
                         await dismissOpportunity({ data: { brandId, opportunityId: item.id } });
                         await reload();
@@ -171,7 +143,7 @@ function Opportunities({ brandId }: { brandId: string }) {
                   ) : null}
                 </div>
               ) : (
-                <Button className="mt-4" variant="quiet" onClick={() => { setOpenId(item.id); setBriefId(null); }}>
+                <Button className="mt-4" variant="quiet" onClick={() => setOpenId(item.id)}>
                   Why this
                 </Button>
               )}
@@ -189,68 +161,5 @@ function Metric({ label, value }: { label: string; value: number | string }) {
       <dt className="text-muted">{label}</dt>
       <dd className="font-semibold">{typeof value === "number" ? value.toFixed(2) : value}</dd>
     </div>
-  );
-}
-
-function Compose({
-  brandId,
-  briefId,
-  pending,
-  onRun,
-  onDone,
-}: {
-  brandId: string;
-  briefId: string;
-  pending: boolean;
-  onRun: (task: () => Promise<void>) => Promise<void>;
-  onDone: (message: string) => void;
-}) {
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    void onRun(async () => {
-      const result = await composeCreative({
-        data: {
-          brandId,
-          briefId,
-          hook: String(form.get("hook") ?? ""),
-          script: String(form.get("script") ?? ""),
-          offer: String(form.get("offer") ?? ""),
-          cta: String(form.get("cta") ?? ""),
-          visualTreatment: String(form.get("visualTreatment") ?? ""),
-        },
-      });
-      onDone(`Creative ${result.decision.replaceAll("_", " ").toLowerCase()}. ${result.reasons[0] ?? ""}`);
-    });
-  }
-  return (
-    <form onSubmit={submit} className="grid gap-3 border-t border-line pt-4">
-      <h3 className="font-display text-xl">Produce from this brief</h3>
-      <Field label="Hook"><TextInput name="hook" required /></Field>
-      <Field label="Script"><TextArea name="script" required /></Field>
-      <Field label="Offer"><TextInput name="offer" /></Field>
-      <Field label="Call to action"><TextInput name="cta" required /></Field>
-      <Field label="Visual treatment"><TextInput name="visualTreatment" /></Field>
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={pending}>Check and save</Button>
-        <Button
-          type="button"
-          variant="quiet"
-          disabled={pending}
-          onClick={() => {
-            void onRun(async () => {
-              const result = await generateCreative({ data: { brandId, briefId } });
-              if (result.status !== "completed") {
-                onDone(result.message);
-                return;
-              }
-              onDone(`Generated creative ${result.decision.replaceAll("_", " ").toLowerCase()}. ${result.reasons[0] ?? ""}`);
-            });
-          }}
-        >
-          Generate script
-        </Button>
-      </div>
-    </form>
   );
 }

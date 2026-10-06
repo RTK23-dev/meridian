@@ -268,6 +268,12 @@ export type MachineSnapshot = {
     costCents: number | null;
     missingCost: number;
   };
+  operating: {
+    recommendation: { label: string; angle: string; category: string; reason: string; expectedValue: number } | null;
+    generationRuns: number;
+    publishedTests: number;
+    learning: { summary: string; lift: number }[];
+  };
 };
 
 export const getMachine = createServerFn({ method: "POST" })
@@ -282,6 +288,36 @@ export const getMachine = createServerFn({ method: "POST" })
       const rows = await sql.query<{ count: number }>(query, [data.brandId, access.organizationId]);
       return asNumber(rows[0]?.count);
     };
+    const usageRows = (await sql<Record<string, unknown>>`
+          select operation, tokens, cost_cents from model_runs
+          where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+        `).map((row) => ({
+          operation: asText(row.operation),
+          tokens: row.tokens == null ? null : asNumber(row.tokens),
+          costCents: row.cost_cents == null ? null : asNumber(row.cost_cents),
+        }));
+    const top = await sql<Record<string, unknown>>`
+      select label, angle, category, reason, expected_value from opportunities
+      where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+        and status in ('open', 'briefed')
+      order by expected_value desc
+      limit 1
+    `;
+    const learned = await sql<Record<string, unknown>>`
+      select summary, lift from learned_patterns
+      where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+      order by created_at desc
+      limit 4
+    `;
+    const runs = await sql<{ count: number }>`
+      select count(*) as count from generation_runs
+      where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+    `;
+    const published = await sql<{ count: number }>`
+      select count(*) as count from provider_objects
+      where brand_id = ${data.brandId} and organization_id = ${access.organizationId} and object_type = 'ad'
+    `;
+    const recommendation = top[0];
     return {
       role: access.role,
       providerConfigured: provider.configured,
@@ -297,16 +333,21 @@ export const getMachine = createServerFn({ method: "POST" })
         patterns: await count(`select count(*) as count from learned_patterns where brand_id = $1 and organization_id = $2`),
         performanceRows: await count(`select count(*) as count from performance_observations where brand_id = $1 and organization_id = $2`),
       },
-      usage: summarizeUsage(
-        (await sql<Record<string, unknown>>`
-          select operation, tokens, cost_cents from model_runs
-          where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
-        `).map((row) => ({
-          operation: asText(row.operation),
-          tokens: row.tokens == null ? null : asNumber(row.tokens),
-          costCents: row.cost_cents == null ? null : asNumber(row.cost_cents),
-        })),
-      ),
+      usage: summarizeUsage(usageRows),
+      operating: {
+        recommendation: recommendation
+          ? {
+              label: asText(recommendation.label),
+              angle: asText(recommendation.angle),
+              category: asText(recommendation.category),
+              reason: asText(recommendation.reason),
+              expectedValue: asNumber(recommendation.expected_value),
+            }
+          : null,
+        generationRuns: asNumber(runs[0]?.count),
+        publishedTests: asNumber(published[0]?.count),
+        learning: learned.map((row) => ({ summary: asText(row.summary), lift: asNumber(row.lift) })),
+      },
     };
   });
 
@@ -1916,6 +1957,26 @@ export const getIntelligence = createServerFn({ method: "POST" })
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
     const loaded = await loadContext(sql, access.organizationId, data.brandId);
     const summary = summarizeIntelligence(loaded.creatives);
+    const { readSemanticClusters } = await import("@/lib/meridian/embeddings/store");
+    let semanticNote = "local:semantic vectors were not read.";
+    let semanticClusters: { label: string; summary: string }[] = [];
+    try {
+      const semantic = await readSemanticClusters(
+        sql,
+        access.organizationId,
+        data.brandId,
+        loaded.creatives.map((creative) => ({
+          id: creative.id,
+          origin: creative.origin,
+          angle: creative.angle,
+          text: creative.text,
+        })),
+      );
+      semanticNote = semantic.note;
+      semanticClusters = semantic.clusters.map((cluster) => ({ label: cluster.label, summary: cluster.summary }));
+    } catch (error) {
+      semanticNote = error instanceof Error ? error.message : "local:semantic could not be read.";
+    }
     const notifications = await sql<Record<string, unknown>>`
       select kind, title, body, created_at from notifications
       where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
@@ -1924,7 +1985,9 @@ export const getIntelligence = createServerFn({ method: "POST" })
     return {
       role: access.role,
       ...summary,
-      neuralEmbedding: "LOCAL_MINILM" as const,
+      neuralEmbedding: "local:semantic" as const,
+      semanticNote,
+      semanticClusters,
       adLibrary: "NOT_CONNECTED" as const,
       publishing: "NOT_CONNECTED" as const,
       video: "NOT_CONNECTED" as const,

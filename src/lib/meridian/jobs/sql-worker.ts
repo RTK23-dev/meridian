@@ -78,3 +78,41 @@ export async function tickSqlJobs(sql: Sql): Promise<{ claimed: number; stopped:
   }
   return { claimed, stopped: false };
 }
+
+/** Runs one queued job by id. The studio uses the same executor as the worker. */
+export async function claimAndRun(sql: Sql, jobId: string): Promise<string> {
+  const due = await sql<ExecutableJob>`
+    select id, organization_id, brand_id, job_type, payload, attempts, max_attempts
+    from jobs
+    where id = ${jobId} and status in ('queued', 'retry')
+    limit 1
+  `;
+  const job = due[0];
+  if (!job) return "skipped";
+  const locked = await sql<{ id: string }>`
+    update jobs
+    set status = 'running', attempts = attempts + 1, lease_until = now() + interval '120 seconds',
+        heartbeat_at = now(), updated_at = now()
+    where id = ${job.id} and status in ('queued', 'retry')
+    returning id
+  `;
+  if (!locked[0]) return "skipped";
+  try {
+    const result = await executeJob(sql, job);
+    await sql`
+      update jobs set status = 'succeeded', result = ${result}, lease_until = null, last_error = '', updated_at = now()
+      where id = ${job.id} and status = 'running'
+    `;
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Job failed.";
+    const attempts = job.attempts + 1;
+    const dead = attempts >= job.max_attempts;
+    await sql`
+      update jobs
+      set status = ${dead ? "dead" : "retry"}, last_error = ${message.slice(0, 500)}, lease_until = null, updated_at = now()
+      where id = ${job.id} and status = 'running'
+    `;
+    return dead ? `dead:${message}` : `retry:${message}`;
+  }
+}

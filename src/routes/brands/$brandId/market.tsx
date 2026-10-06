@@ -121,18 +121,19 @@ function MarketPage({ brandId }: { brandId: string }) {
             className="mt-4 grid gap-3 md:grid-cols-2"
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault();
-              const form = new FormData(event.currentTarget);
+              const form = event.currentTarget;
+              const data = new FormData(form);
               void busy.run(async () => {
                 await addCompetitor({
                   data: {
                     brandId,
-                    name: String(form.get("name") ?? ""),
-                    website: String(form.get("website") ?? ""),
-                    notes: String(form.get("notes") ?? ""),
-                    kind: String(form.get("kind") ?? "direct"),
+                    name: String(data.get("name") ?? ""),
+                    website: String(data.get("website") ?? ""),
+                    notes: String(data.get("notes") ?? ""),
+                    kind: String(data.get("kind") ?? "direct"),
                   },
                 });
-                event.currentTarget.reset();
+                form.reset();
                 await reload();
               });
             }}
@@ -175,31 +176,32 @@ function MarketPage({ brandId }: { brandId: string }) {
             className="mt-4 grid gap-3"
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault();
-              const form = new FormData(event.currentTarget);
+              const form = event.currentTarget;
+              const data = new FormData(form);
               void busy.run(async () => {
                 const saved = await recordObservation({
                   data: {
                     brandId,
                     origin: "competitor",
-                    competitorId: String(form.get("competitorId") ?? ""),
-                    angle: String(form.get("angle") ?? ""),
-                    observedAngle: String(form.get("observedAngle") ?? ""),
-                    hookType: String(form.get("hookType") ?? ""),
-                    format: String(form.get("format") ?? ""),
-                    proofType: String(form.get("proofType") ?? ""),
-                    title: String(form.get("title") ?? ""),
-                    hook: String(form.get("hook") ?? ""),
-                    message: String(form.get("message") ?? ""),
-                    offer: String(form.get("offer") ?? ""),
-                    cta: String(form.get("cta") ?? ""),
-                    claim: String(form.get("claim") ?? ""),
-                    platform: String(form.get("platform") ?? ""),
+                    competitorId: String(data.get("competitorId") ?? ""),
+                    angle: String(data.get("angle") ?? ""),
+                    observedAngle: String(data.get("observedAngle") ?? ""),
+                    hookType: String(data.get("hookType") ?? ""),
+                    format: String(data.get("format") ?? ""),
+                    proofType: String(data.get("proofType") ?? ""),
+                    title: String(data.get("title") ?? ""),
+                    hook: String(data.get("hook") ?? ""),
+                    message: String(data.get("message") ?? ""),
+                    offer: String(data.get("offer") ?? ""),
+                    cta: String(data.get("cta") ?? ""),
+                    claim: String(data.get("claim") ?? ""),
+                    platform: String(data.get("platform") ?? ""),
                     productName: "",
-                    sourceUrl: String(form.get("sourceUrl") ?? ""),
+                    sourceUrl: String(data.get("sourceUrl") ?? ""),
                   },
                 });
                 setNote(saved.duplicate ? "That observation was already stored." : "Observation stored.");
-                if (!saved.duplicate) event.currentTarget.reset();
+                if (!saved.duplicate) form.reset();
                 await reload();
               });
             }}
