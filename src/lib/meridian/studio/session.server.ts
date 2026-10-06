@@ -20,6 +20,7 @@ import { loadAppliedPolicies } from "@/lib/meridian/jev/policy";
 import { generationAllowed } from "@/lib/meridian/security/budget";
 import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features";
 import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work";
+import { generateHypitStudioVideo, publishStudioHypitVideo } from "./hypit-run";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store";
 import { assessPublishing, type AccountSnapshot } from "../publishing/readiness";
 import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure";
@@ -410,11 +411,18 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
         confidence: asNumber(row.confidence),
         hookDirection: hookFor(asText(row.hypothesis_id)),
       };
+      const documents = await sql<{ id: string; excerpt: string }>`
+        select id, excerpt from source_documents
+        where brand_id = ${data.brandId} and organization_id = ${access.organizationId} and status = 'stored'
+        order by created_at desc
+        limit 6
+      `;
       const brief = buildBrief({
         opportunity: draft,
         brain: loaded.brain,
         patterns: loaded.patterns,
         rejections: loaded.rejections,
+        observations: documents.map((document) => ({ id: document.id, text: document.excerpt })),
       });
       for (const pattern of loaded.patterns.filter((item) => item.lift < 0)) {
         const line = `Do not prefer ${pattern.attribute}=${pattern.value}.`;
@@ -646,7 +654,7 @@ export async function generateStudioVariants(
         id, organization_id, brand_id, opportunity_id, brief_id, prompt_version, image_provider, video_provider, status, created_by
       ) values (
         ${runId}, ${access.organizationId}, ${data.brandId}, ${asText(brief.opportunity_id) || null}, ${data.briefId},
-        ${STUDIO_PROMPT_VERSION}, ${data.imageProvider}, ${data.videoProvider}, 'running', ${context.userId}
+        ${STUDIO_PROMPT_VERSION}, ${data.imageProvider}, 'hypit', 'running', ${context.userId}
       )
     `;
     try {
@@ -765,63 +773,58 @@ export async function generateStudioVariants(
         )
       `;
     }
-    for (let index = 0; index < 3; index += 1) {
-      const prompt = variantPrompt({ ...basePrompt, index, kind: "video" });
-      const creativeId = crypto.randomUUID();
-      const assetId = crypto.randomUUID();
-      const mediaJobId = crypto.randomUUID();
-      const copy = `${productName}. ${prompt}`;
-      await sql`
-        insert into creative_records (
-          id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
-          message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
-        ) values (
-          ${creativeId}, ${access.organizationId}, ${data.brandId}, 'generated', ${`${asText(brief.title)} video ${index + 1}`},
-          ${copy}, ${productName}, ${asText(brief.hook)}, ${"demonstration"}, ${asText(brief.angle)},
-          ${copy}, ${asText(brief.cta)}, ${asText(brief.format)}, ${asText(brief.proof_type)},
-          ${asText(brief.opportunity_id) || null}, ${data.briefId}, 'in_review', ${context.userId},
-          ${JSON.stringify({ generationRunId: runId, provider: data.videoProvider, promptVersion: `${STUDIO_PROMPT_VERSION}#video-${index + 1}`, kind: "video", variant: index + 1 })}
-        )
-      `;
-      await sql`
-        insert into assets (
-          id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
-          lifecycle, provider, model, prompt_version, generation_run_id, kind, qa_decision, review_status,
-          media_status, variant_index, provenance
-        ) values (
-          ${assetId}, ${access.organizationId}, ${data.brandId}, ${creativeId}, 1, ${`pending/${assetId}`}, '',
-          'video/mp4', ${data.videoProvider}, 'unavailable', 'requested', ${data.videoProvider}, ${data.videoProvider === "xai:video" ? "grok-imagine-video-1.5" : "test-video-v1"},
-          ${`${STUDIO_PROMPT_VERSION}#video-${index + 1}`}, ${runId}, 'video', '', 'in_review', 'queued', ${index}, 'generated'
-        )
-      `;
-      await sql`
-        insert into media_jobs (
-          id, organization_id, brand_id, asset_id, creative_id, generation_run_id, provider, model, prompt, prompt_version, status
-        ) values (
-          ${mediaJobId}, ${access.organizationId}, ${data.brandId}, ${assetId}, ${creativeId}, ${runId},
-          ${data.videoProvider}, ${data.videoProvider === "xai:video" ? "grok-imagine-video-1.5" : "test-video-v1"}, ${prompt}, ${`${STUDIO_PROMPT_VERSION}#video-${index + 1}`}, 'queued'
-        )
-      `;
-      const jobId = crypto.randomUUID();
-      await sql`
-        insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload, max_attempts)
-        values (
-          ${jobId}, ${access.organizationId}, ${data.brandId}, 'video.generate', ${`video.generate:${mediaJobId}`},
-          'queued', ${JSON.stringify({ mediaJobId, allowTest: data.videoProvider === "test:video", organizationId: access.organizationId })}, 4
-        )
-      `;
-    }
-    for (let pass = 0; pass < 16; pass += 1) {
-      const due = await sql<{ id: string }>`
-        select id from jobs
-        where organization_id = ${access.organizationId} and brand_id = ${data.brandId}
-          and job_type in ('video.generate', 'video.poll') and status in ('queued', 'retry')
-        order by created_at asc
-        limit 4
-      `;
-      if (due.length === 0) break;
-      for (const job of due) await claimAndRun(sql, job.id);
-    }
+    const decisionRows = await sql<{
+      id: string;
+      organization_id: string;
+      brand_id: string;
+      question_id: string;
+      policy_version: string;
+      decision: string;
+      reviewer_decision: string | null;
+      reasons: string;
+      evidence: string;
+    }>`
+      select id, organization_id, brand_id, question_id, policy_version, decision, reviewer_decision, reasons, evidence
+      from jev_decisions
+      where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
+      limit 1
+    `;
+    const decisionRow = decisionRows[0];
+    if (!decisionRow) throw new Error("JEV has not approved this creative. No Hypit job was created.");
+    const decisionValue = decisionRow.decision === "AUTO_APPROVE" || decisionRow.decision === "HUMAN_REVIEW" || decisionRow.decision === "REJECT"
+      ? decisionRow.decision
+      : "HUMAN_REVIEW";
+    await generateHypitStudioVideo(sql, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      runId,
+      actorId: context.userId,
+      productName,
+      opportunityId: asText(brief.opportunity_id),
+      brief: {
+        id: data.briefId,
+        title: asText(brief.title),
+        angle: asText(brief.angle),
+        hook: asText(brief.hook),
+        message: asText(brief.message),
+        cta: asText(brief.cta),
+        format: asText(brief.format),
+        proofType: asText(brief.proof_type),
+        constraints: asText(brief.constraints),
+      },
+      decision: {
+        id: decisionRow.id,
+        organizationId: decisionRow.organization_id,
+        brandId: decisionRow.brand_id,
+        questionId: decisionRow.question_id,
+        policyVersion: decisionRow.policy_version,
+        decision: decisionValue,
+        reviewerDecision: decisionRow.reviewer_decision === "approved" || decisionRow.reviewer_decision === "rejected" ? decisionRow.reviewer_decision : "",
+        reasons: asJson<string[]>(decisionRow.reasons, []),
+        evidence: asJson<{ id: string; source: string; summary: string }[]>(decisionRow.evidence, []),
+      },
+      tone: loaded.brain.tone,
+    });
     const videos = await sql<Record<string, unknown>>`
       select a.id, a.creative_id, a.storage_key, a.media_status, a.byte_size, a.width, a.height, a.duration_ms, a.transcript,
              a.scenes, a.checksum, a.mime_type, a.prompt_version, c.raw_text, c.angle
@@ -978,6 +981,16 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
     });
     if (data.publisher !== "test" && readiness.state !== "READY") {
       throw new Error(`${readiness.state}. ${readiness.summary}`);
+    }
+    if (asset[0]?.kind === "video") {
+      if (data.publisher !== "test") throw new Error(`${readiness.state}. ${readiness.summary}`);
+      await publishStudioHypitVideo(sql, {
+        organizationId: access.organizationId,
+        brandId: data.brandId,
+        creativeId: data.creativeId,
+        actorId: context.userId,
+      });
+      return loadSession(sql, access.organizationId, data.brandId, access.role);
     }
     const existing = await sql<{ external_id: string }>`
       select external_id from provider_objects

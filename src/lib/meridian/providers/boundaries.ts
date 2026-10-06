@@ -1,4 +1,5 @@
 import { acceptPerformanceEvent, type PerformanceEvent } from "../performance/normalize.ts";
+import { testProviderPublish, type TestPublishArtifact, type TestPublishReceipt } from "./test-provider.ts";
 
 export type ProviderState = "SUPPORTED" | "CONNECTED" | "SYNCING" | "FAILED" | "NOT_CONNECTED";
 
@@ -30,7 +31,7 @@ export function accountProviderState(provider: AccountProvider, env: NodeJS.Proc
 }
 
 export type PublishOutcome =
-  | { status: "NOT_CONNECTED"; externalId: null; mode: "live" }
+  | { status: "NOT_CONNECTED"; externalId: null; mode: "live" | "test" }
   | { status: "TEST_PUBLISHED"; externalId: string; mode: "test" };
 
 /** Live adapters never invent an external id. The test adapter is explicit and prefixed. */
@@ -39,10 +40,14 @@ export function publishThrough(input: {
   creativeId: string;
   allowTestProvider?: boolean;
   env?: NodeJS.ProcessEnv;
-}): PublishOutcome {
+  artifact?: TestPublishArtifact;
+}): PublishOutcome & { receipt?: TestPublishReceipt } {
   if (input.provider === "test") {
-    if (!input.allowTestProvider) throw new Error("The test publishing provider is not enabled.");
-    return { status: "TEST_PUBLISHED", externalId: `test:${input.creativeId}`, mode: "test" };
+    const published = testProviderPublish(input.creativeId, input.allowTestProvider === true, input.artifact);
+    if (!published.externalId) return { status: "NOT_CONNECTED", externalId: null, mode: "test" };
+    return published.receipt
+      ? { status: "TEST_PUBLISHED", externalId: published.externalId, mode: "test", receipt: published.receipt }
+      : { status: "TEST_PUBLISHED", externalId: published.externalId, mode: "test" };
   }
   const state = accountProviderState(input.provider, input.env);
   if (state.status !== "CONNECTED") return { status: "NOT_CONNECTED", externalId: null, mode: "live" };

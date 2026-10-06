@@ -41,8 +41,8 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
     if (imageProvider !== "test:image" && imageProvider !== "xai:image") {
       throw new Error("Choose an image provider. test:image is explicit and off until you select it.");
     }
-    if (videoProvider !== "test:video" && videoProvider !== "xai:video") {
-      throw new Error("Choose a video provider. test:video is explicit. xai:video needs XAI_API_KEY and does not invent a clip.");
+    if (videoProvider !== "hypit") {
+      throw new Error("Video generation uses the separate Hypit runtime. xAI and test:video are not this path.");
     }
     return { brandId, briefId, imageProvider, videoProvider };
   })

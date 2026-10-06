@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-beta.2 — 2026-10-06
+
+Video generation now follows an approved JEV decision into a separate Hypit process.
+
+- Studio no longer queues `test:video` or `xai:video` for the production video path. A rejected or unapproved decision creates no job. A missing `HYPIT_BASE_URL` is `HYPIT_NOT_CONNECTED`. A failed Hypit run stores no video.
+- A succeeded Hypit artifact is stored, then published through the existing publisher. A missing file, a failed job, or another tenant's artifact is not published.
+- Test performance attached to that receipt uses the existing ingestion and `learning.update` path. It is labeled `test:performance` and is not a live ad-account result.
+- A public page collected by the existing fetcher is passed into the next brief as untrusted text. The Meta Ad Library stays not connected without its token.
+- Setup documents the separate Hypit runtime. Hypit source is not included in this repository.
+
+Not in this beta: a live Meta, TikTok, or Google account, or a claim that synthetic performance is real delivery data.
+
 ## 0.1.0-beta.1 — 2026-10-06
 
 First beta of the Meridian application.

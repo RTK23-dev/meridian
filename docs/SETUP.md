@@ -1,6 +1,6 @@
 # Setup
 
-Meridian 0.1.0-beta.1. Node.js 22 and a Postgres database.
+Meridian 0.1.0-beta.2. Node.js 22 and a Postgres database.
 
 ## 1. Install
 
@@ -73,15 +73,40 @@ On a host that is not your laptop, run the worker and the scheduler as long-live
 4. Record market observations, or fetch one public page.
 5. Open Studio. Rank an opportunity, accept the brief, and generate variants.
 
-Image and video generation need `XAI_API_KEY`. Without it, Studio reports the model as unavailable and stores no file. `test:video` is not a production provider and is off unless a test turns it on.
+Images can use xAI when `XAI_API_KEY` is set. Video does not. Studio sends an approved JEV brief to a separate Hypit process. Without `HYPIT_BASE_URL`, generation stops at `HYPIT_NOT_CONNECTED` and stores no file.
 
-## 5. Optional connections
+## 5. Hypit video
+
+Hypit is not part of this repository. Install it yourself and follow its license. This app only talks to it over HTTP.
+
+```bash
+npm install @hypit/hypit@0.2.17
+```
+
+`ffmpeg` and `ffprobe` must be on `PATH`. Then, in another terminal:
+
+```bash
+export HYPIT_BIN="$(pwd)/node_modules/.bin/hypit"
+export HYPIT_BRIDGE_PORT=8766
+node scripts/hypit-bridge.mjs
+```
+
+In `.env`:
+
+```
+HYPIT_BASE_URL=http://127.0.0.1:8766
+```
+
+The bridge shells out to the Hypit CLI. It does not copy Hypit source into Meridian. A rejected or unapproved JEV decision never becomes a job. `scripts/hypit-product-loop.mjs` is a live smoke test against that process. It is not part of `npm test`.
+
+## 6. Optional connections
 
 Leave a variable blank to keep that provider not connected.
 
 | You want | Set | Then |
 | --- | --- | --- |
-| xAI images and video | `XAI_API_KEY` | Generate from Studio. A file is stored only after bytes come back. |
+| Hypit video | `HYPIT_BASE_URL` | Studio video. A file is stored only after Hypit returns MP4 bytes. |
+| xAI images | `XAI_API_KEY` | Image generation. Video does not use this key. |
 | S3-compatible files | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | The active store switches after the client is configured. `S3_REGION` defaults to `us-east-1`. |
 | Invite email | `EMAIL_API_URL`, `EMAIL_API_KEY` | The API receives JSON `{ to, subject, text }` with a bearer token. A failure leaves the invite pending. |
 | External embeddings | `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY` | OpenAI-compatible `POST` with `{ model, input }`. Local MiniLM is used when these are blank. |
@@ -96,7 +121,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 `BETTER_AUTH_SECRET` should be a different long random string in production. `BETTER_AUTH_URL` is the public origin, such as `https://your-host.example`.
 
-## 6. Checks before you ship a change
+## 7. Checks before you ship a change
 
 ```bash
 npm test
@@ -107,12 +132,12 @@ npm run build
 
 `node scripts/a11y-audit.mjs` signs up through the real form against an already running app. It is not a screen-reader pass.
 
-## 7. What a healthy empty install looks like
+## 8. What a healthy empty install looks like
 
 - `/api/health` has `application: up` and `database: up`.
 - Worker and scheduler are `running` only while those processes are up.
 - Integrations show Meta, TikTok, Google, and Ad Library as not configured.
-- Video is `NOT_CONNECTED` until `XAI_API_KEY` is set, then `CONFIGURED`. Configured is not a generated clip.
+- Video is `HYPIT_NOT_CONNECTED` until `HYPIT_BASE_URL` answers. A configured URL is not a generated clip.
 - Creating a brand, storing an observation, and ranking it does not require any ad account.
 
 ## Troubleshooting
@@ -121,7 +146,8 @@ npm run build
 | --- | --- |
 | Migrations say `DATABASE_URL not set` | `npm run db:migrate` reads `.env` and does not override a variable already in the shell. Put the URL in `.env`, or export it. |
 | Health says the worker is stopped | Start `npm run worker` on a machine that can reach the same database. |
-| Studio says the model is unavailable | `XAI_API_KEY` is missing or the provider rejected the request. No file was stored. |
+| Studio says Hypit is not connected | `HYPIT_BASE_URL` is empty, or the bridge is not running. No video was stored. |
+| Studio says the image model is unavailable | `XAI_API_KEY` is missing or the provider rejected the request. No image was stored. |
 | Invite says nobody was notified | `EMAIL_API_URL` or `EMAIL_API_KEY` is missing, or the provider returned an error. The row is still in `invites`. |
 | Publish button does not create a campaign | The account is not healthy, or a required id (page, budget, country, link, or uploaded media id) is missing. |
 | Build works and the site is blank | Confirm `/assets/*` is served as JavaScript, not HTML. See [DEPLOYMENT.md](DEPLOYMENT.md). |

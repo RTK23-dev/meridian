@@ -78,6 +78,34 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     return `semantic:${vector.dimensions}`;
   }
   if (job.job_type === "market.collect") {
+    const pageUrl = typeof payload.url === "string" ? payload.url.trim() : "";
+    if (pageUrl && job.brand_id) {
+      const { fetchPublicText } = await import("../sources/fetch-page.server.ts");
+      const { quarantineExternalText } = await import("../ingestion/quarantine.ts");
+      try {
+        const page = await fetchPublicText(pageUrl);
+        const clean = quarantineExternalText(page.text);
+        if (!clean.text) throw new Error("The page had no usable text after instruction-like lines were removed.");
+        await sql`
+          insert into source_documents (id, organization_id, brand_id, url, status, excerpt, created_by)
+          values (
+            ${crypto.randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${page.url}, 'stored',
+            ${clean.text.slice(0, 12000)}, 'market.collect'
+          )
+        `;
+        return "stored";
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "The page could not be read.";
+        await sql`
+          insert into source_documents (id, organization_id, brand_id, url, status, error, created_by)
+          values (
+            ${crypto.randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${pageUrl}, 'failed',
+            ${message.slice(0, 400)}, 'market.collect'
+          )
+        `;
+        return message;
+      }
+    }
     const library = collectAdLibrarySource();
     const connection = collectMarket("ad_library");
     if (job.brand_id) {

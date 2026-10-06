@@ -112,7 +112,7 @@ try {
   await page.locator("dd").filter({ hasText: /AUTO_APPROVE|HUMAN_REVIEW|REJECT/ }).first().waitFor();
   const firstConstraints = await page.getByTestId("brief-constraints").innerText();
   await page.locator("select[name='imageProvider']").selectOption("test:image");
-  await page.locator("select[name='videoProvider']").selectOption("test:video");
+  await page.locator("select[name='videoProvider']").selectOption("hypit");
   await page.getByRole("button", { name: "Generate 3 image + 3 video variants" }).click();
   await page.getByRole("img", { name: /test:image/ }).first().waitFor({ timeout: 60000 });
   await page.getByText("2.5s").first().waitFor();

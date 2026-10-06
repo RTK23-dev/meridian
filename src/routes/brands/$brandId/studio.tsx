@@ -197,11 +197,10 @@ function Studio({ brandId }: { brandId: string }) {
                   <option value="xai:image">xai:image</option>
                 </SelectInput>
               </Field>
-              <Field label="Video provider" hint="test:video is a fixture. xai:video stores a clip only after xAI returns one.">
-                <SelectInput name="videoProvider" defaultValue="" required>
+              <Field label="Video" hint="Hypit renders the approved brief. It is not connected until HYPIT_BASE_URL is set. No clip is invented.">
+                <SelectInput name="videoProvider" defaultValue="hypit" required>
                   <option value="" disabled>Choose</option>
-                  <option value="test:video">test:video</option>
-                  <option value="xai:video">xai:video</option>
+                  <option value="hypit">hypit</option>
                 </SelectInput>
               </Field>
               <div className="md:col-span-2">
