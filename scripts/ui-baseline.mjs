@@ -100,9 +100,20 @@ async function prepareFixtureWorkspace(page) {
   }
 
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
-  await page.waitForTimeout(700);
-  await page.getByRole("heading", { name: "Workspace overview", exact: true })
-    .waitFor({ state: "visible", timeout: 10_000 });
+  const overviewHeading = page.getByRole("heading", { name: "Workspace overview", exact: true });
+  try {
+    await overviewHeading.waitFor({ state: "visible", timeout: 15_000 });
+  } catch {
+    // Workspace creation can complete before the bootstrap query finishes refreshing
+    // its signed-in cache. A full navigation asks for the persisted workspace again.
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 45_000 });
+    try {
+      await overviewHeading.waitFor({ state: "visible", timeout: 15_000 });
+    } catch {
+      const bodyText = await page.locator("body").innerText().catch(() => "<page body unavailable>");
+      throw new Error(`UI baseline could not load the workspace overview after creating the fixture workspace. Page content: ${bodyText.slice(0, 600)}`);
+    }
+  }
   const linkedBrandId = await page.locator('a[href^="/brands/"]').evaluateAll((anchors) =>
     anchors.map((anchor) => new URL(anchor.href).pathname.match(/^\/brands\/([^/]+)/)?.[1])
       .find((value) => value && value !== "new"),

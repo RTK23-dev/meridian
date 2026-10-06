@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { BrandNav } from "@/components/brand-nav";
 import { useBusy } from "@/components/gate";
-import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, SelectInput, Sheet, SheetContent, SheetDescription, SheetTitle, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import {
   addCompetitor,
@@ -39,6 +39,14 @@ function parseAnalysis(value: string): AnalysisView | null {
   try { return JSON.parse(value) as AnalysisView; } catch { return null; }
 }
 
+function researchAdState(ad: { analysisStatus: string; reviewRequired: boolean; transcriptStatus: string; mediaStatus: string }) {
+  if (ad.analysisStatus === "review" || (ad.analysisStatus === "analyzed" && ad.reviewRequired)) return "needs review";
+  if (ad.analysisStatus === "analyzed") return "analyzed";
+  if (ad.transcriptStatus === "completed") return "transcribed";
+  if (ad.mediaStatus === "stored") return "media stored";
+  return "collected";
+}
+
 function Page() {
   const { brandId } = Route.useParams();
   return (
@@ -57,6 +65,10 @@ function MarketPage({ brandId }: { brandId: string }) {
   const [captureBefore, setCaptureBefore] = useState("");
   const [minimumDuration, setMinimumDuration] = useState("");
   const [maximumDuration, setMaximumDuration] = useState("");
+  const [researchView, setResearchView] = useState<"gallery" | "table">("gallery");
+  const [researchState, setResearchState] = useState("all");
+  const [advertiserFilter, setAdvertiserFilter] = useState("");
+  const [selectedAdId, setSelectedAdId] = useState<string | null>(null);
   const busy = useBusy([qk.market(brandId), qk.intelligence(brandId), qk.opportunities(brandId), qk.studio(brandId)]);
 
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
@@ -76,6 +88,9 @@ function MarketPage({ brandId }: { brandId: string }) {
     };
     const corpus = `${ad.advertiser} ${ad.copy} ${ad.headline} ${ad.transcript} ${JSON.stringify(analysis ?? {})}`.toLowerCase();
     if (query && !corpus.includes(query)) return false;
+    if (advertiserFilter.trim() && !ad.advertiser.toLowerCase().includes(advertiserFilter.trim().toLowerCase())) return false;
+    const state = researchAdState(ad);
+    if (researchState !== "all" && state !== researchState) return false;
     if (researchField !== "all" && !(values[researchField] ?? "").trim()) return false;
     const captureTime = Date.parse(ad.capturedAt);
     if (captureAfter && captureTime < Date.parse(`${captureAfter}T00:00:00`)) return false;
@@ -84,6 +99,8 @@ function MarketPage({ brandId }: { brandId: string }) {
     if (maximumDuration && (!ad.durationMs || ad.durationMs > Number(maximumDuration) * 1000)) return false;
     return !analysis || ad.confidence >= Number(minimumConfidence);
   });
+  const selectedAd = market.researchAds.find((ad) => ad.id === selectedAdId) ?? null;
+  const selectedAnalysis = selectedAd ? parseAnalysis(selectedAd.analysis) : null;
 
   return (
     <div className="space-y-8">
@@ -141,9 +158,11 @@ function MarketPage({ brandId }: { brandId: string }) {
         </div>
       </Panel>
       <Panel>
-        <h2 className="font-display text-2xl">Analyzed ads</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-2xl">Analyzed ads</h2><p className="text-sm text-muted">Showing saved source, media, transcript, and analysis states.</p></div><div className="flex gap-2" aria-label="Research display mode"><Button type="button" variant={researchView === "gallery" ? "primary" : "secondary"} aria-pressed={researchView === "gallery"} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant={researchView === "table" ? "primary" : "secondary"} aria-pressed={researchView === "table"} onClick={() => setResearchView("table")}>Table</Button></div></div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Search"><TextInput value={researchText} onChange={(event) => setResearchText(event.currentTarget.value)} placeholder="Advertiser, transcript, hook…" /></Field>
+          <Field label="Advertiser"><TextInput value={advertiserFilter} onChange={(event) => setAdvertiserFilter(event.currentTarget.value)} placeholder="Filter advertiser" /></Field>
+          <Field label="Research state"><SelectInput value={researchState} onChange={(event) => setResearchState(event.currentTarget.value)}><option value="all">All states</option><option value="collected">Collected</option><option value="media stored">Media stored</option><option value="transcribed">Transcribed</option><option value="analyzed">Analyzed</option><option value="needs review">Needs review</option></SelectInput></Field>
           <Field label="Has field"><SelectInput value={researchField} onChange={(event) => setResearchField(event.currentTarget.value)}><option value="all">Any analysis</option><option value="topic">Topic</option><option value="openingMove">Opening move</option><option value="hookMechanism">Hook mechanism</option><option value="hook">Hook</option><option value="structure">Structure</option><option value="cta">CTA</option><option value="segmentRole">Segment role</option></SelectInput></Field>
           <Field label="Minimum analysis confidence"><SelectInput value={minimumConfidence} onChange={(event) => setMinimumConfidence(event.currentTarget.value)}><option value="0">Any confidence</option><option value="0.65">0.65</option><option value="0.8">0.80</option></SelectInput></Field>
           <Field label="Captured after"><TextInput type="date" value={captureAfter} onChange={(event) => setCaptureAfter(event.currentTarget.value)} /></Field>
@@ -152,22 +171,33 @@ function MarketPage({ brandId }: { brandId: string }) {
           <Field label="Maximum duration (seconds)"><TextInput type="number" min="0" step="1" value={maximumDuration} onChange={(event) => setMaximumDuration(event.currentTarget.value)} /></Field>
         </div>
         <p className="mt-3 text-sm text-muted">Showing {visibleResearch.length} of {market.researchAds.length} recent source records. Filter labels apply to JEV Research classifications.</p>
-        {visibleResearch.length ? <ul className="mt-4 space-y-4">{visibleResearch.map((ad) => {
-          const analysis = parseAnalysis(ad.analysis);
-          return <li key={ad.id} className="border-t border-line pt-4">
-            <div className="flex flex-wrap items-start justify-between gap-2"><div><a className="font-semibold underline" href={ad.url} target="_blank" rel="noreferrer">{ad.advertiser}</a><p className="text-xs text-muted">Source {ad.externalId} · Captured {new Date(ad.capturedAt).toLocaleDateString()} · Meta Ad Library · {ad.mediaType} · media {ad.mediaStatus} · transcript {ad.transcriptStatus} · analysis {ad.analysisStatus}</p></div><p className="text-xs text-muted">{ad.durationMs ? `${(ad.durationMs / 1000).toFixed(1)} sec` : "duration unavailable"} · {ad.mediaBytes ? `${Math.round(ad.mediaBytes / 1024)} KB` : "media bytes unavailable"}</p></div>
-            {analysis ? <>
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">{([
-                ["Topic", analysis.topic], ["Opening move", analysis.openingMove], ["Hook mechanism", analysis.hookMechanism], ["Hook", analysis.hook],
-                ["Structure", analysis.structure], ["Evidence", analysis.evidenceOffered], ["Emotional appeal", analysis.emotionalAppeal], ["Advice specificity", analysis.adviceSpecificity], ["CTA", analysis.cta],
-              ] as [string, AnalysisFieldView | undefined][]).map(([label, field]) => <li key={label} className="rounded border border-line p-2 text-sm"><strong>{label}:</strong> {field?.value ?? "unclear"}<p className="text-xs text-muted">Confidence {(field?.confidence ?? 0).toFixed(2)} · evidence segments {(field?.evidence ?? []).join(", ") || "none"}</p></li>)}</ul>
-              <p className="text-xs text-muted">JEV Research confidence {ad.confidence.toFixed(2)} · {ad.reviewRequired ? "review required" : "high-confidence structured analysis"} · {ad.provider}/{ad.model} · {ad.schemaVersion}</p>
-              <p className="mt-2 text-sm">{ad.transcript || ad.copy}</p>
-              <ul className="mt-2 space-y-1">{(analysis.segments ?? []).map((segment) => <li key={segment.id} className="text-xs text-muted"><strong>{segment.role ?? "unclear"}</strong>{segment.startMs != null ? ` ${segment.startMs}–${segment.endMs ?? "?"} ms` : " · time unavailable"} · confidence {(segment.confidence ?? 0).toFixed(2)} · {segment.text}</li>)}</ul>
-              {analysis.claims?.length ? <ul className="mt-2 space-y-1">{analysis.claims.map((claim, index) => <li key={`${claim.type}:${index}`} className="text-xs text-muted"><strong>{claim.type ?? "claim"}:</strong> {claim.text} · evidence {(claim.evidence ?? []).join(", ") || "none"}</li>)}</ul> : null}
-            </> : <p className="mt-2 text-sm text-muted">{ad.copy || ad.headline || "No source copy available."} {ad.error ? `· ${ad.error}` : "· No analysis is shown unless media and transcript evidence are available."}</p>}
-          </li>;
-        })}</ul> : <p className="mt-3 text-sm text-muted">No ads match these filters.</p>}
+        {visibleResearch.length ? <ul className={`mt-4 ${researchView === "gallery" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-3" : "divide-y divide-line"}`}>{visibleResearch.map((ad) => (
+          <li key={ad.id} className={researchView === "gallery" ? "min-w-0 rounded-lg border border-line p-4" : "grid gap-2 py-3 md:grid-cols-[minmax(10rem,1fr)_10rem_10rem_8rem] md:items-center"}>
+            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><a className="font-semibold underline" href={ad.url} target="_blank" rel="noreferrer">{ad.advertiser}</a><span className="rounded-full border border-line px-2 py-0.5 text-xs">{researchAdState(ad)}</span></div><p className="mt-1 text-xs text-muted">Meta Ad Library · {ad.mediaType} · captured {new Date(ad.capturedAt).toLocaleDateString()}</p>{researchView === "gallery" ? <p className="mt-3 line-clamp-3 text-sm">{ad.copy || ad.headline || "No source copy available."}</p> : null}</div>
+            <p className="text-xs text-muted">Media {ad.mediaStatus} · transcript {ad.transcriptStatus}</p>
+            <p className="text-xs text-muted">{ad.durationMs ? `${(ad.durationMs / 1000).toFixed(1)} sec` : "duration unavailable"} · confidence {ad.confidence.toFixed(2)}</p>
+            <Button type="button" variant="secondary" onClick={() => setSelectedAdId(ad.id)}>View analysis</Button>
+          </li>
+        ))}</ul> : <p className="mt-3 text-sm text-muted">No ads match these filters.</p>}
+        <Sheet open={!!selectedAd} onOpenChange={(open) => { if (!open) setSelectedAdId(null); }}>
+          <SheetContent className="left-auto right-0 top-0 bottom-0 max-h-none w-full max-w-2xl rounded-none border-l border-t-0">
+            {selectedAd ? <>
+              <SheetTitle className="font-display text-2xl">{selectedAd.advertiser || "Research ad"}</SheetTitle>
+              <SheetDescription>Source {selectedAd.externalId} · Meta Ad Library · {new Date(selectedAd.capturedAt).toLocaleDateString()}</SheetDescription>
+              <div className="mt-5 space-y-5">
+                <p className="text-xs text-muted">Media {selectedAd.mediaStatus} · transcript {selectedAd.transcriptStatus} · analysis {selectedAd.analysisStatus} · duration {selectedAd.durationMs ? `${(selectedAd.durationMs / 1000).toFixed(1)} sec` : "unavailable"}</p>
+                {selectedAnalysis ? <>
+                  <p className="text-sm">{selectedAd.transcript || selectedAd.copy || "No transcript or source copy stored."}</p>
+                  <dl className="grid gap-2 sm:grid-cols-2">{([ ["Topic", selectedAnalysis.topic], ["Opening move", selectedAnalysis.openingMove], ["Hook mechanism", selectedAnalysis.hookMechanism], ["Hook", selectedAnalysis.hook], ["Structure", selectedAnalysis.structure], ["Evidence offered", selectedAnalysis.evidenceOffered], ["Emotional appeal", selectedAnalysis.emotionalAppeal], ["Advice specificity", selectedAnalysis.adviceSpecificity], ["CTA", selectedAnalysis.cta] ] as [string, AnalysisFieldView | undefined][]).map(([label, field]) => <div key={label} className="rounded border border-line p-3"><dt className="text-xs font-semibold uppercase text-muted">{label}</dt><dd className="mt-1 text-sm">{field?.value ?? "unclear"}</dd><dd className="mt-1 text-xs text-muted">Confidence {(field?.confidence ?? 0).toFixed(2)} · evidence {(field?.evidence ?? []).join(", ") || "none"}</dd></div>)}</dl>
+                  <p className="text-xs text-muted">JEV Research confidence {selectedAd.confidence.toFixed(2)} · {selectedAd.reviewRequired ? "review required" : "no review flagged"} · {selectedAd.provider}/{selectedAd.model} · schema {selectedAd.schemaVersion}</p>
+                  <div><h3 className="font-semibold">Transcript segments</h3><ul className="mt-2 space-y-2">{(selectedAnalysis.segments ?? []).map((segment, index) => <li key={segment.id ?? index} className="border-l-2 border-brass pl-3 text-sm"><strong>{segment.role ?? "unclear"}</strong>{segment.startMs != null ? ` · ${segment.startMs}–${segment.endMs ?? "?"} ms` : " · time unavailable"} · {segment.text}</li>)}</ul></div>
+                </> : <p className="text-sm text-muted">{selectedAd.copy || selectedAd.headline || "No source copy available."} {selectedAd.error ? `· ${selectedAd.error}` : "· Structured analysis is not available for this ad."}</p>}
+                {selectedAnalysis?.claims?.length ? <div><h3 className="font-semibold">Claims and evidence</h3><ul className="mt-2 space-y-2">{selectedAnalysis.claims.map((claim, index) => <li key={`${claim.type}:${index}`} className="text-sm"><strong>{claim.type ?? "Claim"}:</strong> {claim.text} · evidence {(claim.evidence ?? []).join(", ") || "none"}</li>)}</ul></div> : null}
+                {selectedAd.error ? <Notice>{selectedAd.error}</Notice> : null}
+              </div>
+            </> : null}
+          </SheetContent>
+        </Sheet>
       </Panel>
       <Panel>
         <h2 className="font-display text-2xl">Competitors</h2>

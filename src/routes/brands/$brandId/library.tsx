@@ -25,6 +25,11 @@ function Library({ brandId }: { brandId: string }) {
   const query = useLibraryQuery(brandId);
   const data = query.data ?? null;
   const [traceId, setTraceId] = useState<string | null>(null);
+  const [creativeSearch, setCreativeSearch] = useState("");
+  const [creativeStatus, setCreativeStatus] = useState("all");
+  const [creativeOrigin, setCreativeOrigin] = useState("all");
+  const [createdAfter, setCreatedAfter] = useState("");
+  const [createdBefore, setCreatedBefore] = useState("");
   const traceQuery = useTraceQuery(brandId, traceId);
   const trace = traceQuery.data ?? null;
   const [note, setNote] = useState<string | null>(null);
@@ -34,6 +39,16 @@ function Library({ brandId }: { brandId: string }) {
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!data) return <div role="status" aria-label="Loading library" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const canEdit = hasRole(data.role, "member");
+  const visibleCreatives = data.creatives.filter((item) => {
+    const queryText = `${item.title} ${item.hook} ${item.angle}`.toLowerCase();
+    if (creativeSearch.trim() && !queryText.includes(creativeSearch.trim().toLowerCase())) return false;
+    if (creativeStatus !== "all" && item.status !== creativeStatus) return false;
+    if (creativeOrigin !== "all" && item.origin !== creativeOrigin) return false;
+    const created = Date.parse(item.createdAt);
+    if (createdAfter && created < Date.parse(`${createdAfter}T00:00:00`)) return false;
+    if (createdBefore && created > Date.parse(`${createdBefore}T23:59:59.999`)) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-8">
@@ -155,15 +170,25 @@ function Library({ brandId }: { brandId: string }) {
         ) : null}
       </Panel>
       {data.creatives.length === 0 ? <Panel>No brand creatives yet. Score an opportunity, brief it, and save a script. Or record one you already ran.</Panel> : (
-        <ul className="space-y-3">
-          {data.creatives.map((item) => (
+        <section aria-labelledby="library-creatives-title" className="space-y-4">
+        <div><h2 id="library-creatives-title" className="font-display text-2xl">Creative library</h2><p className="text-sm text-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Field label="Search"><TextInput value={creativeSearch} onChange={(event) => setCreativeSearch(event.currentTarget.value)} placeholder="Title, hook, angle" /></Field>
+          <Field label="Status"><SelectInput value={creativeStatus} onChange={(event) => setCreativeStatus(event.currentTarget.value)}><option value="all">All statuses</option>{[...new Set(data.creatives.map((item) => item.status))].map((status) => <option key={status} value={status}>{status}</option>)}</SelectInput></Field>
+          <Field label="Origin"><SelectInput value={creativeOrigin} onChange={(event) => setCreativeOrigin(event.currentTarget.value)}><option value="all">All origins</option>{[...new Set(data.creatives.map((item) => item.origin))].map((origin) => <option key={origin} value={origin}>{origin}</option>)}</SelectInput></Field>
+          <Field label="Created after"><TextInput type="date" value={createdAfter} onChange={(event) => setCreatedAfter(event.currentTarget.value)} /></Field>
+          <Field label="Created before"><TextInput type="date" value={createdBefore} onChange={(event) => setCreatedBefore(event.currentTarget.value)} /></Field>
+        </div>
+        <p className="text-sm text-muted">Showing {visibleCreatives.length} of {data.creatives.length} creatives.</p>
+        {visibleCreatives.length ? <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {visibleCreatives.map((item) => (
             <li key={item.id} className="rounded-lg border border-line bg-panel p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <h2 className="font-display text-2xl">{item.title || item.hook}</h2>
+                <h3 className="font-display text-xl">{item.title || item.hook}</h3>
                 <span className="text-xs font-semibold uppercase tracking-widest text-brass">{item.status}</span>
               </div>
-              <p className="text-sm text-muted">{item.angle} · {item.origin}</p>
-              <p className="mt-2">{item.hook}</p>
+              <p className="text-sm text-muted">{item.angle} · {item.origin} · {new Date(item.createdAt).toLocaleDateString()}</p>
+              <p className="mt-2 line-clamp-3">{item.hook}</p>
               <Button
                 className="mt-3"
                 variant="quiet"
@@ -175,7 +200,8 @@ function Library({ brandId }: { brandId: string }) {
               </Button>
             </li>
           ))}
-        </ul>
+        </ul> : <Panel>No creatives match these filters.</Panel>}
+        </section>
       )}
       {trace && traceId ? (
         <Panel>
