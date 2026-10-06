@@ -141,7 +141,6 @@ function pipelineSteps(snapshot: MachineSnapshot, filled: number): PipelineStep[
   const researchCount = snapshot.counts.observations + snapshot.counts.documents;
   const hasMarket = researchCount > 0;
   const hasOpportunity = snapshot.counts.openOpportunities > 0;
-  const hasCreative = snapshot.counts.creatives > 0 || snapshot.operating.generationRuns > 0;
   const hasReview = snapshot.counts.reviews > 0;
   const hasPublish = snapshot.operating.publishedTests > 0;
   const hasPerformance = snapshot.counts.performanceRows > 0;
@@ -151,14 +150,14 @@ function pipelineSteps(snapshot: MachineSnapshot, filled: number): PipelineStep[
     { label: "Research", to: "/brands/$brandId/market", count: researchCount },
     { label: "Opportunity", to: "/brands/$brandId/opportunities", count: snapshot.counts.openOpportunities },
     { label: "Decision", to: "/brands/$brandId/opportunities", count: snapshot.counts.openOpportunities },
-    { label: "Brief", to: "/brands/$brandId/studio", count: hasCreative ? snapshot.counts.creatives : null },
+    { label: "Brief", to: "/brands/$brandId/studio", count: null },
     { label: "Studio", to: "/brands/$brandId/studio", count: snapshot.operating.generationRuns },
     { label: "Review", to: "/brands/$brandId/studio", count: snapshot.counts.reviews },
     { label: "Publish", to: "/brands/$brandId/studio", count: snapshot.operating.publishedTests },
     { label: "Performance", to: "/brands/$brandId/learning", count: snapshot.counts.performanceRows },
     { label: "Learning", to: "/brands/$brandId/learning", count: snapshot.counts.patterns },
   ];
-  const completed = [hasMarket, hasMarket, hasOpportunity, hasOpportunity, hasCreative, snapshot.operating.generationRuns > 0, hasReview, hasPublish, hasPerformance, hasLearning];
+  const completed = [hasMarket, hasMarket, hasOpportunity, hasOpportunity, snapshot.counts.creatives > 0, snapshot.operating.generationRuns > 0, hasReview, hasPublish, hasPerformance, hasLearning];
   const firstPending = completed.findIndex((done) => !done);
   return candidates.map((step, index) => ({
     ...step,
