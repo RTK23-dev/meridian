@@ -94,18 +94,25 @@ async function prepareFixtureWorkspace(page) {
   }
   await page.getByRole("button", { name: "Account and appearance settings", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
 
+  let createdFixtureWorkspace = false;
   if (await page.getByRole("button", { name: "Create workspace", exact: true }).count()) {
-    await page.locator("form input").first().fill("Meridian UI baseline fixture");
+    await page.getByLabel("Workspace name", { exact: true }).fill("Meridian UI baseline fixture");
     await page.getByRole("button", { name: "Create workspace", exact: true }).click();
     try {
       await page.getByRole("heading", { name: "Workspace overview", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      createdFixtureWorkspace = true;
     } catch {
       const bodyText = await page.locator("body").innerText().catch(() => "<page body unavailable>");
       throw new Error(`UI baseline could not create its fixture workspace. Page content: ${bodyText.slice(0, 1_200)}`);
     }
   }
 
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  // Creating the workspace awaits the refreshed bootstrap data and waits for the
+  // overview above. Keep that confirmed page state instead of issuing a second
+  // bootstrap request that can race the just-completed onboarding mutation.
+  if (!createdFixtureWorkspace) {
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  }
   const overviewHeading = page.getByRole("heading", { name: "Workspace overview", exact: true });
   try {
     await overviewHeading.waitFor({ state: "visible", timeout: 15_000 });
