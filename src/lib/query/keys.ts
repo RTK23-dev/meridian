@@ -14,6 +14,7 @@ export const qk = {
   calibration: (brandId: string) => ["calibration", brandId] as const,
   integrations: (organizationId: string) => ["integrations", organizationId] as const,
   jobs: (organizationId: string) => ["jobs", organizationId] as const,
+  usage: (organizationId: string) => ["usage", organizationId] as const,
 };
 
 export function userScopedQueryKey(userId: string | null | undefined, key: readonly unknown[]) {

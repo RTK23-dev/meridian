@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
-import { Activity, Bell, Brain, ChevronDown, FlaskConical, House, Layers3, Menu, Moon, Package, Search, Settings, Sparkles, Sun, WandSparkles, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, Bell, Brain, ChevronDown, FlaskConical, House, Layers3, Menu, Moon, Package, Search, Settings, Sparkles, Sun, WandSparkles, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { useWorkspace } from "@/components/workspace";
@@ -17,11 +17,12 @@ type NavLink = { label: string; to: string; icon: LucideIcon; badge?: number };
 const PAGE_NAMES: Record<string, string> = {
   "": "Overview", market: "Market research", intelligence: "Intelligence", opportunities: "Opportunities",
   reviews: "Reviews", studio: "Studio", library: "Library", learning: "Learning", brain: "Brand brain", products: "Products",
-  integrations: "Integrations", settings: "Settings", jobs: "Jobs & health", new: "New brand",
+  integrations: "Integrations", settings: "Settings", jobs: "Jobs & health", usage: "Usage & cost", new: "New brand",
 };
 
 const WORKSPACE_LINKS: NavLink[] = [
   { label: "Jobs & health", to: "/jobs", icon: Activity },
+  { label: "Usage & cost", to: "/usage", icon: BarChart3 },
   { label: "Integrations", to: "/integrations", icon: Activity },
   { label: "Settings", to: "/settings", icon: Settings },
 ];
@@ -104,6 +105,7 @@ export function Shell({ children }: { children: ReactNode }) {
     setPaletteOpen(false);
     if (to === "/") { void navigate({ to: "/" }); return; }
     if (to === "/integrations") { void navigate({ to: "/integrations" }); return; }
+    if (to === "/usage") { void navigate({ to: "/usage" }); return; }
     if (to === "/settings") { void navigate({ to: "/settings" }); return; }
     if (to === "/brands/new") { void navigate({ to: "/brands/new" }); return; }
     const match = to.match(/^\/brands\/([^/]+)(?:\/(.*))?$/);
@@ -185,6 +187,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {[["Overview", `/brands/${brandId}`], ["Market", `/brands/${brandId}/market`], ["Intelligence", `/brands/${brandId}/intelligence`], ["Opportunities", `/brands/${brandId}/opportunities`], ["Reviews", `/brands/${brandId}/reviews`], ["Studio", `/brands/${brandId}/studio`], ["Library", `/brands/${brandId}/library`], ["Learning", `/brands/${brandId}/learning`], ["Brand brain", `/brands/${brandId}/brain`], ["Products", `/brands/${brandId}/products`]].map(([label, to]) => <Command.Item key={to} value={label} onSelect={() => go(to)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">{label}</Command.Item>)}
           </> : null}
           <Command.Item value="Workspace overview" onSelect={() => go("/")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Workspace overview</Command.Item>
+          <Command.Item value="Usage and cost" onSelect={() => go("/usage")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Usage &amp; cost</Command.Item>
           <Command.Item value="New brand" onSelect={() => go("/brands/new")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">New brand</Command.Item>
           <Command.Item value="Settings" onSelect={() => go("/settings")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Settings</Command.Item>
           <Command.Item value="Integrations" onSelect={() => go("/integrations")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Integrations</Command.Item>

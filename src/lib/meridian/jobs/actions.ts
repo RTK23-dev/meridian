@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { hasRole, isRole } from "@/lib/meridian/access";
+import { summarizeUsage } from "@/lib/meridian/observability/usage";
 
 function inputText(value: unknown, name: string): string {
   if (typeof value !== "string" || !value.trim() || value.trim().length > 100) throw new Error(`${name} is required.`);
@@ -88,4 +89,48 @@ export const cancelJob = createServerFn({ method: "POST" })
     await sql`insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
       values (${crypto.randomUUID()}, ${data.organizationId}, null, ${context.userId}, 'job.cancel_requested', 'job', ${rows[0].id}, '{}')`;
     return { status: "cancel_requested" as const };
+  });
+
+export const listUsage = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ organizationId: inputText((input as { organizationId?: unknown })?.organizationId, "Workspace") }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await requireAdmin(context.userId, data.organizationId);
+    const rows = await sql<Record<string, unknown>>`
+      select operation, tokens, cost_cents, created_at from model_runs
+      where organization_id = ${data.organizationId}
+      order by created_at desc limit 20_000
+    `;
+    const runs = rows.map((row) => ({
+      operation: String(row.operation ?? "unknown"),
+      tokens: row.tokens == null ? null : Number(row.tokens),
+      costCents: row.cost_cents == null ? null : Number(row.cost_cents),
+      createdAt: String(row.created_at),
+    }));
+    const byDay = new Map<string, { tokens: number; knownCost: number; missingCost: number }>();
+    const byOperation = new Map<string, { tokens: number; knownCost: number; missingCost: number }>();
+    for (const run of runs) {
+      const day = run.createdAt.slice(0, 10);
+      const total = byDay.get(day) ?? { tokens: 0, knownCost: 0, missingCost: 0 };
+      total.tokens += run.tokens ?? 0;
+      if (run.costCents == null) total.missingCost += 1;
+      else total.knownCost += run.costCents;
+      byDay.set(day, total);
+
+      const operation = byOperation.get(run.operation) ?? { tokens: 0, knownCost: 0, missingCost: 0 };
+      operation.tokens += run.tokens ?? 0;
+      if (run.costCents == null) operation.missingCost += 1;
+      else operation.knownCost += run.costCents;
+      byOperation.set(run.operation, operation);
+    }
+    return {
+      usage: summarizeUsage(runs),
+      runs: runs.length,
+      byOperation: [...byOperation.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([operation, value]) => ({
+        operation, tokens: value.tokens, costCents: value.missingCost === 0 ? value.knownCost : null,
+      })),
+      daily: [...byDay.entries()].sort(([left], [right]) => right.localeCompare(left)).slice(0, 90).map(([day, value]) => ({
+        day, tokens: value.tokens, costCents: value.missingCost === 0 ? value.knownCost : null,
+      })),
+    };
   });

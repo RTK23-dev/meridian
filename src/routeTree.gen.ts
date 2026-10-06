@@ -16,6 +16,7 @@ import { Route as InviteRouteImport } from './routes/invite'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as UsageRouteImport } from './routes/usage'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as BrandsNewRouteImport } from './routes/brands/new'
 import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$assetId'
@@ -66,6 +67,11 @@ const LoginRoute = LoginRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UsageRoute = UsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/usage': typeof UsageRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -184,6 +191,7 @@ export interface FileRoutesByTo {
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/usage': typeof UsageRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -210,6 +218,7 @@ export interface FileRoutesById {
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/usage': typeof UsageRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof BrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/login'
     | '/settings'
+    | '/usage'
     | '/api/health'
     | '/brands/new'
     | '/api/assets/$assetId'
@@ -262,6 +272,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/login'
     | '/settings'
+    | '/usage'
     | '/api/health'
     | '/brands/new'
     | '/api/assets/$assetId'
@@ -287,6 +298,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/login'
     | '/settings'
+    | '/usage'
     | '/api/health'
     | '/brands/new'
     | '/api/assets/$assetId'
@@ -313,6 +325,7 @@ export interface RootRouteChildren {
   JobsRoute: typeof JobsRoute
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
+  UsageRoute: typeof UsageRoute
   ApiHealthRoute: typeof ApiHealthRoute
   BrandsNewRoute: typeof BrandsNewRoute
   ApiAssetsAssetIdRoute: typeof ApiAssetsAssetIdRoute
@@ -380,6 +393,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/usage': {
+      id: '/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof UsageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/health': {
@@ -505,6 +525,7 @@ const rootRouteChildren: RootRouteChildren = {
   JobsRoute: JobsRoute,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
+  UsageRoute: UsageRoute,
   ApiHealthRoute: ApiHealthRoute,
   BrandsNewRoute: BrandsNewRoute,
   ApiAssetsAssetIdRoute: ApiAssetsAssetIdRoute,
