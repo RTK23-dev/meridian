@@ -17,6 +17,7 @@ Not in this beta: a live Meta round-trip, a licensed ad-intelligence feed, or me
 
 ## 0.1.0-beta.3 — 2026-10-06
 
+
 JEV Research now collects and analyzes external Meta video-ad evidence as a research layer. It does not replace or gate JEV decisions.
 
 - Forms share typed browser/server validation for market collection, competitor records, creative observations, manual performance, paused publishing, performance schedules, and Studio generation choices. Field errors and unsaved state appear before submission; invalid calendar dates are rejected.
