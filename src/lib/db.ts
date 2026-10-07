@@ -1,7 +1,7 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { resolveDbSource, type DbSource } from "./db-source.ts";
 
-/** Which database backend is active. */
-export type DbSource = "neon" | "pglite";
+export type { DbSource };
 
 // An empty/whitespace DATABASE_URL (an easy misconfig in deploy UIs) must mean
 // "unset" — otherwise production would silently run on the PGLite fallback.
@@ -14,9 +14,13 @@ const databaseUrl =
  * Active backend: real **Neon** when `DATABASE_URL` is set (deployed / configured
  * sandbox), otherwise a local embedded **PGLite** (Postgres compiled to WASM) so
  * the app has a working database even with nothing configured — the live preview
- * included. Swap in Neon later by just setting `DATABASE_URL`; no code changes.
+ * included. Production and published deploys refuse the embedded fallback.
  */
-export const dbSource: DbSource = databaseUrl ? "neon" : "pglite";
+export const dbSource: DbSource = resolveDbSource({
+  DATABASE_URL: typeof process !== "undefined" ? process.env.DATABASE_URL : undefined,
+  NODE_ENV: typeof process !== "undefined" ? process.env.NODE_ENV : undefined,
+  GROK_PROJECT_ID: typeof process !== "undefined" ? process.env.GROK_PROJECT_ID : undefined,
+});
 
 /**
  * Minimal shared SQL surface, satisfied by both Neon and PGLite. Both the
