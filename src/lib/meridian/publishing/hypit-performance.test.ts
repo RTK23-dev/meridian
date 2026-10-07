@@ -74,8 +74,8 @@ const priors = [
   ...[0, 1, 2, 3].map((index) => creative(`c-offer-${index}`, "offer")),
 ];
 const priorRows = [
-  row("c-demonstration-0", 80),
-  row("c-demonstration-1", 80),
+  row("c-demonstration-0", 20),
+  row("c-demonstration-1", 20),
   ...[0, 1, 2, 3].map((index) => row(`c-offer-${index}`, 20)),
 ];
 
