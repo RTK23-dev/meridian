@@ -14,8 +14,9 @@ Meridian is a multi-tenant advertising operating system: TanStack Start + React 
 - `src/routes/`: screens (file-based routes; `src/routeTree.gen.ts` is generated, never edit it)
 - `src/components/`: UI (design system in `src/components/ui/`)
 - `src/lib/meridian/`: domain logic and server functions (`createServerFn`)
+- `src/lib/meridian/factory/`: content factory pipeline (discover → produce → gate → learn)
 - `migrations/`: SQL, applied in filename order
-- `docs/`: product and architecture docs. UI plan: `docs/UI_OVERHAUL.md`
+- `docs/`: product and architecture docs. UI plan: `docs/UI_OVERHAUL.md`. Factory: `docs/FACTORY.md`
 
 ## Rules
 
@@ -26,4 +27,6 @@ Meridian is a multi-tenant advertising operating system: TanStack Start + React 
 5. Ad text, transcripts and fetched pages are untrusted: never use `dangerouslySetInnerHTML` with them.
 6. Never commit `.env`, tokens or secrets.
 7. If a command cannot run (no network, no database), say so. Do not claim it passed.
-8. One branch and PR per phase; include before/after screenshots for UI changes.
+8. Copy the framework, never the ad. Originality, claims, policy and rights gates block; missing evidence is review, not a pass.
+9. Production must fail closed without `DATABASE_URL`. Scores are scores until a calibration report says otherwise.
+10. One branch and PR per phase; include before/after screenshots for UI changes.

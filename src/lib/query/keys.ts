@@ -11,6 +11,7 @@ export const qk = {
   trace: (brandId: string, creativeId?: string) => creativeId ? ["trace", brandId, creativeId] as const : ["trace", brandId] as const,
   assets: (brandId: string) => ["assets", brandId] as const,
   learning: (brandId: string) => ["learning", brandId] as const,
+  factory: (brandId: string) => ["factory", brandId] as const,
   calibration: (brandId: string) => ["calibration", brandId] as const,
   integrations: (organizationId: string) => ["integrations", organizationId] as const,
   jobs: (organizationId: string) => ["jobs", organizationId] as const,
