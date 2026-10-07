@@ -132,7 +132,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         {/* TAB 1: ACCOUNT DNA & MULTIMODAL */}
         <TabsContent value="account" className="space-y-6">
           {/* Platform Selector Bar */}
-          <div className="flex items-center gap-2 border-b border-line pb-4">
+          <div className="flex flex-wrap items-center gap-2 border-b border-line pb-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">Platform:</span>
             {["instagram", "tiktok", "youtube"].map((p) => (
               <Button
@@ -451,9 +451,9 @@ function Intelligence({ brandId }: { brandId: string }) {
                   </div>
 
                   {/* Actions (Enforce Role Check) */}
-                  <div className="flex items-center justify-between border-t border-line pt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
                     {canEdit ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {opp.status !== "accepted" && (
                           <Button
                             size="sm"

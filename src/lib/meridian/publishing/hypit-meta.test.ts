@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { publishHypitVideoToMeta } from "./hypit-meta.server.ts";
+import { publishHypitVideoToMeta } from "./hypit-meta.ts";
 import { publishPausedStages } from "../providers/live.ts";
 import type { Sql } from "../learning/store.ts";
 import type { Transport, TransportRequest } from "../providers/http.ts";

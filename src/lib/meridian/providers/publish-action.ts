@@ -119,7 +119,7 @@ export async function publishPausedForBrand(
     briefId: string; storageKey: string; sha256: string; byteLength: number;
   } | null = null;
   if (input.provider === "meta") {
-    const { publishHypitVideoToMeta } = await import("../publishing/hypit-meta.server.ts");
+    const { publishHypitVideoToMeta } = await import("../publishing/hypit-meta.ts");
     const video = await publishHypitVideoToMeta(sql, {
       organizationId: input.organizationId,
       brandId: input.brandId,
