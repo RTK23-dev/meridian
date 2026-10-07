@@ -47,3 +47,63 @@ export function spendWithinCap(spentCents: number, cap: SpendCap): boolean {
   if (cap.totalCents > 0 && spentCents >= cap.totalCents) return false;
   return true;
 }
+
+export type MetaRoundTripReceipt = {
+  ok: boolean;
+  hasConfirmedVideoUpload: boolean;
+  hasPausedCampaign: boolean;
+  hasSyncedPerformance: boolean;
+  missing: string[];
+};
+
+export async function checkMetaRoundTripReceipt(
+  sql: import("../learning/store.ts").Sql,
+  brandId: string,
+): Promise<MetaRoundTripReceipt> {
+  const uploads = await sql<{ count: string }>`
+    select count(*) as count from meta_video_uploads
+    where brand_id = ${brandId} and status = 'confirmed' and external_id != ''
+  `;
+  const hasConfirmedVideoUpload = Number(uploads[0]?.count ?? 0) > 0;
+
+  const campaigns = await sql<{ count: string }>`
+    select count(*) as count from provider_objects
+    where brand_id = ${brandId} and provider = 'meta' and object_type in ('campaign', 'ad', 'adset') and status = 'stored'
+  `;
+  const hasPausedCampaign = Number(campaigns[0]?.count ?? 0) > 0;
+
+  const performance = await sql<{ count: string }>`
+    select count(*) as count from performance_observations
+    where brand_id = ${brandId} and (source = 'meta' or platform = 'meta')
+  `;
+  const hasSyncedPerformance = Number(performance[0]?.count ?? 0) > 0;
+
+  const missing: string[] = [];
+  if (!hasConfirmedVideoUpload) missing.push("confirmed Meta MP4 video upload");
+  if (!hasPausedCampaign) missing.push("paused Meta campaign creation receipt");
+  if (!hasSyncedPerformance) missing.push("synced Meta performance observations");
+
+  const ok = hasConfirmedVideoUpload && hasPausedCampaign && hasSyncedPerformance;
+  return {
+    ok,
+    hasConfirmedVideoUpload,
+    hasPausedCampaign,
+    hasSyncedPerformance,
+    missing,
+  };
+}
+
+export async function assertAutopilotLevelAllowed(
+  sql: import("../learning/store.ts").Sql,
+  brandId: string,
+  level: FactoryLevel,
+): Promise<void> {
+  if (level <= 1) return;
+  const receipt = await checkMetaRoundTripReceipt(sql, brandId);
+  if (!receipt.ok) {
+    throw new Error(
+      `Autopilot level ${level} (${FACTORY_LEVEL_LABELS[level]}) requires a verified Meta test-account round trip. Missing evidence: ${receipt.missing.join(", ")}. Missing evidence is review, not a pass.`,
+    );
+  }
+}
+
