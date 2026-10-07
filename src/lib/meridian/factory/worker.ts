@@ -1,6 +1,8 @@
 import type { Sql } from "../learning/store.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import { CREATIVE_DNA_VERSION, dnaFromTranscript, type AdFormat, type CreativeDna } from "./creative-dna.ts";
+import { decodeVideoDna } from "./decode.ts";
+import type { ResearchSegment } from "../research/schema.ts";
 import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate } from "./gates.ts";
 import { adsMustPause } from "./kill-switch.ts";
 import { factoryStageAllowed, isFactoryStage } from "./pipeline.ts";
@@ -131,9 +133,11 @@ async function decodeStoredAds(sql: Sql, organizationId: string, brandId: string
     id: string;
     copy: string;
     media_duration_ms: number | null;
+    media_storage_key: string;
     transcript: string | null;
+    segments: string | null;
   }>`
-    select a.id, a.copy, a.media_duration_ms, t.transcript
+    select a.id, a.copy, a.media_duration_ms, a.media_storage_key, t.transcript, t.segments
     from research_ads a
     left join research_transcript_cache t on t.id = a.transcript_cache_id
     where a.organization_id = ${organizationId} and a.brand_id = ${brandId}
@@ -142,19 +146,51 @@ async function decodeStoredAds(sql: Sql, organizationId: string, brandId: string
   `;
   let count = 0;
   for (const ad of ads) {
-    const source = (ad.transcript || ad.copy || "").trim();
-    const dna = dnaFromTranscript({
-      adId: ad.id,
-      durationMs: ad.media_duration_ms ?? 0,
-      transcript: source,
-      format: guessFormat(source),
-    });
+    let dna: CreativeDna;
+    let videoBytes: Uint8Array | null = null;
+    if (ad.media_storage_key) {
+      const blob = await sql<{ body: string }>`
+        select body from asset_blobs
+        where storage_key = ${ad.media_storage_key} and organization_id = ${organizationId} and brand_id = ${brandId}
+        limit 1
+      `;
+      if (blob[0]?.body) {
+        videoBytes = new Uint8Array(Buffer.from(blob[0].body, "base64"));
+      }
+    }
+
+    if (videoBytes && videoBytes.byteLength > 0) {
+      let segments: ResearchSegment[] = [];
+      try {
+        if (ad.segments) segments = JSON.parse(ad.segments) as ResearchSegment[];
+      } catch {
+        segments = [];
+      }
+      dna = await decodeVideoDna({
+        adId: ad.id,
+        videoBytes,
+        durationMs: ad.media_duration_ms,
+        transcript: ad.transcript,
+        segments,
+      });
+    } else {
+      const source = (ad.transcript || ad.copy || "").trim();
+      dna = dnaFromTranscript({
+        adId: ad.id,
+        durationMs: ad.media_duration_ms ?? 0,
+        transcript: source,
+        format: guessFormat(source),
+        schema: CREATIVE_DNA_VERSION,
+      });
+    }
+
     const id = `dna:${brandId}:${ad.id}`;
+    const embSql = dna.embedding && dna.embedding.length > 0 ? `[${dna.embedding.join(",")}]` : null;
     await sql`
-      insert into creative_dna (id, organization_id, brand_id, research_ad_id, schema_version, record)
-      values (${id}, ${organizationId}, ${brandId}, ${ad.id}, ${CREATIVE_DNA_VERSION}, ${JSON.stringify(dna)})
+      insert into creative_dna (id, organization_id, brand_id, research_ad_id, schema_version, record, embedding)
+      values (${id}, ${organizationId}, ${brandId}, ${ad.id}, ${CREATIVE_DNA_VERSION}, ${JSON.stringify(dna)}, ${embSql})
       on conflict (organization_id, brand_id, research_ad_id, schema_version) do update
-        set record = excluded.record
+        set record = excluded.record, embedding = excluded.embedding
     `;
     count += 1;
   }
