@@ -1,5 +1,5 @@
 import type { Sql } from "../learning/store.ts";
-import { cosineSimilarity, type EmbeddingVector } from "../embeddings/provider.ts";
+import { cosineSimilarity } from "../embeddings/provider.ts";
 
 export type ConceptAd = {
   id: string;

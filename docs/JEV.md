@@ -54,6 +54,14 @@ Approved threshold versions are read on the next opportunity, brief, creative, i
 
 Research records are separate from `jev_decisions`: source ads, media hashes, transcript-cache entries, analysis runs and fields, transcript segments, and observed patterns live in the research tables. Analysis records identify provider, model, prompt/schema version, latency, token count, and representative analysis ids. Identical source/transcript/schema/model analyses are reused on retry. The source transcript is the only evidence the research analyst may classify; it may not infer visuals or outcomes. Transient job failures retry through the shared worker and eventually dead-letter; missing credentials and unavailable source media retain explicit statuses.
 
+## Bayesian Learning Engine & Recency Decay
+
+JEV's learning feedback loop updates Beta-binomial conjugate posteriors from observed performance:
+- **Metrics Tracked**: Paid metrics (`ctr`, `cvr`, `roas`) and organic metrics (`retention_3s`, `completion_rate`, `shares`).
+- **Recency-Decay Weighting**: Half-life time decay (`calculateDecayWeight`) discounts old observations, ensuring fresh signals drive the next brief without historical campaign bias.
+- **Hierarchical Cold-Start Priors**: Translates anonymized vertical baselines (`hierarchicalColdStartPrior`) into empirical priors, accelerating learning for new brands while preserving strict tenant isolation.
+- **FDR Filtering**: Uses Benjamini-Hochberg false-discovery rate control (`bhQValues`) to keep only statistically robust patterns.
+
 ## Tests
 
-`src/lib/meridian/loop.test.ts` and `evals/jev/cases.json` (loaded by `src/lib/meridian/jev/fixtures.test.ts`).
+`src/lib/meridian/loop.test.ts`, `src/lib/meridian/learning/decay.test.ts`, and `evals/jev/cases.json` (loaded by `src/lib/meridian/jev/fixtures.test.ts`).

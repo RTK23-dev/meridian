@@ -2,15 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PNG } from "pngjs";
 import { videoEngineById } from "../video/engine.ts";
-import { solidFrame } from "../video/inspect.ts";
 import {
   ASPECT_RATIOS,
-  buildTimelineComposition,
   renderTimelineToVideo,
 } from "./render.ts";
 import { templateFromDna, variantMatrix } from "./template.ts";
 import { dnaFromTranscript } from "./creative-dna.ts";
-import { compareOriginalityAgainstSource, originalityGate } from "./gates.ts";
+import { compareOriginalityAgainstSource } from "./gates.ts";
 
 test("Production Step 5: second VideoEngine adapter (timeline) is available and functional", async () => {
   const engine = videoEngineById("timeline");

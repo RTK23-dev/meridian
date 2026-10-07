@@ -494,7 +494,7 @@ function Studio({ brandId }: { brandId: string }) {
             </Field>
 
             {publishResults ? (
-              <div className="space-y-2 rounded-md border border-line bg-panel p-3 text-sm">
+              <div aria-live="polite" role="status" className="space-y-2 rounded-md border border-line bg-panel p-3 text-sm">
                 <p className="font-semibold">Publish Receipts:</p>
                 {publishResults.map((res) => (
                   <div key={res.channelId} className="flex items-center justify-between text-xs">

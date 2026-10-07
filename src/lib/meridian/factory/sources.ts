@@ -190,7 +190,7 @@ export class SensorTowerSourceAdapter implements SourceAdapter {
   }
 
   async fetchAds(
-    query: { niche?: string; advertiser?: string; limit?: number } = {},
+    _query: { niche?: string; advertiser?: string; limit?: number } = {},
     env: { SENSOR_TOWER_API_KEY?: string; LICENSED_AD_INTELLIGENCE_KEY?: string } = process.env,
   ): Promise<SourceFetchResult> {
     const check = await this.checkConnection(env);

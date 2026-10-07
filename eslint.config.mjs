@@ -33,13 +33,32 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": [
         "warn",
-        { allowConstantExport: true },
+        {
+          allowConstantExport: true,
+          allowExportNames: [
+            "useBusy",
+            "useWorkspace",
+            "useTheme",
+            "badgeVariants",
+            "buttonVariants",
+            "fieldVariants",
+            "feedbackVariants",
+            "errorText",
+            "cn",
+          ],
+        },
       ],
       "@typescript-eslint/no-unused-vars": [
         "warn",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
+    files: ["src/components/ui/**/*.{ts,tsx}", "src/components/ui.tsx"],
+    rules: {
+      "react-refresh/only-export-components": "off",
     },
   },
   // Disable rules that conflict with Prettier formatting.

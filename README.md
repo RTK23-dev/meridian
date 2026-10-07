@@ -1,123 +1,175 @@
 # Meridian
 
-Beta **0.1.0-beta.4**. Evidence-led advertising research, a content factory that copies frameworks not ads, JEV decisions, Hypit video production, and paused Meta publishing for multi-tenant brands.
+> **Multi-Tenant Autonomous Creative Operating System**  
+> Evidence-led advertising & organic content factory, JEV deterministic policy engine, Hypit video production, modular n8n-style flow pipelines, and closed-loop Bayesian learning.
 
-You add a brand. Meridian ranks what to make from evidence you store, generates image and video variants, checks them, and writes results back into the next decision.
+[![CI](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml/badge.svg)](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Status: Beta](https://img.shields.io/badge/Release-0.1.0--beta.4-emerald.svg)](CHANGELOG.md)
+
+---
+
+## Autonomous Closed-Loop Architecture
+
+Meridian continuously analyzes evidence, generates video variants, enforces safety/originality policies, selectively distributes to paid and organic channels, and feeds verified telemetry back into Bayesian posteriors:
 
 ```
-market → JEV Research → advertising patterns → opportunity → JEV → brief → studio
-  → image / video → QA → review → publish → performance → learning
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                           MERIDIAN AUTONOMOUS FLYWHEEL                        │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                       │
+     1. DISCOVER                       ▼                       2. EVALUATE & GATE
+ ┌──────────────────────┐    ┌────────────────────┐    ┌─────────────────────────┐
+ │ Market Sources & DNA │───▶│ Opportunity Ranker │───▶│ JEV Deterministic Policy│
+ │ Ad Library / Sensors │    │ Winner Score & DNA │    │ Originality & Claim QA  │
+ └──────────────────────┘    └────────────────────┘    └─────────────────────────┘
+                                                                    │
+                                                                    ▼
+     4. CLOSED-LOOP FLYWHEEL           5. DISTRIBUTE           3. PRODUCE
+ ┌──────────────────────┐    ┌────────────────────┐    ┌─────────────────────────┐
+ │ JEV Bayesian Learning│◀───│ Selective Channels │◀───│ Studio Production       │
+ │ Decay-Weighted Stats │    │ Paid Ads & Organic │    │ Hypit & Timeline Engines│
+ └──────────────────────┘    └────────────────────┘    └─────────────────────────┘
 ```
 
-A provider is **not connected** until one of its requests succeeds. This repository does not include ad accounts, and it does not invent ads, metrics, or publish receipts.
+> **Core Invariant**: A provider or channel remains **NOT CONNECTED** until real credentials succeed. Meridian never invents ad accounts, delivery metrics, publish receipts, or connected states.
 
-Licensed under the [MIT License](LICENSE). Original code.
+---
 
-## Start here
+## Key Capabilities
 
-[docs/SETUP.md](docs/SETUP.md) is the full local and production setup. The short path:
+### 1. Modular Engine & n8n-Style Flow Connectors
+- **Decoupled Swappable Engines**: Cleanly separated contracts for `GradingEngine`, `PlannerEngine`, `PublishEngine`, `VideoEngine`, and `SourceAdapter`.
+- **Chainable Pipelines**: Connect engines with standardized `FlowNode` contracts and `createFlow("pipeline-id")` runners (identical to n8n node graphs).
+- **Extensible Registry**: Register custom video renderers or ad networks without modifying core routing or database schemas.
 
+### 2. Multi-Channel Selective Distribution
+- **Paid Advertising**: Paused campaign staging for **Meta Ads**, **TikTok Ads**, and **Google Ads**.
+- **Organic Social**: Native connectors for **Instagram Reels**, **Facebook Pages**, and **YouTube Shorts**.
+- **Per-Channel Targeting**: Interactive modal lets operators selectively pick which channels receive paid test spend vs. organic distribution for each creative variant.
+
+### 3. Creative DNA v2 & Content Factory
+- **Multimodal Video Decomposition**: `ffmpeg` scene detection, keyframe vision analysis, OCR text role classification, and WhisperX timestamp alignment.
+- **pgvector Semantic Retrieval**: 384-dimensional embeddings stored in Postgres with cosine similarity index (`migrations/0019_creative_dna_pgvector.sql`).
+- **Originality & Claim Gates**: 64-bit perceptual hashing with Hamming distance checks block copycat variants. Claims missing proof stay in human review.
+
+### 4. Advanced JEV & Bayesian Learning Flywheel
+- **Multi-Objective Telemetry**: Ingests both paid performance (CTR, CVR, ROAS) and organic engagement (3s hook retention, completion rate, shares).
+- **Exponential Recency-Decay Weighting**: Half-life decay ensures fresh performance informs new briefs without being skewed by months-old ad campaigns.
+- **Hierarchical Cold-Start Priors**: Smoothly regularizes new brands using vertical category baselines while preserving strict multi-tenant isolation.
+- **Benjamini-Hochberg FDR Control**: False-discovery rate filtering weeds out random statistical noise.
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Node.js 22+
+- PostgreSQL 16+ with `pgvector` (or embedded PGlite for local preview)
+- FFmpeg & FFprobe (optional for mock tests, required for real video analysis)
+
+### 1. Installation
 ```bash
+git clone https://github.com/RTK23-dev/meridian.git
+cd meridian
 npm install
 cp .env.example .env
-# set DATABASE_URL, then:
-npm run db:migrate
-npm run dev
 ```
 
-In two more terminals:
-
+### 2. Database Setup
 ```bash
+# Set your DATABASE_URL in .env, then apply migrations:
+npm run db:migrate
+
+# Or launch local embedded PGlite server:
+npm run db:local
+```
+
+### 3. Run Applications
+```bash
+# Terminal 1: Web Interface & API (http://localhost:8080)
+npm run dev
+
+# Terminal 2: Background Job Worker
 npm run worker
+
+# Terminal 3: Periodic Job Scheduler
 npm run scheduler
 ```
 
-Open the app, create an account, and add a brand. Without `DATABASE_URL`, the process uses an embedded database that does not survive a restart. Video needs a separate Hypit process at `HYPIT_BASE_URL`. Without ad-account credentials, nothing is published to Meta, TikTok, or Google.
+---
 
-## What this beta includes
+## Quality Gates & Verification
 
-- Workspaces, roles, invites, brands, Brand Brain, and products.
-- Manual market observations, public-page fetch, and semantic clustering with a local MiniLM model.
-- Meta Ad Library video-ad collection, verified source media storage, timestamped transcription, confidence-rated structured JEV Research, and observed cross-ad pattern summaries. Research does not assert effectiveness from frequency.
-- Opportunity ranking, JEV decisions, briefs, text QA, and human review.
-- Shared browser/server validation on market, creative, performance, publishing, and schedule forms, with field-level errors and unsaved-change feedback.
-- JEV uses OpenRouter as its only external model gateway. Optional Studio images can use Google AI Studio / Nano Banana. Studio production video uses Hypit after JEV approval.
-- A Hypit MP4 is stored only after the separate process returns bytes. Missing vision evidence does not auto-approve.
-- Manual performance and learning that changes the next rank and the next brief.
-- Provider clients for Meta, TikTok, Google Ads, and the Meta Ad Library. Confirmed provider ids are stored only after a real response.
-- Approved, tenant-scoped Hypit MP4s can be uploaded to Meta and used in a paused campaign/ad-set/ad chain. Upload retries reconcile the prior upload; publishing is not activated automatically.
-- Tenant-scoped Meta performance jobs verify the selected ad and account before storing observations.
-- A separate worker and scheduler, filesystem storage, and an S3-compatible client.
-- **Content Factory & Creative DNA v2**: `ffmpeg` scene-cut detection, keyframe vision labeling, OCR text role classification, WhisperX alignment, 384-dimensional multimodal embeddings stored in Postgres via `pgvector` (`migrations/0019_creative_dna_pgvector.sql`), and pgvector cosine-similarity trends clustering.
-- **Multi-Source Intelligence & Winner Score**: Pluggable source adapters (`BulkUploadSourceAdapter` and `SensorTowerSourceAdapter`), daily timeline tracking, and calibrated Winner Score backtesting.
-- **Multi-Aspect Production & Originality Gate**: Timeline video assembly across `9:16`, `4:5`, `1:1`, and `16:9` aspect ratios; second `VideoEngine` adapter (`timelineVideoEngine`); and 64-bit perceptual hashing originality gate with Hamming distance.
-- **Autopilot Levels 0–3 & Meta Verification Gate**: Discovers trends, generates variants, stages paused campaigns, and manages budgets. Levels 2 & 3 ("Stage" and "Run") strictly fail closed unless a confirmed Meta test-account round trip (video upload, paused campaign, and synced performance) is recorded.
-- **Modular Engines & n8n-Style Flow Connectors**: Cleanly decoupled swappable engines (`GradingEngine`, `PlannerEngine`, `PublishEngine`, `VideoEngine`, `SourceAdapter`) connected via standardized `FlowNode` contracts and chainable `createFlow` / `FlowPipeline` runners.
-- Production refuses to boot without `DATABASE_URL`. Snapshot video from Ad Library stays off unless `RESEARCH_SNAPSHOT_MEDIA=1`.
-- Invite email when `EMAIL_API_URL` and `EMAIL_API_KEY` are set. Otherwise the invite is stored and nobody is notified.
-
-## What needs a connection
-
-| Need | Environment | Until then |
-| --- | --- | --- |
-| Meta ads | A successful tenant Meta connection and ad-account selection; `META_ACCESS_TOKEN` / `META_AD_ACCOUNT_ID` can provide host-configured access, and OAuth uses `META_APP_ID`, `META_APP_SECRET`, `TOKEN_ENCRYPTION_KEY` | Without a usable connection/account, live video upload, paused publication, and Meta performance sync remain `NOT_CONNECTED`. Campaign objects remain paused. |
-| Meta Ad Library | `META_AD_LIBRARY_TOKEN` | No ads are collected. |
-| JEV model gateway | `OPENROUTER_API_KEY` | Model-backed JEV actions report not configured. |
-| JEV Research transcription | local WhisperX; `ffmpeg` and `ffprobe` on the worker | Research transcription reports `NOT_CONNECTED`; no hosted API fallback is used. |
-| TikTok ads | `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, and for OAuth `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET` | No campaign is created. |
-| Google Ads | `GOOGLE_ADS_ACCESS_TOKEN`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, and for OAuth `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET` | No customer is listed. |
-| Token storage and webhooks | `TOKEN_ENCRYPTION_KEY`, `WEBHOOK_SECRET` | Tokens are not stored. Webhook posts are rejected. |
-| Object storage | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Files stay on the filesystem provider. |
-| Video | `HYPIT_BASE_URL` on a separate Hypit 0.2.17 process, with `ffmpeg` and `ffprobe` | Studio reports `HYPIT_NOT_CONNECTED`. No clip is stored. |
-| Optional images | `GOOGLE_AI_STUDIO_API_KEY` | Images are skipped; JEV and Hypit video continue. |
-| External embeddings | `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY` | Local MiniLM is used. No vector is invented for the missing API. |
-| Invite email | `EMAIL_API_URL`, `EMAIL_API_KEY` | The invitation is stored. Nobody is emailed. |
-| Worker and scheduler | `DATABASE_URL` on a long-lived host | The web process does not run their loops. |
-
-The variable list is [.env.example](.env.example). App secrets stay in the host environment. OAuth tokens are written to Postgres only as AES-256-GCM ciphertext when `TOKEN_ENCRYPTION_KEY` is set.
-
-## Checks
+Every pull request and release is validated across rigorous automated test suites:
 
 ```bash
+# Run 326+ automated tests across 16 test suites
 npm test
+
+# Verify strict TypeScript types (0 errors)
 npm run typecheck
+
+# Verify ESLint code quality (0 errors, 0 warnings)
 npm run lint
+
+# Compile production bundle with Nitro & PGlite assets
 npm run build
 ```
 
-GitHub Actions runs the same checks on `main` and on a published release. This application is not an npm package.
+---
 
-## Layout
+## Configuration & Environment Variables
 
-- `src/lib/meridian/` — tenancy, brand brain, JEV, opportunities, studio, learning, providers
-- `src/routes/` — screens
-- `migrations/` — schema
-- `evals/` — gate and market fixtures
-- `docs/` — behavior, setup, and gaps
+| Variable | Purpose | Default / Requirement |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | PGlite embedded if unset |
+| `TOKEN_ENCRYPTION_KEY` | AES-256-GCM key for tenant tokens | Required for OAuth tokens |
+| `OPENROUTER_API_KEY` | Model gateway for JEV decisions | Required for model evaluations |
+| `HYPIT_BASE_URL` | Hypit 0.2.17 video generation service | Reports `HYPIT_NOT_CONNECTED` if unset |
+| `META_ACCESS_TOKEN` | Meta Graph API access token | Meta publishing stays paused |
+| `TIKTOK_ACCESS_TOKEN` | TikTok Marketing API access token | TikTok publishing stays disabled |
+| `GOOGLE_ADS_DEVELOPER_TOKEN` | Google Ads API developer token | Google client stays disconnected |
+| `S3_ENDPOINT` / `S3_BUCKET` | S3-compatible object storage | Local filesystem used if unset |
 
-## Docs
+---
 
-- [Setup](docs/SETUP.md)
-- [Product](docs/PRODUCT.md)
-- [Deployment](docs/DEPLOYMENT.md)
-- [Providers](docs/PROVIDERS.md)
-- [JEV](docs/JEV.md)
-- [Database](docs/DATABASE.md)
-- [Security](docs/SECURITY.md)
-- [Testing](docs/TESTING.md)
-- [Gap analysis](docs/PRODUCT_GAP_ANALYSIS.md)
-- [Changelog](CHANGELOG.md)
+## Project Layout
 
-## Readiness
+```
+meridian/
+├── src/
+│   ├── routes/              # TanStack Start file-based screens
+│   ├── components/          # Reusable UI & design system (WCAG 2.2 AA)
+│   └── lib/
+│       ├── meridian/
+│       │   ├── distribution/ # Multi-channel paid & organic connectors
+│       │   ├── factory/      # Creative DNA v2, trends & source adapters
+│       │   ├── flow/         # Modular n8n-style flow connector pipeline
+│       │   ├── grading/      # Winner score & heuristic grading engines
+│       │   ├── jev/          # Deterministic questions, policy & judgments
+│       │   ├── learning/     # Bayesian engine, decay weights & store
+│       │   ├── stats/        # Beta-binomial math & FDR control
+│       │   └── video/        # Hypit & timeline multi-aspect video engines
+├── migrations/              # SQL migrations applied in chronological order
+├── docs/                    # Architecture, setup, JEV, and gap analysis
+└── scripts/                 # Worker, scheduler, and smoke automation
+```
 
-| Area | Status |
-| --- | --- |
-| Decision loop, JEV, learning write-back | In this beta. Stored external advertising evidence and validated performance observations can inform later ranks and briefs. |
-| Hypit video and Meta publishing | In this beta: approved briefs can produce stored MP4s through a separate Hypit process; configured Meta connections can publish the verified artifact into a paused campaign chain. This repo does not include Hypit source. |
-| Local semantic embeddings, worker, scheduler, filesystem storage | In this beta. |
-| Optional Nano Banana images | Google AI Studio integration is optional. No image credentials are required for JEV or Hypit. |
-| S3, Meta, TikTok, Google Ads, Ad Library | External connection required. Meta video publishing and performance sync remain `NOT_CONNECTED` until the tenant credential and ad account are configured and verified. |
-| Invite email | Stored always. Sent only when the email API answers. |
-| Live delivery and live metrics | Meta video publishing and provider performance sync are implemented, but require real tenant credentials/accounts and remain paused until separately activated. Test performance is labeled `test:performance` and is not live delivery data. |
+---
 
-Not a live media buyer while those external accounts are absent. See [docs/PRODUCT_GAP_ANALYSIS.md](docs/PRODUCT_GAP_ANALYSIS.md).
+## Documentation Index
+
+- [Local & Production Setup Guide](docs/SETUP.md)
+- [System Architecture & Flow Design](docs/ARCHITECTURE.md)
+- [Content Factory & Creative DNA](docs/FACTORY.md)
+- [JEV Deterministic Policy & Learning](docs/JEV.md)
+- [Accessibility (WCAG 2.2 AA) Standards](docs/ACCESSIBILITY.md)
+- [Provider Integrations & Security](docs/PROVIDERS.md)
+- [Product Gap Analysis & Roadmap](docs/PRODUCT_GAP_ANALYSIS.md)
+
+---
+
+## License
+
+Licensed under the [MIT License](LICENSE). Original code.

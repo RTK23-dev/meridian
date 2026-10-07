@@ -14,6 +14,8 @@ Target: WCAG 2.2 AA. This document does not claim conformance.
 - `prefers-reduced-motion: reduce` shortens animation and transition durations.
 - Design tokens used for text meet a 4.5:1 contrast ratio. The check is `src/lib/meridian/a11y/contrast.ts` and `providers/readiness.test.ts`.
 - Source uploads for text, DOCX, and PDF have a visible label.
+- Studio generation, video rendering, and multi-channel publication status updates use `aria-live="polite"` and `role="status"` live regions to announce progress to screen readers.
+- Distribution dialogs implement focus management and keyboard dismissal (`Escape`).
 
 ## Verified by automation
 

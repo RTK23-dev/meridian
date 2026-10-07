@@ -106,3 +106,13 @@ const flow = createFlow("brand-campaign-flow")
 
 const report = await flow.run(input, context);
 ```
+
+---
+
+### Step 7: Multi-Channel Distribution & Organic Telemetry
+
+The distribution engine (`src/lib/meridian/distribution/`) handles dual-track publication:
+- **Paid Ad Staging**: Meta Ads, TikTok Ads, Google Ads (staged strictly in PAUSED mode until manually verified).
+- **Organic Social Posting**: Instagram Reels, Facebook Pages, YouTube Shorts (via native connectors under `channel_connections`).
+- **Telemetry Ingestion**: Gathers 3s hook retention, video completion rates, and shares, feeding back into JEV Bayesian posteriors with exponential recency-decay weighting (`decay.test.ts`).
+

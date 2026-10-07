@@ -53,6 +53,7 @@ The web process does not execute the worker loop. `scripts/worker-entry.ts` clai
 | Planner Engine | `planner/engine.ts` | Swappable planning: `MatrixPlannerEngine` (permutational variant matrices) |
 | Video Engine | `video/engine.ts` | Swappable rendering: `HypitVideoEngine`, `TimelineVideoEngine` |
 | Publish Engine | `publishing/engine.ts` | Swappable publishing: `MetaPublishEngine`, `TestPublishEngine` |
+| Distribution | `distribution/` | Multi-channel selective delivery: Meta, TikTok, Google, IG Reels, FB Pages, YouTube Shorts |
 | API | `machine.ts` | Persistence and tenant checks |
 
 AI output is parsed into fields and then checked by deterministic code. Retrieved page text is wrapped as `untrusted_source` and is not allowed to act as instructions.

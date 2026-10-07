@@ -36,6 +36,53 @@ export function updateBeta(prior: BetaParams, successes: number, trials: number)
   return { alpha: prior.alpha + safeSuccess, beta: prior.beta + failures };
 }
 
+/**
+ * Exponential recency-decay weight based on observation age and half-life.
+ * Weight is 1.0 for observations occurring right now, and 0.5 after halfLifeDays.
+ */
+export function calculateDecayWeight(observationTimestampMs: number, nowMs: number = Date.now(), halfLifeDays = 30): number {
+  if (halfLifeDays <= 0) return 1.0;
+  const ageMs = Math.max(0, nowMs - observationTimestampMs);
+  const halfLifeMs = halfLifeDays * 24 * 60 * 60 * 1000;
+  return Math.exp(- (Math.LN2 * ageMs) / halfLifeMs);
+}
+
+/**
+ * Weighted Beta updating: applies decay weights to successes and failures.
+ * This prevents stale performance from dominating recent shifts in ad or social algorithms.
+ */
+export function updateBetaWeighted(
+  prior: BetaParams,
+  observations: ReadonlyArray<{ successes: number; trials: number; weight?: number }>,
+): BetaParams {
+  let effectiveSuccess = 0;
+  let effectiveFailures = 0;
+  for (const obs of observations) {
+    const w = obs.weight != null ? Math.max(0, Math.min(1, obs.weight)) : 1.0;
+    const s = Math.max(0, obs.successes) * w;
+    const t = Math.max(0, obs.trials) * w;
+    effectiveSuccess += s;
+    effectiveFailures += Math.max(0, t - s);
+  }
+  return {
+    alpha: prior.alpha + effectiveSuccess,
+    beta: prior.beta + effectiveFailures,
+  };
+}
+
+/**
+ * Hierarchical Empirical-Bayes cold start prior.
+ * Translates cross-brand or industry benchmark rates into a weakly informative prior
+ * to bootstrap early learning while respecting tenant privacy.
+ */
+export function hierarchicalColdStartPrior(categoryRate: number, priorStrength = 20): BetaParams {
+  const mean = clamp01(categoryRate);
+  const weight = Math.max(2, priorStrength);
+  const alpha = Math.max(0.1, mean * weight);
+  const beta = Math.max(0.1, (1 - mean) * weight);
+  return { alpha, beta };
+}
+
 export function betaMean(params: BetaParams): number {
   const total = params.alpha + params.beta;
   if (total <= 0) return 0.5;

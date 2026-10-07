@@ -125,6 +125,18 @@ Research is available only when these connections are configured. Missing creden
 | JEV Research collection | `META_AD_LIBRARY_TOKEN`, `OPENROUTER_API_KEY`, local WhisperX, `ffmpeg`/`ffprobe` on the worker | Research stays `NOT_CONNECTED` without source/model/runtime connections. Ads whose snapshots expose no downloadable MP4 stay unavailable. Snapshot media stays off unless `RESEARCH_SNAPSHOT_MEDIA=1`. |
 | OAuth and webhooks | App ids, `TOKEN_ENCRYPTION_KEY`, `WEBHOOK_SECRET` | Tokens are sealed. Webhook posts without a valid signature are rejected. |
 
+### Multi-channel social distribution & organic connectors
+
+Meridian supports dual-track distribution across paid ad accounts and organic social channels:
+- **Paid Advertising**: Meta Ads, TikTok Ads, Google Ads (requires ad accounts configured via Integrations).
+- **Organic Social**: Instagram Reels, Facebook Pages, YouTube Shorts (stored under `channel_connections` and `organic_posts` via migration `0020_organic_publishing.sql`).
+
+Publishing options can be selectively configured in Studio per variant. Telemetry ingestion updates Bayesian posteriors with organic engagement metrics (`retention_3s`, `completion_rate`, `shares`).
+
+### Modular n8n-style flow pipelines
+
+Engines (`GradingEngine`, `PlannerEngine`, `PublishEngine`, `VideoEngine`, `SourceAdapter`) are pluggable. Custom pipelines can be wired using `createFlow("pipeline-id")` without modifying core database schemas or server functions.
+
 `TOKEN_ENCRYPTION_KEY` is a secret you generate, for example:
 
 ```bash

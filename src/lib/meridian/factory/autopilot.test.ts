@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   assertAutopilotLevelAllowed,
   checkMetaRoundTripReceipt,
-  FACTORY_LEVEL_LABELS,
 } from "./autopilot.ts";
 import type { Sql } from "../learning/store.ts";
 

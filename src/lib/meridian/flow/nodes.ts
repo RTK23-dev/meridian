@@ -82,7 +82,7 @@ export function createProductionNode(engine: VideoEngine, id = "production-node"
     id,
     name: `Production (${engine.id})`,
     type: "produce",
-    async execute(contract, context): Promise<NodeExecutionResult<{ artifactBytes: Uint8Array; mime: string; durationMs: number }>> {
+    async execute(contract, _context): Promise<NodeExecutionResult<{ artifactBytes: Uint8Array; mime: string; durationMs: number }>> {
       const status = engine.status();
       if (status.status !== "CONFIGURED") {
         return {

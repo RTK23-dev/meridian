@@ -5,7 +5,6 @@ import { vector } from "@electric-sql/pglite-pgvector";
 import { buildFixtureClip, solidFrame } from "../video/inspect.ts";
 import {
   CREATIVE_DNA_V2,
-  emptyCreativeDna,
   decodeOk,
 } from "./creative-dna.ts";
 import {

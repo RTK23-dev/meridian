@@ -89,7 +89,7 @@ export function timelineVideoEngine(): VideoEngine {
         },
       };
     },
-    async collect(providerJobId) {
+    async collect(_providerJobId) {
       const { buildFixtureClip, solidFrame } = await import("../video/inspect.ts");
       const { createHash } = await import("node:crypto");
       const frame = solidFrame(80, 142, [30, 30, 30]);

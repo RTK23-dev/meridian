@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createFlow, FlowPipeline } from "./connector.ts";
+import { createFlow } from "./connector.ts";
 import {
-  createSourceNode,
   createGradingNode,
   createPlannerNode,
   createGateNode,
   createPublishNode,
 } from "./nodes.ts";
-import { BulkUploadSourceAdapter } from "../factory/sources.ts";
 import { winnerScoreGradingEngine, heuristicGradingEngine } from "../grading/engine.ts";
 import { matrixPlannerEngine } from "../planner/engine.ts";
 import { testPublishEngine } from "../publishing/engine.ts";

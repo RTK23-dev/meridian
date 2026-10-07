@@ -52,7 +52,7 @@ console.log("\n📦 Running database migrations...");
 try {
   execSync("node scripts/with-dotenv.mjs node scripts/migrate.mjs", { stdio: "inherit" });
   console.log("✅ Database migrations up to date.");
-} catch (err) {
+} catch {
   console.warn("⚠️  Migration script finished with notice (PGlite fallback will migrate automatically on start).");
 }
 

@@ -82,7 +82,7 @@ export function testPublishEngine(): PublishEngine {
     status() {
       return { status: "CONFIGURED", provider: "test", detail: "Test publisher is always ready for sandbox verification." };
     },
-    async publishPaused(request: PublishPausedRequest): Promise<PublishEngineResult> {
+    async publishPaused(_request: PublishPausedRequest): Promise<PublishEngineResult> {
       const stages: PausedStage[] = [
         { objectType: "campaign", status: "stored", externalId: `test_camp_${Date.now()}`, reused: false, error: "" },
         { objectType: "adset", status: "stored", externalId: `test_set_${Date.now()}`, reused: false, error: "" },
