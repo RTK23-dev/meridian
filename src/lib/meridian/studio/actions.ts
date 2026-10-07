@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
 
 function clip(value: unknown): string {
   return typeof value === "string" ? value.trim().slice(0, 80) : "";
@@ -48,6 +49,7 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    refuseIfLimited(modelLimit, context.userId);
     const api = await import("./session.server");
     return api.generateStudioVariants(context.userId, data);
   });

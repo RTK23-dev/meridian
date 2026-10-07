@@ -6,9 +6,9 @@ export type DecisionState = (typeof DECISIONS)[number];
 export const ANSWER_SCHEMA_VERSION = "jev.answer.v1";
 
 export type ThresholdConfig = {
-  /** Probability at or above this can auto-approve, if confidence is also high enough. */
+  /** Score at or above this can auto-approve, if confidence is also high enough. */
   autoApprove: number;
-  /** Probability at or above this, but below auto-approve, waits for a person. */
+  /** Score at or above this, but below auto-approve, waits for a person. */
   humanReview: number;
   /** Below this confidence, auto-approve is downgraded to human review. */
   minConfidenceForAuto: number;
@@ -26,6 +26,9 @@ export type AnswerValue = "yes" | "no" | "uncertain" | "insufficient" | "violati
 export type EvidenceState = "present" | "missing" | "contradictory" | "violation";
 
 export type Evaluation = {
+  /** Uncalibrated score in [0, 1]. Not a probability until a calibration report says so. */
+  score?: number;
+  /** @deprecated Prefer `score`. Kept so existing questions keep compiling. */
   probability: number;
   confidence: number;
   reasons: string[];
@@ -35,25 +38,20 @@ export type Evaluation = {
   answer?: AnswerValue;
 };
 
-export type DecisionQuestion<TInput> = {
-  id: string;
-  version: string;
-  description: string;
-  thresholds: ThresholdConfig;
-  evaluate: (input: TInput) => Evaluation;
-};
-
 export type ProbabilisticAnswer = {
   schemaVersion: typeof ANSWER_SCHEMA_VERSION;
   value: AnswerValue;
+  /** Uncalibrated score. Same value as `probability` for stored rows. */
+  score: number;
+  /** @deprecated Prefer `score`. Persisted column name. */
   probability: number;
   confidence: number;
 };
 
-/** Applied after the probabilistic answer and before the policy. Null means identity. */
+/** Applied after the score and before the policy. Null means identity. */
 export type CalibrationStep = {
   version: string;
-  apply: (probability: number) => number;
+  apply: (score: number) => number;
 };
 
 export type DecisionContext = {
@@ -66,7 +64,12 @@ export type DecisionContext = {
 
 export type DecisionOutput = {
   decision: DecisionState;
+  /** Uncalibrated score. Same value as `probability`. */
+  score: number;
+  rawScore: number;
+  /** @deprecated Prefer `score`. Persisted as jev_decisions.probability. */
   probability: number;
+  /** @deprecated Prefer `rawScore`. */
   rawProbability: number;
   confidence: number;
   reasons: string[];
@@ -84,12 +87,18 @@ export type DecisionOutput = {
   evidenceState: EvidenceState;
 };
 
+function evaluationScore(evaluation: Evaluation): number {
+  if (typeof evaluation.score === "number" && Number.isFinite(evaluation.score)) return evaluation.score;
+  return evaluation.probability;
+}
+
 /**
- * Evidence → question → probability → calibration → policy → decision.
+ * Evidence → question → score → calibration → policy → decision.
  * The evaluator does not choose AUTO_APPROVE / HUMAN_REVIEW / REJECT.
  * Missing or contradictory evidence cannot auto-approve.
  * A violation cannot auto-approve or stay in review.
  * Calibration, when supplied, changes this result only. It does not rewrite a previous result.
+ * The numeric output is a score, not a calibrated probability.
  */
 export function decide<TInput>(
   question: DecisionQuestion<TInput>,
@@ -97,9 +106,9 @@ export function decide<TInput>(
   context?: DecisionContext,
 ): DecisionOutput {
   const evaluation = question.evaluate(input);
-  const rawProbability = round3(clamp01(evaluation.probability));
-  const calibrated = context?.calibration ? context.calibration.apply(rawProbability) : rawProbability;
-  const probability = round3(clamp01(calibrated));
+  const rawScore = round3(clamp01(evaluationScore(evaluation)));
+  const calibrated = context?.calibration ? context.calibration.apply(rawScore) : rawScore;
+  const score = round3(clamp01(calibrated));
   const confidence = round3(clamp01(evaluation.confidence));
   const evidenceState: EvidenceState =
     evaluation.evidenceState ?? (evaluation.evidence.length === 0 ? "missing" : "present");
@@ -109,11 +118,11 @@ export function decide<TInput>(
   } else if (evidenceState === "missing" || evidenceState === "contradictory") {
     decision = "HUMAN_REVIEW";
   } else if (
-    probability >= question.thresholds.autoApprove &&
+    score >= question.thresholds.autoApprove &&
     confidence >= question.thresholds.minConfidenceForAuto
   ) {
     decision = "AUTO_APPROVE";
-  } else if (probability >= question.thresholds.humanReview) {
+  } else if (score >= question.thresholds.humanReview) {
     decision = "HUMAN_REVIEW";
   } else {
     decision = "REJECT";
@@ -121,8 +130,10 @@ export function decide<TInput>(
   const answerValue = answerFor(decision, evidenceState, evaluation.answer);
   return {
     decision,
-    probability,
-    rawProbability,
+    score,
+    rawScore,
+    probability: score,
+    rawProbability: rawScore,
     confidence,
     reasons: evaluation.reasons.length > 0 ? evaluation.reasons : ["No reason was recorded."],
     evidence: evaluation.evidence,
@@ -133,7 +144,8 @@ export function decide<TInput>(
     answer: {
       schemaVersion: ANSWER_SCHEMA_VERSION,
       value: answerValue,
-      probability,
+      score,
+      probability: score,
       confidence,
     },
     policyVersion: context?.policyVersion ?? `code:${question.id}.${question.version}`,
@@ -144,6 +156,14 @@ export function decide<TInput>(
     evidenceState,
   };
 }
+
+export type DecisionQuestion<TInput> = {
+  id: string;
+  version: string;
+  description: string;
+  thresholds: ThresholdConfig;
+  evaluate: (input: TInput) => Evaluation;
+};
 
 /** Refuses another workspace's rows before a question runs. */
 export function decideForTenant<TInput>(
