@@ -167,7 +167,7 @@ async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string)
     select id, captured_at, published_at, platforms, analysis_status
     from research_ads
     where organization_id = ${organizationId} and brand_id = ${brandId}
-    order by a.captured_at desc
+    order by captured_at desc
     limit 80
   `;
   const now = new Date().toISOString();
