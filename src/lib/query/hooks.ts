@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBrand } from "@/lib/meridian/api";
 import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, listLibrary, listOpportunities, listReviews, getTrace } from "@/lib/meridian/machine";
@@ -7,6 +7,7 @@ import { getFactoryBoard } from "@/lib/meridian/factory/actions";
 import { getStudioSession } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
+import { getJevAccountIntelligenceFn, updateWhitespaceStatusFn, runAccountIntelligenceAnalysisFn } from "@/lib/meridian/jev/actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { qk, userScopedQueryKey } from "./keys";
 
@@ -104,4 +105,37 @@ export const useOrganicDistributionQuery = (brandId: string, enabled = true) => 
 export const usePlatformAccountsQuery = (brandId: string, platform?: string, enabled = true) => {
   const scope = useUserScopedKey(qk.accounts(brandId));
   return useQuery({ ...scope, queryFn: () => getPlatformAccountsAction({ data: { brandId, platform } }), enabled: scope.enabled && enabled && !!brandId });
+};
+
+export const useAccountIntelligenceQuery = (brandId: string, platform = "instagram", enabled = true) => {
+  const scope = useUserScopedKey(qk.accountIntelligence(brandId, platform));
+  return useQuery({
+    ...scope,
+    queryFn: () => getJevAccountIntelligenceFn({ data: { brandId, platform } }),
+    enabled: scope.enabled && enabled && !!brandId,
+  });
+};
+
+export const useUpdateWhitespaceStatus = (brandId: string) => {
+  const qc = useQueryClient();
+  const { user } = useCurrentUserState();
+  return useMutation({
+    mutationFn: (vars: { opportunityId: string; status: "proposed" | "accepted" | "rejected" | "explored" }) =>
+      updateWhitespaceStatusFn({ data: { brandId, ...vars } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.accountIntelligence(brandId)) });
+    },
+  });
+};
+
+export const useRunAccountIntelligence = (brandId: string) => {
+  const qc = useQueryClient();
+  const { user } = useCurrentUserState();
+  return useMutation({
+    mutationFn: (vars: { platform: string; accountHandle: string; items: any[] }) =>
+      runAccountIntelligenceAnalysisFn({ data: { brandId, ...vars } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.accountIntelligence(brandId)) });
+    },
+  });
 };
