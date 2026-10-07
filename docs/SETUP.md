@@ -1,6 +1,6 @@
 # Setup
 
-Meridian 0.1.0-beta.3. Node.js 22 and a Postgres database.
+Meridian 0.1.0-beta.4. Node.js 22 and a Postgres database.
 
 ## 1. Install
 
@@ -50,6 +50,8 @@ npm run db:migrate
 ```
 
 Migrations in `migrations/` run in filename order, once each, inside a transaction. `npm run build` runs the same command and skips it when `DATABASE_URL` is unset. There is no automatic down migration. Restore a backup to roll back.
+
+`NODE_ENV=production` without a real `DATABASE_URL` refuses to start. The embedded database is for local preview only.
 
 ## 3. Web, worker, and scheduler
 
@@ -107,7 +109,7 @@ Leave a variable blank to keep that provider not connected.
 
 ### JEV Research collection
 
-The first research source is Meta Ad Library video ads. Configure `META_AD_LIBRARY_TOKEN` and `OPENROUTER_API_KEY`. The long-lived worker needs local WhisperX plus `ffmpeg` and `ffprobe`; set `WHISPERX_PATH`, `WHISPERX_MODEL` (defaults to `small`), `WHISPERX_DEVICE` (defaults to `cpu`), `FFMPEG_PATH`, and `FFPROBE_PATH` when installed outside `PATH`. A Meta snapshot that does not expose an explicit downloadable MP4 remains unavailable and is not transcribed or analyzed. No hosted transcription key is required.
+The first research source is Meta Ad Library video ads. Configure `META_AD_LIBRARY_TOKEN` and `OPENROUTER_API_KEY`. The long-lived worker needs local WhisperX plus `ffmpeg` and `ffprobe`; set `WHISPERX_PATH`, `WHISPERX_MODEL` (defaults to `small`), `WHISPERX_DEVICE` (defaults to `cpu`), `FFMPEG_PATH`, and `FFPROBE_PATH` when installed outside `PATH`. Snapshot video download stays off unless `RESEARCH_SNAPSHOT_MEDIA=1` after an explicit rights review. A Meta snapshot that does not expose an explicit downloadable MP4 remains unavailable and is not transcribed or analyzed. No hosted transcription key is required.
 
 Research is available only when these connections are configured. Missing credentials produce `NOT_CONNECTED`. Low-confidence structured analyses are retained with review status. Pattern summaries report observed corpus frequency only. Cross-brand organization summaries have no examples and are consumed only by brands that explicitly opt into organization learning in Learning settings.
 
@@ -120,7 +122,7 @@ Research is available only when these connections are configured. Missing creden
 | Invite email | `EMAIL_API_URL`, `EMAIL_API_KEY` | The API receives JSON `{ to, subject, text }` with a bearer token. A failure leaves the invite pending. |
 | External embeddings | `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY` | OpenAI-compatible `POST` with `{ model, input }`. Local MiniLM is used when these are blank. |
 | Meta, TikTok, Google | The tokens in `.env.example`; Meta video publishing also needs the tenant's intended `META_AD_ACCOUNT_ID` and a usable Meta ad account | An admin uses Integrations, tests the connection, and publishes only after the probe succeeds. Meta Hypit video publication creates a paused chain; it does not activate it. |
-| JEV Research collection | `META_AD_LIBRARY_TOKEN`, `OPENROUTER_API_KEY`, local WhisperX, `ffmpeg`/`ffprobe` on the worker | Research stays `NOT_CONNECTED` without source/model/runtime connections. Ads whose snapshots expose no downloadable MP4 stay unavailable. |
+| JEV Research collection | `META_AD_LIBRARY_TOKEN`, `OPENROUTER_API_KEY`, local WhisperX, `ffmpeg`/`ffprobe` on the worker | Research stays `NOT_CONNECTED` without source/model/runtime connections. Ads whose snapshots expose no downloadable MP4 stay unavailable. Snapshot media stays off unless `RESEARCH_SNAPSHOT_MEDIA=1`. |
 | OAuth and webhooks | App ids, `TOKEN_ENCRYPTION_KEY`, `WEBHOOK_SECRET` | Tokens are sealed. Webhook posts without a valid signature are rejected. |
 
 `TOKEN_ENCRYPTION_KEY` is a secret you generate, for example:
