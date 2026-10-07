@@ -1,6 +1,6 @@
 # Meridian
 
-Beta **0.1.0-beta.3**. Evidence-led advertising research, JEV decisions, Hypit video production, and paused Meta publishing for multi-tenant brands.
+Beta **0.1.0-beta.4**. Evidence-led advertising research, a content factory that copies frameworks not ads, JEV decisions, Hypit video production, and paused Meta publishing for multi-tenant brands.
 
 You add a brand. Meridian ranks what to make from evidence you store, generates image and video variants, checks them, and writes results back into the next decision.
 
@@ -48,6 +48,8 @@ Open the app, create an account, and add a brand. Without `DATABASE_URL`, the pr
 - Approved, tenant-scoped Hypit MP4s can be uploaded to Meta and used in a paused campaign/ad-set/ad chain. Upload retries reconcile the prior upload; publishing is not activated automatically.
 - Tenant-scoped Meta performance jobs verify the selected ad and account before storing observations.
 - A separate worker and scheduler, filesystem storage, and an S3-compatible client.
+- A Factory screen: discover winners and trends, abstract templates, gated production, review, capped live tests, and learnings. Autopilot stays at Suggest until an admin raises the ceiling.
+- Production refuses to boot without `DATABASE_URL`. Snapshot video from Ad Library stays off unless `RESEARCH_SNAPSHOT_MEDIA=1`.
 - Invite email when `EMAIL_API_URL` and `EMAIL_API_KEY` are set. Otherwise the invite is stored and nobody is notified.
 
 ## What needs a connection

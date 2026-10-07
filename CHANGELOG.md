@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.0-beta.4 — 2026-10-07
+
+Content factory foundation on top of beta.3. Copy the framework, never the ad.
+
+- Production and published deploys refuse to start without `DATABASE_URL`. The embedded database remains for local preview only.
+- JEV outputs are labelled as scores, not probabilities. A calibration report records Brier score and a reliability curve without moving thresholds.
+- Learning uses a beta-binomial model per attribute with credible intervals and a multiple-testing correction. Thin samples are not stored as winners.
+- Rate limits apply to sign-in, invites, uploads, and model-calling server functions (per IP or user).
+- Research collection records yield: ads found, videos downloaded, transcripts, snapshot-without-video. Snapshot media stays off unless `RESEARCH_SNAPSHOT_MEDIA=1`.
+- Factory job graph (`factory.discover` … `factory.learn`), Winner Score with a range and evidence, ad timelines, Creative DNA v1, trend clusters, abstract storyboard templates, originality/brand/claims/policy/rights gates, Thompson sampling inside caps, and a kill switch.
+- Hypit is adapter one behind a `VideoEngine` interface.
+- Factory screen: Discover, Templates, Production, Review, Live tests, Learnings. Autopilot levels 0–3. Spending still starts only inside owner-set caps.
+
+Not in this beta: a live Meta round-trip, a licensed ad-intelligence feed, or measured Ad Library yield on a live token. Those stay `NOT_CONNECTED` until configured.
+
 ## 0.1.0-beta.3 — 2026-10-06
 
 JEV Research now collects and analyzes external Meta video-ad evidence as a research layer. It does not replace or gate JEV decisions.
