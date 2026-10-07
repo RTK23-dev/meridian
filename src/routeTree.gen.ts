@@ -28,6 +28,7 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
 import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
 import { Route as BrandsBrandIdIndexRouteImport } from './routes/brands/$brandId/index'
+import { Route as BrandsBrandIdAccountsRouteImport } from './routes/brands/$brandId/accounts'
 import { Route as BrandsBrandIdBrainRouteImport } from './routes/brands/$brandId/brain'
 import { Route as BrandsBrandIdCalibrationRouteImport } from './routes/brands/$brandId/calibration'
 import { Route as BrandsBrandIdFactoryRouteImport } from './routes/brands/$brandId/factory'
@@ -135,6 +136,11 @@ const BrandsBrandIdIndexRoute = BrandsBrandIdIndexRouteImport.update({
   path: '/brands/$brandId/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BrandsBrandIdAccountsRoute = BrandsBrandIdAccountsRouteImport.update({
+  id: '/brands/$brandId/accounts',
+  path: '/brands/$brandId/accounts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BrandsBrandIdBrainRoute = BrandsBrandIdBrainRouteImport.update({
   id: '/brands/$brandId/brain',
   path: '/brands/$brandId/brain',
@@ -213,6 +219,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
+  '/brands/$brandId/accounts': typeof BrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof BrandsBrandIdCalibrationRoute
   '/brands/$brandId/factory': typeof BrandsBrandIdFactoryRoute
@@ -245,6 +252,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
+  '/brands/$brandId/accounts': typeof BrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof BrandsBrandIdCalibrationRoute
   '/brands/$brandId/factory': typeof BrandsBrandIdFactoryRoute
@@ -278,6 +286,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
+  '/brands/$brandId/accounts': typeof BrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof BrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof BrandsBrandIdCalibrationRoute
   '/brands/$brandId/factory': typeof BrandsBrandIdFactoryRoute
@@ -312,6 +321,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
+    | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
     | '/brands/$brandId/factory'
@@ -344,6 +354,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
+    | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
     | '/brands/$brandId/factory'
@@ -376,6 +387,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
+    | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
     | '/brands/$brandId/factory'
@@ -409,6 +421,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
+  BrandsBrandIdAccountsRoute: typeof BrandsBrandIdAccountsRoute
   BrandsBrandIdBrainRoute: typeof BrandsBrandIdBrainRoute
   BrandsBrandIdCalibrationRoute: typeof BrandsBrandIdCalibrationRoute
   BrandsBrandIdFactoryRoute: typeof BrandsBrandIdFactoryRoute
@@ -558,6 +571,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BrandsBrandIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/brands/$brandId/accounts': {
+      id: '/brands/$brandId/accounts'
+      path: '/brands/$brandId/accounts'
+      fullPath: '/brands/$brandId/accounts'
+      preLoaderRoute: typeof BrandsBrandIdAccountsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/brands/$brandId/brain': {
       id: '/brands/$brandId/brain'
       path: '/brands/$brandId/brain'
@@ -657,6 +677,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,
+  BrandsBrandIdAccountsRoute: BrandsBrandIdAccountsRoute,
   BrandsBrandIdBrainRoute: BrandsBrandIdBrainRoute,
   BrandsBrandIdCalibrationRoute: BrandsBrandIdCalibrationRoute,
   BrandsBrandIdFactoryRoute: BrandsBrandIdFactoryRoute,

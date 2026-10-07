@@ -21,6 +21,7 @@ export const qk = {
   notifications: (organizationId: string) => ["notification-preferences", organizationId] as const,
   channels: (brandId: string) => ["channels", brandId] as const,
   organic: (brandId: string) => ["organic", brandId] as const,
+  accounts: (brandId: string) => ["accounts", brandId] as const,
 };
 
 export function userScopedQueryKey(userId: string | null | undefined, key: readonly unknown[]) {

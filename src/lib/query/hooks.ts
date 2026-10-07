@@ -6,6 +6,7 @@ import { getCalibration } from "@/lib/meridian/calibration/actions";
 import { getFactoryBoard } from "@/lib/meridian/factory/actions";
 import { getStudioSession } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
+import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { qk, userScopedQueryKey } from "./keys";
 
@@ -99,4 +100,8 @@ export const useDistributionChannelsQuery = (brandId: string, enabled = true) =>
 export const useOrganicDistributionQuery = (brandId: string, enabled = true) => {
   const scope = useUserScopedKey(qk.organic(brandId));
   return useQuery({ ...scope, queryFn: () => getOrganicDistribution({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+};
+export const usePlatformAccountsQuery = (brandId: string, platform?: string, enabled = true) => {
+  const scope = useUserScopedKey(qk.accounts(brandId));
+  return useQuery({ ...scope, queryFn: () => getPlatformAccountsAction({ data: { brandId, platform } }), enabled: scope.enabled && enabled && !!brandId });
 };

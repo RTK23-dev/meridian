@@ -15,7 +15,7 @@ type NavLink = { label: string; to: string; icon: LucideIcon; badge?: number };
 
 const PAGE_NAMES: Record<string, string> = {
   "": "Overview", factory: "Factory", market: "Market research", intelligence: "Intelligence", opportunities: "Opportunities",
-  reviews: "Reviews", studio: "Studio", library: "Library", learning: "Learning", calibration: "Calibration", brain: "Brand brain", products: "Products",
+  reviews: "Reviews", studio: "Studio", library: "Library", learning: "Learning", calibration: "Calibration", brain: "Brand brain", products: "Products", accounts: "Connected accounts",
   integrations: "Integrations", settings: "Settings", jobs: "Jobs & health", usage: "Usage & cost", alerts: "Alerts center", audit: "Audit log", webhooks: "Webhook events", notifications: "Notification preferences", new: "New brand",
 };
 
@@ -40,7 +40,7 @@ function navGroups(brandId: string | undefined, reviews: number): { label: strin
     { label: "Decide", links: [{ label: "Opportunities", to: `${b}/opportunities`, icon: Layers3 }, { label: "Reviews", to: `${b}/reviews`, icon: Bell, ...(reviews ? { badge: reviews } : {}) }] },
     { label: "Create", links: [{ label: "Studio", to: `${b}/studio`, icon: WandSparkles }, { label: "Library", to: `${b}/library`, icon: Package }] },
     { label: "Learn", links: [{ label: "Learning", to: `${b}/learning`, icon: Activity }, { label: "Calibration", to: `${b}/calibration`, icon: BarChart3 }] },
-    { label: "Brand", links: [{ label: "Brand brain", to: `${b}/brain`, icon: Brain }, { label: "Products", to: `${b}/products`, icon: Package }] },
+    { label: "Brand", links: [{ label: "Brand brain", to: `${b}/brain`, icon: Brain }, { label: "Products", to: `${b}/products`, icon: Package }, { label: "Accounts", to: `${b}/accounts`, icon: Layers3 }] },
     { label: "Workspace", links: WORKSPACE_LINKS },
   ];
 }
@@ -191,7 +191,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <Command.List className="max-h-[60vh] overflow-auto p-2"><Command.Empty className="p-4 text-sm text-muted">No matching command.</Command.Empty>
         <Command.Group heading="Navigate" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
           {brandId ? <>
-            {[["Overview", `/brands/${brandId}`], ["Market", `/brands/${brandId}/market`], ["Intelligence", `/brands/${brandId}/intelligence`], ["Opportunities", `/brands/${brandId}/opportunities`], ["Reviews", `/brands/${brandId}/reviews`], ["Studio", `/brands/${brandId}/studio`], ["Library", `/brands/${brandId}/library`], ["Learning", `/brands/${brandId}/learning`], ["Brand brain", `/brands/${brandId}/brain`], ["Products", `/brands/${brandId}/products`]].map(([label, to]) => <Command.Item key={to} value={label} onSelect={() => go(to)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">{label}</Command.Item>)}
+            {[["Overview", `/brands/${brandId}`], ["Market", `/brands/${brandId}/market`], ["Intelligence", `/brands/${brandId}/intelligence`], ["Opportunities", `/brands/${brandId}/opportunities`], ["Reviews", `/brands/${brandId}/reviews`], ["Studio", `/brands/${brandId}/studio`], ["Library", `/brands/${brandId}/library`], ["Learning", `/brands/${brandId}/learning`], ["Brand brain", `/brands/${brandId}/brain`], ["Products", `/brands/${brandId}/products`], ["Accounts", `/brands/${brandId}/accounts`]].map(([label, to]) => <Command.Item key={to} value={label} onSelect={() => go(to)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">{label}</Command.Item>)}
           </> : null}
           <Command.Item value="Workspace overview" onSelect={() => go("/")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Workspace overview</Command.Item>
           <Command.Item value="Usage and cost" onSelect={() => go("/usage")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Usage &amp; cost</Command.Item>
