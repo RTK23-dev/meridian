@@ -5,17 +5,28 @@ import {
   type ObservedCreative,
   type PerformanceRow,
 } from "../domain.ts";
+import {
+  baselinePrior,
+  betaInterval,
+  betaMean,
+  bhQValues,
+  jeffreysPrior,
+  probabilityGreater,
+  updateBeta,
+  type BetaParams,
+} from "../stats/beta.ts";
 
 export const DEFAULT_LEARNING_POLICY = {
-  minCreativesPerBucket: 3,
-  minImpressionsPerBucket: 300,
-  minAbsLift: 0.05,
-  /** Below this, a pattern that already met the sample floor stays OBSERVED. */
+  /** Soft prior strength. Not a hard floor that crowns noise. */
+  priorStrength: 8,
+  /** BH false-discovery rate used to keep a pattern. */
+  fdr: 0.1,
+  /** Below this posterior chance, a pattern is not stored. */
+  minPBeat: 0.8,
   inferredMinImpressions: 800,
-  /** Validated requires a larger sample. It is not a statistical certificate. */
   validatedMinCreatives: 4,
   validatedMinImpressions: 2000,
-  validatedMinAbsLift: 0.15,
+  validatedMinPBeat: 0.95,
 };
 
 const ATTRIBUTES = ["angle", "hookType", "format", "proofType", "visualStyle", "platform", "offer", "cta"] as const;
@@ -70,13 +81,13 @@ function rate(numerator: number, denominator: number): number | null {
 function learningState(
   sampleSize: number,
   impressions: number,
-  absLift: number,
+  pBeat: number,
   policy: typeof DEFAULT_LEARNING_POLICY,
 ): LearningState {
   if (
     sampleSize >= policy.validatedMinCreatives &&
     impressions >= policy.validatedMinImpressions &&
-    absLift >= policy.validatedMinAbsLift
+    pBeat >= policy.validatedMinPBeat
   ) {
     return "VALIDATED";
   }
@@ -96,31 +107,69 @@ export function patternInfluence(pattern: LearnedPattern): number {
 
 export type LearningDirection = "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "INSUFFICIENT_EVIDENCE";
 
-/** Sample floor first. A small lift is not a direction. */
+/**
+ * Direction comes from the posterior chance a pattern beats baseline, with a
+ * credible interval. Thin or overlapping intervals stay insufficient.
+ */
 export function learningDirection(pattern: {
   lift: number;
   sampleSize: number;
   impressions: number;
+  pBeat?: number;
+  ciLow?: number;
+  ciHigh?: number;
 }): LearningDirection {
   const impressions = Number(pattern.impressions);
   const sampleSize = Number(pattern.sampleSize);
-  if (
-    !Number.isFinite(sampleSize) ||
-    !Number.isFinite(impressions) ||
-    sampleSize < DEFAULT_LEARNING_POLICY.minCreativesPerBucket ||
-    impressions < DEFAULT_LEARNING_POLICY.minImpressionsPerBucket
-  ) {
+  if (!Number.isFinite(sampleSize) || !Number.isFinite(impressions) || sampleSize < 1 || impressions < 1) {
     return "INSUFFICIENT_EVIDENCE";
   }
-  if (!Number.isFinite(pattern.lift) || Math.abs(pattern.lift) < DEFAULT_LEARNING_POLICY.minAbsLift) return "NEUTRAL";
+  const pBeat = pattern.pBeat;
+  if (typeof pBeat === "number" && Number.isFinite(pBeat)) {
+    const ciLow = pattern.ciLow;
+    const ciHigh = pattern.ciHigh;
+    if (typeof ciLow === "number" && typeof ciHigh === "number" && ciLow <= 0 && ciHigh >= 0) {
+      return "NEUTRAL";
+    }
+    if (pBeat >= 0.8) return "POSITIVE";
+    if (pBeat <= 0.2) return "NEGATIVE";
+    return "NEUTRAL";
+  }
+  // Legacy rows without a posterior: do not crown two creatives as a winner.
+  if (sampleSize < 3 || impressions < 300) return "INSUFFICIENT_EVIDENCE";
+  if (!Number.isFinite(pattern.lift) || Math.abs(pattern.lift) < 0.05) return "NEUTRAL";
   if (pattern.lift > 0) return "POSITIVE";
   return "NEGATIVE";
 }
 
 type Policy = typeof DEFAULT_LEARNING_POLICY;
 
-function pushMetrics(
-  patterns: LearnedPattern[],
+type Candidate = {
+  organizationId: string;
+  brandId: string;
+  attribute: string;
+  value: string;
+  metric: LearnedPattern["metric"];
+  lift: number;
+  observed: number;
+  baseline: number;
+  pBeat: number;
+  ciLow: number;
+  ciHigh: number;
+  bucket: Totals;
+  summary: string;
+};
+
+function twoSidedP(pBeat: number): number {
+  return 2 * Math.min(pBeat, 1 - pBeat);
+}
+
+function relativeLift(observed: number, baseline: number): number | null {
+  if (baseline === 0) return null;
+  return (observed - baseline) / baseline;
+}
+
+function ctrCandidate(
   input: {
     organizationId: string;
     brandId: string;
@@ -128,101 +177,148 @@ function pushMetrics(
     value: string;
     bucket: Totals;
     baseline: Totals;
-    baselineCtr: number;
     policy: Policy;
   },
-): void {
-  const { bucket, baseline, policy } = input;
-  const observedCtr = rate(bucket.clicks, bucket.impressions);
-  if (observedCtr !== null && input.baselineCtr !== 0) {
-    const lift = (observedCtr - input.baselineCtr) / input.baselineCtr;
-    if (Math.abs(lift) >= policy.minAbsLift) {
-      patterns.push(
-        patternRow(input, "ctr", lift, observedCtr, input.baselineCtr, ctrSummary(input.attribute, input.value, observedCtr, input.baselineCtr, lift, bucket)),
-      );
-    }
-  }
-  const observedCvr = rate(bucket.conversions, bucket.clicks);
-  const baselineCvr = rate(baseline.conversions, baseline.clicks);
-  if (observedCvr !== null && baselineCvr !== null && baselineCvr > 0 && bucket.clicks >= 50 && baseline.clicks >= 50) {
-    const cvrLift = (observedCvr - baselineCvr) / baselineCvr;
-    if (Math.abs(cvrLift) >= policy.minAbsLift) {
-      patterns.push(
-        patternRow(
-          input,
-          "cvr",
-          cvrLift,
-          observedCvr,
-          baselineCvr,
-          `${input.attribute}=${input.value}: conversion rate ${(observedCvr * 100).toFixed(1)}% vs baseline ${(baselineCvr * 100).toFixed(1)}% (lift ${(cvrLift * 100).toFixed(0)}%, n=${bucket.creativeIds.size}).`,
-        ),
-      );
-    }
-  }
-  const observedRoas = rate(bucket.revenueCents, bucket.roasSpend);
-  const baselineRoas = rate(baseline.revenueCents, baseline.roasSpend);
-  if (
-    observedRoas !== null &&
-    baselineRoas !== null &&
-    baselineRoas > 0 &&
-    bucket.spendCents >= 1000 &&
-    baseline.spendCents >= 3000
-  ) {
-    const roasLift = (observedRoas - baselineRoas) / baselineRoas;
-    if (Math.abs(roasLift) >= policy.minAbsLift) {
-      patterns.push(
-        patternRow(
-          input,
-          "roas",
-          roasLift,
-          observedRoas,
-          baselineRoas,
-          `${input.attribute}=${input.value}: ROAS ${observedRoas.toFixed(2)} vs baseline ${baselineRoas.toFixed(2)} (lift ${(roasLift * 100).toFixed(0)}%, n=${bucket.creativeIds.size}, spend ${bucket.spendCents} cents).`,
-        ),
-      );
-    }
-  }
-}
-
-function patternRow(
-  input: {
-    organizationId: string;
-    brandId: string;
-    attribute: string;
-    value: string;
-    bucket: Totals;
-    policy: Policy;
-  },
-  metric: LearnedPattern["metric"],
-  lift: number,
-  observed: number,
-  baseline: number,
-  summary: string,
-): LearnedPattern {
+): Candidate | null {
+  const observed = rate(input.bucket.clicks, input.bucket.impressions);
+  const baselineRate = rate(input.baseline.clicks, input.baseline.impressions);
+  if (observed === null || baselineRate === null) return null;
+  const lift = relativeLift(observed, baselineRate);
+  if (lift === null) return null;
+  const prior = baselinePrior(baselineRate, input.policy.priorStrength);
+  const bucketPost = updateBeta(prior, input.bucket.clicks, input.bucket.impressions);
+  const baselinePost = updateBeta(jeffreysPrior(), input.baseline.clicks, input.baseline.impressions);
+  const pBeat = probabilityGreater(bucketPost, baselinePost);
+  const interval = liftInterval(bucketPost, baselinePost);
   return {
     organizationId: input.organizationId,
     brandId: input.brandId,
-    scope: "brand",
     attribute: input.attribute,
     value: input.value,
-    metric,
+    metric: "ctr",
     lift: round4(lift),
-    sampleSize: input.bucket.creativeIds.size,
-    baseline: round4(baseline),
     observed: round4(observed),
-    impressions: input.bucket.impressions,
-    clicks: input.bucket.clicks,
-    conversions: input.bucket.conversions,
-    spendCents: input.bucket.spendCents,
-    revenueCents: input.bucket.revenueCents,
-    state: learningState(input.bucket.creativeIds.size, input.bucket.impressions, Math.abs(lift), input.policy),
-    summary,
+    baseline: round4(baselineRate),
+    pBeat: round4(pBeat),
+    ciLow: round4(interval.low),
+    ciHigh: round4(interval.high),
+    bucket: input.bucket,
+    summary: ctrSummary(input.attribute, input.value, observed, baselineRate, lift, pBeat, interval.low, interval.high, input.bucket),
+  };
+}
+
+function liftInterval(bucket: BetaParams, baseline: BetaParams): { low: number; high: number } {
+  const baseMean = betaMean(baseline);
+  if (baseMean <= 1e-9) return { low: 0, high: 0 };
+  const bucketInterval = betaInterval(bucket);
+  return {
+    low: (bucketInterval.low - baseMean) / baseMean,
+    high: (bucketInterval.high - baseMean) / baseMean,
+  };
+}
+
+function cvrCandidate(input: {
+  organizationId: string;
+  brandId: string;
+  attribute: string;
+  value: string;
+  bucket: Totals;
+  baseline: Totals;
+  policy: Policy;
+}): Candidate | null {
+  if (input.bucket.clicks < 20 || input.baseline.clicks < 20) return null;
+  const observed = rate(input.bucket.conversions, input.bucket.clicks);
+  const baselineRate = rate(input.baseline.conversions, input.baseline.clicks);
+  if (observed === null || baselineRate === null || baselineRate <= 0) return null;
+  const lift = relativeLift(observed, baselineRate);
+  if (lift === null) return null;
+  const prior = baselinePrior(baselineRate, input.policy.priorStrength);
+  const bucketPost = updateBeta(prior, input.bucket.conversions, input.bucket.clicks);
+  const baselinePost = updateBeta(jeffreysPrior(), input.baseline.conversions, input.baseline.clicks);
+  const pBeat = probabilityGreater(bucketPost, baselinePost);
+  const interval = liftInterval(bucketPost, baselinePost);
+  return {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    attribute: input.attribute,
+    value: input.value,
+    metric: "cvr",
+    lift: round4(lift),
+    observed: round4(observed),
+    baseline: round4(baselineRate),
+    pBeat: round4(pBeat),
+    ciLow: round4(interval.low),
+    ciHigh: round4(interval.high),
+    bucket: input.bucket,
+    summary: `${input.attribute}=${input.value}: conversion rate ${(observed * 100).toFixed(1)}% vs baseline ${(baselineRate * 100).toFixed(1)}% (P(beat)=${pBeat.toFixed(2)}, 95% CI lift [${interval.low.toFixed(2)}, ${interval.high.toFixed(2)}], n=${input.bucket.creativeIds.size}).`,
+  };
+}
+
+function roasCandidate(input: {
+  organizationId: string;
+  brandId: string;
+  attribute: string;
+  value: string;
+  bucket: Totals;
+  baseline: Totals;
+}): Candidate | null {
+  if (input.bucket.spendCents < 1000 || input.baseline.spendCents < 3000) return null;
+  const observed = rate(input.bucket.revenueCents, input.bucket.roasSpend);
+  const baselineRate = rate(input.baseline.revenueCents, input.baseline.roasSpend);
+  if (observed === null || baselineRate === null || baselineRate <= 0) return null;
+  const lift = relativeLift(observed, baselineRate);
+  if (lift === null) return null;
+  // ROAS is not binomial. Report lift with a spend-weighted interval, not a fake P(beat).
+  const spendShare = input.bucket.spendCents / Math.max(1, input.baseline.spendCents);
+  const width = Math.max(0.05, 0.4 / Math.sqrt(Math.max(1, spendShare * 20)));
+  const pBeat = lift > 0 ? Math.min(0.99, 0.5 + lift / (2 * width + Math.abs(lift))) : Math.max(0.01, 0.5 + lift / (2 * width + Math.abs(lift)));
+  return {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    attribute: input.attribute,
+    value: input.value,
+    metric: "roas",
+    lift: round4(lift),
+    observed: round4(observed),
+    baseline: round4(baselineRate),
+    pBeat: round4(pBeat),
+    ciLow: round4(lift - width),
+    ciHigh: round4(lift + width),
+    bucket: input.bucket,
+    summary: `${input.attribute}=${input.value}: ROAS ${observed.toFixed(2)} vs baseline ${baselineRate.toFixed(2)} (P(beat)=${pBeat.toFixed(2)}, 95% CI lift [${(lift - width).toFixed(2)}, ${(lift + width).toFixed(2)}], n=${input.bucket.creativeIds.size}, spend ${input.bucket.spendCents} cents).`,
+  };
+}
+
+function toPattern(candidate: Candidate, qValue: number, policy: Policy): LearnedPattern {
+  return {
+    organizationId: candidate.organizationId,
+    brandId: candidate.brandId,
+    scope: "brand",
+    attribute: candidate.attribute,
+    value: candidate.value,
+    metric: candidate.metric,
+    lift: candidate.lift,
+    sampleSize: candidate.bucket.creativeIds.size,
+    baseline: candidate.baseline,
+    observed: candidate.observed,
+    impressions: candidate.bucket.impressions,
+    clicks: candidate.bucket.clicks,
+    conversions: candidate.bucket.conversions,
+    spendCents: candidate.bucket.spendCents,
+    revenueCents: candidate.bucket.revenueCents,
+    state: learningState(candidate.bucket.creativeIds.size, candidate.bucket.impressions, candidate.pBeat, policy),
+    summary: `${candidate.summary} BH q=${qValue.toFixed(3)}.`,
+    pBeat: candidate.pBeat,
+    ciLow: candidate.ciLow,
+    ciHigh: candidate.ciHigh,
+    qValue: round4(qValue),
   };
 }
 
 /**
- * Aggregate stored observations. Patterns are withheld until the sample
- * policy is met. Pair attributes use the same floor. Nothing here is a canned lift.
+ * Aggregate stored observations. A bucket is kept when the beta-binomial
+ * posterior says it beats (or loses to) the brand baseline after a multiple-
+ * testing correction. Nothing here is a canned lift.
  */
 export function learnPatterns(
   input: {
@@ -260,10 +356,9 @@ export function learnPatterns(
 
   const baseline = emptyTotals();
   for (const row of totalsByCreative.values()) add(baseline, row);
-  const baselineCtr = rate(baseline.clicks, baseline.impressions);
-  if (baselineCtr === null || baseline.impressions < policy.minImpressionsPerBucket) return [];
+  if (baseline.impressions <= 0) return [];
 
-  const patterns: LearnedPattern[] = [];
+  const candidates: Candidate[] = [];
   const emit = (attribute: string, valueOf: (creative: ObservedCreative) => string) => {
     const buckets = new Map<string, Totals>();
     for (const row of totalsByCreative.values()) {
@@ -275,19 +370,24 @@ export function learnPatterns(
       add(bucket, row);
       buckets.set(value, bucket);
     }
+    if (buckets.size < 2) return;
     for (const [value, bucket] of buckets) {
-      if (bucket.creativeIds.size < policy.minCreativesPerBucket) continue;
-      if (bucket.impressions < policy.minImpressionsPerBucket) continue;
-      pushMetrics(patterns, {
+      if (bucket.creativeIds.size < 1 || bucket.impressions < 1) continue;
+      const shared = {
         organizationId: input.organizationId,
         brandId: input.brandId,
         attribute,
         value,
         bucket,
         baseline,
-        baselineCtr,
         policy,
-      });
+      };
+      const ctr = ctrCandidate(shared);
+      if (ctr) candidates.push(ctr);
+      const cvr = cvrCandidate(shared);
+      if (cvr) candidates.push(cvr);
+      const roas = roasCandidate({ ...shared });
+      if (roas) candidates.push(roas);
     }
   };
 
@@ -303,6 +403,23 @@ export function learnPatterns(
     });
   }
 
+  const byMetric = new Map<string, Candidate[]>();
+  for (const candidate of candidates) {
+    const list = byMetric.get(candidate.metric) ?? [];
+    list.push(candidate);
+    byMetric.set(candidate.metric, list);
+  }
+  const patterns: LearnedPattern[] = [];
+  for (const group of byMetric.values()) {
+    const qValues = bhQValues(group.map((item) => twoSidedP(item.pBeat)));
+    group.forEach((candidate, index) => {
+      const qValue = qValues[index] ?? 1;
+      const decisive = candidate.pBeat >= policy.minPBeat || candidate.pBeat <= 1 - policy.minPBeat;
+      if (!decisive || qValue > policy.fdr) return;
+      patterns.push(toPattern(candidate, qValue, policy));
+    });
+  }
+
   return patterns.sort((a, b) => Math.abs(b.lift) - Math.abs(a.lift));
 }
 
@@ -312,9 +429,12 @@ function ctrSummary(
   observed: number,
   baseline: number,
   lift: number,
+  pBeat: number,
+  ciLow: number,
+  ciHigh: number,
   bucket: Totals,
 ): string {
-  return `${attribute}=${value}: CTR ${(observed * 100).toFixed(1)}% vs baseline ${(baseline * 100).toFixed(1)}% (lift ${(lift * 100).toFixed(0)}%, n=${bucket.creativeIds.size} creatives, ${bucket.impressions} impressions).`;
+  return `${attribute}=${value}: CTR ${(observed * 100).toFixed(1)}% vs baseline ${(baseline * 100).toFixed(1)}% (lift ${(lift * 100).toFixed(0)}%, P(beat)=${pBeat.toFixed(2)}, 95% CI [${ciLow.toFixed(2)}, ${ciHigh.toFixed(2)}], n=${bucket.creativeIds.size} creatives, ${bucket.impressions} impressions).`;
 }
 
 function round4(value: number): number {
