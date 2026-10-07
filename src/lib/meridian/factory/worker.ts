@@ -69,11 +69,12 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
     return `graded:${graded}`;
   }
   if (job.job_type === "factory.trend") {
-    const rows = await sql<{ n: number }>`
-      select count(*)::int as n from research_ads
-      where organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
-    `;
-    return `clustered:${rows[0]?.n ?? 0}`;
+    const { clusterStoredCreativeDna } = await import("./trends.ts");
+    const clusters = await clusterStoredCreativeDna(sql, {
+      organizationId: job.organization_id,
+      brandId: job.brand_id,
+    });
+    return `clustered:${clusters.length}`;
   }
   if (job.job_type === "factory.pick") {
     const rows = await sql<{ n: number }>`
