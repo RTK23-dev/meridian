@@ -14,6 +14,8 @@ In this tree:
 10. Filesystem and S3-compatible object storage clients.
 11. Local semantic embeddings. An external embedding vendor stays not connected without a key.
 
+12. Content factory foundation: fail-closed production database, honest scores, beta-binomial learning, factory job graph, Winner Score, timelines, Creative DNA, gates, kill switch, and the Factory screen. See [FACTORY.md](FACTORY.md).
+
 External launch dependencies:
 
 - A customer ad account and the permission to spend.

@@ -57,6 +57,13 @@ export type LearnedPattern = {
   brandId?: string;
   /** Brand scope is used by default. Organization scope applies only after an explicit opt-in. Global never applies. */
   scope?: "brand" | "organization" | "global";
+  /** P(this bucket beats the brand baseline). Uncalibrated until a report says otherwise. */
+  pBeat?: number;
+  /** 95% credible interval for relative lift. */
+  ciLow?: number;
+  ciHigh?: number;
+  /** Benjamini-Hochberg q-value across buckets of the same metric. */
+  qValue?: number;
 };
 
 export type RejectionFact = {
