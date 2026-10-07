@@ -237,6 +237,17 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     `;
     return "dispatched";
   }
+  if (job.job_type === "publishing.dispatch") {
+    const { claimScheduledJobs } = await import("../publishing/orchestrator.ts");
+    const claimed = await claimScheduledJobs(sql, 10);
+    return `claimed:${claimed.length}`;
+  }
+  if (job.job_type === "telemetry.sync") {
+    if (!job.brand_id) throw new Error("Telemetry sync needs a brand.");
+    const { syncTelemetryToLearning } = await import("../learning/telemetry-engine.ts");
+    const syncRes = await syncTelemetryToLearning(sql, job.organization_id, job.brand_id);
+    return `synced:${syncRes.syncedRecords}:patterns:${syncRes.patternsLearned}`;
+  }
   if (job.job_type === "market.normalize" || job.job_type === "creative.analyze" || job.job_type === "cluster.refresh" || job.job_type === "asset.process") {
     throw new Error(`${job.job_type} has no payload work in this claim. It was not marked done.`);
   }

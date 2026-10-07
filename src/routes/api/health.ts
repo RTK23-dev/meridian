@@ -44,6 +44,14 @@ export const Route = createFileRoute("/api/health")({
             select status, count(*) as count from jobs group by status
           `;
           body.jobs = jobs;
+          try {
+            const queueCounts = await sql<{ status: string; count: number }>`
+              select status, count(*) as count from publishing_queues group by status
+            `;
+            body.publishingQueue = queueCounts;
+          } catch {
+            body.publishingQueue = [];
+          }
         } catch (error) {
           body.database = error instanceof Error ? "down" : "down";
         }

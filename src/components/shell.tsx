@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
@@ -77,35 +77,7 @@ export function Shell({ children }: { children: ReactNode }) {
     return () => cancelAnimationFrame(frame);
   }, [page, path]);
 
-  useEffect(() => {
-    let gPressedAt = 0;
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const typing = target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "");
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault(); setPaletteOpen(true); return;
-      }
-      if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key.toLowerCase() === "g") { gPressedAt = Date.now(); return; }
-      if (Date.now() - gPressedAt < 900) {
-        const targetPath = { o: "/", s: brandId ? `/brands/${brandId}/studio` : "/", r: brandId ? `/brands/${brandId}/reviews` : "/" }[event.key.toLowerCase()];
-        if (targetPath) { event.preventDefault(); void navigatePath(targetPath); }
-        gPressedAt = 0; return;
-      }
-      if (event.key === "/") { event.preventDefault(); setPaletteOpen(true); }
-      if (event.key === "?") { event.preventDefault(); setShortcutsOpen(true); }
-    };
-    const navigatePath = (to: string) => {
-      if (to === "/") return navigate({ to: "/" });
-      if (brandId && to.endsWith("/studio")) return navigate({ to: "/brands/$brandId/studio", params: { brandId } });
-      if (brandId && to.endsWith("/reviews")) return navigate({ to: "/brands/$brandId/reviews", params: { brandId } });
-      return Promise.resolve();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [brandId, navigate]);
-
-  function go(to: string) {
+  const go = useCallback((to: string) => {
     setPaletteOpen(false);
     if (to === "/") { void navigate({ to: "/" }); return; }
     if (to === "/integrations") { void navigate({ to: "/integrations" }); return; }
@@ -122,7 +94,37 @@ export function Shell({ children }: { children: ReactNode }) {
     const suffix = match[2] ?? "";
     const route = suffix ? `/brands/$brandId/${suffix}` : "/brands/$brandId";
     void navigate({ to: route as never, params: { brandId: id } as never });
-  }
+  }, [navigate]);
+
+  useEffect(() => {
+    let gPressedAt = 0;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "");
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault(); setPaletteOpen(true); return;
+      }
+      if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key.toLowerCase() === "g") { gPressedAt = Date.now(); return; }
+      if (Date.now() - gPressedAt < 900) {
+        const targetPath = {
+          o: "/",
+          s: brandId ? `/brands/${brandId}/studio` : "/",
+          r: brandId ? `/brands/${brandId}/reviews` : "/",
+          i: brandId ? `/brands/${brandId}/intelligence` : "/",
+          l: brandId ? `/brands/${brandId}/learning` : "/",
+          f: brandId ? `/brands/${brandId}/factory` : "/",
+          a: brandId ? `/brands/${brandId}/accounts` : "/",
+        }[event.key.toLowerCase()];
+        if (targetPath) { event.preventDefault(); go(targetPath); }
+        gPressedAt = 0; return;
+      }
+      if (event.key === "/") { event.preventDefault(); setPaletteOpen(true); }
+      if (event.key === "?") { event.preventDefault(); setShortcutsOpen(true); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [brandId, go]);
 
   const sidebar = (mobile = false) => (
     <div className="flex h-full flex-col bg-panel">
@@ -187,11 +189,44 @@ export function Shell({ children }: { children: ReactNode }) {
       <p className="sr-only" aria-live="polite" aria-atomic="true">{page}</p>
     </div>
     <Command.Dialog open={paletteOpen} onOpenChange={setPaletteOpen} label="Command palette" className="fixed left-1/2 top-[18vh] z-50 w-[min(38rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-line bg-panel shadow-2xl">
-      <Command.Input autoFocus placeholder="Search screens and actions…" className="h-14 w-full border-b border-line bg-transparent px-4 outline-none" />
+      <Command.Input autoFocus placeholder="Search screens, brands, and operator actions…" className="h-14 w-full border-b border-line bg-transparent px-4 outline-none" />
       <Command.List className="max-h-[60vh] overflow-auto p-2"><Command.Empty className="p-4 text-sm text-muted">No matching command.</Command.Empty>
-        <Command.Group heading="Navigate" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
+        {data?.brands && data.brands.length > 0 ? (
+          <Command.Group heading="Switch Brand" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-brass">
+            {data.brands.map((b) => (
+              <Command.Item
+                key={b.id}
+                value={`Switch Brand ${b.name}`}
+                onSelect={() => go(`/brands/${b.id}`)}
+                className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper"
+              >
+                🏢 {b.name}
+              </Command.Item>
+            ))}
+          </Command.Group>
+        ) : null}
+        {brandId ? (
+          <Command.Group heading="Operator Actions" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-brass">
+            <Command.Item value="Queue and Schedule Multi-Account Publish" onSelect={() => go(`/brands/${brandId}/studio`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
+              🚀 Multi-Account Publishing Queue
+            </Command.Item>
+            <Command.Item value="JEV Whitespace and Account DNA" onSelect={() => go(`/brands/${brandId}/intelligence`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
+              🧠 JEV Multimodal Account Intelligence
+            </Command.Item>
+            <Command.Item value="Telemetry and Bayesian Flywheel" onSelect={() => go(`/brands/${brandId}/learning`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
+              📈 Multi-Channel Performance Telemetry
+            </Command.Item>
+            <Command.Item value="Connected Accounts and Vault" onSelect={() => go(`/brands/${brandId}/accounts`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
+              🔐 Encrypted Credential Vault &amp; Accounts
+            </Command.Item>
+            <Command.Item value="Factory Pipeline" onSelect={() => go(`/brands/${brandId}/factory`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
+              🏭 Content Factory Pipeline
+            </Command.Item>
+          </Command.Group>
+        ) : null}
+        <Command.Group heading="Navigate Screens" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
           {brandId ? <>
-            {[["Overview", `/brands/${brandId}`], ["Market", `/brands/${brandId}/market`], ["Intelligence", `/brands/${brandId}/intelligence`], ["Opportunities", `/brands/${brandId}/opportunities`], ["Reviews", `/brands/${brandId}/reviews`], ["Studio", `/brands/${brandId}/studio`], ["Library", `/brands/${brandId}/library`], ["Learning", `/brands/${brandId}/learning`], ["Brand brain", `/brands/${brandId}/brain`], ["Products", `/brands/${brandId}/products`], ["Accounts", `/brands/${brandId}/accounts`]].map(([label, to]) => <Command.Item key={to} value={label} onSelect={() => go(to)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">{label}</Command.Item>)}
+            {[["Overview", `/brands/${brandId}`], ["Factory", `/brands/${brandId}/factory`], ["Market", `/brands/${brandId}/market`], ["Intelligence", `/brands/${brandId}/intelligence`], ["Opportunities", `/brands/${brandId}/opportunities`], ["Reviews", `/brands/${brandId}/reviews`], ["Studio", `/brands/${brandId}/studio`], ["Library", `/brands/${brandId}/library`], ["Learning", `/brands/${brandId}/learning`], ["Brand brain", `/brands/${brandId}/brain`], ["Products", `/brands/${brandId}/products`], ["Accounts", `/brands/${brandId}/accounts`]].map(([label, to]) => <Command.Item key={to} value={label} onSelect={() => go(to)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">{label}</Command.Item>)}
           </> : null}
           <Command.Item value="Workspace overview" onSelect={() => go("/")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Workspace overview</Command.Item>
           <Command.Item value="Usage and cost" onSelect={() => go("/usage")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Usage &amp; cost</Command.Item>
@@ -203,7 +238,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <Command.Item value="Settings" onSelect={() => go("/settings")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Settings</Command.Item>
           <Command.Item value="Integrations" onSelect={() => go("/integrations")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Integrations</Command.Item>
         </Command.Group>
-        <Command.Group heading="Actions" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
+        <Command.Group heading="Preferences &amp; System" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
           <Command.Item value="Toggle theme" onSelect={() => { setPaletteOpen(false); setTheme(theme === "dark" ? "light" : "dark"); }} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Toggle theme</Command.Item>
           {brandId ? <Command.Item value="Refresh opportunities" onSelect={() => { setPaletteOpen(false); void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, ["opportunities", brandId]) }); }} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Refresh opportunities</Command.Item> : null}
           {brandId ? <Command.Item value="Open reviews" onSelect={() => go(`/brands/${brandId}/reviews`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Open reviews</Command.Item> : null}
@@ -213,7 +248,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </Command.List>
     </Command.Dialog>
     {paletteOpen ? <button className="fixed inset-0 z-40 cursor-default bg-black/40" aria-label="Close command palette" onClick={() => setPaletteOpen(false)} /> : null}
-    {shortcutsOpen ? <div role="presentation" className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShortcutsOpen(false); }}><section role="dialog" aria-modal="true" aria-labelledby="shortcut-title" className="w-full max-w-md rounded-xl border border-line bg-panel p-6 shadow-xl"><div className="flex items-center justify-between"><h2 id="shortcut-title" className="font-display text-xl">Keyboard shortcuts</h2><button type="button" onClick={() => setShortcutsOpen(false)} aria-label="Close shortcuts">×</button></div><dl className="mt-4 grid grid-cols-[1fr_auto] gap-3 text-sm"><dt>Open search and commands</dt><dd><kbd>⌘ / Ctrl K</kbd></dd><dt>Overview</dt><dd><kbd>G O</kbd></dd><dt>Studio</dt><dd><kbd>G S</kbd></dd><dt>Reviews</dt><dd><kbd>G R</kbd></dd><dt>Focus search</dt><dd><kbd>/</kbd></dd><dt>Show this help</dt><dd><kbd>?</kbd></dd></dl></section></div> : null}
+    {shortcutsOpen ? <div role="presentation" className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShortcutsOpen(false); }}><section role="dialog" aria-modal="true" aria-labelledby="shortcut-title" className="w-full max-w-md rounded-xl border border-line bg-panel p-6 shadow-xl"><div className="flex items-center justify-between"><h2 id="shortcut-title" className="font-display text-xl">Keyboard shortcuts</h2><button type="button" onClick={() => setShortcutsOpen(false)} aria-label="Close shortcuts">×</button></div><dl className="mt-4 grid grid-cols-[1fr_auto] gap-3 text-sm"><dt>Open search and commands</dt><dd><kbd>⌘ / Ctrl K</kbd></dd><dt>Overview</dt><dd><kbd>G O</kbd></dd><dt>Studio</dt><dd><kbd>G S</kbd></dd><dt>Reviews</dt><dd><kbd>G R</kbd></dd><dt>Intelligence &amp; DNA</dt><dd><kbd>G I</kbd></dd><dt>Learning &amp; Flywheel</dt><dd><kbd>G L</kbd></dd><dt>Factory Pipeline</dt><dd><kbd>G F</kbd></dd><dt>Connected Accounts</dt><dd><kbd>G A</kbd></dd><dt>Focus search</dt><dd><kbd>/</kbd></dd><dt>Show this help</dt><dd><kbd>?</kbd></dd></dl></section></div> : null}
   </div>;
 }
 
