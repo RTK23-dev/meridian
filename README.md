@@ -48,7 +48,11 @@ Open the app, create an account, and add a brand. Without `DATABASE_URL`, the pr
 - Approved, tenant-scoped Hypit MP4s can be uploaded to Meta and used in a paused campaign/ad-set/ad chain. Upload retries reconcile the prior upload; publishing is not activated automatically.
 - Tenant-scoped Meta performance jobs verify the selected ad and account before storing observations.
 - A separate worker and scheduler, filesystem storage, and an S3-compatible client.
-- A Factory screen: discover winners and trends, abstract templates, gated production, review, capped live tests, and learnings. Autopilot stays at Suggest until an admin raises the ceiling.
+- **Content Factory & Creative DNA v2**: `ffmpeg` scene-cut detection, keyframe vision labeling, OCR text role classification, WhisperX alignment, 384-dimensional multimodal embeddings stored in Postgres via `pgvector` (`migrations/0019_creative_dna_pgvector.sql`), and pgvector cosine-similarity trends clustering.
+- **Multi-Source Intelligence & Winner Score**: Pluggable source adapters (`BulkUploadSourceAdapter` and `SensorTowerSourceAdapter`), daily timeline tracking, and calibrated Winner Score backtesting.
+- **Multi-Aspect Production & Originality Gate**: Timeline video assembly across `9:16`, `4:5`, `1:1`, and `16:9` aspect ratios; second `VideoEngine` adapter (`timelineVideoEngine`); and 64-bit perceptual hashing originality gate with Hamming distance.
+- **Autopilot Levels 0–3 & Meta Verification Gate**: Discovers trends, generates variants, stages paused campaigns, and manages budgets. Levels 2 & 3 ("Stage" and "Run") strictly fail closed unless a confirmed Meta test-account round trip (video upload, paused campaign, and synced performance) is recorded.
+- **Modular Engines & n8n-Style Flow Connectors**: Cleanly decoupled swappable engines (`GradingEngine`, `PlannerEngine`, `PublishEngine`, `VideoEngine`, `SourceAdapter`) connected via standardized `FlowNode` contracts and chainable `createFlow` / `FlowPipeline` runners.
 - Production refuses to boot without `DATABASE_URL`. Snapshot video from Ad Library stays off unless `RESEARCH_SNAPSHOT_MEDIA=1`.
 - Invite email when `EMAIL_API_URL` and `EMAIL_API_KEY` are set. Otherwise the invite is stored and nobody is notified.
 

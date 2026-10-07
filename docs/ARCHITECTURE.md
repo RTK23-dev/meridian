@@ -47,6 +47,12 @@ The web process does not execute the worker loop. `scripts/worker-entry.ts` clai
 | Providers | `providers/meta.ts`, `tiktok.ts`, `google-ads.ts`, `connect.ts` | Live HTTP. Test provider is explicit |
 | Sources | `sources/` | Manual adapter, public-page fetch, SSRF checks |
 | JEV Research | `research/`, `providers/meta-research.ts` | Tenant-scoped Ad Library collection, verified media, transcript, evidence-grounded analysis, and corpus summaries |
+| Content Factory | `factory/` | Creative DNA v2, pgvector embeddings, trends clustering, multi-aspect rendering, autopilot levels |
+| Flow Connectors | `flow/` | Standardized n8n-style node connectors (`FlowNode`, `FlowPipeline`, `createFlow`) |
+| Grading Engine | `grading/engine.ts` | Swappable grading: `WinnerScoreGradingEngine`, `HeuristicGradingEngine` |
+| Planner Engine | `planner/engine.ts` | Swappable planning: `MatrixPlannerEngine` (permutational variant matrices) |
+| Video Engine | `video/engine.ts` | Swappable rendering: `HypitVideoEngine`, `TimelineVideoEngine` |
+| Publish Engine | `publishing/engine.ts` | Swappable publishing: `MetaPublishEngine`, `TestPublishEngine` |
 | API | `machine.ts` | Persistence and tenant checks |
 
 AI output is parsed into fields and then checked by deterministic code. Retrieved page text is wrapped as `untrusted_source` and is not allowed to act as instructions.
