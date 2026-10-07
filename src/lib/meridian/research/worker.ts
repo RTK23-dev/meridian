@@ -11,6 +11,8 @@ import type { Sql } from "../learning/store.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import { rerankBrand } from "../opportunity/rerank.ts";
 import type { ResearchSegment } from "./schema.ts";
+import { snapshotMediaAllowed } from "../factory/sources.ts";
+import { emptyYield, formatYield } from "../factory/yield.ts";
 
 const MAX_VIDEO_BYTES = 24_000_000;
 const MAX_RUN_MEDIA_BYTES = 100_000_000;
@@ -80,10 +82,23 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
     on conflict (id) do update set status = excluded.status, last_error = '', updated_at = now()
   `;
   let analyzedCount = 0;
+  let videosDownloaded = 0;
+  let transcriptsProduced = 0;
+  let snapshotWithoutVideo = 0;
+  let mediaFailed = 0;
+  const allowSnapshotMedia = snapshotMediaAllowed();
+  const yieldRow = emptyYield(searchTerms);
+  yieldRow.snapshotMediaEnabled = allowSnapshotMedia;
   for (const ad of collected.ads) {
     const adId = await persistMetaAd(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId, ad });
     if (ad.mediaType !== "VIDEO") {
       await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "media", status: "unavailable", message: "This archived record is not a video ad." });
+      snapshotWithoutVideo += 1;
+      continue;
+    }
+    if (!allowSnapshotMedia) {
+      await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "media", status: "unavailable", message: "Snapshot video download is off. Metadata was stored. Set RESEARCH_SNAPSHOT_MEDIA=1 only after a rights review." });
+      snapshotWithoutVideo += 1;
       continue;
     }
     let bytes: Uint8Array;
@@ -110,6 +125,7 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
       if (media.mimeType !== "video/mp4" || !isMp4(media.bytes)) throw new Error("The source did not return a verified MP4.");
       bytes = media.bytes;
       await persistResearchVideo(sql, { organizationId: job.organization_id, brandId: job.brand_id, researchAdId: adId, bytes, mimeType: media.mimeType, durationMs: null });
+      videosDownloaded += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Media ingestion failed.";
       if (/larger than the .*research limit/i.test(message)) {
@@ -117,6 +133,7 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
         continue;
       }
       await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "media", status: "failed", message });
+      mediaFailed += 1;
       return retryCollection(sql, job, runId, message);
     }
     const transcript = await transcriptForVideo(sql, bytes, { organizationId: job.organization_id, brandId: job.brand_id, adId });
@@ -126,6 +143,7 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
       continue;
     }
     const storedTranscript = await persistTranscript(sql, { organizationId: job.organization_id, brandId: job.brand_id, researchAdId: adId, transcript });
+    transcriptsProduced += 1;
     if (transcript.status === "no_speech") continue;
     await sql`update research_ads set media_duration_ms = ${transcript.durationMs} where id = ${adId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
     const reusable = await loadReusableResearchAnalysis(sql, { organizationId: job.organization_id, brandId: job.brand_id, researchAdId: adId, videoHash: sha256(bytes) });
@@ -190,11 +208,17 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
     await sql`update research_collection_runs set analyzed_count = ${analyzedCount}, updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
     void storedTranscript;
   }
+  yieldRow.adsFound = collected.ads.length;
+  yieldRow.videosDownloaded = videosDownloaded;
+  yieldRow.transcriptsProduced = transcriptsProduced;
+  yieldRow.analysesCompleted = analyzedCount;
+  yieldRow.snapshotWithoutVideo = snapshotWithoutVideo;
+  yieldRow.mediaFailed = mediaFailed;
   const patterns = await rebuildResearchPatterns(sql, job.organization_id, job.brand_id);
   await rebuildOrganizationResearchPatterns(sql, job.organization_id);
   await rerankBrand(sql, job.organization_id, job.brand_id);
-  await sql`update research_collection_runs set status = 'succeeded', collected_count = ${collected.ads.length}, analyzed_count = ${analyzedCount}, error = ${patterns.length ? "" : "No video analyses were available to aggregate."}, updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
-  return `ads:${collected.ads.length};analyzed:${analyzedCount};patterns:${patterns.length};opportunities:refreshed`;
+  await sql`update research_collection_runs set status = 'succeeded', collected_count = ${collected.ads.length}, analyzed_count = ${analyzedCount}, videos_downloaded = ${videosDownloaded}, transcripts_produced = ${transcriptsProduced}, snapshot_without_video = ${snapshotWithoutVideo}, yield_json = ${JSON.stringify(yieldRow)}, error = ${patterns.length ? "" : "No video analyses were available to aggregate."}, updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
+  return `ads:${collected.ads.length};analyzed:${analyzedCount};patterns:${patterns.length};opportunities:refreshed;${formatYield(yieldRow)}`;
 }
 
 export function newResearchRunId(): string { return randomUUID(); }
