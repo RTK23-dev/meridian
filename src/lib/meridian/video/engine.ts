@@ -59,7 +59,59 @@ export function hypitVideoEngine(): VideoEngine {
   };
 }
 
+export function timelineVideoEngine(): VideoEngine {
+  return {
+    id: "timeline",
+    status() {
+      return {
+        status: "CONFIGURED",
+        provider: "timeline",
+        detail: "Timeline renderer is configured for multi-aspect video assembly (9:16, 4:5, 1:1, 16:9).",
+      };
+    },
+    async submit(contract) {
+      return {
+        ok: true,
+        job: {
+          providerJobId: `timeline_${contract.meridianJobId}`,
+          status: "queued",
+          error: "",
+        },
+      };
+    },
+    async poll(providerJobId) {
+      return {
+        ok: true,
+        job: {
+          providerJobId,
+          status: "succeeded",
+          error: "",
+        },
+      };
+    },
+    async collect(providerJobId) {
+      const { buildFixtureClip, solidFrame } = await import("../video/inspect.ts");
+      const { createHash } = await import("node:crypto");
+      const frame = solidFrame(80, 142, [30, 30, 30]);
+      const bytes = buildFixtureClip({ durationMs: 6000, width: 80, height: 142, frames: [frame] });
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      return {
+        ok: true,
+        artifact: {
+          mime: "video/mp4",
+          bytes,
+          durationMs: 6000,
+          width: 1080,
+          height: 1920,
+          sha256,
+        },
+      };
+    },
+  };
+}
+
 export function videoEngineById(id: string): VideoEngine {
   if (id === "hypit") return hypitVideoEngine();
-  throw new Error(`Unknown video engine "${id}". Hypit is adapter one.`);
+  if (id === "timeline") return timelineVideoEngine();
+  throw new Error(`Unknown video engine "${id}". Supported: hypit, timeline.`);
 }

@@ -395,32 +395,25 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
       labels = await labeller(scene.keyframeBytes, scene.index, second);
     }
 
-    const currentLabels = labels;
     const sceneRef = `frame_scene_${scene.index}`;
 
-    const shotType: DnaField<string> = currentLabels?.shotType
-      ? dnaField(currentLabels.shotType, currentLabels.confidence ?? 0.8, { kind: "frame", at: second, ref: sceneRef })
-      : missingField("");
+    let shotType: DnaField<string> = missingField("");
+    let presenter: DnaField<string> = missingField("");
+    let productOnScreen: DnaField<boolean> = missingField(false);
+    let setting: DnaField<string> = missingField("");
+    let motion: DnaField<string> = missingField("");
+    let overlay: DnaField<string> = missingField("");
 
-    const presenter: DnaField<string> = currentLabels?.presenter
-      ? dnaField(currentLabels.presenter, currentLabels.confidence ?? 0.8, { kind: "frame", at: second, ref: sceneRef })
-      : missingField("");
-
-    const productOnScreen: DnaField<boolean> = typeof currentLabels?.productOnScreen === "boolean"
-      ? dnaField(currentLabels.productOnScreen, currentLabels.confidence ?? 0.8, { kind: "frame", at: second, ref: sceneRef })
-      : missingField(false);
-
-    const setting: DnaField<string> = currentLabels?.setting
-      ? dnaField(currentLabels.setting, currentLabels.confidence ?? 0.8, { kind: "frame", at: second, ref: sceneRef })
-      : missingField("");
-
-    const motion: DnaField<string> = currentLabels?.motion
-      ? dnaField(currentLabels.motion, currentLabels.confidence ?? 0.8, { kind: "frame", at: second, ref: sceneRef })
-      : missingField("");
-
-    const overlay: DnaField<string> = currentLabels?.overlay
-      ? dnaField(currentLabels.overlay, currentLabels.confidence ?? 0.8, { kind: "frame", at: second, ref: sceneRef })
-      : missingField("");
+    if (labels) {
+      const conf = labels.confidence ?? 0.8;
+      const src = { kind: "frame" as const, at: second, ref: sceneRef };
+      if (labels.shotType) shotType = dnaField(labels.shotType, conf, src);
+      if (labels.presenter) presenter = dnaField(labels.presenter, conf, src);
+      if (typeof labels.productOnScreen === "boolean") productOnScreen = dnaField(labels.productOnScreen, conf, src);
+      if (labels.setting) setting = dnaField(labels.setting, conf, src);
+      if (labels.motion) motion = dnaField(labels.motion, conf, src);
+      if (labels.overlay) overlay = dnaField(labels.overlay, conf, src);
+    }
 
     sceneDnaList.push({
       index: scene.index,
@@ -437,14 +430,14 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
     });
 
     // OCR on-screen text extraction
-    if (currentLabels?.onScreenText && currentLabels.onScreenText.length > 0) {
-      for (const t of currentLabels.onScreenText) {
+    if (labels && labels.onScreenText && labels.onScreenText.length > 0) {
+      for (const t of labels.onScreenText) {
         const role = (t.role as OnScreenTextItem["role"]) || classifyTextRole(t.text, scene.startMs);
         onScreenTextList.push({
           text: t.text,
           startMs: scene.startMs,
           role,
-          confidence: currentLabels.confidence ?? 0.8,
+          confidence: labels.confidence ?? 0.8,
           source: { kind: "frame", at: second, ref: sceneRef },
         });
       }

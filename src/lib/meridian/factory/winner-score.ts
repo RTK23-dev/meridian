@@ -85,7 +85,7 @@ export function winnerScore(input: WinnerEvidence, weights = DEFAULT_WEIGHTS): W
 export function backtestWinnerScore(rows: {
   score: number;
   stillLiveAfter30Days: boolean;
-}): { top20HitRate: number | null; randomHitRate: number | null; lift: number | null; n: number } {
+}[]): { top20HitRate: number | null; randomHitRate: number | null; lift: number | null; n: number } {
   if (rows.length < 10) {
     return { top20HitRate: null, randomHitRate: null, lift: null, n: rows.length };
   }
