@@ -37,7 +37,7 @@ function navGroups(brandId: string | undefined, reviews: number): { label: strin
     { label: "Overview", links: [{ label: "Overview", to: b, icon: House }] },
     { label: "Factory", links: [{ label: "Factory", to: `${b}/factory`, icon: Factory }] },
     { label: "Research", links: [{ label: "Market", to: `${b}/market`, icon: FlaskConical }, { label: "Intelligence", to: `${b}/intelligence`, icon: Sparkles }] },
-    { label: "Decide", links: [{ label: "Opportunities", to: `${b}/opportunities`, icon: Layers3 }, { label: "Reviews", to: `${b}/reviews", icon: Bell, ...(reviews ? { badge: reviews } : {}) }] },
+    { label: "Decide", links: [{ label: "Opportunities", to: `${b}/opportunities`, icon: Layers3 }, { label: "Reviews", to: `${b}/reviews`, icon: Bell, ...(reviews ? { badge: reviews } : {}) }] },
     { label: "Create", links: [{ label: "Studio", to: `${b}/studio`, icon: WandSparkles }, { label: "Library", to: `${b}/library`, icon: Package }] },
     { label: "Learn", links: [{ label: "Learning", to: `${b}/learning`, icon: Activity }, { label: "Calibration", to: `${b}/calibration`, icon: BarChart3 }] },
     { label: "Brand", links: [{ label: "Brand brain", to: `${b}/brain`, icon: Brain }, { label: "Products", to: `${b}/products`, icon: Package }] },
