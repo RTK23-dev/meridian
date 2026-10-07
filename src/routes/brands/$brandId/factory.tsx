@@ -54,13 +54,13 @@ function FactoryPage({ brandId }: { brandId: string }) {
       {note ? <p className="text-sm text-muted" role="status">{note}</p> : null}
 
       <Tabs defaultValue="discover">
-        <TabsList>
-          <TabsTrigger value="discover">Discover</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="production">Production</TabsTrigger>
-          <TabsTrigger value="review">Review</TabsTrigger>
-          <TabsTrigger value="tests">Live tests</TabsTrigger>
-          <TabsTrigger value="learnings">Learnings</TabsTrigger>
+        <TabsList className="grid h-auto w-full grid-cols-3 gap-1 sm:grid-cols-6">
+          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="discover">Discover</TabsTrigger>
+          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="templates">Templates</TabsTrigger>
+          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="production">Production</TabsTrigger>
+          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="review">Review</TabsTrigger>
+          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="tests">Live tests</TabsTrigger>
+          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="learnings">Learnings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="discover" className="space-y-6">

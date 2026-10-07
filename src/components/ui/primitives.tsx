@@ -53,7 +53,7 @@ export const TooltipTrigger = TooltipPrimitive.Trigger;
 export function TooltipContent({ className, ...props }: ComponentProps<typeof TooltipPrimitive.Content>) { return <TooltipPrimitive.Portal><TooltipPrimitive.Content {...props} className={cn("z-50 rounded bg-fg px-2 py-1 text-xs text-bg shadow-sm", className)} /></TooltipPrimitive.Portal>; }
 
 export const Tabs = TabsPrimitive.Root;
-export function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.List>) { return <TabsPrimitive.List {...props} className={cn("inline-flex gap-1 border-b border-border", className)} />; }
+export function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.List>) { return <TabsPrimitive.List {...props} className={cn("inline-flex max-w-full flex-wrap gap-1 border-b border-border", className)} />; }
 export function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsPrimitive.Trigger>) { return <TabsPrimitive.Trigger {...props} className={cn("min-h-10 px-3 text-sm text-fg-muted outline-none focus-visible:ring-2 focus-visible:ring-accent data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:font-semibold data-[state=active]:text-fg", className)} />; }
 export const TabsContent = TabsPrimitive.Content;
 

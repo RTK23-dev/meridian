@@ -20,7 +20,7 @@ export const DEFAULT_LEARNING_POLICY = {
   /** Soft prior strength. Not a hard floor that crowns noise. */
   priorStrength: 8,
   /** BH false-discovery rate used to keep a pattern. */
-  fdr: 0.1,
+  fdr: 0.15,
   /** Below this posterior chance, a pattern is not stored. */
   minPBeat: 0.8,
   inferredMinImpressions: 800,
