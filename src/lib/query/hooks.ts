@@ -3,6 +3,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBrand } from "@/lib/meridian/api";
 import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, listLibrary, listOpportunities, listReviews, getTrace } from "@/lib/meridian/machine";
 import { getCalibration } from "@/lib/meridian/calibration/actions";
+import { getFactoryBoard } from "@/lib/meridian/factory/actions";
 import { getStudioSession } from "@/lib/meridian/studio/actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { qk, userScopedQueryKey } from "./keys";
@@ -72,6 +73,15 @@ export const useAssetsQuery = (brandId: string, enabled = true) => {
 export const useLearningQuery = (brandId: string, enabled = true) => {
   const scope = useUserScopedKey(qk.learning(brandId));
   return useQuery({ ...scope, queryFn: () => getLearning({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+};
+export const useFactoryQuery = (brandId: string, enabled = true) => {
+  const scope = useUserScopedKey(qk.factory(brandId));
+  return useQuery({
+    ...scope,
+    queryFn: () => getFactoryBoard({ data: { brandId } }),
+    enabled: scope.enabled && enabled && !!brandId,
+    refetchInterval: (query) => query.state.data?.runs.some((run) => run.status === "queued" || run.status === "running") ? 5_000 : false,
+  });
 };
 export const useCalibrationQuery = (brandId: string, enabled = true) => {
   const scope = useUserScopedKey(qk.calibration(brandId));
