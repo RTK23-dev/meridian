@@ -1,0 +1,65 @@
+import type { Transport } from "../providers/http.ts";
+import {
+  collectHypitArtifact,
+  hypitConnection,
+  pollHypitJob,
+  startHypitJob,
+} from "../hypit/client.ts";
+import type { HypitJobContract } from "../hypit/contract.ts";
+import { videoGenerationStatus } from "./provider.ts";
+
+export type VideoEngineStatus =
+  | { status: "NOT_CONNECTED"; provider: string; detail: string }
+  | { status: "CONFIGURED"; provider: string; detail: string };
+
+export type VideoEngine = {
+  id: string;
+  status(): VideoEngineStatus;
+  submit: typeof startHypitJob extends (...args: infer _A) => infer R
+    ? (contract: HypitJobContract, transport: Transport) => R
+    : never;
+  poll: typeof pollHypitJob extends (...args: infer _A) => infer R
+    ? (providerJobId: string, transport: Transport) => R
+    : never;
+  collect: typeof collectHypitArtifact extends (...args: infer _A) => infer R
+    ? (providerJobId: string, transport: Transport) => R
+    : never;
+};
+
+export function hypitVideoEngine(): VideoEngine {
+  return {
+    id: "hypit",
+    status() {
+      const snapshot = videoGenerationStatus({ baseUrl: process.env.HYPIT_BASE_URL });
+      return snapshot.status === "CONFIGURED"
+        ? { status: "CONFIGURED", provider: "hypit", detail: snapshot.detail }
+        : { status: "NOT_CONNECTED", provider: "hypit", detail: snapshot.detail };
+    },
+    submit(contract, transport) {
+      const connection = hypitConnection();
+      if (connection.status !== "CONFIGURED") {
+        return Promise.resolve({ ok: false as const, code: "HYPIT_FAILED" as const, error: connection.detail });
+      }
+      return startHypitJob(connection, contract, transport);
+    },
+    poll(providerJobId, transport) {
+      const connection = hypitConnection();
+      if (connection.status !== "CONFIGURED") {
+        return Promise.resolve({ ok: false as const, code: "HYPIT_FAILED" as const, error: connection.detail });
+      }
+      return pollHypitJob(connection, providerJobId, transport);
+    },
+    collect(providerJobId, transport) {
+      const connection = hypitConnection();
+      if (connection.status !== "CONFIGURED") {
+        return Promise.resolve({ ok: false as const, code: "HYPIT_FAILED" as const, error: connection.detail });
+      }
+      return collectHypitArtifact(connection, providerJobId, transport);
+    },
+  };
+}
+
+export function videoEngineById(id: string): VideoEngine {
+  if (id === "hypit") return hypitVideoEngine();
+  throw new Error(`Unknown video engine "${id}". Hypit is adapter one.`);
+}
