@@ -41,6 +41,10 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     const { executeResearchCollection } = await import("../research/worker.ts");
     return executeResearchCollection(sql, job, payload);
   }
+  if (job.job_type.startsWith("factory.")) {
+    const { executeFactoryJob } = await import("../factory/worker.ts");
+    return executeFactoryJob(sql, job, payload);
+  }
   if (job.job_type === "learning.update") {
     if (!job.brand_id) throw new Error("Learning needs a brand.");
     const count = await applyLearnedPatterns(sql, job.organization_id, job.brand_id);
