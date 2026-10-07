@@ -1,5 +1,5 @@
 import type { FlowContext, FlowNode, NodeExecutionResult } from "./connector.ts";
-import type { SourceAdapter, NormalizedAdRecord } from "../factory/sources.ts";
+import type { SourceAdapter, SourceAdItem } from "../factory/sources.ts";
 import type { GradingEngine, GradingInput, GradingResult } from "../grading/engine.ts";
 import type { PlannerEngine, VariantPlanningInput, VariantPlanningResult } from "../planner/engine.ts";
 import type { VideoEngine } from "../video/engine.ts";
@@ -8,26 +8,34 @@ import { compareOriginalityAgainstSource } from "../factory/gates.ts";
 import type { HypitJobContract } from "../hypit/contract.ts";
 
 /** Source Ingestion Connector Node */
-export function createSourceNode(adapter: SourceAdapter, id = "source-node"): FlowNode<{ limit?: number }, NormalizedAdRecord[]> {
+export function createSourceNode(adapter: SourceAdapter, id = "source-node"): FlowNode<{ niche?: string; limit?: number }, SourceAdItem[]> {
   return {
     id,
-    name: `Source (${adapter.id})`,
+    name: `Source (${adapter.name})`,
     type: "source",
-    async execute(input, context): Promise<NodeExecutionResult<NormalizedAdRecord[]>> {
-      const status = adapter.status();
-      if (status.status !== "CONFIGURED") {
+    async execute(input): Promise<NodeExecutionResult<SourceAdItem[]>> {
+      const check = await adapter.checkConnection();
+      if (!check.connected) {
         return {
           ok: false,
           data: [],
-          error: `Source adapter "${adapter.id}" is not configured: ${status.detail}`,
-          logs: [`Adapter status: ${status.status}`],
+          error: `Source adapter "${adapter.name}" is not connected: ${check.reason ?? "Missing credentials"}`,
+          logs: [`Connected: false`],
         };
       }
-      const records = await adapter.fetchRecentAds({ limit: input.limit ?? 20 });
+      const fetchResult = await adapter.fetchAds({ niche: input.niche, limit: input.limit ?? 20 });
+      if (fetchResult.status !== "connected") {
+        const errorMsg = fetchResult.status === "failed" ? fetchResult.error : fetchResult.reason;
+        return {
+          ok: false,
+          data: [],
+          error: errorMsg,
+        };
+      }
       return {
         ok: true,
-        data: records,
-        logs: [`Fetched ${records.length} records from ${adapter.id}`],
+        data: fetchResult.ads,
+        logs: [`Fetched ${fetchResult.ads.length} records from ${adapter.name}`],
       };
     },
   };
@@ -86,10 +94,11 @@ export function createProductionNode(engine: VideoEngine, id = "production-node"
 
       const submit = await engine.submit(contract, {} as any);
       if (!submit.ok || !submit.job?.providerJobId) {
+        const errorMsg = "error" in submit ? String(submit.error) : "No job ID returned";
         return {
           ok: false,
           data: { artifactBytes: new Uint8Array(), mime: "", durationMs: 0 },
-          error: `Video submission failed: ${submit.error || "No job ID returned"}`,
+          error: `Video submission failed: ${errorMsg}`,
         };
       }
 
@@ -104,10 +113,11 @@ export function createProductionNode(engine: VideoEngine, id = "production-node"
 
       const artifact = await engine.collect(submit.job.providerJobId, {} as any);
       if (!artifact.ok || !artifact.artifact) {
+        const errorMsg = "error" in artifact ? String(artifact.error) : "Artifact missing";
         return {
           ok: false,
           data: { artifactBytes: new Uint8Array(), mime: "", durationMs: 0 },
-          error: `Could not collect completed video artifact: ${artifact.error || "Artifact missing"}`,
+          error: `Could not collect completed video artifact: ${errorMsg}`,
         };
       }
 
@@ -116,7 +126,7 @@ export function createProductionNode(engine: VideoEngine, id = "production-node"
         data: {
           artifactBytes: artifact.artifact.bytes,
           mime: artifact.artifact.mime,
-          durationMs: artifact.artifact.durationMs,
+          durationMs: artifact.artifact.durationMs ?? 0,
         },
         logs: [`Produced artifact: ${artifact.artifact.bytes.byteLength} bytes (${artifact.artifact.mime})`],
       };
@@ -126,7 +136,7 @@ export function createProductionNode(engine: VideoEngine, id = "production-node"
 
 /** Originality and Rights Gate Connector Node */
 export function createGateNode(
-  options: { maxHammingDistance?: number; maxEmbeddingCosine?: number } = {},
+  _options: { maxHammingDistance?: number; maxEmbeddingCosine?: number } = {},
   id = "gate-node",
 ): FlowNode<{ variantFrames?: Uint8Array[]; sourceFrames?: Uint8Array[]; variantEmbedding?: number[]; sourceEmbedding?: number[] }, { passed: boolean; reason: string }> {
   return {
@@ -139,8 +149,6 @@ export function createGateNode(
         sourceFrames: input.sourceFrames,
         variantEmbedding: input.variantEmbedding,
         sourceEmbedding: input.sourceEmbedding,
-        maxHammingDistance: options.maxHammingDistance,
-        maxEmbeddingCosine: options.maxEmbeddingCosine,
       });
 
       if (check.result === "block") {

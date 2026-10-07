@@ -205,3 +205,9 @@ export class SensorTowerSourceAdapter implements SourceAdapter {
     };
   }
 }
+
+export function sourceAdapterById(id: string): SourceAdapter {
+  if (id === "bulk-upload" || id === "bulk_upload") return new BulkUploadSourceAdapter();
+  if (id === "sensor-tower" || id === "licensed_sensor_tower") return new SensorTowerSourceAdapter();
+  throw new Error(`Unknown source adapter "${id}". Supported: bulk_upload, licensed_sensor_tower.`);
+}
