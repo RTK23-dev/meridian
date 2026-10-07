@@ -62,6 +62,56 @@ JEV's learning feedback loop updates Beta-binomial conjugate posteriors from obs
 - **Hierarchical Cold-Start Priors**: Translates anonymized vertical baselines (`hierarchicalColdStartPrior`) into empirical priors, accelerating learning for new brands while preserving strict tenant isolation.
 - **FDR Filtering**: Uses Benjamini-Hochberg false-discovery rate control (`bhQValues`) to keep only statistically robust patterns.
 
+---
+
+## Account-Level Intelligence & Multimodal DNA Engine
+
+Introduced in migration `0022_jev_account_intelligence.sql` (`src/lib/meridian/jev/account-engine.ts` and `src/lib/meridian/jev/multimodal-scorer.ts`), JEV expands from isolated variant evaluation into comprehensive account-level intelligence and portfolio analysis.
+
+### 1. 6-Beat Short-Form Narrative Decomposition
+Every video creative is decomposed into a structured 6-beat narrative arc:
+
+| Beat | Window | Analytical Focus |
+|---|---|---|
+| **1. Hook** | `0 - 3s` | Visual contrast, facial expression, bold text overlay, pattern interrupt |
+| **2. Problem** | `3 - 7s` | Pain point agitation, relatable dilemma, status-quo friction |
+| **3. Reveal** | `7 - 15s` | Introduction of the product, paradigm shift, transformation |
+| **4. Proof** | `15 - 25s` | Side-by-side demo, customer review, clinical data, social proof |
+| **5. Offer** | `25 - 30s` | Value proposition, bundle discount, guarantee, scarcity |
+| **6. CTA** | `30 - 35s` | Clear directional action (verbal cue + visual text sticker) |
+
+### 2. Decile Trait Separation
+JEV categorizes an account's content portfolio into top decile (top 10%) vs. bottom decile (bottom 10%) by blended engagement and retention, calculating exact creative differentiators:
+- **Speech Rate (WPM)**: Pacing distribution across narrative beats.
+- **Audio Energy**: Dynamic range and RMS energy across hook vs. body.
+- **Motion Intensity**: Frame-to-frame pixel change rate in the first 3 seconds.
+- **Text Density**: On-screen typography density and legibility.
+- **Visual Style**: UGC selfie vs. high-production vs. screencast vs. illustration.
+
+### 3. Multimodal Predictive Scoring (`multimodal-scorer.ts`)
+- **Logistic Hook Retention Prediction**: Predicts probability of 3s hook retention using calibrated weights:
+  $$P(\text{retention}) = \frac{1}{1 + \exp(-(\beta_0 + 0.35 \cdot \text{visual} + 0.25 \cdot \text{audio} + 0.20 \cdot \text{motion} + 0.20 \cdot \text{text}))}$$
+- **Audio Prosody Scoring**: Analyzes speaking pace (140-180 WPM sweet spot) and dynamic audio energy.
+- **Comment Objection Mining**: Extracts recurring audience objections (e.g., price, shipping, efficacy) to proactively address in upcoming briefs.
+
+### 4. Competitor Whitespace Radar (`jev_whitespace_opportunities`)
+Analyzes competitor ad coverage to identify **un-saturated creative angles**:
+- Calculates competitor saturation scores per category.
+- Formulates high-expected-win-probability whitespace opportunities.
+- Allows operators to promote whitespace directly into new Studio briefs.
+
+### 5. Intelligence Dashboard
+Located at `/brands/$brandId/intelligence`:
+- **Account DNA Tab**: High-level archetype, posting cadence, top decile vs. bottom decile comparative cards, and 6-beat narrative timeline.
+- **Competitor Whitespace Tab**: Filterable opportunities table with win probability, competitor saturation ratings, and action controls (`Promote to Brief`, `Dismiss`).
+- **Semantic Memory Tab**: Chronological feed of analyzed content pieces, narrative breakdowns, and objection clusters.
+
+---
+
 ## Tests
 
-`src/lib/meridian/loop.test.ts`, `src/lib/meridian/learning/decay.test.ts`, and `evals/jev/cases.json` (loaded by `src/lib/meridian/jev/fixtures.test.ts`).
+- `src/lib/meridian/loop.test.ts`: End-to-end evidence, decision, and brief loop.
+- `src/lib/meridian/jev/account.test.ts`: 12 comprehensive unit and integration tests for Account DNA, 6-beat scoring, decile separation, and whitespace detection (< 1.5s on 500-post dataset).
+- `src/lib/meridian/learning/decay.test.ts`: Recency decay math, weighted beta updating, and cold-start priors.
+- `evals/jev/cases.json`: Ground-truth calibration test cases.
+

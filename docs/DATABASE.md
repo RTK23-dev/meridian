@@ -32,12 +32,35 @@ Every machine table below also stores `organization_id` and `brand_id`. Server f
 - `rejections` — reason code, note, actor (`jev` or a user id)
 - `generation_jobs`, `model_runs`, `prompt_versions`
 
-## Results
+## Results & Telemetry
 
 - `experiments` — opened when performance is recorded
-- `performance_observations` — manual rows: impressions, clicks, conversions, spend, revenue, date, source
-- `learned_patterns` — one row per brand, attribute, value, and metric
+- `performance_observations` — manual & synced rows: impressions, clicks, conversions, spend, revenue, date, source
+- `organic_observations` — views, 3s views, completion rate, shares, likes, comments
+- `unified_performance_telemetry` — (`0024`) multi-channel continuous performance stream with decay weights, hook retention, completion rates, conversions, and metadata
+- `learned_patterns` — one row per brand, attribute, value, and metric with Bayesian credible intervals and FDR q-values
+
+## Content Factory & pgvector (`0018`, `0019`)
+
+- `creative_dna` — scene decomposition, OCR text, and 384-dimensional vector embeddings (`vector(384)`) with cosine index
+- `factory_runs`, `factory_timeline_compositions`, `factory_variants` — multi-aspect production states and timeline assets
+
+## Multi-Account & Encrypted Vault (`0021`)
+
+- `credential_vault` — AES-256-GCM encrypted tokens, IVs, tags, and key versioning
+- `platform_accounts` — connected Instagram, TikTok, YouTube, Meta, and Google accounts with status tracking
+
+## JEV Account Intelligence (`0022`)
+
+- `jev_account_profiles` — rolling 30/60/90-day profiles, decile creative differentiators, brand archetypes
+- `jev_content_analyses` — per-post multimodal creative DNA, 6-beat breakdown, objection clusters
+- `jev_whitespace_opportunities` — category-level competitor whitespace angles, saturation scores, win probabilities
+
+## Publishing Orchestration (`0023`)
+
+- `publishing_queues` — scheduled multi-account jobs with minute-normalized idempotency keys and exponential backoff
+- `publishing_receipts` — immutable execution receipts with verified platform post IDs and URLs
 
 Organization columns `brand_fit` through `risk` are scoring weights, not results.
 
-No migration inserts sample brands, ads, or metrics.
+No migration inserts sample brands, ads, or metrics. Production fails closed without valid credentials.

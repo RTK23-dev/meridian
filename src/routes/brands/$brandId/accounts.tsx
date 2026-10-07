@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useBusy } from "@/components/gate";
 import {
+  Badge,
   Button,
   Dialog,
   DialogContent,
@@ -158,15 +159,9 @@ function BrandAccounts({ brandId }: { brandId: string }) {
                     <span className="text-xs font-semibold uppercase tracking-widest text-brass">
                       {account.platform.replace("_", " ")}
                     </span>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        isConnected
-                          ? "bg-success/15 text-success border border-success/30"
-                          : "bg-danger/15 text-danger border border-danger/30"
-                      }`}
-                    >
+                    <Badge variant={isConnected ? "success" : "danger"}>
                       {account.status}
-                    </span>
+                    </Badge>
                   </div>
                   <h3 className="font-display text-xl">{account.name}</h3>
                   {account.handle ? (

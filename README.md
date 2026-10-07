@@ -5,7 +5,7 @@
 
 [![CI](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml/badge.svg)](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status: Beta](https://img.shields.io/badge/Release-0.1.0--beta.4-emerald.svg)](CHANGELOG.md)
+[![Status: Beta](https://img.shields.io/badge/Release-0.1.0--beta.5-emerald.svg)](CHANGELOG.md)
 
 ---
 
@@ -55,9 +55,35 @@ Meridian continuously analyzes evidence, generates video variants, enforces safe
 
 ### 4. Advanced JEV & Bayesian Learning Flywheel
 - **Multi-Objective Telemetry**: Ingests both paid performance (CTR, CVR, ROAS) and organic engagement (3s hook retention, completion rate, shares).
-- **Exponential Recency-Decay Weighting**: Half-life decay ensures fresh performance informs new briefs without being skewed by months-old ad campaigns.
+- **Exponential Recency-Decay Weighting**: Half-life decay (14-day) ensures fresh performance informs new briefs without being skewed by months-old ad campaigns.
 - **Hierarchical Cold-Start Priors**: Smoothly regularizes new brands using vertical category baselines while preserving strict multi-tenant isolation.
 - **Benjamini-Hochberg FDR Control**: False-discovery rate filtering weeds out random statistical noise.
+- **Complete Guide**: [Unified Telemetry & Flywheel Guide](docs/TELEMETRY_FLYWHEEL.md).
+
+### 5. Encrypted Credential Vault & Multi-Account Management
+- **AES-256-GCM Encryption**: Secure at-rest encryption for OAuth tokens, refresh tokens, and webhook secrets with random 96-bit IVs and 128-bit authentication tags.
+- **Multi-Account Scale**: Connect dozens of Instagram Pages, TikTok accounts, YouTube channels, and Meta Ad accounts per brand.
+- **Cryptographic Tamper-Proofing**: Fail-closed integrity validation prevents unauthorized token modifications.
+- **Complete Guide**: [Vault & Accounts Guide](docs/VAULT_AND_ACCOUNTS.md).
+
+### 6. Multi-Account Publishing Orchestrator
+- **Deterministic Idempotency**: Minute-normalized SHA-256 keys prevent duplicate posting across retries and concurrent schedules.
+- **Atomic Worker Claiming**: Concurrency-safe job execution using Postgres `SELECT ... FOR UPDATE SKIP LOCKED`.
+- **Exponential Backoff & Rate Limits**: Automated retry progression with per-platform rate limiting.
+- **Immutable Receipts**: Verified live execution receipts with direct external post IDs and links.
+- **Complete Guide**: [Publishing Orchestration Guide](docs/PUBLISHING_ORCHESTRATION.md).
+
+### 7. JEV Large-Scale Cognitive Intelligence & Whitespace Radar
+- **6-Beat Short-Form Decomposition**: Real-time evaluation of Hook (0-3s), Problem (3-7s), Reveal (7-15s), Proof (15-25s), Offer (25-30s), and CTA (30-35s).
+- **Decile Creative Differentiators**: Isolates top 10% vs bottom 10% content drivers across speech WPM, audio energy, motion intensity, and text density.
+- **Competitor Whitespace Radar**: Identifies un-saturated angles with high win probabilities for instant promotion into briefs.
+- **Complete Guide**: [JEV Intelligence Architecture](docs/JEV.md).
+
+### 8. Operator Control Center & Keyboard Fast-Path
+- **Global Command Palette (`Cmd+K`)**: Rapid brand switching, instant screen routing, and one-click execution actions.
+- **Two-Key Vim Navigation**: Instant chords (`G O`, `G S`, `G R`, `G I`, `G L`, `G F`, `G A`).
+- **Distributed Observability**: Real-time worker monitoring, job queues, and `/api/health` monitoring.
+- **Complete Guide**: [Operator Control Center Guide](docs/OPERATOR_GUIDE.md).
 
 ---
 

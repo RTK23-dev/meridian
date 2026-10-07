@@ -54,6 +54,11 @@ The web process does not execute the worker loop. `scripts/worker-entry.ts` clai
 | Video Engine | `video/engine.ts` | Swappable rendering: `HypitVideoEngine`, `TimelineVideoEngine` |
 | Publish Engine | `publishing/engine.ts` | Swappable publishing: `MetaPublishEngine`, `TestPublishEngine` |
 | Distribution | `distribution/` | Multi-channel selective delivery: Meta, TikTok, Google, IG Reels, FB Pages, YouTube Shorts |
+| Credential Vault | `vault/` | AES-256-GCM encrypted database vault, random 96-bit IVs, GCM authentication tags |
+| Platform Accounts | `accounts/` | Multi-account platform management across Instagram, TikTok, YouTube, Meta, Google |
+| JEV Account Intelligence | `jev/account-engine.ts` | 6-beat short-form decomposition, decile trait separation, whitespace radar |
+| Publishing Orchestrator | `publishing/orchestrator.ts` | Idempotent multi-account scheduling, atomic job claims, backoff, receipts |
+| Telemetry & Flywheel | `learning/telemetry-engine.ts`| Unified multi-channel telemetry, 14-day exponential decay, closed-loop Bayesian priors |
 | API | `machine.ts` | Persistence and tenant checks |
 
 AI output is parsed into fields and then checked by deterministic code. Retrieved page text is wrapped as `untrusted_source` and is not allowed to act as instructions.

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-beta.5 — 2026-10-08
+
+Enterprise JEV Account Intelligence, Multi-Account Credential Vault, Publishing Orchestrator, Unified Telemetry Flywheel, and Operator Control Center.
+
+- **Cryptographic Credential Vault**: AES-256-GCM authenticated encryption for platform credentials with per-brand and per-tenant cryptographic isolation. Multi-account credential assignment across Instagram, Facebook, YouTube, TikTok, Meta Ads, and Google Ads.
+- **Multi-Account Platform Manager**: Manage multiple social pages, creator handles, and ad accounts per brand with automated status probing and health monitoring.
+- **JEV Large-Scale Multimodal Account Intelligence**: Full 6-beat short-form narrative decomposition (hook, problem, mechanism, demonstration, proof, call-to-action), decile trait performance separation, logistic hook retention curves, and interactive Whitespace Opportunity Radar.
+- **Multi-Account Publishing Orchestration**: Deterministic minute-normalized idempotency hashing, atomic PostgreSQL `FOR UPDATE SKIP LOCKED` worker claims, platform rate limits, backoff retry policies, and durable publication receipts.
+- **Unified Telemetry & Closed-Loop Bayesian Flywheel**: Multi-channel performance telemetry ingestion (CTR, CVR, ROAS, 3s hook retention, completion rate, share rate) with 14-day half-life exponential recency-decay weighting, conjugate Beta-binomial updating, hierarchical vertical cold-start priors, and Benjamini-Hochberg FDR control.
+- **Operator Control Center**: Global Cmd+K / Ctrl+K command palette with instant search and keyboard chords (`G O`, `G S`, `G R`, `G I`, `G L`, `G F`, `G A`), queue observability in `/api/health`, and dedicated worker jobs (`accounts.probe`, `publishing.dispatch`, `telemetry.sync`).
+- **Complete Enterprise Documentation**: Comprehensive operator runbooks, security specifications, and architecture guides across all core subsystems.
+
 ## 0.1.0-beta.4 — 2026-10-07
 
 Content factory foundation on top of beta.3. Copy the framework, never the ad.
