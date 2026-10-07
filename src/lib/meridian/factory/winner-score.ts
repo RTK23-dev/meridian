@@ -85,7 +85,7 @@ export function winnerScore(input: WinnerEvidence, weights = DEFAULT_WEIGHTS): W
 export function backtestWinnerScore(rows: {
   score: number;
   stillLiveAfter30Days: boolean;
-}[]): { top20HitRate: number | null; randomHitRate: number | null; lift: number | null; n: number } {
+}): { top20HitRate: number | null; randomHitRate: number | null; lift: number | null; n: number } {
   if (rows.length < 10) {
     return { top20HitRate: null, randomHitRate: null, lift: null, n: rows.length };
   }
@@ -98,5 +98,49 @@ export function backtestWinnerScore(rows: {
     randomHitRate: Math.round(live * 1000) / 1000,
     lift: live === 0 ? null : Math.round((topLive / live) * 1000) / 1000,
     n: rows.length,
+  };
+}
+
+export async function runWinnerScoreBacktest(
+  sql: import("../learning/store.ts").Sql,
+  input: { organizationId?: string; brandId?: string } = {},
+): Promise<{
+  top20HitRate: number | null;
+  randomHitRate: number | null;
+  lift: number | null;
+  n: number;
+  report: string;
+}> {
+  let rows: { winner_score: number | null; days_running: number }[];
+  if (input.organizationId && input.brandId) {
+    rows = await sql<{ winner_score: number | null; days_running: number }>`
+      select winner_score, days_running
+      from ad_timelines
+      where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and winner_score is not null
+    `;
+  } else {
+    rows = await sql<{ winner_score: number | null; days_running: number }>`
+      select winner_score, days_running
+      from ad_timelines
+      where winner_score is not null
+    `;
+  }
+
+  const backtestInput = rows
+    .filter((r) => r.winner_score != null)
+    .map((r) => ({
+      score: r.winner_score!,
+      stillLiveAfter30Days: r.days_running >= 30,
+    }));
+
+  const result = backtestWinnerScore(backtestInput);
+  const report =
+    result.lift !== null
+      ? `Winner Score Backtest: Top 20% hit rate is ${(result.top20HitRate! * 100).toFixed(1)}% vs ${(result.randomHitRate! * 100).toFixed(1)}% baseline (lift: ${result.lift.toFixed(2)}x across ${result.n} tracked ads).`
+      : `Winner Score Backtest: Insufficient historical data (n = ${result.n}, requires at least 10 tracked ads). Scores remain uncalibrated.`;
+
+  return {
+    ...result,
+    report,
   };
 }
