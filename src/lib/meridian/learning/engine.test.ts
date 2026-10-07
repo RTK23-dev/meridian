@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ObservedCreative, PerformanceRow } from "../domain.ts";
+import type { ObservedCreative, PerformanceRow, OrganicObservationRow } from "../domain.ts";
 import { learnPatterns } from "./engine.ts";
 
 const org = "org-1";
@@ -73,4 +73,37 @@ test("a large, consistent lift is stored with a credible interval and q-value", 
   assert.ok(curiosity.ciLow != null && curiosity.ciHigh != null);
   assert.ok(curiosity.qValue != null && curiosity.qValue <= 0.1);
   assert.match(curiosity.summary, /P\(beat\)/);
+});
+
+test("organic video observations learn 3s retention and share rate patterns under JEV flywheel", () => {
+  const creatives = [
+    ...Array.from({ length: 6 }, (_, index) => creative(`hook-fast-${index}`, "curiosity")),
+    ...Array.from({ length: 6 }, (_, index) => creative(`hook-slow-${index}`, "offer")),
+  ];
+  const organicObservations: OrganicObservationRow[] = creatives.map((item) => ({
+    creativeId: item.id,
+    organizationId: org,
+    brandId: brand,
+    views: 2500,
+    threeSecondViews: item.angle === "curiosity" ? 1750 : 750, // 70% vs 30% 3s retention
+    completionRate: item.angle === "curiosity" ? 0.45 : 0.18,
+    shares: item.angle === "curiosity" ? 150 : 25, // 6% vs 1% share rate
+  }));
+  const patterns = learnPatterns({
+    organizationId: org,
+    brandId: brand,
+    creatives,
+    observations: [],
+    organicObservations,
+  });
+  assert.ok(patterns.length > 0);
+  const retentionPattern = patterns.find((item) => item.attribute === "angle" && item.value === "curiosity" && item.metric === "retention_3s");
+  assert.ok(retentionPattern, "should extract 3s retention pattern");
+  assert.ok((retentionPattern.pBeat ?? 0) >= 0.95);
+  assert.match(retentionPattern.summary, /3s retention/);
+
+  const sharePattern = patterns.find((item) => item.attribute === "angle" && item.value === "curiosity" && item.metric === "shares");
+  assert.ok(sharePattern, "should extract organic shares pattern");
+  assert.ok((sharePattern.pBeat ?? 0) >= 0.95);
+  assert.match(sharePattern.summary, /share rate/);
 });

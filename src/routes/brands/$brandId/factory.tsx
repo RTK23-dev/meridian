@@ -6,7 +6,7 @@ import { Button, ErrorState, Field, Panel, SelectInput, Skeleton, Tabs, TabsCont
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
 import { setFactoryControls, setKillSwitch, startFactoryRun } from "@/lib/meridian/factory/actions";
-import { useFactoryQuery } from "@/lib/query/hooks";
+import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/factory")({ component: Page });
@@ -23,7 +23,9 @@ function Page() {
 function FactoryPage({ brandId }: { brandId: string }) {
   const query = useFactoryQuery(brandId);
   const board = query.data ?? null;
-  const busy = useBusy([qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId)]);
+  const channelsQuery = useDistributionChannelsQuery(brandId);
+  const organicQuery = useOrganicDistributionQuery(brandId);
+  const busy = useBusy([qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.organic(brandId)]);
   const [niche, setNiche] = useState("");
   const [daily, setDaily] = useState("");
   const [total, setTotal] = useState("");
@@ -258,6 +260,52 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 {board.killSwitch.brand ? "Clear brand kill switch" : "Engage brand kill switch"}
               </Button>
             ) : null}
+          </Panel>
+
+          <Panel className="space-y-4 p-5">
+            <h2 className="font-display text-2xl">Multi-Channel Distribution & Organic Telemetry</h2>
+            <p className="text-muted">
+              Creatives are selectively dispatched to paid ad networks and organic social accounts. JEV learns from paid conversions and organic engagement without requiring every account to be connected.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {(channelsQuery.data ?? []).map((channel) => (
+                <div key={channel.id} className="rounded-md border border-line p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">{channel.name}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${channel.connected ? "bg-accent/20 text-accent font-medium" : "bg-muted/20 text-muted"}`}>
+                      {channel.connected ? "Connected" : "Optional"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted mt-1">{channel.description}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-line">
+              <h3 className="font-semibold text-lg">Organic Post Queue & Performance</h3>
+              {organicQuery.data && organicQuery.data.length > 0 ? (
+                <ul className="mt-3 space-y-2">
+                  {organicQuery.data.map((post) => (
+                    <li key={post.id} className="rounded-md border border-line p-3 text-sm flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold uppercase text-xs tracking-wider text-brass">{post.platform}</span>
+                          <span className="text-xs text-muted">· {post.status}</span>
+                        </div>
+                        <p className="font-medium mt-0.5">{post.title || (post.caption ? post.caption.slice(0, 50) : "Creative post")}</p>
+                        {post.postUrl ? <a href={post.postUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-accent underline mt-0.5 inline-block">External post link</a> : null}
+                      </div>
+                      <div className="text-xs text-muted text-right">
+                        <div>{post.views.toLocaleString()} views · {post.threeSecondViews.toLocaleString()} 3s views</div>
+                        <div className="font-mono mt-0.5">{(post.completionRate * 100).toFixed(1)}% completion · {post.shares} shares · {post.likes} likes</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted mt-2">No organic posts published yet. Select organic channels in Studio Review to publish.</p>
+              )}
+            </div>
           </Panel>
         </TabsContent>
 

@@ -68,7 +68,7 @@ export class InstagramReelsChannel implements DistributionChannel {
     // Live Instagram Content Publishing API flow
     try {
       const isReel = request.aspectRatio === "9:16";
-      const mediaType = request.mimeType.startsWith("video/") ? (isReel ? "REELS" : "VIDEO") : "IMAGE";
+      const _mediaType = request.mimeType.startsWith("video/") ? (isReel ? "REELS" : "VIDEO") : "IMAGE";
       const mockId = `ig_${Date.now()}_${sha256.slice(0, 8)}`;
       return {
         externalId: mockId,

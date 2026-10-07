@@ -4,6 +4,7 @@ import {
   type LearningState,
   type ObservedCreative,
   type PerformanceRow,
+  type OrganicObservationRow,
 } from "../domain.ts";
 import {
   baselinePrior,
@@ -315,6 +316,167 @@ function toPattern(candidate: Candidate, qValue: number, policy: Policy): Learne
   };
 }
 
+type OrganicTotals = {
+  views: number;
+  threeSecondViews: number;
+  completionSum: number;
+  completionCount: number;
+  shares: number;
+  creativeIds: Set<string>;
+};
+
+function emptyOrganicTotals(): OrganicTotals {
+  return {
+    views: 0,
+    threeSecondViews: 0,
+    completionSum: 0,
+    completionCount: 0,
+    shares: 0,
+    creativeIds: new Set(),
+  };
+}
+
+function addOrganic(totals: OrganicTotals, row: OrganicObservationRow): void {
+  totals.views += row.views;
+  totals.threeSecondViews += row.threeSecondViews;
+  totals.completionSum += row.completionRate;
+  totals.completionCount += 1;
+  totals.shares += row.shares;
+  totals.creativeIds.add(row.creativeId);
+}
+
+function retentionCandidate(input: {
+  organizationId: string;
+  brandId: string;
+  attribute: string;
+  value: string;
+  bucket: OrganicTotals;
+  baseline: OrganicTotals;
+  policy: Policy;
+}): Candidate | null {
+  if (input.bucket.views < 20 || input.baseline.views < 40) return null;
+  const observed = rate(input.bucket.threeSecondViews, input.bucket.views);
+  const baselineRate = rate(input.baseline.threeSecondViews, input.baseline.views);
+  if (observed === null || baselineRate === null || baselineRate <= 0) return null;
+  const lift = relativeLift(observed, baselineRate);
+  if (lift === null) return null;
+  const prior = baselinePrior(baselineRate, input.policy.priorStrength);
+  const bucketPost = updateBeta(prior, input.bucket.threeSecondViews, input.bucket.views);
+  const baselinePost = updateBeta(jeffreysPrior(), input.baseline.threeSecondViews, input.baseline.views);
+  const pBeat = probabilityGreater(bucketPost, baselinePost);
+  const interval = liftInterval(bucketPost, baselinePost);
+  return {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    attribute: input.attribute,
+    value: input.value,
+    metric: "retention_3s",
+    lift: round4(lift),
+    observed: round4(observed),
+    baseline: round4(baselineRate),
+    pBeat: round4(pBeat),
+    ciLow: round4(interval.low),
+    ciHigh: round4(interval.high),
+    bucket: {
+      impressions: input.bucket.views,
+      clicks: input.bucket.threeSecondViews,
+      conversions: 0,
+      spendCents: 0,
+      revenueCents: 0,
+      roasSpend: 0,
+      creativeIds: input.bucket.creativeIds,
+    },
+    summary: `${input.attribute}=${input.value}: 3s retention ${(observed * 100).toFixed(1)}% vs baseline ${(baselineRate * 100).toFixed(1)}% (P(beat)=${pBeat.toFixed(2)}, 95% CI lift [${interval.low.toFixed(2)}, ${interval.high.toFixed(2)}], n=${input.bucket.creativeIds.size}, views=${input.bucket.views}).`,
+  };
+}
+
+function sharesCandidate(input: {
+  organizationId: string;
+  brandId: string;
+  attribute: string;
+  value: string;
+  bucket: OrganicTotals;
+  baseline: OrganicTotals;
+  policy: Policy;
+}): Candidate | null {
+  if (input.bucket.views < 20 || input.baseline.views < 40) return null;
+  const observed = rate(input.bucket.shares, input.bucket.views);
+  const baselineRate = rate(input.baseline.shares, input.baseline.views);
+  if (observed === null || baselineRate === null || baselineRate <= 0) return null;
+  const lift = relativeLift(observed, baselineRate);
+  if (lift === null) return null;
+  const prior = baselinePrior(baselineRate, input.policy.priorStrength);
+  const bucketPost = updateBeta(prior, input.bucket.shares, input.bucket.views);
+  const baselinePost = updateBeta(jeffreysPrior(), input.baseline.shares, input.baseline.views);
+  const pBeat = probabilityGreater(bucketPost, baselinePost);
+  const interval = liftInterval(bucketPost, baselinePost);
+  return {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    attribute: input.attribute,
+    value: input.value,
+    metric: "shares",
+    lift: round4(lift),
+    observed: round4(observed),
+    baseline: round4(baselineRate),
+    pBeat: round4(pBeat),
+    ciLow: round4(interval.low),
+    ciHigh: round4(interval.high),
+    bucket: {
+      impressions: input.bucket.views,
+      clicks: 0,
+      conversions: input.bucket.shares,
+      spendCents: 0,
+      revenueCents: 0,
+      roasSpend: 0,
+      creativeIds: input.bucket.creativeIds,
+    },
+    summary: `${input.attribute}=${input.value}: share rate ${(observed * 100).toFixed(2)}% vs baseline ${(baselineRate * 100).toFixed(2)}% (P(beat)=${pBeat.toFixed(2)}, 95% CI lift [${interval.low.toFixed(2)}, ${interval.high.toFixed(2)}], n=${input.bucket.creativeIds.size}, views=${input.bucket.views}).`,
+  };
+}
+
+function completionCandidate(input: {
+  organizationId: string;
+  brandId: string;
+  attribute: string;
+  value: string;
+  bucket: OrganicTotals;
+  baseline: OrganicTotals;
+  policy: Policy;
+}): Candidate | null {
+  if (input.bucket.completionCount < 1 || input.baseline.completionCount < 2) return null;
+  const observed = input.bucket.completionSum / input.bucket.completionCount;
+  const baselineRate = input.baseline.completionSum / input.baseline.completionCount;
+  if (baselineRate <= 0) return null;
+  const lift = relativeLift(observed, baselineRate);
+  if (lift === null) return null;
+  const width = Math.max(0.04, 0.3 / Math.sqrt(Math.max(1, input.bucket.completionCount * 2)));
+  const pBeat = lift > 0 ? Math.min(0.99, 0.5 + lift / (2 * width + Math.abs(lift))) : Math.max(0.01, 0.5 + lift / (2 * width + Math.abs(lift)));
+  return {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    attribute: input.attribute,
+    value: input.value,
+    metric: "completion_rate",
+    lift: round4(lift),
+    observed: round4(observed),
+    baseline: round4(baselineRate),
+    pBeat: round4(pBeat),
+    ciLow: round4(lift - width),
+    ciHigh: round4(lift + width),
+    bucket: {
+      impressions: input.bucket.views,
+      clicks: 0,
+      conversions: 0,
+      spendCents: 0,
+      revenueCents: 0,
+      roasSpend: 0,
+      creativeIds: input.bucket.creativeIds,
+    },
+    summary: `${input.attribute}=${input.value}: completion rate ${(observed * 100).toFixed(1)}% vs baseline ${(baselineRate * 100).toFixed(1)}% (P(beat)=${pBeat.toFixed(2)}, 95% CI lift [${(lift - width).toFixed(2)}, ${(lift + width).toFixed(2)}], n=${input.bucket.creativeIds.size}).`,
+  };
+}
+
 /**
  * Aggregate stored observations. A bucket is kept when the beta-binomial
  * posterior says it beats (or loses to) the brand baseline after a multiple-
@@ -326,11 +488,15 @@ export function learnPatterns(
     brandId: string;
     creatives: ObservedCreative[];
     observations: PerformanceRow[];
+    organicObservations?: OrganicObservationRow[];
   },
   policy = DEFAULT_LEARNING_POLICY,
 ): LearnedPattern[] {
   assertSameTenant(input.creatives, input.organizationId, input.brandId);
   assertSameTenant(input.observations, input.organizationId, input.brandId);
+  if (input.organicObservations) {
+    assertSameTenant(input.organicObservations, input.organizationId, input.brandId);
+  }
   const byId = new Map(input.creatives.map((creative) => [creative.id, creative]));
   const totalsByCreative = new Map<string, PerformanceRow>();
   for (const row of input.observations) {
@@ -356,38 +522,99 @@ export function learnPatterns(
 
   const baseline = emptyTotals();
   for (const row of totalsByCreative.values()) add(baseline, row);
-  if (baseline.impressions <= 0) return [];
+
+  const organicTotalsByCreative = new Map<string, OrganicObservationRow>();
+  if (input.organicObservations) {
+    for (const row of input.organicObservations) {
+      if (!byId.has(row.creativeId)) continue;
+      const current = organicTotalsByCreative.get(row.creativeId) ?? {
+        creativeId: row.creativeId,
+        organizationId: row.organizationId,
+        brandId: row.brandId,
+        views: 0,
+        threeSecondViews: 0,
+        completionRate: 0,
+        shares: 0,
+      };
+      current.views += row.views;
+      current.threeSecondViews += row.threeSecondViews;
+      current.completionRate = row.completionRate;
+      current.shares += row.shares;
+      organicTotalsByCreative.set(row.creativeId, current);
+    }
+  }
+
+  const organicBaseline = emptyOrganicTotals();
+  for (const row of organicTotalsByCreative.values()) addOrganic(organicBaseline, row);
+
+  if (baseline.impressions <= 0 && organicBaseline.views <= 0) return [];
 
   const candidates: Candidate[] = [];
   const emit = (attribute: string, valueOf: (creative: ObservedCreative) => string) => {
-    const buckets = new Map<string, Totals>();
-    for (const row of totalsByCreative.values()) {
-      const creative = byId.get(row.creativeId);
-      if (!creative) continue;
-      const value = valueOf(creative).trim().toLowerCase();
-      if (!value || value === "+" || value.startsWith("+") || value.endsWith("+")) continue;
-      const bucket = buckets.get(value) ?? emptyTotals();
-      add(bucket, row);
-      buckets.set(value, bucket);
+    if (baseline.impressions > 0) {
+      const buckets = new Map<string, Totals>();
+      for (const row of totalsByCreative.values()) {
+        const creative = byId.get(row.creativeId);
+        if (!creative) continue;
+        const value = valueOf(creative).trim().toLowerCase();
+        if (!value || value === "+" || value.startsWith("+") || value.endsWith("+")) continue;
+        const bucket = buckets.get(value) ?? emptyTotals();
+        add(bucket, row);
+        buckets.set(value, bucket);
+      }
+      if (buckets.size >= 2) {
+        for (const [value, bucket] of buckets) {
+          if (bucket.creativeIds.size < 1 || bucket.impressions < 1) continue;
+          const shared = {
+            organizationId: input.organizationId,
+            brandId: input.brandId,
+            attribute,
+            value,
+            bucket,
+            baseline,
+            policy,
+          };
+          const ctr = ctrCandidate(shared);
+          if (ctr) candidates.push(ctr);
+          const cvr = cvrCandidate(shared);
+          if (cvr) candidates.push(cvr);
+          const roas = roasCandidate({ ...shared });
+          if (roas) candidates.push(roas);
+        }
+      }
     }
-    if (buckets.size < 2) return;
-    for (const [value, bucket] of buckets) {
-      if (bucket.creativeIds.size < 1 || bucket.impressions < 1) continue;
-      const shared = {
-        organizationId: input.organizationId,
-        brandId: input.brandId,
-        attribute,
-        value,
-        bucket,
-        baseline,
-        policy,
-      };
-      const ctr = ctrCandidate(shared);
-      if (ctr) candidates.push(ctr);
-      const cvr = cvrCandidate(shared);
-      if (cvr) candidates.push(cvr);
-      const roas = roasCandidate({ ...shared });
-      if (roas) candidates.push(roas);
+
+    if (organicBaseline.views > 0) {
+      const organicBuckets = new Map<string, OrganicTotals>();
+      for (const row of organicTotalsByCreative.values()) {
+        const creative = byId.get(row.creativeId);
+        if (!creative) continue;
+        const value = valueOf(creative).trim().toLowerCase();
+        if (!value || value === "+" || value.startsWith("+") || value.endsWith("+")) continue;
+        const bucket = organicBuckets.get(value) ?? emptyOrganicTotals();
+        addOrganic(bucket, row);
+        organicBuckets.set(value, bucket);
+      }
+      if (organicBuckets.size >= 2) {
+        for (const [value, bucket] of organicBuckets) {
+          if (bucket.creativeIds.size < 1 || bucket.views < 1) continue;
+          const shared = {
+            organizationId: input.organizationId,
+            brandId: input.brandId,
+            attribute,
+            value,
+            bucket,
+            baseline: organicBaseline,
+            policy,
+          };
+          const retention = retentionCandidate(shared);
+          if (retention) candidates.push(retention);
+          const shares = sharesCandidate(shared);
+          if (shares) candidates.push(shares);
+          const completion = completionCandidate(shared);
+          if (completion) candidates.push(completion);
+        }
+      }
     }
   };
 

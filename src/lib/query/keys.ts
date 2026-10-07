@@ -19,6 +19,8 @@ export const qk = {
   audit: (organizationId: string) => ["audit", organizationId] as const,
   webhooks: (organizationId: string) => ["webhooks", organizationId] as const,
   notifications: (organizationId: string) => ["notification-preferences", organizationId] as const,
+  channels: (brandId: string) => ["channels", brandId] as const,
+  organic: (brandId: string) => ["organic", brandId] as const,
 };
 
 export function userScopedQueryKey(userId: string | null | undefined, key: readonly unknown[]) {

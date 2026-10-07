@@ -5,6 +5,7 @@ import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, l
 import { getCalibration } from "@/lib/meridian/calibration/actions";
 import { getFactoryBoard } from "@/lib/meridian/factory/actions";
 import { getStudioSession } from "@/lib/meridian/studio/actions";
+import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { qk, userScopedQueryKey } from "./keys";
 
@@ -90,4 +91,12 @@ export const useCalibrationQuery = (brandId: string, enabled = true) => {
 export const useIntegrationsQuery = (organizationId: string, enabled = true) => {
   const scope = useUserScopedKey(qk.integrations(organizationId));
   return useQuery({ ...scope, queryFn: () => getSystemStatus({ data: { organizationId } }), enabled: scope.enabled && enabled && !!organizationId });
+};
+export const useDistributionChannelsQuery = (brandId: string, enabled = true) => {
+  const scope = useUserScopedKey(qk.channels(brandId));
+  return useQuery({ ...scope, queryFn: () => getDistributionChannels({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+};
+export const useOrganicDistributionQuery = (brandId: string, enabled = true) => {
+  const scope = useUserScopedKey(qk.organic(brandId));
+  return useQuery({ ...scope, queryFn: () => getOrganicDistribution({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
 };

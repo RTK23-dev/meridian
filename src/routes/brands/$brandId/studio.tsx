@@ -12,12 +12,15 @@ import { hasRole } from "@/lib/meridian/access";
 import {
   generateStudioVariants,
   openStudioBrief,
-  publishStudioVariant,
   recordStudioTestPerformance,
   reviewStudioVariant,
 } from "@/lib/meridian/studio/actions";
+import {
+  publishMultiChannelVariant,
+  recordOrganicTelemetryAction,
+} from "@/lib/meridian/distribution/actions";
 
-import { useStudioQuery } from "@/lib/query/hooks";
+import { useStudioQuery, useDistributionChannelsQuery, useOrganicDistributionQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
 import { studioGenerationSchema, type StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
@@ -40,11 +43,20 @@ function Studio({ brandId }: { brandId: string }) {
   const [reviewTarget, setReviewTarget] = useState<{ creativeId: string; mode: "reject" | "revision" } | null>(null);
   const [reviewReason, setReviewReason] = useState("other");
   const [reviewNote, setReviewNote] = useState("");
+  const [publishTarget, setPublishTarget] = useState<{ creativeId: string; title: string; defaultCaption: string } | null>(null);
+  const [selectedChannels, setSelectedChannels] = useState<string[]>(["test-publisher", "instagram-reels", "youtube-shorts"]);
+  const [publishCaption, setPublishCaption] = useState("");
+  const [publishResults, setPublishResults] = useState<{ channelId: string; platform: string; type: string; status: string; url?: string; error?: string }[] | null>(null);
+
+  const channelsQuery = useDistributionChannelsQuery(brandId);
+  const organicQuery = useOrganicDistributionQuery(brandId);
+
   const briefAction = useBusy([qk.studio(brandId), qk.opportunities(brandId)]);
   const generationAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
   const reviewAction = useBusy([qk.studio(brandId), qk.reviews(brandId)]);
-  const publishAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
+  const publishAction = useBusy([qk.studio(brandId), qk.library(brandId), qk.organic(brandId)]);
   const performanceAction = useBusy([qk.studio(brandId), qk.learning(brandId)]);
+  const organicTelemetryAction = useBusy([qk.studio(brandId), qk.organic(brandId), qk.learning(brandId)]);
   const generationForm = useForm<StudioGeneration>({
     resolver: zodResolver(studioGenerationSchema),
     defaultValues: { imageProvider: "none", videoProvider: "hypit" },
@@ -57,8 +69,8 @@ function Studio({ brandId }: { brandId: string }) {
     window.addEventListener("beforeunload", warnBeforeLeave);
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [generationDirty]);
-  const actionErrors = [briefAction.error, generationAction.error, reviewAction.error, publishAction.error, performanceAction.error].filter(Boolean);
-  const anyActionPending = briefAction.pending || generationAction.pending || reviewAction.pending || publishAction.pending || performanceAction.pending;
+  const actionErrors = [briefAction.error, generationAction.error, reviewAction.error, publishAction.error, performanceAction.error, organicTelemetryAction.error].filter(Boolean);
+  const anyActionPending = briefAction.pending || generationAction.pending || reviewAction.pending || publishAction.pending || performanceAction.pending || organicTelemetryAction.pending;
 
   if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!session) return <div role="status" aria-label="Loading studio" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="media" /></div>;
@@ -284,8 +296,16 @@ function Studio({ brandId }: { brandId: string }) {
                   </>
                 ) : null}
                 {canEdit && (variant.creativeStatus === "approved" || variant.creativeStatus === "testing") ? (
-                  <Button type="button" disabled={publishAction.pending} onClick={() => { void publishAction.run(async () => { await publishStudioVariant({ data: { brandId, creativeId: variant.creativeId, publisher: "test" } }); }); }}>
-                    Publish with test publisher
+                  <Button
+                    type="button"
+                    disabled={publishAction.pending}
+                    onClick={() => {
+                      setPublishTarget({ creativeId: variant.creativeId, title: variant.title, defaultCaption: variant.transcript || variant.title || "" });
+                      setPublishCaption(variant.transcript || variant.title || "");
+                      setPublishResults(null);
+                    }}
+                  >
+                    Publish to channels…
                   </Button>
                 ) : null}
               </div>
@@ -337,22 +357,53 @@ function Studio({ brandId }: { brandId: string }) {
         )}
         {session.publications.length > 0 ? (
           <ul className="mt-3 text-sm">
-            {session.publications.map((item) => <li key={item.externalId}>Test publication {item.externalId}</li>)}
+            {session.publications.map((item) => <li key={item.externalId}>Paid publication: {item.provider} · {item.externalId}</li>)}
           </ul>
-        ) : <p className="mt-3 text-sm text-muted">Nothing from this brand has a stored publisher id.</p>}
+        ) : <p className="mt-3 text-sm text-muted">Nothing from this brand has a stored ad publisher id.</p>}
+        {organicQuery.data && organicQuery.data.length > 0 ? (
+          <div className="mt-4 pt-3 border-t border-line">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-brass">Organic Social Publications</h3>
+            <ul className="mt-2 space-y-2 text-sm">
+              {organicQuery.data.map((post) => (
+                <li key={post.id} className="rounded-md border border-line p-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="font-semibold capitalize">{post.platform}</span> · <span className="text-muted">{post.status}</span>
+                    <p className="text-xs text-muted mt-0.5">{post.caption ? post.caption.slice(0, 70) : "No caption"}</p>
+                  </div>
+                  <div className="text-xs text-right">
+                    <span>{post.views} views · {post.threeSecondViews} (3s hook) · {(post.completionRate * 100).toFixed(1)}% comp · {post.shares} shares</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {canEdit ? (
-          <Button
-            className="mt-4"
-            type="button"
-            disabled={performanceAction.pending || session.publications.length === 0}
-            onClick={() => {
-              void performanceAction.run(async () => {
-                await recordStudioTestPerformance({ data: { brandId } });
-              });
-            }}
-          >
-            Record test-provider performance and learn
-          </Button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={performanceAction.pending || session.publications.length === 0}
+              onClick={() => {
+                void performanceAction.run(async () => {
+                  await recordStudioTestPerformance({ data: { brandId } });
+                });
+              }}
+            >
+              Record test-provider performance and learn
+            </Button>
+            <Button
+              type="button"
+              variant="quiet"
+              disabled={organicTelemetryAction.pending || !(organicQuery.data && organicQuery.data.length > 0)}
+              onClick={() => {
+                void organicTelemetryAction.run(async () => {
+                  await recordOrganicTelemetryAction({ data: { brandId } });
+                });
+              }}
+            >
+              Record organic telemetry & learn
+            </Button>
+          </div>
         ) : null}
       </Panel>
       <Dialog open={!!reviewTarget} onOpenChange={(open) => { if (!open && !reviewAction.pending) setReviewTarget(null); }}>
@@ -371,6 +422,119 @@ function Studio({ brandId }: { brandId: string }) {
                 setReviewNote("");
               });
             }}>{reviewTarget?.mode === "reject" ? "Confirm rejection" : "Send revision request"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!publishTarget} onOpenChange={(open) => { if (!open && !publishAction.pending) { setPublishTarget(null); setPublishResults(null); } }}>
+        <DialogContent aria-describedby="multi-channel-publish-description">
+          <DialogTitle>Publish Creative Across Channels</DialogTitle>
+          <DialogDescription id="multi-channel-publish-description">
+            Select where to publish this creative. Choose paid advertising channels and/or organic social posting. No platform is required.
+          </DialogDescription>
+          <div className="mt-4 space-y-4">
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-brass">Paid Advertising Channels</h4>
+              <div className="mt-2 space-y-2">
+                {(channelsQuery.data ?? []).filter((c) => c.type === "paid").map((channel) => (
+                  <label key={channel.id} className="flex items-start gap-2.5 text-sm cursor-pointer p-2 rounded-md border border-line bg-surface/50 hover:bg-surface">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 rounded border-line"
+                      checked={selectedChannels.includes(channel.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedChannels([...selectedChannels, channel.id]);
+                        else setSelectedChannels(selectedChannels.filter((id) => id !== channel.id));
+                      }}
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">{channel.name}</span>
+                        <span className="text-xs text-muted">{channel.connected ? "Ready" : "Not connected"}</span>
+                      </div>
+                      <p className="text-xs text-muted">{channel.description}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-brass">Organic Social Channels</h4>
+              <div className="mt-2 space-y-2">
+                {(channelsQuery.data ?? []).filter((c) => c.type === "organic").map((channel) => (
+                  <label key={channel.id} className="flex items-start gap-2.5 text-sm cursor-pointer p-2 rounded-md border border-line bg-surface/50 hover:bg-surface">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 rounded border-line"
+                      checked={selectedChannels.includes(channel.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedChannels([...selectedChannels, channel.id]);
+                        else setSelectedChannels(selectedChannels.filter((id) => id !== channel.id));
+                      }}
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">{channel.name}</span>
+                        <span className="text-xs text-muted">{channel.accountName ?? "Active"}</span>
+                      </div>
+                      <p className="text-xs text-muted">{channel.description}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <Field label="Post caption & hashtags">
+              <TextArea
+                value={publishCaption}
+                onChange={(e) => setPublishCaption(e.target.value)}
+                placeholder="Caption with tags (e.g., #skincare #cleanbeauty)"
+                rows={3}
+              />
+            </Field>
+
+            {publishResults ? (
+              <div className="space-y-2 rounded-md border border-line bg-panel p-3 text-sm">
+                <p className="font-semibold">Publish Receipts:</p>
+                {publishResults.map((res) => (
+                  <div key={res.channelId} className="flex items-center justify-between text-xs">
+                    <span>{res.channelId}: <span className={res.status === "published" ? "text-success font-semibold" : res.status === "failed" ? "text-danger" : "text-brass"}>{res.status}</span></span>
+                    {res.url ? <a href={res.url} target="_blank" rel="noopener noreferrer" className="underline text-accent">View post</a> : res.error ? <span className="text-danger">{res.error}</span> : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="quiet"
+                disabled={publishAction.pending}
+                onClick={() => { setPublishTarget(null); setPublishResults(null); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={publishAction.pending || selectedChannels.length === 0}
+                onClick={() => {
+                  if (!publishTarget) return;
+                  void publishAction.run(async () => {
+                    const res = await publishMultiChannelVariant({
+                      data: {
+                        brandId,
+                        creativeId: publishTarget.creativeId,
+                        channelIds: selectedChannels,
+                        caption: publishCaption,
+                      },
+                    });
+                    setPublishResults(res);
+                  });
+                }}
+              >
+                {publishAction.pending ? "Publishing…" : `Publish to selected (${selectedChannels.length})`}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

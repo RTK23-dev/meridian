@@ -1,4 +1,4 @@
-import type { ObservedCreative, PerformanceRow } from "../domain.ts";
+import type { ObservedCreative, PerformanceRow, OrganicObservationRow } from "../domain.ts";
 import { learnPatterns } from "./engine.ts";
 
 /** Tagged-template SQL. Structural so the worker does not import the web database module. */
@@ -60,7 +60,28 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
     spendCents: asNumber(row.spend_cents),
     revenueCents: row.revenue_cents == null ? null : asNumber(row.revenue_cents),
   }));
-  const patterns = learnPatterns({ organizationId, brandId, creatives, observations });
+  let organicObservations: OrganicObservationRow[] = [];
+  try {
+    const organicRows = await sql<Record<string, unknown>>`
+      select creative_id, organization_id, brand_id, views, three_second_views, completion_rate, shares, likes, comments
+      from organic_observations
+      where brand_id = ${brandId} and organization_id = ${organizationId} and creative_id is not null
+    `;
+    organicObservations = organicRows.map((row) => ({
+      creativeId: asText(row.creative_id),
+      organizationId: asText(row.organization_id),
+      brandId: asText(row.brand_id),
+      views: asNumber(row.views),
+      threeSecondViews: asNumber(row.three_second_views),
+      completionRate: asNumber(row.completion_rate),
+      shares: asNumber(row.shares),
+      likes: asNumber(row.likes),
+      comments: asNumber(row.comments),
+    }));
+  } catch {
+    organicObservations = [];
+  }
+  const patterns = learnPatterns({ organizationId, brandId, creatives, observations, organicObservations });
   await sql`delete from learned_patterns where brand_id = ${brandId} and organization_id = ${organizationId} and scope = 'brand'`;
   for (const pattern of patterns) {
     await sql`

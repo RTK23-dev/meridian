@@ -35,6 +35,18 @@ export type PerformanceRow = {
   revenueCents: number | null;
 };
 
+export type OrganicObservationRow = {
+  creativeId: string;
+  organizationId: string;
+  brandId: string;
+  views: number;
+  threeSecondViews: number;
+  completionRate: number;
+  shares: number;
+  likes?: number;
+  comments?: number;
+};
+
 export type LearningState = "OBSERVED" | "INFERRED" | "VALIDATED";
 
 export type LearnedPattern = {

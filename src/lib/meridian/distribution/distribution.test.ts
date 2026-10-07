@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { InstagramReelsChannel } from "./instagram.ts";
-import { FacebookPagesChannel } from "./facebook.ts";
 import { YouTubeShortsChannel } from "./youtube.ts";
-import { publishToSelectedChannels, listDistributionChannels, getDistributionChannel } from "./registry.ts";
+import { publishToSelectedChannels, listDistributionChannels } from "./registry.ts";
 
 test("registry discovers all built-in organic channels", () => {
   const channels = listDistributionChannels();
@@ -84,4 +83,17 @@ test("selective publishing dispatches only to requested channels", async () => {
 
   // Facebook should not have been called because user did not select it
   assert.ok(!results.some((r) => r.channelId === "facebook-pages"));
+});
+
+test("distribution service lists both paid and organic channels", async () => {
+  const { listAvailableChannels } = await import("./service.ts");
+  const dummySql = (async () => []) as any;
+  dummySql.query = async () => [];
+
+  const channels = await listAvailableChannels(dummySql, "org-1", "brand-1");
+  assert.ok(channels.length >= 6);
+  assert.ok(channels.some((c) => c.id === "test-publisher" && c.type === "paid"));
+  assert.ok(channels.some((c) => c.id === "instagram-reels" && c.type === "organic"));
+  assert.ok(channels.some((c) => c.id === "youtube-shorts" && c.type === "organic"));
+  assert.ok(channels.some((c) => c.id === "meta-ads" && c.type === "paid"));
 });
