@@ -1,12 +1,30 @@
-# Media worker: ffmpeg on the image. WhisperX and the embedding model are
-# installed at image build, not by a postinstall download at runtime.
+# Media worker: ffmpeg, WhisperX, onnxruntime, and embedding models on the image.
+# Installed at image build, not by a postinstall download at runtime.
 FROM node:22-bookworm-slim
+
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg python3 python3-pip \
+  && apt-get install -y --no-install-recommends ffmpeg python3 python3-pip python3-dev git \
   && rm -rf /var/lib/apt/lists/*
+
+ENV WHISPERX_PATH=whisperx \
+    WHISPERX_MODEL=small \
+    WHISPERX_DEVICE=cpu \
+    HF_HOME=/root/.cache/huggingface
+
+RUN pip3 install --no-cache-dir --break-system-packages torch torchaudio --index-url https://download.pytorch.org/whl/cpu \
+  && pip3 install --no-cache-dir --break-system-packages whisperx \
+  && python3 -c "import whisperx; whisperx.load_model('small', 'cpu', compute_type='int8')"
+
 WORKDIR /app
+
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev \
+  && npx --no-install onnxruntime-node --version || true
+
+# Pre-fetch Hugging Face / Transformers embedding model at build time
+RUN node -e "import('@huggingface/transformers').then(t => { t.env.cacheDir = process.env.HF_HOME; return t.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { dtype: 'q8' }); })"
+
 COPY . .
+
 ENV NODE_ENV=production
 CMD ["node", "--experimental-strip-types", "scripts/worker-entry.ts"]

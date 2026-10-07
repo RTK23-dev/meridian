@@ -229,18 +229,20 @@ test("ranking and JEV judgment are numerically separate", () => {
 
 test("the signed-in paths call this engine instead of a hardcoded decision", () => {
   const session = readFileSync(new URL("../studio/session.server.ts", import.meta.url), "utf8");
-  const machine = readFileSync(new URL("../machine.ts", import.meta.url), "utf8");
+  const opportunity = readFileSync(new URL("../opportunity/actions.ts", import.meta.url), "utf8");
+  const studio = readFileSync(new URL("../studio/creative-actions.ts", import.meta.url), "utf8");
+  const publishing = readFileSync(new URL("../publishing/actions.ts", import.meta.url), "utf8");
   const rerank = readFileSync(new URL("../opportunity/rerank.ts", import.meta.url), "utf8");
   assert.match(session, /judgeMedia\(/);
   assert.match(session, /judgeBrief\(/);
   assert.match(session, /decide\(publishingReadiness/);
   assert.doesNotMatch(session, /readiness\.state === "READY" \? 0\.9/);
-  assert.match(machine, /decideForTenant\(active\.question/);
-  assert.match(machine, /decideForTenant\(visualPolicy\.question/);
-  assert.match(machine, /decideForTenant\(textPolicy\.question/);
+  assert.match(opportunity, /decideForTenant\(active\.question/);
+  assert.match(studio, /decideForTenant\(visualPolicy\.question/);
+  assert.match(studio, /decideForTenant\(textPolicy\.question/);
   assert.match(rerank, /decideForTenant\(active\.question/);
-  assert.doesNotMatch(machine, /expectedValue >= [^;]*AUTO_APPROVE/);
-  const review = machine.slice(machine.indexOf("export const resolveReview"), machine.indexOf("export const dismissOpportunity"));
+  assert.doesNotMatch(opportunity, /expectedValue >= [^;]*AUTO_APPROVE/);
+  const review = publishing.slice(publishing.indexOf("export const resolveReview"));
   const update = review.slice(review.indexOf("update jev_decisions"), review.indexOf("where id = ${review.decision_id}"));
   assert.match(update, /reviewer_decision/);
   assert.doesNotMatch(update, /(?<!reviewer_)decision =/);
