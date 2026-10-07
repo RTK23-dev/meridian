@@ -85,7 +85,7 @@ function ReviewCard({
   const [note, setNote] = useState("");
   return (
     <Panel aria-label="Selected review">
-      <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.question} · {item.decision} · answer {item.answer || "unrecorded"} · p {item.probability.toFixed(2)} · <Term id="confidence" /> {item.confidence.toFixed(2)}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.question} · {item.decision} · answer {item.answer || "unrecorded"} · score {item.probability.toFixed(2)} · <Term id="confidence" /> {item.confidence.toFixed(2)}</p>
       <h2 className="mt-2 font-display text-2xl">{item.label || "Untitled"}</h2>
       <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted">
         {item.reasons.map((reasonLine) => <li key={reasonLine}>{reasonLine}</li>)}
