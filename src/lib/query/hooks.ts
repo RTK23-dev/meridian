@@ -14,6 +14,11 @@ import {
   cancelPublishJobAction,
   retryPublishJobAction,
 } from "@/lib/meridian/publishing/orchestrator-actions";
+import {
+  getTelemetrySummaryAction,
+  recordTelemetryAction,
+  syncTelemetryPriorsAction,
+} from "@/lib/meridian/learning/telemetry-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { qk, userScopedQueryKey } from "./keys";
 
@@ -192,3 +197,55 @@ export const useRetryPublishJob = (brandId: string) => {
     },
   });
 };
+
+export const useTelemetryQuery = (brandId: string, platform?: string, enabled = true) => {
+  const scope = useUserScopedKey(qk.telemetry(brandId, platform));
+  return useQuery({
+    ...scope,
+    queryFn: () => getTelemetrySummaryAction({ data: { brandId, platform } }),
+    enabled: scope.enabled && enabled && !!brandId,
+  });
+};
+
+export const useRecordTelemetry = (brandId: string) => {
+  const qc = useQueryClient();
+  const { user } = useCurrentUserState();
+  return useMutation({
+    mutationFn: (vars: {
+      platform: string;
+      sourceType?: "organic" | "paid" | "hybrid";
+      creativeId?: string;
+      variantId?: string;
+      views?: number;
+      impressions?: number;
+      reach?: number;
+      clicks?: number;
+      engagements?: number;
+      shares?: number;
+      saves?: number;
+      conversions?: number;
+      hookType?: string;
+      angle?: string;
+      hookRetention3s?: number;
+      completionRate?: number;
+    }) => recordTelemetryAction({ data: { brandId, ...vars } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.telemetry(brandId)) });
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.learning(brandId)) });
+    },
+  });
+};
+
+export const useSyncTelemetry = (brandId: string) => {
+  const qc = useQueryClient();
+  const { user } = useCurrentUserState();
+  return useMutation({
+    mutationFn: () => syncTelemetryPriorsAction({ data: { brandId } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.telemetry(brandId)) });
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.learning(brandId)) });
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.accountIntelligence(brandId)) });
+    },
+  });
+};
+

@@ -24,6 +24,7 @@ export const qk = {
   accounts: (brandId: string) => ["accounts", brandId] as const,
   accountIntelligence: (brandId: string, platform?: string) => platform ? ["account-intelligence", brandId, platform] as const : ["account-intelligence", brandId] as const,
   publishingQueue: (brandId: string, status?: string) => status ? ["publishing-queue", brandId, status] as const : ["publishing-queue", brandId] as const,
+  telemetry: (brandId: string, platform?: string) => platform ? ["telemetry", brandId, platform] as const : ["telemetry", brandId] as const,
 };
 
 export function userScopedQueryKey(userId: string | null | undefined, key: readonly unknown[]) {

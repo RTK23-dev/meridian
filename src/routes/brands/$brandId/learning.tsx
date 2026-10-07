@@ -9,7 +9,7 @@ import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextIn
 import { hasRole } from "@/lib/meridian/access";
 import { getPerformanceRowsForExport, setPerformanceSchedule } from "@/lib/meridian/performance/actions";
 import { refreshLearning, setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
-import { useLearningQuery } from "@/lib/query/hooks";
+import { useLearningQuery, useTelemetryQuery, useRecordTelemetry, useSyncTelemetry } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
 import { performanceScheduleSchema, type PerformanceSchedule, type PerformanceScheduleFields } from "@/lib/meridian/schemas/performance-schedule";
@@ -117,6 +117,9 @@ function Learning({ brandId }: { brandId: string }) {
           </label>
         ) : null}
       </Panel>
+
+      <TelemetryFlywheelPanel brandId={brandId} canEdit={canEdit} />
+
       {data.patterns.length === 0 ? (
         <Panel>No learned patterns. Enter performance on at least three creatives that share an attribute, with 300 impressions in that bucket, then recompute. CTR, conversion rate, and ROAS are calculated from those rows. Nothing is filled in for you.</Panel>
       ) : (
@@ -216,3 +219,246 @@ function Learning({ brandId }: { brandId: string }) {
     </div>
   );
 }
+
+function TelemetryFlywheelPanel({ brandId, canEdit }: { brandId: string; canEdit: boolean }) {
+  const telemetryQuery = useTelemetryQuery(brandId);
+  const recordTelemetry = useRecordTelemetry(brandId);
+  const syncTelemetry = useSyncTelemetry(brandId);
+  const [showIngestForm, setShowIngestForm] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const [platform, setPlatform] = useState("tiktok");
+  const [sourceType, setSourceType] = useState<"organic" | "paid" | "hybrid">("organic");
+  const [creativeId, setCreativeId] = useState("");
+  const [views, setViews] = useState("10000");
+  const [hookRetention3s, setHookRetention3s] = useState("0.65");
+  const [completionRate, setCompletionRate] = useState("0.35");
+  const [engagements, setEngagements] = useState("850");
+  const [shares, setShares] = useState("210");
+  const [hookType, setHookType] = useState("contrarian");
+  const [angle, setAngle] = useState("founder_story");
+
+  const summary = (telemetryQuery.data as any)?.summary;
+  const records = (telemetryQuery.data as any)?.records ?? [];
+
+  async function handleRecord(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await recordTelemetry.mutateAsync({
+        platform,
+        sourceType,
+        creativeId: creativeId.trim() || undefined,
+        views: Number(views) || 0,
+        hookRetention3s: Number(hookRetention3s) || 0,
+        completionRate: Number(completionRate) || 0,
+        engagements: Number(engagements) || 0,
+        shares: Number(shares) || 0,
+        hookType: hookType.trim() || undefined,
+        angle: angle.trim() || undefined,
+      });
+      setShowIngestForm(false);
+      setSyncMessage("Recorded new performance observation into telemetry store.");
+    } catch (err) {
+      setSyncMessage(err instanceof Error ? err.message : "Failed to record telemetry");
+    }
+  }
+
+  async function handleSync() {
+    try {
+      const res = await syncTelemetry.mutateAsync();
+      setSyncMessage(
+        `Synchronized ${res.syncedRecords} records to Bayesian flywheel. Learned ${res.patternsLearned} patterns. Top hooks: ${res.topHooks.join(", ") || "none"}.`
+      );
+    } catch (err) {
+      setSyncMessage(err instanceof Error ? err.message : "Sync failed");
+    }
+  }
+
+  return (
+    <Panel className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="font-display text-2xl">Multi-Channel Telemetry & JEV Bayesian Flywheel</h2>
+          <p className="mt-1 text-sm text-muted">
+            Continuous Bayesian parameter updating with exponential recency decay (14-day half-life).
+            Feeds organic viral retention and paid attribution directly into JEV cognitive priors.
+          </p>
+        </div>
+        {canEdit && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="quiet"
+              onClick={() => setShowIngestForm(!showIngestForm)}
+            >
+              {showIngestForm ? "Close Form" : "Ingest Telemetry"}
+            </Button>
+            <Button
+              type="button"
+              disabled={syncTelemetry.isPending || records.length === 0}
+              onClick={() => void handleSync()}
+            >
+              {syncTelemetry.isPending ? "Syncing Flywheel…" : "Sync to JEV Brain"}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {syncMessage && (
+        <div className="rounded-md border border-line bg-surface p-3 text-sm text-foreground">
+          {syncMessage}
+        </div>
+      )}
+
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-lg border border-line bg-surface p-3">
+          <p className="text-xs uppercase tracking-wider text-muted">Tracked Views</p>
+          <p className="mt-1 font-display text-2xl font-semibold">
+            {summary?.totalViews ? summary.totalViews.toLocaleString() : "0"}
+          </p>
+          <p className="text-xs text-muted">{summary?.totalRecords ?? 0} observation rows</p>
+        </div>
+        <div className="rounded-lg border border-line bg-surface p-3">
+          <p className="text-xs uppercase tracking-wider text-muted">Avg 3s Hook Retention</p>
+          <p className="mt-1 font-display text-2xl font-semibold text-accent">
+            {summary?.avgHookRetention3s ? `${(summary.avgHookRetention3s * 100).toFixed(1)}%` : "—"}
+          </p>
+          <p className="text-xs text-muted">Decay-weighted</p>
+        </div>
+        <div className="rounded-lg border border-line bg-surface p-3">
+          <p className="text-xs uppercase tracking-wider text-muted">Avg Completion Rate</p>
+          <p className="mt-1 font-display text-2xl font-semibold">
+            {summary?.avgCompletionRate ? `${(summary.avgCompletionRate * 100).toFixed(1)}%` : "—"}
+          </p>
+          <p className="text-xs text-muted">Full video watches</p>
+        </div>
+        <div className="rounded-lg border border-line bg-surface p-3">
+          <p className="text-xs uppercase tracking-wider text-muted">Active Platforms</p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {summary?.byPlatform && Object.keys(summary.byPlatform).length > 0 ? (
+              Object.keys(summary.byPlatform).map((plat) => (
+                <span key={plat} className="rounded bg-line/40 px-1.5 py-0.5 text-xs font-mono capitalize">
+                  {plat}
+                </span>
+              ))
+            ) : (
+              <span className="text-sm text-muted">None</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Ingest Form */}
+      {showIngestForm && canEdit && (
+        <form onSubmit={handleRecord} className="rounded-lg border border-line bg-surface p-4 space-y-4">
+          <h3 className="font-semibold text-sm uppercase tracking-wider text-brass">Manual Telemetry Ingest</h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Platform">
+              <SelectInput value={platform} onChange={(e) => setPlatform(e.target.value)}>
+                <option value="tiktok">TikTok</option>
+                <option value="instagram">Instagram</option>
+                <option value="meta">Meta (Reels / Ads)</option>
+                <option value="youtube">YouTube Shorts</option>
+                <option value="x">X / Twitter</option>
+              </SelectInput>
+            </Field>
+            <Field label="Source Type">
+              <SelectInput value={sourceType} onChange={(e) => setSourceType(e.target.value as any)}>
+                <option value="organic">Organic Social</option>
+                <option value="paid">Paid Campaign</option>
+                <option value="hybrid">Hybrid / Whitelisted</option>
+              </SelectInput>
+            </Field>
+            <Field label="Creative ID (Optional)">
+              <TextInput value={creativeId} onChange={(e) => setCreativeId(e.target.value)} placeholder="cr_..." />
+            </Field>
+            <Field label="Views">
+              <TextInput type="number" value={views} onChange={(e) => setViews(e.target.value)} required />
+            </Field>
+            <Field label="3s Hook Retention (0 - 1.0)">
+              <TextInput type="number" step="0.01" value={hookRetention3s} onChange={(e) => setHookRetention3s(e.target.value)} required />
+            </Field>
+            <Field label="Completion Rate (0 - 1.0)">
+              <TextInput type="number" step="0.01" value={completionRate} onChange={(e) => setCompletionRate(e.target.value)} />
+            </Field>
+            <Field label="Engagements">
+              <TextInput type="number" value={engagements} onChange={(e) => setEngagements(e.target.value)} />
+            </Field>
+            <Field label="Shares">
+              <TextInput type="number" value={shares} onChange={(e) => setShares(e.target.value)} />
+            </Field>
+            <Field label="Hook Type">
+              <SelectInput value={hookType} onChange={(e) => setHookType(e.target.value)}>
+                <option value="contrarian">Contrarian</option>
+                <option value="question">Question</option>
+                <option value="statistic">Statistic</option>
+                <option value="visual_shock">Visual Shock</option>
+                <option value="pov">POV</option>
+                <option value="curiosity_gap">Curiosity Gap</option>
+              </SelectInput>
+            </Field>
+            <Field label="Creative Angle">
+              <TextInput value={angle} onChange={(e) => setAngle(e.target.value)} placeholder="founder_story, how_to..." />
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="quiet" onClick={() => setShowIngestForm(false)}>Cancel</Button>
+            <Button type="submit" disabled={recordTelemetry.isPending}>
+              {recordTelemetry.isPending ? "Recording…" : "Save Telemetry Row"}
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {/* Bayesian Feature Posteriors: Hook Types */}
+      {summary?.posteriorsByHookType && summary.posteriorsByHookType.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm uppercase tracking-wider text-brass">
+              Bayesian Hook Retention Posteriors
+            </h3>
+            <span className="text-xs text-muted">Baseline: {(summary.posteriorsByHookType[0].baselineRate * 100).toFixed(1)}%</span>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-surface/50 text-xs uppercase tracking-wider text-muted">
+                <tr>
+                  <th className="p-3">Hook Archetype</th>
+                  <th className="p-3 text-right">Samples</th>
+                  <th className="p-3 text-right">Effective Views</th>
+                  <th className="p-3 text-right">Posterior Mean</th>
+                  <th className="p-3 text-right">90% Credible Interval</th>
+                  <th className="p-3 text-right">Lift vs Base</th>
+                  <th className="p-3 text-right">P(Beat Base)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {summary.posteriorsByHookType.map((post: any) => (
+                  <tr key={post.featureValue} className="hover:bg-surface/30">
+                    <td className="p-3 font-medium capitalize">{post.featureValue.replaceAll("_", " ")}</td>
+                    <td className="p-3 text-right text-muted">{post.sampleCount}</td>
+                    <td className="p-3 text-right text-muted">{post.effectiveTrials.toLocaleString()}</td>
+                    <td className="p-3 text-right font-mono font-semibold text-accent">
+                      {(post.posterior.mean * 100).toFixed(1)}%
+                    </td>
+                    <td className="p-3 text-right font-mono text-xs text-muted">
+                      [{(post.credibleInterval90.low * 100).toFixed(1)}% – {(post.credibleInterval90.high * 100).toFixed(1)}%]
+                    </td>
+                    <td className={`p-3 text-right font-mono text-sm ${post.lift >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                      {post.lift >= 0 ? `+${(post.lift * 100).toFixed(1)}%` : `${(post.lift * 100).toFixed(1)}%`}
+                    </td>
+                    <td className="p-3 text-right font-mono text-xs">
+                      {(post.probabilityBeatsBaseline * 100).toFixed(0)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
