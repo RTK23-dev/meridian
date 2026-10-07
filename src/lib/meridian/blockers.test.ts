@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
+import { vector } from "@electric-sql/pglite-pgvector";
 import { readdir, readFile } from "node:fs/promises";
 import { emptyBrain } from "./brain.ts";
 import { buildBrief, renderGenerationPrompt } from "./brief/engine.ts";
@@ -345,7 +346,7 @@ test("pdf text is extracted and instruction lines are not obeyed", async () => {
 });
 
 async function migratedSql(): Promise<Sql> {
-  const db = new PGlite();
+  const db = new PGlite({ extensions: { vector } });
   await db.waitReady;
   const dir = join(process.cwd(), "migrations");
   const names = (await readdir(dir)).filter((name) => name.endsWith(".sql")).sort();

@@ -119,7 +119,11 @@ async function createPgliteSql(): Promise<Sql> {
   // migrations/*.sql are applied again when this module reloads.
   globalRef.__pgliteInstance__ ??= (async () => {
     const { PGlite } = await import("@electric-sql/pglite");
+    const { vector } = await import("@electric-sql/pglite-pgvector");
     const pg = new PGlite({
+      extensions: {
+        vector,
+      },
       parsers: {
         [OID_INT8]: Number,
         [OID_DATE]: identity,
