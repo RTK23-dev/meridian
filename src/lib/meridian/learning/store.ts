@@ -66,12 +66,12 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
     await sql`
       insert into learned_patterns (
         id, organization_id, brand_id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary,
-        state, clicks, conversions, spend_cents, revenue_cents, scope
+        state, clicks, conversions, spend_cents, revenue_cents, scope, p_beat, ci_low, ci_high, q_value
       ) values (
         ${globalThis.crypto.randomUUID()}, ${organizationId}, ${brandId}, ${pattern.attribute}, ${pattern.value}, ${pattern.metric},
         ${pattern.lift}, ${pattern.sampleSize}, ${pattern.baseline}, ${pattern.observed}, ${pattern.impressions}, ${pattern.summary},
         ${pattern.state ?? "INFERRED"}, ${pattern.clicks ?? 0}, ${pattern.conversions ?? 0}, ${pattern.spendCents ?? 0}, ${pattern.revenueCents ?? 0},
-        ${pattern.scope ?? "brand"}
+        ${pattern.scope ?? "brand"}, ${pattern.pBeat ?? null}, ${pattern.ciLow ?? null}, ${pattern.ciHigh ?? null}, ${pattern.qValue ?? null}
       )
     `;
   }
