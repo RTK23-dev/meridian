@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useBusy } from "@/components/gate";
-import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
 import { BrandNav } from "@/components/brand-nav";
 import { MediaPlayer } from "@/components/media-player";
 import { Term } from "@/components/term";
@@ -21,10 +21,20 @@ import {
   recordOrganicTelemetryAction,
 } from "@/lib/meridian/distribution/actions";
 
-import { useStudioQuery, useDistributionChannelsQuery, useOrganicDistributionQuery } from "@/lib/query/hooks";
+import {
+  useStudioQuery,
+  useDistributionChannelsQuery,
+  useOrganicDistributionQuery,
+  usePublishingQueueQuery,
+  useScheduleMultiAccountPublish,
+  useCancelPublishJob,
+  useRetryPublishJob,
+  usePlatformAccountsQuery,
+} from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
 import { studioGenerationSchema, type StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
+import { Clock, RefreshCw, Send, CheckCircle2, Share2 } from "lucide-react";
 
 export const Route = createFileRoute("/brands/$brandId/studio")({ component: Page });
 
@@ -51,6 +61,16 @@ function Studio({ brandId }: { brandId: string }) {
 
   const channelsQuery = useDistributionChannelsQuery(brandId);
   const organicQuery = useOrganicDistributionQuery(brandId);
+  const accountsQuery = usePlatformAccountsQuery(brandId);
+  const queueQuery = usePublishingQueueQuery(brandId);
+  const schedulePublishMutation = useScheduleMultiAccountPublish(brandId);
+  const cancelJobMutation = useCancelPublishJob(brandId);
+  const retryJobMutation = useRetryPublishJob(brandId);
+
+  const [queueCreativeId, setQueueCreativeId] = useState("");
+  const [queueAccountIds, setQueueAccountIds] = useState<string[]>([]);
+  const [queueScheduledTime, setQueueScheduledTime] = useState("");
+  const [queueTargetType, setQueueTargetType] = useState<"organic" | "paid_campaign">("organic");
 
   const briefAction = useBusy([qk.studio(brandId), qk.opportunities(brandId)]);
   const generationAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
@@ -110,11 +130,12 @@ function Studio({ brandId }: { brandId: string }) {
       {actionErrors.map((error) => <Notice key={error}>{error}</Notice>)}
       {anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
       <Tabs defaultValue="direction" className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5">
           <TabsTrigger value="direction">1. Direction</TabsTrigger>
           <TabsTrigger value="brief">2. Brief</TabsTrigger>
           <TabsTrigger value="generate">3. Generate</TabsTrigger>
           <TabsTrigger value="review">4. Review</TabsTrigger>
+          <TabsTrigger value="queue">5. Queue & Schedule</TabsTrigger>
         </TabsList>
         <TabsContent value="direction" className="space-y-5">
       {recommendation ? (
@@ -555,6 +576,291 @@ function Studio({ brandId }: { brandId: string }) {
           </div>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        {/* TAB 5: ORCHESTRATED QUEUE & SCHEDULE */}
+        <TabsContent value="queue" className="space-y-6">
+          <div className="flex flex-col gap-1">
+            <h2 className="font-display text-2xl font-bold">Multi-Account Publishing Queue</h2>
+            <p className="text-sm text-muted">
+              Orchestrate social publishing across connected platform accounts with rate limiting, automated retries, and idempotency guarantees.
+            </p>
+          </div>
+
+          {/* Schedule Form */}
+          <Panel className="space-y-4">
+            <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+              <Share2 className="h-4 w-4 text-brass" />
+              Schedule Variant to Destination Accounts
+            </h3>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Choose Creative Variant">
+                <SelectInput
+                  value={queueCreativeId}
+                  onChange={(e) => setQueueCreativeId(e.target.value)}
+                >
+                  <option value="">Select a variant…</option>
+                  {session.variants.map((v) => (
+                    <option key={v.creativeId} value={v.creativeId}>
+                      {v.creativeId} ({v.creativeStatus})
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+
+              <Field label="Target Type">
+                <SelectInput
+                  value={queueTargetType}
+                  onChange={(e) => setQueueTargetType(e.target.value as "organic" | "paid_campaign")}
+                >
+                  <option value="organic">Organic Social Post</option>
+                  <option value="paid_campaign">Paid Ad Campaign</option>
+                </SelectInput>
+              </Field>
+            </div>
+
+            {/* Target Accounts Selection */}
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted block mb-2">
+                Target Platform Accounts ({queueAccountIds.length} selected)
+              </label>
+              {(accountsQuery.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted">
+                  No social accounts connected yet. Go to <a href={`/brands/${brandId}/accounts`} className="underline text-accent">Accounts</a> to connect Instagram, TikTok, or YouTube.
+                </p>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                  {(accountsQuery.data ?? []).map((acct) => (
+                    <label
+                      key={acct.id}
+                      className="flex items-center gap-2.5 p-2 rounded-md border border-line bg-surface/40 hover:bg-surface cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={queueAccountIds.includes(acct.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setQueueAccountIds([...queueAccountIds, acct.id]);
+                          else setQueueAccountIds(queueAccountIds.filter((id) => id !== acct.id));
+                        }}
+                        className="rounded border-line"
+                      />
+                      <div className="truncate">
+                        <span className="font-semibold block truncate">{acct.name}</span>
+                        <span className="text-xs text-muted block truncate capitalize">
+                          {acct.platform} {acct.handle ? `· ${acct.handle}` : ""}
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Timing */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Schedule Time (optional, leave blank for immediate)">
+                <input
+                  type="datetime-local"
+                  value={queueScheduledTime}
+                  onChange={(e) => setQueueScheduledTime(e.target.value)}
+                  className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-foreground"
+                />
+              </Field>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="primary"
+                disabled={
+                  !canEdit ||
+                  !queueCreativeId ||
+                  queueAccountIds.length === 0 ||
+                  schedulePublishMutation.isPending
+                }
+                onClick={() => {
+                  schedulePublishMutation.mutate(
+                    {
+                      creativeId: queueCreativeId,
+                      targetAccountIds: queueAccountIds,
+                      scheduledTime: queueScheduledTime ? new Date(queueScheduledTime).toISOString() : undefined,
+                      targetType: queueTargetType,
+                    },
+                    {
+                      onSuccess: () => {
+                        setQueueAccountIds([]);
+                        setQueueScheduledTime("");
+                      },
+                    },
+                  );
+                }}
+              >
+                <Send className="mr-1.5 h-4 w-4" />
+                {schedulePublishMutation.isPending
+                  ? "Enqueueing…"
+                  : `Enqueue to ${queueAccountIds.length} Account(s)`}
+              </Button>
+            </div>
+          </Panel>
+
+          {/* Live Queue Table */}
+          {(() => {
+            const queueItems = ((queueQuery.data as any)?.queue as Array<{
+              id: string;
+              platform: string;
+              creativeId: string;
+              targetType: string;
+              scheduledTime: string;
+              status: string;
+              attempts: number;
+              maxAttempts: number;
+            }>) ?? [];
+            const queueReceipts = ((queueQuery.data as any)?.receipts as Array<{
+              id: string;
+              platform: string;
+              externalPostId: string;
+              publishedAt: string;
+              externalUrl?: string;
+            }>) ?? [];
+
+            return (
+              <>
+                <Panel className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-brass" />
+                      Live Publishing Queue ({queueItems.length})
+                    </h3>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void queueQuery.refetch()}
+                      disabled={queueQuery.isFetching}
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${queueQuery.isFetching ? "animate-spin" : ""}`} />
+                    </Button>
+                  </div>
+
+                  {queueItems.length === 0 ? (
+                    <p className="text-sm text-muted py-4 text-center">
+                      Publishing queue is currently empty.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="border-b border-line text-muted uppercase tracking-wider">
+                          <tr>
+                            <th className="py-2 pr-3">Target Platform</th>
+                            <th className="py-2 pr-3">Creative ID</th>
+                            <th className="py-2 pr-3">Type</th>
+                            <th className="py-2 pr-3">Scheduled</th>
+                            <th className="py-2 pr-3">Status</th>
+                            <th className="py-2 pr-3">Attempts</th>
+                            <th className="py-2 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-line">
+                          {queueItems.map((item) => {
+                            const badgeVariant =
+                              item.status === "published"
+                                ? "success"
+                                : item.status === "processing"
+                                ? "info"
+                                : item.status === "failed"
+                                ? "danger"
+                                : item.status === "cancelled"
+                                ? "neutral"
+                                : "warning";
+
+                            return (
+                              <tr key={item.id} className="hover:bg-surface/30">
+                                <td className="py-3 pr-3 font-semibold capitalize">{item.platform}</td>
+                                <td className="py-3 pr-3 font-mono text-muted">{item.creativeId}</td>
+                                <td className="py-3 pr-3 capitalize text-muted">{item.targetType.replace(/_/g, " ")}</td>
+                                <td className="py-3 pr-3 text-muted">
+                                  {new Date(item.scheduledTime).toLocaleString()}
+                                </td>
+                                <td className="py-3 pr-3">
+                                  <Badge variant={badgeVariant} className="capitalize">
+                                    {item.status}
+                                  </Badge>
+                                </td>
+                                <td className="py-3 pr-3 text-muted">
+                                  {item.attempts} / {item.maxAttempts}
+                                </td>
+                                <td className="py-3 text-right">
+                                  {canEdit && (item.status === "failed" || item.status === "cancelled") && (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      className="h-7 text-xs"
+                                      disabled={retryJobMutation.isPending}
+                                      onClick={() => retryJobMutation.mutate({ queueId: item.id })}
+                                    >
+                                      Retry
+                                    </Button>
+                                  )}
+                                  {canEdit && (item.status === "queued" || item.status === "processing") && (
+                                    <Button
+                                      size="sm"
+                                      variant="danger"
+                                      className="h-7 text-xs ml-1"
+                                      disabled={cancelJobMutation.isPending}
+                                      onClick={() => cancelJobMutation.mutate({ queueId: item.id })}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Panel>
+
+                {/* Execution Receipts Stream */}
+                {queueReceipts.length > 0 && (
+                  <Panel className="space-y-3">
+                    <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      Live Execution Receipts
+                    </h3>
+                    <div className="space-y-2">
+                      {queueReceipts.map((rec) => (
+                        <div
+                          key={rec.id}
+                          className="flex items-center justify-between p-3 rounded-md border border-line bg-surface/30 text-xs"
+                        >
+                          <div>
+                            <span className="font-semibold capitalize">{rec.platform} Post</span>
+                            <span className="font-mono text-muted block mt-0.5">ID: {rec.externalPostId}</span>
+                            <span className="text-muted block text-[11px]">
+                              Published: {new Date(rec.publishedAt).toLocaleString()}
+                            </span>
+                          </div>
+                          {rec.externalUrl ? (
+                            <a
+                              href={rec.externalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline text-accent font-semibold"
+                            >
+                              View External Post &rarr;
+                            </a>
+                          ) : (
+                            <Badge variant="success">Confirmed Live</Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+                )}
+              </>
+            );
+          })()}
         </TabsContent>
       </Tabs>
     </div>

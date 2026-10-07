@@ -23,6 +23,7 @@ export const qk = {
   organic: (brandId: string) => ["organic", brandId] as const,
   accounts: (brandId: string) => ["accounts", brandId] as const,
   accountIntelligence: (brandId: string, platform?: string) => platform ? ["account-intelligence", brandId, platform] as const : ["account-intelligence", brandId] as const,
+  publishingQueue: (brandId: string, status?: string) => status ? ["publishing-queue", brandId, status] as const : ["publishing-queue", brandId] as const,
 };
 
 export function userScopedQueryKey(userId: string | null | undefined, key: readonly unknown[]) {

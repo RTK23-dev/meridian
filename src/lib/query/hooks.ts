@@ -8,6 +8,12 @@ import { getStudioSession } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
 import { getJevAccountIntelligenceFn, updateWhitespaceStatusFn, runAccountIntelligenceAnalysisFn } from "@/lib/meridian/jev/actions";
+import {
+  listPublishingQueueAction,
+  scheduleMultiAccountPublishAction,
+  cancelPublishJobAction,
+  retryPublishJobAction,
+} from "@/lib/meridian/publishing/orchestrator-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { qk, userScopedQueryKey } from "./keys";
 
@@ -136,6 +142,53 @@ export const useRunAccountIntelligence = (brandId: string) => {
       runAccountIntelligenceAnalysisFn({ data: { brandId, ...vars } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.accountIntelligence(brandId)) });
+    },
+  });
+};
+
+export const usePublishingQueueQuery = (brandId: string, status?: string, enabled = true) => {
+  const scope = useUserScopedKey(qk.publishingQueue(brandId, status));
+  return useQuery({
+    ...scope,
+    queryFn: () => listPublishingQueueAction({ data: { brandId, status } }),
+    enabled: scope.enabled && enabled && !!brandId,
+    refetchInterval: (query) => {
+      const data = query.state.data as { queue?: Array<{ status: string }> } | undefined;
+      return data?.queue?.some((item) => item.status === "queued" || item.status === "processing") ? 4_000 : false;
+    },
+  });
+};
+
+export const useScheduleMultiAccountPublish = (brandId: string) => {
+  const qc = useQueryClient();
+  const { user } = useCurrentUserState();
+  return useMutation({
+    mutationFn: (vars: { creativeId: string; targetAccountIds: string[]; scheduledTime?: string; targetType?: "organic" | "paid_campaign" }) =>
+      scheduleMultiAccountPublishAction({ data: { brandId, ...vars } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.publishingQueue(brandId)) });
+    },
+  });
+};
+
+export const useCancelPublishJob = (brandId: string) => {
+  const qc = useQueryClient();
+  const { user } = useCurrentUserState();
+  return useMutation({
+    mutationFn: (vars: { queueId: string }) => cancelPublishJobAction({ data: { brandId, ...vars } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.publishingQueue(brandId)) });
+    },
+  });
+};
+
+export const useRetryPublishJob = (brandId: string) => {
+  const qc = useQueryClient();
+  const { user } = useCurrentUserState();
+  return useMutation({
+    mutationFn: (vars: { queueId: string }) => retryPublishJobAction({ data: { brandId, ...vars } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.publishingQueue(brandId)) });
     },
   });
 };
