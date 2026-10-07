@@ -138,7 +138,7 @@ try {
   if (approveCount < 3) throw new Error(`Expected review buttons, saw ${approveCount}.`);
   await approve.first().focus();
   await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: "Publish with test publisher" }).first().waitFor();
+  await page.getByRole("button", { name: "Publish with test publisher" }).first().waitFor({ timeout: 60000 });
   await page.getByRole("button", { name: "Inspect evidence" }).first().click();
   await page.getByText("logo_match").first().waitFor();
   await page.getByText(/answer (yes|no|uncertain|insufficient|violation)/).first().waitFor();

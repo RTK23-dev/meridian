@@ -12,6 +12,7 @@ import { hasRole } from "@/lib/meridian/access";
 import {
   generateStudioVariants,
   openStudioBrief,
+  publishStudioVariant,
   recordStudioTestPerformance,
   reviewStudioVariant,
 } from "@/lib/meridian/studio/actions";
@@ -296,17 +297,31 @@ function Studio({ brandId }: { brandId: string }) {
                   </>
                 ) : null}
                 {canEdit && (variant.creativeStatus === "approved" || variant.creativeStatus === "testing") ? (
-                  <Button
-                    type="button"
-                    disabled={publishAction.pending}
-                    onClick={() => {
-                      setPublishTarget({ creativeId: variant.creativeId, title: variant.title, defaultCaption: variant.transcript || variant.title || "" });
-                      setPublishCaption(variant.transcript || variant.title || "");
-                      setPublishResults(null);
-                    }}
-                  >
-                    Publish to channels…
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      disabled={publishAction.pending}
+                      onClick={() => {
+                        void publishAction.run(async () => {
+                          await publishStudioVariant({ data: { brandId, creativeId: variant.creativeId, publisher: "test" } });
+                        });
+                      }}
+                    >
+                      Publish with test publisher
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="quiet"
+                      disabled={publishAction.pending}
+                      onClick={() => {
+                        setPublishTarget({ creativeId: variant.creativeId, title: variant.title, defaultCaption: variant.transcript || variant.title || "" });
+                        setPublishCaption(variant.transcript || variant.title || "");
+                        setPublishResults(null);
+                      }}
+                    >
+                      Publish to channels…
+                    </Button>
+                  </>
                 ) : null}
               </div>
               {inspectId === variant.creativeId ? (
@@ -357,9 +372,11 @@ function Studio({ brandId }: { brandId: string }) {
         )}
         {session.publications.length > 0 ? (
           <ul className="mt-3 text-sm">
-            {session.publications.map((item) => <li key={item.externalId}>Paid publication: {item.provider} · {item.externalId}</li>)}
+            {session.publications.map((item) => (
+              <li key={item.externalId}>Test publication {item.externalId}</li>
+            ))}
           </ul>
-        ) : <p className="mt-3 text-sm text-muted">Nothing from this brand has a stored ad publisher id.</p>}
+        ) : <p className="mt-3 text-sm text-muted">Nothing from this brand has a stored publisher id.</p>}
         {organicQuery.data && organicQuery.data.length > 0 ? (
           <div className="mt-4 pt-3 border-t border-line">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-brass">Organic Social Publications</h3>
