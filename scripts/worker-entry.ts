@@ -31,6 +31,7 @@ function sqlClient(): Sql {
 const sql = sqlClient();
 let timer: NodeJS.Timeout | null = null;
 let running = false;
+let shutdownRequested = false;
 
 async function beat(detail: string) {
   await sql`
@@ -54,10 +55,15 @@ async function loop() {
     console.error("[worker]", error instanceof Error ? error.message : error);
   } finally {
     running = false;
+    if (shutdownRequested) {
+      const retry = setTimeout(() => void loop(), 1000);
+      retry.unref();
+    }
   }
 }
 
 function shutdown() {
+  shutdownRequested = true;
   requestWorkerStop();
   if (timer) clearInterval(timer);
   void loop();

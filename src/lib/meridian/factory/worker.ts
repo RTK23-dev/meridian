@@ -3,7 +3,7 @@ import type { ExecutableJob } from "../jobs/execute.ts";
 import { CREATIVE_DNA_VERSION, dnaFromTranscript, type AdFormat, type CreativeDna } from "./creative-dna.ts";
 import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate } from "./gates.ts";
 import { adsMustPause } from "./kill-switch.ts";
-import { isFactoryStage } from "./pipeline.ts";
+import { factoryStageAllowed, isFactoryStage } from "./pipeline.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { templateFromDna, variantMatrix } from "./template.ts";
 import { buildAdTimeline } from "./timeline.ts";
@@ -27,12 +27,13 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   if (!job.brand_id) throw new Error("Factory jobs need a brand.");
   const runId = text(payload.runId);
   if (!runId) throw new Error("Factory jobs need a run id.");
-  const owned = await sql<{ id: string; status: string; niche: string }>`
-    select id, status, niche from factory_runs
+  const owned = await sql<{ id: string; status: string; niche: string; level: number }>`
+    select id, status, niche, level from factory_runs
     where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
     limit 1
   `;
   if (!owned[0]) throw new Error("Factory run is not owned by this organization and brand.");
+  if (!factoryStageAllowed(owned[0].level, job.job_type)) return `skipped:above-level-${owned[0].level}`;
   const paused = await killSwitchPaused(sql, job.organization_id, job.brand_id);
   if (paused && (job.job_type === "factory.launch" || job.job_type === "factory.test")) {
     await sql`update factory_runs set status = 'paused', error = 'Kill switch is engaged. Live ads were not started.', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id}`;
@@ -40,7 +41,7 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   }
   await sql`
     update factory_runs
-    set status = case when status = 'queued' then 'running' else status end,
+    set status = case when status in ('queued', 'failed') then 'running' else status end,
         current_stage = ${job.job_type},
         error = '',
         updated_at = now()
@@ -82,6 +83,9 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   if (job.job_type === "factory.template") {
     const made = await persistTemplates(sql, job.organization_id, job.brand_id, runId);
     await recordCost(sql, job, runId, "factory.template", made * 3, made);
+    if (owned[0].level === 0) {
+      await sql`update factory_runs set status = 'succeeded', error = '', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
+    }
     return `templates:${made}`;
   }
   if (job.job_type === "factory.produce") {
@@ -98,6 +102,7 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
       select count(*)::int as n from factory_variants
       where organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and gate_result = 'review'
     `;
+    await sql`update factory_runs set status = 'succeeded', error = '', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
     return `review:${rows[0]?.n ?? 0}`;
   }
   if (job.job_type === "factory.launch") {

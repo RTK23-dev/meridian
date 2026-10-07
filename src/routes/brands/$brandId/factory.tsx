@@ -36,6 +36,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
 
   const canEdit = hasRole(board.role, "member");
   const canAdmin = hasRole(board.role, "admin");
+  const canOwnControls = board.role === "owner";
   const killOn = board.killSwitch.workspace || board.killSwitch.brand;
 
   return (
@@ -210,7 +211,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
           <Panel className="space-y-4 p-5">
             <h2 className="font-display text-2xl">Caps and kill switch</h2>
             <p className="text-muted">Daily cap {dollars(board.cap.dailyCents)} · total cap {dollars(board.cap.totalCents)}. Spending starts only after the owner sets a cap. Automation never invents a live campaign.</p>
-            {canAdmin ? (
+            {canOwnControls ? (
               <form
                 className="grid gap-3 md:grid-cols-2"
                 onSubmit={(event) => {
@@ -231,19 +232,19 @@ function FactoryPage({ brandId }: { brandId: string }) {
               >
                 <Field label="Running level">
                   <SelectInput value={level} onChange={(event) => setLevel(event.currentTarget.value)}>
-                    {([0, 1, 2, 3] as const).map((value) => <option key={value} value={String(value)}>{value} · {FACTORY_LEVEL_LABELS[value]} — {FACTORY_LEVEL_DETAIL[value]}</option>)}
+                    {([0, 1] as const).map((value) => <option key={value} value={String(value)}>{value} · {FACTORY_LEVEL_LABELS[value]} — {FACTORY_LEVEL_DETAIL[value]}</option>)}
                   </SelectInput>
                 </Field>
                 <Field label="Ceiling">
                   <SelectInput value={ceiling} onChange={(event) => setCeiling(event.currentTarget.value)}>
-                    {([0, 1, 2, 3] as const).map((value) => <option key={value} value={String(value)}>{value} · {FACTORY_LEVEL_LABELS[value]}</option>)}
+                    {([0, 1] as const).map((value) => <option key={value} value={String(value)}>{value} · {FACTORY_LEVEL_LABELS[value]}</option>)}
                   </SelectInput>
                 </Field>
                 <Field label="Daily spend cap (USD)"><TextInput type="number" min="0" step="0.01" value={daily} onChange={(event) => setDaily(event.currentTarget.value)} placeholder={String(board.cap.dailyCents / 100)} /></Field>
                 <Field label="Total spend cap (USD)"><TextInput type="number" min="0" step="0.01" value={total} onChange={(event) => setTotal(event.currentTarget.value)} placeholder={String(board.cap.totalCents / 100)} /></Field>
                 <Button type="submit" disabled={busy.pending}>Save caps and level</Button>
               </form>
-            ) : <p className="text-sm text-muted">Only admins set levels and spend caps.</p>}
+            ) : <p className="text-sm text-muted">Only workspace owners set factory levels and spend caps.</p>}
             {canAdmin ? (
               <Button
                 type="button"

@@ -22,7 +22,7 @@ JEV and Winner Score values are **scores**, not calibrated probabilities. The ca
 
 ## Owner control
 
-Autopilot levels 0–3 (Suggest, Produce, Stage, Run). The running level cannot exceed the brand ceiling. Spend starts only inside owner-set daily and total caps. A kill switch per brand or workspace pauses live ads. Level 3 is opt-in.
+Autopilot levels 0–1 (Suggest, Produce) are currently runnable. Staging and live optimization (levels 2–3) remain unavailable until their live publishing and performance loops are connected. The running level cannot exceed the brand ceiling. Owners set daily and total caps. A kill switch per brand or workspace pauses live ads.
 
 ## Production fail-closed
 

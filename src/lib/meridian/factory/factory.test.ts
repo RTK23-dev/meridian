@@ -4,8 +4,11 @@ import { canRunStage, parseFactoryLevel, spendWithinCap, assertSpendCap } from "
 import { rollupCosts, withinBudget } from "./cost.ts";
 import { dnaFromTranscript, decodeOk, emptyCreativeDna } from "./creative-dna.ts";
 import { brandGate, claimsGate, combineGates, originalityGate, policyGate, rightsGate } from "./gates.ts";
-import { adsMustPause, killSwitchCommand } from "./kill-switch.ts";
-import { factoryRunJobs, isFactoryStage } from "./pipeline.ts";
+import { adsMustPause, assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
+import type { Sql } from "../learning/store.ts";
+import { factoryRunJobs, factoryStageAllowed, isFactoryStage } from "./pipeline.ts";
+import { executeFactoryJob } from "./worker.ts";
+import type { ExecutableJob } from "../jobs/execute.ts";
 import { weeklyStrategistReport } from "./report.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { templateFromDna, variantMatrix } from "./template.ts";
@@ -23,7 +26,30 @@ test("a factory run is a job graph with tenant-scoped idempotency", () => {
   assert.ok(jobs.every((job) => job.payload.organizationId === "org-1"));
   assert.ok(isFactoryStage("factory.gate"));
   assert.equal(isFactoryStage("video.generate"), false);
+  const suggest = factoryRunJobs({ organizationId: "org-1", brandId: "brand-1", runId: "run-2", niche: "skincare", level: 0 });
+  assert.ok(suggest.some((job) => job.jobType === "factory.template"));
+  assert.ok(suggest.every((job) => !["factory.produce", "factory.gate", "factory.review", "factory.launch"].includes(job.jobType)));
+  const produce = factoryRunJobs({ organizationId: "org-1", brandId: "brand-1", runId: "run-3", niche: "skincare", level: 1 });
+  assert.ok(produce.some((job) => job.jobType === "factory.review"));
+  assert.ok(produce.every((job) => !["factory.launch", "factory.test", "factory.learn"].includes(job.jobType)));
+  assert.equal(factoryStageAllowed(0, "factory.produce"), false);
+  assert.equal(factoryStageAllowed(1, "factory.review"), true);
   assert.throws(() => factoryRunJobs({ organizationId: "", brandId: "b", runId: "r", niche: "x" }), /organization/);
+});
+
+test("persisted factory jobs cannot execute beyond their run level", async () => {
+  const queries: string[] = [];
+  const sql = (async (strings: TemplateStringsArray) => {
+    queries.push(strings.join(" "));
+    if (strings.join(" ").includes("select id, status, niche, level")) return [{ id: "run-1", status: "running", niche: "skincare", level: 0 }];
+    return [];
+  }) as unknown as Sql;
+  const job: ExecutableJob = {
+    id: "job-1", organization_id: "org-1", brand_id: "brand-1", job_type: "factory.produce",
+    payload: JSON.stringify({ runId: "run-1" }), attempts: 0, max_attempts: 3,
+  };
+  assert.equal(await executeFactoryJob(sql, job, { runId: "run-1" }), "skipped:above-level-0");
+  assert.equal(queries.length, 1);
 });
 
 test("winner score shows a range and evidence, never a bare number", () => {
@@ -137,6 +163,17 @@ test("a kill switch pauses every live ad in that scope", () => {
   assert.equal(event.scope, "brand");
   assert.equal(adsMustPause({ workspaceEngaged: false, brandEngaged: true }), true);
   assert.equal(adsMustPause({ workspaceEngaged: false, brandEngaged: false }), false);
+});
+
+test("a brand kill switch cannot target a brand in another workspace", async () => {
+  let values: unknown[] = [];
+  const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
+    values = params;
+    assert.match(strings.join(" "), /organization_id =/);
+    return [];
+  }) as unknown as Sql;
+  await assert.rejects(assertBrandInWorkspace(sql, "org-a", "brand-b"), /not owned by that workspace/);
+  assert.deepEqual(values, ["brand-b", "org-a"]);
 });
 
 test("thompson sampling pauses losers only after minimum spend", () => {

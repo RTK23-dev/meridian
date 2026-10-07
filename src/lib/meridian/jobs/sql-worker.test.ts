@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { claimAndRun, executeWithLease } from "./sql-worker.ts";
+import { claimAndRun, executeWithLease, resetWorkerStop, tickSqlJobs } from "./sql-worker.ts";
 import type { ExecutableJob } from "./execute.ts";
 import type { Sql } from "../learning/store.ts";
 
@@ -35,4 +35,36 @@ test("claimAndRun schedules a retry using exponential backoff", async () => {
   const result = await claimAndRun(sql, job.id);
   assert.match(result, /^retry:/);
   assert.ok(updates.some((query) => query.includes("run_after = now() + (power(2")));
+});
+
+test("a factory run is marked failed when its job reaches the dead-letter queue", async () => {
+  const updates: string[] = [];
+  const factoryJob = { ...job, job_type: "factory.decode", attempts: 2, payload: JSON.stringify({ runId: "run-1" }) };
+  const sql = (async (strings: TemplateStringsArray) => {
+    const query = strings.join(" ");
+    updates.push(query);
+    if (query.includes("select id, organization_id")) return [factoryJob];
+    if (query.includes("returning id")) return [{ id: factoryJob.id }];
+    return [];
+  }) as unknown as Sql;
+  const result = await claimAndRun(sql, factoryJob.id, async () => { throw new Error("source unavailable"); });
+  assert.match(result, /^dead:/);
+  assert.ok(updates.some((query) => query.includes("update factory_runs") && query.includes("status = 'failed'")));
+});
+
+test("an expired factory job at its attempt limit fails the associated run", async () => {
+  resetWorkerStop();
+  const updates: string[] = [];
+  const expiredFactoryJob = {
+    ...job, job_type: "factory.decode", attempts: 3, max_attempts: 3,
+    payload: JSON.stringify({ runId: "run-expired" }), status: "dead",
+  };
+  const sql = (async (strings: TemplateStringsArray) => {
+    const query = strings.join(" ");
+    updates.push(query);
+    if (query.includes("set status = case when attempts >= max_attempts")) return [expiredFactoryJob];
+    return [];
+  }) as unknown as Sql;
+  await tickSqlJobs(sql);
+  assert.ok(updates.some((query) => query.includes("update factory_runs") && query.includes("status = 'failed'")));
 });

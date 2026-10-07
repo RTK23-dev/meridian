@@ -6,7 +6,7 @@ import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
 import { FACTORY_GRAPH } from "./pipeline.ts";
 import { factoryRunJobs } from "./pipeline.ts";
 import { parseFactoryLevel, FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "./autopilot.ts";
-import { killSwitchCommand } from "./kill-switch.ts";
+import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
 import { winnerScore } from "./winner-score.ts";
 import { buildAdTimeline } from "./timeline.ts";
@@ -293,12 +293,13 @@ export const startFactoryRun = createServerFn({ method: "POST" })
     `;
     const ceiling = (settings[0]?.ceiling ?? 1) as FactoryLevel;
     if (data.level > ceiling) throw new Error("That autopilot level is above the owner ceiling for this brand.");
+    if (data.level > 1) throw new Error("Live staging and optimization are not connected for this factory yet.");
     const runId = crypto.randomUUID();
     await sql`
       insert into factory_runs (id, organization_id, brand_id, niche, level, status, current_stage, created_by)
       values (${runId}, ${organizationId}, ${data.brandId}, ${data.niche}, ${data.level}, 'queued', 'factory.discover', ${context.userId})
     `;
-    const jobs = factoryRunJobs({ organizationId, brandId: data.brandId, runId, niche: data.niche });
+    const jobs = factoryRunJobs({ organizationId, brandId: data.brandId, runId, niche: data.niche, level: data.level });
     const idByKey = new Map<string, string>();
     for (const job of jobs) {
       const id = crypto.randomUUID();
@@ -324,7 +325,8 @@ export const setFactoryControls = createServerFn({ method: "POST" })
     const ceiling = parseFactoryLevel(body.ceiling);
     const dailyCents = Number(body.dailyCents);
     const totalCents = Number(body.totalCents);
-    if (level == null || ceiling == null) throw new Error("Choose factory levels 0–3.");
+    if (level == null || ceiling == null) throw new Error("Choose factory levels 0–1.");
+    if (level > 1 || ceiling > 1) throw new Error("Live staging and optimization are not connected for this factory yet.");
     if (!Number.isInteger(dailyCents) || !Number.isInteger(totalCents) || dailyCents < 0 || totalCents < 0) {
       throw new Error("Spend caps must be whole cents.");
     }
@@ -332,7 +334,7 @@ export const setFactoryControls = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "owner");
     if (data.level > data.ceiling) throw new Error("The running level cannot exceed the ceiling.");
     await sql`
       insert into factory_settings (organization_id, brand_id, level, ceiling, updated_by)
@@ -365,6 +367,7 @@ export const setKillSwitch = createServerFn({ method: "POST" })
     const role = members[0]?.role;
     if (!role || !isRole(role)) throw new Error("That workspace is not available to you.");
     assertRole(role, "admin");
+    if (data.brandId) await assertBrandInWorkspace(sql, data.organizationId, data.brandId);
     const event = killSwitchCommand({
       organizationId: data.organizationId,
       brandId: data.brandId || null,

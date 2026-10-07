@@ -1,3 +1,5 @@
+import type { Sql } from "../learning/store.ts";
+
 export type KillSwitchScope = "brand" | "workspace";
 
 export type KillSwitchEvent = {
@@ -32,4 +34,11 @@ export function killSwitchCommand(input: {
 
 export function adsMustPause(switchState: { workspaceEngaged: boolean; brandEngaged: boolean }): boolean {
   return switchState.workspaceEngaged || switchState.brandEngaged;
+}
+
+export async function assertBrandInWorkspace(sql: Sql, organizationId: string, brandId: string): Promise<void> {
+  const brands = await sql<{ id: string }>`
+    select id from brands where id = ${brandId} and organization_id = ${organizationId} and deleted_at is null limit 1
+  `;
+  if (!brands[0]) throw new Error("Brand is not owned by that workspace.");
 }

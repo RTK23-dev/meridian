@@ -52,18 +52,32 @@ export type FactoryJobDraft = {
   priority: number;
 };
 
+export function minimumLevel(stage: FactoryStage): 0 | 1 | 2 | 3 {
+  if (stage === "factory.launch") return 2;
+  if (stage === "factory.test" || stage === "factory.learn") return 3;
+  if (stage === "factory.produce" || stage === "factory.gate" || stage === "factory.review") return 1;
+  return 0;
+}
+
+export function factoryStageAllowed(level: number, stage: FactoryStage): boolean {
+  return level >= minimumLevel(stage);
+}
+
 export function factoryRunJobs(input: {
   organizationId: string;
   brandId: string;
   runId: string;
   niche: string;
+  level?: 0 | 1 | 2 | 3;
 }): FactoryJobDraft[] {
   const org = input.organizationId.trim();
   const brand = input.brandId.trim();
   const run = input.runId.trim();
   if (!org || !brand || !run) throw new Error("A factory run needs an organization, brand, and run id.");
   const niche = input.niche.trim().slice(0, 80);
-  return FACTORY_GRAPH.map((stage, index) => ({
+  const level = input.level ?? 3;
+  const stages = FACTORY_GRAPH.filter((stage) => factoryStageAllowed(level, stage.type));
+  return stages.map((stage, index) => ({
     jobType: stage.type,
     idempotencyKey: `factory:${brand}:${run}:${stage.type}`,
     payload: {

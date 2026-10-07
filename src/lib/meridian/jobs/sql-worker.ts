@@ -5,6 +5,27 @@ let stopping = false;
 const LEASE_SECONDS = 120;
 const HEARTBEAT_MS = 30_000;
 
+function factoryRunId(job: ExecutableJob): string {
+  if (!job.job_type.startsWith("factory.")) return "";
+  try {
+    const payload = JSON.parse(job.payload || "{}") as Record<string, unknown>;
+    return typeof payload.runId === "string" ? payload.runId : "";
+  } catch {
+    return "";
+  }
+}
+
+async function failFactoryRun(sql: Sql, job: ExecutableJob, message: string): Promise<void> {
+  const runId = factoryRunId(job);
+  if (!runId || !job.brand_id) return;
+  await sql`
+    update factory_runs
+    set status = 'failed', error = ${message.slice(0, 500)}, updated_at = now()
+    where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+      and status in ('queued', 'running')
+  `;
+}
+
 export async function executeWithLease(
   sql: Sql,
   job: ExecutableJob,
@@ -36,14 +57,18 @@ export function resetWorkerStop(): void {
 /** One pass over due jobs. The web process must not call this. */
 export async function tickSqlJobs(sql: Sql): Promise<{ claimed: number; stopped: boolean }> {
   if (stopping) return { claimed: 0, stopped: true };
-  await sql`
+  const expired = await sql<ExecutableJob & { status: string }>`
     update jobs
     set status = case when attempts >= max_attempts then 'dead' else 'retry' end,
         last_error = 'Lease expired before the worker finished.',
         lease_until = null,
         updated_at = now()
     where status = 'running' and lease_until is not null and lease_until < now()
+    returning id, organization_id, brand_id, job_type, payload, attempts, max_attempts, status
   `;
+  for (const job of expired) {
+    if (job.status === "dead") await failFactoryRun(sql, job, "Lease expired before the worker finished.");
+  }
   await sql`
     update jobs
     set status = 'cancelled', updated_at = now(), lease_until = null
@@ -96,13 +121,18 @@ export async function tickSqlJobs(sql: Sql): Promise<{ claimed: number; stopped:
             updated_at = now()
         where id = ${job.id} and status = 'running'
       `;
+      if (dead) await failFactoryRun(sql, job, message);
     }
   }
   return { claimed, stopped: false };
 }
 
 /** Runs one queued job by id. The studio uses the same executor as the worker. */
-export async function claimAndRun(sql: Sql, jobId: string): Promise<string> {
+export async function claimAndRun(
+  sql: Sql,
+  jobId: string,
+  execute: (sql: Sql, job: ExecutableJob) => Promise<string> = executeJob,
+): Promise<string> {
   const due = await sql<ExecutableJob>`
     select id, organization_id, brand_id, job_type, payload, attempts, max_attempts
     from jobs
@@ -120,7 +150,7 @@ export async function claimAndRun(sql: Sql, jobId: string): Promise<string> {
   `;
   if (!locked[0]) return "skipped";
   try {
-    const result = await executeWithLease(sql, job);
+    const result = await executeWithLease(sql, job, execute);
     await sql`
       update jobs set status = 'succeeded', result = ${result}, lease_until = null, last_error = '', updated_at = now()
       where id = ${job.id} and status = 'running'
@@ -136,6 +166,7 @@ export async function claimAndRun(sql: Sql, jobId: string): Promise<string> {
           run_after = now() + (power(2, least(${attempts}, 6)) * interval '1 second'), updated_at = now()
       where id = ${job.id} and status = 'running'
     `;
+    if (dead) await failFactoryRun(sql, job, message);
     return dead ? `dead:${message}` : `retry:${message}`;
   }
 }
