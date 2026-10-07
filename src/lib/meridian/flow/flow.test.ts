@@ -142,3 +142,53 @@ test("Flow Connectors: multi-step flow (Planner -> Gate -> Publisher) executes o
   assert.equal((pubReport.finalOutput as any).engineId, "test");
   assert.equal((pubReport.finalOutput as any).stages.length, 4);
 });
+
+test("Flow Connectors: channel branch node selectively routes to user-chosen organic channels", async () => {
+  const { createBranchNode, createOrganicPublishNode, createOrganicTelemetryNode } = await import("./nodes.ts");
+
+  const branch = createBranchNode<{ videoBytes: Uint8Array; title: string }>((_data) => ({
+    routePaid: false,
+    routeOrganic: true,
+    organicChannels: ["instagram-reels", "youtube-shorts"],
+  }));
+
+  const branchReport = await branch.execute(
+    { videoBytes: new Uint8Array([1, 2, 3]), title: "Viral soap demo" },
+    { organizationId: "org-test", brandId: "brand-test", correlationId: "corr-6" },
+  );
+
+  assert.equal(branchReport.ok, true);
+  assert.equal(branchReport.data.routePaid, false);
+  assert.equal(branchReport.data.routeOrganic, true);
+  assert.deepEqual(branchReport.data.organicChannels, ["instagram-reels", "youtube-shorts"]);
+
+  // Test organic publish node
+  const publishNode = createOrganicPublishNode();
+  const publishReport = await publishNode.execute(
+    {
+      mediaBytes: new Uint8Array([1, 2, 3, 4]),
+      mimeType: "video/mp4",
+      caption: "Brand organic post #trending",
+      channelIds: branchReport.data.organicChannels,
+    },
+    { organizationId: "org-test", brandId: "brand-test", correlationId: "corr-7" },
+  );
+
+  assert.equal(publishReport.ok, true);
+  assert.equal(publishReport.data.length, 2);
+  assert.equal(publishReport.data[0]?.channelId, "instagram-reels");
+  assert.equal(publishReport.data[1]?.channelId, "youtube-shorts");
+
+  // Test telemetry node
+  const telemetryNode = createOrganicTelemetryNode();
+  const telemetryReport = await telemetryNode.execute(
+    publishReport.data.map((p) => ({ channelId: p.channelId, externalId: p.externalId })),
+    { organizationId: "org-test", brandId: "brand-test", correlationId: "corr-8" },
+  );
+
+  assert.equal(telemetryReport.ok, true);
+  assert.equal(telemetryReport.data.length, 2);
+  assert.ok((telemetryReport.data[0]?.metrics as any).views > 0);
+  assert.ok((telemetryReport.data[1]?.metrics as any).threeSecondViews > 0);
+});
+

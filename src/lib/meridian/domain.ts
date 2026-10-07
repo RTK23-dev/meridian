@@ -40,7 +40,7 @@ export type LearningState = "OBSERVED" | "INFERRED" | "VALIDATED";
 export type LearnedPattern = {
   attribute: string;
   value: string;
-  metric: "ctr" | "cvr" | "roas";
+  metric: "ctr" | "cvr" | "roas" | "retention_3s" | "completion_rate" | "shares";
   lift: number;
   sampleSize: number;
   baseline: number;

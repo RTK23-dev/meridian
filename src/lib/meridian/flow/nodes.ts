@@ -204,3 +204,124 @@ export function createPublishNode(engine: PublishEngine, id = "publish-node"): F
     },
   };
 }
+
+/** Branching / Channel Router Connector Node (selectively directs content to chosen destinations) */
+export function createBranchNode<T = unknown>(
+  predicate: (data: T, context: FlowContext) => { routePaid: boolean; routeOrganic: boolean; organicChannels?: string[] },
+  id = "branch-node",
+): FlowNode<T, { payload: T; routePaid: boolean; routeOrganic: boolean; organicChannels: string[] }> {
+  return {
+    id,
+    name: "Channel Router",
+    type: "branch",
+    async execute(input, context): Promise<NodeExecutionResult<{ payload: T; routePaid: boolean; routeOrganic: boolean; organicChannels: string[] }>> {
+      const routing = predicate(input, context);
+      const organicChannels = routing.organicChannels ?? [];
+      return {
+        ok: true,
+        data: {
+          payload: input,
+          routePaid: routing.routePaid,
+          routeOrganic: routing.routeOrganic,
+          organicChannels,
+        },
+        logs: [`Route decision -> Paid: ${routing.routePaid}, Organic: ${routing.routeOrganic} (Channels: ${organicChannels.join(", ") || "none"})`],
+      };
+    },
+  };
+}
+
+/** Organic Social Multi-Channel Publishing Connector Node */
+export function createOrganicPublishNode(
+  options: { channelIds?: string[] } = {},
+  id = "organic-publish-node",
+): FlowNode<
+  {
+    mediaBytes: Uint8Array;
+    mimeType: string;
+    caption: string;
+    title?: string;
+    tags?: string[];
+    aspectRatio?: "9:16" | "1:1" | "16:9" | "4:5";
+    channelIds?: string[];
+    creativeId?: string;
+  },
+  { channelId: string; externalId: string; status: string; postUrl?: string }[]
+> {
+  return {
+    id,
+    name: "Organic Social Publisher",
+    type: "publish",
+    async execute(input, context): Promise<NodeExecutionResult<{ channelId: string; externalId: string; status: string; postUrl?: string }[]>> {
+      const { publishToSelectedChannels } = await import("../distribution/registry.ts");
+      const targetChannels = input.channelIds ?? options.channelIds ?? ["instagram-reels", "youtube-shorts"];
+      
+      const publishResults = await publishToSelectedChannels({
+        selectedChannelIds: targetChannels,
+        request: {
+          brandId: context.brandId,
+          organizationId: context.organizationId,
+          creativeId: input.creativeId,
+          mediaBytes: input.mediaBytes,
+          mimeType: input.mimeType,
+          caption: input.caption,
+          title: input.title,
+          tags: input.tags,
+          aspectRatio: input.aspectRatio ?? "9:16",
+          allowTestProvider: true,
+        },
+      });
+
+      const successful = publishResults.filter((r) => r.receipt.status === "published" || r.receipt.status === "scheduled");
+      const mapped = publishResults.map((r) => ({
+        channelId: r.channelId,
+        externalId: r.receipt.externalId,
+        status: r.receipt.status,
+        postUrl: r.receipt.postUrl,
+      }));
+
+      return {
+        ok: successful.length > 0,
+        data: mapped,
+        logs: mapped.map((m) => `[${m.channelId}] Status: ${m.status} (ID: ${m.externalId})`),
+        error: successful.length === 0 ? "All targeted organic channels failed to publish." : undefined,
+      };
+    },
+  };
+}
+
+/** Organic Social Telemetry Ingestion Connector Node */
+export function createOrganicTelemetryNode(
+  id = "organic-telemetry-node",
+): FlowNode<
+  { channelId: string; externalId: string }[],
+  { channelId: string; externalId: string; metrics: Record<string, unknown> }[]
+> {
+  return {
+    id,
+    name: "Organic Telemetry Ingestor",
+    type: "telemetry",
+    async execute(targets): Promise<NodeExecutionResult<{ channelId: string; externalId: string; metrics: Record<string, unknown> }[]>> {
+      const { getDistributionChannel } = await import("../distribution/registry.ts");
+      const results: { channelId: string; externalId: string; metrics: Record<string, unknown> }[] = [];
+
+      for (const target of targets) {
+        const channel = getDistributionChannel(target.channelId);
+        if (!channel) continue;
+        const metrics = await channel.fetchMetrics(target.externalId);
+        results.push({
+          channelId: target.channelId,
+          externalId: target.externalId,
+          metrics,
+        });
+      }
+
+      return {
+        ok: true,
+        data: results,
+        logs: results.map((r) => `[${r.channelId}] Ingested telemetry for ${r.externalId}`),
+      };
+    },
+  };
+}
+

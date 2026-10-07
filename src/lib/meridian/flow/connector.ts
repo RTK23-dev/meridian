@@ -9,6 +9,8 @@ export type FlowNodeType =
   | "produce"
   | "gate"
   | "publish"
+  | "branch"
+  | "telemetry"
   | "sync";
 
 export type FlowContext = {
