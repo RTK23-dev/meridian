@@ -58,7 +58,7 @@ async function discoverRoutes(page, seededBrandId) {
   const routeFiles = readdirSync("src/routes", { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && extname(entry.name) === ".tsx")
     .map((entry) => relative("src/routes", join(entry.parentPath, entry.name)))
-    .filter((file) => file !== "__root.tsx");
+    .filter((file) => file !== "__root.tsx" && !file.includes("[_design]"));
   const sourceRoutes = routeFiles.map((file) => {
     const route = file === "index.tsx"
       ? ""
