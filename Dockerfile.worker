@@ -1,0 +1,12 @@
+# Media worker: ffmpeg on the image. WhisperX and the embedding model are
+# installed at image build, not by a postinstall download at runtime.
+FROM node:22-bookworm-slim
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg python3 python3-pip \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY . .
+ENV NODE_ENV=production
+CMD ["node", "--experimental-strip-types", "scripts/worker-entry.ts"]
