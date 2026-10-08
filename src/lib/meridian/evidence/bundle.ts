@@ -5,7 +5,7 @@
  * validates provenance, and compacts state before passing to JEV.
  */
 
-import type { EvidenceBundle } from "./types.ts";
+import { getNumericEvidence, type EvidenceBundle } from "./types.ts";
 
 export function createEvidenceBundle(
   input: Omit<EvidenceBundle, "id" | "createdAt"> & { id?: string },
@@ -73,10 +73,10 @@ export function compressEvidenceForJev(bundle: EvidenceBundle): {
     platform: bundle.source.platform,
     contentType: bundle.content.type,
     metrics: {
-      views: bundle.performance?.views,
-      likes: bundle.performance?.likes,
-      comments: bundle.performance?.comments,
-      shares: bundle.performance?.shares,
+      views: getNumericEvidence(bundle.performance?.views),
+      likes: getNumericEvidence(bundle.performance?.likes),
+      comments: getNumericEvidence(bundle.performance?.comments),
+      shares: getNumericEvidence(bundle.performance?.shares),
       creatorFollowers: bundle.profile?.followers,
       outlierRatio: bundle.comparisonContext?.outlierRatio,
     },

@@ -1,14 +1,9 @@
-/**
- * Hypit Production Provider Adapter
- *
- * Adapts Hypit video assembly engine to the provider-neutral ProductionProvider interface.
- */
-
 import type {
   CreativeSpec,
   ProductionCapabilities,
   ProductionJob,
   ProductionProvider,
+  ProviderHealth,
 } from "../types.ts";
 
 export class HypitProvider implements ProductionProvider {
@@ -25,9 +20,47 @@ export class HypitProvider implements ProductionProvider {
 
   private jobs = new Map<string, ProductionJob>();
 
+  async health(): Promise<ProviderHealth> {
+    const baseUrl = process.env.HYPIT_BASE_URL?.trim();
+    if (!baseUrl) {
+      return {
+        id: this.id,
+        state: "NOT_CONFIGURED",
+        capabilities: [],
+        detail: "HYPIT_BASE_URL is not set.",
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
+    return {
+      id: this.id,
+      state: "HEALTHY",
+      capabilities: ["timelineEditing", "voiceoverGeneration"],
+      detail: `Hypit runtime configured at ${baseUrl}.`,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
   async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
-    const jobId = `prod_hypit_${globalThis.crypto.randomUUID()}`;
+    const baseUrl = process.env.HYPIT_BASE_URL?.trim();
     const costEstimate = spec.durationTargetSeconds * this.capabilities.costPerSecondEstimateUsd;
+
+    if (!baseUrl) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "NOT_CONFIGURED",
+        costEstimateUsd: costEstimate,
+        error: "Hypit runtime is not configured (HYPIT_BASE_URL unset).",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    const jobId = `prod_hypit_${globalThis.crypto.randomUUID()}`;
 
     const job: ProductionJob = {
       jobId,

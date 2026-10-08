@@ -83,8 +83,9 @@ export async function scrapeAndLearnOrganicContent(
   } else if (text.includes("vs") || text.includes("compared to") || text.includes("dupe")) {
     inferredFormat = "comparison";
   }
-
-  const views = scraped.views ?? input.estimatedViews ?? 5000;
+  const observedViews = scraped.views;
+  const estimatedViews = input.estimatedViews;
+  const views = observedViews ?? estimatedViews ?? 0;
 
   // 3. Optional creator snapshot recording
   if (scraped.authorHandle) {

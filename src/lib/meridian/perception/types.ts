@@ -54,14 +54,24 @@ export type PerceptionBundle = {
   model: string;
 };
 
+export type PerceptionHealth = {
+  id: string;
+  state: "HEALTHY" | "NOT_CONFIGURED" | "UNAVAILABLE";
+  detail: string;
+};
+
 export interface MultimodalPerceptionProvider {
   readonly id: string;
   readonly model: string;
 
+  health(): Promise<PerceptionHealth>;
   perceiveVideo(input: {
     artifactId: string;
-    videoBytes: Uint8Array;
+    videoBytes?: Uint8Array;
     durationMs?: number;
     keyframes?: Array<{ sceneIndex: number; timestampMs: number; bytes: Uint8Array }>;
+  }): Promise<PerceptionBundle>;
+  perceiveImages?(input: {
+    images: Array<{ id: string; bytes: Uint8Array; mimeType?: string }>;
   }): Promise<PerceptionBundle>;
 }

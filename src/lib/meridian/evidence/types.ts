@@ -12,6 +12,42 @@ export type EvidenceFieldState =
   | "LEARNED"   // Cross-observation empirical correlation
   | "VALIDATED"; // Confirmed in first-party experiments
 
+export type EvidenceValue<T> = {
+  value: T;
+  state: EvidenceFieldState;
+  source?: import("../jev/types.ts").EvidenceRef[];
+  methodId?: string;
+  uncertainty?: {
+    lower?: number;
+    upper?: number;
+    confidence?: number;
+  };
+};
+
+export function asEvidenceValue<T>(
+  val: T | EvidenceValue<T> | undefined,
+  defaultState: EvidenceFieldState = "OBSERVED",
+  uncertainty?: { lower?: number; upper?: number; confidence?: number },
+): EvidenceValue<T> | undefined {
+  if (val === undefined || val === null) return undefined;
+  if (typeof val === "object" && val !== null && "state" in val && "value" in val) {
+    return val as EvidenceValue<T>;
+  }
+  return {
+    value: val as T,
+    state: defaultState,
+    uncertainty,
+  };
+}
+
+export function getNumericEvidence(
+  field: number | EvidenceValue<number> | undefined,
+): number | undefined {
+  if (field === undefined || field === null) return undefined;
+  if (typeof field === "number") return field;
+  return field.value;
+}
+
 export type Provenance = {
   adapterId: string;
   sourceUrl?: string;
@@ -133,12 +169,12 @@ export type EvidenceBundle = {
   };
 
   performance?: {
-    views?: number;
-    likes?: number;
-    comments?: number;
-    shares?: number;
-    saves?: number;
-    reach?: number;
+    views?: EvidenceValue<number> | number;
+    likes?: EvidenceValue<number> | number;
+    comments?: EvidenceValue<number> | number;
+    shares?: EvidenceValue<number> | number;
+    saves?: EvidenceValue<number> | number;
+    reach?: EvidenceValue<number> | number;
     capturedAt?: string;
   };
 

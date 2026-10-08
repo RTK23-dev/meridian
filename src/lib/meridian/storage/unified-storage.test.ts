@@ -51,3 +51,42 @@ test("createGoogleDriveObjectStore exposes storage operations", () => {
   assert.equal(typeof store.get, "function");
   assert.equal(typeof store.delete, "function");
 });
+
+test("createGoogleDriveObjectStore resolves provider_file_id before calling drive.get", async () => {
+  let passedIdToGet = "";
+  const fakeDrive = {
+    async put(input: any) {
+      return {
+        fileId: "drive_file_id_12345",
+        name: "test.mp4",
+        mimeType: input.mimeType,
+        size: input.bytes.byteLength,
+        checksum: "abc123hash",
+      };
+    },
+    async get(fileId: string) {
+      passedIdToGet = fileId;
+      return {
+        bytes: new Uint8Array([1, 2, 3, 4]),
+        mimeType: "video/mp4",
+        name: "test.mp4",
+      };
+    },
+    async delete() {},
+  } as any;
+
+  const store = createGoogleDriveObjectStore(fakeDrive);
+  await store.put({
+    organizationId: "org-test",
+    brandId: "brand-test",
+    key: "creatives/test.mp4",
+    mimeType: "video/mp4",
+    bytes: new Uint8Array([1, 2, 3, 4]),
+  });
+
+  const retrieved = await store.get("org-test", "brand-test", "creatives/test.mp4");
+  assert.ok(retrieved);
+  assert.equal(passedIdToGet, "drive_file_id_12345");
+  assert.notEqual(passedIdToGet, "creatives/test.mp4");
+  assert.equal(retrieved.size, 4);
+});

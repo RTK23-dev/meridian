@@ -13,6 +13,7 @@ import type {
   ProductionCapabilities,
   ProductionJob,
   ProductionProvider,
+  ProviderHealth,
 } from "../types.ts";
 
 export class ManualCloudProvider implements ProductionProvider {
@@ -34,7 +35,45 @@ export class ManualCloudProvider implements ProductionProvider {
     this.drive = drive;
   }
 
+  async health(): Promise<ProviderHealth> {
+    const driveHealth = await this.drive.health();
+    if (driveHealth.status !== "HEALTHY") {
+      return {
+        id: this.id,
+        state: driveHealth.status,
+        capabilities: [],
+        detail: `Google Drive is ${driveHealth.status.toLowerCase()}: ${driveHealth.detail}`,
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
+    return {
+      id: this.id,
+      state: "HEALTHY",
+      capabilities: ["timelineEditing", "zeroSpend"],
+      detail: "Google Drive connected for zero-spend artifact drop workflows.",
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
   async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
+    const driveHealth = await this.drive.health();
+    if (driveHealth.status !== "HEALTHY") {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "PREFLIGHT_FAILED",
+        costEstimateUsd: 0.0,
+        costActualUsd: 0.0,
+        error: "GOOGLE_DRIVE_NOT_CONFIGURED",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
     const jobId = `prod_mc_${globalThis.crypto.randomUUID()}`;
 
     // Prepare manifest
@@ -52,7 +91,6 @@ export class ManualCloudProvider implements ProductionProvider {
     let dropFolderUrl: string | undefined;
 
     try {
-      // Attempt to write manifest into Drive drop folder
       const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2), "utf8");
       const uploadRes = await this.drive.put({
         organizationId: spec.organizationId,
@@ -62,9 +100,20 @@ export class ManualCloudProvider implements ProductionProvider {
         bytes: manifestBytes,
       });
       dropFolderUrl = uploadRes.webViewLink;
-    } catch {
-      // When Drive is disconnected or offline, fallback without crashing
-      dropFolderUrl = undefined;
+    } catch (err) {
+      return {
+        jobId,
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "PREFLIGHT_FAILED",
+        costEstimateUsd: 0.0,
+        costActualUsd: 0.0,
+        error: `GOOGLE_DRIVE_NOT_CONFIGURED: ${err instanceof Error ? err.message : String(err)}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
     }
 
     const job: ProductionJob = {
@@ -99,7 +148,9 @@ export class ManualCloudProvider implements ProductionProvider {
         jobId,
       });
 
-      const videoFile = outputs.find((f) => f.mimeType.includes("video") || f.name.endsWith(".mp4"));
+      const videoFile = outputs.find(
+        (f) => (f.mimeType.includes("video") || f.name.endsWith(".mp4")) && f.size > 0,
+      );
       if (videoFile) {
         job.status = "RENDERED";
         job.outputArtifactId = videoFile.fileId;

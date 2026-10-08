@@ -184,7 +184,7 @@ export function evaluatePolicy(
 
   // If any question had missing/insufficient evidence or low confidence, auto-approve is forbidden
   const hasLowConfidence = answerList.some(
-    (a) => a.confidence < thresholds.minConfidenceForAuto,
+    (a) => a.confidence !== undefined && a.confidence < thresholds.minConfidenceForAuto,
   );
 
   if (uncertainCount > 0 || hasLowConfidence) {

@@ -115,7 +115,23 @@ export function externalObjectStorageStatus(env: { bucket?: string; accessKeyId?
  * Creates Google Drive backed object store.
  * Drive is the primary binary storage target for Meridian.
  */
-export function createGoogleDriveObjectStore(client?: import("./drive.ts").GoogleDriveClient) {
+export function createGoogleDriveObjectStore(
+  client?: import("./drive.ts").GoogleDriveClient,
+  options?: {
+    lookupFileId?: (organizationId: string, brandId: string, key: string) => Promise<string | null>;
+    recordFileId?: (input: {
+      organizationId: string;
+      brandId: string;
+      key: string;
+      fileId: string;
+      mimeType: string;
+      size: number;
+      checksum: string;
+    }) => Promise<void>;
+  },
+) {
+  const fileIdMap = new Map<string, string>();
+
   return {
     id: "google_drive" as const,
     async put(input: {
@@ -136,6 +152,21 @@ export function createGoogleDriveObjectStore(client?: import("./drive.ts").Googl
         bytes: input.bytes,
       });
 
+      const mapKey = `${input.organizationId}:${input.brandId}:${key}`;
+      fileIdMap.set(mapKey, res.fileId);
+
+      if (options?.recordFileId) {
+        await options.recordFileId({
+          organizationId: input.organizationId,
+          brandId: input.brandId,
+          key,
+          fileId: res.fileId,
+          mimeType: res.mimeType,
+          size: res.size,
+          checksum: res.checksum,
+        });
+      }
+
       return {
         key,
         organizationId: input.organizationId,
@@ -150,10 +181,41 @@ export function createGoogleDriveObjectStore(client?: import("./drive.ts").Googl
     },
     async get(organizationId: string, brandId: string, key: string): Promise<StoredObject | null> {
       const drive = client || (await import("./drive.ts")).googleDriveClient;
+      const cleanKey = safeStorageKey(key);
+      const mapKey = `${organizationId}:${brandId}:${cleanKey}`;
+
+      // Step 1: Resolve provider_file_id from options or in-memory map
+      let fileId = fileIdMap.get(mapKey);
+      if (!fileId && options?.lookupFileId) {
+        fileId = (await options.lookupFileId(organizationId, brandId, cleanKey)) || undefined;
+      }
+
+      // Step 2: Fallback search within Drive folder hierarchy
+      if (!fileId) {
+        try {
+          const pathParts = cleanKey.split("/").filter(Boolean);
+          const fileName = pathParts.pop();
+          if (fileName) {
+            const folderId = await drive.getFolderForPath({
+              organizationId,
+              brandId,
+              subpath: pathParts.join("/"),
+            });
+            fileId = (await drive.findFileByName(folderId, fileName)) || undefined;
+          }
+        } catch {
+          // Folder navigation fallback not available or failed
+        }
+      }
+
+      if (!fileId) {
+        return null;
+      }
+
       try {
-        const file = await drive.get(safeStorageKey(key));
+        const file = await drive.get(fileId);
         return {
-          key,
+          key: cleanKey,
           organizationId,
           brandId,
           mimeType: file.mimeType,

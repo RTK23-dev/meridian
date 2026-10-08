@@ -32,13 +32,87 @@ export type CreativeSegment = {
   evidenceRef?: string;
 };
 
+export type CreativeStructureKind =
+  | "organic_short"
+  | "ad_narrative"
+  | "pov"
+  | "skit"
+  | "storytime"
+  | "listicle"
+  | "tutorial"
+  | "reaction"
+  | "trend_audio"
+  | "transformation"
+  | "review"
+  | "comparison"
+  | "loop"
+  | "unstructured";
+
+export type CreativeStructureSegment = {
+  index: number;
+  startMs: number;
+  endMs: number;
+  role?: string;
+  visualFunction?: string;
+  dialogueFunction?: string;
+  transition?: string;
+  evidenceRefs?: string[];
+  description?: string;
+};
+
+export type CreativeStructurePacing = {
+  cutsPerMinute?: number;
+  medianShotMs?: number;
+  openingShotMs?: number;
+  loopType?: string;
+};
+
 export type CreativeStructure = {
-  structureType: "dynamic" | "ad_narrative" | "organic_short" | "unstructured";
-  durationMs: number;
-  segments: CreativeSegment[];
+  kind: CreativeStructureKind;
+  confidence?: number;
+  durationMs?: number;
+  segments: CreativeStructureSegment[];
+  pacing?: CreativeStructurePacing;
   primaryAngle?: string;
   format?: string;
+  structureType?: "dynamic" | "ad_narrative" | "organic_short" | "unstructured";
 };
+
+export type SegmentRef = {
+  index: number;
+  startMs: number;
+  endMs: number;
+  description?: string;
+};
+
+export type AdNarrative = {
+  hook?: SegmentRef;
+  problem?: SegmentRef;
+  reveal?: SegmentRef;
+  proof?: SegmentRef;
+  offer?: SegmentRef;
+  cta?: SegmentRef;
+};
+
+export function deriveAdNarrative(structure: CreativeStructure): AdNarrative | null {
+  const narrative: AdNarrative = {};
+  for (const seg of structure.segments) {
+    if (seg.role === "hook" && !narrative.hook) {
+      narrative.hook = { index: seg.index, startMs: seg.startMs, endMs: seg.endMs, description: seg.description };
+    } else if (seg.role === "problem" && !narrative.problem) {
+      narrative.problem = { index: seg.index, startMs: seg.startMs, endMs: seg.endMs, description: seg.description };
+    } else if (seg.role === "reveal" && !narrative.reveal) {
+      narrative.reveal = { index: seg.index, startMs: seg.startMs, endMs: seg.endMs, description: seg.description };
+    } else if (seg.role === "proof" && !narrative.proof) {
+      narrative.proof = { index: seg.index, startMs: seg.startMs, endMs: seg.endMs, description: seg.description };
+    } else if (seg.role === "offer" && !narrative.offer) {
+      narrative.offer = { index: seg.index, startMs: seg.startMs, endMs: seg.endMs, description: seg.description };
+    } else if (seg.role === "cta" && !narrative.cta) {
+      narrative.cta = { index: seg.index, startMs: seg.startMs, endMs: seg.endMs, description: seg.description };
+    }
+  }
+  return Object.keys(narrative).length > 0 ? narrative : null;
+}
 
 export const FORMATS = ["ugc", "demo", "testimonial", "listicle", "skit", "unboxing", "other"] as const;
 export type AdFormat = (typeof FORMATS)[number];

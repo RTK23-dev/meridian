@@ -178,11 +178,6 @@ export class GoogleDriveClient {
 
     const sha256 = createHash("sha256").update(input.bytes).digest("hex");
 
-    // Multipart upload
-    const boundary = "-------314159265358979323846";
-    const delimiter = `\r\n--${boundary}\r\n`;
-    const closeDelimiter = `\r\n--${boundary}--`;
-
     const fileMetadata = {
       name: fileName,
       parents: [parentFolderId],
@@ -192,6 +187,61 @@ export class GoogleDriveClient {
         brandId: input.brandId,
       },
     };
+
+    // Resumable upload for files larger than 5 MB
+    const isLarge = input.bytes.byteLength > 5 * 1024 * 1024;
+    if (isLarge) {
+      const initRes = await fetch(
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size,webViewLink",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Type": input.mimeType,
+            "X-Upload-Content-Length": input.bytes.byteLength.toString(),
+          },
+          body: JSON.stringify(fileMetadata),
+        },
+      );
+
+      if (!initRes.ok) {
+        throw new Error(`Google Drive resumable upload init failed (${initRes.status}): ${await initRes.text()}`);
+      }
+
+      const uploadUrl = initRes.headers.get("location");
+      if (!uploadUrl) {
+        throw new Error("Google Drive did not return resumable upload session URL.");
+      }
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Length": input.bytes.byteLength.toString(),
+          "Content-Type": input.mimeType,
+        },
+        body: Buffer.from(input.bytes),
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error(`Google Drive resumable content upload failed (${uploadRes.status}): ${await uploadRes.text()}`);
+      }
+
+      const data = (await uploadRes.json()) as { id: string; name: string; mimeType: string; size?: string; webViewLink?: string };
+      return {
+        fileId: data.id,
+        name: data.name,
+        mimeType: data.mimeType || input.mimeType,
+        size: data.size ? Number(data.size) : input.bytes.byteLength,
+        checksum: sha256,
+        webViewLink: data.webViewLink,
+      };
+    }
+
+    // Multipart upload for <= 5 MB
+    const boundary = "-------314159265358979323846";
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
 
     const metadataHeader = "Content-Type: application/json; charset=UTF-8\r\n\r\n";
     const mediaHeader = `Content-Type: ${input.mimeType}\r\n\r\n`;
@@ -226,6 +276,18 @@ export class GoogleDriveClient {
       checksum: sha256,
       webViewLink: data.webViewLink,
     };
+  }
+
+  async findFileByName(folderId: string, name: string): Promise<string | null> {
+    const token = await getGoogleDriveAccessToken();
+    if (!token) return null;
+    const q = `'${folderId}' in parents and name = '${name.replace(/'/g, "\\'")}' and trashed = false`;
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { files?: Array<{ id: string }> };
+    return data.files?.[0]?.id || null;
   }
 
   async get(fileId: string): Promise<{ bytes: Uint8Array; mimeType: string; name: string }> {

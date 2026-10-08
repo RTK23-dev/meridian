@@ -144,6 +144,18 @@ export async function recordTelemetry(
     throw new Error("Telemetry record requires organizationId and brandId.");
   }
 
+  const isSynthetic =
+    input.metadata?.synthetic === true ||
+    input.metadata?.simulated === true ||
+    (input as any).synthetic === true ||
+    (input as any).simulated === true;
+
+  if (isSynthetic) {
+    if (process.env.NODE_ENV === "production" || process.env.ALLOW_SYNTHETIC_TELEMETRY !== "true") {
+      throw new Error("Synthetic or simulated telemetry cannot be ingested into production learning.");
+    }
+  }
+
   const id = input.id || randomUUID();
   const recordedAtDate = input.recordedAt ? new Date(input.recordedAt) : new Date();
   const recordedAtMs = recordedAtDate.getTime();
@@ -511,6 +523,10 @@ export async function syncTelemetryToLearning(
   // 1. Bridge telemetry records that have creativeId into performance_observations
   for (const r of records) {
     if (!r.creativeId) continue;
+    if (r.metadata?.synthetic === true || r.metadata?.simulated === true) {
+      // Never bridge synthetic or simulated records into production learning
+      continue;
+    }
 
     // Check if observation exists for this creative
     const existing = await sql`
@@ -560,7 +576,8 @@ export async function syncTelemetryToLearning(
             // Optional FK
           }
 
-          const threeSecViews = Math.round(r.views * (r.hookRetention3s || 0.45));
+          const threeSecViews = r.hookRetention3s !== undefined ? Math.round(r.views * r.hookRetention3s) : null;
+          const compRate = r.completionRate !== undefined ? r.completionRate : null;
           await sql`
             insert into organic_observations (
               id, organization_id, brand_id, organic_post_id, creative_id, platform,
@@ -568,7 +585,7 @@ export async function syncTelemetryToLearning(
               observed_on, created_at
             ) values (
               ${randomUUID()}, ${organizationId}, ${brandId}, ${postId}, ${r.creativeId}, ${r.platform},
-              ${r.views}, ${threeSecViews}, ${r.completionRate || 0.25}, ${r.shares}, ${r.engagements},
+              ${r.views}, ${threeSecViews}, ${compRate}, ${r.shares}, ${r.engagements},
               0, ${r.saves}, current_date, now()
             )
           `;

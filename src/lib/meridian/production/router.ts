@@ -66,6 +66,51 @@ export class ProductionRouter {
     const hypit = this.providers.get("hypit");
     return hypit || manualCloud!;
   }
+
+  async routeConfigured(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): Promise<ProductionProvider> {
+    const healthChecks = await Promise.all(
+      Array.from(this.providers.values()).map(async (p) => ({
+        provider: p,
+        health: await p.health(),
+      })),
+    );
+
+    const healthy = healthChecks
+      .filter((h) => h.health.state === "HEALTHY")
+      .map((h) => h.provider);
+
+    const manualCloud = this.providers.get("manual_cloud");
+
+    if (mode === "ZERO_SPEND") {
+      const isManualCloudHealthy = healthy.some((p) => p.id === "manual_cloud");
+      if (!isManualCloudHealthy) {
+        throw new Error("ManualCloud provider is NOT_CONFIGURED (Google Drive not connected).");
+      }
+      return manualCloud!;
+    }
+
+    if (healthy.length === 0) {
+      throw new Error(`No configured production providers available for mode ${mode}.`);
+    }
+
+    if (mode === "LOWEST_COST") {
+      const sorted = [...healthy].sort(
+        (a, b) => a.capabilities.costPerSecondEstimateUsd - b.capabilities.costPerSecondEstimateUsd,
+      );
+      return sorted[0]!;
+    }
+
+    if (mode === "QUALITY_FIRST") {
+      const veo = healthy.find((p) => p.id === "veo");
+      const hf = healthy.find((p) => p.id === "higgsfield");
+      return veo || hf || healthy[0]!;
+    }
+
+    // BALANCED
+    const hypit = healthy.find((p) => p.id === "hypit");
+    const veo = healthy.find((p) => p.id === "veo");
+    return hypit || veo || healthy[0]!;
+  }
 }
 
 export const productionRouter = new ProductionRouter();

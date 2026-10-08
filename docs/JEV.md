@@ -1,24 +1,33 @@
-# JEV
+# JEV (TypeSafe Decisions API)
 
-JEV is the deterministic gate around evidence. It is not a prompt and it does not see pixels.
+JEV is the deterministic epistemic gate around evidence. It executes typed semantic judgments using TypeSafe's native Decisions API served through OpenRouter:
+- **Endpoint**: `POST https://openrouter.ai/api/alpha/decisions`
+- **Model**: `typesafe/jev-1.13`
+- **Supported Question Primitives**:
+  - `choice`: One-of-N classification with probability distribution and confidence.
+  - `noul`: Independent probabilistic judgment returning direct probability in `noul` (confidence is never fabricated).
+  - `score`: Ordered discrete scoring with probability distribution, legend, and confidence.
+- **Fail-Closed Policy**: If the remote Decisions API returns an error or is unreachable, the client abstains (`abstain_uncertain`). It never falls back to generic chat models (`/chat/completions`) pretending to be JEV.
+- **State Minimization**: Only strictly required evidence fields, captions, transcripts, and controls are passed in the request state. Tokens, credentials, and unrelated tenant data are stripped.
 
-JEV Research is a separate upstream intelligence layer. It collects public Meta Ad Library video records, transcribes available audio, and stores typed, confidence-rated transcript analysis with source evidence. It discovers recurring patterns but makes no approval decision and does not claim that frequency predicts performance. Its patterns become evidence for the existing opportunity ranker and JEV decision questions; an approved decision can continue through the brief and Hypit handoff. A verified stored Hypit MP4 may then be uploaded to Meta and published only as a paused campaign chain after the tenant, approval, lineage, and artifact checks pass.
+JEV Research is a separate upstream intelligence layer. It collects public social media artifacts (Reels, TikTok, Shorts, Meta Ad Library), transcribes available audio, and stores typed, confidence-rated transcript analysis with source evidence. It discovers recurring patterns across organic and paid content but makes no approval decision and does not claim that frequency predicts performance. Its patterns become evidence for the existing opportunity ranker and JEV decision questions; an approved decision can continue through the brief and production router.
 
 ## Path
 
 ```
-stored evidence
-  → versioned question (id + schema version + evaluator)
-  → probabilistic answer (yes, no, uncertain, insufficient, or violation)
-  → calibration, only when an admin has approved a version
-  → policy thresholds
+EvidenceBundle
+  → state projection (minimized)
+  → OpenRouter Decisions API (typesafe/jev-1.13)
+  → typed answers (choice / noul / score)
+  → provenance preservation (EvidenceRefs)
+  → calibration & policy thresholds
   → AUTO_APPROVE | HUMAN_REVIEW | REJECT
-  → jev_decisions row
+  → persisted decision run & answers
 ```
 
 Missing evidence and contradictory evidence stay in human review. A violation is a reject. Neither case can auto-approve. Calibration changes the next decision only. It does not rewrite a stored decision, and it does not move thresholds until an admin approves a proposal.
 
-Code: `src/lib/meridian/jev/engine.ts`, `src/lib/meridian/jev/questions.ts`, `src/lib/meridian/jev/judgment.ts`, and `src/lib/meridian/jev/policy.ts`.
+Code: `src/lib/meridian/jev/client.ts`, `src/lib/meridian/jev/engine.ts`, `src/lib/meridian/jev/questions.ts`, `src/lib/meridian/jev/judgment.ts`, and `src/lib/meridian/jev/policy.ts`.
 
 `decide()` clamps probability and confidence, then:
 

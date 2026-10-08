@@ -137,6 +137,17 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   if (job.job_type === "publishing.dispatch") {
     const creativeId = typeof payload.creativeId === "string" ? payload.creativeId : "";
     if (creativeId) {
+      if (payload.storageObjectId) {
+        const storageRows = await sql<{ size_bytes: number; mime_type: string; sha256: string; lifecycle: string }>`
+          select size_bytes, mime_type, sha256, lifecycle from storage_objects
+          where id = ${String(payload.storageObjectId)} and organization_id = ${job.organization_id}
+          limit 1
+        `;
+        const storageObj = storageRows[0];
+        if (!storageObj || Number(storageObj.size_bytes) <= 0 || !storageObj.sha256 || (storageObj.lifecycle !== "approved" && storageObj.lifecycle !== "stored")) {
+          return "REJECTED:unverified-media-artifact";
+        }
+      }
       const provider = payload.provider === "test" ? "test" : "meta";
       const result = publishThrough({
         provider,

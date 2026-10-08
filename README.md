@@ -48,12 +48,14 @@ Meridian continuously analyzes evidence, generates video variants, enforces safe
 - **Organic Social**: Native connectors for **Instagram Reels**, **Facebook Pages**, and **YouTube Shorts**.
 - **Per-Channel Targeting**: Interactive modal lets operators selectively pick which channels receive paid test spend vs. organic distribution for each creative variant.
 
-### 3. Creative DNA v2 & Content Factory
+### 3. Dynamic Creative Structure & Primary Object Storage
+- **Dynamic Creative Structures**: Flexible structure modeling (`organic_short`, `pov`, `skit`, `storytime`, `listicle`, `tutorial`, `reaction`, `trend_audio`, `transformation`, `review`, `comparison`, `loop`, `unstructured`) alongside optional derived `AdNarrative`.
+- **Google Drive Primary Storage**: Authoritative binary object store mapped via Postgres `storage_objects`, featuring resumable uploads for media > 5MB.
 - **Multimodal Video Decomposition**: `ffmpeg` scene detection, keyframe vision analysis, OCR text role classification, and WhisperX timestamp alignment.
-- **pgvector Semantic Retrieval**: 384-dimensional embeddings stored in Postgres with cosine similarity index (`migrations/0019_creative_dna_pgvector.sql`).
 - **Originality & Claim Gates**: 64-bit perceptual hashing with Hamming distance checks block copycat variants. Claims missing proof stay in human review.
 
 ### 4. Advanced JEV & Bayesian Learning Flywheel
+- **TypeSafe Decisions API**: Native integration with OpenRouter's `/api/alpha/decisions` (`typesafe/jev-1.13`) providing typed `choice`, `noul`, and `score` decisions.
 - **Multi-Objective Telemetry**: Ingests both paid performance (CTR, CVR, ROAS) and organic engagement (3s hook retention, completion rate, shares).
 - **Exponential Recency-Decay Weighting**: Half-life decay (14-day) ensures fresh performance informs new briefs without being skewed by months-old ad campaigns.
 - **Hierarchical Cold-Start Priors**: Smoothly regularizes new brands using vertical category baselines while preserving strict multi-tenant isolation.
@@ -73,8 +75,8 @@ Meridian continuously analyzes evidence, generates video variants, enforces safe
 - **Immutable Receipts**: Verified live execution receipts with direct external post IDs and links.
 - **Complete Guide**: [Publishing Orchestration Guide](docs/PUBLISHING_ORCHESTRATION.md).
 
-### 7. JEV Large-Scale Cognitive Intelligence & Whitespace Radar
-- **6-Beat Short-Form Decomposition**: Real-time evaluation of Hook (0-3s), Problem (3-7s), Reveal (7-15s), Proof (15-25s), Offer (25-30s), and CTA (30-35s).
+### 7. JEV Cognitive Intelligence & Whitespace Radar
+- **Universal Structure Intelligence**: Native timeline evaluation across scenes, visual pacing, and optional ad-narrative beats (hook, problem, reveal, proof, offer, cta).
 - **Decile Creative Differentiators**: Isolates top 10% vs bottom 10% content drivers across speech WPM, audio energy, motion intensity, and text density.
 - **Competitor Whitespace Radar**: Identifies un-saturated angles with high win probabilities for instant promotion into briefs.
 - **Complete Guide**: [JEV Intelligence Architecture](docs/JEV.md).

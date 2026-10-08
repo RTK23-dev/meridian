@@ -62,20 +62,47 @@ export type JevAnswerStatus =
   | "abstain_insufficient_evidence"
   | "abstain_uncertain";
 
+export type RawJevAnswer =
+  | {
+      type: "choice";
+      choice: string;
+      probabilities: Record<string, number>;
+      confidence: number;
+    }
+  | {
+      type: "noul";
+      noul: number;
+    }
+  | {
+      type: "score";
+      score: number;
+      probabilities: Record<string, number>;
+      confidence: number;
+      legend?: Record<string, string>;
+    };
+
 export type JevAnswer = {
   questionId: string;
   questionVersion: string;
+  type?: JevQuestionType;
   model: string;
   provider: string;
   status: JevAnswerStatus;
-  answer: string | boolean | number;
+  choice?: string;
+  noul?: number;
+  score?: number;
+  answer?: string | boolean | number;
   probability?: number;
+  probabilities?: Record<string, number>;
   distribution?: Record<string, number>;
-  confidence: number;
+  confidence?: number;
+  legend?: Record<string, string>;
   evidenceRefs: EvidenceRef[];
   abstainReason?: string;
   evaluatedAt: string;
 };
+
+export type MeridianJevAnswer = JevAnswer;
 
 export type JevDecisionRequest = {
   model?: string;

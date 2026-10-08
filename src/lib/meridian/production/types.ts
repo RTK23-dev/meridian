@@ -8,16 +8,29 @@
 export type CostMode = "ZERO_SPEND" | "LOWEST_COST" | "BALANCED" | "QUALITY_FIRST";
 
 export type ProductionJobState =
+  | "NOT_CONFIGURED"
   | "PENDING_PREFLIGHT"
   | "PREFLIGHT_FAILED"
+  | "SUBMITTING"
   | "QUEUED"
+  | "RUNNING"
   | "RENDERING"
+  | "WAITING_FOR_ARTIFACT"
   | "WAITING_FOR_EXTERNAL_ARTIFACT"
   | "RENDERED"
   | "PENDING_POSTFLIGHT"
   | "POSTFLIGHT_FAILED"
   | "COMPLETED"
-  | "FAILED";
+  | "FAILED"
+  | "CANCELLED";
+
+export type ProviderHealth = {
+  id: string;
+  state: "HEALTHY" | "NOT_CONFIGURED" | "UNAVAILABLE";
+  capabilities: string[];
+  detail: string;
+  checkedAt: string;
+};
 
 export type ProductionCapabilities = {
   textToVideo: boolean;
@@ -73,6 +86,7 @@ export interface ProductionProvider {
   readonly id: string;
   readonly capabilities: ProductionCapabilities;
 
+  health(): Promise<ProviderHealth>;
   submitJob(spec: CreativeSpec): Promise<ProductionJob>;
   checkJobStatus(jobId: string): Promise<ProductionJob>;
   cancelJob?(jobId: string): Promise<void>;

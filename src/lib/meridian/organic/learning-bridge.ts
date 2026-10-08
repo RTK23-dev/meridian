@@ -40,6 +40,26 @@ export type IngestOrganicInput = {
   commentsList?: Array<{ text: string; author?: string; likes?: number }>;
 };
 
+export function extractOrganicMetrics(metrics: {
+  views?: number | null;
+  threeSecondViews?: number | null;
+  completionRate?: number | null;
+  shares?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  saves?: number | null;
+}) {
+  return {
+    views: metrics.views ?? null,
+    threeSecondViews: metrics.threeSecondViews ?? null,
+    completionRate: metrics.completionRate ?? null,
+    shares: metrics.shares ?? null,
+    likes: metrics.likes ?? null,
+    comments: metrics.comments ?? null,
+    saves: metrics.saves ?? null,
+  };
+}
+
 export async function ingestOrganicContentForLearning(
   sql: Sql,
   input: IngestOrganicInput,
@@ -94,10 +114,11 @@ export async function ingestOrganicContentForLearning(
       raw_text = excluded.raw_text
   `;
 
-  // 2. Compute 3s views if missing (heuristic: 45% of views for short-form organic video)
-  const views = Math.max(1, input.metrics.views);
-  const threeSecondViews = input.metrics.threeSecondViews ?? Math.round(views * 0.45);
-  const completionRate = input.metrics.completionRate ?? 0.25;
+  // 2. Truthful metric extraction without synthetic fallback fabrication
+  const extracted = extractOrganicMetrics(input.metrics);
+  const views = extracted.views;
+  const threeSecondViews = extracted.threeSecondViews;
+  const completionRate = extracted.completionRate;
   const observationId = `org_obs_${globalThis.crypto.randomUUID()}`;
 
   // 3. Process comment intents if provided
