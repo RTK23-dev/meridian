@@ -7,6 +7,39 @@ export type CreativeDnaSchema = typeof CREATIVE_DNA_V1 | typeof CREATIVE_DNA_V2;
 export const BEATS = ["hook", "problem", "reveal", "proof", "offer", "cta"] as const;
 export type BeatRole = (typeof BEATS)[number];
 
+export type SegmentRole =
+  | BeatRole
+  | "opening"
+  | "demonstration"
+  | "reaction"
+  | "vignette"
+  | "payoff"
+  | "closing"
+  | "narrative"
+  | "commentary"
+  | "testimonial"
+  | "comparison"
+  | "other";
+
+export type CreativeSegment = {
+  id?: string;
+  index: number;
+  role: SegmentRole;
+  startMs: number;
+  endMs: number;
+  confidence: number;
+  description?: string;
+  evidenceRef?: string;
+};
+
+export type CreativeStructure = {
+  structureType: "dynamic" | "ad_narrative" | "organic_short" | "unstructured";
+  durationMs: number;
+  segments: CreativeSegment[];
+  primaryAngle?: string;
+  format?: string;
+};
+
 export const FORMATS = ["ugc", "demo", "testimonial", "listicle", "skit", "unboxing", "other"] as const;
 export type AdFormat = (typeof FORMATS)[number];
 
@@ -56,6 +89,7 @@ export type CreativeDna = {
     visual: DnaField<string>;
   };
   beats: { role: BeatRole; startMs: number; endMs: number; confidence: number }[];
+  structure?: CreativeStructure;
   format: DnaField<AdFormat>;
   angle: DnaField<string>;
   onScreenText: OnScreenTextItem[];

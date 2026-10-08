@@ -3,6 +3,11 @@ import { extractJson } from "../providers/chat.server.ts";
 import type { ChatResult } from "../providers/types.ts";
 import { RESEARCH_SCHEMA_VERSION, validateResearchAnalysis, type ResearchAnalysis, type ResearchSegment } from "./schema.ts";
 
+import type { EvidenceBundle } from "../evidence/types.ts";
+import { openRouterJevClient, type OpenRouterJevClient } from "../jev/client.ts";
+import { jevRegistry } from "../jev/registry.ts";
+import type { JevAnswer } from "../jev/types.ts";
+
 export type ResearchTextModel = (input: {
   system: string;
   user: string;
@@ -66,4 +71,42 @@ export async function analyzeResearchTranscript(input: {
   } catch (error) {
     return { status: "failed", error: error instanceof Error ? error.message : "JEV Research returned invalid structured analysis." };
   }
+}
+
+/**
+ * Executes structured JEV questions against a normalized EvidenceBundle.
+ */
+export async function analyzeEvidenceWithJev(input: {
+  bundle: EvidenceBundle;
+  questionIds?: string[];
+  client?: OpenRouterJevClient;
+}): Promise<{
+  bundleId: string;
+  answers: JevAnswer[];
+}> {
+  const client = input.client || openRouterJevClient;
+  const questionIds = input.questionIds || [
+    "org_hook_intent",
+    "org_retention_risk",
+    "org_format_structure",
+    "safe_substantiation_present",
+  ];
+
+  const answers: JevAnswer[] = [];
+
+  for (const qid of questionIds) {
+    const question = jevRegistry.get(qid);
+    if (!question) continue;
+
+    const answer = await client.answer({
+      evidenceBundle: input.bundle,
+      question,
+    });
+    answers.push(answer);
+  }
+
+  return {
+    bundleId: input.bundle.id,
+    answers,
+  };
 }

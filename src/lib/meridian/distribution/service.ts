@@ -159,8 +159,8 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "instagram",
       description: "Full-screen vertical short-form organic video (9:16) with captions and hashtag targeting.",
-      connected: connectionsByPlatform.has("instagram") || true, // Test mock allowed
-      accountName: connectionsByPlatform.get("instagram") ?? "@brand_official (Instagram)",
+      connected: connectionsByPlatform.has("instagram"),
+      accountName: connectionsByPlatform.get("instagram"),
     },
     {
       id: "facebook-pages",
@@ -168,8 +168,8 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "facebook",
       description: "Organic feed videos and Reels distributed to page followers and algorithmic recommendations.",
-      connected: connectionsByPlatform.has("facebook") || true,
-      accountName: connectionsByPlatform.get("facebook") ?? "Brand Official Page",
+      connected: connectionsByPlatform.has("facebook"),
+      accountName: connectionsByPlatform.get("facebook"),
     },
     {
       id: "youtube-shorts",
@@ -177,8 +177,8 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "youtube",
       description: "Organic short-form vertical video (<=60s) published to the brand's official YouTube channel.",
-      connected: connectionsByPlatform.has("youtube") || true,
-      accountName: connectionsByPlatform.get("youtube") ?? "Brand Channel (YouTube)",
+      connected: connectionsByPlatform.has("youtube"),
+      accountName: connectionsByPlatform.get("youtube"),
     },
   ];
 }
@@ -277,19 +277,53 @@ export async function publishCreativeToChannels(
 
     const scheduledDate = input.scheduledFor ? new Date(input.scheduledFor) : undefined;
 
+    if (!asset) {
+      results.push({
+        channelId,
+        platform: organicChannel.platform,
+        type: "organic",
+        status: "failed",
+        error: "Missing video asset for creative. Stored artifact required for publishing.",
+      });
+      continue;
+    }
+
+    let mediaBytes: Uint8Array | null = null;
+    try {
+      const { createFilesystemObjectStore } = await import("../storage/filesystem.ts");
+      const store = createFilesystemObjectStore(process.env.STORAGE_ROOT || ".meridian/storage");
+      const stored = store.get(access.organizationId, asset.storage_key);
+      if (stored?.bytes && stored.bytes.byteLength > 0) {
+        mediaBytes = stored.bytes;
+      }
+    } catch {
+      // storage unavailable
+    }
+
+    if (!mediaBytes || mediaBytes.byteLength === 0) {
+      results.push({
+        channelId,
+        platform: organicChannel.platform,
+        type: "organic",
+        status: "failed",
+        error: "Stored media artifact bytes not found. Cannot publish empty or placeholder media.",
+      });
+      continue;
+    }
+
     try {
       const publishReceipt = await organicChannel.publish({
         brandId: input.brandId,
         organizationId: access.organizationId,
         creativeId: input.creativeId,
-        assetId: asset?.id ?? "asset-stub",
-        mediaBytes: new Uint8Array([0, 1, 2, 3]),
-        mimeType: asset?.mime_type || "video/mp4",
+        assetId: asset.id,
+        mediaBytes,
+        mimeType: asset.mime_type || "video/mp4",
         caption,
         title,
         scheduledFor: scheduledDate ? scheduledDate.toISOString() : undefined,
         aspectRatio: "9:16",
-        allowTestProvider: true,
+        allowTestProvider: false,
       });
 
       const postId = globalThis.crypto.randomUUID();

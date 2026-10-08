@@ -110,3 +110,67 @@ export function externalObjectStorageStatus(env: { bucket?: string; accessKeyId?
     detail: "S3 credentials are present. An object is stored only after the bucket accepts the request.",
   };
 }
+
+/**
+ * Creates Google Drive backed object store.
+ * Drive is the primary binary storage target for Meridian.
+ */
+export function createGoogleDriveObjectStore(client?: import("./drive.ts").GoogleDriveClient) {
+  return {
+    id: "google_drive" as const,
+    async put(input: {
+      organizationId: string;
+      brandId: string;
+      key: string;
+      mimeType: string;
+      bytes: Uint8Array;
+      lifecycle?: AssetLifecycle;
+    }): Promise<StoredObject> {
+      const drive = client || (await import("./drive.ts")).googleDriveClient;
+      const key = safeStorageKey(input.key);
+      const res = await drive.put({
+        organizationId: input.organizationId,
+        brandId: input.brandId,
+        path: key,
+        mimeType: input.mimeType,
+        bytes: input.bytes,
+      });
+
+      return {
+        key,
+        organizationId: input.organizationId,
+        brandId: input.brandId,
+        mimeType: res.mimeType,
+        checksum: res.checksum,
+        size: res.size,
+        version: 1,
+        lifecycle: input.lifecycle ?? "stored",
+        bytes: input.bytes,
+      };
+    },
+    async get(organizationId: string, brandId: string, key: string): Promise<StoredObject | null> {
+      const drive = client || (await import("./drive.ts")).googleDriveClient;
+      try {
+        const file = await drive.get(safeStorageKey(key));
+        return {
+          key,
+          organizationId,
+          brandId,
+          mimeType: file.mimeType,
+          checksum: contentHash(Buffer.from(file.bytes).toString("base64")),
+          size: file.bytes.byteLength,
+          version: 1,
+          lifecycle: "stored",
+          bytes: file.bytes,
+        };
+      } catch {
+        return null;
+      }
+    },
+    async delete(fileId: string): Promise<void> {
+      const drive = client || (await import("./drive.ts")).googleDriveClient;
+      await drive.delete(fileId);
+    },
+  };
+}
+

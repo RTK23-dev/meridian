@@ -46,7 +46,7 @@ export function posteriorDraw(input: { successes: number; trials: number; seed: 
 export function rankFromEvidence(input: {
   discovered: EvidenceCandidate[];
   patterns: LearnedPattern[];
-  performance: { angle: string; clicks: number; impressions: number }[];
+  performance: { angle: string; clicks?: number; impressions?: number; views?: number; holdViews?: number }[];
   seed: string;
 }): PosteriorRank[] {
   const exploration: EvidenceCandidate[] = HYPOTHESES.map((item) => ({
@@ -65,9 +65,9 @@ export function rankFromEvidence(input: {
   const candidates = [...input.discovered, ...exploration.filter((item) => !seen.has(item.angle))];
   const ranked = candidates.map((candidate) => {
     const rows = input.performance.filter((row) => row.angle === candidate.angle);
-    const clicks = rows.reduce((sum, row) => sum + row.clicks, 0);
-    const impressions = rows.reduce((sum, row) => sum + row.impressions, 0);
-    const draw = posteriorDraw({ successes: clicks, trials: Math.max(impressions, rows.length), seed: `${input.seed}:${candidate.angle}` });
+    const successes = rows.reduce((sum, row) => sum + (row.clicks ?? row.holdViews ?? 0), 0);
+    const trials = rows.reduce((sum, row) => sum + (row.impressions ?? row.views ?? 0), 0);
+    const draw = posteriorDraw({ successes, trials: Math.max(trials, rows.length), seed: `${input.seed}:${candidate.angle}` });
     const related = input.patterns.filter((pattern) => pattern.value.split("+")[0] === candidate.angle || pattern.value === candidate.angle);
     const lift = related.reduce((sum, pattern) => sum + pattern.lift * (pattern.sampleSize / (pattern.sampleSize + 8)), 0);
     const score = clamp01(candidate.alignment * 0.55 + (candidate.source === "discovered" ? 0.25 : 0) + draw * 0.2 + lift * 0.35);

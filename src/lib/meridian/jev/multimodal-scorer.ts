@@ -20,15 +20,15 @@ import type { NarrativeBeat } from "./account-engine.ts";
 
 export type SceneVisualFeatures = {
   /** Motion intensity in the opening 3 seconds (0-1). */
-  motionIntensity: number;
+  motionIntensity?: number;
   /** Presence of a human face/presenter gaze in opening 3s (0-1 or boolean 0/1). */
-  facePresence: number;
+  facePresence?: number;
   /** Text density / on-screen graphic ratio (0-1). Too high causes clutter. */
-  textDensity: number;
+  textDensity?: number;
   /** Visual contrast ratio (normalized 0-1). */
-  contrastRatio: number;
+  contrastRatio?: number;
   /** Typography boldness and readability (0-1). */
-  typographyWeight: number;
+  typographyWeight?: number;
   /** Shot cut cadence / average cut length in seconds (e.g. 1.5 - 3.5s). */
   avgCutLengthSec?: number;
 };
@@ -89,10 +89,17 @@ export type MultimodalEvaluation = {
 // ---------------------------------------------------------------------------
 
 /**
- * Empirical weights for predicting 3s short-form hook retention based on
- * early visual & audio stimuli. Calibrated from short-form ad benchmarks.
+ * Seed prior weights for predicting 3s short-form hook retention based on
+ * initial visual & audio stimuli heuristics.
+ * Origin: seed_prior (heuristic baseline). Not empirically calibrated until
+ * fitted against real first-party telemetry outcomes.
  */
+export const HOOK_RETENTION_WEIGHTS_VERSION = "v1-seed" as const;
+export const HOOK_RETENTION_PARAMETER_STATE = "seed_prior" as const;
+
 export const HOOK_RETENTION_WEIGHTS = {
+  version: HOOK_RETENTION_WEIGHTS_VERSION,
+  state: HOOK_RETENTION_PARAMETER_STATE,
   bias: -0.40,
   motionIntensity: 1.15,
   facePresence: 0.90,
@@ -138,20 +145,15 @@ export function predictHookRetention(
   visual: SceneVisualFeatures,
   audio?: AudioProsodyFeatures,
 ): { predictedRetention: number; logit: number; contributions: Record<string, number> } {
-  const motion = clamp01(visual.motionIntensity);
-  const face = clamp01(visual.facePresence);
-  const typo = clamp01(visual.typographyWeight);
-  const contrast = clamp01(visual.contrastRatio);
-  const textDensity = clamp01(visual.textDensity);
+  const motionContrib = visual.motionIntensity !== undefined ? clamp01(visual.motionIntensity) * HOOK_RETENTION_WEIGHTS.motionIntensity : 0;
+  const faceContrib = visual.facePresence !== undefined ? clamp01(visual.facePresence) * HOOK_RETENTION_WEIGHTS.facePresence : 0;
+  const typoContrib = visual.typographyWeight !== undefined ? clamp01(visual.typographyWeight) * HOOK_RETENTION_WEIGHTS.typographyWeight : 0;
+  const contrastContrib = visual.contrastRatio !== undefined ? clamp01(visual.contrastRatio) * HOOK_RETENTION_WEIGHTS.contrastRatio : 0;
+  const textDensity = visual.textDensity !== undefined ? clamp01(visual.textDensity) : 0;
 
   // Clutter penalty kicks in when text density exceeds 0.5
   const clutterExcess = Math.max(0, textDensity - 0.50) * 2; // scaled 0..1 for density 0.5..1.0
   const clutterPenalty = clutterExcess * HOOK_RETENTION_WEIGHTS.textClutterPenalty;
-
-  const motionContrib = motion * HOOK_RETENTION_WEIGHTS.motionIntensity;
-  const faceContrib = face * HOOK_RETENTION_WEIGHTS.facePresence;
-  const typoContrib = typo * HOOK_RETENTION_WEIGHTS.typographyWeight;
-  const contrastContrib = contrast * HOOK_RETENTION_WEIGHTS.contrastRatio;
 
   let audioEnergyContrib = 0;
   let silencePenalty = 0;
@@ -283,10 +285,10 @@ export function evaluateMultimodalCreative(input: MultimodalInput): MultimodalEv
 
   // 4. Hook visual score (isolated visual elements)
   const hookVisualScore = clamp01(
-    clamp01(visual.motionIntensity) * 0.35 +
-    clamp01(visual.facePresence) * 0.30 +
-    clamp01(visual.typographyWeight) * 0.20 +
-    clamp01(visual.contrastRatio) * 0.15,
+    (visual.motionIntensity !== undefined ? clamp01(visual.motionIntensity) * 0.35 : 0) +
+    (visual.facePresence !== undefined ? clamp01(visual.facePresence) * 0.30 : 0) +
+    (visual.typographyWeight !== undefined ? clamp01(visual.typographyWeight) * 0.20 : 0) +
+    (visual.contrastRatio !== undefined ? clamp01(visual.contrastRatio) * 0.15 : 0),
   );
 
   // 5. Objection mining

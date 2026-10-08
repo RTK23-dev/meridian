@@ -1,0 +1,79 @@
+/**
+ * Provider-Neutral Production Types
+ *
+ * Contracts for rendering/generating short-form video creatives across multiple engines:
+ * ManualCloud (zero spend Drive drop folder), Hypit, Veo, Higgsfield.
+ */
+
+export type CostMode = "ZERO_SPEND" | "LOWEST_COST" | "BALANCED" | "QUALITY_FIRST";
+
+export type ProductionJobState =
+  | "PENDING_PREFLIGHT"
+  | "PREFLIGHT_FAILED"
+  | "QUEUED"
+  | "RENDERING"
+  | "WAITING_FOR_EXTERNAL_ARTIFACT"
+  | "RENDERED"
+  | "PENDING_POSTFLIGHT"
+  | "POSTFLIGHT_FAILED"
+  | "COMPLETED"
+  | "FAILED";
+
+export type ProductionCapabilities = {
+  textToVideo: boolean;
+  imageToVideo: boolean;
+  timelineEditing: boolean;
+  voiceoverGeneration: boolean;
+  zeroSpend: boolean;
+  averageLatencySeconds: number;
+  costPerSecondEstimateUsd: number;
+};
+
+export type CreativeSpec = {
+  id: string;
+  organizationId: string;
+  brandId: string;
+  title: string;
+  format: string;
+  aspectRatio: "9:16" | "16:9" | "1:1";
+  durationTargetSeconds: number;
+  hookLine: string;
+  script: string;
+  scenes: Array<{
+    index: number;
+    description: string;
+    durationSeconds: number;
+    onScreenText?: string;
+    voiceoverText?: string;
+    assetUrl?: string;
+  }>;
+  audioTrack?: {
+    musicStyle?: string;
+    voiceId?: string;
+  };
+};
+
+export type ProductionJob = {
+  jobId: string;
+  organizationId: string;
+  brandId: string;
+  creativeSpec: CreativeSpec;
+  providerId: string;
+  status: ProductionJobState;
+  costEstimateUsd: number;
+  costActualUsd?: number;
+  dropFolderUrl?: string;
+  outputArtifactId?: string;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export interface ProductionProvider {
+  readonly id: string;
+  readonly capabilities: ProductionCapabilities;
+
+  submitJob(spec: CreativeSpec): Promise<ProductionJob>;
+  checkJobStatus(jobId: string): Promise<ProductionJob>;
+  cancelJob?(jobId: string): Promise<void>;
+}

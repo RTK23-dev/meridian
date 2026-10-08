@@ -534,6 +534,49 @@ export async function syncTelemetryToLearning(
         )
       `;
     }
+
+    // Bridge organic records directly into organic_observations for JEV retention & shares learning
+    if (r.sourceType === "organic" || (r.views > 0 && r.spendCents === 0)) {
+      try {
+        const existingOrg = await sql`
+          select id from organic_observations
+          where organization_id = ${organizationId}
+            and brand_id = ${brandId}
+            and creative_id = ${r.creativeId}
+          limit 1
+        `;
+        if (!existingOrg || existingOrg.length === 0) {
+          const postId = r.externalPostId || `post_${r.creativeId}`;
+          try {
+            await sql`
+              insert into organic_posts (
+                id, organization_id, brand_id, creative_id, platform, caption, status
+              ) values (
+                ${postId}, ${organizationId}, ${brandId}, ${r.creativeId}, ${r.platform}, '', 'published'
+              )
+              on conflict (id) do nothing
+            `;
+          } catch {
+            // Optional FK
+          }
+
+          const threeSecViews = Math.round(r.views * (r.hookRetention3s || 0.45));
+          await sql`
+            insert into organic_observations (
+              id, organization_id, brand_id, organic_post_id, creative_id, platform,
+              views, three_second_views, completion_rate, shares, likes, comments, saves,
+              observed_on, created_at
+            ) values (
+              ${randomUUID()}, ${organizationId}, ${brandId}, ${postId}, ${r.creativeId}, ${r.platform},
+              ${r.views}, ${threeSecViews}, ${r.completionRate || 0.25}, ${r.shares}, ${r.engagements},
+              0, ${r.saves}, current_date, now()
+            )
+          `;
+        }
+      } catch {
+        // Continue gracefully if organic_observations unavailable
+      }
+    }
   }
 
   // 2. Recompute brand-scoped Bayesian learned patterns

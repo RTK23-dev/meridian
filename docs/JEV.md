@@ -108,10 +108,33 @@ Located at `/brands/$brandId/intelligence`:
 
 ---
 
+## Native TypeSafe JEV Decision Engine (v1.13)
+
+JEV is built around TypeSafe's System One decision primitives:
+- **`noul`**: Boolean necessity / compliance gates ($P \in [0, 1]$).
+- **`choice`**: Selection across discrete categories with probability distributions.
+- **`score`**: Ordered rubric evaluations across defined quality criteria.
+
+### Structured Decision Flow
+1. **Evidence Sufficiency Gate**: Questions declare strict `evidenceRequirements`. If required evidence is missing, the engine abstains (`abstain_insufficient_evidence`) with zero confidence and explicit reasons, rather than hallucinating answers.
+2. **Deterministic Input Hashing**: Evaluates hash over tenant state, questions, and model parameters to power bounded in-memory caching.
+3. **OpenRouter Gateway**: All JEV calls execute via OpenRouter (`JEV_PROVIDER=openrouter`, `JEV_MODEL=typesafe/jev-1.13`).
+4. **Deterministic Policy Evaluator**:
+   - `AUTO_APPROVE`: Average probability $\ge 0.85$ and minimum confidence $\ge 0.75$ with zero policy violations.
+   - `HUMAN_REVIEW`: Any missing evidence, uncertainty, or average probability in $[0.50, 0.85)$.
+   - `REJECT`: Any hard policy violation or low probability $< 0.50$.
+5. **Dynamic Creative Structures**: Short-form videos use dynamic discovered segments (`CreativeStructure`), where narrative beats are an optional specialization rather than an enforced rigid structure.
+6. **Calibration & Reliability**: Evaluated via Brier score, empirical log loss, and binned calibration curves before any seed prior is considered calibrated.
+
+---
+
 ## Tests
 
 - `src/lib/meridian/loop.test.ts`: End-to-end evidence, decision, and brief loop.
-- `src/lib/meridian/jev/account.test.ts`: 12 comprehensive unit and integration tests for Account DNA, 6-beat scoring, decile separation, and whitespace detection (< 1.5s on 500-post dataset).
-- `src/lib/meridian/learning/decay.test.ts`: Recency decay math, weighted beta updating, and cold-start priors.
+- `src/lib/meridian/jev/unified-engine.test.ts`: Native TypeSafe JEV engine tests (abstention, policy, Brier score, calibration).
+- `src/lib/meridian/evidence/unified-evidence.test.ts`: Normalized evidence bundles, deduplication, and compression.
+- `src/lib/meridian/production/unified-production.test.ts`: Production router, ManualCloud zero spend, and QC gates.
+- `src/lib/meridian/learning/unified-learning.test.ts`: Learning guardrails, parameter lifecycle, and fatigue tracking.
+- `src/lib/meridian/storage/unified-storage.test.ts`: Google Drive primary storage tests.
 - `evals/jev/cases.json`: Ground-truth calibration test cases.
 

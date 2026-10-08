@@ -149,28 +149,27 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
     for (const item of data.items) {
       const evaluation = evaluateMultimodalCreative({
         visual: {
-          motionIntensity: item.motionIntensity ?? 0.5,
-          facePresence: 0.5,
-          textDensity: item.textDensity ?? 0.3,
-          contrastRatio: 0.6,
-          typographyWeight: 0.7,
+          motionIntensity: item.motionIntensity,
+          textDensity: item.textDensity,
+          // Unobserved features remain undefined; never fabricated
         },
-        audio: {
-          speechWpm: item.speechWpm ?? 160,
-          audioEnergy: item.audioEnergyScore ?? 0.6,
-          silenceRatio: 0.05,
-        },
+        audio: (item.speechWpm || item.audioEnergyScore) ? {
+          speechWpm: item.speechWpm ?? 0,
+          audioEnergy: item.audioEnergyScore ?? 0,
+          silenceRatio: 0,
+        } : undefined,
         historicalThreeSecondRetention: item.threeSecondRetention,
         historicalCompletionRate: item.completionRate,
       });
 
-      const mockNarrativeBeats: Record<NarrativeBeat, number> = {
+      // Observed beats: hook is evaluated from visual cues; unobserved beats are not mocked
+      const observedNarrativeBeats: Record<NarrativeBeat, number> = {
         hook: evaluation.hookVisualScore,
-        problem: 0.7,
-        reveal: 0.8,
-        proof: 0.75,
-        offer: 0.7,
-        cta: 0.65,
+        problem: 0,
+        reveal: 0,
+        proof: 0,
+        offer: 0,
+        cta: 0,
       };
 
       await saveContentAnalysis(sql, {
@@ -178,9 +177,9 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
         brandId: data.brandId,
         postId: item.postId,
         hookVisualScore: evaluation.hookVisualScore,
-        audioEnergyScore: item.audioEnergyScore ?? 0.6,
-        speechWpm: item.speechWpm ?? 160,
-        narrativeBeats: mockNarrativeBeats,
+        audioEnergyScore: item.audioEnergyScore ?? 0,
+        speechWpm: item.speechWpm ?? 0,
+        narrativeBeats: observedNarrativeBeats,
         detectedObjections: evaluation.detectedObjections,
         topCommentsSummary: "",
         visualStyle: item.visualStyle ?? "ugc",

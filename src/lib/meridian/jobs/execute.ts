@@ -136,13 +136,18 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   }
   if (job.job_type === "publishing.dispatch") {
     const creativeId = typeof payload.creativeId === "string" ? payload.creativeId : "";
-    const provider = payload.provider === "test" ? "test" : "meta";
-    const result = publishThrough({
-      provider,
-      creativeId,
-      allowTestProvider: payload.allowTestProvider === true,
-    });
-    return result.externalId ? `${result.status}:${result.externalId}` : result.status;
+    if (creativeId) {
+      const provider = payload.provider === "test" ? "test" : "meta";
+      const result = publishThrough({
+        provider,
+        creativeId,
+        allowTestProvider: payload.allowTestProvider === true,
+      });
+      return result.externalId ? `${result.status}:${result.externalId}` : result.status;
+    }
+    const { claimScheduledJobs } = await import("../publishing/orchestrator.ts");
+    const claimed = await claimScheduledJobs(sql, 10);
+    return `claimed:${claimed.length}`;
   }
   if (job.job_type === "performance.ingest" || job.job_type === "performance.sync") {
     const { runPerformanceSync } = await import("../performance/job.ts");
@@ -236,11 +241,6 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
       values (${job.id}, ${job.organization_id}, ${job.brand_id}, 'job', ${title}, ${typeof payload.body === "string" ? payload.body : ""})
     `;
     return "dispatched";
-  }
-  if (job.job_type === "publishing.dispatch") {
-    const { claimScheduledJobs } = await import("../publishing/orchestrator.ts");
-    const claimed = await claimScheduledJobs(sql, 10);
-    return `claimed:${claimed.length}`;
   }
   if (job.job_type === "telemetry.sync") {
     if (!job.brand_id) throw new Error("Telemetry sync needs a brand.");

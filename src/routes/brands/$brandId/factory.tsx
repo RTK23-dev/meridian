@@ -5,8 +5,9 @@ import { useBusy } from "@/components/gate";
 import { Button, ErrorState, Field, Panel, SelectInput, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
-import { setFactoryControls, setKillSwitch, startFactoryRun } from "@/lib/meridian/factory/actions";
-import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery } from "@/lib/query/hooks";
+import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery } from "@/lib/query/hooks";
+import { startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/brands/$brandId/factory")({ component: Page });
@@ -25,7 +26,8 @@ function FactoryPage({ brandId }: { brandId: string }) {
   const board = query.data ?? null;
   const channelsQuery = useDistributionChannelsQuery(brandId);
   const organicQuery = useOrganicDistributionQuery(brandId);
-  const busy = useBusy([qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.organic(brandId)]);
+  const pipelineQuery = usePipelineConfigQuery(brandId);
+  const busy = useBusy([qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.organic(brandId), qk.pipelineConfig(brandId)]);
   const [niche, setNiche] = useState("");
   const [daily, setDaily] = useState("");
   const [total, setTotal] = useState("");
@@ -55,8 +57,9 @@ function FactoryPage({ brandId }: { brandId: string }) {
       {board.note ? <p className="text-sm text-muted">{board.note}</p> : null}
       {note ? <p className="text-sm text-muted" role="status">{note}</p> : null}
 
-      <Tabs defaultValue="discover">
-        <TabsList className="grid h-auto w-full grid-cols-3 gap-1 sm:grid-cols-6">
+      <Tabs defaultValue="pipeline">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">
+          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm font-medium" value="pipeline">Factory Line</TabsTrigger>
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="discover">Discover</TabsTrigger>
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="templates">Templates</TabsTrigger>
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="production">Production</TabsTrigger>
@@ -64,6 +67,14 @@ function FactoryPage({ brandId }: { brandId: string }) {
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="tests">Live tests</TabsTrigger>
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="learnings">Learnings</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="pipeline" className="space-y-6">
+          <PipelineEditor
+            brandId={brandId}
+            initialConfig={pipelineQuery.data}
+            canEdit={canEdit}
+          />
+        </TabsContent>
 
         <TabsContent value="discover" className="space-y-6">
           <Panel className="space-y-4 p-5">

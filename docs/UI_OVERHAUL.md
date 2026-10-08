@@ -5,7 +5,7 @@ The backend is rich: market research, JEV decisions, opportunity ranking, studio
 
 ---
 
-## 1. Rules for Codex (read before touching anything)
+## 1. Rules(read before touching anything)
 
 ### 1.1 Do not break these product rules
 
@@ -314,6 +314,15 @@ Variant gallery:
 **4.11 Settings (`settings.tsx`)**: tabs: General, Members (table with role selector and invite dialog), Scoring weights (sliders with live preview and a reset), Alerts (delivery targets), Learning, Danger zone.
 
 **4.12 Auth screens (`login`, `invite`, `Welcome`, `brands/new`)**: tidy layout, brand mark, password show/hide, inline validation, clear error mapping (not raw server text).
+
+**4.13 Factory Line Pipeline Editor (`factory.tsx`, `components/factory/pipeline-editor.tsx`)**
+- Modular visual conveyor belt replacing external workflow automation tools (like n8n).
+- 4 configuration tabs:
+  1. **Conveyor Belt Flow**: Visual cards for 9 pipeline stages with toggle/bypass controls and stage drawer details.
+  2. **Generation Volume & Engine**: Output quantity (1–10 videos), multi-aspect ratio selection (9:16, 1:1, 16:9, 4:5), duration, pacing, and engine selector ($0 ManualCloud, Hypit, Veo, Higgsfield).
+  3. **Winner Grading Levels**: Interactive sliders for minimum Winner Score floor, Bayesian $P(\text{beat})$ confidence, 3s retention floor, auto-approve gate, and strict claim gate.
+  4. **System Prompts**: In-browser prompt editing with real-time character counters for Brief Synthesis, Scriptwriting, Multimodal Perception, and JEV Cognitive Grading.
+- One-click preset switchers (`Viral UGC`, `Problem-Solution`, `Strict Quality`, `Manual Cloud`).
 
 ### Phase 5: Media serving (small backend task, blocks Studio and Library)
 
