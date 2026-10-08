@@ -180,7 +180,12 @@ export class VeoProvider implements ProductionProvider {
       name?: string;
       done?: boolean;
       error?: { message: string };
-      response?: { generatedVideos?: Array<{ video?: { uri?: string } }> };
+      response?: {
+        generatedVideos?: Array<{ video?: { uri?: string } }>;
+        generateVideoResponse?: {
+          generatedSamples?: Array<{ video?: { uri?: string } }>;
+        };
+      };
     };
 
     if (operation.error) {
@@ -198,7 +203,9 @@ export class VeoProvider implements ProductionProvider {
       };
     }
 
-    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+    const videoUri =
+      operation.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
+      operation.response?.generatedVideos?.[0]?.video?.uri;
 
     return {
       jobId,

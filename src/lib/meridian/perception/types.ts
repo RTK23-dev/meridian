@@ -32,7 +32,9 @@ export type SceneObservation = {
   visual: VisualSceneFeatures;
   audio?: AudioSceneFeatures;
   ocrText?: string;
-  confidence: number;
+  state?: "OBSERVED" | "INFERRED";
+  modelQualityEstimate?: number;
+  confidence?: number;
 };
 
 export type PerceptionTranscriptSegment = {

@@ -27,6 +27,8 @@ export type JevQuestionSpec = {
   type: JevQuestionType;
   instructions: string;
   criteria: JevQuestionCriteria;
+  levels?: Record<string, string>;
+  options?: string[];
   evidenceRequirements: string[];
   outputInterpretation?: Record<string, string>;
   policyMapping?: {
@@ -37,6 +39,7 @@ export type JevQuestionSpec = {
 };
 
 export type EvidenceRef = {
+  kind?: string;
   artifactId?: string;
   sourceId?: string;
   field?:
@@ -60,7 +63,8 @@ export type EvidenceRef = {
 export type JevAnswerStatus =
   | "answered"
   | "abstain_insufficient_evidence"
-  | "abstain_uncertain";
+  | "abstain_uncertain"
+  | "provider_error";
 
 export type RawJevAnswer =
   | {

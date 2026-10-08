@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   type FactoryPipelineConfig,
   type FactoryComponentId,
@@ -25,6 +25,14 @@ export function PipelineEditor({
   const [config, setConfig] = useState<FactoryPipelineConfig>(
     () => initialConfig || getDefaultPipelineConfig(),
   );
+  const [hasUserEdited, setHasUserEdited] = useState(false);
+
+  useEffect(() => {
+    if (initialConfig && !hasUserEdited) {
+      setConfig(initialConfig);
+    }
+  }, [initialConfig, hasUserEdited]);
+
   const [selectedStage, setSelectedStage] = useState<FactoryComponentId>("produce");
   const [activeTab, setActiveTab] = useState<"pipeline" | "volume" | "grading" | "prompts">("pipeline");
   const [isSaving, setIsSaving] = useState(false);
@@ -32,6 +40,7 @@ export function PipelineEditor({
 
   const handleStageToggle = (stageId: FactoryComponentId) => {
     if (!canEdit) return;
+    setHasUserEdited(true);
     setConfig((prev) => ({
       ...prev,
       presetName: "custom",
@@ -50,6 +59,7 @@ export function PipelineEditor({
     try {
       await applyPipelinePreset({ data: { brandId, presetName: presetKey } });
       qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.pipelineConfig(brandId)) });
+      setHasUserEdited(false);
       setFeedback({ message: `Preset "${presetKey.replace(/_/g, " ")}" applied and saved.`, type: "success" });
     } catch (err) {
       setFeedback({ message: err instanceof Error ? err.message : String(err), type: "error" });
@@ -66,6 +76,7 @@ export function PipelineEditor({
       const validated = validatePipelineConfig(config);
       await savePipelineConfig({ data: { brandId, config: validated } });
       qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.pipelineConfig(brandId)) });
+      setHasUserEdited(false);
       setFeedback({ message: "Factory line configuration saved successfully.", type: "success" });
     } catch (err) {
       setFeedback({ message: err instanceof Error ? err.message : String(err), type: "error" });

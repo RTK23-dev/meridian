@@ -12,7 +12,8 @@
 
 import type { Sql } from "./store.ts";
 
-export type ParameterState = "seed_prior" | "candidate_fit" | "fitted" | "validated";
+export type ParameterState = "seed_prior" | "candidate_fit" | "fitted" | "validated" | "retired";
+export type ModelParameterStatus = ParameterState;
 
 export type ModelParameterRecord = {
   id: string;

@@ -12,16 +12,22 @@ export type EvidenceFieldState =
   | "LEARNED"   // Cross-observation empirical correlation
   | "VALIDATED"; // Confirmed in first-party experiments
 
+export type EvidenceState = EvidenceFieldState;
+
 export type EvidenceValue<T> = {
   value: T;
   state: EvidenceFieldState;
-  source?: import("../jev/types.ts").EvidenceRef[];
+  source?: string | import("../jev/types.ts").EvidenceRef[];
+  observedAt?: string;
   methodId?: string;
   uncertainty?: {
+    kind?: "interval" | "distribution" | "qualitative";
     lower?: number;
     upper?: number;
     confidence?: number;
+    value?: unknown;
   };
+  evidenceRefs?: import("../jev/types.ts").EvidenceRef[];
 };
 
 export function asEvidenceValue<T>(

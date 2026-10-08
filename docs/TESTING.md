@@ -12,10 +12,11 @@ Unit tests cover the decision math without a database:
 - `src/lib/meridian/workflow/templates.test.ts` — same stages, different variables
 - `src/lib/meridian/sources/public-url.test.ts` — private hosts blocked before fetch
 
-- `src/lib/meridian/blockers.test.ts` — semantic retrieval, negative learning, worker lease, storage, PDF extraction, logo pixels, calibration
-- `src/lib/meridian/providers/readiness.test.ts` — provider probes store only returned ids, campaign retry does not create a second campaign, test provider stays off, contrast ratios
-- `src/lib/meridian/providers/completion.test.ts` — paused publishing stages, insight dedupe, OAuth seal, webhook rejection, calibration approval source
-- `src/lib/meridian/providers/final.test.ts` — TikTok and Google stage reuse, insight clients, performance-to-brief, schedules, refresh, alert dead-letter, calibration tenancy
+- src/lib/meridian/blockers.test.ts — semantic retrieval, negative learning, worker lease, storage, PDF extraction, logo pixels, calibration
+- src/lib/meridian/testing/historical-regression.test.ts — 28-point regression test suite guarding against data fabrication, loose JEV fallbacks, unconfigured provider assumptions, drive resolution failures, and simulated telemetry
+- src/lib/meridian/providers/readiness.test.ts — provider probes store only returned ids, campaign retry does not create a second campaign, test provider stays off, contrast ratios
+- src/lib/meridian/providers/completion.test.ts — paused publishing stages, insight dedupe, OAuth seal, webhook rejection, calibration approval source
+- src/lib/meridian/providers/final.test.ts — TikTok and Google stage reuse, insight clients, performance-to-brief, schedules, refresh, alert dead-letter, calibration tenancy
 
 Run `npm test`.
 

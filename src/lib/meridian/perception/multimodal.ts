@@ -151,7 +151,9 @@ Output ONLY the JSON array.`;
                 dominantColors: obs?.dominantColors,
               },
               ocrText: obs?.ocrText || undefined,
-              confidence: 0.9,
+              state: "OBSERVED",
+              modelQualityEstimate: 0.85,
+              confidence: 0.85,
             };
           });
 

@@ -111,6 +111,80 @@ export function externalObjectStorageStatus(env: { bucket?: string; accessKeyId?
   };
 }
 
+export type StorageObjectRecord = {
+  organizationId: string;
+  brandId: string;
+  key: string;
+  providerFileId: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  lifecycle?: AssetLifecycle;
+};
+
+export interface StorageMetadataRepository {
+  upsert(record: StorageObjectRecord): Promise<void>;
+  getByKey(organizationId: string, brandId: string, key: string): Promise<StorageObjectRecord | null>;
+}
+
+export function createMemoryStorageMetadataRepository(): StorageMetadataRepository {
+  const map = new Map<string, StorageObjectRecord>();
+  return {
+    async upsert(record: StorageObjectRecord): Promise<void> {
+      map.set(`${record.organizationId}:${record.brandId}:${record.key}`, record);
+    },
+    async getByKey(orgId: string, brandId: string, key: string): Promise<StorageObjectRecord | null> {
+      return map.get(`${orgId}:${brandId}:${key}`) || null;
+    },
+  };
+}
+
+export function createSqlStorageMetadataRepository(sql: any): StorageMetadataRepository {
+  return {
+    async upsert(record: StorageObjectRecord): Promise<void> {
+      const id = `${record.organizationId}:${record.brandId}:${record.key}`;
+      await sql`
+        insert into storage_objects (
+          id, organization_id, brand_id, provider, provider_file_id,
+          name, mime_type, size_bytes, sha256, lifecycle, metadata, updated_at
+        ) values (
+          ${id}, ${record.organizationId}, ${record.brandId}, 'google_drive', ${record.providerFileId},
+          ${record.key}, ${record.mimeType}, ${record.sizeBytes}, ${record.sha256}, ${record.lifecycle ?? 'stored'},
+          ${JSON.stringify({ key: record.key })}, now()
+        )
+        on conflict (provider, provider_file_id) do update set
+          mime_type = excluded.mime_type,
+          size_bytes = excluded.size_bytes,
+          sha256 = excluded.sha256,
+          lifecycle = excluded.lifecycle,
+          updated_at = now()
+      `;
+    },
+    async getByKey(orgId: string, brandId: string, key: string): Promise<StorageObjectRecord | null> {
+      const rows = await sql`
+        select provider_file_id, mime_type, size_bytes, sha256, lifecycle
+        from storage_objects
+        where organization_id = ${orgId}
+          and brand_id = ${brandId}
+          and (name = ${key} or id = ${`${orgId}:${brandId}:${key}`} or metadata->>'key' = ${key})
+        limit 1
+      `;
+      if (!rows.length || !rows[0]) return null;
+      const r = rows[0] as any;
+      return {
+        organizationId: orgId,
+        brandId,
+        key,
+        providerFileId: r.provider_file_id,
+        mimeType: r.mime_type,
+        sizeBytes: Number(r.size_bytes),
+        sha256: r.sha256,
+        lifecycle: r.lifecycle as AssetLifecycle,
+      };
+    },
+  };
+}
+
 /**
  * Creates Google Drive backed object store.
  * Drive is the primary binary storage target for Meridian.
@@ -118,6 +192,7 @@ export function externalObjectStorageStatus(env: { bucket?: string; accessKeyId?
 export function createGoogleDriveObjectStore(
   client?: import("./drive.ts").GoogleDriveClient,
   options?: {
+    metadataRepo?: StorageMetadataRepository;
     lookupFileId?: (organizationId: string, brandId: string, key: string) => Promise<string | null>;
     recordFileId?: (input: {
       organizationId: string;
@@ -131,6 +206,7 @@ export function createGoogleDriveObjectStore(
   },
 ) {
   const fileIdMap = new Map<string, string>();
+  const repo = options?.metadataRepo || createMemoryStorageMetadataRepository();
 
   return {
     id: "google_drive" as const,
@@ -154,6 +230,17 @@ export function createGoogleDriveObjectStore(
 
       const mapKey = `${input.organizationId}:${input.brandId}:${key}`;
       fileIdMap.set(mapKey, res.fileId);
+
+      await repo.upsert({
+        organizationId: input.organizationId,
+        brandId: input.brandId,
+        key,
+        providerFileId: res.fileId,
+        mimeType: res.mimeType,
+        sizeBytes: res.size,
+        sha256: res.checksum,
+        lifecycle: input.lifecycle,
+      });
 
       if (options?.recordFileId) {
         await options.recordFileId({
@@ -184,8 +271,14 @@ export function createGoogleDriveObjectStore(
       const cleanKey = safeStorageKey(key);
       const mapKey = `${organizationId}:${brandId}:${cleanKey}`;
 
-      // Step 1: Resolve provider_file_id from options or in-memory map
+      // Step 1: Resolve provider_file_id from in-memory map or metadata repository
       let fileId = fileIdMap.get(mapKey);
+      if (!fileId) {
+        const meta = await repo.getByKey(organizationId, brandId, cleanKey);
+        if (meta) {
+          fileId = meta.providerFileId;
+        }
+      }
       if (!fileId && options?.lookupFileId) {
         fileId = (await options.lookupFileId(organizationId, brandId, cleanKey)) || undefined;
       }

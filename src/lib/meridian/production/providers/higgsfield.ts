@@ -73,7 +73,7 @@ export class HiggsfieldProvider implements ProductionProvider {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Key ${apiKey}`,
         },
         body: JSON.stringify({
           prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
@@ -97,8 +97,15 @@ export class HiggsfieldProvider implements ProductionProvider {
         };
       }
 
-      const data = (await res.json()) as { id?: string; job_id?: string; status?: string };
-      const externalId = data.id || data.job_id;
+      const data = (await res.json()) as {
+        id?: string;
+        job_id?: string;
+        request_id?: string;
+        status?: string;
+        status_url?: string;
+        cancel_url?: string;
+      };
+      const externalId = data.request_id || data.id || data.job_id || data.status_url;
 
       if (!externalId) {
         return {
@@ -109,7 +116,7 @@ export class HiggsfieldProvider implements ProductionProvider {
           providerId: this.id,
           status: "FAILED",
           costEstimateUsd: costEstimate,
-          error: "Higgsfield response missing job ID.",
+          error: "Higgsfield response missing job ID or status URL.",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -148,9 +155,10 @@ export class HiggsfieldProvider implements ProductionProvider {
       throw new Error("Cannot check Higgsfield job status: API key not configured.");
     }
 
-    const res = await this.fetchImpl(`https://api.higgsfield.ai/v1/status/${jobId}`, {
+    const pollUrl = jobId.startsWith("http") ? jobId : `https://api.higgsfield.ai/v1/status/${jobId}`;
+    const res = await this.fetchImpl(pollUrl, {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Key ${apiKey}`,
       },
     });
 
@@ -162,6 +170,7 @@ export class HiggsfieldProvider implements ProductionProvider {
       status?: string;
       error?: string;
       video_url?: string;
+      video?: { url?: string };
     };
 
     if (data.error) {
@@ -179,6 +188,8 @@ export class HiggsfieldProvider implements ProductionProvider {
       };
     }
 
+    const videoUrl = data.video?.url || data.video_url;
+
     return {
       jobId,
       organizationId: "",
@@ -187,7 +198,7 @@ export class HiggsfieldProvider implements ProductionProvider {
       providerId: this.id,
       status: data.status === "completed" ? "RENDERED" : "RUNNING",
       costEstimateUsd: 0,
-      outputArtifactId: data.video_url,
+      outputArtifactId: videoUrl,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

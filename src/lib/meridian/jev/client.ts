@@ -53,12 +53,20 @@ export function computeJevInputHash(input: {
 }): string {
   const normalizedQuestions = Object.keys(input.questions)
     .sort()
-    .map((k) => ({
-      id: input.questions[k].id,
-      version: input.questions[k].version,
-      type: input.questions[k].type,
-      criteria: input.questions[k].criteria,
-    }));
+    .map((k) => {
+      const q = input.questions[k];
+      return {
+        id: q.id,
+        version: q.version,
+        type: q.type,
+        instructions: q.instructions,
+        criteria: q.criteria,
+        levels: q.levels,
+        options: q.options,
+        evidenceRequirements: q.evidenceRequirements,
+        policyMapping: (q as any).policyMapping,
+      };
+    });
 
   return createHash("sha256")
     .update(
@@ -336,9 +344,24 @@ export class OpenRouterJevClient implements JevClient {
         if (item) {
           // Normalize according to question type: noul, choice, score
           if (qSpec.type === "noul" || item.type === "noul") {
-            const prob = typeof item.noul === "number"
+            const rawProb = typeof item.noul === "number"
               ? item.noul
-              : (typeof item.probability === "number" ? item.probability : (item.answer === true ? 1.0 : item.answer === false ? 0.0 : 0.5));
+              : (typeof item.probability === "number" ? item.probability : undefined);
+
+            if (rawProb === undefined || Number.isNaN(rawProb) || rawProb < 0 || rawProb > 1) {
+              answers[key] = {
+                questionId: qSpec.id,
+                questionVersion: qSpec.version,
+                type: "noul",
+                model,
+                provider,
+                status: "provider_error",
+                evidenceRefs: inputEvidenceRefs,
+                abstainReason: "Remote JEV response returned invalid or missing noul probability.",
+                evaluatedAt: new Date().toISOString(),
+              };
+              continue;
+            }
 
             answers[key] = {
               questionId: qSpec.id,
@@ -347,15 +370,30 @@ export class OpenRouterJevClient implements JevClient {
               model,
               provider,
               status: "answered",
-              noul: prob,
-              probability: prob,
-              answer: prob >= 0.5,
+              noul: rawProb,
+              probability: rawProb,
+              answer: rawProb >= 0.5,
               confidence: undefined, // noul probability is returned directly; confidence is not fabricated
               evidenceRefs: inputEvidenceRefs,
               evaluatedAt: new Date().toISOString(),
             };
           } else if (qSpec.type === "choice" || item.type === "choice") {
-            const choiceStr = typeof item.choice === "string" ? item.choice : String(item.answer ?? "");
+            const rawChoice = typeof item.choice === "string" ? item.choice : (typeof item.answer === "string" ? item.answer : undefined);
+            if (!rawChoice) {
+              answers[key] = {
+                questionId: qSpec.id,
+                questionVersion: qSpec.version,
+                type: "choice",
+                model,
+                provider,
+                status: "provider_error",
+                evidenceRefs: inputEvidenceRefs,
+                abstainReason: "Remote JEV response returned missing or empty choice string.",
+                evaluatedAt: new Date().toISOString(),
+              };
+              continue;
+            }
+
             const conf = typeof item.confidence === "number" ? item.confidence : undefined;
             const probs = item.probabilities || item.distribution;
 
@@ -366,8 +404,8 @@ export class OpenRouterJevClient implements JevClient {
               model,
               provider,
               status: "answered",
-              choice: choiceStr,
-              answer: choiceStr,
+              choice: rawChoice,
+              answer: rawChoice,
               probabilities: probs,
               distribution: probs,
               confidence: conf,
@@ -375,7 +413,22 @@ export class OpenRouterJevClient implements JevClient {
               evaluatedAt: new Date().toISOString(),
             };
           } else if (qSpec.type === "score" || item.type === "score") {
-            const scoreVal = typeof item.score === "number" ? item.score : (typeof item.answer === "number" ? item.answer : 0);
+            const rawScore = typeof item.score === "number" ? item.score : (typeof item.answer === "number" ? item.answer : undefined);
+            if (rawScore === undefined || Number.isNaN(rawScore)) {
+              answers[key] = {
+                questionId: qSpec.id,
+                questionVersion: qSpec.version,
+                type: "score",
+                model,
+                provider,
+                status: "provider_error",
+                evidenceRefs: inputEvidenceRefs,
+                abstainReason: "Remote JEV response returned missing or invalid numeric score.",
+                evaluatedAt: new Date().toISOString(),
+              };
+              continue;
+            }
+
             const conf = typeof item.confidence === "number" ? item.confidence : undefined;
             const probs = item.probabilities || item.distribution;
 
@@ -386,8 +439,8 @@ export class OpenRouterJevClient implements JevClient {
               model,
               provider,
               status: "answered",
-              score: scoreVal,
-              answer: scoreVal,
+              score: rawScore,
+              answer: rawScore,
               probabilities: probs,
               distribution: probs,
               confidence: conf,
@@ -396,7 +449,22 @@ export class OpenRouterJevClient implements JevClient {
               evaluatedAt: new Date().toISOString(),
             };
           } else {
-            // General answered fallback
+            // General typed answer
+            if (item.answer === undefined && item.choice === undefined && item.score === undefined) {
+              answers[key] = {
+                questionId: qSpec.id,
+                questionVersion: qSpec.version,
+                type: qSpec.type,
+                model,
+                provider,
+                status: "provider_error",
+                evidenceRefs: inputEvidenceRefs,
+                abstainReason: "Remote JEV response missing answer field.",
+                evaluatedAt: new Date().toISOString(),
+              };
+              continue;
+            }
+
             answers[key] = {
               questionId: qSpec.id,
               questionVersion: qSpec.version,
@@ -404,7 +472,7 @@ export class OpenRouterJevClient implements JevClient {
               model,
               provider,
               status: "answered",
-              answer: item.answer ?? item.choice ?? item.score ?? false,
+              answer: item.answer ?? item.choice ?? item.score,
               probability: typeof item.probability === "number" ? item.probability : undefined,
               confidence: typeof item.confidence === "number" ? item.confidence : undefined,
               evidenceRefs: inputEvidenceRefs,
@@ -419,9 +487,6 @@ export class OpenRouterJevClient implements JevClient {
             model,
             provider,
             status: "abstain_uncertain",
-            answer: false,
-            probability: 0.0,
-            confidence: 0.0,
             evidenceRefs: inputEvidenceRefs,
             abstainReason: "Model provided no decision for this question.",
             evaluatedAt: new Date().toISOString(),
