@@ -103,6 +103,12 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
 
     if (!brandId) throw new Error("Choose a brand.");
 
+    function optionalNumber(value: unknown): number | null {
+      if (value === null || value === undefined || value === "") return null;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
     const items: ContentItem[] = rawItems.map((r: any, idx: number) => ({
       id: clip(r.id) || `post-${idx}`,
       platform: clip(r.platform) || platform,
@@ -113,16 +119,16 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
       ctaType: typeof r.ctaType === "string" ? clip(r.ctaType) : undefined,
       visualStyle: typeof r.visualStyle === "string" ? clip(r.visualStyle) : undefined,
       angle: typeof r.angle === "string" ? clip(r.angle) : undefined,
-      views: Number(r.views) || 0,
-      likes: Number(r.likes) || 0,
-      comments: Number(r.comments) || 0,
-      shares: Number(r.shares) || 0,
-      threeSecondRetention: Number(r.threeSecondRetention) || 0,
-      completionRate: Number(r.completionRate) || 0,
-      motionIntensity: Number(r.motionIntensity) || 0,
-      textDensity: Number(r.textDensity) || 0,
-      speechWpm: Number(r.speechWpm) || 0,
-      audioEnergyScore: Number(r.audioEnergyScore) || 0,
+      views: optionalNumber(r.views),
+      likes: optionalNumber(r.likes),
+      comments: optionalNumber(r.comments),
+      shares: optionalNumber(r.shares),
+      threeSecondRetention: optionalNumber(r.threeSecondRetention),
+      completionRate: optionalNumber(r.completionRate),
+      motionIntensity: optionalNumber(r.motionIntensity) ?? undefined,
+      textDensity: optionalNumber(r.textDensity) ?? undefined,
+      speechWpm: optionalNumber(r.speechWpm) ?? undefined,
+      audioEnergyScore: optionalNumber(r.audioEnergyScore) ?? undefined,
       publishedAt: typeof r.publishedAt === "string" ? r.publishedAt : undefined,
     }));
 
@@ -158,8 +164,8 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
           audioEnergy: item.audioEnergyScore ?? 0,
           silenceRatio: 0,
         } : undefined,
-        historicalThreeSecondRetention: item.threeSecondRetention,
-        historicalCompletionRate: item.completionRate,
+        historicalThreeSecondRetention: item.threeSecondRetention ?? undefined,
+        historicalCompletionRate: item.completionRate ?? undefined,
       });
 
       // Observed beats: hook is evaluated from visual cues; unobserved beats are not mocked

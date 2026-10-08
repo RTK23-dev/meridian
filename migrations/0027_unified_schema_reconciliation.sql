@@ -12,8 +12,6 @@ begin
     alter table storage_objects
       add constraint storage_objects_org_brand_name_key unique (organization_id, brand_id, name);
   end if;
-exception
-  when others then null;
 end $$;
 
 -- 2. JEV Answers nullable answer and confidence

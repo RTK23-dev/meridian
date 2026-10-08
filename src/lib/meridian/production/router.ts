@@ -17,19 +17,38 @@ import { HiggsfieldProvider } from "./providers/higgsfield.ts";
 
 export class ProductionRouter {
   private providers = new Map<string, ProductionProvider>();
+  readonly runtime: "production" | "testing";
 
-  constructor() {
-    this.register(new ManualCloudProvider());
-    this.register(new HypitProvider());
-    this.register(new VeoProvider());
-    this.register(new HiggsfieldProvider());
+  constructor(options?: { runtime?: "production" | "testing"; providers?: ProductionProvider[] }) {
+    this.runtime =
+      options?.runtime ||
+      (process.env.NODE_ENV === "test" || process.env.MERIDIAN_TESTING_RUNTIME === "true"
+        ? "testing"
+        : "production");
+
+    if (options?.providers) {
+      for (const p of options.providers) {
+        this.register(p);
+      }
+    } else {
+      this.register(new ManualCloudProvider());
+      this.register(new HypitProvider());
+      this.register(new VeoProvider());
+      this.register(new HiggsfieldProvider());
+    }
   }
 
   register(provider: ProductionProvider): void {
+    if (this.runtime === "production" && (provider.id === "test:video" || provider.id === "test")) {
+      throw new Error(`Cannot register test provider '${provider.id}' in ProductionRuntime.`);
+    }
     this.providers.set(provider.id, provider);
   }
 
   get(id: string): ProductionProvider | undefined {
+    if (this.runtime === "production" && (id === "test:video" || id === "test")) {
+      return undefined;
+    }
     return this.providers.get(id);
   }
 
@@ -67,9 +86,37 @@ export class ProductionRouter {
   }
 
   /**
-   * Safe by default: routes only configured, operational providers.
+   * Explicit provider routing: verifies requested provider without silent fallback.
    */
-  async route(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): Promise<ProductionProvider> {
+  async routeExplicit(id: string, _spec: CreativeSpec): Promise<ProductionProvider> {
+    const provider = this.get(id);
+    if (!provider) {
+      throw new Error(
+        `Production provider '${id}' is not registered or cannot be resolved in ${this.runtime} runtime.`,
+      );
+    }
+    const health = await provider.health();
+    if (health.state === "NOT_CONFIGURED") {
+      throw new Error(`Provider '${id}' is NOT_CONFIGURED: ${health.detail || "Credentials missing."}`);
+    }
+    if (health.state === "UNAVAILABLE" || health.state === "AUTH_FAILED") {
+      throw new Error(`Provider '${id}' is ${health.state}: ${health.detail || "Provider offline."}`);
+    }
+    return provider;
+  }
+
+  /**
+   * Safe by default: routes only configured, operational providers.
+   * If requestedProvider is specified and not 'auto', respects the selection strictly.
+   */
+  async route(
+    spec: CreativeSpec,
+    mode: CostMode = "ZERO_SPEND",
+    requestedProvider?: string,
+  ): Promise<ProductionProvider> {
+    if (requestedProvider && requestedProvider !== "auto") {
+      return this.routeExplicit(requestedProvider, spec);
+    }
     return this.routeConfigured(spec, mode);
   }
 
@@ -82,7 +129,7 @@ export class ProductionRouter {
     );
 
     const healthy = healthChecks
-      .filter((h) => h.health.state === "HEALTHY")
+      .filter((h) => h.health.state === "HEALTHY" || h.health.state === "CONFIGURED")
       .map((h) => h.provider);
 
     const manualCloud = this.providers.get("manual_cloud");

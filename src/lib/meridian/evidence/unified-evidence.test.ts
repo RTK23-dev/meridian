@@ -38,8 +38,8 @@ test("compressEvidenceForJev creates compact summary and tags available evidence
   assert.equal(compressed.platform, "instagram");
   assert.ok(compressed.availableEvidence.includes("transcript"));
   assert.ok(compressed.availableEvidence.includes("scene_cuts"));
-  assert.match(compressed.transcriptSummary, /Try this new method/);
-  assert.match(compressed.sceneSummary, /Total scenes: 2/);
+  assert.match(compressed.transcriptSummary!, /Try this new method/);
+  assert.match(compressed.sceneSummary!, /Total scenes: 2/);
 });
 
 test("deduplication detects identical byte and perceptual hashes", () => {

@@ -6,6 +6,37 @@ import type {
   ProviderHealth,
 } from "../types.ts";
 
+export type VideoCapability = {
+  supportedDurations: number[];
+  supportedAspectRatios: string[];
+  supportedResolutions: string[];
+  imageToVideo: boolean;
+  videoToVideo: boolean;
+  referenceImages: boolean;
+  nativeAudio: boolean;
+};
+
+export const VEO_MODEL_CAPABILITIES: Record<string, VideoCapability> = {
+  "veo-3.1-generate-preview": {
+    supportedDurations: [5, 6, 7, 8, 9, 10],
+    supportedAspectRatios: ["9:16", "16:9", "1:1"],
+    supportedResolutions: ["720p", "1080p"],
+    imageToVideo: false,
+    videoToVideo: false,
+    referenceImages: false,
+    nativeAudio: false,
+  },
+  "veo-2.0-generate-001": {
+    supportedDurations: [5, 6, 7, 8, 9, 10],
+    supportedAspectRatios: ["9:16", "16:9", "1:1"],
+    supportedResolutions: ["720p"],
+    imageToVideo: false,
+    videoToVideo: false,
+    referenceImages: false,
+    nativeAudio: false,
+  },
+};
+
 export class VeoProvider implements ProductionProvider {
   readonly id = "veo";
   readonly capabilities: ProductionCapabilities = {
@@ -30,6 +61,10 @@ export class VeoProvider implements ProductionProvider {
 
   private getModel(): string {
     return process.env.MERIDIAN_VEO_MODEL?.trim() || "veo-3.1-generate-preview";
+  }
+
+  getModelCapability(model = this.getModel()): VideoCapability {
+    return VEO_MODEL_CAPABILITIES[model] || VEO_MODEL_CAPABILITIES["veo-3.1-generate-preview"];
   }
 
   async health(): Promise<ProviderHealth> {
@@ -72,38 +107,39 @@ export class VeoProvider implements ProductionProvider {
       };
     }
 
-    if (spec.durationTargetSeconds <= 0 || spec.durationTargetSeconds > 60) {
-      return {
-        jobId: "",
-        organizationId: spec.organizationId,
-        brandId: spec.brandId,
-        creativeSpec: spec,
-        providerId: this.id,
-        status: "FAILED",
-        costEstimateUsd: costEstimate,
-        error: `Unsupported duration: ${spec.durationTargetSeconds}s. Veo accepts durations between 5 and 60 seconds.`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    const supportedAspects = new Set(["9:16", "16:9", "1:1"]);
-    if (!supportedAspects.has(spec.aspectRatio)) {
-      return {
-        jobId: "",
-        organizationId: spec.organizationId,
-        brandId: spec.brandId,
-        creativeSpec: spec,
-        providerId: this.id,
-        status: "FAILED",
-        costEstimateUsd: costEstimate,
-        error: `Unsupported aspect ratio: ${spec.aspectRatio}. Veo accepts 9:16, 16:9, or 1:1.`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
     const model = this.getModel();
+    const capability = this.getModelCapability(model);
+
+    if (!capability.supportedDurations.includes(spec.durationTargetSeconds)) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "FAILED",
+        costEstimateUsd: costEstimate,
+        error: `Unsupported duration: ${spec.durationTargetSeconds}s for model '${model}'. Veo requires exact duration in [${capability.supportedDurations.join(", ")}] seconds.`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    if (!capability.supportedAspectRatios.includes(spec.aspectRatio)) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "FAILED",
+        costEstimateUsd: costEstimate,
+        error: `Unsupported aspect ratio: ${spec.aspectRatio} for model '${model}'. Supported ratios: ${capability.supportedAspectRatios.join(", ")}.`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
     const prompt = spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script;
 
     try {

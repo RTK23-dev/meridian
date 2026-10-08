@@ -337,11 +337,13 @@ function emptyOrganicTotals(): OrganicTotals {
 }
 
 function addOrganic(totals: OrganicTotals, row: OrganicObservationRow): void {
-  totals.views += row.views;
-  totals.threeSecondViews += row.threeSecondViews;
-  totals.completionSum += row.completionRate;
-  totals.completionCount += 1;
-  totals.shares += row.shares;
+  if (row.views != null) totals.views += row.views;
+  if (row.threeSecondViews != null) totals.threeSecondViews += row.threeSecondViews;
+  if (row.completionRate != null) {
+    totals.completionSum += row.completionRate;
+    totals.completionCount += 1;
+  }
+  if (row.shares != null) totals.shares += row.shares;
   totals.creativeIds.add(row.creativeId);
 }
 
@@ -531,15 +533,19 @@ export function learnPatterns(
         creativeId: row.creativeId,
         organizationId: row.organizationId,
         brandId: row.brandId,
-        views: 0,
-        threeSecondViews: 0,
-        completionRate: 0,
-        shares: 0,
+        views: null,
+        threeSecondViews: null,
+        completionRate: null,
+        shares: null,
+        likes: null,
+        comments: null,
       };
-      current.views += row.views;
-      current.threeSecondViews += row.threeSecondViews;
-      current.completionRate = row.completionRate;
-      current.shares += row.shares;
+      if (row.views != null) current.views = (current.views ?? 0) + row.views;
+      if (row.threeSecondViews != null) current.threeSecondViews = (current.threeSecondViews ?? 0) + row.threeSecondViews;
+      if (row.completionRate != null) current.completionRate = row.completionRate;
+      if (row.shares != null) current.shares = (current.shares ?? 0) + row.shares;
+      if (row.likes != null) current.likes = (current.likes ?? 0) + row.likes;
+      if (row.comments != null) current.comments = (current.comments ?? 0) + row.comments;
       organicTotalsByCreative.set(row.creativeId, current);
     }
   }

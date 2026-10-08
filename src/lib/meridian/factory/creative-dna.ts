@@ -69,6 +69,9 @@ export type CreativeStructurePacing = {
 
 export type CreativeStructure = {
   kind: CreativeStructureKind;
+  state?: "OBSERVED" | "COMPUTED" | "INFERRED" | "LEARNED" | "VALIDATED";
+  methodId?: string;
+  heuristicScore?: number;
   confidence?: number;
   durationMs?: number;
   segments: CreativeStructureSegment[];
@@ -164,6 +167,7 @@ export type CreativeDna = {
   };
   beats: { role: BeatRole; startMs: number; endMs: number; confidence: number }[];
   structure?: CreativeStructure;
+  adNarrative?: AdNarrative | null;
   format: DnaField<AdFormat>;
   angle: DnaField<string>;
   onScreenText: OnScreenTextItem[];
@@ -331,7 +335,9 @@ export function buildCanonicalCreativeStructure(input: {
 
   return {
     kind,
-    confidence: 0.8,
+    state: "INFERRED",
+    methodId: "creative_structure_classifier.v1",
+    heuristicScore: 0.8,
     durationMs: input.durationMs,
     segments: structureSegments,
     pacing: {

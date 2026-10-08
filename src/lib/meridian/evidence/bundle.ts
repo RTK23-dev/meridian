@@ -36,15 +36,15 @@ export function createEvidenceBundle(
  */
 export function compressEvidenceForJev(
   bundle: EvidenceBundle,
-  _question?: import("../jev/types.ts").JevQuestionSpec,
+  question?: import("../jev/types.ts").JevQuestionSpec,
 ): {
   description: string;
   source: string;
   platform: string;
   contentType: string;
   metrics: Record<string, number | undefined>;
-  transcriptSummary: string;
-  sceneSummary: string;
+  transcriptSummary?: string;
+  sceneSummary?: string;
   scenes?: Array<{
     index: number;
     startMs: number;
@@ -56,6 +56,8 @@ export function compressEvidenceForJev(
   }>;
   ocr?: Array<{ text: string; role?: string; startMs: number; endMs: number }>;
   comments?: Array<{ text: string; intent?: string }>;
+  comparisonContext?: unknown;
+  creatorBaseline?: unknown;
   availableEvidence: string[];
   evidenceRefs: import("../jev/types.ts").EvidenceRef[];
 } {
@@ -74,14 +76,6 @@ export function compressEvidenceForJev(
   if (bundle.performance) availableEvidence.push("performance_snapshot");
   if (bundle.comparisonContext) availableEvidence.push("comparison_context");
 
-  const transcriptSummary = bundle.transcript
-    ? bundle.transcript.map((t) => `[${(t.startMs / 1000).toFixed(1)}s-${(t.endMs / 1000).toFixed(1)}s] ${t.text}`).join(" ")
-    : "No spoken audio transcribed.";
-
-  const sceneSummary = bundle.scenes
-    ? `Total scenes: ${bundle.scenes.length}. Cut cadence: ${(bundle.scenes.reduce((acc, s) => acc + (s.endMs - s.startMs), 0) / (bundle.scenes.length * 1000 || 1)).toFixed(2)}s/cut.`
-    : "No visual scene cuts detected.";
-
   const evidenceRefs: import("../jev/types.ts").EvidenceRef[] = [];
   if (bundle.provenance.sourceUrl) {
     evidenceRefs.push({
@@ -91,27 +85,91 @@ export function compressEvidenceForJev(
     });
   }
 
-  const scenes = bundle.scenes?.slice(0, 15).map((s) => ({
-    index: s.index,
-    startMs: s.startMs,
-    endMs: s.endMs,
-    shotType: s.shotType,
-    facePresence: s.facePresence,
-    productPresence: s.productPresence,
-    keyframeRef: s.keyframeRef,
-  }));
+  const qId = question?.id || "";
 
-  const ocr = bundle.ocr?.slice(0, 15).map((o) => ({
-    text: o.text,
-    role: o.role,
-    startMs: o.startMs,
-    endMs: o.endMs,
-  }));
+  // 1. Visual Craft focus
+  const isVisualCraft = qId.includes("visual_craft") || qId.includes("visual");
+  // 2. Retention Architecture focus
+  const isRetention = qId.includes("retention") || qId.includes("pacing");
+  // 3. Share Trigger focus
+  const isShareTrigger = qId.includes("share_trigger") || qId.includes("audience");
+  // 4. Transferability focus
+  const isTransferability = qId.includes("transferability") || qId.includes("category");
 
-  const comments = bundle.comments?.slice(0, 10).map((c) => ({
-    text: c.text,
-    intent: c.intentCategory,
-  }));
+  const includeScenes = !qId || isVisualCraft || isRetention;
+  const includeOcr = !qId || isVisualCraft;
+  const includeTranscript = !qId || isRetention;
+  const includeComments = !qId || isShareTrigger;
+  const includeContext = !qId || isTransferability;
+
+  const transcriptSummary = includeTranscript && bundle.transcript
+    ? bundle.transcript.map((t) => `[${(t.startMs / 1000).toFixed(1)}s-${(t.endMs / 1000).toFixed(1)}s] ${t.text}`).join(" ")
+    : undefined;
+
+  if (includeTranscript && bundle.transcript) {
+    for (const t of bundle.transcript.slice(0, 5)) {
+      evidenceRefs.push({
+        kind: "metric",
+        path: `transcript:${t.startMs}-${t.endMs}`,
+        summary: t.text.slice(0, 100),
+      });
+    }
+  }
+
+  const sceneSummary = includeScenes && bundle.scenes
+    ? `Total scenes: ${bundle.scenes.length}. Cut cadence: ${(bundle.scenes.reduce((acc, s) => acc + (s.endMs - s.startMs), 0) / (bundle.scenes.length * 1000 || 1)).toFixed(2)}s/cut.`
+    : undefined;
+
+  const scenes = includeScenes
+    ? bundle.scenes?.slice(0, 15).map((s) => {
+        if (s.keyframeRef) {
+          evidenceRefs.push({
+            kind: "url",
+            path: s.keyframeRef,
+            summary: `Keyframe scene ${s.index}`,
+          });
+        }
+        return {
+          index: s.index,
+          startMs: s.startMs,
+          endMs: s.endMs,
+          shotType: s.shotType,
+          facePresence: s.facePresence,
+          productPresence: s.productPresence,
+          keyframeRef: s.keyframeRef,
+        };
+      })
+    : undefined;
+
+  const ocr = includeOcr
+    ? bundle.ocr?.slice(0, 15).map((o) => {
+        evidenceRefs.push({
+          kind: "metric",
+          path: `ocr:${o.startMs}-${o.endMs}`,
+          summary: o.text,
+        });
+        return {
+          text: o.text,
+          role: o.role,
+          startMs: o.startMs,
+          endMs: o.endMs,
+        };
+      })
+    : undefined;
+
+  const comments = includeComments
+    ? bundle.comments?.slice(0, 10).map((c, idx) => {
+        evidenceRefs.push({
+          kind: "metric",
+          path: `comment:${idx}`,
+          summary: c.text.slice(0, 100),
+        });
+        return {
+          text: c.text,
+          intent: c.intentCategory,
+        };
+      })
+    : undefined;
 
   return {
     description: `${bundle.content.title || "Untitled"} - ${bundle.content.caption || ""}`,
@@ -131,6 +189,8 @@ export function compressEvidenceForJev(
     scenes,
     ocr,
     comments,
+    comparisonContext: includeContext ? bundle.comparisonContext : undefined,
+    creatorBaseline: includeContext ? bundle.profile : undefined,
     availableEvidence,
     evidenceRefs,
   };

@@ -45,13 +45,13 @@ export type ContentItem = {
   ctaType?: string;
   visualStyle?: string;
   angle?: string;
-  /** Engagement */
-  views: number;
-  likes: number;
-  comments: number;
-  shares: number;
-  threeSecondRetention: number;
-  completionRate: number;
+  /** Engagement (never coerce unknown to zero) */
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  threeSecondRetention: number | null;
+  completionRate: number | null;
   /** Audio/visual scores (0-1) */
   hookVisualScore?: number;
   audioEnergyScore?: number;
@@ -102,21 +102,28 @@ export type WhitespaceOpportunity = {
 
 /**
  * Computes the engagement rate for a post: (likes + comments + shares) / views.
- * Returns 0 for zero views (never invents data).
+ * Preserves null for unknown views or unknown interactions; returns 0 for observed 0.
  */
-export function engagementRate(item: ContentItem): number {
+export function engagementRate(item: ContentItem): number | null {
+  if (item.views === null || item.views === undefined) return null;
   if (item.views <= 0) return 0;
-  return clamp01((item.likes + item.comments + item.shares) / item.views);
+  if (item.likes === null && item.comments === null && item.shares === null) return null;
+  const interactions = (item.likes ?? 0) + (item.comments ?? 0) + (item.shares ?? 0);
+  return clamp01(interactions / item.views);
 }
 
 /**
- * Computes the average engagement rate across content items.
- * Returns 0 for empty arrays.
+ * Computes the average engagement rate across content items with known metrics.
+ * Returns 0 for empty arrays or no observed views.
  */
 export function averageEngagementRate(items: readonly ContentItem[]): number {
   if (items.length === 0) return 0;
-  const total = items.reduce((sum, item) => sum + engagementRate(item), 0);
-  return total / items.length;
+  const validRates = items
+    .map(engagementRate)
+    .filter((r): r is number => r !== null);
+  if (validRates.length === 0) return 0;
+  const total = validRates.reduce((sum, r) => sum + r, 0);
+  return total / validRates.length;
 }
 
 /**
@@ -145,18 +152,22 @@ export function estimatePostingCadence(items: readonly ContentItem[]): number {
 
 /**
  * Splits content items into top-N% and bottom-N% by engagement rate.
- * Returns trait frequency maps for each decile group.
+ * Only ranks items with observed engagement metrics.
  */
 export function decileTraits(
   items: readonly ContentItem[],
   percentile: number = 10,
 ): { top: Record<string, number>; bottom: Record<string, number> } {
-  if (items.length < 4) return { top: {}, bottom: {} };
+  const itemsWithRate = items
+    .map((item) => ({ item, rate: engagementRate(item) }))
+    .filter((entry): entry is { item: ContentItem; rate: number } => entry.rate !== null);
 
-  const sorted = [...items].sort((a, b) => engagementRate(b) - engagementRate(a));
+  if (itemsWithRate.length < 4) return { top: {}, bottom: {} };
+
+  const sorted = [...itemsWithRate].sort((a, b) => b.rate - a.rate);
   const cutoff = Math.max(1, Math.floor(sorted.length * (percentile / 100)));
-  const topSlice = sorted.slice(0, cutoff);
-  const bottomSlice = sorted.slice(-cutoff);
+  const topSlice = sorted.slice(0, cutoff).map((e) => e.item);
+  const bottomSlice = sorted.slice(-cutoff).map((e) => e.item);
 
   return {
     top: countTraits(topSlice),
@@ -298,7 +309,10 @@ export function detectWhitespaceOpportunities(
     if (!item.angle) continue;
     const existing = competitorAngleStats.get(item.angle) || { count: 0, totalEngagement: 0 };
     existing.count += 1;
-    existing.totalEngagement += engagementRate(item);
+    const rate = engagementRate(item);
+    if (rate !== null) {
+      existing.totalEngagement += rate;
+    }
     competitorAngleStats.set(item.angle, existing);
   }
 
@@ -313,7 +327,10 @@ export function detectWhitespaceOpportunities(
   for (const item of ownItems) {
     if (!item.angle) continue;
     const rates = ownAngleEngagement.get(item.angle) || [];
-    rates.push(engagementRate(item));
+    const rate = engagementRate(item);
+    if (rate !== null) {
+      rates.push(rate);
+    }
     ownAngleEngagement.set(item.angle, rates);
   }
 
@@ -518,14 +535,20 @@ export type ContentAnalysis = {
   textDensity?: number;
   hookType?: string;
   ctaType?: string;
-  views?: number;
-  likes?: number;
-  comments?: number;
-  shares?: number;
-  threeSecondRetention?: number;
-  completionRate?: number;
+  views?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+  threeSecondRetention?: number | null;
+  completionRate?: number | null;
   createdAt?: string;
 };
+
+function optionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
 /**
  * Stores a multimodal content analysis record. Tenant-scoped.
@@ -548,8 +571,10 @@ export async function storeContentAnalysis(
       ${item.mediaSha256 ?? ""}, ${item.hookVisualScore ?? 0}, ${item.audioEnergyScore ?? 0}, ${item.speechWpm ?? 0},
       ${JSON.stringify(item.narrativeBeats ?? {})}, ${JSON.stringify(item.detectedObjections ?? [])}, ${item.topCommentsSummary ?? ""},
       ${item.visualStyle ?? ""}, ${item.colorPalette ?? ""}, ${item.motionIntensity ?? 0}, ${item.textDensity ?? 0},
-      ${item.hookType ?? ""}, ${item.ctaType ?? ""}, ${item.views ?? 0}, ${item.likes ?? 0},
-      ${item.comments ?? 0}, ${item.shares ?? 0}, ${item.threeSecondRetention ?? 0}, ${item.completionRate ?? 0}
+      ${item.hookType ?? ""}, ${item.ctaType ?? ""},
+      ${item.views ?? null}, ${item.likes ?? null},
+      ${item.comments ?? null}, ${item.shares ?? null},
+      ${item.threeSecondRetention ?? null}, ${item.completionRate ?? null}
     )
   `;
   return id;
@@ -586,24 +611,24 @@ export async function getContentAnalyses(
     accountId: r.account_id ?? undefined,
     postId: r.post_id || "",
     mediaSha256: r.media_sha256 || "",
-    hookVisualScore: Number(r.hook_visual_score) || 0,
-    audioEnergyScore: Number(r.audio_energy_score) || 0,
-    speechWpm: Number(r.speech_wpm) || 0,
+    hookVisualScore: optionalNumber(r.hook_visual_score) ?? 0,
+    audioEnergyScore: optionalNumber(r.audio_energy_score) ?? 0,
+    speechWpm: optionalNumber(r.speech_wpm) ?? 0,
     narrativeBeats: parseJsonRecord(r.narrative_beats) as Record<NarrativeBeat, number>,
     detectedObjections: parseJsonArray(r.detected_objections),
     topCommentsSummary: r.top_comments_summary || "",
     visualStyle: r.visual_style || "",
     colorPalette: r.color_palette || "",
-    motionIntensity: Number(r.motion_intensity) || 0,
-    textDensity: Number(r.text_density) || 0,
+    motionIntensity: optionalNumber(r.motion_intensity) ?? 0,
+    textDensity: optionalNumber(r.text_density) ?? 0,
     hookType: r.hook_type || "",
     ctaType: r.cta_type || "",
-    views: Number(r.engagement_views) || 0,
-    likes: Number(r.engagement_likes) || 0,
-    comments: Number(r.engagement_comments) || 0,
-    shares: Number(r.engagement_shares) || 0,
-    threeSecondRetention: Number(r.three_second_retention) || 0,
-    completionRate: Number(r.completion_rate) || 0,
+    views: optionalNumber(r.engagement_views),
+    likes: optionalNumber(r.engagement_likes),
+    comments: optionalNumber(r.engagement_comments),
+    shares: optionalNumber(r.engagement_shares),
+    threeSecondRetention: optionalNumber(r.three_second_retention),
+    completionRate: optionalNumber(r.completion_rate),
     createdAt: r.created_at ? String(r.created_at) : undefined,
   }));
 }

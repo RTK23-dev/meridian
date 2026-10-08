@@ -39,12 +39,12 @@ export type OrganicObservationRow = {
   creativeId: string;
   organizationId: string;
   brandId: string;
-  views: number;
-  threeSecondViews: number;
-  completionRate: number;
-  shares: number;
-  likes?: number;
-  comments?: number;
+  views: number | null;
+  threeSecondViews: number | null;
+  completionRate: number | null;
+  shares: number | null;
+  likes?: number | null;
+  comments?: number | null;
 };
 
 export type LearningState = "OBSERVED" | "INFERRED" | "VALIDATED";

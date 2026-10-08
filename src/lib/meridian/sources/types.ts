@@ -21,6 +21,12 @@ export type SourceKind =
   | "licensed"
   | "first_party_analytics";
 
+export type EvidenceAvailability =
+  | "REFERENCE_ONLY"
+  | "METADATA_AVAILABLE"
+  | "MEDIA_AVAILABLE"
+  | "FULL_EVIDENCE_AVAILABLE";
+
 export type SourceCapabilities = {
   profileDiscovery: boolean;
   contentDiscovery: boolean;
@@ -31,6 +37,8 @@ export type SourceCapabilities = {
   performance: boolean;
   webpages: boolean;
   search: boolean;
+  mediaDownload?: boolean;
+  pagination?: boolean;
 };
 
 export type SourceReference = {
@@ -41,6 +49,7 @@ export type SourceReference = {
   sourceAdapter: string;
   discoveredAt: string;
   capturedAt?: string;
+  evidenceAvailability?: EvidenceAvailability;
   metadata?: Record<string, unknown>;
 };
 
@@ -53,6 +62,7 @@ export type RawArtifact = {
   sha256?: string;
   textPayload?: string;
   jsonPayload?: Record<string, unknown>;
+  evidenceAvailability?: EvidenceAvailability;
   capturedAt: string;
 };
 

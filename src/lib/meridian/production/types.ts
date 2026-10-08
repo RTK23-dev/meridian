@@ -68,15 +68,28 @@ export type CreativeSpec = {
 
 export type ProductionJob = {
   jobId: string;
+  meridianJobId?: string;
   organizationId: string;
   brandId: string;
   creativeSpec: CreativeSpec;
   providerId: string;
+  providerJobId?: string;
+  requestId?: string;
+  operationName?: string;
+  statusUrl?: string;
+  cancelUrl?: string;
+  specHash?: string;
+  attemptCount?: number;
+  submittedAt?: string;
+  lastPolledAt?: string;
+  nextPollAt?: string;
+  errorCode?: string;
   status: ProductionJobState;
   costEstimateUsd: number;
   costActualUsd?: number;
   dropFolderUrl?: string;
   outputArtifactId?: string;
+  artifactId?: string;
   error?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;

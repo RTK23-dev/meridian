@@ -342,12 +342,18 @@ export class OpenRouterJevClient implements JevClient {
         throw new Error(`OpenRouter Decisions API returned status ${res.status}: ${await res.text()}`);
       }
 
-      const data = (await res.json()) as {
-        answers?: Record<string, any>;
-        decisions?: Record<string, any>;
-      };
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("OpenRouter Decisions API returned malformed JSON response.");
+      }
 
-      const remoteAnswers = data.answers || data.decisions || {};
+      if (!data || typeof data !== "object" || !data.answers || typeof data.answers !== "object") {
+        throw new Error("OpenRouter Decisions API response missing strict 'answers' object contract.");
+      }
+
+      const remoteAnswers = data.answers;
 
       for (const [key, qSpec] of Object.entries(questionsToDispatch)) {
         const item = remoteAnswers[key];
@@ -382,8 +388,8 @@ export class OpenRouterJevClient implements JevClient {
               status: "answered",
               noul: rawProb,
               probability: rawProb,
-              answer: rawProb >= 0.5,
-              confidence: undefined, // noul probability is returned directly; confidence is not fabricated
+              answer: typeof item.answer === "boolean" ? item.answer : rawProb >= 0.5,
+              confidence: undefined,
               evidenceRefs: inputEvidenceRefs,
               evaluatedAt: new Date().toISOString(),
             };
@@ -555,10 +561,9 @@ export class OpenRouterJevClient implements JevClient {
             ) values (
               ${globalThis.crypto.randomUUID()}, ${request.organizationId}, ${request.brandId}, ${runId},
               ${ans.questionId}, ${ans.questionId}, ${ans.questionVersion},
-              ${ans.model}, ${ans.provider},
-              ${isAnswered ? JSON.stringify(ans.answer) : null},
+              ${isAnswered && ans.answer !== undefined ? JSON.stringify(ans.answer) : null},
               ${isAnswered ? (ans.probability ?? null) : null},
-              ${isAnswered ? JSON.stringify(ans.probabilities || ans.distribution || {}) : null},
+              ${isAnswered && (ans.probabilities || ans.distribution) ? JSON.stringify(ans.probabilities || ans.distribution) : null},
               ${isAnswered ? (ans.confidence ?? null) : null},
               ${ans.status}, ${JSON.stringify(ans.evidenceRefs)}
             )

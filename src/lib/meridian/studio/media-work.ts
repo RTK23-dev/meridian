@@ -4,6 +4,8 @@ import { advanceTestVideo, startTestVideo, type VideoJob } from "../providers/me
 import { inspectVideo, videoFactsFromInspection } from "../video/inspect.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 
+import { productionRouter } from "../production/router.ts";
+
 export const STUDIO_PROMPT_VERSION = "studio-media-v1";
 export const TEST_VIDEO_MAX_POLLS = 4;
 
@@ -137,7 +139,7 @@ export async function runVideoJob(sql: Sql, job: ExecutableJob, payload: Record<
   const assetId = String(row.asset_id ?? "");
 
   if (provider === "test:video") {
-    if (!isTestingRuntime()) {
+    if (productionRouter.runtime === "production" || !isTestingRuntime()) {
       await sql`
         update media_jobs set status = 'failed', error = 'test:video is only available in TestingRuntime and is disabled in ProductionRuntime.', updated_at = now()
         where id = ${mediaJobId}
@@ -147,12 +149,15 @@ export async function runVideoJob(sql: Sql, job: ExecutableJob, payload: Record<
     }
     if (payload.allowTest !== true) throw new Error("The test video provider is not enabled.");
   } else {
-    await sql`
-      update media_jobs set status = 'failed', error = 'No video vendor adapter is connected.', updated_at = now()
-      where id = ${mediaJobId}
-    `;
-    await sql`update assets set media_status = 'failed', error = 'No video vendor adapter is connected.' where id = ${assetId}`;
-    return "NOT_CONNECTED";
+    const resolved = productionRouter.get(provider);
+    if (!resolved) {
+      await sql`
+        update media_jobs set status = 'failed', error = ${`Provider '${provider}' cannot be resolved in ${productionRouter.runtime} runtime.`}, updated_at = now()
+        where id = ${mediaJobId}
+      `;
+      await sql`update assets set media_status = 'failed', error = ${`Provider '${provider}' cannot be resolved.`} where id = ${assetId}`;
+      return "NOT_CONNECTED";
+    }
   }
 
   if (job.job_type === "video.generate") {
