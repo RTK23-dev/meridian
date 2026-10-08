@@ -28,7 +28,8 @@ test("OpenRouterJevClient abstains when required evidence is missing", async () 
   assert.ok(response.answers[question.id]);
   const answer = response.answers[question.id]!;
   assert.equal(answer.status, "abstain_insufficient_evidence");
-  assert.equal(answer.confidence, 0);
+  assert.equal(answer.confidence, undefined);
+  assert.equal((answer as any).answer, undefined);
   assert.match(answer.abstainReason!, /required evidence/i);
 });
 
@@ -60,8 +61,6 @@ test("evaluatePolicy forbids auto-approval on uncertain or missing evidence", ()
       model: "test-model",
       provider: "test-provider",
       status: "abstain_insufficient_evidence",
-      answer: false,
-      confidence: 0,
       evidenceRefs: [],
       evaluatedAt: new Date().toISOString(),
       abstainReason: "No video transcript available",
@@ -251,6 +250,6 @@ test("OpenRouterJevClient abstains without generic chat fallback when API errors
   assert.equal(callCount, 1); // No secondary fallback call to /chat/completions
   const ans = response.answers.q_fail;
   assert.ok(ans);
-  assert.equal(ans.status, "abstain_uncertain");
+  assert.equal(ans.status, "provider_error");
   assert.match(ans.abstainReason!, /Decisions API returned status 500/);
 });

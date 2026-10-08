@@ -23,9 +23,9 @@ export class YouTubeSourceAdapter implements SourceAdapter {
     profileDiscovery: true,
     contentDiscovery: true,
     metadata: true,
-    videos: true,
+    videos: false,
     images: false,
-    comments: true,
+    comments: false,
     performance: true,
     webpages: false,
     search: true,
@@ -44,9 +44,9 @@ export class YouTubeSourceAdapter implements SourceAdapter {
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 15,
-      message: "Connected to YouTube Data API v3.",
+      message: "Configured with YouTube Data API v3 key.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

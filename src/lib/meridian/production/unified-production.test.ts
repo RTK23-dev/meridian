@@ -19,7 +19,7 @@ test("productionRouter selects manual_cloud in ZERO_SPEND mode", () => {
     scenes: [],
   };
 
-  const provider = productionRouter.route(spec, "ZERO_SPEND");
+  const provider = productionRouter.routeTheoretical(spec, "ZERO_SPEND");
   assert.equal(provider.id, "manual_cloud");
   assert.equal(provider.capabilities.zeroSpend, true);
 });
@@ -200,3 +200,70 @@ test("ManualCloudProvider returns PREFLIGHT_FAILED when Google Drive is disconne
   assert.equal(job.status, "PREFLIGHT_FAILED");
   assert.equal(job.error, "GOOGLE_DRIVE_NOT_CONFIGURED");
 });
+
+test("HypitProvider returns NOT_CONFIGURED without URL and executes real HTTP when configured", async () => {
+  const origUrl = process.env.HYPIT_BASE_URL;
+  delete process.env.HYPIT_BASE_URL;
+
+  try {
+    const { HypitProvider } = await import("./providers/hypit.ts");
+    const provider = new HypitProvider();
+    const health = await provider.health();
+    assert.equal(health.state, "NOT_CONFIGURED");
+
+    const job = await provider.submitJob({
+      id: "spec-hypit",
+      organizationId: "org-1",
+      brandId: "brand-1",
+      title: "Hypit Test",
+      format: "ugc",
+      aspectRatio: "9:16",
+      durationTargetSeconds: 15,
+      hookLine: "Hook",
+      script: "Script",
+      scenes: [],
+    });
+    assert.equal(job.status, "NOT_CONFIGURED");
+    assert.equal(job.jobId, "");
+    assert.ok(job.error?.includes("not configured"));
+
+    // Configured real HTTP test
+    process.env.HYPIT_BASE_URL = "https://hypit.internal";
+    const calledEndpoints: string[] = [];
+    const fakeFetch: typeof fetch = async (url, init) => {
+      calledEndpoints.push(String(url));
+      if (String(url).endsWith("/health")) {
+        return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
+      }
+      if (String(url).endsWith("/v1/jobs") && init?.method === "POST") {
+        return new Response(JSON.stringify({ id: "hypit-job-456", status: "queued" }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+    };
+
+    const configuredProvider = new HypitProvider({ fetchImpl: fakeFetch });
+    const configuredHealth = await configuredProvider.health();
+    assert.equal(configuredHealth.state, "HEALTHY");
+    assert.ok(calledEndpoints.some((ep) => ep.includes("/health")));
+
+    const submittedJob = await configuredProvider.submitJob({
+      id: "spec-hypit-2",
+      organizationId: "org-1",
+      brandId: "brand-1",
+      title: "Hypit Submit",
+      format: "ugc",
+      aspectRatio: "9:16",
+      durationTargetSeconds: 10,
+      hookLine: "Hook",
+      script: "Script",
+      scenes: [],
+    });
+    assert.equal(submittedJob.status, "RUNNING");
+    assert.equal(submittedJob.jobId, "hypit-job-456");
+    assert.ok(calledEndpoints.some((ep) => ep.includes("/v1/jobs")));
+  } finally {
+    if (origUrl) process.env.HYPIT_BASE_URL = origUrl;
+    else delete process.env.HYPIT_BASE_URL;
+  }
+});
+

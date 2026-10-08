@@ -10,8 +10,8 @@ import { accountProviderState } from "../providers/boundaries.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
 import { createEvidenceBundle, compressEvidenceForJev } from "../evidence/bundle.ts";
 import { asEvidenceValue } from "../evidence/types.ts";
-import { buildCanonicalCreativeStructure } from "../factory/decode.ts";
-import { deriveAdNarrative } from "../factory/creative-dna.ts";
+import { buildCanonicalCreativeStructure, deriveAdNarrative } from "../factory/creative-dna.ts";
+import { runVideoJob } from "../studio/media-work.ts";
 import {
   createGoogleDriveObjectStore,
   createMemoryStorageMetadataRepository,
@@ -154,13 +154,13 @@ test("6. Regression: JEV never calls /chat/completions fallback on error", async
   });
 
   const answer = res.answers["q_test"]!;
-  assert.equal(answer.status, "abstain_uncertain");
+  assert.equal(answer.status, "provider_error");
   assert.ok(calledUrl.includes("/decisions"));
   assert.ok(!calledUrl.includes("/chat/completions"));
 });
 
 // 7. JEV receives actual relevant evidence
-test("7. Regression: compressEvidenceForJev packages actual normalized evidence, not just empty labels", () => {
+test("7. Regression: compressEvidenceForJev packages actual normalized evidence and reaches remote fetch body", async () => {
   const bundle = createEvidenceBundle({
     organizationId: "org-1",
     brandId: "brand-1",
@@ -212,6 +212,46 @@ test("7. Regression: compressEvidenceForJev packages actual normalized evidence,
   assert.ok(compressed.ocr && compressed.ocr.length === 1);
   assert.equal(compressed.ocr[0].text, "Order Now");
   assert.ok(compressed.evidenceRefs.length > 0);
+
+  // Boundary verification: verify that client.answer() transmits compressed evidence into fetch payload
+  let capturedPayload: any = null;
+  const mockFetch: typeof fetch = async (_url, init) => {
+    capturedPayload = JSON.parse(init?.body as string);
+    return new Response(
+      JSON.stringify({
+        answers: {
+          q_test: { type: "noul", noul: 0.92 },
+        },
+      }),
+      { status: 200 },
+    );
+  };
+
+  const client = new OpenRouterJevClient({
+    apiKey: "test-api-key",
+    fetchImpl: mockFetch,
+  });
+
+  const answer = await client.answer({
+    evidenceBundle: bundle,
+    question: {
+      id: "q_test",
+      version: "1.0.0",
+      type: "noul",
+      instructions: "Is this genuine product demonstration?",
+      criteria: { true: "genuine", false: "misleading" },
+      evidenceRequirements: [],
+    },
+  });
+
+  assert.equal(answer.status, "answered");
+  assert.ok(capturedPayload, "Remote JEV request body must be captured");
+  assert.equal(capturedPayload.state.platform, "instagram");
+  assert.equal(capturedPayload.state.metrics?.views, 55000);
+  assert.ok(Array.isArray(capturedPayload.state.scenes), "Scenes must reach remote JEV state");
+  assert.equal(capturedPayload.state.scenes[0]?.shotType, "close_up");
+  assert.ok(Array.isArray(capturedPayload.state.ocr), "OCR must reach remote JEV state");
+  assert.equal(capturedPayload.state.ocr[0]?.text, "Order Now");
 });
 
 // 8. Synthetic telemetry cannot enter production learning
@@ -270,7 +310,7 @@ test("10. Regression: unconfigured providers never invent job IDs", async () => 
 });
 
 // 11. Studio cannot reach test:video
-test("11. Regression: studio readiness rejects test:video as publishable live channel", () => {
+test("11. Regression: studio readiness rejects test:video and production runtime refuses execution", async () => {
   const result = assessPublishing({
     accounts: [],
     provider: "test:video",
@@ -283,6 +323,36 @@ test("11. Regression: studio readiness rejects test:video as publishable live ch
   });
   assert.equal(result.state, "HUMAN_REVIEW");
   assert.ok(result.summary.includes("explicit test publisher"));
+
+  // Boundary verification: runVideoJob in ProductionRuntime strictly throws error
+  const origEnv = process.env.NODE_ENV;
+  const origTesting = process.env.MERIDIAN_TESTING_RUNTIME;
+  try {
+    process.env.NODE_ENV = "production";
+    delete process.env.MERIDIAN_TESTING_RUNTIME;
+
+    const mockSql = ((strings: TemplateStringsArray) => {
+      const q = strings.join("");
+      if (q.includes("select * from media_jobs")) {
+        return Promise.resolve([{ id: "m-1", provider: "test:video", asset_id: "a-1" }]);
+      }
+      return Promise.resolve([]);
+    }) as any;
+
+    await assert.rejects(
+      async () => {
+        await runVideoJob(
+          mockSql,
+          { id: "j-1", organization_id: "org-1", job_type: "video.generate" } as any,
+          { mediaJobId: "m-1", allowTest: true },
+        );
+      },
+      /test:video is only available in TestingRuntime and is disabled in ProductionRuntime/,
+    );
+  } finally {
+    process.env.NODE_ENV = origEnv;
+    if (origTesting) process.env.MERIDIAN_TESTING_RUNTIME = origTesting;
+  }
 });
 
 // 12. Veo polling reads generatedSamples path
@@ -321,11 +391,12 @@ test("13. Regression: Higgsfield uses Authorization: Key and status_url contract
   let capturedAuth = "";
   const fakeFetch: typeof fetch = async (url, init) => {
     capturedAuth = (init?.headers as Record<string, string>)?.["Authorization"] || "";
-    if (String(url).includes("/generate")) {
+    if (String(url).includes("/requests") && init?.method === "POST") {
       return new Response(
         JSON.stringify({
           request_id: "req_999",
-          status_url: "https://api.higgsfield.ai/v1/status/req_999",
+          status_url: "https://api.higgsfield.ai/v1/requests/req_999/status",
+          cancel_url: "https://api.higgsfield.ai/v1/requests/req_999/cancel",
           status: "queued",
         }),
         { status: 200 },
@@ -359,8 +430,10 @@ test("13. Regression: Higgsfield uses Authorization: Key and status_url contract
     });
     assert.equal(job.jobId, "req_999");
     assert.ok(capturedAuth.startsWith("Key "));
+    assert.equal(job.metadata?.statusUrl, "https://api.higgsfield.ai/v1/requests/req_999/status");
+    assert.equal(job.metadata?.cancelUrl, "https://api.higgsfield.ai/v1/requests/req_999/cancel");
 
-    const status = await hf.checkJobStatus(job.jobId);
+    const status = await hf.checkJobStatus(job.jobId, job.metadata);
     assert.equal(status.status, "RENDERED");
     assert.equal(status.outputArtifactId, "https://cdn.higgsfield.ai/video_999.mp4");
   } finally {
@@ -429,12 +502,31 @@ test("15. Regression: Drive metadata is persisted to repository after upload", a
 });
 
 // 16. Unknown metrics are not stored as zero
-test("16. Regression: unknown metrics stay null, not stored as zero", () => {
+test("16. Regression: unknown metrics stay null, not stored as zero in extractOrganicMetrics and recordTelemetry", async () => {
   const metrics = extractOrganicMetrics({});
   assert.equal(metrics.views, null);
   assert.notEqual(metrics.views, 0);
   assert.equal(metrics.likes, null);
   assert.notEqual(metrics.likes, 0);
+
+  // Boundary verification: recordTelemetry preserves null values without coercing to zero
+  const mockSql = ((_strings: TemplateStringsArray, ..._values: any[]) => {
+    return Promise.resolve([]);
+  }) as any;
+
+  const recorded = await recordTelemetry(mockSql, {
+    organizationId: "org-1",
+    brandId: "brand-1",
+    creativeId: "c-1",
+    platform: "tiktok",
+    // views, impressions, reach omitted
+  });
+  assert.equal(recorded.views, null);
+  assert.notEqual(recorded.views, 0);
+  assert.equal(recorded.impressions, null);
+  assert.notEqual(recorded.impressions, 0);
+  assert.equal(recorded.completionRate, null);
+  assert.notEqual(recorded.completionRate, 0);
 });
 
 // 17. CreativeStructure can represent a POV

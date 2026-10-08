@@ -152,11 +152,14 @@ export function createSqlStorageMetadataRepository(sql: any): StorageMetadataRep
           ${record.key}, ${record.mimeType}, ${record.sizeBytes}, ${record.sha256}, ${record.lifecycle ?? 'stored'},
           ${JSON.stringify({ key: record.key })}, now()
         )
-        on conflict (provider, provider_file_id) do update set
+        on conflict (organization_id, brand_id, name) do update set
+          provider = excluded.provider,
+          provider_file_id = excluded.provider_file_id,
           mime_type = excluded.mime_type,
           size_bytes = excluded.size_bytes,
           sha256 = excluded.sha256,
           lifecycle = excluded.lifecycle,
+          metadata = excluded.metadata,
           updated_at = now()
       `;
     },
@@ -166,7 +169,7 @@ export function createSqlStorageMetadataRepository(sql: any): StorageMetadataRep
         from storage_objects
         where organization_id = ${orgId}
           and brand_id = ${brandId}
-          and (name = ${key} or id = ${`${orgId}:${brandId}:${key}`} or metadata->>'key' = ${key})
+          and name = ${key}
         limit 1
       `;
       if (!rows.length || !rows[0]) return null;

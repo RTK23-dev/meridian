@@ -26,7 +26,7 @@ export type ProductionJobState =
 
 export type ProviderHealth = {
   id: string;
-  state: "HEALTHY" | "NOT_CONFIGURED" | "UNAVAILABLE";
+  state: "CONFIGURED" | "HEALTHY" | "DEGRADED" | "AUTH_FAILED" | "UNAVAILABLE" | "RATE_LIMITED" | "NOT_CONFIGURED";
   capabilities: string[];
   detail: string;
   checkedAt: string;
@@ -78,6 +78,7 @@ export type ProductionJob = {
   dropFolderUrl?: string;
   outputArtifactId?: string;
   error?: string;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 };
@@ -88,6 +89,6 @@ export interface ProductionProvider {
 
   health(): Promise<ProviderHealth>;
   submitJob(spec: CreativeSpec): Promise<ProductionJob>;
-  checkJobStatus(jobId: string): Promise<ProductionJob>;
+  checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob>;
   cancelJob?(jobId: string): Promise<void>;
 }

@@ -18,7 +18,8 @@ create table if not exists storage_objects (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(provider, provider_file_id)
+  unique(provider, provider_file_id),
+  unique(organization_id, brand_id, name)
 );
 
 create index if not exists idx_storage_objects_tenant
@@ -95,12 +96,12 @@ create table if not exists creators (
   category text not null default 'general',
   niche text not null default 'general',
   bio text not null default '',
-  followers_count bigint not null default 0,
-  following_count bigint not null default 0,
-  posts_count bigint not null default 0,
-  median_views bigint not null default 0,
-  average_views bigint not null default 0,
-  outlier_rate double precision not null default 0.0,
+  followers_count bigint,
+  following_count bigint,
+  posts_count bigint,
+  median_views bigint,
+  average_views bigint,
+  outlier_rate double precision,
   dna jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -110,14 +111,14 @@ create table if not exists creators (
 create table if not exists creator_snapshots (
   id text primary key,
   creator_id text not null references creators(id) on delete cascade,
-  followers_count bigint not null default 0,
-  following_count bigint not null default 0,
-  posts_count bigint not null default 0,
-  median_views bigint not null default 0,
-  average_views bigint not null default 0,
-  median_likes bigint not null default 0,
-  median_comments bigint not null default 0,
-  posting_frequency_per_week double precision not null default 0.0,
+  followers_count bigint,
+  following_count bigint,
+  posts_count bigint,
+  median_views bigint,
+  average_views bigint,
+  median_likes bigint,
+  median_comments bigint,
+  posting_frequency_per_week double precision,
   captured_at timestamptz not null default now()
 );
 
@@ -179,11 +180,11 @@ create table if not exists jev_answers (
   question_version text not null,
   model text not null,
   provider text not null,
-  answer jsonb not null,
+  answer jsonb,
   probability double precision,
   distribution jsonb,
-  confidence double precision not null default 0.0,
-  status text not null default 'answered', -- 'answered', 'abstain_insufficient_evidence', 'abstain_uncertain'
+  confidence double precision,
+  status text not null default 'answered', -- 'answered', 'abstain_insufficient_evidence', 'abstain_uncertain', 'provider_error'
   evidence jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
@@ -291,18 +292,22 @@ create table if not exists production_artifacts (
 -- 8. Model Parameters, Calibration & Guardrails
 create table if not exists model_parameters (
   id text primary key,
-  model_id text not null,
-  parameter_name text not null,
+  organization_id text not null references organizations(id) on delete cascade,
+  brand_id text not null references brands(id) on delete cascade,
   population text not null default 'global',
-  state text not null default 'seed_prior', -- 'seed_prior', 'candidate_fit', 'fitted', 'validated'
+  parameter_name text not null,
+  version text not null default 'v1-seed',
+  state text not null default 'seed_prior', -- 'seed_prior', 'candidate_fit', 'fitted', 'validated', 'retired'
   prior_value double precision not null,
   posterior_value double precision,
   sample_size integer not null default 0,
-  fit_date timestamptz,
   calibration_metrics jsonb not null default '{}'::jsonb,
   provenance_filter text not null default 'real_only',
+  notes text,
+  fit_date timestamptz,
   created_at timestamptz not null default now(),
-  unique(model_id, parameter_name, population)
+  updated_at timestamptz not null default now(),
+  unique(organization_id, brand_id, population, parameter_name, version)
 );
 
 create table if not exists calibration_runs (

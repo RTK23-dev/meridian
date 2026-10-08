@@ -18,10 +18,22 @@ export class HypitProvider implements ProductionProvider {
     costPerSecondEstimateUsd: 0.05,
   };
 
-  private jobs = new Map<string, ProductionJob>();
+  private fetchImpl: typeof fetch;
+
+  constructor(options?: { fetchImpl?: typeof fetch }) {
+    this.fetchImpl = options?.fetchImpl || globalThis.fetch;
+  }
+
+  private getBaseUrl(): string | undefined {
+    return process.env.HYPIT_BASE_URL?.trim();
+  }
+
+  private getToken(): string | undefined {
+    return process.env.HYPIT_API_TOKEN?.trim() || process.env.HYPIT_API_KEY?.trim();
+  }
 
   async health(): Promise<ProviderHealth> {
-    const baseUrl = process.env.HYPIT_BASE_URL?.trim();
+    const baseUrl = this.getBaseUrl();
     if (!baseUrl) {
       return {
         id: this.id,
@@ -32,17 +44,39 @@ export class HypitProvider implements ProductionProvider {
       };
     }
 
-    return {
-      id: this.id,
-      state: "HEALTHY",
-      capabilities: ["timelineEditing", "voiceoverGeneration"],
-      detail: `Hypit runtime configured at ${baseUrl}.`,
-      checkedAt: new Date().toISOString(),
-    };
+    try {
+      const res = await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/health`, {
+        headers: this.getToken() ? { Authorization: `Bearer ${this.getToken()}` } : {},
+      });
+      if (res.ok) {
+        return {
+          id: this.id,
+          state: "HEALTHY",
+          capabilities: ["timelineEditing", "voiceoverGeneration"],
+          detail: `Hypit runtime reachable at ${baseUrl}.`,
+          checkedAt: new Date().toISOString(),
+        };
+      }
+      return {
+        id: this.id,
+        state: "DEGRADED",
+        capabilities: [],
+        detail: `Hypit runtime returned status ${res.status}.`,
+        checkedAt: new Date().toISOString(),
+      };
+    } catch {
+      return {
+        id: this.id,
+        state: "UNAVAILABLE",
+        capabilities: [],
+        detail: `Hypit runtime unreachable at ${baseUrl}.`,
+        checkedAt: new Date().toISOString(),
+      };
+    }
   }
 
   async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
-    const baseUrl = process.env.HYPIT_BASE_URL?.trim();
+    const baseUrl = this.getBaseUrl();
     const costEstimate = spec.durationTargetSeconds * this.capabilities.costPerSecondEstimateUsd;
 
     if (!baseUrl) {
@@ -60,27 +94,131 @@ export class HypitProvider implements ProductionProvider {
       };
     }
 
-    const jobId = `prod_hypit_${globalThis.crypto.randomUUID()}`;
+    try {
+      const res = await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/v1/jobs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(this.getToken() ? { Authorization: `Bearer ${this.getToken()}` } : {}),
+        },
+        body: JSON.stringify({
+          meridianJobId: `prod_hypit_${globalThis.crypto.randomUUID()}`,
+          creativeSpec: spec,
+          targetDurationSeconds: spec.durationTargetSeconds,
+          aspectRatio: spec.aspectRatio,
+        }),
+      });
 
-    const job: ProductionJob = {
-      jobId,
-      organizationId: spec.organizationId,
-      brandId: spec.brandId,
-      creativeSpec: spec,
-      providerId: this.id,
-      status: "QUEUED",
-      costEstimateUsd: costEstimate,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      if (!res.ok) {
+        return {
+          jobId: "",
+          organizationId: spec.organizationId,
+          brandId: spec.brandId,
+          creativeSpec: spec,
+          providerId: this.id,
+          status: "FAILED",
+          costEstimateUsd: costEstimate,
+          error: `Hypit rejected job submission (${res.status}): ${await res.text()}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
 
-    this.jobs.set(jobId, job);
-    return job;
+      const data = (await res.json()) as { id?: string; jobId?: string; status?: string };
+      const externalId = data.id || data.jobId;
+      if (!externalId) {
+        return {
+          jobId: "",
+          organizationId: spec.organizationId,
+          brandId: spec.brandId,
+          creativeSpec: spec,
+          providerId: this.id,
+          status: "FAILED",
+          costEstimateUsd: costEstimate,
+          error: "Hypit response missing job ID.",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      return {
+        jobId: externalId,
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: data.status === "completed" || data.status === "succeeded" ? "RENDERED" : "RUNNING",
+        costEstimateUsd: costEstimate,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "FAILED",
+        costEstimateUsd: costEstimate,
+        error: `Failed to connect to Hypit process: ${err instanceof Error ? err.message : String(err)}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
   }
 
   async checkJobStatus(jobId: string): Promise<ProductionJob> {
-    const job = this.jobs.get(jobId);
-    if (!job) throw new Error(`Job not found: ${jobId}`);
-    return job;
+    const baseUrl = this.getBaseUrl();
+    if (!baseUrl) {
+      throw new Error("Cannot check Hypit job status: HYPIT_BASE_URL is not configured.");
+    }
+
+    const res = await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/v1/jobs/${encodeURIComponent(jobId)}`, {
+      headers: this.getToken() ? { Authorization: `Bearer ${this.getToken()}` } : {},
+    });
+
+    if (!res.ok) {
+      throw new Error(`Hypit status poll failed (${res.status}): ${await res.text()}`);
+    }
+
+    const data = (await res.json()) as {
+      id?: string;
+      status?: string;
+      error?: string;
+      outputArtifactId?: string;
+    };
+
+    let status: ProductionJob["status"] = "RUNNING";
+    if (data.status === "succeeded" || data.status === "completed") status = "RENDERED";
+    else if (data.status === "failed") status = "FAILED";
+    else if (data.status === "queued") status = "QUEUED";
+
+    return {
+      jobId,
+      organizationId: "",
+      brandId: "",
+      creativeSpec: {} as CreativeSpec,
+      providerId: this.id,
+      status,
+      costEstimateUsd: 0,
+      outputArtifactId: data.outputArtifactId,
+      error: data.error,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  async cancelJob(jobId: string): Promise<void> {
+    const baseUrl = this.getBaseUrl();
+    if (!baseUrl) return;
+    try {
+      await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/v1/jobs/${encodeURIComponent(jobId)}/cancel`, {
+        method: "POST",
+        headers: this.getToken() ? { Authorization: `Bearer ${this.getToken()}` } : {},
+      });
+    } catch {
+      // Best-effort cancellation
+    }
   }
 }

@@ -22,6 +22,7 @@ import type {
   JevQuestionSpec,
   EvidenceRef,
 } from "./types.ts";
+import { compressEvidenceForJev } from "../evidence/bundle.ts";
 
 export type JevClientConfig = {
   provider?: string;
@@ -108,17 +109,32 @@ function minimizeJevState(state: Record<string, unknown>): Record<string, unknow
   const clean: Record<string, unknown> = {};
 
   if (state.description) clean.description = state.description;
-  if (state.content) clean.content = state.content;
+  if (state.bundleId) clean.bundleId = state.bundleId;
+  if (state.source) clean.source = state.source;
+  if (state.platform) clean.platform = state.platform;
+  if (state.contentType) clean.contentType = state.contentType;
+  if (state.metrics) clean.metrics = state.metrics;
   if (state.performance) clean.performance = state.performance;
+  if (state.transcriptSummary) clean.transcriptSummary = state.transcriptSummary;
+  if (state.sceneSummary) clean.sceneSummary = state.sceneSummary;
+  if (state.scenes) clean.scenes = state.scenes;
+  if (state.ocr) clean.ocr = state.ocr;
+  if (state.comments) clean.comments = state.comments;
+  if (state.transcript) clean.transcript = state.transcript;
+  if (state.profile) clean.profile = state.profile;
+  if (state.derivedMetrics) clean.derivedMetrics = state.derivedMetrics;
+  if (state.comparisonContext) clean.comparisonContext = state.comparisonContext;
+  if (state.content) clean.content = state.content;
   if (state.controls) clean.controls = state.controls;
   if (state.records) clean.records = state.records;
   if (state.availableEvidence) clean.availableEvidence = state.availableEvidence;
   if (state.evidenceRefs) clean.evidenceRefs = state.evidenceRefs;
 
-  // If none of the structured fields matched, pass through non-sensitive fields
-  if (Object.keys(clean).length === 0) {
-    for (const [k, v] of Object.entries(state)) {
-      if (!k.toLowerCase().includes("secret") && !k.toLowerCase().includes("token") && !k.toLowerCase().includes("password")) {
+  // Pass through any other structured domain fields that are non-sensitive
+  for (const [k, v] of Object.entries(state)) {
+    if (clean[k] === undefined && v !== undefined && v !== null) {
+      const lower = k.toLowerCase();
+      if (!lower.includes("secret") && !lower.includes("token") && !lower.includes("password") && !lower.includes("apikey")) {
         clean[k] = v;
       }
     }
@@ -240,9 +256,6 @@ export class OpenRouterJevClient implements JevClient {
           model,
           provider,
           status: "abstain_insufficient_evidence",
-          answer: false,
-          probability: 0.0,
-          confidence: 0.0,
           evidenceRefs: inputEvidenceRefs,
           abstainReason: `Missing required evidence: ${sufficiency.missing.join(", ")}`,
           evaluatedAt: new Date().toISOString(),
@@ -276,10 +289,7 @@ export class OpenRouterJevClient implements JevClient {
           type: qSpec.type,
           model,
           provider,
-          status: "abstain_uncertain",
-          answer: false,
-          probability: 0.0,
-          confidence: 0.0,
+          status: "not_configured",
           evidenceRefs: inputEvidenceRefs,
           abstainReason: "OPENROUTER_API_KEY is not configured for native TypeSafe JEV.",
           evaluatedAt: new Date().toISOString(),
@@ -502,9 +512,7 @@ export class OpenRouterJevClient implements JevClient {
           type: qSpec.type,
           model,
           provider,
-          status: "abstain_uncertain",
-          answer: false,
-          confidence: 0.0,
+          status: "provider_error",
           evidenceRefs: inputEvidenceRefs,
           abstainReason: errMsg,
           evaluatedAt: new Date().toISOString(),
@@ -539,6 +547,7 @@ export class OpenRouterJevClient implements JevClient {
         `;
 
         for (const ans of Object.values(answers)) {
+          const isAnswered = ans.status === "answered";
           await this.sql`
             insert into jev_answers (
               id, organization_id, brand_id, run_id, record_id, question_id, question_version,
@@ -546,9 +555,12 @@ export class OpenRouterJevClient implements JevClient {
             ) values (
               ${globalThis.crypto.randomUUID()}, ${request.organizationId}, ${request.brandId}, ${runId},
               ${ans.questionId}, ${ans.questionId}, ${ans.questionVersion},
-              ${ans.model}, ${ans.provider}, ${JSON.stringify(ans.answer)},
-              ${ans.probability ?? null}, ${JSON.stringify(ans.probabilities || ans.distribution || {})},
-              ${ans.confidence ?? 0.0}, ${ans.status}, ${JSON.stringify(ans.evidenceRefs)}
+              ${ans.model}, ${ans.provider},
+              ${isAnswered ? JSON.stringify(ans.answer) : null},
+              ${isAnswered ? (ans.probability ?? null) : null},
+              ${isAnswered ? JSON.stringify(ans.probabilities || ans.distribution || {}) : null},
+              ${isAnswered ? (ans.confidence ?? null) : null},
+              ${ans.status}, ${JSON.stringify(ans.evidenceRefs)}
             )
           `;
         }
@@ -569,17 +581,42 @@ export class OpenRouterJevClient implements JevClient {
     const orgId = input.organizationId || (input.evidenceBundle.organizationId as string) || "system";
     const brandId = input.brandId || (input.evidenceBundle.brandId as string) || "system";
 
+    const compressed = (input.evidenceBundle as any).provenance || (input.evidenceBundle as any).source
+      ? compressEvidenceForJev(input.evidenceBundle as any, input.question)
+      : null;
+
+    const statePayload: { description: string; [key: string]: unknown } = {
+      description: (compressed?.description || (input.evidenceBundle as any).description || `Evidence bundle evaluation for bundle ${input.evidenceBundle.id}`) as string,
+      bundleId: input.evidenceBundle.id,
+      availableEvidence: compressed?.availableEvidence || input.evidenceBundle.availableEvidence || [],
+      evidenceRefs: [
+        ...(compressed?.evidenceRefs || []),
+        { field: "metadata", artifactId: input.evidenceBundle.id },
+      ],
+      content: (input.evidenceBundle as any).content,
+      performance: (input.evidenceBundle as any).performance,
+      ...(compressed ? {
+        source: compressed.source,
+        platform: compressed.platform,
+        contentType: compressed.contentType,
+        metrics: compressed.metrics,
+        transcriptSummary: compressed.transcriptSummary,
+        sceneSummary: compressed.sceneSummary,
+        scenes: compressed.scenes,
+        ocr: compressed.ocr,
+        comments: compressed.comments,
+      } : {}),
+      ...((input.evidenceBundle as any).transcript ? { transcript: (input.evidenceBundle as any).transcript } : {}),
+      ...((input.evidenceBundle as any).scenes ? { scenes: (input.evidenceBundle as any).scenes } : {}),
+      ...((input.evidenceBundle as any).ocr ? { ocr: (input.evidenceBundle as any).ocr } : {}),
+      ...((input.evidenceBundle as any).comments ? { comments: (input.evidenceBundle as any).comments } : {}),
+      ...((input.evidenceBundle as any).profile ? { profile: (input.evidenceBundle as any).profile } : {}),
+    };
+
     const resp = await this.decide({
       organizationId: orgId,
       brandId: brandId,
-      state: {
-        description: `Evidence bundle evaluation for bundle ${input.evidenceBundle.id}`,
-        bundleId: input.evidenceBundle.id,
-        availableEvidence: input.evidenceBundle.availableEvidence || [],
-        content: input.evidenceBundle.content,
-        performance: input.evidenceBundle.performance,
-        evidenceRefs: [{ field: "metadata", artifactId: input.evidenceBundle.id }],
-      },
+      state: statePayload,
       questions: {
         [input.question.id]: input.question,
       },
@@ -593,8 +630,6 @@ export class OpenRouterJevClient implements JevClient {
         model: resp.model,
         provider: resp.provider,
         status: "abstain_uncertain",
-        answer: false,
-        confidence: 0,
         evidenceRefs: [],
         evaluatedAt: new Date().toISOString(),
         abstainReason: "No answer returned by engine",

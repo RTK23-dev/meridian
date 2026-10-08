@@ -136,10 +136,10 @@ export function evaluatePolicy(
     collectedEvidence.push(...item.evidenceRefs);
     const qSpec = getQuestionById(item.questionId);
 
-    // 1. Check for explicit abstention or insufficient evidence
-    if (item.status === "abstain_insufficient_evidence" || item.status === "abstain_uncertain") {
+    // 1. Check for explicit abstention or insufficient evidence or provider error
+    if (item.status !== "answered") {
       uncertainCount++;
-      reasons.push(`${item.questionId}: ${item.abstainReason || "insufficient evidence"}`);
+      reasons.push(`${item.questionId}: ${item.abstainReason || item.status}`);
       continue;
     }
 

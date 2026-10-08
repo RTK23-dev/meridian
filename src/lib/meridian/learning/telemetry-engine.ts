@@ -72,19 +72,19 @@ export type TelemetryRecord = {
   hookType: string;
   angle: string;
   format: string;
-  views: number;
-  impressions: number;
-  reach: number;
-  clicks: number;
-  engagements: number;
-  shares: number;
-  saves: number;
-  conversions: number;
-  spendCents: number;
-  revenueCents: number;
-  watchTimeSeconds: number;
-  hookRetention3s: number;
-  completionRate: number;
+  views: number | null;
+  impressions: number | null;
+  reach: number | null;
+  clicks: number | null;
+  engagements: number | null;
+  shares: number | null;
+  saves: number | null;
+  conversions: number | null;
+  spendCents: number | null;
+  revenueCents: number | null;
+  watchTimeSeconds: number | null;
+  hookRetention3s: number | null;
+  completionRate: number | null;
   decayWeight: number;
   recordedAt: string;
   createdAt: string;
@@ -161,19 +161,19 @@ export async function recordTelemetry(
   const recordedAtMs = recordedAtDate.getTime();
   const decayWeight = calculateDecayWeight(recordedAtMs, Date.now(), halfLifeDays);
 
-  const safeViews = Math.max(0, Math.floor(input.views || 0));
-  const safeImpressions = Math.max(0, Math.floor(input.impressions || 0));
-  const safeReach = Math.max(0, Math.floor(input.reach || 0));
-  const safeClicks = Math.max(0, Math.floor(input.clicks || 0));
-  const safeEngagements = Math.max(0, Math.floor(input.engagements || 0));
-  const safeShares = Math.max(0, Math.floor(input.shares || 0));
-  const safeSaves = Math.max(0, Math.floor(input.saves || 0));
-  const safeConversions = Math.max(0, Math.floor(input.conversions || 0));
-  const safeSpendCents = Math.max(0, Math.floor(input.spendCents || 0));
-  const safeRevenueCents = Math.max(0, Math.floor(input.revenueCents || 0));
-  const safeWatchTime = Math.max(0, Math.floor(input.watchTimeSeconds || 0));
-  const safeHookRetention = Math.min(1, Math.max(0, Number(input.hookRetention3s) || 0));
-  const safeCompletionRate = Math.min(1, Math.max(0, Number(input.completionRate) || 0));
+  const safeViews = input.views != null ? Math.max(0, Math.floor(input.views)) : null;
+  const safeImpressions = input.impressions != null ? Math.max(0, Math.floor(input.impressions)) : null;
+  const safeReach = input.reach != null ? Math.max(0, Math.floor(input.reach)) : null;
+  const safeClicks = input.clicks != null ? Math.max(0, Math.floor(input.clicks)) : null;
+  const safeEngagements = input.engagements != null ? Math.max(0, Math.floor(input.engagements)) : null;
+  const safeShares = input.shares != null ? Math.max(0, Math.floor(input.shares)) : null;
+  const safeSaves = input.saves != null ? Math.max(0, Math.floor(input.saves)) : null;
+  const safeConversions = input.conversions != null ? Math.max(0, Math.floor(input.conversions)) : null;
+  const safeSpendCents = input.spendCents != null ? Math.max(0, Math.floor(input.spendCents)) : null;
+  const safeRevenueCents = input.revenueCents != null ? Math.max(0, Math.floor(input.revenueCents)) : null;
+  const safeWatchTime = input.watchTimeSeconds != null ? Math.max(0, Math.floor(input.watchTimeSeconds)) : null;
+  const safeHookRetention = input.hookRetention3s != null ? Math.min(1, Math.max(0, Number(input.hookRetention3s))) : null;
+  const safeCompletionRate = input.completionRate != null ? Math.min(1, Math.max(0, Number(input.completionRate))) : null;
 
   const metadataJson = JSON.stringify(input.metadata || {});
 
@@ -320,19 +320,19 @@ function mapRowToTelemetryRecord(r: any): TelemetryRecord {
     hookType: String(r.hook_type || ""),
     angle: String(r.angle || ""),
     format: String(r.format || ""),
-    views: Number(r.views) || 0,
-    impressions: Number(r.impressions) || 0,
-    reach: Number(r.reach) || 0,
-    clicks: Number(r.clicks) || 0,
-    engagements: Number(r.engagements) || 0,
-    shares: Number(r.shares) || 0,
-    saves: Number(r.saves) || 0,
-    conversions: Number(r.conversions) || 0,
-    spendCents: Number(r.spend_cents) || 0,
-    revenueCents: Number(r.revenue_cents) || 0,
-    watchTimeSeconds: Number(r.watch_time_seconds) || 0,
-    hookRetention3s: Number(r.hook_retention_3s) || 0,
-    completionRate: Number(r.completion_rate) || 0,
+    views: r.views != null ? Number(r.views) : null,
+    impressions: r.impressions != null ? Number(r.impressions) : null,
+    reach: r.reach != null ? Number(r.reach) : null,
+    clicks: r.clicks != null ? Number(r.clicks) : null,
+    engagements: r.engagements != null ? Number(r.engagements) : null,
+    shares: r.shares != null ? Number(r.shares) : null,
+    saves: r.saves != null ? Number(r.saves) : null,
+    conversions: r.conversions != null ? Number(r.conversions) : null,
+    spendCents: r.spend_cents != null ? Number(r.spend_cents) : null,
+    revenueCents: r.revenue_cents != null ? Number(r.revenue_cents) : null,
+    watchTimeSeconds: r.watch_time_seconds != null ? Number(r.watch_time_seconds) : null,
+    hookRetention3s: r.hook_retention_3s != null ? Number(r.hook_retention_3s) : null,
+    completionRate: r.completion_rate != null ? Number(r.completion_rate) : null,
     decayWeight: Number(r.decay_weight) || 1.0,
     recordedAt: String(r.recorded_at),
     createdAt: String(r.created_at),
@@ -358,7 +358,7 @@ export function calculateTelemetryFeaturePosteriors(
   let totalBaselineTrials = 0;
   let totalBaselineSuccesses = 0;
   for (const r of records) {
-    if (r.views <= 0) continue;
+    if (r.views == null || r.views <= 0 || r.hookRetention3s == null) continue;
     const successes = Math.round(r.views * r.hookRetention3s);
     totalBaselineTrials += r.views;
     totalBaselineSuccesses += successes;
@@ -374,7 +374,7 @@ export function calculateTelemetryFeaturePosteriors(
 
   for (const r of records) {
     const val = r[featureKey];
-    if (!val || r.views <= 0) continue;
+    if (!val || r.views == null || r.views <= 0 || r.hookRetention3s == null) continue;
 
     if (!groups.has(val)) {
       groups.set(val, []);
@@ -448,18 +448,18 @@ export function summarizeTelemetry(records: TelemetryRecord[]): TelemetrySummary
   const byPlatform: Record<string, { views: number; engagements: number; shares: number }> = {};
 
   for (const r of records) {
-    totalViews += r.views;
-    totalImpressions += r.impressions;
-    totalClicks += r.clicks;
-    totalConversions += r.conversions;
-    totalSpendCents += r.spendCents;
-    totalRevenueCents += r.revenueCents;
+    if (r.views != null) totalViews += r.views;
+    if (r.impressions != null) totalImpressions += r.impressions;
+    if (r.clicks != null) totalClicks += r.clicks;
+    if (r.conversions != null) totalConversions += r.conversions;
+    if (r.spendCents != null) totalSpendCents += r.spendCents;
+    if (r.revenueCents != null) totalRevenueCents += r.revenueCents;
 
-    if (r.hookRetention3s > 0) {
+    if (r.hookRetention3s != null && r.hookRetention3s > 0) {
       sumHookRetention += r.hookRetention3s;
       retentionSamples++;
     }
-    if (r.completionRate > 0) {
+    if (r.completionRate != null && r.completionRate > 0) {
       sumCompletion += r.completionRate;
       completionSamples++;
     }
@@ -467,9 +467,9 @@ export function summarizeTelemetry(records: TelemetryRecord[]): TelemetrySummary
     if (!byPlatform[r.platform]) {
       byPlatform[r.platform] = { views: 0, engagements: 0, shares: 0 };
     }
-    byPlatform[r.platform].views += r.views;
-    byPlatform[r.platform].engagements += r.engagements;
-    byPlatform[r.platform].shares += r.shares;
+    if (r.views != null) byPlatform[r.platform].views += r.views;
+    if (r.engagements != null) byPlatform[r.platform].engagements += r.engagements;
+    if (r.shares != null) byPlatform[r.platform].shares += r.shares;
   }
 
   const avgHookRetention3s = retentionSamples > 0 ? sumHookRetention / retentionSamples : 0;
@@ -544,15 +544,15 @@ export async function syncTelemetryToLearning(
           spend_cents, revenue_cents, observed_on, source
         ) values (
           ${randomUUID()}, ${organizationId}, ${brandId}, ${r.creativeId},
-          ${Math.max(r.impressions, r.views)}, ${r.clicks}, ${r.conversions},
-          ${r.spendCents}, ${r.revenueCents > 0 ? r.revenueCents : null},
+          ${Math.max(r.impressions ?? 0, r.views ?? 0)}, ${r.clicks ?? 0}, ${r.conversions ?? 0},
+          ${r.spendCents ?? 0}, ${(r.revenueCents && r.revenueCents > 0) ? r.revenueCents : null},
           ${r.recordedAt.slice(0, 10)}, ${r.platform}
         )
       `;
     }
 
     // Bridge organic records directly into organic_observations for JEV retention & shares learning
-    if (r.sourceType === "organic" || (r.views > 0 && r.spendCents === 0)) {
+    if (r.sourceType === "organic" || ((r.views ?? 0) > 0 && (r.spendCents ?? 0) === 0)) {
       try {
         const existingOrg = await sql`
           select id from organic_observations
@@ -576,8 +576,8 @@ export async function syncTelemetryToLearning(
             // Optional FK
           }
 
-          const threeSecViews = r.hookRetention3s !== undefined ? Math.round(r.views * r.hookRetention3s) : null;
-          const compRate = r.completionRate !== undefined ? r.completionRate : null;
+          const threeSecViews = (r.views != null && r.hookRetention3s != null) ? Math.round(r.views * r.hookRetention3s) : null;
+          const compRate = r.completionRate != null ? r.completionRate : null;
           await sql`
             insert into organic_observations (
               id, organization_id, brand_id, organic_post_id, creative_id, platform,
@@ -615,7 +615,7 @@ export async function syncTelemetryToLearning(
   // 4. Update JEV account profiles for this brand
   const topHooksJson = JSON.stringify(topHooks.length > 0 ? topHooks : ["contrarian", "question", "statistic"]);
   const avgEng = records.length > 0
-    ? records.reduce((acc, r) => acc + (r.views > 0 ? r.engagements / r.views : 0), 0) / records.length
+    ? records.reduce((acc, r) => acc + (r.views != null && r.views > 0 && r.engagements != null ? r.engagements / r.views : 0), 0) / records.length
     : 0.05;
 
   try {

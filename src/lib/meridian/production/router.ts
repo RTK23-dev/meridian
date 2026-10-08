@@ -37,34 +37,40 @@ export class ProductionRouter {
     return Array.from(this.providers.values());
   }
 
-  route(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): ProductionProvider {
-    const manualCloud = this.providers.get("manual_cloud");
-
-    if (mode === "ZERO_SPEND") {
-      if (!manualCloud) throw new Error("ManualCloud zero-spend provider is not registered.");
-      return manualCloud;
-    }
-
+  rankProviders(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): ProductionProvider[] {
     const available = Array.from(this.providers.values());
-
+    if (mode === "ZERO_SPEND") {
+      return available.filter((p) => p.capabilities.zeroSpend);
+    }
     if (mode === "LOWEST_COST") {
-      // Sort ascending by cost per second
-      const sorted = [...available].sort(
+      return [...available].sort(
         (a, b) => a.capabilities.costPerSecondEstimateUsd - b.capabilities.costPerSecondEstimateUsd,
       );
-      return sorted[0] || manualCloud!;
     }
-
     if (mode === "QUALITY_FIRST") {
-      // Prefer generative models if spec requires AI scene generation
-      const veo = this.providers.get("veo");
-      const hf = this.providers.get("higgsfield");
-      return veo || hf || manualCloud!;
+      const preferred = ["veo", "higgsfield", "hypit", "manual_cloud"];
+      return [...available].sort(
+        (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
+      );
     }
+    // BALANCED
+    const preferred = ["hypit", "veo", "higgsfield", "manual_cloud"];
+    return [...available].sort(
+      (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
+    );
+  }
 
-    // BALANCED: Hypit or generative if budget permits
-    const hypit = this.providers.get("hypit");
-    return hypit || manualCloud!;
+  routeTheoretical(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): ProductionProvider {
+    const ranked = this.rankProviders(spec, mode);
+    if (!ranked[0]) throw new Error(`No provider available for mode ${mode}.`);
+    return ranked[0];
+  }
+
+  /**
+   * Safe by default: routes only configured, operational providers.
+   */
+  async route(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): Promise<ProductionProvider> {
+    return this.routeConfigured(spec, mode);
   }
 
   async routeConfigured(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): Promise<ProductionProvider> {

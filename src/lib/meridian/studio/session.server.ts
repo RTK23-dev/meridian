@@ -1038,13 +1038,25 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
           ${JSON.stringify(decision.answer)}, ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""}
         )
       `;
-      const result = publishThrough({ provider: "test", creativeId: data.creativeId, allowTestProvider: true });
-      if (!result.externalId) throw new Error("The publisher did not return an id. Nothing was stored.");
+      const isTest = data.publisher === "test";
+      const isTestRuntime = process.env.NODE_ENV === "test" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
+      if (isTest && !isTestRuntime) {
+        throw new Error("The test publisher is isolated to TestingRuntime and cannot be used in ProductionRuntime. Connect a live channel to publish.");
+      }
+      const publisherProvider = isTest ? "test" : (data.publisher as any);
+      const result = publishThrough({
+        provider: publisherProvider,
+        creativeId: data.creativeId,
+        allowTestProvider: isTest && isTestRuntime,
+      });
+      if (!result.externalId) {
+        throw new Error(`The publisher (${data.publisher}) did not return an external id (${result.status}). Nothing was stored.`);
+      }
       await sql`
         insert into provider_objects (
           id, organization_id, brand_id, provider, object_type, idempotency_key, external_id, status
         ) values (
-          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, 'test', 'ad', ${data.creativeId},
+          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${publisherProvider}, 'ad', ${data.creativeId},
           ${result.externalId}, ${result.status}
         )
       `;

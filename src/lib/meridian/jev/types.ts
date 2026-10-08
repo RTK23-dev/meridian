@@ -64,7 +64,8 @@ export type JevAnswerStatus =
   | "answered"
   | "abstain_insufficient_evidence"
   | "abstain_uncertain"
-  | "provider_error";
+  | "provider_error"
+  | "not_configured";
 
 export type RawJevAnswer =
   | {
@@ -85,26 +86,49 @@ export type RawJevAnswer =
       legend?: Record<string, string>;
     };
 
-export type JevAnswer = {
+export type AnsweredJevAnswer = {
   questionId: string;
   questionVersion: string;
   type?: JevQuestionType;
   model: string;
   provider: string;
-  status: JevAnswerStatus;
+  status: "answered";
   choice?: string;
   noul?: number;
   score?: number;
-  answer?: string | boolean | number;
+  answer: string | boolean | number;
   probability?: number;
   probabilities?: Record<string, number>;
   distribution?: Record<string, number>;
   confidence?: number;
   legend?: Record<string, string>;
   evidenceRefs: EvidenceRef[];
-  abstainReason?: string;
+  abstainReason?: undefined;
   evaluatedAt: string;
 };
+
+export type AbstainedJevAnswer = {
+  questionId: string;
+  questionVersion: string;
+  type?: JevQuestionType;
+  model: string;
+  provider: string;
+  status: "abstain_insufficient_evidence" | "abstain_uncertain" | "provider_error" | "not_configured";
+  choice?: undefined;
+  noul?: undefined;
+  score?: undefined;
+  answer?: undefined;
+  probability?: undefined;
+  probabilities?: undefined;
+  distribution?: undefined;
+  confidence?: undefined;
+  legend?: undefined;
+  evidenceRefs: EvidenceRef[];
+  abstainReason: string;
+  evaluatedAt: string;
+};
+
+export type JevAnswer = AnsweredJevAnswer | AbstainedJevAnswer;
 
 export type MeridianJevAnswer = JevAnswer;
 

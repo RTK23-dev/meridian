@@ -10,7 +10,7 @@ export class VeoProvider implements ProductionProvider {
   readonly id = "veo";
   readonly capabilities: ProductionCapabilities = {
     textToVideo: true,
-    imageToVideo: true,
+    imageToVideo: false,
     timelineEditing: false,
     voiceoverGeneration: false,
     zeroSpend: false,
@@ -46,8 +46,8 @@ export class VeoProvider implements ProductionProvider {
 
     return {
       id: this.id,
-      state: "HEALTHY",
-      capabilities: ["textToVideo", "imageToVideo"],
+      state: "CONFIGURED",
+      capabilities: ["textToVideo"],
       detail: `Configured with model ${this.getModel()}.`,
       checkedAt: new Date().toISOString(),
     };
@@ -67,6 +67,37 @@ export class VeoProvider implements ProductionProvider {
         status: "NOT_CONFIGURED",
         costEstimateUsd: costEstimate,
         error: "Google Veo API credentials are not configured.",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    if (spec.durationTargetSeconds <= 0 || spec.durationTargetSeconds > 60) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "FAILED",
+        costEstimateUsd: costEstimate,
+        error: `Unsupported duration: ${spec.durationTargetSeconds}s. Veo accepts durations between 5 and 60 seconds.`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    const supportedAspects = new Set(["9:16", "16:9", "1:1"]);
+    if (!supportedAspects.has(spec.aspectRatio)) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "FAILED",
+        costEstimateUsd: costEstimate,
+        error: `Unsupported aspect ratio: ${spec.aspectRatio}. Veo accepts 9:16, 16:9, or 1:1.`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

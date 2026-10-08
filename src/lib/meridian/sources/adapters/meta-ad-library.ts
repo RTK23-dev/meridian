@@ -21,7 +21,7 @@ export class MetaAdLibrarySourceAdapter implements SourceAdapter {
     profileDiscovery: false,
     contentDiscovery: true,
     metadata: true,
-    videos: true,
+    videos: false,
     images: true,
     comments: false,
     performance: false,
@@ -46,9 +46,9 @@ export class MetaAdLibrarySourceAdapter implements SourceAdapter {
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 15,
-      message: "Connected to Meta Ad Library API.",
+      message: "Configured with Meta Ad Library credentials.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

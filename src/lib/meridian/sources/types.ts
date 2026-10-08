@@ -72,7 +72,7 @@ export type SourceSnapshot = {
 
 export type SourceHealth = {
   adapterId: string;
-  status: "HEALTHY" | "DEGRADED" | "NOT_CONFIGURED" | "UNAVAILABLE";
+  status: "HEALTHY" | "DEGRADED" | "NOT_CONFIGURED" | "UNAVAILABLE" | "CONFIGURED" | "AUTH_FAILED" | "RATE_LIMITED";
   latencyMs: number;
   message?: string;
   lastCheckedAt: string;

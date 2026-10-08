@@ -1,3 +1,13 @@
+/**
+ * Higgsfield Provider
+ *
+ * Async video generation via Higgsfield AI platform:
+ * - Uses Bearer-less Key auth header (Authorization: Key <api_key>)
+ * - Posts to requests endpoint and retains request_id, status_url, and cancel_url
+ * - Polls returned status_url or /requests/<request_id>/status
+ * - Never invents job IDs or guesses unreturned endpoints
+ */
+
 import type {
   CreativeSpec,
   ProductionCapabilities,
@@ -42,9 +52,9 @@ export class HiggsfieldProvider implements ProductionProvider {
 
     return {
       id: this.id,
-      state: "HEALTHY",
+      state: "CONFIGURED",
       capabilities: ["textToVideo", "imageToVideo"],
-      detail: "Higgsfield generative video API configured.",
+      detail: "Higgsfield generative video API key configured.",
       checkedAt: new Date().toISOString(),
     };
   }
@@ -69,7 +79,7 @@ export class HiggsfieldProvider implements ProductionProvider {
     }
 
     try {
-      const res = await this.fetchImpl("https://api.higgsfield.ai/v1/generate", {
+      const res = await this.fetchImpl("https://api.higgsfield.ai/v1/requests", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -105,7 +115,11 @@ export class HiggsfieldProvider implements ProductionProvider {
         status_url?: string;
         cancel_url?: string;
       };
-      const externalId = data.request_id || data.id || data.job_id || data.status_url;
+
+      const requestId = data.request_id || data.id || data.job_id;
+      const statusUrl = data.status_url;
+      const cancelUrl = data.cancel_url;
+      const externalId = requestId || statusUrl;
 
       if (!externalId) {
         return {
@@ -116,7 +130,7 @@ export class HiggsfieldProvider implements ProductionProvider {
           providerId: this.id,
           status: "FAILED",
           costEstimateUsd: costEstimate,
-          error: "Higgsfield response missing job ID or status URL.",
+          error: "Higgsfield response missing request_id or status_url.",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -130,6 +144,11 @@ export class HiggsfieldProvider implements ProductionProvider {
         providerId: this.id,
         status: data.status === "completed" ? "RENDERED" : "RUNNING",
         costEstimateUsd: costEstimate,
+        metadata: {
+          requestId,
+          statusUrl,
+          cancelUrl,
+        },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -149,13 +168,19 @@ export class HiggsfieldProvider implements ProductionProvider {
     }
   }
 
-  async checkJobStatus(jobId: string): Promise<ProductionJob> {
+  async checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error("Cannot check Higgsfield job status: API key not configured.");
     }
 
-    const pollUrl = jobId.startsWith("http") ? jobId : `https://api.higgsfield.ai/v1/status/${jobId}`;
+    const pollUrl =
+      typeof metadata?.statusUrl === "string"
+        ? metadata.statusUrl
+        : jobId.startsWith("http")
+          ? jobId
+          : `https://api.higgsfield.ai/requests/${encodeURIComponent(jobId)}/status`;
+
     const res = await this.fetchImpl(pollUrl, {
       headers: {
         Authorization: `Key ${apiKey}`,
@@ -171,6 +196,7 @@ export class HiggsfieldProvider implements ProductionProvider {
       error?: string;
       video_url?: string;
       video?: { url?: string };
+      output?: { url?: string };
     };
 
     if (data.error) {
@@ -183,12 +209,14 @@ export class HiggsfieldProvider implements ProductionProvider {
         status: "FAILED",
         costEstimateUsd: 0,
         error: data.error,
+        metadata,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
     }
 
-    const videoUrl = data.video?.url || data.video_url;
+    const isComplete = data.status === "completed" || data.status === "succeeded";
+    const videoUrl = data.video?.url || data.video_url || data.output?.url;
 
     return {
       jobId,
@@ -196,11 +224,33 @@ export class HiggsfieldProvider implements ProductionProvider {
       brandId: "",
       creativeSpec: {} as CreativeSpec,
       providerId: this.id,
-      status: data.status === "completed" ? "RENDERED" : "RUNNING",
+      status: isComplete ? "RENDERED" : data.status === "failed" ? "FAILED" : "RUNNING",
       costEstimateUsd: 0,
       outputArtifactId: videoUrl,
+      metadata,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  async cancelJob(jobId: string, metadata?: Record<string, unknown>): Promise<void> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) return;
+
+    const cancelUrl =
+      typeof metadata?.cancelUrl === "string"
+        ? metadata.cancelUrl
+        : `https://api.higgsfield.ai/requests/${encodeURIComponent(jobId)}/cancel`;
+
+    try {
+      await this.fetchImpl(cancelUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Key ${apiKey}`,
+        },
+      });
+    } catch {
+      // Best-effort cancellation
+    }
   }
 }

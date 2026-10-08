@@ -7,15 +7,13 @@ import type { ResearchSegment } from "../research/schema.ts";
 import { inspectVideo } from "../video/inspect.ts";
 import {
   CREATIVE_DNA_V2,
+  buildCanonicalCreativeStructure,
   dnaField,
   emptyCreativeDna,
   missingField,
   type AdFormat,
   type BeatRole,
   type CreativeDna,
-  type CreativeStructure,
-  type CreativeStructureKind,
-  type CreativeStructureSegment,
   type DnaField,
   type OnScreenTextItem,
   type SceneDna,
@@ -371,77 +369,7 @@ export function buildBeatSequence(
   return uniqueBeats;
 }
 
-/**
- * Builds canonical CreativeStructure classifying native organic structures
- * (pov, skit, storytime, listicle, tutorial, reaction, loop, transformation, review, comparison, organic_short)
- * or dynamic ad narrative.
- */
-export function buildCanonicalCreativeStructure(input: {
-  scenes: SceneDna[];
-  segments: ResearchSegment[];
-  onScreenText: OnScreenTextItem[];
-  durationMs: number;
-  cutsPerSecond: number;
-  transcript?: string;
-}): CreativeStructure {
-  const allText = (input.transcript || input.segments.map((s) => s.text).join(" ")).toLowerCase();
-
-  let kind: CreativeStructureKind = "organic_short";
-  if (allText.includes("pov:") || allText.includes("pov ")) {
-    kind = "pov";
-  } else if (
-    allText.includes("reasons why") ||
-    allText.includes("top 3") ||
-    allText.includes("top 5") ||
-    input.onScreenText.some((t) => /^\d+\./.test(t.text))
-  ) {
-    kind = "listicle";
-  } else if (allText.includes("how to") || allText.includes("tutorial") || allText.includes("step 1")) {
-    kind = "tutorial";
-  } else if (allText.includes("storytime") || allText.includes("so basically")) {
-    kind = "storytime";
-  } else if (allText.includes("before and after") || allText.includes("transformation")) {
-    kind = "transformation";
-  } else if (allText.includes("review") || allText.includes("honest review")) {
-    kind = "review";
-  } else if (allText.includes("vs ") || allText.includes("compared to")) {
-    kind = "comparison";
-  } else if (allText.includes("wait for the loop") || allText.includes("seamless loop")) {
-    kind = "loop";
-  } else if (input.scenes.some((s) => s.overlay.value.includes("skit") || s.presenter.value.includes("character"))) {
-    kind = "skit";
-  }
-
-  const structureSegments: CreativeStructureSegment[] = input.scenes.map((s, idx) => {
-    let role = "content";
-    if (idx === 0) role = "opening";
-    else if (idx === input.scenes.length - 1) role = "closing";
-    else if (s.productOnScreen.value) role = "demonstration";
-
-    return {
-      index: s.index,
-      startMs: s.startMs,
-      endMs: s.endMs,
-      role,
-      visualFunction: s.shotType.value || undefined,
-      description: s.transcript || undefined,
-    };
-  });
-
-  const openingShotMs = input.scenes[0] ? input.scenes[0].endMs - input.scenes[0].startMs : undefined;
-
-  return {
-    kind,
-    confidence: 0.8,
-    durationMs: input.durationMs,
-    segments: structureSegments,
-    pacing: {
-      cutsPerMinute: Math.round(input.cutsPerSecond * 60),
-      openingShotMs,
-    },
-    structureType: kind === "organic_short" ? "organic_short" : "dynamic",
-  };
-}
+export { buildCanonicalCreativeStructure } from "./creative-dna.ts";
 
 /**
  * Real creative DNA decoder replacing dnaFromTranscript.
