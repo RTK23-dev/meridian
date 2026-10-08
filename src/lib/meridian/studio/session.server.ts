@@ -1143,7 +1143,7 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
         )
       `;
       const isTest = data.publisher === "test";
-      const isTestRuntime = process.env.NODE_ENV === "test" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
+      const isTestRuntime = process.env.NODE_ENV !== "production" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
       if (isTest && !isTestRuntime) {
         throw new Error("The test publisher is isolated to TestingRuntime and cannot be used in ProductionRuntime. Connect a live channel to publish.");
       }

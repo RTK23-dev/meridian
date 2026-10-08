@@ -136,8 +136,8 @@ export function PipelineEditor({
           <div
             className={`mt-4 rounded-lg px-3.5 py-2 text-xs font-medium border flex items-center justify-between ${
               feedback.type === "success"
-                ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-400"
-                : "border-red-500/30 bg-red-950/20 text-red-400"
+                ? "border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300"
+                : "border-red-500/30 bg-red-500/10 dark:bg-red-950/20 text-red-800 dark:text-red-300"
             }`}
           >
             <span>{feedback.message}</span>
@@ -240,8 +240,8 @@ export function PipelineEditor({
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${
                               stage.enabled
-                                ? "bg-emerald-950/40 text-emerald-400 border border-emerald-500/30"
-                                : "bg-neutral-800 text-neutral-400 border border-neutral-700"
+                                ? "bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                                : "bg-surface-elevated text-muted border border-line"
                             }`}
                           >
                             {stage.enabled ? "Active" : "Bypassed"}
@@ -280,8 +280,8 @@ export function PipelineEditor({
                             }}
                             className={`text-[10px] font-semibold px-2 py-0.5 rounded transition ${
                               stage.enabled
-                                ? "text-neutral-400 hover:text-red-400"
-                                : "text-emerald-400 hover:text-emerald-300 font-bold"
+                                ? "text-muted hover:text-red-700 dark:hover:text-red-400"
+                                : "text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 font-bold"
                             }`}
                           >
                             {stage.enabled ? "Bypass" : "Enable"}
@@ -320,8 +320,8 @@ export function PipelineEditor({
                   onClick={() => handleStageToggle(selectedStage)}
                   className={`rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${
                     config.stages.find((s) => s.id === selectedStage)?.enabled
-                      ? "border-red-500/30 bg-red-950/20 text-red-400 hover:bg-red-900/30"
-                      : "border-emerald-500/30 bg-emerald-950/20 text-emerald-400 hover:bg-emerald-900/30"
+                      ? "border-red-500/30 bg-red-500/10 dark:bg-red-950/20 text-red-800 dark:text-red-300 hover:bg-red-500/20"
+                      : "border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/20"
                   }`}
                 >
                   {config.stages.find((s) => s.id === selectedStage)?.enabled ? "Disable this stage" : "Enable this stage"}
@@ -364,6 +364,7 @@ export function PipelineEditor({
                     <label className="text-xs font-medium text-foreground">Render Engine</label>
                     <p className="text-[11px] text-muted">Production provider dispatched for video assembly.</p>
                     <select
+                      aria-label="Render Engine"
                       value={config.generationParams.provider}
                       onChange={(e) => setConfig((p) => ({
                         ...p,
@@ -386,6 +387,7 @@ export function PipelineEditor({
                     <label className="text-xs font-medium text-foreground">Cut Pacing</label>
                     <p className="text-[11px] text-muted">Tempo and frequency of camera / visual transitions.</p>
                     <select
+                      aria-label="Cut Pacing"
                       value={config.generationParams.renderPacing}
                       onChange={(e) => setConfig((p) => ({
                         ...p,
