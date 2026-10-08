@@ -12,13 +12,18 @@ Unit tests cover the decision math without a database:
 - `src/lib/meridian/workflow/templates.test.ts` — same stages, different variables
 - `src/lib/meridian/sources/public-url.test.ts` — private hosts blocked before fetch
 
-- src/lib/meridian/blockers.test.ts — semantic retrieval, negative learning, worker lease, storage, PDF extraction, logo pixels, calibration
-- src/lib/meridian/testing/historical-regression.test.ts — 28-point regression test suite guarding against data fabrication, loose JEV fallbacks, unconfigured provider assumptions, drive resolution failures, and simulated telemetry
-- src/lib/meridian/providers/readiness.test.ts — provider probes store only returned ids, campaign retry does not create a second campaign, test provider stays off, contrast ratios
-- src/lib/meridian/providers/completion.test.ts — paused publishing stages, insight dedupe, OAuth seal, webhook rejection, calibration approval source
-- src/lib/meridian/providers/final.test.ts — TikTok and Google stage reuse, insight clients, performance-to-brief, schedules, refresh, alert dead-letter, calibration tenancy
+- `src/lib/meridian/blockers.test.ts` — semantic retrieval, negative learning, worker lease, storage, PDF extraction, logo pixels, calibration
+- `src/lib/meridian/testing/historical-regression.test.ts` — 28-point regression test suite guarding against data fabrication, loose JEV fallbacks, unconfigured provider assumptions, drive resolution failures, and simulated telemetry
+- `src/lib/meridian/testing/end-to-end-integration.test.ts` — comprehensive boundary tests covering the 4 core lifecycle paths:
+  1. **Organic Discovery Path**: Raw source reference → artifact download → evidence normalization → perception observations → JEV Decisions evaluation → synthesized `CreativeSpec`.
+  2. **Production Routing & QC Path**: `CreativeSpec` → `ProductionRouter.route()` → Veo / Higgsfield / Hypit execution → durable Postgres jobs → Google Drive upload → postflight QC (originality, claim checks, container validation).
+  3. **Publishing Readiness & Account Gating Path**: Channel readiness evaluation → connected account gate verification → idempotent execution.
+  4. **Telemetry Ingestion & Closed-Loop Learning Path**: Telemetry ingestion with null preservation → recency decay weighting → Beta-binomial posteriors → calibrated model parameter lifecycle.
+- `src/lib/meridian/providers/readiness.test.ts` — provider probes store only returned ids, campaign retry does not create a second campaign, test provider stays off, contrast ratios
+- `src/lib/meridian/providers/completion.test.ts` — paused publishing stages, insight dedupe, OAuth seal, webhook rejection, calibration approval source
+- `src/lib/meridian/providers/final.test.ts` — TikTok and Google stage reuse, insight clients, performance-to-brief, schedules, refresh, alert dead-letter, calibration tenancy
 
-Run `npm test`.
+Run `npm test` (464 automated tests across 16 suites).
 
 `node scripts/a11y-audit.mjs` signs up through the real form and runs axe on the signed-in screens, plus a keyboard walk, a narrow viewport, and reduced motion. It needs the app already running. It does not bypass authentication. It is not a screen-reader pass and it does not claim WCAG conformance.
 

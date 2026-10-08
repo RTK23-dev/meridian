@@ -77,8 +77,10 @@ JEV's learning feedback loop updates Beta-binomial conjugate posteriors from obs
 
 Introduced in migration `0022_jev_account_intelligence.sql` (`src/lib/meridian/jev/account-engine.ts` and `src/lib/meridian/jev/multimodal-scorer.ts`), JEV expands from isolated variant evaluation into comprehensive account-level intelligence and portfolio analysis.
 
-### 1. 6-Beat Short-Form Narrative Decomposition
-Every video creative is decomposed into a structured 6-beat narrative arc:
+### 1. Canonical CreativeStructure vs Optional Ad Narrative
+Meridian models creative videos using canonical `CreativeStructure`:
+- **Organic Content**: Preserves native creative formats (`pov`, `skit`, `storytime`, `listicle`, `tutorial`, `reaction`, `trend_audio`, `transformation`, `review`, `comparison`, `loop`, `organic_short`). Heuristic classifications are strictly marked `state: "INFERRED"` and `methodId: "creative_structure_classifier.v1"` with inspectable `heuristicScore`, never masquerading as calibrated confidence.
+- **Paid Ads (AdNarrative)**: The legacy 6-beat ad narrative is an optional projection derived solely for direct-response paid ads:
 
 | Beat | Window | Analytical Focus |
 |---|---|---|
@@ -88,6 +90,14 @@ Every video creative is decomposed into a structured 6-beat narrative arc:
 | **4. Proof** | `15 - 25s` | Side-by-side demo, customer review, clinical data, social proof |
 | **5. Offer** | `25 - 30s` | Value proposition, bundle discount, guarantee, scarcity |
 | **6. CTA** | `30 - 35s` | Clear directional action (verbal cue + visual text sticker) |
+
+### 2. Question-Aware Evidence Compression (`compressEvidenceForJev`)
+To prevent token waste and focus JEV's attention, evidence bundles are compressed dynamically based on the specific question requested:
+- `organic.visual_craft`: Includes scene detection, shot types, keyframes, and OCR text overlays.
+- `organic.retention_architecture`: Includes scene cuts, pacing cadence, and timestamped transcripts.
+- `organic.share_trigger`: Includes audience comments, intent categories, and creator baseline.
+- `organic.transferability`: Includes creator and category comparative outlier context.
+Every compressed fact retains structured `EvidenceRef` lineage pointing back to source media and offsets.
 
 ### 2. Decile Trait Separation
 JEV categorizes an account's content portfolio into top decile (top 10%) vs. bottom decile (bottom 10%) by blended engagement and retention, calculating exact creative differentiators:

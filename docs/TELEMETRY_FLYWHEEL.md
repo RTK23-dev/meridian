@@ -31,10 +31,12 @@ The database stores granular, observation-level metrics for every published vari
 | `conversions` | `integer NOT NULL DEFAULT 0` | Conversions/purchases |
 | `spend_cents` | `integer NOT NULL DEFAULT 0` | Paid spend in cents |
 | `revenue_cents` | `integer NOT NULL DEFAULT 0` | Attributed revenue in cents |
-| `hook_retention_3s` | `double precision NOT NULL DEFAULT 0` | 3-second hook retention rate ($0.0 - 1.0$) |
-| `completion_rate` | `double precision NOT NULL DEFAULT 0` | Full video completion rate ($0.0 - 1.0$) |
+| `hook_retention_3s` | `double precision` | 3-second hook retention rate ($0.0 - 1.0$), or `null` if unobserved |
+| `completion_rate` | `double precision` | Full video completion rate ($0.0 - 1.0$), or `null` if unobserved |
 | `decay_weight` | `double precision NOT NULL DEFAULT 1.0` | Exponential recency weight |
 | `recorded_at` | `timestamptz NOT NULL` | When the observation occurred |
+
+> **Strict Truthfulness Invariant**: Telemetry ingestion uses `optionalNumber(value)`. Missing or unobserved metrics are stored and computed as `null`, **never** coerced to `0` via `Number(val) || 0`. Observed zeros (e.g. 0 shares recorded by the API) remain `0`. Null metrics do not contribute negative or positive evidence to Bayesian updates, outlier scores, or decile trait separation.
 
 ---
 

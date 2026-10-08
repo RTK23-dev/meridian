@@ -22,20 +22,23 @@ Google Drive is the primary binary artifact store for Meridian. Assets are organ
 ### Multimodal Perception (Gemini)
 Gemini Multimodal Perception (`gemini-2.5-flash`) extracts factual visual observations (shot types, face presence, product presence, OCR, setting) from keyframe images and video media. Perception produces factual observations only; it does not make policy or ranking decisions.
 
-### Production Video Engines
-Meridian supports provider-neutral video rendering through `ProductionRouter`:
-1. **ManualCloudProvider (Zero Spend)**: Generates structured creative manifests and Google Drive drop folders (`production/inputs/{jobId}/manifest.json`). Ingests finished MP4s dropped by editors without third-party API fees. Fails closed with `PREFLIGHT_FAILED` if Drive is not configured.
-2. **Google Veo Provider**: Submits asynchronous video generation jobs via Google Veo (`MERIDIAN_VEO_MODEL`, default `veo-3.1-generate-preview`) using `predictLongRunning`. Unconfigured credentials return `NOT_CONFIGURED`.
-3. **Higgsfield Provider**: Generates video via Higgsfield AI camera and video models when `HIGGSFIELD_API_KEY` is configured.
-4. **Hypit Provider**: Assembles multi-segment UGC video timelines when `HYPIT_BASE_URL` runtime is configured.
+### Production Video Engines (`ProductionRouter`)
+Meridian executes creative specs through `ProductionRouter`:
+- **Runtime Isolation**: `ProductionRouter` enforces strict runtime boundaries (`ProductionRuntime` vs `TestingRuntime`). In `ProductionRuntime`, `test:video` cannot be resolved and throws immediately. In `TestingRuntime`, `test:video` is injected via dependency injection for unit tests.
+- **Durable PostgreSQL Persistence**: Job metadata (`meridian_job_id`, `provider`, `provider_job_id`, `request_id`, `operation_name`, `status_url`, `cancel_url`, `spec_hash`, `attempt_count`, `submitted_at`, `last_polled_at`, `next_poll_at`, `error_code`, `artifact_id`) is stored in `production_jobs` (migration `0028`), ensuring complete recovery across worker restarts.
+- **Provider Implementations**:
+  1. **ManualCloudProvider (Zero Spend)**: Generates structured creative manifests and Google Drive drop folders (`production/inputs/{jobId}/manifest.json`). Ingests finished MP4s dropped by editors without third-party API fees. Fails closed with `PREFLIGHT_FAILED` if Drive is not configured.
+  2. **Google Veo Provider**: Evaluates exact model-specific `VideoCapability` descriptions (`veo-3.1-generate-preview`: supported durations `[5, 6, 7, 8, 9, 10]`, aspect ratios `["9:16", "16:9", "1:1"]`, native audio `false`, imageToVideo `false`). Rejects unsupported combinations before dispatch. Extracts sample URIs from upstream REST `generatedSamples` payload.
+  3. **Higgsfield Provider**: Generates video via model-specific payloads (`dop-v1`, `higgsfield-video-v1`). Uses official `Authorization: Key <api_key>` headers, maps 401/403 to `AUTH_FAILED` and 429 to `RATE_LIMITED`, and preserves verbatim upstream `request_id`, `status_url`, and `cancel_url`.
+  4. **Hypit Provider**: Assembles multi-segment UGC video timelines when `HYPIT_BASE_URL` runtime is configured.
 
 | Provider | Probe / Health | Publish / Execution |
 | --- | --- | --- |
 | TypeSafe JEV | POST `/decisions` with test question | Semantic decisions (`choice`, `noul`, `score`) |
 | Google Drive | `GET /drive/v3/about` | Primary binary object store (`<= 5MB` multipart, `> 5MB` resumable) |
 | Gemini Perception | `POST /models/{model}:generateContent` | Factual multimodal feature extraction |
-| Google Veo | `POST /models/{model}:predictLongRunning` | Asynchronous generative video |
-| Higgsfield | `POST /v1/generate` | Generative video |
+| Google Veo | `POST /models/{model}:predictLongRunning` | Asynchronous generative video with capability gating |
+| Higgsfield | `POST /v1/requests` | Model-specific camera & video generation |
 | ManualCloud | Google Drive health check | Manifest generation & drop folder sync |
 | Hypit | `HYPIT_BASE_URL` health | UGC video assembly timeline |
 | Meta | `GET /me`, ad accounts, granted permissions | Paused campaign, ad set, creative, and ad on Graph API v21.0 |
