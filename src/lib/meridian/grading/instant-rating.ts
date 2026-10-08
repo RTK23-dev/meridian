@@ -94,11 +94,13 @@ export function calculateInstantRating(input: InstantRatingInput): InstantRating
 
   // Tier Assignment Logic
   let ratingTier: InstantRatingTier = "C";
-  if ((shrunkScore >= 2.0 || (isSmallCreatorBreakout && shrunkScore >= 1.5)) && actionScore >= 50) {
+  const hasHighVelocity = velocityScore >= 70;
+
+  if ((shrunkScore >= 1.8 || (isSmallCreatorBreakout && shrunkScore >= 1.4)) && actionScore >= 45) {
     ratingTier = "S";
-  } else if (shrunkScore >= 1.3 && actionScore >= 35) {
+  } else if ((shrunkScore >= 1.0 || (shrunkScore >= 0.8 && hasHighVelocity)) && actionScore >= 30) {
     ratingTier = "A";
-  } else if (shrunkScore >= 0.6) {
+  } else if (shrunkScore >= 0.5) {
     ratingTier = "B";
   }
 
