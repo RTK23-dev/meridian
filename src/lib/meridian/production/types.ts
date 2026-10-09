@@ -26,7 +26,7 @@ export type ProductionJobState =
 
 export type ProviderHealth = {
   id: string;
-  state: "CONFIGURED" | "HEALTHY" | "DEGRADED" | "AUTH_FAILED" | "UNAVAILABLE" | "RATE_LIMITED" | "NOT_CONFIGURED";
+  state: "CONFIGURED" | "HEALTHY" | "DEGRADED" | "DEPRECATED" | "AUTH_FAILED" | "UNAVAILABLE" | "RATE_LIMITED" | "NOT_CONFIGURED";
   capabilities: string[];
   detail: string;
   checkedAt: string;

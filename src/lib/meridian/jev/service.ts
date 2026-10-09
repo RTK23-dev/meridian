@@ -169,8 +169,8 @@ export class JevDecisionService {
       };
     }
 
-    const firstQ = Object.values(questionsRecord)[0];
-    const compressed = compressEvidenceForJev(input.bundle, firstQ);
+    const allQuestions = Object.values(questionsRecord);
+    const compressed = compressEvidenceForJev(input.bundle, allQuestions);
 
     const request: JevDecisionRequest = {
       organizationId: input.organizationId,

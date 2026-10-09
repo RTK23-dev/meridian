@@ -9,6 +9,7 @@ import { randomUUID, createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { sourceRegistry, SourceRegistry } from "../sources/registry.ts";
 import { crawlLadderPage } from "./crawler.ts";
+import { ResearchPlanner } from "./planner.ts";
 import type {
   DiscoveryScope,
   DiscoveryRun,
@@ -184,37 +185,55 @@ export class DiscoveryService {
           run.status = "completed";
         }
       } else {
-        // Niche, Profile, or URL List - leverage registered adapters
-        for (const seed of input.seeds) {
-          const adapter = this.registry.get("website");
-          if (adapter) {
-            try {
-              const refs = await adapter.discover({
-                query: seed,
-                limit: budget.maxPages,
-              });
-              for (const ref of refs) {
+        // Niche, Profile, or URL List - leverage ResearchPlanner across registered adapters
+        const plan = await ResearchPlanner.planResearch(this.registry, {
+          scope: input.scope,
+          seeds: input.seeds,
+          budget,
+        });
+
+        for (const exec of plan.executions) {
+          if (exec.status !== "eligible") {
+            run.perSourceErrors[exec.adapterId] = exec.reason || `Source ${exec.adapterId} not configured.`;
+            continue;
+          }
+
+          const adapter = this.registry.get(exec.adapterId);
+          if (!adapter) continue;
+
+          try {
+            const refs = await adapter.discover({
+              query: exec.seed,
+              niche: exec.seed,
+              limit: budget.maxPages,
+            });
+            for (const ref of refs) {
+              const itemHash = createHash("sha256").update(ref.sourceId + (ref.canonicalUrl || "")).digest("hex");
+              if (!seenHashes.has(itemHash)) {
+                seenHashes.add(itemHash);
                 discoveredItems.push({
                   id: `item_${runId}_${discoveredItems.length}`,
                   runId,
-                  url: ref.canonicalUrl || seed,
-                  canonicalUrl: ref.canonicalUrl || seed,
+                  url: ref.canonicalUrl || exec.seed,
+                  canonicalUrl: ref.canonicalUrl || exec.seed,
                   source: ref.platform,
                   cardType: "post",
-                  title: (ref.metadata?.handle as string) || ref.canonicalUrl || seed,
+                  title: (ref.metadata?.handle as string) || (ref.metadata?.caption as string) || ref.canonicalUrl || exec.seed,
+                  text: (ref.metadata?.caption as string) || undefined,
                   metrics: {
                     views: { value: null, state: "UNAVAILABLE" },
                     likes: { value: null, state: "UNAVAILABLE" },
                     comments: { value: null, state: "UNAVAILABLE" },
                   },
-                  contentHash: createHash("sha256").update(ref.sourceId).digest("hex"),
-                  sourceLocation: seed,
+                  contentHash: itemHash,
+                  sourceLocation: exec.seed,
                   discoveredAt: new Date().toISOString(),
                 });
               }
-            } catch (err) {
-              run.perSourceErrors[seed] = err instanceof Error ? err.message : String(err);
             }
+          } catch (err) {
+            run.perSourceErrors[exec.adapterId] = err instanceof Error ? err.message : String(err);
+            // Non-fatal for optional adapters (e.g. Cyclone): mission continues
           }
         }
         run.status = "completed";
@@ -227,6 +246,32 @@ export class DiscoveryService {
     run.completedAt = new Date().toISOString();
     run.progress.discoveredCards = discoveredItems.filter((i) => i.source === "repeated_card_discovery").length;
     run.progress.discoveredUrls = discoveredItems.length;
+
+    // Durable DB persistence if SQL provided
+    if (input.sql) {
+      try {
+        const sql = input.sql;
+        for (const item of discoveredItems) {
+          const sourceId = `src_${item.id}`;
+          await sql`
+            insert into sources (
+              id, organization_id, brand_id, platform, adapter_id, external_id,
+              canonical_url, name, status, metadata, created_at, updated_at
+            ) values (
+              ${sourceId}, ${input.organizationId}, ${input.brandId}, ${item.source},
+              ${item.source}, ${item.id}, ${item.canonicalUrl || item.url},
+              ${(item.title || item.canonicalUrl || item.id).slice(0, 100)}, 'ready', ${JSON.stringify(item)}, now(), now()
+            )
+            on conflict (organization_id, platform, external_id) do update set
+              canonical_url = excluded.canonical_url,
+              metadata = excluded.metadata,
+              updated_at = now()
+          `;
+        }
+      } catch {
+        // Graceful error handling for DB persistence
+      }
+    }
 
     inMemoryRuns.set(runId, run);
     inMemoryItems.set(runId, discoveredItems);

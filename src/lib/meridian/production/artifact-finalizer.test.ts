@@ -1,0 +1,121 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createHash } from "node:crypto";
+import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
+import type { Sql } from "../learning/store.ts";
+import type { GoogleDriveClient } from "../storage/drive.ts";
+
+test("finalizeProductionArtifact: persists valid media bytes to Drive and commits COMPLETED", async () => {
+  const validMp4Bytes = Buffer.from("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41payload-video-sample-bytes");
+  const expectedSha256 = createHash("sha256").update(validMp4Bytes).digest("hex");
+
+  const storedDrivePuts: Array<{ path: string; bytes: Uint8Array; mimeType: string }> = [];
+  const mockDrive = {
+    put: async (input: any) => {
+      storedDrivePuts.push(input);
+      return { fileId: "drive-file-123", webViewLink: "https://drive.google.com/test" };
+    },
+    get: async () => null,
+    delete: async () => {},
+    health: async () => ({ status: "CONFIGURED" as const, configured: true }),
+  };
+
+  const queries: string[] = [];
+  const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
+    queries.push(strings.join("?"));
+    return [];
+  }) as unknown as Sql;
+
+  const result = await finalizeProductionArtifact(mockSql, {
+    jobId: "job-sync-101",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    provider: "google_omni",
+    runId: "run-1",
+    rawArtifact: {
+      bytes: new Uint8Array(validMp4Bytes),
+      mimeType: "video/mp4",
+    },
+    options: {
+      driveClient: mockDrive as unknown as GoogleDriveClient,
+    },
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.status, "COMPLETED");
+  assert.equal(result.sha256, expectedSha256);
+  assert.equal(result.byteSize, validMp4Bytes.byteLength);
+  assert.equal(storedDrivePuts.length, 1);
+  assert.equal(storedDrivePuts[0].path, "org-1/brand-1/production/job-sync-101/artifact.mp4");
+  assert.ok(queries.some((q) => q.includes("insert into storage_objects")));
+  assert.ok(queries.some((q) => q.includes("status = 'COMPLETED'")));
+});
+
+test("finalizeProductionArtifact: Drive storage failure fails closed with STORAGE_PERSISTENCE_FAILED", async () => {
+  const validMp4Bytes = Buffer.from("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41payload-video-sample-bytes");
+
+  const mockFailingDrive = {
+    put: async () => {
+      throw new Error("Google Drive 503 Service Unavailable");
+    },
+    get: async () => null,
+    delete: async () => {},
+    health: async () => ({ status: "CONFIGURED" as const, configured: true }),
+  };
+
+  const queries: string[] = [];
+  const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
+    queries.push(strings.join("?"));
+    return [];
+  }) as unknown as Sql;
+
+  const result = await finalizeProductionArtifact(mockSql, {
+    jobId: "job-fail-storage-1",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    provider: "google_omni",
+    rawArtifact: {
+      bytes: new Uint8Array(validMp4Bytes),
+      mimeType: "video/mp4",
+    },
+    options: {
+      driveClient: mockFailingDrive as unknown as GoogleDriveClient,
+    },
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.status, "STORAGE_PERSISTENCE_FAILED");
+  assert.equal(result.errorCode, "STORAGE_PERSISTENCE_FAILED");
+  // Crucial invariant: never mark COMPLETED when storage fails!
+  assert.ok(!queries.some((q) => q.includes("status = 'COMPLETED'")));
+  assert.ok(queries.some((q) => q.includes("status = 'STORAGE_PERSISTENCE_FAILED'")));
+});
+
+test("finalizeProductionArtifact: missing bytes returns WAITING_FOR_ARTIFACT", async () => {
+  const mockDrive = {
+    put: async () => ({ fileId: "1", webViewLink: "" }),
+    get: async () => null,
+    delete: async () => {},
+    health: async () => ({ status: "CONFIGURED" as const, configured: true }),
+  };
+
+  const queries: string[] = [];
+  const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
+    queries.push(strings.join("?"));
+    return [];
+  }) as unknown as Sql;
+
+  const result = await finalizeProductionArtifact(mockSql, {
+    jobId: "job-waiting-1",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    provider: "google_omni",
+    rawArtifact: {},
+    options: {
+      driveClient: mockDrive as unknown as GoogleDriveClient,
+    },
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.status, "WAITING_FOR_ARTIFACT");
+});

@@ -74,14 +74,16 @@ Meridian continuously harvests evidence, analyzes high-performing creative diver
   3. *Transfer Potential* (brand and product fit).
   4. *Business Potential* (conversion and ROAS telemetry).
 
-### 5. ProductionRouter & Generative Video
-- **Unified Creative Execution**: Production compiles to canonical `CreativeSpec` objects, routed across configured providers:
+### 5. Creative Decision Engine & ProductionRouter
+- **Versioned Creative Plan**: `CreativeDecisionEngine` translates JEV semantic judgments and constraints into a typed `CreativePlan`, strictly respecting `creationScope` (`image_only`, `video_only`, `carousel_only`, `mixed_campaign`, `research_only`) and `autonomy` mode (`manual`, `semi_automatic`, `fully_automatic`). Research-only plans never trigger production jobs.
+- **Unified Media Production**: Production compiles to canonical `CreativeSpec` objects, routed across configured providers:
   - **Google Gemini Omni Flash**: Generative video editing and text/image-to-video via official Interactions API.
+  - **Google Gemini Nano Banana**: High-fidelity creative image generation (`gemini-nano-banana-2.1`, `gemini-3.1-flash-lite-image`, `gemini-3-pro-image`, `gemini-3.1-flash-image`).
   - **Google Veo**: Stable GA video models (`veo-2.0-generate-001`).
   - **Higgsfield AI**: Camera-directed generative video.
   - **Hypit Engine**: Local multi-track UGC video assembly bridge.
   - **ManualCloud (Zero Spend)**: Generates production manifests and drop-folder structures for manual editing workflows.
-- **Durable Job Poller**: Claims jobs with `SELECT ... FOR UPDATE SKIP LOCKED` and verifies postflight quality control.
+- **Durable Job Poller & Artifact Finalizer**: Claims jobs with `SELECT ... FOR UPDATE SKIP LOCKED`, normalizes media bytes, and commits to Google Drive object storage (`finalizeProductionArtifact`). Fails closed with `STORAGE_PERSISTENCE_FAILED` on storage failure—jobs are never marked `COMPLETED` prematurely.
 
 ### 6. Closed-Loop Bayesian Learning Flywheel
 - **Empirical Beta Posteriors**: Tracks winning formulas using conjugate Beta-binomial distributions from verified ad and organic telemetry.
@@ -134,7 +136,7 @@ npm run scheduler
 All releases enforce complete verification before merge:
 
 ```bash
-# Run 523 automated tests across 16 test suites (including 35 Historical Regressions)
+# Run 550 automated tests across 16 test suites (including 35 Historical Regressions and 9 Beta.8 Audit Gates)
 npm test
 
 # Verify strict TypeScript compilation (0 errors)

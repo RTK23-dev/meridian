@@ -39,6 +39,8 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
     const imageProvider = clip(body.imageProvider);
     const videoProvider = clip(body.videoProvider);
     const mode = clip(body.mode);
+    const creationScope = clip(body.creationScope);
+    const autonomy = clip(body.autonomy);
     const source = clip(body.source);
     const productionMode = clip(body.productionMode);
     const aspectRatio = clip(body.aspectRatio);
@@ -68,6 +70,8 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
       imageProvider: imageProvider || "none",
       videoProvider: videoProvider || "none",
       mode: (mode || (videoProvider && videoProvider !== "none" ? "video" : "image_ad")) as import("@/lib/meridian/factory/creative-manifest").CreationMode,
+      creationScope: creationScope as import("@/lib/meridian/creative/plan").CreationScope | undefined,
+      autonomy: autonomy as import("@/lib/meridian/creative/plan").AutonomyMode | undefined,
       source: (source || "new_brief") as import("@/lib/meridian/factory/creative-manifest").StartingMaterialType,
       productionMode: (productionMode || (videoProvider === "manual_cloud" ? "manual_cloud" : "automated_provider")) as import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType,
       aspectRatio: (aspectRatio === "16:9" || aspectRatio === "1:1" ? aspectRatio : "9:16") as "9:16" | "16:9" | "1:1" | "4:5",

@@ -59,6 +59,9 @@ The web process does not execute the worker loop. `scripts/worker-entry.ts` clai
 | JEV Account Intelligence | `jev/account-engine.ts` | 6-beat short-form decomposition, decile trait separation, whitespace radar |
 | Publishing Orchestrator | `publishing/orchestrator.ts` | Idempotent multi-account scheduling, atomic job claims, backoff, receipts |
 | Telemetry & Flywheel | `learning/telemetry-engine.ts`| Unified multi-channel telemetry, 14-day exponential decay, closed-loop Bayesian priors |
+| Creative Decision Engine | `creative/engine.ts` | Versioned CreativePlan translating JEV judgments & constraints to exact deliverables |
+| Artifact Finalizer | `production/artifact-finalizer.ts` | Idempotent persistence to Google Drive; fail-closed on storage errors |
+| Multi-Source Discovery | `discovery/planner.ts` | Multi-source discovery across web/social/search; Cyclone optional |
 | API | `machine.ts` | Persistence and tenant checks |
 
 AI output is parsed into fields and then checked by deterministic code. Retrieved page text is wrapped as `untrusted_source` and is not allowed to act as instructions.

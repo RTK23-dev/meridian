@@ -36,7 +36,7 @@ export function createEvidenceBundle(
  */
 export function compressEvidenceForJev(
   bundle: EvidenceBundle,
-  question?: import("../jev/types.ts").JevQuestionSpec,
+  questionOrQuestions?: import("../jev/types.ts").JevQuestionSpec | Array<import("../jev/types.ts").JevQuestionSpec>,
 ): {
   description: string;
   source: string;
@@ -85,22 +85,26 @@ export function compressEvidenceForJev(
     });
   }
 
-  const qId = question?.id || "";
+  const questions = Array.isArray(questionOrQuestions)
+    ? questionOrQuestions
+    : questionOrQuestions
+    ? [questionOrQuestions]
+    : [];
 
-  // 1. Visual Craft focus
-  const isVisualCraft = qId.includes("visual_craft") || qId.includes("visual");
-  // 2. Retention Architecture focus
-  const isRetention = qId.includes("retention") || qId.includes("pacing");
-  // 3. Share Trigger focus
-  const isShareTrigger = qId.includes("share_trigger") || qId.includes("audience");
-  // 4. Transferability focus
-  const isTransferability = qId.includes("transferability") || qId.includes("category");
+  const qIds = questions.map((q) => q.id);
+  // If no questions specified or multiple questions, include the union of all required evidence
+  const isMulti = qIds.length === 0 || qIds.length > 1;
 
-  const includeScenes = !qId || isVisualCraft || isRetention;
-  const includeOcr = !qId || isVisualCraft;
-  const includeTranscript = !qId || isRetention;
-  const includeComments = !qId || isShareTrigger;
-  const includeContext = !qId || isTransferability;
+  const isVisualCraft = isMulti || qIds.some((id) => id.includes("visual_craft") || id.includes("visual") || id.includes("format"));
+  const isRetention = isMulti || qIds.some((id) => id.includes("retention") || id.includes("pacing") || id.includes("hook"));
+  const isShareTrigger = isMulti || qIds.some((id) => id.includes("share_trigger") || id.includes("audience"));
+  const isTransferability = isMulti || qIds.some((id) => id.includes("transferability") || id.includes("category"));
+
+  const includeScenes = isVisualCraft || isRetention;
+  const includeOcr = isVisualCraft;
+  const includeTranscript = isRetention;
+  const includeComments = isShareTrigger;
+  const includeContext = isTransferability;
 
   const transcriptSummary = includeTranscript && bundle.transcript
     ? bundle.transcript.map((t) => `[${(t.startMs / 1000).toFixed(1)}s-${(t.endMs / 1000).toFixed(1)}s] ${t.text}`).join(" ")

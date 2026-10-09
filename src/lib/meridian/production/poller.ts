@@ -8,10 +8,9 @@
 
 import type { Sql } from "../learning/store.ts";
 import { productionRouter, type ProductionRouter } from "./router.ts";
-import { evaluateProductionPostflight } from "./postflight.ts";
 import { googleDriveClient, type GoogleDriveClient } from "../storage/drive.ts";
 import type { ProductionJob } from "./types.ts";
-import { createHash } from "node:crypto";
+import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
 
 export type PollOptions = {
   limit?: number;
@@ -53,7 +52,7 @@ export async function pollProductionJobs(
     select id, organization_id, brand_id, provider, provider_job_id,
            request_id, status_url, cancel_url, status, attempt_count, input
     from production_jobs
-    where status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT')
+    where status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
       and (next_poll_at is null or next_poll_at <= now())
     order by created_at asc
     limit ${limit}
@@ -129,134 +128,32 @@ export async function pollProductionJobs(
     }
 
     if (polledJob.status === "RENDERED" || polledJob.status === "COMPLETED") {
-      let videoBytes: Uint8Array | null = null;
-      let artifactStorageKey = "";
-      let sha256 = "";
+      const runId = typeof parsedInput.runId === "string" ? parsedInput.runId : undefined;
+      const durationSeconds = (parsedInput.creativeSpec as any)?.durationTargetSeconds;
+      const durationMs = typeof durationSeconds === "number" ? durationSeconds * 1000 : undefined;
 
-      // Collect video bytes from output artifact
-      if (polledJob.outputArtifactId && polledJob.outputArtifactId.startsWith("http")) {
-        try {
-          const downloadRes = await fetchImpl(polledJob.outputArtifactId);
-          if (downloadRes.ok) {
-            const buf = await downloadRes.arrayBuffer();
-            videoBytes = new Uint8Array(buf);
-          }
-        } catch {
-          // Download failed
-        }
-      } else if (polledJob.outputArtifactId && polledJob.outputArtifactId.startsWith("data:")) {
-        try {
-          const match = polledJob.outputArtifactId.match(/^data:([^;]+);base64,(.+)$/);
-          if (match && match[2]) {
-            const buf = Buffer.from(match[2], "base64");
-            if (buf.byteLength > 0) {
-              videoBytes = new Uint8Array(buf);
-            }
-          }
-        } catch {
-          // Data URI decode failed
-        }
-      } else if (polledJob.metadata?.videoBytesBase64 && typeof polledJob.metadata.videoBytesBase64 === "string") {
-        try {
-          const buf = Buffer.from(polledJob.metadata.videoBytesBase64, "base64");
-          if (buf.byteLength > 0) {
-            videoBytes = new Uint8Array(buf);
-          }
-        } catch {
-          // Metadata Base64 decode failed
-        }
-      } else if (polledJob.outputArtifactId && row.provider === "manual_cloud") {
-        try {
-          const driveFile = await drive.get(polledJob.outputArtifactId);
-          if (driveFile) {
-            videoBytes = driveFile.bytes;
-          }
-        } catch {
-          // Drive fetch failed
-        }
-      }
-
-      // If we have video bytes, evaluate postflight QC
-      if (videoBytes && videoBytes.byteLength > 0) {
-        const postflight = evaluateProductionPostflight({
+      const finalized = await finalizeProductionArtifact(sql, {
+        jobId: row.id,
+        organizationId: row.organization_id,
+        brandId: row.brand_id,
+        provider: row.provider,
+        providerJobId: row.provider_job_id || undefined,
+        runId,
+        rawArtifact: {
+          uri: polledJob.outputArtifactId,
+          base64: (polledJob.metadata?.videoBytesBase64 as string) || undefined,
+        },
+        options: {
+          driveClient: drive,
+          fetchImpl,
+          durationMs,
           job: polledJob,
-          videoBytes,
-          durationMs: (parsedInput.creativeSpec as any)?.durationTargetSeconds ? (parsedInput.creativeSpec as any).durationTargetSeconds * 1000 : undefined,
-        });
+        },
+      });
 
-        if (!postflight.passed) {
-          await sql`
-            update production_jobs
-            set status = 'POSTFLIGHT_FAILED',
-                error_code = 'POSTFLIGHT_DEFECTIVE',
-                last_polled_at = now(),
-                updated_at = now()
-            where id = ${row.id}
-          `;
-          await sql`
-            update assets
-            set media_status = 'failed',
-                lifecycle = 'rejected',
-                qa_decision = 'rejected'
-            where generation_run_id = ${typeof parsedInput.runId === "string" ? parsedInput.runId : ""}
-          `;
-          result.failed++;
-          continue;
-        }
-
-        sha256 = createHash("sha256").update(videoBytes).digest("hex");
-        artifactStorageKey = `${row.organization_id}/${row.brand_id}/production/${row.id}/artifact.mp4`;
-
-        // Store into Drive and database
-        try {
-          await drive.put({
-            organizationId: row.organization_id,
-            brandId: row.brand_id,
-            path: artifactStorageKey,
-            mimeType: "video/mp4",
-            bytes: videoBytes,
-          });
-        } catch {
-          // Drive put non-fatal if running in test mock
-        }
-
-        const artifactId = crypto.randomUUID();
-        await sql`
-          insert into storage_objects (
-            id, organization_id, brand_id, provider, provider_file_id,
-            name, mime_type, size_bytes, sha256, lifecycle, created_at, updated_at
-          ) values (
-            ${artifactId}, ${row.organization_id}, ${row.brand_id}, 'google_drive', ${polledJob.outputArtifactId || artifactId},
-            ${`production_${row.id}.mp4`}, 'video/mp4', ${videoBytes.byteLength}, ${sha256}, 'approved', now(), now()
-          )
-          on conflict (organization_id, brand_id, name) do update set
-            sha256 = excluded.sha256,
-            size_bytes = excluded.size_bytes,
-            updated_at = now()
-        `;
-
-        await sql`
-          update production_jobs
-          set status = 'COMPLETED',
-              artifact_id = ${artifactId},
-              last_polled_at = now(),
-              updated_at = now()
-          where id = ${row.id}
-        `;
-
-        await sql`
-          update assets
-          set media_status = 'completed',
-              lifecycle = 'stored',
-              qa_decision = 'auto_approved',
-              checksum = ${sha256},
-              byte_size = ${videoBytes.byteLength}
-          where generation_run_id = ${typeof parsedInput.runId === "string" ? parsedInput.runId : ""}
-        `;
-
+      if (finalized.success) {
         result.rendered++;
-      } else {
-        // Missing bytes: do NOT mark as COMPLETED.
+      } else if (finalized.status === "WAITING_FOR_ARTIFACT") {
         const newAttempts = (row.attempt_count || 0) + 1;
         if (newAttempts < 5) {
           await sql`
@@ -282,10 +179,12 @@ export async function pollProductionJobs(
             update assets
             set media_status = 'failed',
                 lifecycle = 'rejected'
-            where generation_run_id = ${typeof parsedInput.runId === "string" ? parsedInput.runId : ""}
+            where generation_run_id = ${runId || ""}
           `;
           result.failed++;
         }
+      } else {
+        result.failed++;
       }
     } else if (polledJob.status === "FAILED") {
       await sql`

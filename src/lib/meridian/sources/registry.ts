@@ -19,6 +19,7 @@ import { FacebookSourceAdapter } from "./adapters/facebook.ts";
 import { PinterestSourceAdapter } from "./adapters/pinterest.ts";
 import { RedditSourceAdapter } from "./adapters/reddit.ts";
 import { LinkedInSourceAdapter } from "./adapters/linkedin.ts";
+import { CycloneScoutSourceAdapter } from "../discovery/cyclone-scout-adapter.ts";
 
 export class SourceRegistry {
   private readonly adapters = new Map<string, SourceAdapter>();
@@ -38,6 +39,7 @@ export class SourceRegistry {
     this.register(new SearchSourceAdapter());
     this.register(new LicensedSourceAdapter());
     this.register(new FirstPartyAnalyticsSourceAdapter());
+    this.register(new CycloneScoutSourceAdapter());
   }
 
   register(adapter: SourceAdapter): void {

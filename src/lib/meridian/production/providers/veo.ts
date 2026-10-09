@@ -103,11 +103,21 @@ export class VeoProvider implements ProductionProvider {
       };
     }
 
+    if (lifecycle.state === "DEPRECATED") {
+      return {
+        id: this.id,
+        state: "DEPRECATED",
+        capabilities: ["textToVideo"],
+        detail: `Veo model '${model}' is a deprecated preview endpoint scheduled for shutdown on 2026-10-22. Excluded from automatic fallback routing; usable only when explicitly selected as a specialist capability. Replacement: ${lifecycle.replacement ?? "gemini-omni-1.1-flash"}`,
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
     return {
       id: this.id,
       state: "CONFIGURED",
       capabilities: ["textToVideo"],
-      detail: `Configured with model ${model}.${lifecycle.warning ? ` Warning: ${lifecycle.warning}` : ""}`,
+      detail: `Configured with model ${model}.`,
       checkedAt: new Date().toISOString(),
     };
   }

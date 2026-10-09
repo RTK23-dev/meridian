@@ -15,6 +15,15 @@
 
 import { createHash } from "node:crypto";
 import type { DiscoveredReelItem, DiscoveredAudioTrend } from "./types.ts";
+import type {
+  SourceAdapter,
+  SourceKind,
+  SourceCapabilities,
+  SourceHealth,
+  SourceReference,
+  RawArtifact,
+  DiscoveryQuery,
+} from "../sources/types.ts";
 
 export interface CycloneGatewayConfig {
   gatewayUrl: string;
@@ -51,10 +60,22 @@ export type CycloneObservationResult =
   | { status: "NOT_CONNECTED"; reason: string }
   | { status: "failed"; error: string };
 
-export class CycloneScoutSourceAdapter {
+export class CycloneScoutSourceAdapter implements SourceAdapter {
   readonly id = "cyclone_scout";
+  readonly platform: SourceKind = "licensed" as SourceKind;
   readonly name = "Cyclone Scout Fleet (Physical Android Device)";
   readonly isLicensed = true;
+  readonly capabilities: SourceCapabilities = {
+    profileDiscovery: true,
+    contentDiscovery: true,
+    metadata: true,
+    videos: true,
+    images: true,
+    comments: false,
+    performance: true,
+    webpages: false,
+    search: true,
+  };
 
   private config?: CycloneGatewayConfig;
   private fetchFn: typeof fetch;
@@ -70,6 +91,67 @@ export class CycloneScoutSourceAdapter {
         deviceId: process.env.CYCLONE_DEVICE_ID,
       };
     }
+  }
+
+  async health(): Promise<SourceHealth> {
+    const conn = await this.checkConnection();
+    if (!this.config?.gatewayUrl || !this.config?.deviceId) {
+      return {
+        adapterId: this.id,
+        status: "NOT_CONFIGURED",
+        latencyMs: 0,
+        message: "Cyclone Gateway or Device ID not set",
+        lastCheckedAt: new Date().toISOString(),
+      };
+    }
+    if (conn.connected) {
+      return {
+        adapterId: this.id,
+        status: "HEALTHY",
+        latencyMs: 15,
+        message: `Device ${this.config.deviceId} status: ${conn.deviceStatus}`,
+        lastCheckedAt: new Date().toISOString(),
+      };
+    }
+    return {
+      adapterId: this.id,
+      status: "UNAVAILABLE",
+      latencyMs: 0,
+      message: conn.reason || "Device not connected",
+      lastCheckedAt: new Date().toISOString(),
+    };
+  }
+
+  async discover(query: DiscoveryQuery): Promise<SourceReference[]> {
+    const niche = query.niche || query.query || "general";
+    const reels = await this.observeFeed({ niche, budget: query.limit || 10 });
+    return reels.map((r) => ({
+      sourceId: r.id,
+      platform: this.platform,
+      externalId: r.externalPostId,
+      canonicalUrl: r.permalink,
+      sourceAdapter: this.id,
+      discoveredAt: new Date().toISOString(),
+      capturedAt: r.scoutObservationTime,
+      evidenceAvailability: "FULL_EVIDENCE_AVAILABLE",
+      metadata: {
+        niche: r.niche,
+        author: r.creatorHandle,
+        caption: r.caption,
+        metrics: r.metrics,
+      },
+    }));
+  }
+
+  async fetch(reference: SourceReference): Promise<RawArtifact> {
+    return {
+      id: `art_${reference.sourceId}`,
+      reference,
+      type: "json",
+      mimeType: "application/json",
+      jsonPayload: reference.metadata,
+      capturedAt: reference.discoveredAt,
+    };
   }
 
   async checkConnection(): Promise<{ connected: boolean; deviceStatus?: string; reason?: string }> {

@@ -27,6 +27,9 @@ import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../e
 import { assessPublishing, type AccountSnapshot } from "../publishing/readiness";
 import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure";
 import type { MarketCluster } from "../intelligence/whitespace";
+import { CreativeDecisionEngine } from "../creative/engine.ts";
+import type { CreationScope, AutonomyMode } from "../creative/plan.ts";
+import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -613,6 +616,8 @@ export async function generateStudioVariants(
     imageProvider: string;
     videoProvider: string;
     mode?: import("@/lib/meridian/factory/creative-manifest").CreationMode;
+    creationScope?: CreationScope;
+    autonomy?: AutonomyMode;
     source?: import("@/lib/meridian/factory/creative-manifest").StartingMaterialType;
     productionMode?: import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType;
     aspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
@@ -631,6 +636,34 @@ export async function generateStudioVariants(
     const loaded = await loadBrandContext(sql, access.organizationId, data.brandId);
     assertSameTenant(loaded.creatives, access.organizationId, data.brandId);
     const productName = loaded.products[0]?.name || "";
+
+    // Resolve creationScope and autonomy (P1.2)
+    const creationScope: CreationScope = data.creationScope || (
+      data.mode === "image_ad" || data.mode === "organic_image" ? "image_only" :
+      data.mode === "video" || data.mode === "video_reel_short" ? "video_only" :
+      data.mode === "carousel" ? "carousel_only" :
+      data.mode === "mixed_format" ? "mixed_campaign" :
+      data.mode === "research_only" ? "research_only" :
+      "auto_choose"
+    );
+    const autonomy: AutonomyMode = data.autonomy || "semi_automatic";
+
+    // Build CreativePlan via CreativeDecisionEngine (P0.5, P1.1)
+    const creativePlan = CreativeDecisionEngine.createPlan({
+      scope: creationScope,
+      autonomy,
+      brief: {
+        title: asText(brief.title),
+        hook: asText(brief.hook),
+        message: asText(brief.message),
+        cta: asText(brief.cta),
+        angle: asText(brief.angle),
+        productName,
+        aspectRatio: data.aspectRatio || "9:16",
+        targetDurationSeconds: 8,
+        decisionId: asText(brief.decision_id),
+      },
+    });
 
     const mode = data.mode || (data.videoProvider && data.videoProvider !== "none" ? "video" : "image_ad");
     const startingMaterial = data.source || "new_brief";
@@ -708,14 +741,14 @@ export async function generateStudioVariants(
       beats,
     });
 
-    if (!plan.willCreateProductionJob || mode === "research_only") {
+    if (!plan.willCreateProductionJob || mode === "research_only" || creativePlan.scope === "research_only" || creativePlan.deliverables.length === 0) {
       // Research-only mode: manifest created and validated, zero production jobs submitted
       await sql`
         insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
         values (
           ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${context.userId},
           'studio.research_manifest_created', 'brief', ${data.briefId},
-          ${JSON.stringify({ manifestId: manifest.creativeId, mode: manifest.mode, beats: manifest.beats.length })}
+          ${JSON.stringify({ manifestId: manifest.creativeId, mode: manifest.mode, beats: manifest.beats.length, planId: creativePlan.id })}
         )
       `;
       return loadSession(sql, access.organizationId, data.brandId, access.role);
@@ -768,7 +801,15 @@ export async function generateStudioVariants(
       audience: asText(brief.audience),
       constraints: asText(brief.constraints),
     };
-    for (let index = 0; data.imageProvider !== "none" && index < 3; index += 1) {
+
+    const imageDeliverables = creativePlan.deliverables.filter(
+      (d) => d.kind === "image" || d.kind === "carousel_slide"
+    );
+    const videoDeliverables = creativePlan.deliverables.filter(
+      (d) => d.kind === "video"
+    );
+
+    for (let index = 0; data.imageProvider !== "none" && index < imageDeliverables.length; index += 1) {
       const prompt = variantPrompt({ ...basePrompt, index, kind: "image" });
       const creativeId = crypto.randomUUID();
       const assetId = crypto.randomUUID();
@@ -886,7 +927,7 @@ export async function generateStudioVariants(
         )
       `;
     }
-    if (data.videoProvider && data.videoProvider !== "none") {
+    if (videoDeliverables.length > 0 && data.videoProvider && data.videoProvider !== "none") {
       const decisionRows = await sql<{
         id: string;
         organization_id: string;
@@ -959,6 +1000,27 @@ export async function generateStudioVariants(
           provider_job_id = excluded.provider_job_id,
           updated_at = now()
       `;
+
+      // If provider completed synchronously, finalize durable artifact immediately (P0.4)
+      if (submittedJob.status === "COMPLETED" || submittedJob.status === "RENDERED") {
+        await finalizeProductionArtifact(sql, {
+          jobId: prodJobId,
+          organizationId: access.organizationId,
+          brandId: data.brandId,
+          provider: provider.id,
+          providerJobId: submittedJob.providerJobId || submittedJob.jobId,
+          runId,
+          rawArtifact: {
+            uri: submittedJob.outputArtifactId,
+            base64: (submittedJob.metadata?.videoBytesBase64 as string) || undefined,
+            mimeType: (submittedJob.metadata?.mimeType as string) || "video/mp4",
+          },
+          options: {
+            durationMs: (creativeSpec.durationTargetSeconds ?? 8) * 1000,
+            job: submittedJob,
+          },
+        });
+      }
 
       const videoCreativeId = crypto.randomUUID();
       const videoAssetId = crypto.randomUUID();

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
-import { GeminiOmniVideoProvider } from "./omni.ts";
+import {
+  GeminiOmniVideoProvider,
+  buildOmniTextToVideoPayload,
+  buildOmniImageToVideoPayload,
+  validateOmniTask,
+} from "./omni.ts";
 import { modelCapabilityRegistry } from "../registry.ts";
 import type { CreativeSpec } from "../types.ts";
 
@@ -293,4 +298,55 @@ test("ModelCapabilityRegistry tracks Veo 3.1 deprecation and Veo 2.0 shutdown", 
   const checkOmni = modelCapabilityRegistry.checkModelLifecycle("gemini-omni-1.1-flash");
   assert.equal(checkOmni.state, "ACTIVE");
   assert.equal(checkOmni.usable, true);
+});
+
+test("Omni task payloads include documented generation_config.video_config.task", () => {
+  // 1. Text-to-video builder
+  const textPayload = buildOmniTextToVideoPayload({
+    model: "gemini-omni-1.1-flash",
+    prompt: "A neon storefront in Tokyo",
+    aspectRatio: "9:16",
+    durationSeconds: 10,
+  });
+
+  assert.equal(textPayload.model, "gemini-omni-1.1-flash");
+  assert.equal(textPayload.input, "A neon storefront in Tokyo");
+  assert.deepEqual(textPayload.generation_config, {
+    video_config: {
+      task: "text_to_video",
+      duration_seconds: 10,
+    },
+  });
+  assert.deepEqual(textPayload.response_format, {
+    type: "video",
+    aspect_ratio: "9:16",
+  });
+
+  // 2. Image-to-video builder
+  const imagePayload = buildOmniImageToVideoPayload({
+    model: "gemini-omni-1.1-flash",
+    prompt: "Animate camera zooming in on bottle",
+    referenceImageUri: "https://storage.googleapis.com/assets/bottle.jpg",
+    aspectRatio: "16:9",
+  });
+
+  assert.equal(imagePayload.model, "gemini-omni-1.1-flash");
+  assert.ok(Array.isArray(imagePayload.input));
+  assert.equal((imagePayload.input as any[])[0].type, "image");
+  assert.equal((imagePayload.input as any[])[0].uri, "https://storage.googleapis.com/assets/bottle.jpg");
+  assert.equal((imagePayload.input as any[])[1].type, "text");
+  assert.equal((imagePayload.input as any[])[1].text, "Animate camera zooming in on bottle");
+  assert.deepEqual(imagePayload.generation_config, {
+    video_config: {
+      task: "image_to_video",
+    },
+  });
+
+  // 3. Task validator rejects unknown tasks
+  validateOmniTask("text_to_video");
+  validateOmniTask("image_to_video");
+  assert.throws(
+    () => validateOmniTask("unsupported_video_edit" as any),
+    /Unsupported Omni task 'unsupported_video_edit'/
+  );
 });

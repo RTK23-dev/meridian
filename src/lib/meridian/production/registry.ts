@@ -62,6 +62,90 @@ export class ModelCapabilityRegistry {
       source_url: "https://ai.google.dev/gemini-api/docs/omni",
     });
 
+    // 1a. Gemini Nano Banana 2.1 (Default image generation/editing)
+    this.register({
+      model_id: "gemini-nano-banana-2.1",
+      provider_id: "google_nano_banana",
+      api_family: "interactions",
+      release_channel: "ga",
+      supported_modalities: ["text", "image"],
+      supported_tasks: ["text-to-image", "image-to-image", "edit"],
+      durations: [],
+      aspect_ratios: ["1:1", "3:4", "4:3", "9:16", "16:9"],
+      resolutions: ["1024x1024", "1536x1024", "1024x1536"],
+      input_reference_types: ["image_uri", "base64"],
+      native_audio: false,
+      editing_support: true,
+      region_constraints: ["global"],
+      pricing_basis: "per_image",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-10-09",
+      source_url: "https://ai.google.dev/gemini-api/docs/image-generation",
+    });
+
+    // 1b. Gemini 3.1 Flash Lite Image (Cost/latency-sensitive batch image work)
+    this.register({
+      model_id: "gemini-3.1-flash-lite-image",
+      provider_id: "google_nano_banana",
+      api_family: "interactions",
+      release_channel: "ga",
+      supported_modalities: ["text", "image"],
+      supported_tasks: ["text-to-image"],
+      durations: [],
+      aspect_ratios: ["1:1", "9:16", "16:9"],
+      resolutions: ["1024x1024"],
+      input_reference_types: ["base64"],
+      native_audio: false,
+      editing_support: false,
+      region_constraints: ["global"],
+      pricing_basis: "per_image",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-10-09",
+      source_url: "https://ai.google.dev/gemini-api/docs/image-generation",
+    });
+
+    // 1c. Gemini 3 Pro Image (Premium / complex art direction)
+    this.register({
+      model_id: "gemini-3-pro-image",
+      provider_id: "google_nano_banana",
+      api_family: "interactions",
+      release_channel: "ga",
+      supported_modalities: ["text", "image"],
+      supported_tasks: ["text-to-image", "image-to-image", "edit"],
+      durations: [],
+      aspect_ratios: ["1:1", "3:4", "4:3", "9:16", "16:9"],
+      resolutions: ["1024x1024", "2048x2048"],
+      input_reference_types: ["image_uri", "base64"],
+      native_audio: false,
+      editing_support: true,
+      region_constraints: ["global"],
+      pricing_basis: "per_image",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-10-09",
+      source_url: "https://ai.google.dev/gemini-api/docs/image-generation",
+    });
+
+    // 1d. Gemini 3.1 Flash Image (Nano Banana 2)
+    this.register({
+      model_id: "gemini-3.1-flash-image",
+      provider_id: "google_nano_banana",
+      api_family: "interactions",
+      release_channel: "ga",
+      supported_modalities: ["text", "image"],
+      supported_tasks: ["text-to-image", "image-to-image", "edit"],
+      durations: [],
+      aspect_ratios: ["1:1", "3:4", "4:3", "9:16", "16:9"],
+      resolutions: ["1024x1024"],
+      input_reference_types: ["image_uri", "base64"],
+      native_audio: false,
+      editing_support: true,
+      region_constraints: ["global"],
+      pricing_basis: "per_image",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-10-09",
+      source_url: "https://ai.google.dev/gemini-api/docs/image-generation",
+    });
+
     // 2. Veo 3.1 Preview (deprecated, shutting down 2026-10-22)
     this.register({
       model_id: "veo-3.1-generate-preview",

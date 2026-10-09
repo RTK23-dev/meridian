@@ -69,13 +69,14 @@ export class ProductionRouter {
       );
     }
     if (mode === "QUALITY_FIRST") {
-      const preferred = ["google_omni", "veo", "higgsfield", "hypit", "manual_cloud"];
+      // Veo preview is excluded from automatic priority; Omni is primary Google video
+      const preferred = ["google_omni", "higgsfield", "hypit", "manual_cloud", "veo"];
       return [...available].sort(
         (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
       );
     }
     // BALANCED
-    const preferred = ["google_omni", "hypit", "veo", "higgsfield", "manual_cloud"];
+    const preferred = ["google_omni", "hypit", "higgsfield", "manual_cloud", "veo"];
     return [...available].sort(
       (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
     );
@@ -148,25 +149,29 @@ export class ProductionRouter {
       throw new Error(`No configured production providers available for mode ${mode}.`);
     }
 
+    // Automatic routing excludes deprecated Veo preview; usable only via explicit selection
+    const eligible = healthy.filter((p) => p.id !== "veo");
+    const candidates = eligible.length > 0 ? eligible : healthy;
+
     if (mode === "LOWEST_COST") {
-      const sorted = [...healthy].sort(
+      const sorted = [...candidates].sort(
         (a, b) => a.capabilities.costPerSecondEstimateUsd - b.capabilities.costPerSecondEstimateUsd,
       );
       return sorted[0]!;
     }
 
     if (mode === "QUALITY_FIRST") {
-      const omni = healthy.find((p) => p.id === "google_omni");
-      const veo = healthy.find((p) => p.id === "veo");
-      const hf = healthy.find((p) => p.id === "higgsfield");
-      return omni || veo || hf || healthy[0]!;
+      const omni = candidates.find((p) => p.id === "google_omni");
+      const hf = candidates.find((p) => p.id === "higgsfield");
+      const hypit = candidates.find((p) => p.id === "hypit");
+      return omni || hf || hypit || candidates[0]!;
     }
 
     // BALANCED
-    const omni = healthy.find((p) => p.id === "google_omni");
-    const hypit = healthy.find((p) => p.id === "hypit");
-    const veo = healthy.find((p) => p.id === "veo");
-    return omni || hypit || veo || healthy[0]!;
+    const omni = candidates.find((p) => p.id === "google_omni");
+    const hypit = candidates.find((p) => p.id === "hypit");
+    const hf = candidates.find((p) => p.id === "higgsfield");
+    return omni || hypit || hf || candidates[0]!;
   }
 }
 

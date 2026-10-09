@@ -25,6 +25,87 @@ import type {
   ProviderHealth,
 } from "../types.ts";
 import { modelCapabilityRegistry } from "../registry.ts";
+import { ProviderConfigResolver } from "../../config/resolver.ts";
+
+export const SUPPORTED_OMNI_TASKS = ["text_to_video", "image_to_video"] as const;
+export type OmniSupportedTask = (typeof SUPPORTED_OMNI_TASKS)[number];
+
+export function validateOmniTask(task: string): asserts task is OmniSupportedTask {
+  if (!SUPPORTED_OMNI_TASKS.includes(task as any)) {
+    throw new Error(`Unsupported Omni task '${task}'. Supported tasks: ${SUPPORTED_OMNI_TASKS.join(", ")}`);
+  }
+}
+
+export interface OmniTextToVideoOptions {
+  model: string;
+  prompt: string;
+  aspectRatio?: string;
+  durationSeconds?: number;
+}
+
+export function buildOmniTextToVideoPayload(options: OmniTextToVideoOptions): Record<string, unknown> {
+  const aspectRatio = options.aspectRatio || "9:16";
+  return {
+    model: options.model,
+    input: options.prompt,
+    generation_config: {
+      video_config: {
+        task: "text_to_video",
+        ...(options.durationSeconds ? { duration_seconds: options.durationSeconds } : {}),
+      },
+    },
+    response_format: {
+      type: "video",
+      aspect_ratio: aspectRatio,
+    },
+  };
+}
+
+export interface OmniImageToVideoOptions {
+  model: string;
+  prompt: string;
+  referenceImageUri: string;
+  aspectRatio?: string;
+  durationSeconds?: number;
+}
+
+export function buildOmniImageToVideoPayload(options: OmniImageToVideoOptions): Record<string, unknown> {
+  const { model, prompt, referenceImageUri } = options;
+  if (!referenceImageUri || !referenceImageUri.trim()) {
+    throw new Error("image_to_video requires a valid reference image URI or base64 data");
+  }
+
+  const aspectRatio = options.aspectRatio || "9:16";
+  const isBase64 = referenceImageUri.startsWith("data:") || !referenceImageUri.startsWith("http");
+  const base64Data = referenceImageUri.startsWith("data:")
+    ? referenceImageUri.replace(/^data:[^;]+;base64,/, "")
+    : referenceImageUri;
+  const mimeType = referenceImageUri.startsWith("data:")
+    ? (referenceImageUri.match(/^data:([^;]+);/)?.[1] || "image/jpeg")
+    : "image/jpeg";
+
+  const imagePart = isBase64 && !referenceImageUri.startsWith("http")
+    ? { type: "image", data: base64Data, mime_type: mimeType }
+    : { type: "image", uri: referenceImageUri, mime_type: mimeType };
+
+  return {
+    model,
+    input: [
+      imagePart,
+      { type: "text", text: prompt },
+    ],
+    generation_config: {
+      video_config: {
+        task: "image_to_video",
+        ...(options.durationSeconds ? { duration_seconds: options.durationSeconds } : {}),
+      },
+    },
+    response_format: {
+      type: "video",
+      aspect_ratio: aspectRatio,
+    },
+  };
+}
 
 export interface OmniInteractionContent {
   type?: string;
@@ -77,30 +158,27 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
   }
 
   private getApiKey(): string | undefined {
-    return process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
+    return ProviderConfigResolver.resolveGoogle().apiKey;
   }
 
   private getModel(): string {
-    return (
-      process.env.MERIDIAN_GEMINI_OMNI_MODEL?.trim() ||
-      process.env.MERIDIAN_OMNI_MODEL?.trim() ||
-      "gemini-omni-1.1-flash"
-    );
+    return ProviderConfigResolver.resolveGoogle().omniModel;
   }
 
   async health(): Promise<ProviderHealth> {
-    const key = this.getApiKey();
+    const googleConfig = ProviderConfigResolver.resolveGoogle();
+    const key = googleConfig.apiKey;
     if (!key) {
       return {
         id: this.id,
         state: "NOT_CONFIGURED",
         capabilities: [],
-        detail: "Google Gemini Omni requires GEMINI_API_KEY or GOOGLE_API_KEY environment variable.",
+        detail: "Google Gemini Omni requires MERIDIAN_GEMINI_API_KEY (or GEMINI_API_KEY / GOOGLE_API_KEY).",
         checkedAt: new Date().toISOString(),
       };
     }
 
-    const model = this.getModel();
+    const model = googleConfig.omniModel;
     const lifecycle = modelCapabilityRegistry.checkModelLifecycle(model);
 
     if (!lifecycle.usable) {
@@ -160,47 +238,29 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
 
     const prompt = spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script;
     const meridianJobId = `job-omni-${globalThis.crypto.randomUUID()}`;
-
-    // Official Gemini Interactions API payload format
-    let payload: Record<string, unknown>;
     const aspectRatio = spec.aspectRatio || "9:16";
+    const durationSeconds = spec.durationTargetSeconds;
 
     const referenceUri = spec.sourceMediaUrl || (spec as any).referenceImageUri;
 
+    let payload: Record<string, unknown>;
     if (referenceUri) {
-      // Official Gemini Interactions API image-to-video input structure:
-      // Array of typed input objects: image part followed by text instruction
-      const isBase64 = referenceUri.startsWith("data:") || !referenceUri.startsWith("http");
-      const base64Data = referenceUri.startsWith("data:")
-        ? referenceUri.replace(/^data:[^;]+;base64,/, "")
-        : referenceUri;
-      const mimeType = referenceUri.startsWith("data:")
-        ? (referenceUri.match(/^data:([^;]+);/)?.[1] || "image/jpeg")
-        : "image/jpeg";
-
-      payload = {
+      validateOmniTask("image_to_video");
+      payload = buildOmniImageToVideoPayload({
         model,
-        input: [
-          isBase64 && !referenceUri.startsWith("http")
-            ? { type: "image", data: base64Data, mime_type: mimeType }
-            : { type: "image", uri: referenceUri, mime_type: mimeType },
-          { type: "text", text: prompt },
-        ],
-        response_format: {
-          type: "video",
-          aspect_ratio: aspectRatio,
-        },
-      };
+        prompt,
+        referenceImageUri: referenceUri,
+        aspectRatio,
+        durationSeconds,
+      });
     } else {
-      // Direct text-to-video request format
-      payload = {
+      validateOmniTask("text_to_video");
+      payload = buildOmniTextToVideoPayload({
         model,
-        input: prompt,
-        response_format: {
-          type: "video",
-          aspect_ratio: aspectRatio,
-        },
-      };
+        prompt,
+        aspectRatio,
+        durationSeconds,
+      });
     }
 
     try {
