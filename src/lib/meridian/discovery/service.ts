@@ -11,6 +11,7 @@ import { sourceRegistry, SourceRegistry } from "../sources/registry.ts";
 import { crawlLadderPage } from "./crawler.ts";
 import { ResearchPlanner } from "./planner.ts";
 import { DiscoveryFrontierService } from "./frontier.ts";
+import { sourceExternalId } from "./source-identity.ts";
 import type {
   DiscoveryScope,
   DiscoveryRun,
@@ -120,7 +121,7 @@ export class DiscoveryService {
               canonical_url, name, status, metadata, created_at, updated_at
             ) values (
               ${sourceId}, ${input.organizationId}, ${input.brandId}, ${item.source},
-              ${item.source}, ${item.id}, ${item.canonicalUrl || item.url},
+              ${item.source}, ${sourceExternalId({ brandId: input.brandId, itemId: item.id, canonicalUrl: item.canonicalUrl || item.url })}, ${item.canonicalUrl || item.url},
               ${(item.title || item.canonicalUrl || item.id).slice(0, 100)}, 'ready', ${JSON.stringify(item)}, now(), now()
             )
             on conflict (organization_id, platform, external_id) do update set
@@ -380,7 +381,7 @@ export class DiscoveryService {
                 canonical_url, name, status, metadata, created_at, updated_at
               ) values (
                 ${`src_${item.id}`}, ${run.organizationId}, ${run.brandId}, ${item.source}, ${item.source},
-                ${item.id}, ${item.canonicalUrl || item.url}, ${(item.title || item.canonicalUrl || item.id).slice(0, 100)},
+                ${sourceExternalId({ brandId: run.brandId, itemId: item.id, canonicalUrl: item.canonicalUrl || item.url })}, ${item.canonicalUrl || item.url}, ${(item.title || item.canonicalUrl || item.id).slice(0, 100)},
                 'ready', ${JSON.stringify(item)}, now(), now()
               ) on conflict (organization_id, platform, external_id) do update set
                 canonical_url = excluded.canonical_url, metadata = excluded.metadata, updated_at = now()
