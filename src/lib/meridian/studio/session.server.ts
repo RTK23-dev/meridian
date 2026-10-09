@@ -1,34 +1,34 @@
-import { getSql } from "@/lib/db";
-import { assertRole, isRole, type Role } from "@/lib/meridian/access";
-import { buildBrief } from "@/lib/meridian/brief/engine";
-import { loadBrandContext } from "@/lib/meridian/context/load";
-import { assertSameTenant } from "@/lib/meridian/domain";
-import type { Sql } from "@/lib/meridian/learning/store";
-import { applyLearnedPatterns } from "@/lib/meridian/learning/store";
-import { learningDirection } from "@/lib/meridian/learning/engine";
-import { fingerprintCreative } from "@/lib/meridian/intelligence/fingerprint";
-import { findWhitespace } from "@/lib/meridian/intelligence/whitespace";
-import { hypothesisById } from "@/lib/meridian/opportunity/catalog";
-import { rankOpportunities, recommendationPosture, type OpportunityDraft } from "@/lib/meridian/opportunity/engine";
-import { rerankBrand } from "@/lib/meridian/opportunity/rerank";
-import { publishThrough } from "@/lib/meridian/providers/boundaries";
-import { testProviderPerformance } from "@/lib/meridian/providers/test-provider";
-import { claimAndRun } from "@/lib/meridian/jobs/sql-worker";
-import { decide } from "@/lib/meridian/jev/engine";
-import { publishingReadiness } from "@/lib/meridian/jev/guards";
-import { loadAppliedPolicies } from "@/lib/meridian/jev/policy";
-import { generationAllowed } from "@/lib/meridian/security/budget";
-import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features";
-import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work";
+import { getSql } from "../../db.ts";
+import { assertRole, isRole, type Role } from "../access.ts";
+import { buildBrief } from "../brief/engine.ts";
+import { loadBrandContext } from "../context/load.ts";
+import { assertSameTenant } from "../domain.ts";
+import type { Sql } from "../learning/store.ts";
+import { applyLearnedPatterns } from "../learning/store.ts";
+import { learningDirection } from "../learning/engine.ts";
+import { fingerprintCreative } from "../intelligence/fingerprint.ts";
+import { findWhitespace } from "../intelligence/whitespace.ts";
+import { hypothesisById } from "../opportunity/catalog.ts";
+import { rankOpportunities, recommendationPosture, type OpportunityDraft } from "../opportunity/engine.ts";
+import { rerankBrand } from "../opportunity/rerank.ts";
+import { publishThrough } from "../providers/boundaries.ts";
+import { testProviderPerformance } from "../providers/test-provider.ts";
+import { claimAndRun } from "../jobs/sql-worker.ts";
+import { decide } from "../jev/engine.ts";
+import { publishingReadiness } from "../jev/guards.ts";
+import { loadAppliedPolicies } from "../jev/policy.ts";
+import { generationAllowed } from "../security/budget.ts";
+import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features.ts";
+import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
 import { productionRouter } from "../production/router.ts";
 import type { CreativeSpec } from "../production/types.ts";
-import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store";
-import { assessPublishing, type AccountSnapshot } from "../publishing/readiness";
-import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure";
-import type { MarketCluster } from "../intelligence/whitespace";
+import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store.ts";
+import { assessPublishing, type AccountSnapshot } from "../publishing/readiness.ts";
+import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure.ts";
+import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
-import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativeFormatRecommendation } from "../creative/plan.ts";
+import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativeFormatRecommendation, CreativePlan } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 
 function answerValue(raw: unknown): string {
@@ -615,12 +615,12 @@ export async function generateStudioVariants(
     briefId: string;
     imageProvider: string;
     videoProvider: string;
-    mode?: import("@/lib/meridian/factory/creative-manifest").CreationMode;
+    mode?: import("../factory/creative-manifest.ts").CreationMode;
     creationScope?: CreationScope;
     autonomy?: AutonomyMode;
     maxSpendUsd?: number;
-    source?: import("@/lib/meridian/factory/creative-manifest").StartingMaterialType;
-    productionMode?: import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType;
+    source?: import("../factory/creative-manifest.ts").StartingMaterialType;
+    productionMode?: import("../factory/creative-manifest.ts").ProductionStrategyType;
     aspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
   },
 ) {
@@ -653,12 +653,13 @@ export async function generateStudioVariants(
     );
     const autonomy: AutonomyMode = data.autonomy || "semi_automatic";
 
-    // Load persisted JEV decision bundle (P0-A)
+    // Load persisted JEV decision bundle (P0-A, P0-2)
     let jevBundle: CreativeJudgmentBundle | undefined;
     if (brief.decision_id) {
       const decisionRows = await sql<{
         id: string;
         decision: string;
+        reviewer_decision: string | null;
         evidence: string;
         model_response: string;
         provider: string;
@@ -666,14 +667,27 @@ export async function generateStudioVariants(
         question_id: string;
         question_version: string;
         reasons: string;
+        probability: number;
+        confidence: number;
       }>`
-        select id, decision, evidence, model_response, provider, model, question_id, question_version, reasons
+        select id, decision, reviewer_decision, evidence, model_response, provider, model,
+               question_id, question_version, reasons, probability, confidence
         from jev_decisions
         where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
         limit 1
       `;
       const dec = decisionRows[0];
       if (dec) {
+        // Enforce Decision Semantics (P0-2)
+        // REJECT is a hard stop: creative production is blocked immediately
+        if (dec.decision === "REJECT") {
+          throw new Error("JEV policy rejected this brief. Creative production is blocked.");
+        }
+        // HUMAN_REVIEW means stop and require recorded human review; not equivalent to approved
+        if (dec.decision === "HUMAN_REVIEW" && dec.reviewer_decision !== "APPROVE") {
+          throw new Error("JEV requires recorded human review for this brief before production can proceed.");
+        }
+
         let evidenceRefs: string[] = [];
         try {
           const parsedEv = JSON.parse(dec.evidence);
@@ -687,11 +701,12 @@ export async function generateStudioVariants(
         }
 
         const recommendedFormats: CreativeFormatRecommendation[] = [];
-        const isAdmissible = dec.decision === "AUTO_APPROVE" || dec.decision === "HUMAN_REVIEW";
-
+        let parsedResp: Record<string, any> = {};
         try {
-          const parsedResp = JSON.parse(dec.model_response || "{}");
-          if (parsedResp.recommendedFormat) {
+          parsedResp = JSON.parse(dec.model_response || "{}");
+          if (parsedResp.recommendedFormats && Array.isArray(parsedResp.recommendedFormats)) {
+            recommendedFormats.push(...parsedResp.recommendedFormats);
+          } else if (parsedResp.recommendedFormat) {
             recommendedFormats.push({
               format: parsedResp.recommendedFormat,
               rationale: parsedResp.rationale || dec.reasons,
@@ -699,43 +714,20 @@ export async function generateStudioVariants(
             });
           }
         } catch {
-          // ignore
+          parsedResp = {};
         }
 
-        if (recommendedFormats.length === 0 && isAdmissible) {
-          const briefFmt = asText(brief.format).toLowerCase();
-          if (briefFmt.includes("video") || briefFmt.includes("reel") || briefFmt.includes("short")) {
-            recommendedFormats.push({
-              format: "video",
-              rationale: dec.reasons || "Dynamic motion mechanism grounded in approved JEV decision.",
-              priority: 1,
-            });
-          } else if (briefFmt.includes("carousel")) {
-            recommendedFormats.push({
-              format: "carousel",
-              rationale: dec.reasons || "Progressive informational sequence in approved JEV decision.",
-              priority: 1,
-            });
-          } else if (briefFmt.includes("image")) {
-            recommendedFormats.push({
-              format: "image",
-              rationale: dec.reasons || "Single static visual representation grounded in approved JEV decision.",
-              priority: 1,
-            });
-          }
-        }
-
+        // Map only authentic fields present in validated JEV record; zero fabricated confidence/scores
         jevBundle = {
-          conceptStrengthScore: 0.85,
-          isOutlier: true,
-          creativeMechanism: asText(brief.angle),
+          conceptStrengthScore: typeof parsedResp.conceptStrengthScore === "number" ? parsedResp.conceptStrengthScore : undefined,
+          isOutlier: typeof parsedResp.isOutlier === "boolean" ? parsedResp.isOutlier : undefined,
+          creativeMechanism: parsedResp.creativeMechanism || undefined,
           recommendedFormats,
-          formatSuitability: {
-            video: { suitable: true, rationale: "Grounding in JEV decision" },
-            image: { suitable: true, rationale: "Grounding in JEV decision" },
-            carousel: { suitable: true, rationale: "Grounding in JEV decision" },
-          },
-          status: isAdmissible ? "admissible" : "abstain_rejected",
+          formatSuitability: parsedResp.formatSuitability || {},
+          brandFitScore: typeof parsedResp.brandFitScore === "number" ? parsedResp.brandFitScore : undefined,
+          transferabilityScore: typeof parsedResp.transferabilityScore === "number" ? parsedResp.transferabilityScore : undefined,
+          distributionSuitability: parsedResp.distributionSuitability,
+          status: "admissible",
           evidenceRefs,
           decisionId: dec.id,
           questionSetVersion: dec.question_version || "v1",
@@ -749,6 +741,8 @@ export async function generateStudioVariants(
     const creativePlan = CreativeDecisionEngine.createPlan({
       scope: creationScope,
       autonomy,
+      preferredImageProvider: data.imageProvider,
+      preferredVideoProvider: data.videoProvider,
       brief: {
         title: asText(brief.title),
         hook: asText(brief.hook),
@@ -794,6 +788,16 @@ export async function generateStudioVariants(
       };
     }
 
+    // Handle JEV Reject (P0-2)
+    if (creativePlan.status === "rejected") {
+      return {
+        status: "rejected",
+        planId: creativePlan.id,
+        plan: creativePlan,
+        error: "JEV policy rejected this brief. Creative production is forbidden.",
+      };
+    }
+
     // Handle Manual or Semi-Automatic Approval Gate (P0-D)
     if (autonomy === "manual" || autonomy === "semi_automatic") {
       return {
@@ -818,135 +822,195 @@ export async function generateStudioVariants(
       };
     }
 
-    const mode = data.mode || (data.videoProvider && data.videoProvider !== "none" ? "video" : "image_ad");
-    const startingMaterial = data.source || "new_brief";
-    const productionStrategy = data.productionMode || (data.videoProvider === "manual_cloud" ? "manual_cloud" : "automated_provider");
-    const aspectRatio = data.aspectRatio || "9:16";
+    // If fully_automatic and approved: transition to executing and execute
+    await sql`
+      update creative_plans
+      set status = 'executing', updated_at = now()
+      where id = ${creativePlan.id}
+    `;
 
-    const { validateCreationPlan, buildCreativeManifest } = await import("@/lib/meridian/factory/creative-manifest");
+    return executeApprovedCreativePlan(sql, access, context.userId, creativePlan, brief, {
+      imageProviderOverride: data.imageProvider !== "none" ? data.imageProvider : undefined,
+      videoProviderOverride: data.videoProvider !== "none" ? data.videoProvider : undefined,
+    });
+}
 
-    let beats: import("@/lib/meridian/factory/creative-manifest").CreativeManifestBeat[] = [];
-    let targetDurationSeconds: number | undefined;
-    let slideCount: number | undefined;
+export async function executeApprovedCreativePlan(
+  sql: Sql,
+  access: { organizationId: string; role: Role },
+  userId: string,
+  creativePlan: CreativePlan,
+  brief: Record<string, unknown>,
+  options?: {
+    imageProviderOverride?: string;
+    videoProviderOverride?: string;
+  },
+) {
+  const brandId = asText(brief.brand_id);
+  const loaded = await loadBrandContext(sql, access.organizationId, brandId);
+  assertSameTenant(loaded.creatives, access.organizationId, brandId);
+  const productName = loaded.products[0]?.name || asText(brief.title);
 
-    if (mode === "research_only") {
-      targetDurationSeconds = undefined;
-      beats = [];
-    } else if (mode === "image_ad" || mode === "organic_image") {
-      targetDurationSeconds = undefined;
-      beats = [
-        {
-          id: "hero",
-          purpose: "hook",
-          visualInstruction: asText(brief.hook || brief.title),
-          onScreenText: asText(brief.cta || brief.hook),
-        },
-      ];
-    } else if (mode === "carousel") {
-      slideCount = 3;
-      targetDurationSeconds = undefined;
+  // Derive concrete creation mode and beats from creativePlan.deliverables
+  const hasVideo = creativePlan.deliverables.some((d) => d.kind === "video");
+  const hasCarousel = creativePlan.deliverables.some((d) => d.kind === "carousel_slide");
+  const hasImage = creativePlan.deliverables.some((d) => d.kind === "image");
+
+  let mode: import("../factory/creative-manifest.ts").CreationMode;
+  if (creativePlan.deliverables.length === 0 || creativePlan.scope === "research_only") {
+    mode = "research_only";
+  } else if ((hasVideo && (hasImage || hasCarousel)) || (hasCarousel && hasImage)) {
+    mode = "mixed_format";
+  } else if (hasVideo) {
+    mode = "video";
+  } else if (hasCarousel) {
+    mode = "carousel";
+  } else {
+    mode = "image_ad";
+  }
+
+  const { validateCreationPlan, buildCreativeManifest } = await import("../factory/creative-manifest.ts");
+
+  let beats: import("../factory/creative-manifest.ts").CreativeManifestBeat[] = [];
+  let targetDurationSeconds: number | undefined;
+  const slideCount = creativePlan.deliverables.filter((d) => d.kind === "carousel_slide").length || undefined;
+
+  if (mode === "research_only") {
+    targetDurationSeconds = undefined;
+    beats = [];
+  } else if (mode === "image_ad") {
+    targetDurationSeconds = undefined;
+    beats = [
+      {
+        id: "hero",
+        purpose: "hook",
+        visualInstruction: asText(brief.hook || brief.title),
+        onScreenText: asText(brief.cta || brief.hook),
+      },
+    ];
+  } else if (mode === "carousel") {
+    targetDurationSeconds = undefined;
+    beats = creativePlan.deliverables
+      .filter((d) => d.kind === "carousel_slide")
+      .map((d, i) => ({
+        id: `slide-${i + 1}`,
+        purpose: i === 0 ? "hook" : i === 1 ? "mechanism_proof" : "offer_cta",
+        visualInstruction: asText(d.title || brief.hook),
+        onScreenText: asText(d.copy || brief.cta),
+      }));
+    if (beats.length === 0) {
       beats = [
         { id: "slide-1", purpose: "hook", visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
         { id: "slide-2", purpose: "mechanism_proof", visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
         { id: "slide-3", purpose: "offer_cta", visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
       ];
-    } else {
-      // video, video_reel_short, mixed_format
-      targetDurationSeconds = 8;
-      beats = [
-        { id: "beat-1", purpose: "hook", targetDurationSeconds: 2, visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
-        { id: "beat-2", purpose: "mechanism", targetDurationSeconds: 4, visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
-        { id: "beat-3", purpose: "payoff_cta", targetDurationSeconds: 2, visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
-      ];
     }
+  } else {
+    targetDurationSeconds = 8;
+    beats = [
+      { id: "beat-1", purpose: "hook", targetDurationSeconds: 2, visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
+      { id: "beat-2", purpose: "mechanism", targetDurationSeconds: 4, visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
+      { id: "beat-3", purpose: "payoff_cta", targetDurationSeconds: 2, visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
+    ];
+  }
 
-    const plan = validateCreationPlan({
-      mode,
-      startingMaterial,
-      productionStrategy,
+  const plan = validateCreationPlan({
+    mode,
+    startingMaterial: "new_brief",
+    productionStrategy: "automated_provider",
+    slideCount,
+    beats,
+  });
+
+  if (!plan.valid) {
+    throw new Error(`Creative plan invalid: ${plan.reason}`);
+  }
+
+  const rawRatio = creativePlan.deliverables[0]?.aspectRatio || "9:16";
+  const aspectRatio: "9:16" | "16:9" | "1:1" | "4:5" = (rawRatio === "16:9" || rawRatio === "1:1" || rawRatio === "4:5") ? rawRatio : "9:16";
+  const manifest = buildCreativeManifest({
+    creativeId: crypto.randomUUID(),
+    conceptId: asText(brief.opportunity_id) || crypto.randomUUID(),
+    mode,
+    startingMaterial: "new_brief",
+    productionStrategy: "automated_provider",
+    brand: {
+      organizationId: access.organizationId,
+      brandId,
+      product: productName,
+      audience: asText(brief.audience),
+      objective: asText(brief.angle),
+    },
+    format: {
+      channel: "multi_channel",
+      aspectRatio,
+      targetDurationSeconds,
       slideCount,
-      beats,
-    });
+    },
+    beats,
+  });
 
-    if (!plan.valid) {
-      throw new Error(`Creative plan invalid: ${plan.reason}`);
-    }
-
-    const manifest = buildCreativeManifest({
-      creativeId: crypto.randomUUID(),
-      conceptId: asText(brief.opportunity_id) || crypto.randomUUID(),
-      mode,
-      startingMaterial,
-      productionStrategy,
-      brand: {
-        organizationId: access.organizationId,
-        brandId: data.brandId,
-        product: productName,
-        audience: asText(brief.audience),
-        objective: asText(brief.angle),
-      },
-      format: {
-        channel: "multi_channel",
-        aspectRatio,
-        targetDurationSeconds,
-        slideCount,
-      },
-      beats,
-    });
-
-    if (!plan.willCreateProductionJob || mode === "research_only" || creativePlan.scope === "research_only" || creativePlan.deliverables.length === 0) {
-      // Research-only mode: manifest created and validated, zero production jobs submitted
-      await sql`
-        insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
-        values (
-          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${context.userId},
-          'studio.research_manifest_created', 'brief', ${data.briefId},
-          ${JSON.stringify({ manifestId: manifest.creativeId, mode: manifest.mode, beats: manifest.beats.length, planId: creativePlan.id })}
-        )
-      `;
-      return loadSession(sql, access.organizationId, data.brandId, access.role);
-    }
-
-    const usage = await sql<{ runs_today: number; running: number; brand_runs_today: number; brand_running: number }>`
-      select
-        count(*) filter (where created_at > now() - interval '1 day' and status in ('running', 'completed'))::int as runs_today,
-        count(*) filter (where status = 'running')::int as running,
-        count(*) filter (where brand_id = ${data.brandId} and created_at > now() - interval '1 day' and status in ('running', 'completed'))::int as brand_runs_today,
-        count(*) filter (where brand_id = ${data.brandId} and status = 'running')::int as brand_running
-      from generation_runs
-      where organization_id = ${access.organizationId}
-    `;
-    const orgGate = generationAllowed({
-      runsToday: asNumber(usage[0]?.runs_today),
-      running: asNumber(usage[0]?.running),
-    });
-    const brandGate = generationAllowed({
-      runsToday: asNumber(usage[0]?.brand_runs_today),
-      running: asNumber(usage[0]?.brand_running),
-    });
-    const blocked = !orgGate.allowed ? orgGate : !brandGate.allowed ? brandGate : null;
-    if (blocked) {
-      await sql`
-        insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
-        values (
-          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${context.userId},
-          'generation.blocked', 'brand', ${data.brandId},
-          ${JSON.stringify({ reason: blocked.reason, estimatedCostCents: blocked.estimatedCostCents })}
-        )
-      `;
-      throw new Error(blocked.reason);
-    }
-    const runId = crypto.randomUUID();
+  if (!plan.willCreateProductionJob || mode === "research_only" || creativePlan.scope === "research_only" || creativePlan.deliverables.length === 0) {
     await sql`
-      insert into generation_runs (
-        id, organization_id, brand_id, opportunity_id, brief_id, prompt_version, image_provider, video_provider, status, created_by
-      ) values (
-        ${runId}, ${access.organizationId}, ${data.brandId}, ${asText(brief.opportunity_id) || null}, ${data.briefId},
-        ${STUDIO_PROMPT_VERSION}, ${data.imageProvider}, ${data.videoProvider}, 'running', ${context.userId}
+      insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
+      values (
+        ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${userId},
+        'studio.research_manifest_created', 'brief', ${asText(brief.id)},
+        ${JSON.stringify({ manifestId: manifest.creativeId, mode: manifest.mode, beats: manifest.beats.length, planId: creativePlan.id })}
       )
     `;
-    try {
-    const { generateImageBytes } = await import("@/lib/meridian/providers/image-bytes.server");
+    await sql`update briefs set status = 'used' where id = ${asText(brief.id)}`;
+    await sql`update creative_plans set status = 'completed', updated_at = now() where id = ${creativePlan.id}`;
+    return loadSession(sql, access.organizationId, brandId, access.role);
+  }
+
+  const usage = await sql<{ runs_today: number; running: number; brand_runs_today: number; brand_running: number }>`
+    select
+      count(*) filter (where created_at > now() - interval '1 day' and status in ('running', 'completed'))::int as runs_today,
+      count(*) filter (where status = 'running')::int as running,
+      count(*) filter (where brand_id = ${brandId} and created_at > now() - interval '1 day' and status in ('running', 'completed'))::int as brand_runs_today,
+      count(*) filter (where brand_id = ${brandId} and status = 'running')::int as brand_running
+    from generation_runs
+    where organization_id = ${access.organizationId}
+  `;
+  const orgGate = generationAllowed({
+    runsToday: asNumber(usage[0]?.runs_today),
+    running: asNumber(usage[0]?.running),
+  });
+  const brandGate = generationAllowed({
+    runsToday: asNumber(usage[0]?.brand_runs_today),
+    running: asNumber(usage[0]?.brand_running),
+  });
+  const blocked = !orgGate.allowed ? orgGate : !brandGate.allowed ? brandGate : null;
+  if (blocked) {
+    await sql`
+      insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
+      values (
+        ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${userId},
+        'generation.blocked', 'brand', ${brandId},
+        ${JSON.stringify({ reason: blocked.reason, estimatedCostCents: blocked.estimatedCostCents })}
+      )
+    `;
+    throw new Error(blocked.reason);
+  }
+
+  const runId = crypto.randomUUID();
+  const firstImgDeliv = creativePlan.deliverables.find((d) => d.kind === "image" || d.kind === "carousel_slide");
+  const firstVidDeliv = creativePlan.deliverables.find((d) => d.kind === "video");
+  const effectiveImageProvider = options?.imageProviderOverride || firstImgDeliv?.provider || "none";
+  const effectiveVideoProvider = options?.videoProviderOverride || firstVidDeliv?.provider || "none";
+
+  await sql`
+    insert into generation_runs (
+      id, organization_id, brand_id, opportunity_id, brief_id, prompt_version, image_provider, video_provider, status, created_by
+    ) values (
+      ${runId}, ${access.organizationId}, ${brandId}, ${asText(brief.opportunity_id) || null}, ${asText(brief.id)},
+      ${STUDIO_PROMPT_VERSION}, ${effectiveImageProvider}, ${effectiveVideoProvider}, 'running', ${userId}
+    )
+  `;
+
+  try {
+    const { generateImageBytes } = await import("../providers/image-bytes.server.ts");
     const basePrompt = {
       productName,
       angle: asText(brief.angle),
@@ -955,274 +1019,280 @@ export async function generateStudioVariants(
       constraints: asText(brief.constraints),
     };
 
-    const imageDeliverables = creativePlan.deliverables.filter(
-      (d) => d.kind === "image" || d.kind === "carousel_slide"
-    );
-    const videoDeliverables = creativePlan.deliverables.filter(
-      (d) => d.kind === "video"
-    );
+    for (const deliv of creativePlan.deliverables) {
+      if (deliv.kind === "image" || deliv.kind === "carousel_slide") {
+        const index = deliv.sequenceIndex ?? 0;
+        const prompt = variantPrompt({ ...basePrompt, index, kind: "image" });
+        const creativeId = crypto.randomUUID();
+        const assetId = crypto.randomUUID();
+        const imgProvider = options?.imageProviderOverride || deliv.provider || effectiveImageProvider;
 
-    for (let index = 0; data.imageProvider !== "none" && index < imageDeliverables.length; index += 1) {
-      const prompt = variantPrompt({ ...basePrompt, index, kind: "image" });
-      const creativeId = crypto.randomUUID();
-      const assetId = crypto.randomUUID();
-      const image = await generateImageBytes({
-        provider: data.imageProvider,
-        prompt,
-        seed: `${runId}:image:${index}`,
-        promptVersion: `${STUDIO_PROMPT_VERSION}#image-${index + 1}`,
-        allowTest: data.imageProvider === "test:image",
-      });
-      if (image.status !== "ready") {
-        await sql`
-          insert into generation_jobs (
-            id, organization_id, brand_id, brief_id, correlation_id, provider, model, prompt_id, prompt_version,
-            status, error, created_by
-          ) values (
-            ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${data.briefId}, ${runId},
-            ${image.provider}, '', 'studio_media', ${`${STUDIO_PROMPT_VERSION}#image-${index + 1}`},
-            ${image.status}, ${image.error.slice(0, 500)}, ${context.userId}
-          )
-        `;
-        break;
-      }
-      const key = `${access.organizationId}/${data.brandId}/runs/${runId}/${assetId}.img`;
-      const stored = await storeBlob(sql, {
-        organizationId: access.organizationId,
-        brandId: data.brandId,
-        key,
-        mime: image.mediaType,
-        bytes: image.bytes,
-      });
-      const copy = `${productName}. ${prompt}`;
-      const visual = await visualFacts(sql, access.organizationId, data.brandId, image.bytes);
-      const ownSemantic = await semanticNearest(copy, loaded.creatives.filter((item) => item.origin !== "competitor").map((item) => item.text)).catch(() => null);
-      const accounts = await accountSnapshots(sql, access.organizationId);
-      const publishing = assessPublishing({
-        accounts,
-        provider: "test:publisher",
-        kind: "image",
-        mime: image.mediaType,
-        width: image.width,
-        height: image.height,
-        byteSize: stored.byteSize,
-        destinationUrl: "",
-      });
-      const facts = factsFor(loaded, {
-        kind: "image",
-        productName,
-        angle: asText(brief.angle),
-        copy,
-        prompt,
-        mime: image.mediaType,
-        byteSize: stored.byteSize,
-        width: image.width,
-        height: image.height,
-        checksum: stored.checksum,
-        durationMs: null,
-        transcript: "",
-        sceneCount: 0,
-        logoSimilarity: visual.measuredLogo.similarity,
-        logoOutcome: visual.measuredLogo.outcome,
-        logoEvidence: visual.measuredLogo.evidence,
-        paletteDistance: visual.measuredPalette.distance,
-        paletteOutcome: visual.measuredPalette.outcome,
-        paletteEvidence: visual.measuredPalette.evidence,
-        semanticSimilarity: await semanticNearest(copy, competitorCopy(loaded)).catch(() => null),
-        ownSemanticSimilarity: ownSemantic,
-        publishing,
-      });
-      const judged = await writeJudgment(sql, {
-        organizationId: access.organizationId,
-        brandId: data.brandId,
-        creativeId,
-        facts,
-      });
-      const status = judged.rollup === "REJECT" ? "rejected" : judged.rollup === "AUTO_APPROVE" ? "approved" : "in_review";
-      await sql`
-        insert into creative_records (
-          id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
-          message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
-        ) values (
-          ${creativeId}, ${access.organizationId}, ${data.brandId}, 'generated', ${`${asText(brief.title)} image ${index + 1}`},
-          ${copy}, ${productName}, ${asText(brief.hook)}, ${"demonstration"}, ${asText(brief.angle)},
-          ${copy}, ${asText(brief.cta)}, ${asText(brief.format)}, ${asText(brief.proof_type)},
-          ${asText(brief.opportunity_id) || null}, ${data.briefId}, ${status}, ${context.userId},
-          ${JSON.stringify({ generationRunId: runId, jevDecisionId: asText(brief.decision_id), provider: image.provider, model: image.model, promptVersion: image.promptVersion, kind: "image", variant: index + 1 })}
-        )
-      `;
-      await sql`
-        insert into assets (
-          id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
-          lifecycle, checksum, width, height, byte_size, provider, model, prompt_version, generation_run_id, kind,
-          qa_decision, review_status, media_status, variant_index, provenance
-        ) values (
-          ${assetId}, ${access.organizationId}, ${data.brandId}, ${creativeId}, 1, ${key}, ${stored.checksum},
-          ${image.mediaType}, ${image.provider}, 'stored', 'qa_required', ${stored.checksum}, ${image.width}, ${image.height},
-          ${stored.byteSize}, ${image.provider}, ${image.model}, ${image.promptVersion}, ${runId}, 'image',
-          ${judged.rollup}, ${status}, 'completed', ${index}, 'generated'
-        )
-      `;
-      if (status === "in_review") {
-        await sql`
-          insert into reviews (id, organization_id, brand_id, decision_id, creative_id, subject_label)
-          values (${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${judged.decisionId}, ${creativeId}, ${`Image ${index + 1}`})
-        `;
-      }
-      await sql`
-        insert into generation_jobs (
-          id, organization_id, brand_id, brief_id, correlation_id, provider, model, prompt_id, prompt_version,
-          status, output, creative_id, created_by
-        ) values (
-          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${data.briefId}, ${runId},
-          ${image.provider}, ${image.model}, 'studio_media', ${image.promptVersion}, 'completed',
-          ${prompt.slice(0, 2000)}, ${creativeId}, ${context.userId}
-        )
-      `;
-    }
-    if (videoDeliverables.length > 0 && data.videoProvider && data.videoProvider !== "none") {
-      const decisionRows = await sql<{
-        id: string;
-        organization_id: string;
-        brand_id: string;
-        question_id: string;
-        policy_version: string;
-        decision: string;
-        reviewer_decision: string | null;
-        reasons: string;
-        evidence: string;
-      }>`
-        select id, organization_id, brand_id, question_id, policy_version, decision, reviewer_decision, reasons, evidence
-        from jev_decisions
-        where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
-        limit 1
-      `;
-      const decisionRow = decisionRows[0];
-      if (!decisionRow) throw new Error("JEV has not approved this creative. No video job was created.");
-      const _decisionValue = decisionRow.decision === "AUTO_APPROVE" || decisionRow.decision === "HUMAN_REVIEW" || decisionRow.decision === "REJECT"
-        ? decisionRow.decision
-        : "HUMAN_REVIEW";
-
-      const creativeSpec: CreativeSpec = {
-        id: manifest.creativeId,
-        organizationId: access.organizationId,
-        brandId: data.brandId,
-        title: asText(brief.title),
-        format: asText(brief.format) || (mode === "video" ? "ugc" : mode),
-        aspectRatio: manifest.format.aspectRatio === "4:5" ? "1:1" : manifest.format.aspectRatio,
-        durationTargetSeconds: manifest.format.targetDurationSeconds ?? 8,
-        hookLine: asText(brief.hook),
-        script: `${asText(brief.hook)}\n${asText(brief.message)}\n${asText(brief.cta)}`,
-        scenes: manifest.beats.map((b, i) => ({
-          index: i,
-          description: b.visualInstruction,
-          durationSeconds: b.targetDurationSeconds ?? 2,
-          onScreenText: b.onScreenText,
-          voiceoverText: b.scriptOrCaption,
-        })),
-      };
-
-      const provider = await productionRouter.route(
-        creativeSpec,
-        "BALANCED",
-        data.videoProvider === "auto" ? undefined : data.videoProvider,
-      );
-
-      const submittedJob = await provider.submitJob(creativeSpec);
-      if (submittedJob.status === "FAILED" || submittedJob.status === "PREFLIGHT_FAILED" || submittedJob.status === "NOT_CONFIGURED") {
-        throw new Error(`Video production failed (${submittedJob.status}): ${submittedJob.error || "Provider rejected job."}`);
-      }
-
-      const prodJobId = submittedJob.meridianJobId || submittedJob.jobId || crypto.randomUUID();
-      await sql`
-        insert into production_jobs (
-          id, organization_id, brand_id, provider, provider_job_id,
-          request_id, status_url, cancel_url, status, cost_mode,
-          estimated_cost_cents, input, created_at, submitted_at
-        ) values (
-          ${prodJobId}, ${access.organizationId}, ${data.brandId}, ${provider.id},
-          ${submittedJob.providerJobId || submittedJob.jobId || null},
-          ${submittedJob.requestId || null}, ${submittedJob.statusUrl || null}, ${submittedJob.cancelUrl || null},
-          ${submittedJob.status}, 'BALANCED',
-          ${Math.round(submittedJob.costEstimateUsd * 100)},
-          ${JSON.stringify({ creativeSpec, runId, briefId: data.briefId, manifestId: manifest.creativeId, manifest })},
-          now(), now()
-        )
-        on conflict (id) do update set
-          status = excluded.status,
-          provider_job_id = excluded.provider_job_id,
-          updated_at = now()
-      `;
-
-      // If provider completed synchronously, finalize durable artifact immediately (P0.4, P0-C)
-      let finalResult: import("../production/artifact-finalizer.ts").ArtifactFinalizeResult | null = null;
-      if (submittedJob.status === "COMPLETED" || submittedJob.status === "RENDERED") {
-        finalResult = await finalizeProductionArtifact(sql, {
-          jobId: prodJobId,
-          organizationId: access.organizationId,
-          brandId: data.brandId,
-          provider: provider.id,
-          providerJobId: submittedJob.providerJobId || submittedJob.jobId,
-          runId,
-          rawArtifact: {
-            uri: submittedJob.outputArtifactId,
-            base64: (submittedJob.metadata?.videoBytesBase64 as string) || undefined,
-            mimeType: (submittedJob.metadata?.mimeType as string) || "video/mp4",
-          },
-          options: {
-            durationMs: (creativeSpec.durationTargetSeconds ?? 8) * 1000,
-            job: submittedJob,
-          },
+        const image = await generateImageBytes({
+          provider: imgProvider,
+          prompt,
+          seed: `${runId}:${deliv.kind}:${index}`,
+          promptVersion: `${STUDIO_PROMPT_VERSION}#${deliv.kind}-${index + 1}`,
+          allowTest: imgProvider === "test:image",
         });
-      }
 
-      if (finalResult && !finalResult.success) {
-        // P0-C: Fail closed! Never insert a fake stored completed asset when finalization fails!
-        await sql`
-          update production_jobs
-          set status = ${finalResult.status}, error = ${finalResult.error || "Storage persistence failed"}, updated_at = now()
-          where id = ${prodJobId}
-        `;
-      } else if (finalResult?.success) {
-        const videoCreativeId = crypto.randomUUID();
-        const videoAssetId = crypto.randomUUID();
-        const videoCopy = `${productName}. ${asText(brief.hook)}`;
-        const storageKey = finalResult.storageKey || `${access.organizationId}/${data.brandId}/runs/${runId}/${videoAssetId}.mp4`;
+        if (image.status !== "ready") {
+          await sql`
+            insert into generation_jobs (
+              id, organization_id, brand_id, brief_id, correlation_id, provider, model, prompt_id, prompt_version,
+              status, error, created_by
+            ) values (
+              ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${asText(brief.id)}, ${runId},
+              ${image.provider}, '', 'studio_media', ${`${STUDIO_PROMPT_VERSION}#${deliv.kind}-${index + 1}`},
+              ${image.status}, ${image.error.slice(0, 500)}, ${userId}
+            )
+          `;
+          continue;
+        }
+
+        const key = `${access.organizationId}/${brandId}/runs/${runId}/${assetId}.img`;
+        const stored = await storeBlob(sql, {
+          organizationId: access.organizationId,
+          brandId,
+          key,
+          mime: image.mediaType,
+          bytes: image.bytes,
+        });
+        const copy = `${productName}. ${prompt}`;
+        const visual = await visualFacts(sql, access.organizationId, brandId, image.bytes);
+        const ownSemantic = await semanticNearest(copy, loaded.creatives.filter((item) => item.origin !== "competitor").map((item) => item.text)).catch(() => null);
+        const accounts = await accountSnapshots(sql, access.organizationId);
+        const publishing = assessPublishing({
+          accounts,
+          provider: "test:publisher",
+          kind: "image",
+          mime: image.mediaType,
+          width: image.width,
+          height: image.height,
+          byteSize: stored.byteSize,
+          destinationUrl: "",
+        });
+        const facts = factsFor(loaded, {
+          kind: "image",
+          productName,
+          angle: asText(brief.angle),
+          copy,
+          prompt,
+          mime: image.mediaType,
+          byteSize: stored.byteSize,
+          width: image.width,
+          height: image.height,
+          checksum: stored.checksum,
+          durationMs: null,
+          transcript: "",
+          sceneCount: 0,
+          logoSimilarity: visual.measuredLogo.similarity,
+          logoOutcome: visual.measuredLogo.outcome,
+          logoEvidence: visual.measuredLogo.evidence,
+          paletteDistance: visual.measuredPalette.distance,
+          paletteOutcome: visual.measuredPalette.outcome,
+          paletteEvidence: visual.measuredPalette.evidence,
+          semanticSimilarity: await semanticNearest(copy, competitorCopy(loaded)).catch(() => null),
+          ownSemanticSimilarity: ownSemantic,
+          publishing,
+        });
+        const judged = await writeJudgment(sql, {
+          organizationId: access.organizationId,
+          brandId,
+          creativeId,
+          facts,
+        });
+        const status = judged.rollup === "REJECT" ? "rejected" : judged.rollup === "AUTO_APPROVE" ? "approved" : "in_review";
+        const itemLabel = deliv.kind === "carousel_slide" ? `carousel slide ${index + 1}` : `image ${index + 1}`;
 
         await sql`
           insert into creative_records (
             id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
             message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
           ) values (
-            ${videoCreativeId}, ${access.organizationId}, ${data.brandId}, 'generated', ${`${asText(brief.title)} video`},
-            ${videoCopy}, ${productName}, ${asText(brief.hook)}, ${"problem"}, ${asText(brief.angle)},
-            ${videoCopy}, ${asText(brief.cta)}, ${asText(brief.format)}, ${asText(brief.proof_type)},
-            ${asText(brief.opportunity_id) || null}, ${data.briefId}, 'in_review', ${context.userId},
-            ${JSON.stringify({
-              generationRunId: runId,
-              provider: provider.id,
-              providerJobId: submittedJob.jobId,
-              productionJobId: prodJobId,
-              jevDecisionId: asText(brief.decision_id),
-              kind: "video",
-            })}
+            ${creativeId}, ${access.organizationId}, ${brandId}, 'generated', ${`${asText(brief.title)} ${itemLabel}`},
+            ${copy}, ${productName}, ${asText(brief.hook)}, ${"demonstration"}, ${asText(brief.angle)},
+            ${copy}, ${asText(brief.cta)}, ${asText(deliv.format || brief.format)}, ${asText(brief.proof_type)},
+            ${asText(brief.opportunity_id) || null}, ${asText(brief.id)}, ${status}, ${userId},
+            ${JSON.stringify({ generationRunId: runId, jevDecisionId: asText(brief.decision_id), provider: image.provider, model: image.model, promptVersion: image.promptVersion, kind: deliv.kind, variant: index + 1, planDeliverableId: deliv.id })}
           )
         `;
-
-        const videoMime = (submittedJob.metadata?.mimeType as string) || "video/mp4";
         await sql`
           insert into assets (
             id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
-            lifecycle, checksum, width, height, byte_size, duration_ms, provider, model, prompt_version, generation_run_id,
-            kind, qa_decision, review_status, media_status, variant_index, provenance
+            lifecycle, checksum, width, height, byte_size, provider, model, prompt_version, generation_run_id, kind,
+            qa_decision, review_status, media_status, variant_index, provenance
           ) values (
-            ${videoAssetId}, ${access.organizationId}, ${data.brandId}, ${videoCreativeId}, 1, ${storageKey}, ${finalResult.sha256 || ""},
-            ${videoMime}, ${provider.id}, 'stored', 'qa_required', ${finalResult.sha256 || ""}, 1080, 1920,
-            ${finalResult.byteSize || 0}, 8000, ${provider.id}, ${provider.id}, 'studio_video_v1', ${runId},
-            'video', '', 'in_review', 'completed', 0, 'generated'
+            ${assetId}, ${access.organizationId}, ${brandId}, ${creativeId}, 1, ${key}, ${stored.checksum},
+            ${image.mediaType}, ${image.provider}, 'stored', 'qa_required', ${stored.checksum}, ${image.width}, ${image.height},
+            ${stored.byteSize}, ${image.provider}, ${image.model}, ${image.promptVersion}, ${runId}, ${deliv.kind},
+            ${judged.rollup}, ${status}, 'completed', ${index}, 'generated'
           )
         `;
+        if (status === "in_review") {
+          await sql`
+            insert into reviews (id, organization_id, brand_id, decision_id, creative_id, subject_label)
+            values (${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${judged.decisionId}, ${creativeId}, ${deliv.kind === "carousel_slide" ? `Slide ${index + 1}` : `Image ${index + 1}`})
+          `;
+        }
+        await sql`
+          insert into generation_jobs (
+            id, organization_id, brand_id, brief_id, correlation_id, provider, model, prompt_id, prompt_version,
+            status, output, creative_id, created_by
+          ) values (
+            ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${asText(brief.id)}, ${runId},
+            ${image.provider}, ${image.model}, 'studio_media', ${image.promptVersion}, 'completed',
+            ${prompt.slice(0, 2000)}, ${creativeId}, ${userId}
+          )
+        `;
+      } else if (deliv.kind === "video") {
+        const decisionRows = await sql<{
+          id: string;
+          organization_id: string;
+          brand_id: string;
+          question_id: string;
+          policy_version: string;
+          decision: string;
+          reviewer_decision: string | null;
+          reasons: string;
+          evidence: string;
+        }>`
+          select id, organization_id, brand_id, question_id, policy_version, decision, reviewer_decision, reasons, evidence
+          from jev_decisions
+          where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${brandId}
+          limit 1
+        `;
+        const decisionRow = decisionRows[0];
+        if (!decisionRow) throw new Error("JEV has not approved this creative. No video job was created.");
+        if (decisionRow.decision === "REJECT") {
+          throw new Error("Brief is rejected by Brand Guardian policy. Creative generation blocked.");
+        }
+        if (decisionRow.decision === "HUMAN_REVIEW" && decisionRow.reviewer_decision !== "approved") {
+          throw new Error("Brief requires human review approval before video generation.");
+        }
+
+        const creativeSpec: CreativeSpec = {
+          id: manifest.creativeId,
+          organizationId: access.organizationId,
+          brandId,
+          title: asText(brief.title),
+          format: asText(brief.format) || (mode === "video" ? "ugc" : mode),
+          aspectRatio: manifest.format.aspectRatio === "4:5" ? "1:1" : manifest.format.aspectRatio,
+          durationTargetSeconds: deliv.targetDurationSeconds ?? manifest.format.targetDurationSeconds ?? 8,
+          hookLine: asText(brief.hook),
+          script: `${asText(brief.hook)}\n${asText(brief.message)}\n${asText(brief.cta)}`,
+          scenes: manifest.beats.map((b, i) => ({
+            index: i,
+            description: b.visualInstruction,
+            durationSeconds: b.targetDurationSeconds ?? 2,
+            onScreenText: b.onScreenText,
+            voiceoverText: b.scriptOrCaption,
+          })),
+        };
+
+        const targetVidProvider = options?.videoProviderOverride || deliv.provider || effectiveVideoProvider;
+        const provider = await productionRouter.route(
+          creativeSpec,
+          "BALANCED",
+          targetVidProvider === "auto" ? undefined : targetVidProvider,
+        );
+
+        const submittedJob = await provider.submitJob(creativeSpec);
+        if (submittedJob.status === "FAILED" || submittedJob.status === "PREFLIGHT_FAILED" || submittedJob.status === "NOT_CONFIGURED") {
+          throw new Error(`Video production failed (${submittedJob.status}): ${submittedJob.error || "Provider rejected job."}`);
+        }
+
+        const prodJobId = submittedJob.meridianJobId || submittedJob.jobId || crypto.randomUUID();
+        await sql`
+          insert into production_jobs (
+            id, organization_id, brand_id, provider, provider_job_id,
+            request_id, status_url, cancel_url, status, cost_mode,
+            estimated_cost_cents, input, created_at, submitted_at
+          ) values (
+            ${prodJobId}, ${access.organizationId}, ${brandId}, ${provider.id},
+            ${submittedJob.providerJobId || submittedJob.jobId || null},
+            ${submittedJob.requestId || null}, ${submittedJob.statusUrl || null}, ${submittedJob.cancelUrl || null},
+            ${submittedJob.status}, 'BALANCED',
+            ${Math.round(submittedJob.costEstimateUsd * 100)},
+            ${JSON.stringify({ creativeSpec, runId, briefId: asText(brief.id), manifestId: manifest.creativeId, manifest, planDeliverableId: deliv.id })},
+            now(), now()
+          )
+          on conflict (id) do update set
+            status = excluded.status,
+            provider_job_id = excluded.provider_job_id,
+            updated_at = now()
+        `;
+
+        let finalResult: import("../production/artifact-finalizer.ts").ArtifactFinalizeResult | null = null;
+        if (submittedJob.status === "COMPLETED" || submittedJob.status === "RENDERED") {
+          finalResult = await finalizeProductionArtifact(sql, {
+            jobId: prodJobId,
+            organizationId: access.organizationId,
+            brandId,
+            provider: provider.id,
+            providerJobId: submittedJob.providerJobId || submittedJob.jobId,
+            runId,
+            rawArtifact: {
+              uri: submittedJob.outputArtifactId,
+              base64: (submittedJob.metadata?.videoBytesBase64 as string) || undefined,
+              mimeType: (submittedJob.metadata?.mimeType as string) || "video/mp4",
+            },
+            options: {
+              durationMs: (creativeSpec.durationTargetSeconds ?? 8) * 1000,
+              job: submittedJob,
+            },
+          });
+        }
+
+        if (finalResult && !finalResult.success) {
+          await sql`
+            update production_jobs
+            set status = ${finalResult.status}, error = ${finalResult.error || "Storage persistence failed"}, updated_at = now()
+            where id = ${prodJobId}
+          `;
+        } else if (finalResult?.success) {
+          const videoCreativeId = crypto.randomUUID();
+          const videoAssetId = crypto.randomUUID();
+          const videoCopy = `${productName}. ${asText(brief.hook)}`;
+          const storageKey = finalResult.storageKey || `${access.organizationId}/${brandId}/runs/${runId}/${videoAssetId}.mp4`;
+
+          await sql`
+            insert into creative_records (
+              id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
+              message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
+            ) values (
+              ${videoCreativeId}, ${access.organizationId}, ${brandId}, 'generated', ${`${asText(brief.title)} video`},
+              ${videoCopy}, ${productName}, ${asText(brief.hook)}, ${"problem"}, ${asText(brief.angle)},
+              ${videoCopy}, ${asText(brief.cta)}, ${asText(brief.format)}, ${asText(brief.proof_type)},
+              ${asText(brief.opportunity_id) || null}, ${asText(brief.id)}, 'in_review', ${userId},
+              ${JSON.stringify({
+                generationRunId: runId,
+                provider: provider.id,
+                providerJobId: submittedJob.jobId,
+                productionJobId: prodJobId,
+                jevDecisionId: asText(brief.decision_id),
+                kind: "video",
+                planDeliverableId: deliv.id,
+              })}
+            )
+          `;
+
+          const videoMime = (submittedJob.metadata?.mimeType as string) || "video/mp4";
+          await sql`
+            insert into assets (
+              id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
+              lifecycle, checksum, width, height, byte_size, duration_ms, provider, model, prompt_version, generation_run_id,
+              kind, qa_decision, review_status, media_status, variant_index, provenance
+            ) values (
+              ${videoAssetId}, ${access.organizationId}, ${brandId}, ${videoCreativeId}, 1, ${storageKey}, ${finalResult.sha256 || ""},
+              ${videoMime}, ${provider.id}, 'stored', 'qa_required', ${finalResult.sha256 || ""}, 1080, 1920,
+              ${finalResult.byteSize || 0}, 8000, ${provider.id}, ${provider.id}, 'studio_video_v1', ${runId},
+              'video', '', 'in_review', 'completed', 0, 'generated'
+            )
+          `;
+        }
       }
+    }
+
     const videos = await sql<Record<string, unknown>>`
       select a.id, a.creative_id, a.storage_key, a.media_status, a.byte_size, a.width, a.height, a.duration_ms, a.transcript,
              a.scenes, a.checksum, a.mime_type, a.prompt_version, c.raw_text, c.angle
@@ -1244,7 +1314,7 @@ export async function generateStudioVariants(
         byteSize: asNumber(video.byte_size),
         destinationUrl: "",
       });
-      const visual = await measuredVideoFrames(sql, access.organizationId, data.brandId, asText(video.storage_key));
+      const visual = await measuredVideoFrames(sql, access.organizationId, brandId, asText(video.storage_key));
       const facts = factsFor(loaded, {
         kind: "video",
         productName,
@@ -1271,7 +1341,7 @@ export async function generateStudioVariants(
       });
       const judged = await writeJudgment(sql, {
         organizationId: access.organizationId,
-        brandId: data.brandId,
+        brandId,
         creativeId: asText(video.creative_id),
         facts,
       });
@@ -1284,26 +1354,26 @@ export async function generateStudioVariants(
       if (status === "in_review") {
         await sql`
           insert into reviews (id, organization_id, brand_id, decision_id, creative_id, subject_label)
-          values (${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${judged.decisionId}, ${asText(video.creative_id)}, 'Video')
+          values (${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${judged.decisionId}, ${asText(video.creative_id)}, 'Video')
         `;
       }
     }
-    }
-    await sql`update briefs set status = 'used' where id = ${data.briefId}`;
+
+    await sql`update briefs set status = 'used' where id = ${asText(brief.id)}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
     await sql`update creative_plans set status = 'completed', updated_at = now() where id = ${creativePlan.id}`;
-    return loadSession(sql, access.organizationId, data.brandId, access.role);
-    } catch (error) {
-      await sql`
-        update generation_runs set status = 'failed'
-        where id = ${runId} and organization_id = ${access.organizationId} and status = 'running'
-      `;
-      await sql`
-        update creative_plans set status = 'failed', updated_at = now()
-        where id = ${creativePlan.id}
-      `.catch(() => {});
-      throw error;
-    }
+    return loadSession(sql, access.organizationId, brandId, access.role);
+  } catch (error) {
+    await sql`
+      update generation_runs set status = 'failed'
+      where id = ${runId} and organization_id = ${access.organizationId} and status = 'running'
+    `;
+    await sql`
+      update creative_plans set status = 'failed', updated_at = now()
+      where id = ${creativePlan.id}
+    `.catch(() => {});
+    throw error;
+  }
 }
 
 export async function approveAndExecuteCreativePlan(
@@ -1312,7 +1382,9 @@ export async function approveAndExecuteCreativePlan(
 ) {
   const sql = await getSql();
   const access = await requireBrand(sql, userId, data.brandId, "member");
-  const planRows = await sql<{
+
+  // Atomic conditional update (P0-3)
+  const updatedPlans = await sql<{
     id: string;
     organization_id: string;
     brand_id: string;
@@ -1326,40 +1398,76 @@ export async function approveAndExecuteCreativePlan(
     budget_reserved_usd: number;
     spend_cap_usd: number | null;
   }>`
-    select id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective,
-           plan_payload, budget_reserved_usd, spend_cap_usd
-    from creative_plans
-    where id = ${data.planId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
-    limit 1
+    update creative_plans
+    set status = 'executing', approved_by = ${userId}, approved_at = now(), updated_at = now()
+    where id = ${data.planId}
+      and brand_id = ${data.brandId}
+      and organization_id = ${access.organizationId}
+      and status = 'awaiting_approval'
+    returning *;
   `;
-  const planRow = planRows[0];
-  if (!planRow) throw new Error("Creative plan not found.");
-  if (planRow.status === "completed") throw new Error("Creative plan is already completed.");
-  if (planRow.status === "abstained") throw new Error("Cannot execute an abstained plan without choosing a format.");
 
-  if (planRow.spend_cap_usd != null && planRow.budget_reserved_usd > planRow.spend_cap_usd) {
-    throw new Error(`Plan estimated cost ($${planRow.budget_reserved_usd}) exceeds spend cap ($${planRow.spend_cap_usd}).`);
+  const planRow = updatedPlans[0];
+  if (!planRow) {
+    const existing = await sql<{ id: string; status: string }>`
+      select id, status from creative_plans
+      where id = ${data.planId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+      limit 1
+    `;
+    if (!existing[0]) {
+      throw new Error("Creative plan not found.");
+    }
+    if (existing[0].status === "executing") {
+      throw new Error("Creative plan is currently executing.");
+    }
+    if (existing[0].status === "completed") {
+      return loadSession(sql, access.organizationId, data.brandId, access.role);
+    }
+    if (existing[0].status === "abstained") {
+      throw new Error("Cannot execute an abstained plan without choosing a format.");
+    }
+    if (existing[0].status === "rejected") {
+      throw new Error("Cannot execute a rejected plan.");
+    }
+    throw new Error(`Creative plan is not awaiting approval (status: ${existing[0].status}).`);
   }
 
-  await sql`
-    update creative_plans
-    set status = 'approved', approved_by = ${userId}, approved_at = now(), updated_at = now()
-    where id = ${data.planId}
+  // Load the brief
+  const briefs = await sql<Record<string, unknown>>`
+    select * from briefs
+    where id = ${planRow.brief_id} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+    limit 1
   `;
+  const brief = briefs[0];
+  if (!brief) throw new Error("Brief associated with creative plan not found.");
 
-  const planPayload = typeof planRow.plan_payload === "string" ? JSON.parse(planRow.plan_payload) : planRow.plan_payload;
-  const firstVideoDeliv = (planPayload?.deliverables as any[])?.find((d: any) => d.kind === "video");
-  const videoProvider = firstVideoDeliv ? firstVideoDeliv.provider : "none";
+  const planPayload: CreativePlan = typeof planRow.plan_payload === "string"
+    ? JSON.parse(planRow.plan_payload)
+    : planRow.plan_payload;
 
-  return generateStudioVariants(userId, {
-    brandId: data.brandId,
-    briefId: planRow.brief_id,
-    imageProvider: "none",
-    videoProvider,
-    creationScope: planRow.scope as any,
-    autonomy: "fully_automatic",
-    maxSpendUsd: planRow.spend_cap_usd ?? undefined,
-  });
+  return executeApprovedCreativePlan(sql, access, userId, planPayload, brief);
+}
+
+export async function rejectCreativePlan(
+  userId: string,
+  data: { brandId: string; planId: string; reason?: string },
+) {
+  const sql = await getSql();
+  const access = await requireBrand(sql, userId, data.brandId, "member");
+
+  const updated = await sql`
+    update creative_plans
+    set status = 'rejected', updated_at = now()
+    where id = ${data.planId}
+      and brand_id = ${data.brandId}
+      and organization_id = ${access.organizationId}
+      and status in ('awaiting_approval', 'draft')
+    returning id;
+  `;
+  if (!updated[0]) {
+    throw new Error("Plan not found or not in a rejectable state.");
+  }
+  return loadSession(sql, access.organizationId, data.brandId, access.role);
 }
 
 export async function reviewStudioVariant(

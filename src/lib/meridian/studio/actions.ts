@@ -31,56 +31,27 @@ export const openStudioBrief = createServerFn({ method: "POST" })
     return api.openStudioBrief(context.userId, data);
   });
 
+import { serverStudioGenerationSchema } from "@/lib/meridian/schemas/studio-generation";
+
 export const generateStudioVariants = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
-    const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
-    const brandId = clip(body.brandId);
-    const briefId = clip(body.briefId);
-    const imageProvider = clip(body.imageProvider);
-    const videoProvider = clip(body.videoProvider);
-    const mode = clip(body.mode);
-    const creationScope = clip(body.creationScope);
-    const autonomy = clip(body.autonomy);
-    const source = clip(body.source);
-    const productionMode = clip(body.productionMode);
-    const aspectRatio = clip(body.aspectRatio);
-
-    if (!brandId || !briefId) throw new Error("Choose a brief.");
-    if (imageProvider && imageProvider !== "none" && imageProvider !== "test:image" && imageProvider !== "google:nano-banana") {
-      throw new Error("Choose no image provider or an optional supported image provider.");
+    const raw = (input && typeof input === "object" ? { ...input } : {}) as Record<string, unknown>;
+    if (raw.videoProvider === "omni") {
+      raw.videoProvider = "google_omni";
     }
-    const isTestRuntime = process.env.NODE_ENV === "test" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
-    const allowedVideoProviders = new Set([
-      "none",
-      "auto",
-      "manual_cloud",
-      "veo",
-      "higgsfield",
-      "hypit",
-      "omni",
-      "google_omni",
-      ...(isTestRuntime ? ["test:video"] : []),
-    ]);
-    if (videoProvider === "veo") {
+    if (raw.videoProvider === "veo") {
       throw new Error("Google Veo 3.1 (Preview) is deprecated and shut down. Please select Google Gemini Omni (google_omni).");
     }
-    const canonicalVideoProvider = videoProvider === "omni" ? "google_omni" : videoProvider;
-    if (canonicalVideoProvider && !allowedVideoProviders.has(canonicalVideoProvider)) {
-      throw new Error(`Unsupported video provider: ${canonicalVideoProvider}. Allowed: auto, manual_cloud, higgsfield, hypit, google_omni, none.`);
-    }
-    const maxSpendUsd = typeof body.maxSpendUsd === "number" && !Number.isNaN(body.maxSpendUsd) ? body.maxSpendUsd : undefined;
+    if (!raw.imageProvider) raw.imageProvider = "none";
+    if (!raw.videoProvider) raw.videoProvider = "none";
+
+    const validated = serverStudioGenerationSchema.parse(raw);
     return {
-      brandId,
-      briefId,
-      imageProvider: imageProvider || "none",
-      videoProvider: canonicalVideoProvider || "none",
-      mode: (mode || (canonicalVideoProvider && canonicalVideoProvider !== "none" ? "video" : "image_ad")) as import("@/lib/meridian/factory/creative-manifest").CreationMode,
-      creationScope: creationScope as import("@/lib/meridian/creative/plan").CreationScope | undefined,
-      autonomy: autonomy as import("@/lib/meridian/creative/plan").AutonomyMode | undefined,
-      maxSpendUsd,
-      source: (source || "new_brief") as import("@/lib/meridian/factory/creative-manifest").StartingMaterialType,
-      productionMode: (productionMode || (canonicalVideoProvider === "manual_cloud" ? "manual_cloud" : "automated_provider")) as import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType,
-      aspectRatio: (aspectRatio === "16:9" || aspectRatio === "1:1" ? aspectRatio : "9:16") as "9:16" | "16:9" | "1:1" | "4:5",
+      ...validated,
+      videoProvider: validated.videoProvider === "omni" ? "google_omni" : validated.videoProvider,
+      mode: validated.mode as import("@/lib/meridian/factory/creative-manifest").CreationMode | undefined,
+      source: validated.source as import("@/lib/meridian/factory/creative-manifest").StartingMaterialType | undefined,
+      productionMode: validated.productionMode as import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType | undefined,
     };
   })
   .middleware([authMiddleware])
@@ -103,6 +74,22 @@ export const approveAndExecuteCreativePlan = createServerFn({ method: "POST" })
     refuseIfLimited(modelLimit, context.userId);
     const api = await import("./session.server");
     return api.approveAndExecuteCreativePlan(context.userId, data);
+  });
+
+export const rejectCreativePlan = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+    const brandId = clip(body.brandId);
+    const planId = clip(body.planId);
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 200) : undefined;
+    if (!brandId || !planId) throw new Error("Choose a valid brand and creative plan.");
+    return { brandId, planId, reason };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    refuseIfLimited(modelLimit, context.userId);
+    const api = await import("./session.server");
+    return api.rejectCreativePlan(context.userId, data);
   });
 
 export const reviewStudioVariant = createServerFn({ method: "POST" })

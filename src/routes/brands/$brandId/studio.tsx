@@ -10,10 +10,12 @@ import { Term } from "@/components/term";
 import { providerLabel, statusLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import {
+  approveAndExecuteCreativePlan,
   generateStudioVariants,
   openStudioBrief,
   publishStudioVariant,
   recordStudioTestPerformance,
+  rejectCreativePlan,
   reviewStudioVariant,
 } from "@/lib/meridian/studio/actions";
 import {
@@ -71,6 +73,13 @@ function Studio({ brandId }: { brandId: string }) {
   const [queueAccountIds, setQueueAccountIds] = useState<string[]>([]);
   const [queueScheduledTime, setQueueScheduledTime] = useState("");
   const [queueTargetType, setQueueTargetType] = useState<"organic" | "paid_campaign">("organic");
+  const [pendingPlan, setPendingPlan] = useState<{
+    planId: string;
+    plan: any;
+    estimatedCostUsd?: number;
+    note?: string;
+  } | null>(null);
+  const [planRejectReason, setPlanRejectReason] = useState("");
 
   const briefAction = useBusy([qk.studio(brandId), qk.opportunities(brandId)]);
   const generationAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
@@ -112,10 +121,44 @@ function Studio({ brandId }: { brandId: string }) {
 
   async function generate(values: StudioGeneration) {
     if (!brief) return;
-    const saved = await generationAction.run(async () => {
-      await generateStudioVariants({ data: { brandId, briefId: brief.id, ...values } });
+    await generationAction.run(async () => {
+      const res = await generateStudioVariants({ data: { brandId, briefId: brief.id, ...values } });
+      if (res && typeof res === "object" && "status" in res) {
+        if (res.status === "awaiting_approval") {
+          setPendingPlan({
+            planId: (res as any).planId,
+            plan: (res as any).plan,
+            estimatedCostUsd: (res as any).estimatedCostUsd,
+            note: (res as any).note,
+          });
+          return;
+        }
+        if (res.status === "abstained") {
+          throw new Error((res as any).note || "JEV abstained from automated format selection. Please select an explicit format.");
+        }
+        if (res.status === "rejected") {
+          throw new Error((res as any).error || "Creative plan was rejected by Brand Guardian policy.");
+        }
+      }
+      generationForm.reset(values);
     });
-    if (saved) generationForm.reset(values);
+  }
+
+  async function handleApprovePlan() {
+    if (!pendingPlan) return;
+    await generationAction.run(async () => {
+      await approveAndExecuteCreativePlan({ data: { brandId, planId: pendingPlan.planId } });
+      setPendingPlan(null);
+    });
+  }
+
+  async function handleRejectPlan() {
+    if (!pendingPlan) return;
+    await generationAction.run(async () => {
+      await rejectCreativePlan({ data: { brandId, planId: pendingPlan.planId, reason: planRejectReason || undefined } });
+      setPendingPlan(null);
+      setPlanRejectReason("");
+    });
   }
 
   return (
@@ -924,6 +967,62 @@ function Studio({ brandId }: { brandId: string }) {
           })()}
         </TabsContent>
       </Tabs>
+
+      {pendingPlan ? (
+        <Dialog open onOpenChange={(open) => { if (!open) setPendingPlan(null); }}>
+          <DialogContent>
+            <DialogTitle>Review Creative Plan</DialogTitle>
+            <DialogDescription>
+              {pendingPlan.note || "Please review the planned deliverables and estimated cost before proceeding with billable generation."}
+            </DialogDescription>
+            <div className="mt-4 space-y-4 text-sm">
+              <div className="flex justify-between items-center py-2 border-b border-line">
+                <span className="text-muted">Plan ID</span>
+                <span className="font-mono text-xs">{pendingPlan.planId}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-line">
+                <span className="text-muted">Scope & Autonomy</span>
+                <span className="font-medium">{pendingPlan.plan?.scope || "auto_choose"} · {pendingPlan.plan?.autonomy || "semi_automatic"}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-line">
+                <span className="text-muted">Estimated Cost</span>
+                <span className="font-bold text-accent">${(pendingPlan.estimatedCostUsd ?? pendingPlan.plan?.estimatedCost?.totalEstimatedUsd ?? 0).toFixed(2)} USD</span>
+              </div>
+              <div>
+                <h4 className="font-semibold mb-2">Planned Deliverables ({pendingPlan.plan?.deliverables?.length ?? 0})</h4>
+                <ul className="space-y-2 max-h-48 overflow-y-auto">
+                  {pendingPlan.plan?.deliverables?.map((deliv: any, idx: number) => (
+                    <li key={deliv.id || idx} className="rounded border border-line p-2 text-xs flex justify-between items-center">
+                      <div>
+                        <span className="font-semibold uppercase text-brass mr-2">{deliv.kind}</span>
+                        <span>{deliv.title || `Deliverable ${idx + 1}`}</span>
+                      </div>
+                      <span className="text-muted">{deliv.provider} · {deliv.aspectRatio || "9:16"}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-line">
+                <Button
+                  type="button"
+                  variant="quiet"
+                  disabled={generationAction.pending}
+                  onClick={() => void handleRejectPlan()}
+                >
+                  Reject Plan
+                </Button>
+                <Button
+                  type="button"
+                  disabled={generationAction.pending}
+                  onClick={() => void handleApprovePlan()}
+                >
+                  {generationAction.pending ? "Executing…" : "Approve & Generate"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

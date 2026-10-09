@@ -60,6 +60,8 @@ export interface CreativeDecisionInput {
     allowedModels?: string[];
     requireHumanReview?: boolean;
   };
+  preferredImageProvider?: string;
+  preferredVideoProvider?: string;
   availableAssets?: AssetPlanItem[];
 }
 
@@ -101,7 +103,18 @@ export class CreativeDecisionEngine {
 
     // Determine target format
     let effectiveFormat: "image" | "video" | "carousel" | "mixed" | "research" | "abstain";
-    if (scope === "image_only") {
+    if (input.jevJudgments?.status === "abstain_rejected") {
+      effectiveFormat = "abstain";
+      chosenFormatDesc = "JEV policy rejected this brief. No production deliverables created.";
+      whyOtherFormatsRejected.all_media = "Brief rejected by JEV policy.";
+      rationales.push({
+        topic: "jev_rejection_block",
+        claim: "JEV policy rejected this brief",
+        groundedIn: "policy_rule",
+        sourceId: input.jevJudgments.decisionId || "jev-rejected",
+        detail: "Hard block: JEV decision is REJECT. Creative production is forbidden.",
+      });
+    } else if (scope === "image_only") {
       effectiveFormat = "image";
       chosenFormatDesc = "User explicitly specified image_only scope.";
       whyOtherFormatsRejected.video = "Excluded by user scope image_only.";
@@ -176,6 +189,13 @@ export class CreativeDecisionEngine {
       });
     }
 
+    const imgProvider = (input.preferredImageProvider && input.preferredImageProvider !== "none")
+      ? input.preferredImageProvider
+      : "google_nano_banana";
+    const vidProvider = (input.preferredVideoProvider && input.preferredVideoProvider !== "none")
+      ? (input.preferredVideoProvider === "omni" ? "google_omni" : input.preferredVideoProvider)
+      : "google_omni";
+
     // 1. Build Deliverables & Production Steps strictly according to effectiveFormat
     if (effectiveFormat === "image") {
       // EXACTLY ZERO video jobs
@@ -189,7 +209,7 @@ export class CreativeDecisionEngine {
           title: `${input.brief.title} - Variant ${i + 1}`,
           copy: `${input.brief.hook}\n${input.brief.message}\n${input.brief.cta}`,
           aspectRatio: input.brief.aspectRatio || "1:1",
-          provider: "google_nano_banana",
+          provider: imgProvider as any,
           model: "gemini-nano-banana-2.1",
         });
 
@@ -197,7 +217,7 @@ export class CreativeDecisionEngine {
           stepId: `step-img-${i + 1}`,
           deliverableId: delivId,
           action: "generate_image",
-          providerId: "google_nano_banana",
+          providerId: imgProvider,
           modelId: "gemini-nano-banana-2.1",
           estimatedCostUsd: 0.05,
         });
@@ -215,7 +235,7 @@ export class CreativeDecisionEngine {
         copy: `${input.brief.hook}\n${input.brief.message}\n${input.brief.cta}`,
         aspectRatio: input.brief.aspectRatio || "9:16",
         targetDurationSeconds: targetSec,
-        provider: "google_omni",
+        provider: vidProvider as any,
         model: "gemini-omni-1.1-flash",
       });
 
@@ -223,7 +243,7 @@ export class CreativeDecisionEngine {
         stepId: "step-video-1",
         deliverableId: delivId,
         action: "generate_video",
-        providerId: "google_omni",
+        providerId: vidProvider,
         modelId: "gemini-omni-1.1-flash",
         estimatedCostUsd: Number((targetSec * 0.15).toFixed(2)),
       });
@@ -246,7 +266,7 @@ export class CreativeDecisionEngine {
           copy: i === 0 ? input.brief.hook : i === 3 ? input.brief.cta : input.brief.message,
           altText: slides[i],
           aspectRatio: "1:1",
-          provider: "google_nano_banana",
+          provider: imgProvider as any,
           model: "gemini-nano-banana-2.1",
         });
 
@@ -254,7 +274,7 @@ export class CreativeDecisionEngine {
           stepId: `step-slide-${i + 1}`,
           deliverableId: delivId,
           action: "generate_image",
-          providerId: "google_nano_banana",
+          providerId: imgProvider,
           modelId: "gemini-nano-banana-2.1",
           estimatedCostUsd: 0.05,
         });
@@ -271,14 +291,14 @@ export class CreativeDecisionEngine {
         copy: input.brief.hook,
         aspectRatio: "9:16",
         targetDurationSeconds: 8,
-        provider: "google_omni",
+        provider: vidProvider as any,
         model: "gemini-omni-1.1-flash",
       });
       productionPlan.push({
         stepId: "step-mixed-vid",
         deliverableId: vidDelivId,
         action: "generate_video",
-        providerId: "google_omni",
+        providerId: vidProvider,
         modelId: "gemini-omni-1.1-flash",
         estimatedCostUsd: 1.20,
       });
@@ -293,14 +313,14 @@ export class CreativeDecisionEngine {
           title: `${input.brief.title} - Slide ${i + 1}`,
           copy: input.brief.message,
           aspectRatio: "1:1",
-          provider: "google_nano_banana",
+          provider: imgProvider as any,
           model: "gemini-nano-banana-2.1",
         });
         productionPlan.push({
           stepId: `step-mixed-slide-${i + 1}`,
           deliverableId: slideId,
           action: "generate_image",
-          providerId: "google_nano_banana",
+          providerId: imgProvider,
           modelId: "gemini-nano-banana-2.1",
           estimatedCostUsd: 0.05,
         });
@@ -316,14 +336,14 @@ export class CreativeDecisionEngine {
           title: `${input.brief.title} - Image Ad ${i + 1}`,
           copy: input.brief.cta,
           aspectRatio: "1:1",
-          provider: "google_nano_banana",
+          provider: imgProvider as any,
           model: "gemini-nano-banana-2.1",
         });
         productionPlan.push({
           stepId: `step-mixed-img-${i + 1}`,
           deliverableId: imgId,
           action: "generate_image",
-          providerId: "google_nano_banana",
+          providerId: imgProvider,
           modelId: "gemini-nano-banana-2.1",
           estimatedCostUsd: 0.05,
         });
@@ -355,7 +375,16 @@ export class CreativeDecisionEngine {
 
     let planStatus: CreativePlanStatus = "draft";
 
-    if (effectiveFormat === "abstain") {
+    if (input.jevJudgments?.status === "abstain_rejected") {
+      planStatus = "rejected";
+      approvalRequirements.push({
+        id: `appr-reject-${planId}`,
+        level: "compliance_gate",
+        status: "rejected",
+        reason: "JEV policy rejected this brief. Creative production is blocked.",
+        requiredBeforeAction: "production_execution",
+      });
+    } else if (effectiveFormat === "abstain") {
       planStatus = "abstained";
       approvalRequirements.push({
         id: `appr-abstain-${planId}`,

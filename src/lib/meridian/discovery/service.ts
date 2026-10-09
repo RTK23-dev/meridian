@@ -70,25 +70,60 @@ export class DiscoveryService {
     inMemoryRuns.set(runId, run);
 
     if (input.sql) {
-      try {
-        const sql = input.sql;
-        await sql`
-          insert into discovery_runs (
-            id, organization_id, brand_id, scope, status, seeds, budget, progress, per_source_errors, started_at
-          ) values (
-            ${runId}, ${input.organizationId}, ${input.brandId}, ${input.scope}, 'running',
-            ${JSON.stringify(input.seeds)}, ${JSON.stringify(budget)}, ${JSON.stringify(run.progress)},
-            ${JSON.stringify(run.perSourceErrors)}, now()
-          )
-        `;
-      } catch (dbErr: any) {
-        run.perSourceErrors["database_init"] = dbErr.message || String(dbErr);
-      }
+      const sql = input.sql;
+      await sql`
+        insert into discovery_runs (
+          id, organization_id, brand_id, scope, status, seeds, budget, progress, per_source_errors, started_at
+        ) values (
+          ${runId}, ${input.organizationId}, ${input.brandId}, ${input.scope}, 'running',
+          ${JSON.stringify(input.seeds)}, ${JSON.stringify(budget)}, ${JSON.stringify(run.progress)},
+          ${JSON.stringify(run.perSourceErrors)}, now()
+        )
+      `;
     }
 
     const discoveredItems: DiscoveredItem[] = [];
     const seenUrls = new Set<string>();
     const seenHashes = new Set<string>();
+
+    const persistItem = async (item: DiscoveredItem) => {
+      discoveredItems.push(item);
+      if (input.sql) {
+        try {
+          await input.sql`
+            insert into discovered_items (
+              id, run_id, organization_id, brand_id, source, url, canonical_url,
+              card_type, title, text_content, metrics, content_hash, source_location, discovered_at
+            ) values (
+              ${item.id}, ${runId}, ${input.organizationId}, ${input.brandId},
+              ${item.source}, ${item.url}, ${item.canonicalUrl || null},
+              ${item.cardType}, ${item.title || null}, ${item.text || null},
+              ${JSON.stringify(item.metrics || {})}, ${item.contentHash},
+              ${item.sourceLocation || null}, now()
+            )
+            on conflict (id) do nothing
+          `;
+
+          const sourceId = `src_${item.id}`;
+          await input.sql`
+            insert into sources (
+              id, organization_id, brand_id, platform, adapter_id, external_id,
+              canonical_url, name, status, metadata, created_at, updated_at
+            ) values (
+              ${sourceId}, ${input.organizationId}, ${input.brandId}, ${item.source},
+              ${item.source}, ${item.id}, ${item.canonicalUrl || item.url},
+              ${(item.title || item.canonicalUrl || item.id).slice(0, 100)}, 'ready', ${JSON.stringify(item)}, now(), now()
+            )
+            on conflict (organization_id, platform, external_id) do update set
+              canonical_url = excluded.canonical_url,
+              metadata = excluded.metadata,
+              updated_at = now()
+          `;
+        } catch (itemErr: any) {
+          run.perSourceErrors[`persist_${item.id}`] = itemErr.message || String(itemErr);
+        }
+      }
+    };
 
     try {
       if (input.scope === "scrape_page") {
@@ -101,7 +136,7 @@ export class DiscoveryService {
             const topHash = createHash("sha256").update(pageResult.title + pageResult.description).digest("hex");
             if (!seenHashes.has(topHash)) {
               seenHashes.add(topHash);
-              discoveredItems.push({
+              await persistItem({
                 id: `item_${runId}_top_${discoveredItems.length}`,
                 runId,
                 url: pageResult.finalUrl,
@@ -126,7 +161,7 @@ export class DiscoveryService {
             for (const card of pageResult.cards) {
               if (!seenHashes.has(card.contentHash)) {
                 seenHashes.add(card.contentHash);
-                discoveredItems.push(card);
+                await persistItem(card);
               }
             }
           } catch (err) {
@@ -153,7 +188,7 @@ export class DiscoveryService {
             const topHash = createHash("sha256").update(pageResult.title + pageResult.description).digest("hex");
             if (!seenHashes.has(topHash)) {
               seenHashes.add(topHash);
-              discoveredItems.push({
+              await persistItem({
                 id: `item_${runId}_${discoveredItems.length}`,
                 runId,
                 url: pageResult.finalUrl,
@@ -178,7 +213,7 @@ export class DiscoveryService {
             for (const card of pageResult.cards) {
               if (!seenHashes.has(card.contentHash)) {
                 seenHashes.add(card.contentHash);
-                discoveredItems.push(card);
+                await persistItem(card);
               }
             }
 
@@ -228,7 +263,7 @@ export class DiscoveryService {
               const itemHash = createHash("sha256").update(ref.sourceId + (ref.canonicalUrl || "")).digest("hex");
               if (!seenHashes.has(itemHash)) {
                 seenHashes.add(itemHash);
-                discoveredItems.push({
+                await persistItem({
                   id: `item_${runId}_${discoveredItems.length}`,
                   runId,
                   url: ref.canonicalUrl || exec.seed,
@@ -264,42 +299,10 @@ export class DiscoveryService {
     run.progress.discoveredCards = discoveredItems.filter((i) => i.source === "repeated_card_discovery").length;
     run.progress.discoveredUrls = discoveredItems.length;
 
-    // Durable DB persistence if SQL provided (P1-A)
+    // Durable DB run status persistence if SQL provided
     if (input.sql) {
       try {
         const sql = input.sql;
-        for (const item of discoveredItems) {
-          await sql`
-            insert into discovered_items (
-              id, run_id, organization_id, brand_id, source, url, canonical_url,
-              card_type, title, text_content, metrics, content_hash, source_location, discovered_at
-            ) values (
-              ${item.id}, ${runId}, ${input.organizationId}, ${input.brandId},
-              ${item.source}, ${item.url}, ${item.canonicalUrl || null},
-              ${item.cardType}, ${item.title || null}, ${item.text || null},
-              ${JSON.stringify(item.metrics || {})}, ${item.contentHash},
-              ${item.sourceLocation || null}, now()
-            )
-            on conflict (id) do nothing
-          `;
-
-          const sourceId = `src_${item.id}`;
-          await sql`
-            insert into sources (
-              id, organization_id, brand_id, platform, adapter_id, external_id,
-              canonical_url, name, status, metadata, created_at, updated_at
-            ) values (
-              ${sourceId}, ${input.organizationId}, ${input.brandId}, ${item.source},
-              ${item.source}, ${item.id}, ${item.canonicalUrl || item.url},
-              ${(item.title || item.canonicalUrl || item.id).slice(0, 100)}, 'ready', ${JSON.stringify(item)}, now(), now()
-            )
-            on conflict (organization_id, platform, external_id) do update set
-              canonical_url = excluded.canonical_url,
-              metadata = excluded.metadata,
-              updated_at = now()
-          `;
-        }
-
         await sql`
           update discovery_runs
           set status = ${run.status}, progress = ${JSON.stringify(run.progress)},
@@ -308,7 +311,6 @@ export class DiscoveryService {
           where id = ${runId}
         `;
       } catch (dbErr: any) {
-        // Record persistence error transparently; don't return completed if required persistence failed
         run.status = "failed";
         run.perSourceErrors["database_persistence"] = dbErr.message || String(dbErr);
       }
@@ -323,11 +325,27 @@ export class DiscoveryService {
     };
   }
 
-  async getDiscoveryRun(runId: string, sql?: Sql): Promise<DiscoveryRun | undefined> {
+  async getDiscoveryRun(
+    runId: string,
+    sqlOrOptions?: Sql | { sql?: Sql; organizationId?: string; brandId?: string },
+  ): Promise<DiscoveryRun | undefined> {
+    const sql = typeof sqlOrOptions === "function" ? sqlOrOptions : sqlOrOptions?.sql;
+    const organizationId = typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.organizationId : undefined;
+    const brandId = typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.brandId : undefined;
+
     if (sql) {
-      const rows = await sql<Record<string, unknown>>`
-        select * from discovery_runs where id = ${runId} limit 1
-      `;
+      let rows: Record<string, unknown>[];
+      if (organizationId && brandId) {
+        rows = await sql<Record<string, unknown>>`
+          select * from discovery_runs
+          where id = ${runId} and organization_id = ${organizationId} and brand_id = ${brandId}
+          limit 1
+        `;
+      } else {
+        rows = await sql<Record<string, unknown>>`
+          select * from discovery_runs where id = ${runId} limit 1
+        `;
+      }
       const row = rows[0];
       if (row) {
         return {
@@ -348,11 +366,27 @@ export class DiscoveryService {
     return inMemoryRuns.get(runId);
   }
 
-  async getDiscoveredItems(runId: string, sql?: Sql): Promise<DiscoveredItem[]> {
+  async getDiscoveredItems(
+    runId: string,
+    sqlOrOptions?: Sql | { sql?: Sql; organizationId?: string; brandId?: string },
+  ): Promise<DiscoveredItem[]> {
+    const sql = typeof sqlOrOptions === "function" ? sqlOrOptions : sqlOrOptions?.sql;
+    const organizationId = typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.organizationId : undefined;
+    const brandId = typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.brandId : undefined;
+
     if (sql) {
-      const rows = await sql<Record<string, unknown>>`
-        select * from discovered_items where run_id = ${runId} order by discovered_at asc
-      `;
+      let rows: Record<string, unknown>[];
+      if (organizationId && brandId) {
+        rows = await sql<Record<string, unknown>>`
+          select * from discovered_items
+          where run_id = ${runId} and organization_id = ${organizationId} and brand_id = ${brandId}
+          order by discovered_at asc
+        `;
+      } else {
+        rows = await sql<Record<string, unknown>>`
+          select * from discovered_items where run_id = ${runId} order by discovered_at asc
+        `;
+      }
       if (rows.length > 0) {
         return rows.map((row) => ({
           id: String(row.id),

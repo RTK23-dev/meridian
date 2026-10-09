@@ -27,7 +27,8 @@ export type CreativePlanStatus =
   | "completed"
   | "failed"
   | "cancelled"
-  | "abstained";
+  | "abstained"
+  | "rejected";
 
 export interface CreativeFormatRecommendation {
   format: "image" | "video" | "carousel";

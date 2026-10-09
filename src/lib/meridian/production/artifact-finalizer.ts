@@ -120,7 +120,21 @@ export async function finalizeProductionArtifact(
     };
   }
 
-  const mimeType = raw.mimeType || (bytes[0] === 0x00 && bytes[4] === 0x66 ? "video/mp4" : "video/mp4");
+  // Detect MIME type and validate container signature
+  let mimeType = raw.mimeType || "application/octet-stream";
+  if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+    mimeType = "video/mp4";
+  } else if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    mimeType = "image/png";
+  } else if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    mimeType = "image/jpeg";
+  } else if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
+    mimeType = "image/webp";
+  } else if (input.provider.includes("nano") || input.provider.includes("image")) {
+    mimeType = "image/png";
+  } else {
+    mimeType = "video/mp4";
+  }
 
   // 3. Postflight QC for video media
   if (!input.options?.skipPostflight && mimeType.startsWith("video/")) {
@@ -175,12 +189,13 @@ export async function finalizeProductionArtifact(
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const byteSize = bytes.byteLength;
   const isVideo = mimeType.startsWith("video/");
-  const ext = isVideo ? "mp4" : "png";
+  const ext = isVideo ? "mp4" : mimeType === "image/jpeg" ? "jpg" : mimeType === "image/webp" ? "webp" : "png";
   const storageKey = `${input.organizationId}/${input.brandId}/production/${input.jobId}/artifact.${ext}`;
 
   // 5. Durably store in Google Drive object store
+  let driveResult: { fileId: string; webViewLink?: string } | undefined;
   try {
-    await drive.put({
+    driveResult = await drive.put({
       organizationId: input.organizationId,
       brandId: input.brandId,
       path: storageKey,
@@ -206,23 +221,63 @@ export async function finalizeProductionArtifact(
     };
   }
 
-  // 6. Idempotently commit storage_objects and link job
+  // 6. Idempotently commit storage_objects aligned with createGoogleDriveObjectStore lookup contract
+  // Note: createSqlStorageMetadataRepository looks up by `name = ${key}`!
+  // Therefore, `name` MUST be set to `storageKey` and `provider_file_id` MUST be `driveResult.fileId`.
   const artifactId = globalThis.crypto.randomUUID();
-  const storageName = `production_${input.jobId}.${ext}`;
+  const providerFileId = driveResult?.fileId || raw.uri || artifactId;
 
-  await sql`
-    insert into storage_objects (
-      id, organization_id, brand_id, provider, provider_file_id,
-      name, mime_type, size_bytes, sha256, lifecycle, created_at, updated_at
-    ) values (
-      ${artifactId}, ${input.organizationId}, ${input.brandId}, 'google_drive', ${raw.uri || artifactId},
-      ${storageName}, ${mimeType}, ${byteSize}, ${sha256}, 'approved', now(), now()
-    )
-    on conflict (organization_id, brand_id, name) do update set
-      sha256 = excluded.sha256,
-      size_bytes = excluded.size_bytes,
-      updated_at = now()
-  `;
+  try {
+    await sql`
+      insert into storage_objects (
+        id, organization_id, brand_id, provider, provider_file_id,
+        name, mime_type, size_bytes, sha256, lifecycle, metadata, created_at, updated_at
+      ) values (
+        ${artifactId}, ${input.organizationId}, ${input.brandId}, 'google_drive', ${providerFileId},
+        ${storageKey}, ${mimeType}, ${byteSize}, ${sha256}, 'approved',
+        ${JSON.stringify({ key: storageKey, fileId: providerFileId })}, now(), now()
+      )
+      on conflict (organization_id, brand_id, name) do update set
+        provider_file_id = excluded.provider_file_id,
+        mime_type = excluded.mime_type,
+        size_bytes = excluded.size_bytes,
+        sha256 = excluded.sha256,
+        metadata = excluded.metadata,
+        updated_at = now()
+    `;
+
+    // Read-after-write verification: ensure stored metadata matches
+    const verifiedRows = await sql<{ provider_file_id: string; size_bytes: number; sha256: string }>`
+      select provider_file_id, size_bytes, sha256
+      from storage_objects
+      where organization_id = ${input.organizationId}
+        and brand_id = ${input.brandId}
+        and name = ${storageKey}
+      limit 1
+    `;
+
+    if (verifiedRows && verifiedRows.length > 0) {
+      if (verifiedRows[0].sha256 !== sha256 || Number(verifiedRows[0].size_bytes) !== byteSize) {
+        throw new Error("Read-after-write verification failed: stored metadata does not match computed checksum/size");
+      }
+    }
+  } catch (dbErr: any) {
+    await sql`
+      update production_jobs
+      set status = 'STORAGE_PERSISTENCE_FAILED',
+          error_code = 'METADATA_PERSISTENCE_FAILED',
+          last_polled_at = now(),
+          updated_at = now()
+      where id = ${input.jobId}
+    `;
+
+    return {
+      success: false,
+      status: "STORAGE_PERSISTENCE_FAILED",
+      errorCode: "METADATA_PERSISTENCE_FAILED",
+      error: `Failed to record durable storage metadata: ${dbErr?.message || String(dbErr)}`,
+    };
+  }
 
   // 7. ONLY now mark the job COMPLETED!
   await sql`
