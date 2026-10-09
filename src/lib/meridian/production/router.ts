@@ -15,6 +15,27 @@ import { HypitProvider } from "./providers/hypit.ts";
 import { VeoProvider } from "./providers/veo.ts";
 import { GeminiOmniVideoProvider } from "./providers/omni.ts";
 import { HiggsfieldProvider } from "./providers/higgsfield.ts";
+import { modelCapabilityRegistry } from "./registry.ts";
+import { selectOffer, type SelectionCandidate, type SelectionRecord, type SelectionRequirement } from "./capability-matrix.ts";
+
+/** Automatic preference order by cost mode. The matrix decides eligibility first; this only orders eligible providers. */
+const PREFERENCE_BY_MODE: Record<"BALANCED" | "QUALITY_FIRST", string[]> = {
+  BALANCED: ["google_omni", "hypit", "higgsfield", "manual_cloud", "veo"],
+  QUALITY_FIRST: ["google_omni", "higgsfield", "hypit", "manual_cloud", "veo"],
+};
+
+export interface ProviderSelection {
+  provider: ProductionProvider;
+  selection: SelectionRecord;
+}
+
+export function requirementFor(spec: CreativeSpec): SelectionRequirement {
+  return {
+    task: spec.sourceMediaUrl ? "image-to-video" : "text-to-video",
+    durationSeconds: spec.durationTargetSeconds,
+    aspectRatio: spec.aspectRatio,
+  };
+}
 
 export class ProductionRouter {
   private providers = new Map<string, ProductionProvider>();
@@ -117,62 +138,77 @@ export class ProductionRouter {
     mode: CostMode = "ZERO_SPEND",
     requestedProvider?: string,
   ): Promise<ProductionProvider> {
-    if (requestedProvider && requestedProvider !== "auto") {
-      return this.routeExplicit(requestedProvider, spec);
-    }
-    return this.routeConfigured(spec, mode);
+    return (await this.selectForSpec(spec, mode, requestedProvider)).provider;
   }
 
-  async routeConfigured(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): Promise<ProductionProvider> {
-    const healthChecks = await Promise.all(
-      Array.from(this.providers.values()).map(async (p) => ({
-        provider: p,
-        health: await p.health(),
+  async selectForSpec(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND", requestedProvider?: string): Promise<ProviderSelection> {
+    const requirement = requirementFor(spec);
+    if (requestedProvider && requestedProvider !== "auto") {
+      const provider = await this.routeExplicit(requestedProvider, spec);
+      const selection = selectOffer({
+        candidates: this.candidatesFor([provider]),
+        requirement,
+        registry: modelCapabilityRegistry,
+        mode: "PREFERENCE",
+        preference: [requestedProvider],
+        allowDeprecated: true,
+        allowZeroSpend: true,
+      });
+      if (!selection.chosen) {
+        throw new Error(`Provider '${requestedProvider}' cannot produce this deliverable: ${summarize(selection)}`);
+      }
+      return { provider, selection };
+    }
+
+    const healthy = await this.healthyProviders();
+    if (mode === "ZERO_SPEND") {
+      const manualCloud = healthy.find((p) => p.id === "manual_cloud");
+      if (!manualCloud) throw new Error("ManualCloud provider is NOT_CONFIGURED (Google Drive not connected).");
+      return {
+        provider: manualCloud,
+        selection: { requirement, mode: "PREFERENCE", chosen: { providerId: manualCloud.id, modelId: modelCapabilityRegistry.listModels(manualCloud.id)[0]?.model_id ?? "", estimateUsd: 0 }, rejected: [] },
+      };
+    }
+    if (healthy.length === 0) throw new Error(`No configured production providers available for mode ${mode}.`);
+
+    const selection = selectOffer({
+      candidates: this.candidatesFor(healthy),
+      requirement,
+      registry: modelCapabilityRegistry,
+      mode: mode === "LOWEST_COST" ? "LOWEST_COST" : "PREFERENCE",
+      preference: mode === "LOWEST_COST" ? undefined : PREFERENCE_BY_MODE[mode],
+    });
+    if (!selection.chosen) throw new Error(`No eligible production provider for mode ${mode}: ${summarize(selection)}`);
+    const provider = healthy.find((p) => p.id === selection.chosen!.providerId);
+    if (!provider) throw new Error(`Chosen provider '${selection.chosen.providerId}' is no longer healthy.`);
+    return { provider, selection };
+  }
+
+  private async healthyProviders(): Promise<ProductionProvider[]> {
+    const checks = await Promise.all(
+      Array.from(this.providers.values()).map(async (p) => ({ provider: p, health: await p.health() })),
+    );
+    return checks.filter((c) => c.health.state === "HEALTHY" || c.health.state === "CONFIGURED").map((c) => c.provider);
+  }
+
+  /** Every registered model of these providers, as selection candidates. */
+  private candidatesFor(providers: ProductionProvider[]): SelectionCandidate[] {
+    return providers.flatMap((provider) =>
+      modelCapabilityRegistry.listModels(provider.id).map((record) => ({
+        provider: {
+          id: provider.id,
+          costPerSecondEstimateUsd: provider.capabilities.costPerSecondEstimateUsd,
+          zeroSpend: provider.capabilities.zeroSpend,
+        },
+        record,
       })),
     );
-
-    const healthy = healthChecks
-      .filter((h) => h.health.state === "HEALTHY" || h.health.state === "CONFIGURED")
-      .map((h) => h.provider);
-
-    const manualCloud = this.providers.get("manual_cloud");
-
-    if (mode === "ZERO_SPEND") {
-      const isManualCloudHealthy = healthy.some((p) => p.id === "manual_cloud");
-      if (!isManualCloudHealthy) {
-        throw new Error("ManualCloud provider is NOT_CONFIGURED (Google Drive not connected).");
-      }
-      return manualCloud!;
-    }
-
-    if (healthy.length === 0) {
-      throw new Error(`No configured production providers available for mode ${mode}.`);
-    }
-
-    // Automatic routing excludes deprecated Veo preview; usable only via explicit selection
-    const eligible = healthy.filter((p) => p.id !== "veo");
-    const candidates = eligible.length > 0 ? eligible : healthy;
-
-    if (mode === "LOWEST_COST") {
-      const sorted = [...candidates].sort(
-        (a, b) => a.capabilities.costPerSecondEstimateUsd - b.capabilities.costPerSecondEstimateUsd,
-      );
-      return sorted[0]!;
-    }
-
-    if (mode === "QUALITY_FIRST") {
-      const omni = candidates.find((p) => p.id === "google_omni");
-      const hf = candidates.find((p) => p.id === "higgsfield");
-      const hypit = candidates.find((p) => p.id === "hypit");
-      return omni || hf || hypit || candidates[0]!;
-    }
-
-    // BALANCED
-    const omni = candidates.find((p) => p.id === "google_omni");
-    const hypit = candidates.find((p) => p.id === "hypit");
-    const hf = candidates.find((p) => p.id === "higgsfield");
-    return omni || hypit || hf || candidates[0]!;
   }
+}
+
+function summarize(selection: SelectionRecord): string {
+  if (selection.rejected.length === 0) return "no candidate offers this model.";
+  return selection.rejected.map((item) => `${item.providerId}/${item.modelId}: ${item.reasons.join(", ")}`).join("; ");
 }
 
 export const productionRouter = new ProductionRouter();
