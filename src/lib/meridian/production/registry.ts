@@ -85,7 +85,7 @@ export class ModelCapabilityRegistry {
       source_url: "https://ai.google.dev/gemini-api/docs/deprecations/",
     });
 
-    // 3. Veo 2.0 GA
+    // 3. Veo 2.0 (Shut down on 2026-06-30 per Google deprecations schedule)
     this.register({
       model_id: "veo-2.0-generate-001",
       provider_id: "veo",
@@ -101,9 +101,11 @@ export class ModelCapabilityRegistry {
       editing_support: false,
       region_constraints: ["us-central1"],
       pricing_basis: "per_job",
-      availability_state: "ACTIVE",
+      availability_state: "SHUTDOWN",
+      announced_shutdown_at: "2026-06-30T00:00:00Z",
+      replacement_model_id: "gemini-omni-1.1-flash",
       last_verified_at: "2026-10-09",
-      source_url: "https://ai.google.dev/gemini-api/docs/veo",
+      source_url: "https://ai.google.dev/gemini-api/docs/deprecations/",
     });
 
     // 4. Higgsfield

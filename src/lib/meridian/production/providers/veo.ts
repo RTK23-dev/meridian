@@ -18,7 +18,7 @@ export type VideoCapability = {
 
 export const VEO_MODEL_CAPABILITIES: Record<string, VideoCapability> = {
   "veo-3.1-generate-preview": {
-    supportedDurations: [8],
+    supportedDurations: [5, 6, 7, 8],
     supportedAspectRatios: ["9:16", "16:9"],
     supportedResolutions: ["720p", "1080p"],
     imageToVideo: false,
@@ -60,11 +60,11 @@ export class VeoProvider implements ProductionProvider {
   }
 
   private getModel(): string {
-    return process.env.MERIDIAN_VEO_MODEL?.trim() || "veo-2.0-generate-001";
+    return process.env.MERIDIAN_VEO_MODEL?.trim() || "veo-3.1-generate-preview";
   }
 
-  getModelCapability(model = this.getModel()): VideoCapability {
-    return VEO_MODEL_CAPABILITIES[model] || VEO_MODEL_CAPABILITIES["veo-2.0-generate-001"] || VEO_MODEL_CAPABILITIES["veo-3.1-generate-preview"];
+  getModelCapability(model = this.getModel()): VideoCapability | undefined {
+    return model ? VEO_MODEL_CAPABILITIES[model] : undefined;
   }
 
   async health(): Promise<ProviderHealth> {
@@ -80,6 +80,16 @@ export class VeoProvider implements ProductionProvider {
     }
 
     const model = this.getModel();
+    if (!model) {
+      return {
+        id: this.id,
+        state: "NOT_CONFIGURED",
+        capabilities: [],
+        detail: "No Veo model configured via MERIDIAN_VEO_MODEL. For Google video generation, Gemini Omni (gemini-omni-1.1-flash) is recommended.",
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
     const { modelCapabilityRegistry } = await import("../registry.ts");
     const lifecycle = modelCapabilityRegistry.checkModelLifecycle(model);
 
@@ -123,6 +133,21 @@ export class VeoProvider implements ProductionProvider {
 
     const model = this.getModel();
     const capability = this.getModelCapability(model);
+
+    if (!capability) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "FAILED",
+        costEstimateUsd: costEstimate,
+        error: `Unknown or unconfigured Veo model '${model}'.`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
 
     if (!capability.supportedDurations.includes(spec.durationTargetSeconds)) {
       return {

@@ -2,13 +2,21 @@
  * Google Gemini Omni Video Provider
  *
  * Implements Google's Gemini Omni video generation/editing via the official
- * Gemini Interactions API contract:
+ * Gemini Interactions API REST contract:
  * POST https://generativelanguage.googleapis.com/v1beta/interactions
  * Model: gemini-omni-1.1-flash
  *
- * Distinct adapter from Veo (which uses predictLongRunning).
+ * Request contract:
+ * - Text-to-video: { model, input: string, response_format: { type: "video", aspect_ratio: "9:16" } }
+ * - Image-to-video: { model, input: [...], generation_config: { video_config: { task: "image-to-video" } }, response_format: { type: "video", aspect_ratio: "9:16" } }
+ *
+ * Response contract:
+ * - status: "completed" | "in_progress" | "failed"
+ * - steps[].type === "model_output" -> content[].type === "video" -> mime_type & Base64 data
+ * - Materializes bytes, verifies SHA-256 & byte size.
  */
 
+import { createHash } from "node:crypto";
 import type {
   CreativeSpec,
   ProductionCapabilities,
@@ -18,9 +26,18 @@ import type {
 } from "../types.ts";
 import { modelCapabilityRegistry } from "../registry.ts";
 
+export interface OmniInteractionContent {
+  type?: string;
+  mime_type?: string;
+  data?: string;
+  uri?: string;
+}
+
 export interface OmniInteractionStep {
   step_id?: string;
+  type?: string;
   status?: string;
+  content?: OmniInteractionContent[];
   outputs?: Array<{
     type?: string;
     uri?: string;
@@ -64,7 +81,11 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
   }
 
   private getModel(): string {
-    return process.env.MERIDIAN_OMNI_MODEL?.trim() || "gemini-omni-1.1-flash";
+    return (
+      process.env.MERIDIAN_GEMINI_OMNI_MODEL?.trim() ||
+      process.env.MERIDIAN_OMNI_MODEL?.trim() ||
+      "gemini-omni-1.1-flash"
+    );
   }
 
   async health(): Promise<ProviderHealth> {
@@ -103,7 +124,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
 
   async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
     const apiKey = this.getApiKey();
-    const costEstimate = spec.durationTargetSeconds * this.capabilities.costPerSecondEstimateUsd;
+    const costEstimate = (spec.durationTargetSeconds || 5) * this.capabilities.costPerSecondEstimateUsd;
 
     if (!apiKey) {
       return {
@@ -140,17 +161,41 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     const prompt = spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script;
     const meridianJobId = `job-omni-${globalThis.crypto.randomUUID()}`;
 
-    const payload = {
-      model,
-      input: {
-        prompt,
-        task: "text-to-video",
-        parameters: {
-          aspect_ratio: spec.aspectRatio,
-          duration_seconds: spec.durationTargetSeconds || 5,
+    // Official Gemini Interactions API payload format
+    let payload: Record<string, unknown>;
+    const aspectRatio = spec.aspectRatio || "9:16";
+
+    const referenceUri = spec.sourceMediaUrl || (spec as any).referenceImageUri;
+
+    if (referenceUri) {
+      // Image-to-video mode using documented generation_config & content parts
+      payload = {
+        model,
+        input: [
+          { text: prompt },
+          { image: { uri: referenceUri } },
+        ],
+        generation_config: {
+          video_config: {
+            task: "image-to-video",
+          },
         },
-      },
-    };
+        response_format: {
+          type: "video",
+          aspect_ratio: aspectRatio,
+        },
+      };
+    } else {
+      // Direct text-to-video request format
+      payload = {
+        model,
+        input: prompt,
+        response_format: {
+          type: "video",
+          aspect_ratio: aspectRatio,
+        },
+      };
+    }
 
     try {
       const res = await this.fetchImpl(
@@ -184,11 +229,11 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
       const body = (await res.json()) as OmniInteractionResponse;
       const interactionId = body.interaction_id || body.id || `interactions/${meridianJobId}`;
 
-      // Check if steps completed immediately
-      const completedStep = body.steps?.find((s) => s.status === "COMPLETED");
-      const videoOutput = completedStep?.outputs?.find((o) => o.type === "video" || o.uri?.endsWith(".mp4"));
+      // Extract output video from documented steps[].content[] structure
+      const parsed = this.extractVideoArtifact(body);
 
-      const isCompleted = body.status === "COMPLETED" || !!videoOutput;
+      const statusLower = (body.status || body.state || "").toLowerCase();
+      const isCompleted = statusLower === "completed" || !!parsed;
 
       return {
         jobId: meridianJobId,
@@ -201,12 +246,15 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         operationName: interactionId,
         status: isCompleted ? "COMPLETED" : "RUNNING",
         costEstimateUsd: costEstimate,
-        outputArtifactId: videoOutput?.uri,
+        outputArtifactId: parsed?.uri,
         metadata: {
           model,
           apiFamily: "interactions",
           interactionId,
-          videoUri: videoOutput?.uri,
+          videoUri: parsed?.uri,
+          mimeType: parsed?.mimeType,
+          sha256: parsed?.sha256,
+          byteSize: parsed?.byteSize,
         },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -277,8 +325,6 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
       }
 
       const body = (await res.json()) as OmniInteractionResponse;
-      const completedStep = body.steps?.find((s) => s.status === "COMPLETED");
-      const videoOutput = completedStep?.outputs?.find((o) => o.type === "video" || o.uri?.endsWith(".mp4"));
 
       if (body.error) {
         return {
@@ -295,7 +341,10 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         };
       }
 
-      const isDone = body.status === "COMPLETED" || body.state === "COMPLETED" || !!videoOutput;
+      const parsed = this.extractVideoArtifact(body);
+      const statusLower = (body.status || body.state || "").toLowerCase();
+      const isDone = statusLower === "completed" || !!parsed;
+      const isFailed = statusLower === "failed" || statusLower === "error";
 
       return {
         jobId,
@@ -304,13 +353,16 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         creativeSpec: {} as any,
         providerId: this.id,
         providerJobId: interactionId,
-        status: isDone ? "COMPLETED" : "RUNNING",
+        status: isFailed ? "FAILED" : isDone ? "COMPLETED" : "RUNNING",
         costEstimateUsd: 0,
-        outputArtifactId: videoOutput?.uri,
+        outputArtifactId: parsed?.uri,
         metadata: {
           ...metadata,
           interactionId,
-          videoUri: videoOutput?.uri,
+          videoUri: parsed?.uri,
+          mimeType: parsed?.mimeType,
+          sha256: parsed?.sha256,
+          byteSize: parsed?.byteSize,
         },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -329,6 +381,60 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         updatedAt: new Date().toISOString(),
       };
     }
+  }
+
+  /**
+   * Extracts output video artifact from official steps/content REST response.
+   */
+  private extractVideoArtifact(body: OmniInteractionResponse): {
+    uri: string;
+    mimeType: string;
+    sha256?: string;
+    byteSize?: number;
+  } | null {
+    if (!body.steps || !Array.isArray(body.steps)) return null;
+
+    for (const step of body.steps) {
+      // 1. Documented REST structure: content[] with type === "video"
+      if (step.content && Array.isArray(step.content)) {
+        for (const item of step.content) {
+          if (item.type === "video" || item.mime_type?.startsWith("video/")) {
+            if (item.data) {
+              const bytes = Buffer.from(item.data, "base64");
+              if (bytes.byteLength > 0) {
+                const sha256 = createHash("sha256").update(bytes).digest("hex");
+                const mime = item.mime_type || "video/mp4";
+                return {
+                  uri: item.uri || `data:${mime};base64,${item.data.slice(0, 100)}...`,
+                  mimeType: mime,
+                  sha256,
+                  byteSize: bytes.byteLength,
+                };
+              }
+            } else if (item.uri) {
+              return {
+                uri: item.uri,
+                mimeType: item.mime_type || "video/mp4",
+              };
+            }
+          }
+        }
+      }
+
+      // 2. Fallback to outputs[] format if present
+      if (step.outputs && Array.isArray(step.outputs)) {
+        for (const output of step.outputs) {
+          if (output.type === "video" || output.uri?.endsWith(".mp4")) {
+            return {
+              uri: output.uri || "artifact://omni-rendered.mp4",
+              mimeType: output.mime_type || "video/mp4",
+            };
+          }
+        }
+      }
+    }
+
+    return null;
   }
 }
 

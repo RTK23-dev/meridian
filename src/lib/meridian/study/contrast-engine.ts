@@ -172,10 +172,10 @@ export class DeepStudyContrastEngine {
     ];
 
     const card: FormulaCard = {
-      id: `formula-${outlierReel.externalPostId}`,
+      id: `formula-${outlierReel.externalPostId || outlierReel.id}`,
       title: `${outlierReel.niche} Snappy Negative Loop Formula`,
       niche: outlierReel.niche,
-      sourceReelPermalink: outlierReel.permalink,
+      sourceReelPermalink: outlierReel.permalink || "",
       hookMechanismSlug: contrast.hookDivergence.outlierMechanism,
       formatStructureSlug: "problem_transformation",
       emotionalDriverSlug: "relatability_anxiety",

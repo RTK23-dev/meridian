@@ -159,6 +159,14 @@ export type JevDecisionResponse = {
   cached: boolean;
   latencyMs: number;
   answers: Record<string, JevAnswer>;
+  fallbackFrom?: string;
+  fallbackReason?: string;
+  comparison?: {
+    comparedWith: string;
+    agreementRate: number;
+    disagreements: Record<string, { primary: unknown; compared: unknown }>;
+    comparedResponse: JevDecisionResponse;
+  };
 };
 
 export type JevPolicyThresholds = {

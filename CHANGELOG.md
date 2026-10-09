@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-beta.8 — 2026-10-09
+
+Meridian beta.7 Stabilization Hotfix:
+- **Direct TypeSafe JEV System One**: Implemented official `POST https://api.typesafe.ai/v1/systemone` endpoint with Bearer auth; typed parsing for `choice`, `score`, and `noul`; wired shared `JevRouter` across all decision paths with `auto` fallback and `compare` mode telemetry.
+- **Google Gemini Omni Video & Model Lifecycle**: Updated to official Interactions API REST payload (`POST /v1beta/interactions`) with `steps[].content[]` video Base64 extraction and SHA-256 verification; marked retired `veo-2.0-generate-001` as `SHUTDOWN` and set active preview to `veo-3.1-generate-preview`.
+- **Cyclone Scout Observation**: Replaced guessed `/devices/{id}/health` with supported `/health` and `/api/v1/devices` readiness checks; zero-fabrication for unobserved permalinks, post dates, and view counts.
+- **Evidence-Honest Opportunity Scoring & Benchmark Harness**: Removed synthetic `roas = 1.0` default; created versioned Gold Set harness (`benchmark-harness.ts`) evaluating ranking with governance requirements ($N \ge 100$ for `validated`).
+- **Live CreativeManifest Studio Wiring**: Wired `CreativeManifest` into Studio generation with mode/strategy gating, preventing `research_only` from submitting generation jobs and mapping manifest beats into durable `CreativeSpec` and `production_jobs.input`.
+- **Test Suite Expansion**: Added comprehensive acceptance tests across all hotfix modules (502 tests passing).
+
 ## 0.1.0-beta.7 — 2026-10-09
 
 Unified Master Engineering Specification v3: Native Decisions API JEV Router, Google Gemini Omni Video, Strict Metrology & Discovery Truthfulness, 4-Target Viral Intelligence, and Universal Creative Manifest.

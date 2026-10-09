@@ -14,20 +14,26 @@ export type CreationMode =
   | "organic_image"
   | "carousel"
   | "video_reel_short"
-  | "mixed_format";
+  | "video"
+  | "mixed_format"
+  | "mixed_campaign";
 
 export type StartingMaterialType =
   | "new_brief"
+  | "winning_reference"
   | "winning_organic_reel"
   | "winning_ad"
   | "meridian_creative"
+  | "brand_assets"
   | "brand_asset_library"
   | "creator_ugc_footage"
   | "website_product_page";
 
 export type ProductionStrategyType =
   | "reuse_edit_assets"
+  | "edit_existing_assets"
   | "manual_cloud"
+  | "automated_provider"
   | "automated_remote"
   | "hybrid"
   | "image_carousel_render";
@@ -130,6 +136,8 @@ export function validateCreationPlan(input: {
   mode: CreationMode;
   productionStrategy: ProductionStrategyType;
   startingMaterial: StartingMaterialType;
+  slideCount?: number;
+  beats?: CreativeManifestBeat[];
 }): { valid: boolean; willCreateProductionJob: boolean; reason?: string } {
   if (input.mode === "research_only") {
     return {
@@ -139,12 +147,29 @@ export function validateCreationPlan(input: {
     };
   }
 
-  if (input.productionStrategy === "automated_remote" && input.mode === "carousel") {
+  if (input.mode === "carousel") {
+    if (input.slideCount !== undefined && input.slideCount < 2) {
+      return {
+        valid: false,
+        willCreateProductionJob: false,
+        reason: "Carousel mode requires at least 2 coherent slides.",
+      };
+    }
     return {
       valid: true,
       willCreateProductionJob: true,
       reason: "Carousel rendering via image synthesis provider.",
     };
+  }
+
+  if (input.mode === "video" || input.mode === "video_reel_short") {
+    if (input.beats !== undefined && input.beats.length === 0) {
+      return {
+        valid: false,
+        willCreateProductionJob: false,
+        reason: "Video creation requires a non-empty shot or beat plan.",
+      };
+    }
   }
 
   return {

@@ -63,3 +63,45 @@ test("buildCreativeManifest builds versioned manifest with telemetry join keys a
   assert.equal(manifest.telemetryJoinKeys.utm_campaign, "brand-nike_concept-hook-negative");
   assert.equal(manifest.telemetryJoinKeys.utm_content, "cm-001");
 });
+
+test("E.5 Acceptance 3: Carousel mode validates coherent slide count >= 2", () => {
+  const invalidCarousel = validateCreationPlan({
+    mode: "carousel",
+    productionStrategy: "automated_provider",
+    startingMaterial: "brand_assets",
+    slideCount: 1, // invalid: carousel requires at least 2 slides
+  });
+  assert.equal(invalidCarousel.valid, false);
+  assert.ok(invalidCarousel.reason?.includes("at least 2 coherent slides"));
+
+  const validCarousel = validateCreationPlan({
+    mode: "carousel",
+    productionStrategy: "automated_provider",
+    startingMaterial: "brand_assets",
+    slideCount: 4,
+  });
+  assert.equal(validCarousel.valid, true);
+  assert.equal(validCarousel.willCreateProductionJob, true);
+});
+
+test("E.5 Acceptance 4: Video mode requires non-empty shot or beat plan", () => {
+  const invalidVideo = validateCreationPlan({
+    mode: "video",
+    productionStrategy: "automated_provider",
+    startingMaterial: "new_brief",
+    beats: [], // empty beats
+  });
+  assert.equal(invalidVideo.valid, false);
+  assert.ok(invalidVideo.reason?.includes("non-empty shot or beat plan"));
+
+  const validVideo = validateCreationPlan({
+    mode: "video",
+    productionStrategy: "automated_provider",
+    startingMaterial: "new_brief",
+    beats: [
+      { id: "b1", purpose: "hook", visualInstruction: "Dramatic stop" },
+    ],
+  });
+  assert.equal(validVideo.valid, true);
+});
+

@@ -52,6 +52,7 @@ export type CreativeSpec = {
   durationTargetSeconds: number;
   hookLine: string;
   script: string;
+  sourceMediaUrl?: string;
   scenes: Array<{
     index: number;
     description: string;

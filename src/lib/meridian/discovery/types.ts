@@ -15,8 +15,8 @@ export interface DiscoveredAudioTrend {
 
 export interface DiscoveredReelItem {
   id: string;
-  permalink: string;
-  externalPostId: string;
+  permalink?: string;
+  externalPostId?: string;
   creatorHandle: string;
   creatorFollowerCount?: number;
   creatorLast30MedianViews?: number;
@@ -26,7 +26,7 @@ export interface DiscoveredReelItem {
   hashtags: string[];
   audio: DiscoveredAudioTrend;
   durationMs?: number;
-  postedAt: string;
+  postedAt?: string;
   discoveredAt: string;
   discoveryTier: DiscoverySourceTier;
   scoutDeviceId?: string;

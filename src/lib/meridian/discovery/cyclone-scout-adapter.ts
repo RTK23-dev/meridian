@@ -10,8 +10,10 @@
  * - Strictly Observe-Only: never performs automated likes, follows, comments, or DMs
  * - Human-paced browsing cadence to protect account authenticity
  * - Session-isolated by phone/device ID
+ * - Zero-fabrication: unobserved URLs, dates, views, and external IDs remain undefined
  */
 
+import { createHash } from "node:crypto";
 import type { DiscoveredReelItem, DiscoveredAudioTrend } from "./types.ts";
 
 export interface CycloneGatewayConfig {
@@ -35,6 +37,13 @@ export interface CycloneScoutSession {
   niche: string;
   startedAt: string;
   reelsObserved: number;
+}
+
+export interface DeviceReadiness {
+  deviceId: string;
+  status: string;
+  battery?: number;
+  appInForeground?: string;
 }
 
 export type CycloneObservationResult =
@@ -72,23 +81,27 @@ export class CycloneScoutSourceAdapter {
     }
 
     try {
-      const pingUrl = `${this.config.gatewayUrl.replace(/\/+$/, "")}/devices/${encodeURIComponent(this.config.deviceId)}/health`;
-      const res = await this.fetchFn(pingUrl, {
+      const base = this.config.gatewayUrl.replace(/\/+$/, "");
+      // Supported Cyclone Gateway health / device readiness routes
+      const pingUrl = `${base}/health`;
+      let res = await this.fetchFn(pingUrl, {
         headers: this.getHeaders(),
       });
 
       if (!res.ok) {
-        return {
-          connected: false,
-          reason: `Cyclone gateway returned HTTP ${res.status}`,
-        };
+        // Fallback to /api/v1/devices
+        res = await this.fetchFn(`${base}/api/v1/devices`, {
+          headers: this.getHeaders(),
+        });
+        if (!res.ok) {
+          return {
+            connected: false,
+            reason: `Cyclone gateway returned HTTP ${res.status}`,
+          };
+        }
       }
 
-      const body = (await res.json()) as { status?: string; battery?: number; appInForeground?: string };
-      if (body.status === "offline") {
-        return { connected: false, reason: "Scout phone is currently offline or sleeping." };
-      }
-
+      const body = (await res.json().catch(() => ({}))) as { status?: string; devices?: any[] };
       return { connected: true, deviceStatus: body.status ?? "ready" };
     } catch (err) {
       return {
@@ -98,9 +111,68 @@ export class CycloneScoutSourceAdapter {
     }
   }
 
+  async getDevices(): Promise<DeviceReadiness[]> {
+    if (!this.config?.gatewayUrl) return [];
+    try {
+      const base = this.config.gatewayUrl.replace(/\/+$/, "");
+      const res = await this.fetchFn(`${base}/api/v1/devices`, {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) return [];
+      const body = (await res.json()) as { devices?: DeviceReadiness[] } | DeviceReadiness[];
+      if (Array.isArray(body)) return body;
+      return body.devices || [];
+    } catch {
+      return [];
+    }
+  }
+
+  async observeFeed(request: { niche: string; budget?: number; sessionId?: string }): Promise<DiscoveredReelItem[]> {
+    if (!this.config?.gatewayUrl || !this.config?.deviceId) {
+      throw new Error("Cyclone Gateway or Device is not configured.");
+    }
+    const base = this.config.gatewayUrl.replace(/\/+$/, "");
+    const res = await this.fetchFn(`${base}/api/v1/devices/${encodeURIComponent(this.config.deviceId)}/observe`, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        niche: request.niche,
+        budget: request.budget || 5,
+        session_id: request.sessionId,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to observe feed via Cyclone: HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as { pageCards?: CyclonePageCard[]; card?: CyclonePageCard };
+    const cards = body.pageCards || (body.card ? [body.card] : []);
+    const reels: DiscoveredReelItem[] = [];
+    for (const c of cards) {
+      const reel = this.parsePageCardToReel(c, request.niche);
+      if (reel) reels.push(reel);
+    }
+    return reels;
+  }
+
+  async captureEvidence(request?: { sessionId?: string }): Promise<{ screenshotUrl?: string; artifactId?: string } | null> {
+    if (!this.config?.gatewayUrl || !this.config?.deviceId) return null;
+    try {
+      const base = this.config.gatewayUrl.replace(/\/+$/, "");
+      const res = await this.fetchFn(`${base}/api/v1/devices/${encodeURIComponent(this.config.deviceId)}/screenshot`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ session_id: request?.sessionId }),
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as { screenshotUrl?: string; artifactId?: string };
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Parses accessibility tree nodes (Page Card) captured by the device into structured Reel items.
-   * This logic can be unit-tested completely offline.
+   * Truth-first: unobserved permalinks, post dates, and view counts are strictly undefined.
    */
   parsePageCardToReel(card: CyclonePageCard, niche: string): DiscoveredReelItem | null {
     const textNodes: string[] = [];
@@ -108,14 +180,13 @@ export class CycloneScoutSourceAdapter {
 
     if (textNodes.length === 0) return null;
 
-    // Look for creator handle pattern (@username or username)
     let creatorHandle = "unknown_creator";
-    let views = 0;
-    let likes = 0;
-    let comments = 0;
+    let views: number | undefined;
+    let likes: number | undefined;
+    let comments: number | undefined;
     let audioName = "Original Audio";
     let isTrendingAudio = false;
-    let permalink = "";
+    let permalink: string | undefined;
 
     for (const text of textNodes) {
       if (text.startsWith("@")) {
@@ -135,13 +206,21 @@ export class CycloneScoutSourceAdapter {
       }
     }
 
-    const postId = permalink ? permalink.split("/reel/")[1]?.replace(/\/$/, "") : `scout-${Math.random().toString(36).substring(2, 9)}`;
-    const fullPermalink = permalink || `https://www.instagram.com/reel/${postId}/`;
+    // Only derive externalPostId if a real permalink was captured on-screen
+    const externalPostId = permalink ? permalink.split("/reel/")[1]?.replace(/\/$/, "") : undefined;
+
+    // Use stable deterministic content fingerprint for internal record ID
+    const fingerprint = createHash("sha256")
+      .update([creatorHandle, textNodes.slice(0, 5).join(" ")].join(":"))
+      .digest("hex")
+      .slice(0, 12);
+
+    const internalId = `scout-${this.config?.deviceId ?? "dev"}-${fingerprint}`;
 
     return {
-      id: `scout-${this.config?.deviceId ?? "dev"}-${postId}`,
-      permalink: fullPermalink,
-      externalPostId: postId || "unknown",
+      id: internalId,
+      permalink,
+      externalPostId,
       creatorHandle,
       creatorFollowerCount: undefined,
       creatorLast30MedianViews: undefined,
@@ -157,14 +236,14 @@ export class CycloneScoutSourceAdapter {
         firstSeenAt: new Date().toISOString(),
       },
       durationMs: undefined,
-      postedAt: new Date().toISOString(),
+      postedAt: undefined, // Distinguish capture time from original post time
       discoveredAt: new Date().toISOString(),
       discoveryTier: "cyclone_scout",
       scoutDeviceId: this.config?.deviceId,
       metrics: {
-        views: views > 0 ? views : undefined,
-        likes: likes > 0 ? likes : undefined,
-        comments: comments > 0 ? comments : undefined,
+        views: views !== undefined && views > 0 ? views : undefined,
+        likes: likes !== undefined && likes > 0 ? likes : undefined,
+        comments: comments !== undefined && comments > 0 ? comments : undefined,
       },
     };
   }

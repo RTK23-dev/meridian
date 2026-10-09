@@ -38,8 +38,13 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
     const briefId = clip(body.briefId);
     const imageProvider = clip(body.imageProvider);
     const videoProvider = clip(body.videoProvider);
+    const mode = clip(body.mode);
+    const source = clip(body.source);
+    const productionMode = clip(body.productionMode);
+    const aspectRatio = clip(body.aspectRatio);
+
     if (!brandId || !briefId) throw new Error("Choose a brief.");
-    if (imageProvider !== "none" && imageProvider !== "test:image" && imageProvider !== "google:nano-banana") {
+    if (imageProvider && imageProvider !== "none" && imageProvider !== "test:image" && imageProvider !== "google:nano-banana") {
       throw new Error("Choose no image provider or an optional supported image provider.");
     }
     const isTestRuntime = process.env.NODE_ENV === "test" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
@@ -52,10 +57,19 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
       "hypit",
       ...(isTestRuntime ? ["test:video"] : []),
     ]);
-    if (!allowedVideoProviders.has(videoProvider)) {
+    if (videoProvider && !allowedVideoProviders.has(videoProvider)) {
       throw new Error(`Unsupported video provider: ${videoProvider}. Allowed: auto, manual_cloud, veo, higgsfield, hypit, none.`);
     }
-    return { brandId, briefId, imageProvider, videoProvider };
+    return {
+      brandId,
+      briefId,
+      imageProvider: imageProvider || "none",
+      videoProvider: videoProvider || "none",
+      mode: (mode || (videoProvider && videoProvider !== "none" ? "video" : "image_ad")) as import("@/lib/meridian/factory/creative-manifest").CreationMode,
+      source: (source || "new_brief") as import("@/lib/meridian/factory/creative-manifest").StartingMaterialType,
+      productionMode: (productionMode || (videoProvider === "manual_cloud" ? "manual_cloud" : "automated_provider")) as import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType,
+      aspectRatio: (aspectRatio === "16:9" || aspectRatio === "1:1" ? aspectRatio : "9:16") as "9:16" | "16:9" | "1:1" | "4:5",
+    };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {

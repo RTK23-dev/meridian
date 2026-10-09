@@ -66,6 +66,7 @@ export type BusinessPotentialScore = {
 
 export type DecomposedOpportunityRating = {
   ratingOutOfTen: number; // 1.0 to 10.0
+  ratingStatus?: "CALCULATED" | "INSUFFICIENT_EVIDENCE" | "LOW_EVIDENCE";
   target: "breakout" | "concept_strength" | "transfer_potential" | "composite";
   observedBreakout: ObservedBreakoutScore;
   conceptStrength: CreativeConceptStrengthScore;
@@ -313,18 +314,37 @@ export function calculateDecomposedOpportunityRating(input: {
 
   // 4. Target 4: Business Potential
   let businessPotential: BusinessPotentialScore;
-  if (input.businessTelemetry?.conversionRate !== undefined || input.businessTelemetry?.roas !== undefined) {
-    const roas = input.businessTelemetry?.roas ?? 1.0;
+  const hasConversion = input.businessTelemetry?.conversionRate !== undefined && input.businessTelemetry?.conversionRate !== null;
+  const hasRoas = input.businessTelemetry?.roas !== undefined && input.businessTelemetry?.roas !== null;
+
+  if (hasRoas) {
+    const roas = input.businessTelemetry!.roas!;
     businessPotential = {
       score: Math.min(1.0, Math.max(0.0, (roas - 0.5) / 2.5)),
-      attributedConversionRate: input.businessTelemetry?.conversionRate,
-      estimatedRoas: input.businessTelemetry?.roas,
-      downstreamValueBand: roas >= 2.5 ? "EXCEPTIONAL" : roas >= 1.5 ? "HIGH" : "MEDIUM",
+      attributedConversionRate: hasConversion ? input.businessTelemetry!.conversionRate : null,
+      estimatedRoas: roas,
+      downstreamValueBand: roas >= 2.5 ? "EXCEPTIONAL" : roas >= 1.5 ? "HIGH" : roas >= 1.0 ? "MEDIUM" : "LOW",
+      epistemicState: "OBSERVED",
+      evidenceRefs: refs.filter((r) => r.field === "performance"),
+    };
+    if (!hasConversion) {
+      missingDimensions.push("business_conversion_telemetry");
+    }
+  } else if (hasConversion) {
+    // Conversion is observed, but ROAS is unavailable - NEVER default ROAS to 1.0 or claim ROAS is OBSERVED
+    missingDimensions.push("business_roas_telemetry");
+    const cr = input.businessTelemetry!.conversionRate!;
+    businessPotential = {
+      score: Math.min(1.0, Math.max(0.0, cr / 0.05)),
+      attributedConversionRate: cr,
+      estimatedRoas: null,
+      downstreamValueBand: cr >= 0.05 ? "EXCEPTIONAL" : cr >= 0.02 ? "HIGH" : cr >= 0.01 ? "MEDIUM" : "LOW",
       epistemicState: "OBSERVED",
       evidenceRefs: refs.filter((r) => r.field === "performance"),
     };
   } else {
     missingDimensions.push("business_conversion_telemetry");
+    missingDimensions.push("business_roas_telemetry");
     businessPotential = {
       score: null,
       attributedConversionRate: null,
@@ -337,7 +357,9 @@ export function calculateDecomposedOpportunityRating(input: {
 
   // Composite 1-10 rating with evidence coverage calculation
   const totalTrackedDimensions = 4;
-  const observedCount = Math.max(0, totalTrackedDimensions - (input.businessTelemetry ? 0 : 1) - (input.observed?.views ? 0 : 1));
+  const hasBreakoutEvidence = input.observed?.views !== undefined && input.observed.views !== null;
+  const hasBusinessEvidence = hasRoas || hasConversion;
+  const observedCount = 2 + (hasBreakoutEvidence ? 1 : 0) + (hasBusinessEvidence ? 1 : 0);
   const evidenceCoverage = Math.round((observedCount / totalTrackedDimensions) * 100) / 100;
 
   // Rating out of 10 computed honestly: weighted by available component scores
@@ -346,9 +368,11 @@ export function calculateDecomposedOpportunityRating(input: {
     composite = (conceptStrength.score * 0.3 + transferPotential.score * 0.3 + breakoutScoreVal * 0.15 + businessPotential.score * 0.25) * 10;
   }
   const ratingOutOfTen = Math.round(Math.max(1.0, Math.min(10.0, composite)) * 10) / 10;
+  const ratingStatus = evidenceCoverage < 0.6 ? "LOW_EVIDENCE" : "CALCULATED";
 
   return {
     ratingOutOfTen,
+    ratingStatus,
     target: "composite",
     observedBreakout,
     conceptStrength,

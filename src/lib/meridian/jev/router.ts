@@ -39,8 +39,23 @@ export class TypeSafeDirectJevProvider implements JevProvider {
     fetchImpl?: typeof fetch;
   }) {
     this.apiKey = options?.apiKey ?? process.env.TYPESAFE_JEV_API_KEY?.trim();
-    this.baseUrl = options?.baseUrl ?? process.env.TYPESAFE_JEV_BASE_URL?.trim() ?? "https://api.typesafe.ai/v1";
+    this.baseUrl = options?.baseUrl ?? process.env.TYPESAFE_JEV_BASE_URL?.trim();
     this.fetchImpl = options?.fetchImpl ?? globalThis.fetch;
+  }
+
+  private getEndpoint(): string {
+    const raw = this.baseUrl?.trim() || "https://api.typesafe.ai/v1/systemone";
+    if (raw.endsWith("/systemone")) {
+      return raw;
+    }
+    if (raw.endsWith("/v1")) {
+      return `${raw}/systemone`;
+    }
+    if (raw.endsWith("/v1/")) {
+      return `${raw}systemone`;
+    }
+    const clean = raw.replace(/\/+$/, "");
+    return `${clean}/v1/systemone`;
   }
 
   capabilities(): JevCapabilities {
@@ -90,10 +105,11 @@ export class TypeSafeDirectJevProvider implements JevProvider {
       };
     }
 
-    // Direct endpoint execution
+    // Direct System One endpoint execution
     const model = request.model || "typesafe/jev-1.13";
     const runId = globalThis.crypto.randomUUID();
     const started = Date.now();
+    const endpoint = this.getEndpoint();
 
     const payload = {
       model,
@@ -102,7 +118,7 @@ export class TypeSafeDirectJevProvider implements JevProvider {
     };
 
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}/decisions`, {
+      const response = await this.fetchImpl(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -118,23 +134,25 @@ export class TypeSafeDirectJevProvider implements JevProvider {
 
       const body = (await response.json()) as any;
       const answers: Record<string, JevAnswer> = {};
-      const rawDecisions = body.decisions || body.answers || {};
+      const rawDecisions = body.answers || body.decisions || {};
+      const resolvedModel = body.model || model;
 
       for (const [key, qSpec] of Object.entries(request.questions)) {
         const rawAns = rawDecisions[key] || rawDecisions[qSpec.id];
-        if (rawAns) {
+        if (rawAns && (rawAns.choice !== undefined || rawAns.noul !== undefined || rawAns.score !== undefined || rawAns.probability !== undefined || rawAns.answer !== undefined)) {
+          const prob = rawAns.noul ?? rawAns.probability;
           answers[key] = {
             questionId: qSpec.id,
             questionVersion: qSpec.version,
             type: qSpec.type,
-            model,
+            model: resolvedModel,
             provider: this.id,
             status: "answered",
             choice: rawAns.choice,
-            noul: rawAns.noul ?? rawAns.probability,
+            noul: prob,
             score: rawAns.score,
-            answer: rawAns.choice ?? rawAns.noul ?? rawAns.score ?? rawAns.answer,
-            probability: rawAns.noul ?? rawAns.probability,
+            answer: rawAns.choice ?? prob ?? rawAns.score ?? rawAns.answer,
+            probability: prob,
             probabilities: rawAns.probabilities,
             confidence: qSpec.type === "noul" ? undefined : rawAns.confidence,
             legend: rawAns.legend,
@@ -146,7 +164,7 @@ export class TypeSafeDirectJevProvider implements JevProvider {
             questionId: qSpec.id,
             questionVersion: qSpec.version,
             type: qSpec.type,
-            model,
+            model: resolvedModel,
             provider: this.id,
             status: "abstain_uncertain",
             evidenceRefs: [],
@@ -158,7 +176,7 @@ export class TypeSafeDirectJevProvider implements JevProvider {
 
       return {
         runId,
-        model,
+        model: resolvedModel,
         provider: this.id,
         inputHash: body.inputHash ?? runId,
         cached: false,
@@ -269,15 +287,25 @@ export class JevRouter implements JevProviderRouter {
     request: JevDecisionRequest,
     policy?: JevRoutingPolicy
   ): Promise<JevDecisionResponse> {
+    const rawMode = (policy?.mode ?? process.env.MERIDIAN_JEV_PROVIDER_MODE ?? "auto").toLowerCase();
     const mode: JevRoutingMode =
-      policy?.mode ??
-      (process.env.MERIDIAN_JEV_PROVIDER_MODE as JevRoutingMode) ??
-      "auto";
+      rawMode === "typesafe" || rawMode === "typesafe_direct"
+        ? "typesafe_direct"
+        : rawMode === "openrouter"
+          ? "openrouter"
+          : rawMode === "compare"
+            ? "compare"
+            : "auto";
 
+    const rawPref = (policy?.preferredProvider ?? process.env.MERIDIAN_JEV_PREFERRED_PROVIDER ?? "").toLowerCase();
     const preferredProviderId: JevProviderId =
-      policy?.preferredProvider ??
-      (process.env.MERIDIAN_JEV_PREFERRED_PROVIDER as JevProviderId) ??
-      (process.env.TYPESAFE_JEV_API_KEY ? "typesafe_direct" : "openrouter");
+      rawPref === "typesafe" || rawPref === "typesafe_direct"
+        ? "typesafe_direct"
+        : rawPref === "openrouter"
+          ? "openrouter"
+          : process.env.TYPESAFE_JEV_API_KEY
+            ? "typesafe_direct"
+            : "openrouter";
 
     const fallbackEnabled =
       policy?.fallbackEnabled ??
@@ -296,11 +324,41 @@ export class JevRouter implements JevProviderRouter {
         this.getProvider("typesafe_direct").decide(request),
         this.getProvider("openrouter").decide(request),
       ]);
-      // Return preferred provider with comparison attached in answer metadata if needed
-      return preferredProviderId === "typesafe_direct" ? directRes : openrouterRes;
+
+      const primary = preferredProviderId === "typesafe_direct" ? directRes : openrouterRes;
+      const secondary = preferredProviderId === "typesafe_direct" ? openrouterRes : directRes;
+
+      let agreementCount = 0;
+      let totalQuestions = 0;
+      const disagreements: Record<string, { primary: unknown; compared: unknown }> = {};
+
+      for (const [qKey, pAns] of Object.entries(primary.answers)) {
+        const sAns = secondary.answers[qKey];
+        if (!sAns) continue;
+        totalQuestions++;
+        const pVal = pAns.choice ?? pAns.score ?? pAns.noul ?? pAns.answer;
+        const sVal = sAns.choice ?? sAns.score ?? sAns.noul ?? sAns.answer;
+        if (pVal !== undefined && sVal !== undefined && pVal === sVal) {
+          agreementCount++;
+        } else {
+          disagreements[qKey] = { primary: pVal, compared: sVal };
+        }
+      }
+
+      const agreementRate = totalQuestions > 0 ? Math.round((agreementCount / totalQuestions) * 100) / 100 : 1;
+
+      return {
+        ...primary,
+        comparison: {
+          comparedWith: secondary.provider,
+          agreementRate,
+          disagreements,
+          comparedResponse: secondary,
+        },
+      };
     }
 
-    // AUTO mode: prefer configured provider, fall back on NOT_CONFIGURED or transport failure
+    // AUTO mode: prefer configured provider, fall back on eligible transport failure
     const preferred = this.getProvider(preferredProviderId);
     const prefHealth = await preferred.health();
 
@@ -308,7 +366,7 @@ export class JevRouter implements JevProviderRouter {
       const resp = await preferred.decide(request);
       // Check if all answers failed with provider_error
       const allFailed = Object.values(resp.answers).every(
-        (a) => a.status === "provider_error"
+        (a) => a.status === "provider_error" || a.status === "not_configured"
       );
       if (allFailed && fallbackEnabled) {
         const fallbackId: JevProviderId =
@@ -316,7 +374,12 @@ export class JevRouter implements JevProviderRouter {
         const fallback = this.getProvider(fallbackId);
         const fbHealth = await fallback.health();
         if (fbHealth.status === "READY") {
-          return fallback.decide(request);
+          const fallbackResp = await fallback.decide(request);
+          return {
+            ...fallbackResp,
+            fallbackFrom: preferredProviderId,
+            fallbackReason: "Primary provider encountered provider_error on all questions.",
+          };
         }
       }
       return resp;
@@ -327,7 +390,12 @@ export class JevRouter implements JevProviderRouter {
       const fallbackId: JevProviderId =
         preferredProviderId === "typesafe_direct" ? "openrouter" : "typesafe_direct";
       const fallback = this.getProvider(fallbackId);
-      return fallback.decide(request);
+      const fallbackResp = await fallback.decide(request);
+      return {
+        ...fallbackResp,
+        fallbackFrom: preferredProviderId,
+        fallbackReason: `Primary provider ${preferredProviderId} was NOT_CONFIGURED.`,
+      };
     }
 
     // Otherwise return preferred decision (which will yield NOT_CONFIGURED answers)

@@ -4,7 +4,7 @@ import type { ChatResult } from "../providers/types.ts";
 import { RESEARCH_SCHEMA_VERSION, validateResearchAnalysis, type ResearchAnalysis, type ResearchSegment } from "./schema.ts";
 
 import type { EvidenceBundle } from "../evidence/types.ts";
-import { openRouterJevClient, type OpenRouterJevClient } from "../jev/client.ts";
+import type { OpenRouterJevClient } from "../jev/client.ts";
 import { jevRegistry } from "../jev/registry.ts";
 import type { JevAnswer } from "../jev/types.ts";
 
@@ -77,18 +77,23 @@ export async function synthesizeResearchTranscript(input: {
 
 export const analyzeResearchTranscript = synthesizeResearchTranscript;
 
+import { jevRouter } from "../jev/router.ts";
+import type { JevProviderRouter } from "../jev/types.ts";
+import { compressEvidenceForJev } from "../evidence/bundle.ts";
+
 /**
  * Executes structured JEV questions against a normalized EvidenceBundle.
+ * Uses shared JevRouter for authoritative decisions.
  */
 export async function analyzeEvidenceWithJev(input: {
   bundle: EvidenceBundle;
   questionIds?: string[];
   client?: OpenRouterJevClient;
+  router?: JevProviderRouter;
 }): Promise<{
   bundleId: string;
   answers: JevAnswer[];
 }> {
-  const client = input.client || openRouterJevClient;
   const questionIds = input.questionIds || [
     "org_hook_intent",
     "org_retention_risk",
@@ -96,21 +101,52 @@ export async function analyzeEvidenceWithJev(input: {
     "safe_substantiation_present",
   ];
 
-  const answers: JevAnswer[] = [];
-
-  for (const qid of questionIds) {
-    const question = jevRegistry.get(qid);
-    if (!question) continue;
-
-    const answer = await client.answer({
-      evidenceBundle: input.bundle,
-      question,
-    });
-    answers.push(answer);
+  if (input.client) {
+    const answers: JevAnswer[] = [];
+    for (const qid of questionIds) {
+      const question = jevRegistry.get(qid);
+      if (!question) continue;
+      const answer = await input.client.answer({
+        evidenceBundle: input.bundle,
+        question,
+      });
+      answers.push(answer);
+    }
+    return { bundleId: input.bundle.id, answers };
   }
+
+  const router = input.router || jevRouter;
+  const questionsRecord: Record<string, any> = {};
+  for (const qid of questionIds) {
+    const q = jevRegistry.get(qid);
+    if (q) questionsRecord[qid] = q;
+  }
+
+  if (Object.keys(questionsRecord).length === 0) {
+    return { bundleId: input.bundle.id, answers: [] };
+  }
+
+  const firstQ = Object.values(questionsRecord)[0];
+  const compressed = compressEvidenceForJev(input.bundle, firstQ);
+
+  const res = await router.decide({
+    organizationId: input.bundle.organizationId || "global",
+    brandId: input.bundle.brandId || "global",
+    state: {
+      description: compressed.description,
+      bundleId: input.bundle.id,
+      availableEvidence: compressed.availableEvidence,
+      evidenceRefs: compressed.evidenceRefs,
+      source: compressed.source,
+      metrics: compressed.metrics,
+      transcriptSummary: compressed.transcriptSummary,
+      sceneSummary: compressed.sceneSummary,
+    },
+    questions: questionsRecord,
+  });
 
   return {
     bundleId: input.bundle.id,
-    answers,
+    answers: Object.values(res.answers),
   };
 }

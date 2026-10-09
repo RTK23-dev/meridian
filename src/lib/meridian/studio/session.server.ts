@@ -607,7 +607,16 @@ async function writeJudgment(
 
 export async function generateStudioVariants(
   userId: string,
-  data: { brandId: string; briefId: string; imageProvider: string; videoProvider: string },
+  data: {
+    brandId: string;
+    briefId: string;
+    imageProvider: string;
+    videoProvider: string;
+    mode?: import("@/lib/meridian/factory/creative-manifest").CreationMode;
+    source?: import("@/lib/meridian/factory/creative-manifest").StartingMaterialType;
+    productionMode?: import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType;
+    aspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
+  },
 ) {
   const context = { userId };
     const sql = await getSql();
@@ -621,6 +630,68 @@ export async function generateStudioVariants(
     if (!brief || asText(brief.status) === "rejected") throw new Error("Brief not found.");
     const loaded = await loadBrandContext(sql, access.organizationId, data.brandId);
     assertSameTenant(loaded.creatives, access.organizationId, data.brandId);
+    const productName = loaded.products[0]?.name || "";
+
+    const mode = data.mode || (data.videoProvider && data.videoProvider !== "none" ? "video" : "image_ad");
+    const startingMaterial = data.source || "new_brief";
+    const productionStrategy = data.productionMode || (data.videoProvider === "manual_cloud" ? "manual_cloud" : "automated_provider");
+    const aspectRatio = data.aspectRatio || "9:16";
+
+    const { validateCreationPlan, buildCreativeManifest } = await import("@/lib/meridian/factory/creative-manifest");
+    const plan = validateCreationPlan({
+      mode,
+      startingMaterial,
+      productionStrategy,
+      beats: [
+        { id: "beat-1", purpose: "hook", targetDurationSeconds: 2, visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
+        { id: "beat-2", purpose: "mechanism", targetDurationSeconds: 4, visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
+        { id: "beat-3", purpose: "payoff_cta", targetDurationSeconds: 2, visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
+      ],
+    });
+
+    if (!plan.valid) {
+      throw new Error(`Creative plan invalid: ${plan.reason}`);
+    }
+
+    const manifest = buildCreativeManifest({
+      creativeId: crypto.randomUUID(),
+      conceptId: asText(brief.opportunity_id) || crypto.randomUUID(),
+      mode,
+      startingMaterial,
+      productionStrategy,
+      brand: {
+        organizationId: access.organizationId,
+        brandId: data.brandId,
+        product: productName,
+        audience: asText(brief.audience),
+        objective: asText(brief.angle),
+      },
+      format: {
+        channel: "multi_channel",
+        aspectRatio,
+        targetDurationSeconds: 8,
+        slideCount: mode === "carousel" ? 3 : undefined,
+      },
+      beats: [
+        { id: "beat-1", purpose: "hook", targetDurationSeconds: 2, visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
+        { id: "beat-2", purpose: "mechanism", targetDurationSeconds: 4, visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
+        { id: "beat-3", purpose: "payoff_cta", targetDurationSeconds: 2, visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
+      ],
+    });
+
+    if (!plan.willCreateProductionJob || mode === "research_only") {
+      // Research-only mode: manifest created and validated, zero production jobs submitted
+      await sql`
+        insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
+        values (
+          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${context.userId},
+          'studio.research_manifest_created', 'brief', ${data.briefId},
+          ${JSON.stringify({ manifestId: manifest.creativeId, mode: manifest.mode, beats: manifest.beats.length })}
+        )
+      `;
+      return loadSession(sql, access.organizationId, data.brandId, access.role);
+    }
+
     const usage = await sql<{ runs_today: number; running: number; brand_runs_today: number; brand_running: number }>`
       select
         count(*) filter (where created_at > now() - interval '1 day' and status in ('running', 'completed'))::int as runs_today,
@@ -661,7 +732,6 @@ export async function generateStudioVariants(
     `;
     try {
     const { generateImageBytes } = await import("@/lib/meridian/providers/image-bytes.server");
-    const productName = loaded.products[0]?.name || "";
     const basePrompt = {
       productName,
       angle: asText(brief.angle),
@@ -811,20 +881,22 @@ export async function generateStudioVariants(
         : "HUMAN_REVIEW";
 
       const creativeSpec: CreativeSpec = {
-        id: crypto.randomUUID(),
+        id: manifest.creativeId,
         organizationId: access.organizationId,
         brandId: data.brandId,
         title: asText(brief.title),
-        format: asText(brief.format) || "ugc",
-        aspectRatio: "9:16",
-        durationTargetSeconds: 8,
+        format: asText(brief.format) || (mode === "video" ? "ugc" : mode),
+        aspectRatio: manifest.format.aspectRatio === "4:5" ? "1:1" : manifest.format.aspectRatio,
+        durationTargetSeconds: manifest.format.targetDurationSeconds ?? 8,
         hookLine: asText(brief.hook),
         script: `${asText(brief.hook)}\n${asText(brief.message)}\n${asText(brief.cta)}`,
-        scenes: [
-          { index: 0, description: asText(brief.hook), durationSeconds: 2, onScreenText: asText(brief.hook) },
-          { index: 1, description: asText(brief.message), durationSeconds: 4, voiceoverText: asText(brief.message) },
-          { index: 2, description: asText(brief.cta), durationSeconds: 2, onScreenText: asText(brief.cta) },
-        ],
+        scenes: manifest.beats.map((b, i) => ({
+          index: i,
+          description: b.visualInstruction,
+          durationSeconds: b.targetDurationSeconds ?? 2,
+          onScreenText: b.onScreenText,
+          voiceoverText: b.scriptOrCaption,
+        })),
       };
 
       const provider = await productionRouter.route(
@@ -850,7 +922,7 @@ export async function generateStudioVariants(
           ${submittedJob.requestId || null}, ${submittedJob.statusUrl || null}, ${submittedJob.cancelUrl || null},
           ${submittedJob.status}, 'BALANCED',
           ${Math.round(submittedJob.costEstimateUsd * 100)},
-          ${JSON.stringify({ creativeSpec, runId, briefId: data.briefId })},
+          ${JSON.stringify({ creativeSpec, runId, briefId: data.briefId, manifestId: manifest.creativeId, manifest })},
           now(), now()
         )
         on conflict (id) do update set

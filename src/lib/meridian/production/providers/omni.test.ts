@@ -38,7 +38,7 @@ test("GeminiOmniVideoProvider reports NOT_CONFIGURED when API key is missing", a
   }
 });
 
-test("GeminiOmniVideoProvider submits typed request to Interactions API and handles response", async () => {
+test("GeminiOmniVideoProvider submits official REST Interactions API payload", async () => {
   process.env.GEMINI_API_KEY = "test-gemini-key";
 
   const mockFetch = async (url: string | URL | Request, init?: RequestInit) => {
@@ -49,17 +49,19 @@ test("GeminiOmniVideoProvider submits typed request to Interactions API and hand
 
     const body = JSON.parse(init?.body as string);
     assert.equal(body.model, "gemini-omni-1.1-flash");
-    assert.equal(body.input.task, "text-to-video");
-    assert.equal(body.input.parameters.aspect_ratio, "9:16");
+    assert.equal(typeof body.input, "string");
+    assert.ok(body.input.includes("Stop scrolling!"));
+    assert.equal(body.response_format.type, "video");
+    assert.equal(body.response_format.aspect_ratio, "9:16");
 
     return new Response(
       JSON.stringify({
         interaction_id: "interactions/omni-job-999",
-        status: "RUNNING",
+        status: "in_progress",
         steps: [
           {
             step_id: "step_0",
-            status: "RUNNING",
+            status: "in_progress",
           },
         ],
       }),
@@ -77,24 +79,25 @@ test("GeminiOmniVideoProvider submits typed request to Interactions API and hand
   assert.equal(job.providerId, "google_omni");
 });
 
-test("GeminiOmniVideoProvider checkJobStatus polls interaction and retrieves video output URI", async () => {
+test("GeminiOmniVideoProvider parses official REST steps[].content[] Base64 video and lowercase completed", async () => {
   process.env.GEMINI_API_KEY = "test-gemini-key";
+  const fakeBase64 = Buffer.from("fake-mp4-video-stream-content").toString("base64");
 
   const mockFetch = async (url: string | URL | Request) => {
     assert.ok(url.toString().includes("interactions/omni-job-999"));
     return new Response(
       JSON.stringify({
         interaction_id: "interactions/omni-job-999",
-        status: "COMPLETED",
+        status: "completed", // Lowercase completed per REST documentation
         steps: [
           {
             step_id: "step_0",
-            status: "COMPLETED",
-            outputs: [
+            type: "model_output",
+            content: [
               {
                 type: "video",
-                uri: "https://storage.googleapis.com/test-bucket/omni-output.mp4",
                 mime_type: "video/mp4",
+                data: fakeBase64,
               },
             ],
           },
@@ -110,27 +113,74 @@ test("GeminiOmniVideoProvider checkJobStatus polls interaction and retrieves vid
 
   const polled = await provider.checkJobStatus("interactions/omni-job-999");
   assert.equal(polled.status, "COMPLETED");
-  assert.equal(polled.outputArtifactId, "https://storage.googleapis.com/test-bucket/omni-output.mp4");
+  assert.ok(polled.metadata?.sha256);
+  assert.equal(polled.metadata?.mimeType, "video/mp4");
+  assert.ok((polled.metadata?.byteSize as number) > 0);
 });
 
-test("ModelCapabilityRegistry tracks Veo 3.1 preview deprecation and replacement", () => {
-  // Before shutdown date (2026-10-09)
-  const checkBefore = modelCapabilityRegistry.checkModelLifecycle(
+test("GeminiOmniVideoProvider supports image-to-video multimodal task structure", async () => {
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+
+  const mockFetch = async (url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(init?.body as string);
+    assert.equal(body.model, "gemini-omni-1.1-flash");
+    assert.ok(Array.isArray(body.input));
+    assert.equal(body.input[0].text, "Stop scrolling!\nHere is the proof why this works.");
+    assert.equal(body.input[1].image.uri, "https://storage.googleapis.com/test-bucket/product.jpg");
+    assert.equal(body.generation_config.video_config.task, "image-to-video");
+
+    return new Response(
+      JSON.stringify({
+        interaction_id: "interactions/omni-i2v-123",
+        status: "completed",
+        steps: [
+          {
+            type: "model_output",
+            content: [
+              {
+                type: "video",
+                uri: "https://storage.googleapis.com/test-bucket/output.mp4",
+              },
+            ],
+          },
+        ],
+      }),
+      { status: 200 }
+    );
+  };
+
+  const provider = new GeminiOmniVideoProvider({
+    fetchImpl: mockFetch as unknown as typeof fetch,
+  });
+
+  const specWithImage: CreativeSpec = {
+    ...sampleSpec,
+    sourceMediaUrl: "https://storage.googleapis.com/test-bucket/product.jpg",
+  };
+
+  const job = await provider.submitJob(specWithImage);
+  assert.equal(job.status, "COMPLETED");
+  assert.equal(job.outputArtifactId, "https://storage.googleapis.com/test-bucket/output.mp4");
+});
+
+test("ModelCapabilityRegistry tracks Veo 3.1 deprecation and Veo 2.0 shutdown", () => {
+  // Veo 3.1 preview deprecation
+  const checkVeo31 = modelCapabilityRegistry.checkModelLifecycle(
     "veo-3.1-generate-preview",
     new Date("2026-10-09T00:00:00Z")
   );
-  assert.equal(checkBefore.state, "DEPRECATED");
-  assert.equal(checkBefore.usable, true);
-  assert.ok(checkBefore.warning?.includes("2026-10-22"));
-  assert.equal(checkBefore.replacement, "gemini-omni-1.1-flash");
+  assert.equal(checkVeo31.state, "DEPRECATED");
+  assert.equal(checkVeo31.usable, true);
+  assert.ok(checkVeo31.warning?.includes("2026-10-22"));
+  assert.equal(checkVeo31.replacement, "gemini-omni-1.1-flash");
 
-  // After shutdown date (2026-10-23)
-  const checkAfter = modelCapabilityRegistry.checkModelLifecycle(
-    "veo-3.1-generate-preview",
-    new Date("2026-10-23T00:00:00Z")
+  // Veo 2.0 GA is shut down as of 2026-06-30
+  const checkVeo20 = modelCapabilityRegistry.checkModelLifecycle(
+    "veo-2.0-generate-001",
+    new Date("2026-10-09T00:00:00Z")
   );
-  assert.equal(checkAfter.state, "SHUTDOWN");
-  assert.equal(checkAfter.usable, false);
+  assert.equal(checkVeo20.state, "SHUTDOWN");
+  assert.equal(checkVeo20.usable, false);
 
   // Active Omni model
   const checkOmni = modelCapabilityRegistry.checkModelLifecycle("gemini-omni-1.1-flash");
