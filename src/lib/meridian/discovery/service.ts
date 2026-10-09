@@ -104,13 +104,14 @@ export class DiscoveryService {
           await input.sql`
             insert into discovered_items (
               id, run_id, organization_id, brand_id, source, url, canonical_url,
-              card_type, title, text_content, metrics, content_hash, source_location, discovered_at
+              card_type, title, text_content, metrics, content_hash, source_location, discovered_at, source_key
             ) values (
               ${item.id}, ${runId}, ${input.organizationId}, ${input.brandId},
               ${item.source}, ${item.url}, ${item.canonicalUrl || null},
               ${item.cardType}, ${item.title || null}, ${item.text || null},
               ${JSON.stringify(item.metrics || {})}, ${item.contentHash},
-              ${item.sourceLocation || null}, now()
+              ${item.sourceLocation || null}, now(),
+              ${sourceExternalId({ brandId: input.brandId, itemId: item.id, canonicalUrl: item.canonicalUrl || item.url })}
             )
             on conflict (id) do nothing
           `;
@@ -369,11 +370,12 @@ export class DiscoveryService {
           await sql`
             insert into discovered_items (
               id, run_id, organization_id, brand_id, source, url, canonical_url,
-              card_type, title, text_content, metrics, content_hash, source_location, discovered_at
+              card_type, title, text_content, metrics, content_hash, source_location, discovered_at, source_key
             ) values (
               ${item.id}, ${run.id}, ${run.organizationId}, ${run.brandId}, ${item.source}, ${item.url},
               ${item.canonicalUrl || null}, ${item.cardType}, ${item.title || null}, ${item.text || null},
-              ${JSON.stringify(item.metrics || {})}, ${item.contentHash}, ${item.sourceLocation || null}, now()
+              ${JSON.stringify(item.metrics || {})}, ${item.contentHash}, ${item.sourceLocation || null}, now(),
+              ${sourceExternalId({ brandId: run.brandId, itemId: item.id, canonicalUrl: item.canonicalUrl || item.url })}
             ) on conflict (id) do nothing
           `;
           items.push(item);
