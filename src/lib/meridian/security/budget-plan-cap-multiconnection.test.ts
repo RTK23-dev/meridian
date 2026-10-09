@@ -56,6 +56,9 @@ async function withFreshMigratedDatabase<T>(run: (pool: pg.Pool, sql: Sql) => Pr
   }
 
   const pool = new pg.Pool({ connectionString: urlWithDatabase(adminUrl!, database), max: 8 });
+  // Idle clients can be closed by the server while the database is torn down below. Query errors reject
+  // their own promises, so this listener only keeps that teardown signal from surfacing as an uncaught error.
+  pool.on("error", () => {});
   try {
     return await run(pool, sqlOverPool(pool));
   } finally {
