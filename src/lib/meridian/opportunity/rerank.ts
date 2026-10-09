@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { loadBrandContext } from "../context/load.ts";
 import { decideForTenant } from "../jev/engine.ts";
+import { ruleDecisionRecordFields } from "../jev/decision-record.ts";
 import { opportunityGate } from "../jev/questions.ts";
 import { loadQuestionPolicy } from "../jev/policy.ts";
 import type { Sql } from "../learning/store.ts";
@@ -53,11 +54,13 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
       model: "opportunity-gate",
     });
     const evidence = [...draft.evidence, ...decision.evidence];
+    const record = ruleDecisionRecordFields(decision, { input: draft.gateInput, evidence });
     await sql`
       insert into jev_decisions (
         id, organization_id, brand_id, correlation_id, question_id, question_version,
         subject_type, subject_id, input, evidence, probability, confidence, thresholds,
-        decision, reasons, provider, model, answer, schema_version, policy_version, calibration_version
+        decision, reasons, provider, model, answer, schema_version, policy_version, calibration_version,
+        decision_fingerprint, outcome_digest
       ) values (
         ${decisionId}, ${organizationId}, ${brandId}, ${correlationId},
         ${decision.questionId}, ${decision.questionVersion}, 'opportunity', ${opportunityId},
@@ -65,7 +68,8 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
         ${decision.probability}, ${decision.confidence}, ${JSON.stringify(decision.thresholds)},
         ${decision.decision}, ${JSON.stringify(decision.reasons)},
         ${decision.provider}, ${decision.model}, ${JSON.stringify(decision.answer)},
-        ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""}
+        ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""},
+        ${record.decisionFingerprint}, ${record.outcomeDigest}
       )
     `;
     const status = decision.decision === "REJECT" ? "rejected" : "open";
