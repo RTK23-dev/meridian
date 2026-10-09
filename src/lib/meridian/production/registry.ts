@@ -31,6 +31,11 @@ export interface ModelCapabilityRecord {
   replacement_model_id?: string;
   last_verified_at: string;
   source_url: string;
+  /**
+   * Set to true only when this provider/model pair is established as free of charge
+   * (for example a zero-spend manual workflow or a test double). Absent means billable.
+   */
+  free_of_charge?: true;
 }
 
 export class ModelCapabilityRegistry {
@@ -238,6 +243,7 @@ export class ModelCapabilityRegistry {
       provider_id: "manual_cloud",
       api_family: "manual",
       release_channel: "ga",
+      free_of_charge: true,
       supported_modalities: ["text", "image", "video"],
       supported_tasks: ["text-to-video", "image-to-video", "edit"],
       durations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 30, 60],
@@ -258,6 +264,7 @@ export class ModelCapabilityRegistry {
       provider_id: "test:video",
       api_family: "manual",
       release_channel: "experimental",
+      free_of_charge: true,
       supported_modalities: ["text", "image", "video", "audio"],
       supported_tasks: ["text-to-video", "image-to-video", "edit"],
       durations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 30, 60],
@@ -278,6 +285,7 @@ export class ModelCapabilityRegistry {
       provider_id: "test:image",
       api_family: "manual",
       release_channel: "experimental",
+      free_of_charge: true,
       supported_modalities: ["text", "image"],
       supported_tasks: ["text-to-image"],
       durations: [],
@@ -297,6 +305,12 @@ export class ModelCapabilityRegistry {
 
   register(record: ModelCapabilityRecord): void {
     this.models.set(record.model_id, record);
+  }
+
+  /** True only when the registry explicitly marks this provider/model pair free of charge. */
+  isEstablishedFree(providerId: string, modelId: string): boolean {
+    const model = this.models.get(modelId);
+    return model !== undefined && model.provider_id === providerId && model.free_of_charge === true;
   }
 
   getModel(modelId: string): ModelCapabilityRecord | undefined {

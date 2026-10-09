@@ -11,6 +11,9 @@ test("Budget Reconciliation: actual spend transfers to spent and releases unused
   await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Recon Org', ${orgId}, 'user') on conflict do nothing`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Recon Brand', 'user') on conflict do nothing`;
 
+  // Reservations tied to a plan require that plan to exist for this tenant (fail closed).
+  await sql`insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd) values ('plan-recon-1', ${orgId}, ${brandId}, '1', 'executing', 'video_only', 'semi_automatic', 'conversion', '{}'::jsonb, 0, null) on conflict do nothing`;
+
   // 1. Initialize account with $20.00 cap
   await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId, 20.0);
 

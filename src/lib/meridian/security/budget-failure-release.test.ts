@@ -11,6 +11,11 @@ test("Budget Failure Release: failed production jobs release reserved funds comp
   await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Release Org', ${orgId}, 'user') on conflict do nothing`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Release Brand', 'user') on conflict do nothing`;
 
+  // Reservations tied to a plan require that plan to exist for this tenant (fail closed).
+  for (const planId of ["plan-fail-1", "plan-retry-1"]) {
+    await sql`insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd) values (${planId}, ${orgId}, ${brandId}, '1', 'executing', 'video_only', 'semi_automatic', 'conversion', '{}'::jsonb, 0, null) on conflict do nothing`;
+  }
+
   // 1. Initialize account with $10.00 cap
   await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId, 10.0);
 

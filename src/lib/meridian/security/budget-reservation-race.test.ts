@@ -11,6 +11,11 @@ test("Budget Reservation Concurrency: race condition prevention under parallel r
   await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Race Org', ${orgId}, 'test-user') on conflict do nothing`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Race Brand', 'test-user') on conflict do nothing`;
 
+  // Reservations tied to a plan require that plan to exist for this tenant (fail closed).
+  for (let i = 0; i < 5; i += 1) {
+    await sql`insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd) values (${`plan-race-${i}`}, ${orgId}, ${brandId}, '1', 'executing', 'video_only', 'semi_automatic', 'conversion', '{}'::jsonb, 0, null) on conflict do nothing`;
+  }
+
   // 1. Initialize account with exact $10.00 cap
   const initialCapUsd = 10.0;
   const account = await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId, initialCapUsd);

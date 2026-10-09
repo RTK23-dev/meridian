@@ -30,7 +30,8 @@ import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativePlan } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
-import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
+import { BudgetLedgerService, InvalidBudgetCapError, toMicros } from "../security/budget-ledger.ts";
+import { modelCapabilityRegistry } from "../production/registry.ts";
 import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
 import { resolveProductionTarget } from "../production/target.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
@@ -825,6 +826,30 @@ export async function generateStudioVariants(
     return executeApprovedCreativePlan(sql, access, context.userId, creativePlan, brief);
 }
 
+/**
+ * Budget reservation amount for an approved plan. Fails closed.
+ * A missing, non-finite, negative, or zero estimate reserves nothing only when every
+ * deliverable's provider/model pair is registered as free of charge. Otherwise it is refused
+ * before any provider call. A positive estimate is reserved exactly, in integer micros.
+ */
+function planReservationMicros(plan: CreativePlan): bigint | null {
+  const allFree = plan.deliverables.every((d) => modelCapabilityRegistry.isEstablishedFree(d.provider, d.model));
+  const total = plan.estimatedCost?.totalEstimatedUsd;
+  if (typeof total !== "number" || !Number.isFinite(total) || total < 0) {
+    if (allFree) return null;
+    throw new InvalidBudgetCapError(
+      `Cost estimate is missing or invalid (${String(total)}) for a billable plan. Budget reservation refused; no provider was called.`
+    );
+  }
+  if (total === 0) {
+    if (allFree) return null;
+    throw new InvalidBudgetCapError(
+      "Zero cost estimate for a billable provider. Budget reservation refused; no provider was called."
+    );
+  }
+  return toMicros(total);
+}
+
 export async function executeApprovedCreativePlan(
   sql: Sql,
   access: { organizationId: string; role: Role },
@@ -977,28 +1002,32 @@ export async function executeApprovedCreativePlan(
   }
 
   let reservationId: string | null = null;
+  // Set once provider I/O may have begun, and cleared only when the provider definitively
+  // rejects the job. While set, the reservation is never released: the job may be billable.
+  let reservationHeld = false;
   let providerSubmissionUnknown = false;
   const estimatedUsd = creativePlan.estimatedCost?.totalEstimatedUsd ?? 0;
-  if (estimatedUsd > 0) {
-    try {
+  try {
+    const reservationMicros = planReservationMicros(creativePlan);
+    if (reservationMicros !== null) {
       const reservation = await BudgetLedgerService.reserve(sql, {
         organizationId: access.organizationId,
         brandId,
-        amountMicros: toMicros(estimatedUsd),
+        amountMicros: reservationMicros,
         creativePlanId: creativePlan.id,
       });
       reservationId = reservation.id;
-    } catch (budgetErr) {
-      await transitionCreativePlan(sql, {
-        organizationId: access.organizationId,
-        brandId,
-        planId: creativePlan.id,
-        actorId: userId,
-        target: "failed",
-        reason: "Budget reservation failed before provider submission.",
-      }).catch(() => {});
-      throw budgetErr;
     }
+  } catch (budgetErr) {
+    await transitionCreativePlan(sql, {
+      organizationId: access.organizationId,
+      brandId,
+      planId: creativePlan.id,
+      actorId: userId,
+      target: "failed",
+      reason: "Budget reservation failed before provider submission.",
+    }).catch(() => {});
+    throw budgetErr;
   }
 
   const runId = crypto.randomUUID();
@@ -1233,6 +1262,7 @@ export async function executeApprovedCreativePlan(
           on conflict (id) do nothing
         `;
         let submittedJob: import("../production/types.ts").ProductionJob;
+        reservationHeld = true;
         try {
           submittedJob = await provider.submitJob(creativeSpec);
         } catch (submitError) {
@@ -1240,7 +1270,7 @@ export async function executeApprovedCreativePlan(
           await sql`
             update production_jobs
             set status = 'SUBMISSION_UNKNOWN', error_code = 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
-              error = ${submitError instanceof Error ? submitError.message : String(submitError)}, updated_at = now()
+              error_message = ${submitError instanceof Error ? submitError.message : String(submitError)}, updated_at = now()
             where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
           `;
           throw new Error("Provider submission outcome is unknown. The durable job and budget reservation are held for reconciliation; it was not resubmitted.");
@@ -1250,16 +1280,18 @@ export async function executeApprovedCreativePlan(
           await sql`
             update production_jobs
             set status = 'SUBMISSION_UNKNOWN', error_code = 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
-              error = ${submittedJob.error || "Provider submission outcome is unknown; automatic retry is disabled."},
+              error_message = ${submittedJob.error || "Provider submission outcome is unknown; automatic retry is disabled."},
               updated_at = now()
             where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
           `;
           throw new Error("Provider submission outcome is unknown. The durable job and budget reservation are held for reconciliation; it was not resubmitted.");
         }
         if (submittedJob.status === "FAILED" || submittedJob.status === "PREFLIGHT_FAILED" || submittedJob.status === "NOT_CONFIGURED") {
+          // Definitive provider rejection: nothing was accepted, so the reservation may be released.
+          reservationHeld = false;
           await sql`
             update production_jobs set status = 'FAILED', error_code = ${submittedJob.errorCode || submittedJob.status},
-              error = ${submittedJob.error || "Provider rejected the request."}, updated_at = now()
+              error_message = ${submittedJob.error || "Provider rejected the request."}, updated_at = now()
             where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
           `;
           throw new Error(`Video production failed (${submittedJob.status}): ${submittedJob.error || "Provider rejected job."}`);
@@ -1270,7 +1302,7 @@ export async function executeApprovedCreativePlan(
             provider_job_id = ${submittedJob.providerJobId || submittedJob.jobId || null},
             request_id = ${submittedJob.requestId || null}, status_url = ${submittedJob.statusUrl || null},
             cancel_url = ${submittedJob.cancelUrl || null}, submitted_at = now(), error_code = null,
-            error = null, updated_at = now()
+            error_message = null, updated_at = now()
           where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
         `;
 
@@ -1298,7 +1330,7 @@ export async function executeApprovedCreativePlan(
         if (finalResult && !finalResult.success) {
           await sql`
             update production_jobs
-            set status = ${finalResult.status}, error = ${finalResult.error || "Storage persistence failed"}, updated_at = now()
+            set status = ${finalResult.status}, error_message = ${finalResult.error || "Storage persistence failed"}, updated_at = now()
             where id = ${prodJobId}
           `;
         } else if (finalResult?.success) {
@@ -1427,7 +1459,7 @@ export async function executeApprovedCreativePlan(
     });
     return loadSession(sql, access.organizationId, brandId, access.role);
   } catch (error) {
-    if (reservationId) {
+    if (reservationId && !reservationHeld) {
       await BudgetLedgerService.release(sql, {
         reservationId,
         reason: error instanceof Error ? error.message : String(error),
