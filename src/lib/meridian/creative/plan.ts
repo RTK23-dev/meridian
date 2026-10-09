@@ -1,3 +1,5 @@
+import type { PlanLineage } from "./lineage.ts";
+
 /**
  * CreativePlan Types & Schemas
  *
@@ -181,4 +183,6 @@ export interface CreativePlan {
   whyFormatChosen: string;
   whyOtherFormatsRejected: Record<string, string>;
   createdAt: string;
+  /** The persisted JEV decision and evidence refs this plan was produced under (lineage.ts). */
+  lineage: PlanLineage;
 }

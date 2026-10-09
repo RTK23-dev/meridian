@@ -4,6 +4,7 @@ import { getSql } from "../../db.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { Sql } from "../learning/store.ts";
 import { executeApprovedCreativePlan, generateStudioVariants } from "./session.server.ts";
+import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
 
 /** Runs `run` with the given runtime variables, then restores the prior values. */
 async function withRuntime<T>(
@@ -95,6 +96,7 @@ test("executeApprovedCreativePlan refuses to generate placeholder images outside
   const sql = await getSql();
   const tenant = await studioTenant(sql, "executor");
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "semi_automatic",
     preferredImageProvider: "test:image",
@@ -113,10 +115,10 @@ test("executeApprovedCreativePlan refuses to generate placeholder images outside
   assert.ok(plan.deliverables.length > 0 && plan.deliverables.every((d) => d.provider === "test:image"));
   await sql`
     insert into creative_plans (
-      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd
+      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd, decision_id
     ) values (
       ${plan.id}, ${tenant.organizationId}, ${tenant.brandId}, ${tenant.briefId}, ${plan.version}, 'executing', ${plan.scope},
-      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, null
+      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, null, ${plan.lineage.decisionId}
     )
   `;
 
@@ -133,6 +135,7 @@ test("executeApprovedCreativePlan still generates placeholder images in TestingR
   const sql = await getSql();
   const tenant = await studioTenant(sql, "control");
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "semi_automatic",
     preferredImageProvider: "test:image",
@@ -150,10 +153,10 @@ test("executeApprovedCreativePlan still generates placeholder images in TestingR
   });
   await sql`
     insert into creative_plans (
-      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd
+      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd, decision_id
     ) values (
       ${plan.id}, ${tenant.organizationId}, ${tenant.brandId}, ${tenant.briefId}, ${plan.version}, 'executing', ${plan.scope},
-      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, null
+      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, null, ${plan.lineage.decisionId}
     )
   `;
 

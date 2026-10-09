@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
+import type { CreativePlan } from "../creative/plan.ts";
 import type { Sql } from "../learning/store.ts";
 import { persistCreativePlanRow } from "./session.server.ts";
+import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
 
 async function tenant(sql: Sql, label: string) {
   const suffix = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -35,6 +37,7 @@ async function tenant(sql: Sql, label: string) {
 
 function planFor(decisionId: string) {
   return CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "semi_automatic",
     preferredImageProvider: "test:image",
@@ -67,10 +70,10 @@ test("persistCreativePlanRow refuses an id collision and leaves the live plan's 
   const plan = planFor(t.decisionId);
   await sql`
     insert into creative_plans (
-      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd
+      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, decision_id
     ) values (
       ${plan.id}, ${t.organizationId}, ${t.brandId}, ${t.briefId}, ${plan.version}, 'executing', ${plan.scope},
-      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0
+      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, ${plan.lineage.decisionId}
     )
   `;
   await assert.rejects(
@@ -79,4 +82,30 @@ test("persistCreativePlanRow refuses an id collision and leaves the live plan's 
   );
   const rows = await sql<{ status: string }>`select status from creative_plans where id = ${plan.id}`;
   assert.equal(rows[0]?.status, "executing", "a colliding insert must not change the live plan's status");
+});
+
+test("persistCreativePlanRow records the decision the plan was produced under", async () => {
+  const sql = await getSql();
+  const t = await tenant(sql, "lineage");
+  const plan = CreativeDecisionEngine.createPlan({
+    scope: "video_only",
+    autonomy: "semi_automatic",
+    brief: { title: "Kitchen sponge", hook: "Tired of smelly sponges?", message: "Mesh layer", cta: "Buy now", targetDurationSeconds: 8 },
+    lineage: { decisionId: t.decisionId, evidenceRefs: ["ev-lineage-1"] },
+  });
+  await persistCreativePlanRow(sql, { plan, organizationId: t.organizationId, brandId: t.brandId, briefId: t.briefId });
+  const rows = await sql<{ decision_id: string }>`select decision_id from creative_plans where id = ${plan.id}`;
+  assert.equal(rows[0]?.decision_id, t.decisionId);
+});
+
+test("persistCreativePlanRow refuses a plan with no lineage and writes no row", async () => {
+  const sql = await getSql();
+  const t = await tenant(sql, "unlinked");
+  const plan = { ...planFor(t.decisionId), lineage: undefined } as unknown as CreativePlan;
+  await assert.rejects(
+    persistCreativePlanRow(sql, { plan, organizationId: t.organizationId, brandId: t.brandId, briefId: t.briefId }),
+    /lineage/,
+  );
+  const rows = await sql<{ id: string }>`select id from creative_plans where id = ${plan.id}`;
+  assert.equal(rows.length, 0);
 });

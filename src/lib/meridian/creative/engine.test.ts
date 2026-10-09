@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CreativeDecisionEngine } from "./engine.ts";
+import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
 
 const sampleBrief = {
   title: "Sleep Calm Gummies",
@@ -12,6 +13,7 @@ const sampleBrief = {
 
 test("CreativeDecisionEngine: image_only scope creates image deliverables and ZERO video jobs", () => {
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "manual",
     brief: sampleBrief,
@@ -28,6 +30,7 @@ test("CreativeDecisionEngine: image_only scope creates image deliverables and ZE
 
 test("CreativeDecisionEngine: video_only scope creates video deliverable and ZERO image deliverables", () => {
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "video_only",
     autonomy: "semi_automatic",
     brief: sampleBrief,
@@ -44,6 +47,7 @@ test("CreativeDecisionEngine: video_only scope creates video deliverable and ZER
 
 test("CreativeDecisionEngine: carousel_only scope creates N slide deliverables and ZERO video jobs", () => {
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "carousel_only",
     autonomy: "manual",
     brief: sampleBrief,
@@ -59,6 +63,7 @@ test("CreativeDecisionEngine: carousel_only scope creates N slide deliverables a
 
 test("CreativeDecisionEngine: mixed_campaign creates video, carousel slides and image variants", () => {
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "mixed_campaign",
     autonomy: "semi_automatic",
     brief: sampleBrief,
@@ -77,6 +82,7 @@ test("CreativeDecisionEngine: mixed_campaign creates video, carousel slides and 
 
 test("CreativeDecisionEngine: research_only creates ZERO deliverables and ZERO production steps", () => {
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "research_only",
     autonomy: "manual",
     brief: sampleBrief,
@@ -90,6 +96,7 @@ test("CreativeDecisionEngine: research_only creates ZERO deliverables and ZERO p
 
 test("CreativeDecisionEngine: provider selection resolves its own compatible registered model", () => {
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "video_only",
     autonomy: "manual",
     preferredVideoProvider: "hypit",
@@ -104,6 +111,7 @@ test("CreativeDecisionEngine: provider selection resolves its own compatible reg
 test("CreativeDecisionEngine: inadmissible JEV output blocks explicit creative scopes", () => {
   for (const status of ["abstain_malformed", "abstain_insufficient_evidence", "abstain_rejected"] as const) {
     const plan = CreativeDecisionEngine.createPlan({
+      lineage: TEST_PLAN_LINEAGE,
       scope: "video_only",
       autonomy: "fully_automatic",
       brief: sampleBrief,
@@ -128,6 +136,7 @@ test("CreativeDecisionEngine: inadmissible JEV output blocks explicit creative s
 test("CreativeDecisionEngine: autonomy modes enforce approval gates", () => {
   // 1. Manual mode
   const manualPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "manual",
     brief: sampleBrief,
@@ -136,6 +145,7 @@ test("CreativeDecisionEngine: autonomy modes enforce approval gates", () => {
 
   // 2. Semi-automatic mode
   const semiPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "video_only",
     autonomy: "semi_automatic",
     brief: sampleBrief,
@@ -144,6 +154,7 @@ test("CreativeDecisionEngine: autonomy modes enforce approval gates", () => {
 
   // 3. Fully automatic mode within spend cap
   const autoPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "fully_automatic",
     brief: sampleBrief,
@@ -153,6 +164,7 @@ test("CreativeDecisionEngine: autonomy modes enforce approval gates", () => {
 
   // 4. Fully automatic exceeding spend cap requires approval
   const expensiveAutoPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "mixed_campaign",
     autonomy: "fully_automatic",
     brief: sampleBrief,

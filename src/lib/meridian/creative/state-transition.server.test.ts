@@ -11,8 +11,8 @@ async function seedPlan(sql: Awaited<ReturnType<typeof getSql>>, status = "await
   await sql`insert into organizations (id, name, slug, created_by) values (${organizationId}, 'Transition Org', ${id}, 'test')`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${organizationId}, 'Transition Brand', 'test')`;
   await sql`
-    insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective)
-    values (${id}, ${organizationId}, ${brandId}, '1', ${status}, 'video_only', 'manual', 'conversion')
+    insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective, decision_id)
+    values (${id}, ${organizationId}, ${brandId}, '1', ${status}, 'video_only', 'manual', 'conversion', 'jev-test-decision')
   `;
   return { id, planId: id, organizationId, brandId };
 }

@@ -639,15 +639,19 @@ export async function persistCreativePlanRow(
   input: { plan: CreativePlan; organizationId: string; brandId: string; briefId: string; maxSpendUsd?: number },
 ): Promise<void> {
   const { plan } = input;
+  // A plan without lineage is refused before any write. The database trigger refuses it too (migration 0042).
+  if (!plan.lineage?.decisionId?.trim()) {
+    throw new Error(`Creative plan '${plan.id}' has no JEV decision lineage; refusing to store it.`);
+  }
   const inserted = await sql<{ id: string }>`
     insert into creative_plans (
       id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective,
-      plan_payload, budget_reserved_usd, spend_cap_usd, created_at, updated_at
+      plan_payload, budget_reserved_usd, spend_cap_usd, decision_id, created_at, updated_at
     ) values (
       ${plan.id}, ${input.organizationId}, ${input.brandId}, ${input.briefId},
       ${plan.version}, ${plan.status}, ${plan.scope}, ${plan.autonomy},
       ${plan.objective}, ${JSON.stringify(plan)},
-      ${plan.estimatedCost.totalEstimatedUsd}, ${input.maxSpendUsd ?? null}, now(), now()
+      ${plan.estimatedCost.totalEstimatedUsd}, ${input.maxSpendUsd ?? null}, ${plan.lineage.decisionId}, now(), now()
     )
     on conflict (id) do nothing
     returning id
@@ -785,6 +789,8 @@ export async function generateStudioVariants(
 
     // Build CreativePlan via CreativeDecisionEngine (P0.5, P1.1, P0-A)
     const creativePlan = CreativeDecisionEngine.createPlan({
+      // Lineage is the gated decision and the evidence it cited, not the brief's free-text fields (P3a).
+      lineage: { decisionId: dec.id, evidenceRefs: jevBundle.evidenceRefs },
       scope: creationScope,
       autonomy,
       preferredImageProvider: data.imageProvider,

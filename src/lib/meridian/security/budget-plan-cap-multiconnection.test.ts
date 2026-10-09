@@ -79,8 +79,8 @@ async function tenantWithPlan(sql: Sql, capUsd: number | null, accountCapUsd: nu
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${organizationId}, ${brandId}, 'test-user')`;
   await BudgetLedgerService.getOrCreateAccount(sql, organizationId, brandId, accountCapUsd);
   await sql`
-    insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd)
-    values (${planId}, ${organizationId}, ${brandId}, '1', 'executing', 'video_only', 'semi_automatic', 'conversion', '{}'::jsonb, 0, ${capUsd})
+    insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd, decision_id)
+    values (${planId}, ${organizationId}, ${brandId}, '1', 'executing', 'video_only', 'semi_automatic', 'conversion', '{}'::jsonb, 0, ${capUsd}, 'jev-test-decision')
   `;
   return { organizationId, brandId, planId };
 }

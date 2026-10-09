@@ -16,6 +16,7 @@ import { DiscoveryService } from "../discovery/service.ts";
 import { SourceRegistry } from "../sources/registry.ts";
 import { compressEvidenceForJev, createEvidenceBundle } from "../evidence/bundle.ts";
 import type { Sql } from "../learning/store.ts";
+import { TEST_PLAN_LINEAGE } from "./plan-lineage.ts";
 
 test("Gate 1: Canonical Provider Config Resolver (P0.1)", () => {
   // 1. Resolves canonical key with precedence
@@ -148,6 +149,7 @@ test("Gate 5: Format Selection Enforces Exact Job Types (P0.5)", () => {
 
   // 1. image_only: zero video jobs
   const imgPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "manual",
     brief,
@@ -157,6 +159,7 @@ test("Gate 5: Format Selection Enforces Exact Job Types (P0.5)", () => {
 
   // 2. video_only: zero image deliverable jobs
   const vidPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "video_only",
     autonomy: "semi_automatic",
     brief,
@@ -166,6 +169,7 @@ test("Gate 5: Format Selection Enforces Exact Job Types (P0.5)", () => {
 
   // 3. carousel_only: N slide deliverables, zero video jobs
   const carPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "carousel_only",
     autonomy: "manual",
     brief,
@@ -176,6 +180,7 @@ test("Gate 5: Format Selection Enforces Exact Job Types (P0.5)", () => {
 
   // 4. research_only: zero production jobs
   const resPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "research_only",
     autonomy: "manual",
     brief,
@@ -280,6 +285,7 @@ test("Gate 9: Autonomy Mode Approval Enforcement (P1.2)", () => {
 
   // Manual mode requires explicit human approval
   const manual = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "manual",
     brief,
@@ -288,6 +294,7 @@ test("Gate 9: Autonomy Mode Approval Enforcement (P1.2)", () => {
 
   // Semi-automatic pauses for user confirmation
   const semi = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "video_only",
     autonomy: "semi_automatic",
     brief,
@@ -296,6 +303,7 @@ test("Gate 9: Autonomy Mode Approval Enforcement (P1.2)", () => {
 
   // Full-auto within spend cap is auto-approved
   const autoApproved = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "fully_automatic",
     brief,
