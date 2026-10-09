@@ -39,10 +39,12 @@ Meridian continuously analyzes evidence, generates video variants, enforces safe
 ## Key Capabilities
 
 ### 1. ProductionRouter & Multi-Provider Video Engines
-- **Provider-Neutral Creative Generation**: Studio requests compile to a canonical `CreativeSpec`, routed dynamically via `ProductionRouter.route()` across healthy providers (`veo`, `higgsfield`, `hypit`, `manual_cloud`). Studio executes strictly through the unified provider job lifecycle.
+- **Provider-Neutral Creative Generation**: Studio requests compile to a canonical `CreativeSpec`, routed dynamically via `ProductionRouter.route()` across healthy providers (`google_omni`, `veo`, `higgsfield`, `hypit`, `manual_cloud`). Studio executes strictly through the unified provider job lifecycle.
+- **Google Gemini Omni Video Provider**: Primary generative video engine via Google's official Gemini Interactions API (`POST /v1beta/interactions`) with `gemini-omni-1.1-flash`. Supports text-to-video, image-to-video, and stateful iterative editing.
+- **Model Capability & Lifecycle Registry**: Tracks model availability, release channels, supported tasks, and shutdown dates in `ModelCapabilityRegistry`. Deprecated preview endpoints (e.g. Veo 3.1 preview shutting down 2026-10-22) are flagged with warnings and pointed to active replacements; retired models fail closed.
 - **Durable PostgreSQL Job State & Poller Worker**: Complete job lifecycle (`request_id`, `status_url`, `cancel_url`, `spec_hash`, polling timestamps) is persisted in `production_jobs` table (migration `0028`). The durable worker poller (`pollProductionJobs`) claims active jobs via `SELECT ... FOR UPDATE SKIP LOCKED`, checks provider status, collects rendered videos to Google Drive, and validates postflight QC.
 - **Strict Testing Runtime Isolation**: `test:video` cannot be resolved in `ProductionRuntime` and is strictly confined to `TestingRuntime` via dependency injection.
-- **Model-Accurate Adapters & Registries**: Google Veo validates model-specific `VideoCapability` boundaries before network calls (Veo 3.1: 8s, 9:16 / 16:9, native audio); Higgsfield integrates `HiggsfieldModelRegistry` with model-specific endpoints (`dop-v1`, `higgsfield-video-v1`, `genjutsu-v1`, `seedance-v1`) and official `Key` headers; ManualCloud operates with zero in-memory authority, reconstructing state from database metadata and drop folder scanning.
+- **Model-Accurate Adapters & Registries**: Google Veo defaults to stable GA models (`veo-2.0-generate-001`); Higgsfield integrates `HiggsfieldModelRegistry` with model-specific endpoints (`dop-v1`, `higgsfield-video-v1`, `genjutsu-v1`, `seedance-v1`) and official `Key` headers; ManualCloud operates with zero in-memory authority, reconstructing state from database metadata and drop folder scanning.
 
 ### 2. Modular Engine & n8n-Style Flow Connectors
 - **Decoupled Swappable Engines**: Cleanly separated contracts for `GradingEngine`, `PlannerEngine`, `PublishEngine`, `VideoEngine`, and `SourceAdapter`.
@@ -56,12 +58,16 @@ Meridian continuously analyzes evidence, generates video variants, enforces safe
 
 ### 4. Dynamic Creative Structure & Primary Object Storage
 - **Dynamic Creative Structures**: Canonical structure modeling (`organic_short`, `pov`, `skit`, `storytime`, `listicle`, `tutorial`, `reaction`, `trend_audio`, `transformation`, `review`, `comparison`, `loop`, `unstructured`) with inferred heuristic classifications. The legacy 6-beat `AdNarrative` is an optional projection for paid ads only.
+- **Concept Genome & 11D Angle Bible**: Canonical versioned `ConceptGenome` and `CreativeConcept` mapped to the 11D Angle Bible.
+- **Four Distinct Viral Intelligence Targets**: Evaluates (1) Observed Breakout Score, (2) Creative Concept Strength, (3) Adaptation / Transfer Potential, and (4) Business Potential independently without collapsing into an unexplained scalar.
+- **Universal Creative Manifest**: Executable specs supporting `research_only`, `image_ad`, `organic_image`, `carousel`, `video_reel_short`, and `mixed_format`.
 - **Google Drive Primary Storage**: Authoritative binary object store mapped via Postgres `storage_objects`, featuring resumable uploads for media > 5MB.
 - **Multimodal Video Decomposition**: `ffmpeg` scene detection, keyframe vision analysis, OCR text role classification, and WhisperX timestamp alignment.
 - **Originality & Claim Gates**: 64-bit perceptual hashing with Hamming distance checks block copycat variants. Claims missing proof stay in human review.
 
 ### 5. Advanced JEV & Bayesian Learning Flywheel
-- **TypeSafe Decisions API**: Native integration with OpenRouter's `/api/alpha/decisions` (`typesafe/jev-1.13`) providing strictly typed `choice`, `noul`, and `score` decisions without chat fallback coercion or fake confidence.
+- **Dual JEV Provider Router**: Unified `JevProviderRouter` supporting both direct TypeSafe AI (`typesafe_direct`) and OpenRouter Decisions API (`openrouter` with `typesafe/jev-1.13`) across `AUTO`, `TYPESAFE_DIRECT`, `OPENROUTER`, and `COMPARE` modes.
+- **Strict Bounded Decisions**: Primitives `choice`, `noul`, and `score` without chat fallback coercion or fake confidence. Generic LLMs are synthesis tools for copywriting, never substitutes for JEV.
 - **Question-Aware Evidence Compression**: Evidence bundles filter selectively by question domain (`visual_craft`, `retention_architecture`, `share_trigger`, `transferability`) while preserving `EvidenceRef` lineage.
 - **Truthful Nullable Telemetry**: Ingests multi-objective telemetry with strict nullable semantics (`optionalNumber`), preserving observed zeros while keeping unobserved metrics as `null`.
 - **Exponential Recency-Decay Weighting**: Half-life decay (14-day) ensures fresh performance informs new briefs without being skewed by months-old ad campaigns.

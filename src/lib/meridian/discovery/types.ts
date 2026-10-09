@@ -8,7 +8,7 @@ export interface DiscoveredAudioTrend {
   id: string;
   name: string;
   isTrending: boolean;
-  reelCount: number;
+  reelCount?: number;
   originalCreatorHandle?: string;
   firstSeenAt: string;
 }
@@ -18,22 +18,22 @@ export interface DiscoveredReelItem {
   permalink: string;
   externalPostId: string;
   creatorHandle: string;
-  creatorFollowerCount: number;
-  creatorLast30MedianViews: number;
-  creatorVariance: number;
+  creatorFollowerCount?: number;
+  creatorLast30MedianViews?: number;
+  creatorVariance?: number;
   niche: string;
   caption: string;
   hashtags: string[];
   audio: DiscoveredAudioTrend;
-  durationMs: number;
+  durationMs?: number;
   postedAt: string;
   discoveredAt: string;
   discoveryTier: DiscoverySourceTier;
   scoutDeviceId?: string;
   metrics: {
-    views: number;
-    likes: number;
-    comments: number;
+    views?: number;
+    likes?: number;
+    comments?: number;
     shares?: number;
     saves?: number;
   };

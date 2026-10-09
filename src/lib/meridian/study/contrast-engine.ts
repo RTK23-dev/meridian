@@ -86,8 +86,7 @@ export class DeepStudyContrastEngine {
     }
 
     // 4. Transferability filter
-    // Non-transferable factors: follower count > 500k, celebrity appearance, one-off accident
-    const isMegaCreator = outlierReel.creatorFollowerCount >= 500000;
+    const isMegaCreator = (outlierReel.creatorFollowerCount ?? 0) >= 500000;
     const nonTransferable: string[] = [];
     if (isMegaCreator) {
       nonTransferable.push("Creator existing celebrity fanbase");
