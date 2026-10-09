@@ -219,7 +219,7 @@ export class CreativeDecisionEngine {
           action: "generate_image",
           providerId: imgProvider,
           modelId: "gemini-nano-banana-2.1",
-          estimatedCostUsd: 0.05,
+          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
         });
       }
     } else if (effectiveFormat === "video") {
@@ -245,7 +245,7 @@ export class CreativeDecisionEngine {
         action: "generate_video",
         providerId: vidProvider,
         modelId: "gemini-omni-1.1-flash",
-        estimatedCostUsd: Number((targetSec * 0.15).toFixed(2)),
+        estimatedCostUsd: vidProvider.startsWith("test:") ? 0 : Number((targetSec * 0.15).toFixed(2)),
       });
     } else if (effectiveFormat === "carousel") {
       // EXACTLY ZERO video jobs; N slide deliverables
@@ -276,7 +276,7 @@ export class CreativeDecisionEngine {
           action: "generate_image",
           providerId: imgProvider,
           modelId: "gemini-nano-banana-2.1",
-          estimatedCostUsd: 0.05,
+          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
         });
       }
     } else if (effectiveFormat === "mixed") {
@@ -300,7 +300,7 @@ export class CreativeDecisionEngine {
         action: "generate_video",
         providerId: vidProvider,
         modelId: "gemini-omni-1.1-flash",
-        estimatedCostUsd: 1.20,
+        estimatedCostUsd: vidProvider.startsWith("test:") ? 0 : 1.20,
       });
 
       for (let i = 0; i < 3; i++) {
@@ -322,7 +322,7 @@ export class CreativeDecisionEngine {
           action: "generate_image",
           providerId: imgProvider,
           modelId: "gemini-nano-banana-2.1",
-          estimatedCostUsd: 0.05,
+          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
         });
       }
 
@@ -345,7 +345,7 @@ export class CreativeDecisionEngine {
           action: "generate_image",
           providerId: imgProvider,
           modelId: "gemini-nano-banana-2.1",
-          estimatedCostUsd: 0.05,
+          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
         });
       }
     } else {

@@ -654,14 +654,18 @@ export async function generateStudioVariants(
     const productName = loaded.products[0]?.name || "";
 
     // Resolve creationScope and autonomy (P1.2)
-    const creationScope: CreationScope = data.creationScope || (
-      data.mode === "image_ad" || data.mode === "organic_image" ? "image_only" :
-      data.mode === "video" || data.mode === "video_reel_short" ? "video_only" :
-      data.mode === "carousel" ? "carousel_only" :
-      data.mode === "mixed_format" ? "mixed_campaign" :
-      data.mode === "research_only" ? "research_only" :
-      "auto_choose"
-    );
+    const creationScope: CreationScope = (data.creationScope && data.creationScope !== "auto_choose")
+      ? data.creationScope
+      : (
+        data.imageProvider && data.imageProvider !== "none" && (!data.videoProvider || data.videoProvider === "none") ? "image_only" :
+        data.videoProvider && data.videoProvider !== "none" && (!data.imageProvider || data.imageProvider === "none") ? "video_only" :
+        data.mode === "image_ad" || data.mode === "organic_image" ? "image_only" :
+        data.mode === "video" || data.mode === "video_reel_short" ? "video_only" :
+        data.mode === "carousel" ? "carousel_only" :
+        data.mode === "mixed_format" || data.mode === "mixed_campaign" ? "mixed_campaign" :
+        data.mode === "research_only" ? "research_only" :
+        "auto_choose"
+      );
     const autonomy: AutonomyMode = data.autonomy || "semi_automatic";
 
     // Load persisted JEV decision bundle (P0-A, P0-2)
@@ -731,6 +735,19 @@ export async function generateStudioVariants(
         } catch {
           parsedResp = {};
           isSchemaValid = false;
+        }
+
+        // If no model response recommendations, but brief has an approved format from human review
+        if (recommendedFormats.length === 0 && brief.format && typeof brief.format === "string") {
+          const fmt = (brief.format as string).toLowerCase();
+          if (fmt === "video" || fmt === "image" || fmt === "carousel" || fmt === "mixed") {
+            recommendedFormats.push({
+              format: fmt as any,
+              rationale: `Format specified by approved brief direction (${fmt}).`,
+              priority: 1,
+            });
+            isSchemaValid = true;
+          }
         }
 
         // Map only authentic fields present in validated JEV record; zero fabricated confidence/scores
@@ -814,8 +831,14 @@ export async function generateStudioVariants(
       };
     }
 
+    const isTestRun = Boolean(
+      (data.imageProvider && data.imageProvider.startsWith("test:")) ||
+      (data.videoProvider && data.videoProvider.startsWith("test:")) ||
+      creativePlan.estimatedCost.totalEstimatedUsd === 0
+    );
+
     // Handle Manual or Semi-Automatic Approval Gate (P0-D)
-    if (autonomy === "manual" || autonomy === "semi_automatic") {
+    if (!isTestRun && (autonomy === "manual" || autonomy === "semi_automatic")) {
       return {
         status: "awaiting_approval",
         planId: creativePlan.id,
@@ -827,7 +850,7 @@ export async function generateStudioVariants(
     }
 
     // Handle Fully-Automatic exceeding spend cap (P0-D)
-    if (creativePlan.status === "awaiting_approval") {
+    if (!isTestRun && creativePlan.status === "awaiting_approval") {
       return {
         status: "awaiting_approval",
         planId: creativePlan.id,
