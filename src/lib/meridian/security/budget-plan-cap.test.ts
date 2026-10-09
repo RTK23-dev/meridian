@@ -18,10 +18,10 @@ async function createPlan(sql: Sql, tenant: { organizationId: string; brandId: s
   await sql`
     insert into creative_plans (
       id, organization_id, brand_id, version, status, scope, autonomy, objective,
-      plan_payload, budget_reserved_usd, spend_cap_usd
+      plan_payload, budget_reserved_usd, spend_cap_usd, decision_id
     ) values (
       ${planId}, ${tenant.organizationId}, ${tenant.brandId}, '1', 'executing', 'video_only', 'semi_automatic',
-      'conversion', '{}'::jsonb, 0, ${capUsd}
+      'conversion', '{}'::jsonb, 0, ${capUsd}, 'jev-test-decision'
     )
   `;
   return planId;

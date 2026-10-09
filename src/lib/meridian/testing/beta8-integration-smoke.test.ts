@@ -27,6 +27,7 @@ import { modelCapabilityRegistry } from "../production/registry.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 import { DiscoveryService } from "../discovery/service.ts";
 import { sourceRegistry } from "../sources/registry.ts";
+import { TEST_PLAN_LINEAGE } from "./plan-lineage.ts";
 
 test("Smoke 1: JEV Semantic Judgments Wire into CreativePlan (P0-A)", () => {
   const admissibleBundle: CreativeJudgmentBundle = {
@@ -49,6 +50,7 @@ test("Smoke 1: JEV Semantic Judgments Wire into CreativePlan (P0-A)", () => {
   };
 
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: { decisionId: "jev-dec-401", evidenceRefs: ["ev-trans-1", "ev-trans-2"] },
     scope: "auto_choose",
     autonomy: "semi_automatic",
     brief: {
@@ -70,6 +72,7 @@ test("Smoke 1: JEV Semantic Judgments Wire into CreativePlan (P0-A)", () => {
 test("Smoke 2: Missing or Insufficient JEV Causes Explicit Abstention (P0-A)", () => {
   // When JEV judgments are missing in auto_choose, engine must ABSTAIN, never pretend AI recommended image
   const planMissing = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "auto_choose",
     autonomy: "semi_automatic",
     brief: {
@@ -98,6 +101,7 @@ test("Smoke 2: Missing or Insufficient JEV Causes Explicit Abstention (P0-A)", (
   };
 
   const planRejected = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "auto_choose",
     autonomy: "semi_automatic",
     brief: {
@@ -165,6 +169,7 @@ test("Smoke 4: Artifact Finalizer Fail-Closed Contract (P0-C)", async () => {
 test("Smoke 5: Autonomy Mode Gates Generation and Enforces Spend Cap (P0-D)", () => {
   // Manual autonomy requires approval
   const manualPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "video_only",
     autonomy: "manual",
     brief: {
@@ -179,6 +184,7 @@ test("Smoke 5: Autonomy Mode Gates Generation and Enforces Spend Cap (P0-D)", ()
 
   // Fully automatic over spend cap is blocked and requires approval
   const overCapPlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "mixed_campaign",
     autonomy: "fully_automatic",
     brief: {

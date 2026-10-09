@@ -138,6 +138,7 @@ export async function createTenantFixture(
   `;
 
   const planned: CreativePlan = CreativeDecisionEngine.createPlan({
+    lineage: { decisionId, evidenceRefs: ["ev-fixture-1"] },
     scope: "video_only",
     autonomy: "semi_automatic",
     preferredVideoProvider: providerId,
@@ -162,10 +163,10 @@ export async function createTenantFixture(
   await sql`
     insert into creative_plans (
       id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective,
-      plan_payload, budget_reserved_usd, spend_cap_usd
+      plan_payload, budget_reserved_usd, spend_cap_usd, decision_id
     ) values (
       ${plan.id}, ${organizationId}, ${brandId}, ${briefId}, ${plan.version}, 'executing', ${plan.scope}, ${plan.autonomy},
-      ${plan.objective}, ${JSON.stringify(plan)}, 0, ${planCapUsd}
+      ${plan.objective}, ${JSON.stringify(plan)}, 0, ${planCapUsd}, ${decisionId}
     )
   `;
 

@@ -4,6 +4,7 @@ import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreativeJudgmentBundle, CreativePlan } from "../creative/plan.ts";
 import { executeApprovedCreativePlan } from "../studio/session.server.ts";
 import type { Sql } from "../learning/store.ts";
+import { TEST_PLAN_LINEAGE } from "./plan-lineage.ts";
 
 // This file executes plans that use the placeholder image provider, which is isolated to TestingRuntime.
 process.env.MERIDIAN_TESTING_RUNTIME = "true";
@@ -30,6 +31,7 @@ test("Studio E2E Workflow 1: Single Source of Truth & Deliverables Fidelity", as
 
   // 2. CreativeDecisionEngine creates plan honoring JEV carousel recommendation
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "auto_choose",
     autonomy: "semi_automatic",
     preferredImageProvider: "test:image",
@@ -309,6 +311,7 @@ test("Studio E2E Workflow 2: Atomic Approval Gate & Double-Execution Guard (P0-3
 test("Studio E2E Workflow 3: Rejection Flow Transitions to Rejected (P0-3)", async () => {
   const plan: CreativePlan = {
     id: "plan-rej-1",
+    lineage: TEST_PLAN_LINEAGE,
     version: "2026.10.1",
     status: "awaiting_approval",
     scope: "image_only",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { CreativePlan, CreativeDeliverable } from "../creative/plan.ts";
 import { manifestFromCreativePlan } from "./creative-manifest.ts";
+import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
 
 test("CreativePlan to Manifest Projection: preserves all semantic creative decisions without brief leakage", () => {
   // A creative plan whose decisions intentionally diverge from a hypothetical generic brief
@@ -57,6 +58,7 @@ test("CreativePlan to Manifest Projection: preserves all semantic creative decis
   };
 
   const plan: CreativePlan = {
+    lineage: TEST_PLAN_LINEAGE,
     id: "plan-durable-99",
     version: "2026.10.1",
     status: "approved",

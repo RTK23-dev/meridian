@@ -25,6 +25,7 @@ import type {
   AutonomyMode,
 } from "./plan.ts";
 import { modelCapabilityRegistry } from "../production/registry.ts";
+import { requireCitedDeliverables, validatePlanLineage, type PlanLineage } from "./lineage.ts";
 
 function modelFor(provider: string, capability: "IMAGE_GENERATION" | "VIDEO_GENERATION"): string {
   const model = modelCapabilityRegistry.resolve({ provider, capability });
@@ -33,6 +34,8 @@ function modelFor(provider: string, capability: "IMAGE_GENERATION" | "VIDEO_GENE
 }
 
 export interface CreativeDecisionInput {
+  /** The persisted JEV decision this plan came from. Required: a plan without lineage is refused (lineage.ts). */
+  lineage: PlanLineage;
   scope: CreationScope;
   autonomy: AutonomyMode;
   objective?: CampaignObjective;
@@ -74,6 +77,7 @@ export interface CreativeDecisionInput {
 
 export class CreativeDecisionEngine {
   static createPlan(input: CreativeDecisionInput): CreativePlan {
+    const lineage = validatePlanLineage(input.lineage);
     const planId = `plan-${globalThis.crypto.randomUUID()}`;
     const version = "2026.10.1";
     const objective = input.objective ?? "conversion";
@@ -118,7 +122,7 @@ export class CreativeDecisionEngine {
         topic: "jev_rejection_block",
         claim: "JEV policy rejected this brief",
         groundedIn: "policy_rule",
-        sourceId: input.jevJudgments.decisionId || "jev-rejected",
+        sourceId: lineage.decisionId,
         detail: "Hard block: JEV decision is REJECT. Creative production is forbidden.",
       });
     } else if (input.jevJudgments?.status?.startsWith("abstain_")) {
@@ -129,7 +133,7 @@ export class CreativeDecisionEngine {
         topic: "jev_admissibility_block",
         claim: "JEV response is inadmissible",
         groundedIn: "policy_rule",
-        sourceId: input.jevJudgments.decisionId || "jev-inadmissible",
+        sourceId: lineage.decisionId,
         detail: chosenFormatDesc,
       });
     } else if (scope === "image_only") {
@@ -173,7 +177,7 @@ export class CreativeDecisionEngine {
           topic: "format_selection_abstention",
           claim: "Format selection requires explicit human choice",
           groundedIn: "policy_rule",
-          sourceId: judgments?.decisionId || input.brief.decisionId || "policy-abstain",
+          sourceId: lineage.decisionId,
           detail: judgments?.status
             ? `JEV status is '${judgments.status}'. No evidence-backed format recommendation.`
             : "No persisted JEV judgments available for this brief.",
@@ -202,7 +206,7 @@ export class CreativeDecisionEngine {
         topic: "creative_mechanism",
         claim: input.jevJudgments.creativeMechanism,
         groundedIn: "jev_answer",
-        sourceId: input.brief.decisionId ?? "jev-default",
+        sourceId: lineage.decisionId,
         detail: `Preserving core mechanism identified by JEV: ${input.jevJudgments.creativeMechanism}`,
       });
     }
@@ -464,18 +468,21 @@ export class CreativeDecisionEngine {
       }
     }
 
-    if (input.jevJudgments && "evidenceRefs" in input.jevJudgments && input.jevJudgments.evidenceRefs?.length) {
+    if (lineage.evidenceRefs.length) {
       rationales.push({
         topic: "jev_evidence_grounding",
         claim: "Judgments grounded in observed evidence",
         groundedIn: "jev_answer",
-        sourceId: input.jevJudgments.decisionId || input.brief.decisionId || "jev-evidence",
-        detail: `Evidence refs: ${input.jevJudgments.evidenceRefs.join(", ")} (Question Set: ${input.jevJudgments.questionSetVersion || "v1"})`,
+        sourceId: lineage.decisionId,
+        detail: `Evidence refs: ${lineage.evidenceRefs.join(", ")} (Question Set: ${input.jevJudgments?.questionSetVersion || "not recorded"})`,
       });
     }
 
+    requireCitedDeliverables(lineage, deliverables.length);
+
     return {
       id: planId,
+      lineage,
       version,
       status: planStatus,
       scope,

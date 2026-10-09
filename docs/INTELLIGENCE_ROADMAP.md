@@ -59,7 +59,7 @@ Goal: evidence becomes a structured creative decision, and that decision is the 
 
 Slices:
 
-- **P3a**: plan lineage. `createPlan` requires a persisted decision id from the M2 gate and the evidence refs it used. A plan without lineage is refused.
+- **P3a** (done): plan lineage. `createPlan` requires `lineage` (the persisted decision id and the evidence refs it cited). A plan without a decision id is refused. A plan that produces deliverables with no cited evidence is refused; an abstained plan may cite none. Production takes lineage from the gated decision (`loadGatedJevDecision`), not from brief text. The `creative_plans.decision_id` column is enforced by a BEFORE INSERT trigger (migration `0042`), not a CHECK constraint, so legacy plans stay updatable. Not done: legacy plans whose brief has no decision keep a null `decision_id` and no recorded evidence refs, so they are not fully traced. Their count needs an owner's decision (they can be left, or retired).
 - **P3b**: decision schema. Each decision records the question version, the evidence set it saw, its thresholds, and the reviewer decision. Re-running the same evidence with the same question version must produce the same decision record.
 - **P3c**: `CreativePlan` as the single source of production truth. Production reads only the plan and its manifest (the source-of-truth test already checks this path; it must read the real path, not source text).
 

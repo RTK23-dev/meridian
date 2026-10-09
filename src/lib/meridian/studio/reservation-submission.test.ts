@@ -8,6 +8,7 @@ import { productionRouter } from "../production/router.ts";
 import type { CreativeSpec, ProductionJob, ProductionProvider } from "../production/types.ts";
 import { BudgetExceededError, BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { executeApprovedCreativePlan } from "./session.server.ts";
+import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
 
 type Outcome = (spec: CreativeSpec) => Promise<ProductionJob>;
 
@@ -80,6 +81,7 @@ async function createTenantFixture(sql: Sql, label: string, planCapUsd: number |
   `;
 
   const plan: CreativePlan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "video_only",
     autonomy: "semi_automatic",
     preferredVideoProvider: providerId,
@@ -103,10 +105,10 @@ async function createTenantFixture(sql: Sql, label: string, planCapUsd: number |
   await sql`
     insert into creative_plans (
       id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective,
-      plan_payload, budget_reserved_usd, spend_cap_usd
+      plan_payload, budget_reserved_usd, spend_cap_usd, decision_id
     ) values (
       ${plan.id}, ${organizationId}, ${brandId}, ${briefId}, ${plan.version}, 'executing', ${plan.scope}, ${plan.autonomy},
-      ${plan.objective}, ${JSON.stringify(plan)}, 0, ${planCapUsd}
+      ${plan.objective}, ${JSON.stringify(plan)}, 0, ${planCapUsd}, ${plan.lineage.decisionId}
     )
   `;
 

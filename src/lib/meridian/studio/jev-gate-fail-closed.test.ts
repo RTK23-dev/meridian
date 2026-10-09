@@ -4,6 +4,7 @@ import { getSql } from "../../db.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { Sql } from "../learning/store.ts";
 import { executeApprovedCreativePlan, generateStudioVariants } from "./session.server.ts";
+import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
 
 /**
  * M2 regression: the JEV gate must fail closed before any write or billable generation.
@@ -152,6 +153,7 @@ test("executeApprovedCreativePlan refuses an approved plan whose brief has no JE
   const sql = await getSql();
   const fixture = await tenant(sql, "exec-null", { kind: "none" });
   const plan = CreativeDecisionEngine.createPlan({
+    lineage: TEST_PLAN_LINEAGE,
     scope: "image_only",
     autonomy: "semi_automatic",
     preferredImageProvider: "test:image",
@@ -168,10 +170,10 @@ test("executeApprovedCreativePlan refuses an approved plan whose brief has no JE
   });
   await sql`
     insert into creative_plans (
-      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd
+      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd, decision_id
     ) values (
       ${plan.id}, ${fixture.organizationId}, ${fixture.brandId}, ${fixture.briefId}, ${plan.version}, 'executing', ${plan.scope},
-      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, null
+      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, null, ${plan.lineage.decisionId}
     )
   `;
   await inProduction(async () => {
