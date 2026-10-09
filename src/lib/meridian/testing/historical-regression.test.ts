@@ -794,3 +794,179 @@ test("28. Regression: Learned parameters cannot be marked validated without empi
   );
 });
 
+// 29. Dual JEV Provider Router routes explicitly without silent chat coercion
+test("29. Regression: Dual JEV Provider Router supports typesafe_direct and openrouter", async () => {
+  const { TypeSafeDirectJevProvider, JevRouter } = await import("../jev/router.ts");
+  const directProvider = new TypeSafeDirectJevProvider({ apiKey: "" });
+  const router = new JevRouter({ typesafeProvider: directProvider });
+
+  const health = await directProvider.health();
+  assert.equal(health.status, "NOT_CONFIGURED");
+
+  const res = await router.decide({
+    organizationId: "org-test",
+    brandId: "brand-test",
+    state: { description: "Test" },
+    questions: {
+      q1: {
+        id: "q1",
+        version: "1.0",
+        type: "noul",
+        instructions: "Test",
+        criteria: { true: "yes", false: "no" },
+        evidenceRequirements: [],
+      },
+    },
+  }, { mode: "typesafe_direct" });
+
+  assert.equal(res.provider, "typesafe_direct");
+  assert.equal(res.answers["q1"].status, "not_configured");
+});
+
+// 30. Cyclone scout adapter reports unknown views as undefined, never 15000 or likes * 15
+test("30. Regression: Cyclone scout adapter leaves unobserved views and baselines undefined", async () => {
+  const { CycloneScoutSourceAdapter } = await import("../discovery/cyclone-scout-adapter.ts");
+  const adapter = new CycloneScoutSourceAdapter({
+    config: { gatewayUrl: "http://127.0.0.1:9090", deviceId: "pixel-8" },
+  });
+
+  const sampleCard = {
+    nodeId: "root",
+    role: "root_view",
+    children: [
+      { nodeId: "creator", role: "TextView", text: "@fitness_daily" },
+      { nodeId: "likes", role: "TextView", text: "500 likes" },
+      { nodeId: "comments", role: "TextView", text: "20 comments" },
+    ],
+  };
+
+  const reel = adapter.parsePageCardToReel(sampleCard, "fitness");
+  assert.ok(reel !== null);
+  if (!reel) return;
+  assert.equal(reel.creatorHandle, "fitness_daily");
+  assert.equal(reel.metrics.views, undefined);
+  assert.notEqual(reel.metrics.views, 7500); // not 500 * 15
+  assert.equal(reel.creatorFollowerCount, undefined);
+  assert.notEqual(reel.creatorFollowerCount, 15000);
+  assert.equal(reel.creatorLast30MedianViews, undefined);
+});
+
+// 31. Graph API adapter preserves unobserved views as undefined
+test("31. Regression: Instagram Graph API adapter leaves unobserved views undefined", async () => {
+  const { InstagramBusinessDiscoveryAdapter } = await import("../discovery/graph-api-adapter.ts");
+  const mockFetch = async () =>
+    new Response(
+      JSON.stringify({
+        business_discovery: {
+          followers_count: 50000,
+          media_count: 10,
+          media: {
+            data: [
+              {
+                id: "media_123",
+                caption: "Morning motivation",
+                media_type: "VIDEO",
+                like_count: 1000,
+                comments_count: 50,
+                permalink: "https://www.instagram.com/reel/123/",
+              },
+            ],
+          },
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+
+  const adapter = new InstagramBusinessDiscoveryAdapter({
+    credentials: { accessToken: "EAAG_TEST", businessAccountId: "1784" },
+    fetchFn: mockFetch as unknown as typeof fetch,
+  });
+
+  const res = await adapter.fetchCreatorReels({ targetUsername: "fitness", niche: "fitness" });
+  assert.equal(res.status, "connected");
+  if (res.status !== "connected") return;
+  assert.equal(res.items[0].metrics.views, undefined);
+  assert.equal(res.items[0].creatorLast30MedianViews, undefined);
+});
+
+// 32. Google Omni provider uses Interactions API contract
+test("32. Regression: GeminiOmniVideoProvider uses Interactions API contract", async () => {
+  const { GeminiOmniVideoProvider } = await import("../production/providers/omni.ts");
+  let calledEndpoint = "";
+
+  const mockFetch = async (url: string | URL | Request) => {
+    calledEndpoint = url.toString();
+    return new Response(
+      JSON.stringify({
+        interaction_id: "interactions/omni-456",
+        status: "COMPLETED",
+        steps: [
+          {
+            status: "COMPLETED",
+            outputs: [{ type: "video", uri: "https://storage.googleapis.com/omni.mp4" }],
+          },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  process.env.GEMINI_API_KEY = "test-key";
+  const provider = new GeminiOmniVideoProvider({ fetchImpl: mockFetch as unknown as typeof fetch });
+  const job = await provider.submitJob({
+    id: "spec-1",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    title: "Test",
+    format: "reel",
+    aspectRatio: "9:16",
+    durationTargetSeconds: 5,
+    hookLine: "Hook",
+    script: "Script",
+    scenes: [],
+  });
+
+  assert.ok(calledEndpoint.includes("/interactions"));
+  assert.equal(job.status, "COMPLETED");
+  assert.equal(job.outputArtifactId, "https://storage.googleapis.com/omni.mp4");
+});
+
+// 33. Model capability registry tracks Veo 3.1 deprecation
+test("33. Regression: ModelCapabilityRegistry flags Veo 3.1 preview shutdown warning", async () => {
+  const { modelCapabilityRegistry } = await import("../production/registry.ts");
+  const lifecycle = modelCapabilityRegistry.checkModelLifecycle(
+    "veo-3.1-generate-preview",
+    new Date("2026-10-09")
+  );
+  assert.equal(lifecycle.state, "DEPRECATED");
+  assert.ok(lifecycle.warning?.includes("2026-10-22"));
+  assert.equal(lifecycle.replacement, "gemini-omni-1.1-flash");
+});
+
+// 34. Decomposed opportunity rating keeps business potential null when telemetry is unobserved
+test("34. Regression: Decomposed opportunity rating preserves unknown business potential as null", async () => {
+  const { calculateDecomposedOpportunityRating } = await import("../factory/concept-genome.ts");
+  const rating = calculateDecomposedOpportunityRating({
+    observed: { views: 50000, creatorMedianViews: 10000 },
+    conceptGenes: ["result-first"],
+  });
+
+  assert.equal(rating.businessPotential.score, null);
+  assert.equal(rating.businessPotential.epistemicState, "UNKNOWN");
+  assert.ok(rating.missingDimensions.includes("business_conversion_telemetry"));
+});
+
+// 35. Universal creative manifest prevents research-only from creating production jobs
+test("35. Regression: validateCreationPlan blocks research-only from creating production jobs", async () => {
+  const { validateCreationPlan } = await import("../factory/creative-manifest.ts");
+  const plan = validateCreationPlan({
+    mode: "research_only",
+    productionStrategy: "reuse_edit_assets",
+    startingMaterial: "new_brief",
+  });
+
+  assert.equal(plan.valid, true);
+  assert.equal(plan.willCreateProductionJob, false);
+});
+
+

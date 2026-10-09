@@ -180,4 +180,20 @@ Meridian provides an integrated, code-driven visual pipeline for the Content Fac
    - `strict_quality`: Conservative bar (85% score floor, 90% $P(\text{beat})$ confidence), human review mandatory.
    - `manual_cloud`: $0 spend workflow exporting shot lists directly to Google Drive.
 
+---
+
+## Concept Genome & 4-Target Opportunity Scoring
+
+Meridian strictly separates virality and performance into four distinct targets (`src/lib/meridian/factory/concept-genome.ts`):
+1. **Observed Breakout Score**: Post views / creator median views against comparable controls. Missing views remain unknown, never guessed or coerced.
+2. **Creative Concept Strength**: Mechanism coherence scored across 11D Angle Bible dimensions (hook mechanism, retention architecture, emotional arc, proof payoff, share trigger, execution craft).
+3. **Adaptation / Transfer Potential**: Feasibility and fit for target brand, product, audience, and claim risk constraints.
+4. **Business Potential**: Attributed conversion and ROAS telemetry. Stays `score: null` and `epistemicState: "UNKNOWN"` when commercial conversion telemetry is absent.
+
+### Universal Creative Manifest (`creative-manifest.ts`)
+Executable creative specs support all creator modes:
+- **Modes**: `research_only`, `image_ad`, `organic_image`, `carousel`, `video_reel_short`, `mixed_format`.
+- **Validation**: `research_only` is blocked from creating accidental production jobs.
+- **Manifest Entity**: Preserves concept lineage, beat-by-beat timeline, asset provenance (`BRAND_OWNED`, `USER_PROVIDED`, `LICENSED`, `AI_GENERATED`), layer specifications, QC audit gates, and attribution join keys (`utm_campaign`, `utm_content`).
+
 

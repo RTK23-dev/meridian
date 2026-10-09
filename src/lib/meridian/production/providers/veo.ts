@@ -60,11 +60,11 @@ export class VeoProvider implements ProductionProvider {
   }
 
   private getModel(): string {
-    return process.env.MERIDIAN_VEO_MODEL?.trim() || "veo-3.1-generate-preview";
+    return process.env.MERIDIAN_VEO_MODEL?.trim() || "veo-2.0-generate-001";
   }
 
   getModelCapability(model = this.getModel()): VideoCapability {
-    return VEO_MODEL_CAPABILITIES[model] || VEO_MODEL_CAPABILITIES["veo-3.1-generate-preview"];
+    return VEO_MODEL_CAPABILITIES[model] || VEO_MODEL_CAPABILITIES["veo-2.0-generate-001"] || VEO_MODEL_CAPABILITIES["veo-3.1-generate-preview"];
   }
 
   async health(): Promise<ProviderHealth> {
@@ -79,11 +79,25 @@ export class VeoProvider implements ProductionProvider {
       };
     }
 
+    const model = this.getModel();
+    const { modelCapabilityRegistry } = await import("../registry.ts");
+    const lifecycle = modelCapabilityRegistry.checkModelLifecycle(model);
+
+    if (!lifecycle.usable) {
+      return {
+        id: this.id,
+        state: "UNAVAILABLE",
+        capabilities: [],
+        detail: lifecycle.warning || `Veo model '${model}' is unavailable.`,
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
     return {
       id: this.id,
       state: "CONFIGURED",
       capabilities: ["textToVideo"],
-      detail: `Configured with model ${this.getModel()}.`,
+      detail: `Configured with model ${model}.${lifecycle.warning ? ` Warning: ${lifecycle.warning}` : ""}`,
       checkedAt: new Date().toISOString(),
     };
   }

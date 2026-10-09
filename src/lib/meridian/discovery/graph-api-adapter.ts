@@ -125,12 +125,6 @@ export class InstagramBusinessDiscoveryAdapter {
         (m) => m.media_type === "VIDEO" || m.permalink?.includes("/reel/")
       );
 
-      // Extract median view proxies and historical variance from comments/likes
-      const likeCounts = mediaList.map((m) => m.like_count ?? 0);
-      const medianLikes = calculateMedian(likeCounts);
-      // Rough view estimate when view counts aren't directly available via Business Discovery (view = ~12x likes for reels)
-      const estimatedMedianViews = Math.max(1000, medianLikes * 12);
-
       const items: DiscoveredReelItem[] = mediaList
         .slice(0, query.limit ?? 25)
         .map((m) => {
@@ -138,16 +132,15 @@ export class InstagramBusinessDiscoveryAdapter {
           const hashtags = extractHashtags(caption);
           const likes = m.like_count ?? 0;
           const comments = m.comments_count ?? 0;
-          const estimatedViews = Math.max(likes * 10, comments * 150);
 
           return {
             id: `ig-graph-${m.id}`,
             permalink: m.permalink ?? `https://www.instagram.com/reel/${m.id}/`,
             externalPostId: m.id,
             creatorHandle: cleanUsername,
-            creatorFollowerCount: followerCount,
-            creatorLast30MedianViews: estimatedMedianViews,
-            creatorVariance: 0.8,
+            creatorFollowerCount: followerCount > 0 ? followerCount : undefined,
+            creatorLast30MedianViews: undefined,
+            creatorVariance: undefined,
             niche: query.niche,
             caption,
             hashtags,
@@ -155,15 +148,15 @@ export class InstagramBusinessDiscoveryAdapter {
               id: `audio-${m.id}`,
               name: "Original Audio",
               isTrending: false,
-              reelCount: 1,
+              reelCount: undefined,
               firstSeenAt: m.timestamp ?? new Date().toISOString(),
             },
-            durationMs: 30000,
+            durationMs: undefined,
             postedAt: m.timestamp ?? new Date().toISOString(),
             discoveredAt: new Date().toISOString(),
             discoveryTier: "graph_api",
             metrics: {
-              views: estimatedViews,
+              views: undefined,
               likes,
               comments,
             },
@@ -271,9 +264,9 @@ export class InstagramHashtagAdapter {
             permalink: m.permalink ?? `https://www.instagram.com/reel/${m.id}/`,
             externalPostId: m.id,
             creatorHandle: "unknown",
-            creatorFollowerCount: 10000,
-            creatorLast30MedianViews: 5000,
-            creatorVariance: 1.0,
+            creatorFollowerCount: undefined,
+            creatorLast30MedianViews: undefined,
+            creatorVariance: undefined,
             niche: query.niche,
             caption,
             hashtags,
@@ -281,15 +274,15 @@ export class InstagramHashtagAdapter {
               id: `audio-${m.id}`,
               name: "Hashtag Audio",
               isTrending: true,
-              reelCount: 100,
+              reelCount: undefined,
               firstSeenAt: m.timestamp ?? new Date().toISOString(),
             },
-            durationMs: 30000,
+            durationMs: undefined,
             postedAt: m.timestamp ?? new Date().toISOString(),
             discoveredAt: new Date().toISOString(),
             discoveryTier: "graph_api",
             metrics: {
-              views: Math.max(likes * 10, comments * 120),
+              views: undefined,
               likes,
               comments,
             },
@@ -309,11 +302,4 @@ export class InstagramHashtagAdapter {
 function extractHashtags(text: string): string[] {
   const matches = text.match(/#[a-zA-Z0-9_]+/g);
   return matches ? matches.map((t) => t.toLowerCase()) : [];
-}
-
-function calculateMedian(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }

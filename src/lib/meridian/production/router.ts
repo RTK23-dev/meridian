@@ -13,6 +13,7 @@ import type {
 import { ManualCloudProvider } from "./providers/manual-cloud.ts";
 import { HypitProvider } from "./providers/hypit.ts";
 import { VeoProvider } from "./providers/veo.ts";
+import { GeminiOmniVideoProvider } from "./providers/omni.ts";
 import { HiggsfieldProvider } from "./providers/higgsfield.ts";
 
 export class ProductionRouter {
@@ -33,6 +34,7 @@ export class ProductionRouter {
     } else {
       this.register(new ManualCloudProvider());
       this.register(new HypitProvider());
+      this.register(new GeminiOmniVideoProvider());
       this.register(new VeoProvider());
       this.register(new HiggsfieldProvider());
     }
@@ -67,13 +69,13 @@ export class ProductionRouter {
       );
     }
     if (mode === "QUALITY_FIRST") {
-      const preferred = ["veo", "higgsfield", "hypit", "manual_cloud"];
+      const preferred = ["google_omni", "veo", "higgsfield", "hypit", "manual_cloud"];
       return [...available].sort(
         (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
       );
     }
     // BALANCED
-    const preferred = ["hypit", "veo", "higgsfield", "manual_cloud"];
+    const preferred = ["google_omni", "hypit", "veo", "higgsfield", "manual_cloud"];
     return [...available].sort(
       (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
     );
@@ -154,15 +156,17 @@ export class ProductionRouter {
     }
 
     if (mode === "QUALITY_FIRST") {
+      const omni = healthy.find((p) => p.id === "google_omni");
       const veo = healthy.find((p) => p.id === "veo");
       const hf = healthy.find((p) => p.id === "higgsfield");
-      return veo || hf || healthy[0]!;
+      return omni || veo || hf || healthy[0]!;
     }
 
     // BALANCED
+    const omni = healthy.find((p) => p.id === "google_omni");
     const hypit = healthy.find((p) => p.id === "hypit");
     const veo = healthy.find((p) => p.id === "veo");
-    return hypit || veo || healthy[0]!;
+    return omni || hypit || veo || healthy[0]!;
   }
 }
 

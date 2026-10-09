@@ -183,3 +183,39 @@ export type JevPolicyEvaluation = {
 export interface JevClient {
   decide(request: JevDecisionRequest): Promise<JevDecisionResponse>;
 }
+
+export type JevProviderId = "typesafe_direct" | "openrouter";
+
+export type JevCapabilities = {
+  primitives: JevQuestionType[];
+  batchDecisions: boolean;
+  explanation: boolean;
+};
+
+export type JevProviderHealth =
+  | { status: "READY"; message?: string }
+  | { status: "NOT_CONFIGURED"; message: string }
+  | { status: "DEGRADED" | "UNAVAILABLE"; message: string };
+
+export interface JevProvider {
+  readonly id: JevProviderId;
+  capabilities(): JevCapabilities;
+  health(): Promise<JevProviderHealth>;
+  decide(request: JevDecisionRequest): Promise<JevDecisionResponse>;
+}
+
+export type JevRoutingMode = "auto" | "typesafe_direct" | "openrouter" | "compare";
+
+export interface JevRoutingPolicy {
+  mode?: JevRoutingMode;
+  preferredProvider?: JevProviderId;
+  fallbackEnabled?: boolean;
+  compareMode?: boolean;
+}
+
+export interface JevProviderRouter {
+  decide(request: JevDecisionRequest, policy?: JevRoutingPolicy): Promise<JevDecisionResponse>;
+  getProvider(id: JevProviderId): JevProvider;
+  health(id?: JevProviderId): Promise<Record<JevProviderId, JevProviderHealth>>;
+}
+
