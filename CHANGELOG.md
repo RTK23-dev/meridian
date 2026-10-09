@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.0-beta.7 — 2026-10-09
+
+Unified Master Engineering Specification v3: Native Decisions API JEV Router, Google Gemini Omni Video, Strict Metrology & Discovery Truthfulness, 4-Target Viral Intelligence, and Universal Creative Manifest.
+
+- **Dual JEV Provider Router**:
+  - Implemented `JevRouter`, `TypeSafeDirectJevProvider`, and `OpenRouterJevProvider` supporting `AUTO`, `TYPESAFE_DIRECT`, `OPENROUTER`, and `COMPARE` provider routing policies.
+  - Full adherence to OpenRouter native Decisions API (`POST /api/alpha/decisions`) and model `typesafe/jev-1.13`, preserving exact `choice`, `noul`, and `score` union responses without generic chat-completion fallback.
+  - Fail closed with `NOT_CONFIGURED` when credentials or endpoints are missing; comparison mode runs on gold sets without merging answers.
+- **Google Gemini Omni Video & Model Lifecycle Registry**:
+  - `GeminiOmniVideoProvider`: Google video generation adapter via official Gemini Interactions API (`POST /v1beta/interactions`) with `gemini-omni-1.1-flash`.
+  - `ModelCapabilityRegistry`: Tracks model lifecycle, supported tasks/modalities, and shutdown dates. Flags `veo-3.1-generate-preview` shutdown date (2026-10-22) with automated warnings pointing to `gemini-omni-1.1-flash`, while keeping stable GA `veo-2.0-generate-001`.
+  - Fully integrated into `ProductionRouter` alongside `veo`, `higgsfield`, `hypit`, and `manual_cloud`.
+- **Truthful Metrology & Discovery Fabric**:
+  - Removed all synthesized metrics (`15000` default follower count, `Math.max(1000, likes * 15)`, `5000` reels count) across `cyclone-scout-adapter` and `graph-api-adapter`.
+  - Missing metrics strictly remain `undefined`/`null`, eliminating artificial outliers and skewed baselines.
+- **4-Target Viral Intelligence & Concept Genome**:
+  - Decomposed opportunity rating into 4 explicit, distinct targets: `observedBreakoutScore`, `conceptStrengthScore`, `transferPotentialScore`, and `businessPotentialScore`.
+  - Business potential strictly returns `null` when downstream telemetry is unavailable.
+  - `ConceptGenome`: Versioned entity mapping mechanisms directly to the 11D Angle Bible, supporting organic structures and multi-format concepts.
+- **Universal Creative Manifest**:
+  - Implemented `CreativeManifest` supporting all creation modes: `research_only`, `image_ad`, `organic_image`, `carousel`, `video_reel_short`, and `mixed_format`.
+  - `validateCreationPlan`: Enforces execution safety, strictly preventing `research_only` from spinning up production jobs, and validating required assets and beat lists.
+- **Historical Regression Hardening**:
+  - Added regression tests 29-35 in `historical-regression.test.ts` verifying all core invariants (35/35 historical regression tests and 484/484 total repository tests passing).
+
 ## 0.1.0-beta.6 — 2026-10-09
 
 Final Runtime Integration & Hardening: ProductionRouter, Durable PostgreSQL Jobs, Model-Accurate Adapters, Truthful Nullable Semantics, and End-to-End Integration Gates.
