@@ -49,7 +49,7 @@ Slices:
 
 - **P2a** (done): epistemic state. Schema `jev.research-ad.v2`. Transcript segments are `OBSERVED`. Field labels and claims are `INFERRED`. Each field's confidence is labelled `confidenceSource: model_self_report`, so it is not presented as calibrated. The validator sets these states, so a model cannot relabel its own inference. Existing v1 cached analyses are not reused, so each ad is analyzed once more.
 - **P2b** (done): cheap ranking gate. `research/gate.ts` scores each ad from metadata before any media download, transcription, or analysis. Duplicates are skipped and the best `RESEARCH_GATE_MAX_ADS` (default 20) are admitted. Every decision is stored with its score and reason, and skipped ads are `gate_skipped`. Weights are `seed_prior`, not calibrated. Previously first-come first-served until the byte budget ran out. Planned as deterministic features ranking candidates before the expensive steps.
-- **P2c**: hook, format, and pattern extraction carries evidence references for each extracted pattern. A pattern without evidence refs cannot be used by P3.
+- **P2c** (done): research patterns are `INFERRED`, not `OBSERVED`. A pattern counts the model's labels, which are inferences, so the old label was wrong. Each pattern stores `evidence_refs` (up to five example ads, each with the transcript segment ids behind its label), and its confidence is labelled `model_self_report`. Labels with no citation are not counted. Organization summaries store no examples, so no brand's transcript crosses a brand boundary. Migration `0041` relabels stored `OBSERVED` patterns and opportunity research states. Not done: the opportunity engine still lists only ad and analysis ids, not segment ids, and the scoring gate on `pattern.confidence` (`opportunity/candidates.ts`) still relies on model self-reports (see Open questions).
 
 Exit: every pattern shown to a human or passed to JEV carries its evidence refs and state. Perception runs on fewer candidates, with the skip reasons stored.
 
@@ -107,3 +107,5 @@ Each PR: draft, real-database tests, a red check against the previous behavior f
 
 - Which provider comes first in P4b (carousel rendering or a second video provider)? This changes the order of P4 slices.
 - Is a calibration sample size of 200 held-out outcomes per decision class acceptable before P5c changes JEV priors? A smaller threshold weakens the guarantee.
+- The opportunity gate (`opportunity/candidates.ts`: a pattern needs `sampleCount >= 2` and `confidence >= 0.65`) reads the model's self-reported confidence. It is a scoring gate, so P2c leaves it unchanged. Should P3 replace it with a calibrated score, or keep the self-report threshold until P5 calibration exists?
+- Is the default gate cap of 20 ads per run (`RESEARCH_GATE_MAX_ADS`) the right operational limit? It changes how many ads reach transcription and analysis, so it needs an owner's decision.

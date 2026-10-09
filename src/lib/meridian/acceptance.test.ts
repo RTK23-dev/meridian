@@ -69,7 +69,7 @@ test("JEV Research patterns are corpus counts with provenance, not performance c
   const patterns = aggregateResearchPatterns([make("ad-a", "pain_point"), make("ad-b", "pain_point"), make("ad-c", "curiosity")]);
   const repeatedHook = patterns.find((pattern) => pattern.dimension === "hookMechanism" && pattern.value === "pain_point");
   assert.equal(repeatedHook?.sampleCount, 2);
-  assert.equal(repeatedHook?.state, "OBSERVED");
+  assert.equal(repeatedHook?.state, "INFERRED", "a corpus count of model labels is an inference, not an observation");
   assert.deepEqual(repeatedHook?.exampleAdIds, ["ad-a", "ad-b"]);
   assert.deepEqual(repeatedHook?.exampleAnalysisIds, ["analysis-ad-a", "analysis-ad-b"]);
   assert.match(repeatedHook?.summary ?? "", /frequency only/i);
@@ -80,7 +80,7 @@ test("JEV Research patterns are corpus counts with provenance, not performance c
   const researchOpportunity = opportunities.find((candidate) => candidate.hypothesisId.startsWith("research:"));
   assert.ok(researchOpportunity);
   assert.equal(researchOpportunity.researchSampleCount, 2);
-  assert.equal(researchOpportunity.researchState, "OBSERVED");
+  assert.equal(researchOpportunity.researchState, "INFERRED");
   assert.ok(researchOpportunity.evidence.some((item) => item.source === "jev_research"));
   const brief = buildBrief({ opportunity: researchOpportunity, brain: brain(), patterns: [], rejections: [], observations: [] });
   assert.ok(brief.why.some((item) => /frequency only/i.test(item)));
