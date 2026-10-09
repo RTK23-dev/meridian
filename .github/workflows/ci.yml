@@ -74,6 +74,9 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Start the local app for product-loop e2e
+        # The product loop exercises the placeholder image provider, which is isolated to TestingRuntime.
+        env:
+          MERIDIAN_TESTING_RUNTIME: "true"
         run: |
           mkdir -p artifacts/e2e
           npm run dev > artifacts/e2e/dev-server.log 2>&1 &
