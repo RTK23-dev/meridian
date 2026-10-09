@@ -1,5 +1,5 @@
 /**
- * Contracts and Types for Organic Discovery Stack
+ * Research Frontier & Organic Discovery Stack Contracts and Types
  */
 
 export type DiscoverySourceTier = "graph_api" | "vendor" | "cyclone_scout" | "bulk_upload";
@@ -60,4 +60,68 @@ export interface VelocityAnalysis {
   viewsGainPerHour: number;
   accelerationScore: number; // derivative of views slope
   isExploding: boolean;
+}
+
+export type DiscoveryScope =
+  | "scrape_page"
+  | "page_plus_links"
+  | "domain"
+  | "niche"
+  | "profile"
+  | "url_list";
+
+export type DiscoveryRunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "partial"
+  | "blocked"
+  | "failed";
+
+export interface CrawlBudget {
+  maxPages: number;
+  maxDepth: number;
+  maxBytes?: number;
+  concurrency: number;
+  delayMs?: number;
+  allowedHosts?: string[];
+}
+
+export interface DiscoveredItem {
+  id: string;
+  runId: string;
+  url: string;
+  canonicalUrl: string;
+  source: string;
+  cardType: "article" | "post" | "ad_card" | "video" | "product";
+  title?: string;
+  text?: string;
+  mediaUrl?: string;
+  destinationUrl?: string;
+  creator?: string;
+  publishedAt?: string;
+  metrics: Record<string, { value: number | null; state: "OBSERVED" | "COMPUTED" | "INFERRED" | "UNAVAILABLE" }>;
+  contentHash: string;
+  sourceLocation: string;
+  discoveredAt: string;
+}
+
+export interface DiscoveryRun {
+  id: string;
+  organizationId: string;
+  brandId: string;
+  scope: DiscoveryScope;
+  seeds: string[];
+  budget: CrawlBudget;
+  status: DiscoveryRunStatus;
+  progress: {
+    pagesCrawled: number;
+    discoveredCards: number;
+    discoveredUrls: number;
+  };
+  perSourceErrors: Record<string, string>;
+  caveat?: string;
+  cursorState?: Record<string, unknown>;
+  startedAt: string;
+  completedAt?: string;
 }

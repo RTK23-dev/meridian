@@ -24,7 +24,8 @@ import type {
   JevProviderRouter,
   JevAnswer,
 } from "./types.ts";
-import { OpenRouterJevClient, openRouterJevClient } from "./client.ts";
+import { OpenRouterJevClient, openRouterJevClient, checkEvidenceSufficiency } from "./client.ts";
+import { resolveJevConfig } from "./config.ts";
 
 export class TypeSafeDirectJevProvider implements JevProvider {
   readonly id: JevProviderId = "typesafe_direct";
@@ -38,8 +39,9 @@ export class TypeSafeDirectJevProvider implements JevProvider {
     baseUrl?: string;
     fetchImpl?: typeof fetch;
   }) {
-    this.apiKey = options?.apiKey ?? process.env.TYPESAFE_JEV_API_KEY?.trim();
-    this.baseUrl = options?.baseUrl ?? process.env.TYPESAFE_JEV_BASE_URL?.trim();
+    const config = resolveJevConfig();
+    this.apiKey = options?.apiKey ?? (config.typesafe.apiKey || undefined);
+    this.baseUrl = options?.baseUrl ?? config.typesafe.baseUrl;
     this.fetchImpl = options?.fetchImpl ?? globalThis.fetch;
   }
 
@@ -111,10 +113,56 @@ export class TypeSafeDirectJevProvider implements JevProvider {
     const started = Date.now();
     const endpoint = this.getEndpoint();
 
+    const answers: Record<string, JevAnswer> = {};
+    const questionsToDispatch: Record<string, any> = {};
+
+    const availableEvidence: string[] = [
+      ...(((request.state as any)?.availableEvidence as string[]) || []),
+    ];
+
+    if ((request.state as any)?.records && Array.isArray((request.state as any).records)) {
+      for (const rec of (request.state as any).records) {
+        if (rec.availableEvidence) {
+          availableEvidence.push(...rec.availableEvidence);
+        }
+      }
+    }
+
+    for (const [key, qSpec] of Object.entries(request.questions)) {
+      const sufficiency = checkEvidenceSufficiency(qSpec, availableEvidence);
+      if (!sufficiency.sufficient) {
+        answers[key] = {
+          questionId: qSpec.id,
+          questionVersion: qSpec.version,
+          type: qSpec.type,
+          model,
+          provider: this.id,
+          status: "abstain_insufficient_evidence",
+          evidenceRefs: [],
+          abstainReason: `Missing required evidence: ${sufficiency.missing.join(", ")}`,
+          evaluatedAt: new Date().toISOString(),
+        };
+      } else {
+        questionsToDispatch[key] = qSpec;
+      }
+    }
+
+    if (Object.keys(questionsToDispatch).length === 0) {
+      return {
+        runId,
+        model,
+        provider: this.id,
+        inputHash: "abstain_insufficient_evidence",
+        cached: false,
+        latencyMs: Date.now() - started,
+        answers,
+      };
+    }
+
     const payload = {
       model,
       state: request.state,
-      questions: request.questions,
+      questions: questionsToDispatch,
     };
 
     try {
@@ -133,11 +181,10 @@ export class TypeSafeDirectJevProvider implements JevProvider {
       }
 
       const body = (await response.json()) as any;
-      const answers: Record<string, JevAnswer> = {};
       const rawDecisions = body.answers || body.decisions || {};
       const resolvedModel = body.model || model;
 
-      for (const [key, qSpec] of Object.entries(request.questions)) {
+      for (const [key, qSpec] of Object.entries(questionsToDispatch)) {
         const rawAns = rawDecisions[key] || rawDecisions[qSpec.id];
         if (rawAns && (rawAns.choice !== undefined || rawAns.noul !== undefined || rawAns.score !== undefined || rawAns.probability !== undefined || rawAns.answer !== undefined)) {
           const prob = rawAns.noul ?? rawAns.probability;
@@ -228,7 +275,8 @@ export class OpenRouterJevProvider implements JevProvider {
   }
 
   async health(): Promise<JevProviderHealth> {
-    const key = process.env.OPENROUTER_API_KEY?.trim();
+    const config = resolveJevConfig();
+    const key = config.openrouter.apiKey;
     if (!key) {
       return {
         status: "NOT_CONFIGURED",
@@ -287,7 +335,8 @@ export class JevRouter implements JevProviderRouter {
     request: JevDecisionRequest,
     policy?: JevRoutingPolicy
   ): Promise<JevDecisionResponse> {
-    const rawMode = (policy?.mode ?? process.env.MERIDIAN_JEV_PROVIDER_MODE ?? "auto").toLowerCase();
+    const config = resolveJevConfig();
+    const rawMode = (policy?.mode ?? config.mode).toLowerCase();
     const mode: JevRoutingMode =
       rawMode === "typesafe" || rawMode === "typesafe_direct"
         ? "typesafe_direct"
@@ -297,19 +346,18 @@ export class JevRouter implements JevProviderRouter {
             ? "compare"
             : "auto";
 
-    const rawPref = (policy?.preferredProvider ?? process.env.MERIDIAN_JEV_PREFERRED_PROVIDER ?? "").toLowerCase();
+    const rawPref = (policy?.preferredProvider ?? config.preferredProvider).toLowerCase();
     const preferredProviderId: JevProviderId =
       rawPref === "typesafe" || rawPref === "typesafe_direct"
         ? "typesafe_direct"
         : rawPref === "openrouter"
           ? "openrouter"
-          : process.env.TYPESAFE_JEV_API_KEY
+          : config.typesafe.apiKey
             ? "typesafe_direct"
             : "openrouter";
 
     const fallbackEnabled =
-      policy?.fallbackEnabled ??
-      (process.env.MERIDIAN_JEV_FALLBACK_ENABLED !== "false");
+      policy?.fallbackEnabled ?? config.fallbackEnabled;
 
     if (mode === "typesafe_direct") {
       return this.getProvider("typesafe_direct").decide(request);

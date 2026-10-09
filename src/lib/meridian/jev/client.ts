@@ -23,6 +23,7 @@ import type {
   EvidenceRef,
 } from "./types.ts";
 import { compressEvidenceForJev } from "../evidence/bundle.ts";
+import { resolveJevConfig } from "./config.ts";
 
 export type JevClientConfig = {
   provider?: string;
@@ -39,11 +40,18 @@ export function getJevConfig(overrides: JevClientConfig = {}): {
   apiKey: string;
   baseUrl: string;
 } {
+  const resolved = resolveJevConfig({
+    openrouter: {
+      apiKey: overrides.apiKey ?? "",
+      baseUrl: overrides.baseUrl ?? "https://openrouter.ai/api/v1",
+      model: overrides.model ?? "typesafe/jev-1.13",
+    },
+  });
   return {
-    provider: overrides.provider || process.env.JEV_PROVIDER?.trim() || "openrouter",
-    model: overrides.model || process.env.JEV_MODEL?.trim() || "typesafe/jev-1.13",
-    apiKey: overrides.apiKey || process.env.OPENROUTER_API_KEY?.trim() || "",
-    baseUrl: overrides.baseUrl || process.env.JEV_BASE_URL?.trim() || "https://openrouter.ai/api/alpha",
+    provider: overrides.provider || (resolved.preferredProvider === "typesafe_direct" ? "typesafe_direct" : "openrouter"),
+    model: overrides.model || resolved.openrouter.model,
+    apiKey: overrides.apiKey || resolved.openrouter.apiKey,
+    baseUrl: overrides.baseUrl || resolved.openrouter.baseUrl,
   };
 }
 

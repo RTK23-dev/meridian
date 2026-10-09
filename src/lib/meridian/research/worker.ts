@@ -13,6 +13,8 @@ import { rerankBrand } from "../opportunity/rerank.ts";
 import type { ResearchSegment } from "./schema.ts";
 import { snapshotMediaAllowed } from "../factory/sources.ts";
 import { emptyYield, formatYield } from "../factory/yield.ts";
+import { jevDecisionService } from "../jev/service.ts";
+import type { EvidenceBundle } from "../evidence/types.ts";
 
 const MAX_VIDEO_BYTES = 24_000_000;
 const MAX_RUN_MEDIA_BYTES = 100_000_000;
@@ -204,6 +206,68 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
         `;
       }
     } catch { /* A failed MiniLM call stores no substitute vector and does not invalidate source analysis. */ }
+
+    // Evaluate Evidence with model-backed Native JEV decision layer
+    try {
+      const bundle: EvidenceBundle = {
+        id: adId,
+        organizationId: job.organization_id,
+        brandId: job.brand_id,
+        source: {
+          platform: "meta",
+          sourceAdapter: "meta_ad_library",
+          canonicalUrl: ad.snapshotUrl,
+          externalId: ad.externalId,
+          capturedAt: ad.capturedAt,
+        },
+        content: {
+          type: "video",
+          title: ad.headline || undefined,
+          caption: ad.copy || undefined,
+          description: ad.description || undefined,
+        },
+        provenance: {
+          adapterId: "meta_ad_library",
+          sourceUrl: ad.snapshotRequestUrl || ad.snapshotUrl,
+          externalId: ad.externalId,
+          capturedAt: ad.capturedAt,
+        },
+        availableEvidence: [
+          "transcript",
+          "metadata",
+          "video_metadata",
+          "topic",
+          "hook",
+          "structure",
+          "claims",
+        ],
+        transcript: transcript.segments.map((s) => ({
+          id: s.id,
+          text: s.text,
+          startMs: s.startMs ?? 0,
+          endMs: s.endMs ?? 0,
+          confidence: 0.9,
+        })),
+        metrics: {
+          durationMs: transcript.durationMs ?? 0,
+        },
+        evidenceRefs: [
+          { field: "transcript", artifactId: adId },
+          { field: "metadata", artifactId: adId },
+        ],
+        createdAt: ad.capturedAt || new Date().toISOString(),
+      };
+
+      await jevDecisionService.evaluateEvidence({
+        organizationId: job.organization_id,
+        brandId: job.brand_id,
+        bundle,
+        sql,
+      });
+    } catch {
+      // JEV evaluation failure or unconfigured state is non-fatal for collection run
+    }
+
     analyzedCount += 1;
     await sql`update research_collection_runs set analyzed_count = ${analyzedCount}, updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
     void storedTranscript;

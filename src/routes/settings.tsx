@@ -11,6 +11,7 @@ import { hasRole, ROLES } from "@/lib/meridian/access";
 import { addMember, changeMemberRole, createOrganization, renameOrganization, updateWeights } from "@/lib/meridian/api";
 import { WEIGHT_KEYS, type ScoreWeights } from "@/lib/meridian/scoring";
 import { memberInviteSchema, scoringWeightsSchema, workspaceNameSchema, type MemberInviteInput, type ScoringWeightsInput, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
+import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
@@ -112,6 +113,7 @@ function Settings() {
           {canAdmin ? <Button type="submit" disabled={pending || renameForm.formState.isSubmitting}>Rename</Button> : null}
         </form>
       </Panel>
+      <ProviderSettingsPanel organizationId={active.id} canAdmin={canAdmin} />
       <Panel>
         <h2 className="font-display text-2xl">People</h2>
         <ul className="mt-4 divide-y divide-line">

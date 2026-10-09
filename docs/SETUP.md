@@ -1,6 +1,6 @@
 # Setup
 
-Meridian 0.1.0-beta.4. Node.js 22 and a Postgres database.
+Meridian 0.1.0-beta.8. Node.js 22 and a Postgres database.
 
 ## 1. Install
 
@@ -11,7 +11,7 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env`. Do not commit it.
+Edit `.env`. Do not commit it. You can also configure credentials directly from the application interface under `/settings`.
 
 ## 2. Database
 
@@ -67,15 +67,19 @@ npm run scheduler    # inserts due jobs, does not run them
 
 On a host that is not your laptop, run the worker and the scheduler as long-lived processes. A serverless web deploy does not keep them alive between requests. See [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## 4. Sign in and create a brand
+## 4. Sign in and configure providers
 
 1. Open `/login` and create an email account.
 2. Create a workspace if you are not already in one.
-3. Add a brand and fill Brand Brain: offer, audience, proof, and what the brand will not say.
-4. Record market observations, or fetch one public page.
-5. Open Studio. Rank an opportunity, accept the brief, and generate variants.
-
-JEV model calls use OpenRouter (`OPENROUTER_API_KEY` and `OPENROUTER_MODEL`). Studio images are optional and can use Google AI Studio / Nano Banana when `GOOGLE_AI_STUDIO_API_KEY` is set. An image provider is not required for JEV or Hypit. Studio sends an approved JEV brief to a separate Hypit process. Without `HYPIT_BASE_URL`, generation stops at `HYPIT_NOT_CONNECTED` and stores no file. A verified stored Hypit MP4 can enter the Meta publishing flow only after the approved JEV decision and tenant/brand lineage are revalidated.
+3. Open **Settings → Provider Integrations** (`/settings`) to configure credentials securely (stored AES-256-GCM encrypted in the workspace vault):
+   - **JEV Intelligence**: Choose TypeSafe Direct (`TYPESAFE_JEV_API_KEY`) or OpenRouter (`OPENROUTER_API_KEY`).
+   - **Perception**: Google AI Studio Gemini API Key for transcription and OCR.
+   - **Sources & Crawling**: Crawl ladder boundaries and Meta Ad Library token.
+   - **Production**: Gemini Omni Flash or Veo video generation key.
+   - **Storage**: Google Drive Service Account credentials.
+4. Add a brand and fill Brand Brain: offer, audience, proof, and what the brand will not say.
+5. Record market observations, crawl a public page, or run a deep contrast study.
+6. Open Studio. Rank an opportunity, inspect JEV provenance via the **Why this decision?** drawer, accept the brief, and generate variants.
 
 ## 5. Studio Video Production (`ProductionRouter`)
 

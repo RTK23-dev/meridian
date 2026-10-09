@@ -150,8 +150,8 @@ export function decide<TInput>(
     },
     policyVersion: context?.policyVersion ?? `code:${question.id}.${question.version}`,
     calibrationVersion: context?.calibration?.version ?? null,
-    model: context?.model ?? "deterministic",
-    provider: context?.provider ?? "jev",
+    model: context?.model ?? "deterministic_rule_engine",
+    provider: context?.provider ?? "ruleEngine",
     decidedAt: context?.now ?? new Date().toISOString(),
     evidenceState,
   };

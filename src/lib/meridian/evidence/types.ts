@@ -191,6 +191,9 @@ export type EvidenceBundle = {
   comments?: CommentEvidence[];
   derivedMetrics?: DerivedMetric[];
   comparisonContext?: ComparisonContext;
+  availableEvidence?: string[];
+  metrics?: Record<string, unknown>;
+  evidenceRefs?: import("../jev/types.ts").EvidenceRef[];
 
   provenance: Provenance;
   createdAt: string;
