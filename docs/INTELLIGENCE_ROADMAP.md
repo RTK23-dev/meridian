@@ -48,7 +48,7 @@ Goal: identify hooks, formats, and patterns from evidence, keep observation sepa
 Slices:
 
 - **P2a** (done): epistemic state. Schema `jev.research-ad.v2`. Transcript segments are `OBSERVED`. Field labels and claims are `INFERRED`. Each field's confidence is labelled `confidenceSource: model_self_report`, so it is not presented as calibrated. The validator sets these states, so a model cannot relabel its own inference. Existing v1 cached analyses are not reused, so each ad is analyzed once more.
-- **P2b**: cheap ranking gate. Deterministic features (copy length, format, platform, recency, duplicate status) rank candidates before the multimodal scorer (`jev/multimodal-scorer.ts`) runs. Only the top N reach perception. The gate records why each candidate was skipped.
+- **P2b** (done): cheap ranking gate. `research/gate.ts` scores each ad from metadata before any media download, transcription, or analysis. Duplicates are skipped and the best `RESEARCH_GATE_MAX_ADS` (default 20) are admitted. Every decision is stored with its score and reason, and skipped ads are `gate_skipped`. Weights are `seed_prior`, not calibrated. Previously first-come first-served until the byte budget ran out. Planned as deterministic features ranking candidates before the expensive steps.
 - **P2c**: hook, format, and pattern extraction carries evidence references for each extracted pattern. A pattern without evidence refs cannot be used by P3.
 
 Exit: every pattern shown to a human or passed to JEV carries its evidence refs and state. Perception runs on fewer candidates, with the skip reasons stored.
