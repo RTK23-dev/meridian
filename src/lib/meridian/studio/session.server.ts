@@ -19,7 +19,6 @@ import { publishingReadiness } from "../jev/guards.ts";
 import { loadAppliedPolicies } from "../jev/policy.ts";
 import { generationAllowed } from "../security/budget.ts";
 import { evaluateJevGate } from "../jev/reviewer-decision.ts";
-import { creativeJudgmentResponseSchemaV1 } from "../jev/schemas/creative-judgment.v1.ts";
 import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features.ts";
 import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
@@ -29,12 +28,13 @@ import { assessPublishing, type AccountSnapshot } from "../publishing/readiness.
 import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure.ts";
 import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
-import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativeFormatRecommendation, CreativePlan } from "../creative/plan.ts";
+import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativePlan } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
 import { resolveProductionTarget } from "../production/target.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
+import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -680,6 +680,9 @@ export async function generateStudioVariants(
         decision: string;
         reviewer_decision: string | null;
         evidence: string;
+        answer: string;
+        subject_type: string;
+        schema_version: string;
         model_response: string;
         provider: string;
         model: string;
@@ -689,8 +692,8 @@ export async function generateStudioVariants(
         probability: number;
         confidence: number;
       }>`
-        select id, decision, reviewer_decision, evidence, model_response, provider, model,
-               question_id, question_version, reasons, probability, confidence
+        select id, decision, reviewer_decision, evidence, answer, subject_type, schema_version,
+               model_response, provider, model, question_id, question_version, reasons, probability, confidence
         from jev_decisions
         where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
         limit 1
@@ -709,61 +712,20 @@ export async function generateStudioVariants(
           throw new Error("JEV requires recorded human review for this brief before production can proceed.");
         }
 
-        let evidenceRefs: string[] = [];
-        try {
-          const parsedEv = JSON.parse(dec.evidence);
-          if (Array.isArray(parsedEv)) {
-            evidenceRefs = parsedEv.map((e) => typeof e === "string" ? e : e?.id || String(e));
-          } else if (parsedEv?.evidenceIds) {
-            evidenceRefs = parsedEv.evidenceIds;
-          }
-        } catch {
-          evidenceRefs = [dec.id];
-        }
-
-        const recommendedFormats: CreativeFormatRecommendation[] = [];
-        let parsedResp: Record<string, any> = {};
-        let isSchemaValid = false;
-
-        try {
-          parsedResp = JSON.parse(dec.model_response || "{}");
-          const validated = creativeJudgmentResponseSchemaV1.safeParse(parsedResp);
-          if (validated.success) {
-            parsedResp = validated.data;
-            isSchemaValid = true;
-            recommendedFormats.push(...validated.data.recommendedFormats);
-          }
-        } catch {
-          parsedResp = {};
-          isSchemaValid = false;
-        }
-
-        const modelDecision = typeof parsedResp.decision === "string" ? parsedResp.decision.toUpperCase() : "";
-        const jevStatus = !isSchemaValid
-          ? "abstain_malformed"
-          : modelDecision === "REJECT" || modelDecision === "ABSTAIN_REJECTED"
-            ? "abstain_rejected"
-            : modelDecision.startsWith("ABSTAIN_")
-              ? modelDecision.toLowerCase() as CreativeJudgmentBundle["status"]
-              : "admissible";
-
-        // Map only authentic fields present in validated JEV record; zero fabricated confidence/scores
-        jevBundle = {
-          conceptStrengthScore: typeof parsedResp.conceptStrengthScore === "number" ? parsedResp.conceptStrengthScore : undefined,
-          isOutlier: typeof parsedResp.isOutlier === "boolean" ? parsedResp.isOutlier : undefined,
-          creativeMechanism: parsedResp.creativeMechanism || undefined,
-          recommendedFormats,
-          formatSuitability: parsedResp.formatSuitability || {},
-          brandFitScore: typeof parsedResp.brandFitScore === "number" ? parsedResp.brandFitScore : undefined,
-          transferabilityScore: typeof parsedResp.transferabilityScore === "number" ? parsedResp.transferabilityScore : undefined,
-          distributionSuitability: parsedResp.distributionSuitability,
-          status: jevStatus,
-          evidenceRefs,
-          decisionId: dec.id,
-          questionSetVersion: dec.question_version || "v1",
+        jevBundle = creativeJudgmentsFromStoredDecision({
+          id: dec.id,
+          subjectType: dec.subject_type,
+          questionId: dec.question_id,
+          questionVersion: dec.question_version,
+          schemaVersion: dec.schema_version,
+          decision: dec.decision,
+          reviewerDecision: dec.reviewer_decision,
+          answer: dec.answer,
+          modelResponse: dec.model_response,
+          evidence: dec.evidence,
           provider: dec.provider,
           model: dec.model,
-        };
+        });
       }
     }
 
