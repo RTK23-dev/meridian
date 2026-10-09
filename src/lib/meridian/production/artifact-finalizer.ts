@@ -260,13 +260,6 @@ export async function finalizeProductionArtifact(
           error_code = null, last_polled_at = now(), updated_at = now()
         where id = ${input.jobId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
       `;
-      if (input.runId) {
-        await sql`
-          update assets set media_status = 'completed', lifecycle = 'stored', qa_decision = 'auto_approved',
-            checksum = ${sha256}, byte_size = ${byteSize}
-          where generation_run_id = ${input.runId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
-        `;
-      }
       return {
         success: true,
         status: "COMPLETED",
@@ -418,18 +411,6 @@ export async function finalizeProductionArtifact(
         updated_at = now()
     where id = ${input.jobId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
   `;
-
-  if (input.runId) {
-    await sql`
-      update assets
-      set media_status = 'completed',
-          lifecycle = 'stored',
-          qa_decision = 'auto_approved',
-          checksum = ${sha256},
-          byte_size = ${byteSize}
-      where generation_run_id = ${input.runId}
-    `;
-  }
 
   return {
     success: true,

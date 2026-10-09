@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { randomUUID } from "node:crypto";
+import { getSql } from "../../db.ts";
+import { createTenantFixture } from "./production-fixtures.ts";
 
 // 1. Organic Fabric & Evidence
 import { createEvidenceBundle, compressEvidenceForJev } from "../evidence/bundle.ts";
@@ -501,77 +504,15 @@ test("E2E Path 4: Telemetry Ingestion -> Null Handling -> Bayesian Posteriors ->
 });
 
 test("E2E Path 5: Durable Production Jobs Poller Worker Loop", async () => {
-  const orgId = "org-poller-test";
-  const brandId = "brand-poller-test";
-  const runId = "run-poller-1";
-
-  // In-memory table mock representing PostgreSQL durable production_jobs, assets, storage_objects
-  const dbProductionJobs: any[] = [];
-  const dbAssets: any[] = [];
-  const dbStorageObjects: any[] = [];
-
-  const mockSql: any = Object.assign(
-    async (strings: TemplateStringsArray, ...values: unknown[]) => {
-      const query = strings.join("?");
-      if (query.toLowerCase().includes("production_jobs") && query.toLowerCase().includes("select")) {
-        // Return pending jobs matching condition
-        return dbProductionJobs.filter(
-          (j) =>
-            ["QUEUED", "RUNNING", "RENDERING", "WAITING_FOR_EXTERNAL_ARTIFACT"].includes(j.status),
-        );
-      }
-      if (query.includes("insert into storage_objects")) {
-        dbStorageObjects.push({
-          id: values[0],
-          organization_id: values[1],
-          brand_id: values[2],
-          provider_file_id: values[3],
-          name: values[4],
-          mime_type: values[5],
-          size_bytes: values[6],
-          sha256: values[7],
-          lifecycle: "approved",
-        });
-        return [];
-      }
-      if (query.includes("from storage_objects")) {
-        return dbStorageObjects;
-      }
-      if (query.includes("update production_jobs")) {
-        const isCompletion = query.includes("status = 'COMPLETED'");
-        const jobId = isCompletion ? values[1] : values[values.length - 1];
-        const job = dbProductionJobs.find((j) => j.id === jobId);
-        if (job) {
-          if (isCompletion) {
-            job.status = "COMPLETED";
-            job.artifact_id = values[0];
-          } else if (query.includes("status = 'FAILED'")) {
-            job.status = "FAILED";
-          }
-        }
-        return [];
-      }
-      if (query.includes("update assets")) {
-        const matchingAsset = dbAssets.find((a) => a.generation_run_id === runId);
-        if (matchingAsset) {
-          matchingAsset.media_status = "completed";
-          matchingAsset.lifecycle = "stored";
-          matchingAsset.qa_decision = "auto_approved";
-        }
-        return [];
-      }
-      return [];
-    },
-    {
-      query: async () => [],
-    },
-  );
-
-  // Seed a submitted production job row and asset row
+  const sql = await getSql();
+  // A real tenant with an approved brief and an executing plan; the job row is what the executor leaves in flight.
+  const tenant = await createTenantFixture(sql, "poller-e2e", 50, "test:video", "test-video-model");
+  const runId = `run-poller-${randomUUID()}`;
+  const jobId = `prod_job_${randomUUID()}`;
   const spec: CreativeSpec = {
     id: "spec-durable",
-    organizationId: orgId,
-    brandId,
+    organizationId: tenant.organizationId,
+    brandId: tenant.brandId,
     title: "Durable Spec",
     format: "ai_video",
     aspectRatio: "9:16",
@@ -592,28 +533,14 @@ test("E2E Path 5: Durable Production Jobs Poller Worker Loop", async () => {
       averageLatencySeconds: 10,
       costPerSecondEstimateUsd: 0.01,
     },
-    health: async () => ({
-      id: "test:video",
-      state: "HEALTHY",
-      capabilities: [],
-      detail: "mock",
-      checkedAt: new Date().toISOString(),
-    }),
-    submitJob: async (s: any) => ({
-      jobId: "prod_job_777",
-      organizationId: s.organizationId,
-      brandId: s.brandId,
-      creativeSpec: s,
-      providerId: "test:video",
-      status: "RUNNING",
-      costEstimateUsd: 0.08,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }),
-    checkJobStatus: async (jobId: string) => ({
-      jobId,
-      organizationId: orgId,
-      brandId,
+    health: async () => ({ id: "test:video", state: "HEALTHY", capabilities: [], detail: "mock", checkedAt: new Date().toISOString() }),
+    submitJob: async () => {
+      throw new Error("fixture: the poller never submits");
+    },
+    checkJobStatus: async (id: string) => ({
+      jobId: id,
+      organizationId: tenant.organizationId,
+      brandId: tenant.brandId,
       creativeSpec: spec,
       providerId: "test:video",
       status: "RENDERED",
@@ -623,60 +550,49 @@ test("E2E Path 5: Durable Production Jobs Poller Worker Loop", async () => {
       updatedAt: new Date().toISOString(),
     }),
   };
-
   const testRouter = new ProductionRouter({ runtime: "testing", providers: [testProvider] });
 
-  dbProductionJobs.push({
-    id: "prod_job_777",
-    organization_id: orgId,
-    brand_id: brandId,
-    provider: "test:video",
-    provider_job_id: "req_777",
-    request_id: "req_777",
-    status_url: "https://api.test/jobs/req_777/status",
-    cancel_url: null,
-    status: "RUNNING",
-    attempt_count: 0,
-    input: JSON.stringify({ creativeSpec: spec, runId }),
-  });
+  await sql`
+    insert into production_jobs (
+      id, organization_id, brand_id, provider, provider_job_id, request_id, status_url, status, cost_mode,
+      estimated_cost_cents, input, created_at, submitted_at, updated_at, creative_plan_id
+    ) values (
+      ${jobId}, ${tenant.organizationId}, ${tenant.brandId}, 'test:video', 'req_777', 'req_777',
+      'https://api.test/jobs/req_777/status', 'RUNNING', 'BALANCED', 0,
+      ${JSON.stringify({
+        creativeSpec: spec,
+        runId,
+        briefId: tenant.briefId,
+        planDeliverableId: "deliverable-poller",
+        manifest: { brand: { product: "Mesh sponge" }, hook: { type: "problem", text: "Durable Hook" }, concept: { mechanism: "demo" } },
+      })},
+      now(), now(), now(), ${tenant.plan.id}
+    )
+  `;
 
-  dbAssets.push({
-    id: "asset_777",
-    organization_id: orgId,
-    brand_id: brandId,
-    generation_run_id: runId,
-    media_status: "submitted",
-    lifecycle: "qa_required",
-  });
-
-  // Valid MP4 video bytes with ftyp box
+  // Valid MP4 video bytes with an ftyp box.
   const validMp4 = new Uint8Array(2048);
-  validMp4[4] = 0x66; // f
-  validMp4[5] = 0x74; // t
-  validMp4[6] = 0x79; // y
-  validMp4[7] = 0x70; // p
-
-  // Mock fetch for video download
+  validMp4[4] = 0x66;
+  validMp4[5] = 0x74;
+  validMp4[6] = 0x79;
+  validMp4[7] = 0x70;
   const fakeFetch: typeof fetch = async (url) => {
     if (String(url).includes("video.mp4")) {
       return new Response(validMp4, { status: 200, headers: { "Content-Type": "video/mp4" } });
     }
     return new Response("Not found", { status: 404 });
   };
-
-  // Mock Google Drive client
   let driveUploaded = false;
   const mockDrive: any = {
     put: async () => {
       driveUploaded = true;
-      return { fileId: "drive_file_777", name: "artifact.mp4", mimeType: "video/mp4", size: validMp4.byteLength, checksum: "sha" };
+      return { fileId: `drive_file_${randomUUID()}`, name: "artifact.mp4", mimeType: "video/mp4", size: validMp4.byteLength, checksum: "sha" };
     },
     get: async () => ({ bytes: validMp4, mimeType: "video/mp4", name: "artifact.mp4" }),
     health: async () => ({ status: "HEALTHY", detail: "mock", latencyMs: 1 }),
   };
 
-  // Run the durable production poller
-  const pollResult = await pollProductionJobs(mockSql, {
+  const pollResult = await pollProductionJobs(sql, {
     fetchImpl: fakeFetch,
     driveClient: mockDrive,
     router: testRouter,
@@ -687,12 +603,23 @@ test("E2E Path 5: Durable Production Jobs Poller Worker Loop", async () => {
   assert.equal(pollResult.rendered, 1);
   assert.equal(pollResult.failed, 0);
 
-  // Verified durable updates
-  assert.equal(dbProductionJobs[0].status, "COMPLETED");
-  assert.ok(dbProductionJobs[0].artifact_id);
-  assert.equal(dbAssets[0].media_status, "completed");
-  assert.equal(dbAssets[0].qa_decision, "auto_approved");
-  assert.equal(dbStorageObjects.length, 1);
+  // Durable state after the poll: the job is COMPLETED and materialized, and the creative is in review.
+  const [job] = await sql<{ status: string; artifact_id: string | null; materialized_at: unknown }>`
+    select status, artifact_id, materialized_at from production_jobs where id = ${jobId}
+  `;
+  assert.equal(job!.status, "COMPLETED");
+  assert.ok(job!.artifact_id, "artifact is registered");
+  assert.ok(job!.materialized_at, "artifact is materialized");
+  const [asset] = await sql<{ media_status: string; qa_decision: string; review_status: string }>`
+    select media_status, qa_decision, review_status from assets where id = ${`video-asset-${jobId}`}
+  `;
+  assert.equal(asset!.media_status, "completed");
+  assert.notEqual(asset!.qa_decision, "auto_approved", "no automatic approval of an asynchronous artifact");
+  assert.equal(asset!.review_status, "in_review");
+  const [creative] = await sql<{ status: string }>`select status from creative_records where id = ${`video-creative-${jobId}`}`;
+  assert.equal(creative!.status, "in_review");
+  const storage = await sql<{ n: number }>`select count(*)::int as n from storage_objects where organization_id = ${tenant.organizationId}`;
+  assert.equal(Number(storage[0]!.n), 1);
   assert.equal(driveUploaded, true);
 });
 

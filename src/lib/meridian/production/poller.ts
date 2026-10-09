@@ -11,6 +11,44 @@ import { productionRouter, type ProductionRouter } from "./router.ts";
 import { googleDriveClient, type GoogleDriveClient } from "../storage/drive.ts";
 import type { ProductionJob } from "./types.ts";
 import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
+import {
+  completeVideoJob,
+  openVideoReview,
+  settleCreativePlanIfComplete,
+} from "./materialization.ts";
+
+const POLLER_ACTOR_ID = "production-poller";
+
+/** Records a materialization failure durably. The job stays COMPLETED and unmaterialized, so it is claimed again. */
+async function recordMaterializationRetry(
+  sql: Sql,
+  row: { id: string; organization_id: string; brand_id: string; attempt_count: number },
+  error: unknown,
+) {
+  const attempts = (row.attempt_count || 0) + 1;
+  await sql`
+    update production_jobs
+    set attempt_count = ${attempts},
+        error_message = ${error instanceof Error ? error.message : String(error)},
+        next_poll_at = now() + (least(${attempts}, 6) * interval '30 seconds'),
+        updated_at = now()
+    where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id}
+  `;
+}
+
+/** Settles the plan a job belongs to, if any. Called whenever a job reaches a terminal state. */
+async function settlePlanOf(
+  sql: Sql,
+  row: { organization_id: string; brand_id: string; creative_plan_id: string | null },
+) {
+  if (!row.creative_plan_id) return;
+  await settleCreativePlanIfComplete(sql, {
+    organizationId: row.organization_id,
+    brandId: row.brand_id,
+    planId: row.creative_plan_id,
+    actorId: POLLER_ACTOR_ID,
+  });
+}
 
 export type PollOptions = {
   limit?: number;
@@ -51,11 +89,17 @@ export async function pollProductionJobs(
     status: string;
     attempt_count: number;
     input: string | Record<string, unknown>;
+    artifact_id: string | null;
+    creative_plan_id: string | null;
+    materialized_at: unknown;
   }>`
     with candidates as (
       select id
       from production_jobs
-      where status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
+      where (
+          status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
+          or (status = 'COMPLETED' and materialized_at is null and artifact_id is not null)
+        )
         and (next_poll_at is null or next_poll_at <= now())
       order by created_at asc
       limit ${limit}
@@ -66,7 +110,8 @@ export async function pollProductionJobs(
     from candidates
     where jobs.id = candidates.id
     returning jobs.id, jobs.organization_id, jobs.brand_id, jobs.provider, jobs.provider_job_id,
-              jobs.request_id, jobs.status_url, jobs.cancel_url, jobs.status, jobs.attempt_count, jobs.input
+              jobs.request_id, jobs.status_url, jobs.cancel_url, jobs.status, jobs.attempt_count, jobs.input,
+              jobs.artifact_id, jobs.creative_plan_id, jobs.materialized_at
   `;
 
   const result: PollResult = {
@@ -86,6 +131,29 @@ export async function pollProductionJobs(
       }
     } else if (typeof row.input === "object" && row.input !== null) {
       parsedInput = row.input as Record<string, unknown>;
+    }
+
+    if (row.status === "COMPLETED") {
+      // Finalized on an earlier pass but not yet materialized. Finish it without contacting the provider.
+      try {
+        const materialized = await completeVideoJob(sql, {
+          organizationId: row.organization_id,
+          brandId: row.brand_id,
+          productionJobId: row.id,
+        });
+        await openVideoReview(sql, {
+          organizationId: row.organization_id,
+          brandId: row.brand_id,
+          creativeId: materialized.creativeId,
+          decisionId: materialized.decisionId,
+        });
+        await settlePlanOf(sql, row);
+        result.rendered++;
+      } catch (error) {
+        await recordMaterializationRetry(sql, row, error);
+        result.polled++;
+      }
+      continue;
     }
 
     let provider;
@@ -157,12 +225,30 @@ export async function pollProductionJobs(
           driveClient: drive,
           fetchImpl,
           durationMs,
-          job: polledJob,
+          // The durable input is authoritative for the spec; a provider need not echo it back.
+          job: { ...polledJob, creativeSpec: polledJob.creativeSpec ?? (parsedInput.creativeSpec as ProductionJob["creativeSpec"]) },
         },
       });
 
       if (finalized.success) {
-        result.rendered++;
+        try {
+          const materialized = await completeVideoJob(sql, {
+            organizationId: row.organization_id,
+            brandId: row.brand_id,
+            productionJobId: row.id,
+          });
+          await openVideoReview(sql, {
+            organizationId: row.organization_id,
+            brandId: row.brand_id,
+            creativeId: materialized.creativeId,
+            decisionId: materialized.decisionId,
+          });
+          await settlePlanOf(sql, row);
+          result.rendered++;
+        } catch (error) {
+          await recordMaterializationRetry(sql, row, error);
+          result.polled++;
+        }
       } else if (finalized.status === "WAITING_FOR_ARTIFACT") {
         const newAttempts = (row.attempt_count || 0) + 1;
         if (newAttempts < 5) {
@@ -185,15 +271,12 @@ export async function pollProductionJobs(
                 updated_at = now()
             where id = ${row.id}
           `;
-          await sql`
-            update assets
-            set media_status = 'failed',
-                lifecycle = 'rejected'
-            where generation_run_id = ${runId || ""}
-          `;
+          // Billing is uncertain for an accepted render, so the reservation stays held for reconciliation.
+          await settlePlanOf(sql, row);
           result.failed++;
         }
       } else {
+        await settlePlanOf(sql, row);
         result.failed++;
       }
     } else if (polledJob.status === "FAILED") {
@@ -205,12 +288,8 @@ export async function pollProductionJobs(
             updated_at = now()
         where id = ${row.id}
       `;
-      await sql`
-        update assets
-        set media_status = 'failed',
-            lifecycle = 'rejected'
-        where generation_run_id = ${typeof parsedInput.runId === "string" ? parsedInput.runId : ""}
-      `;
+      // A provider-side failure after acceptance may still have been billed. Its reservation is held, not released.
+      await settlePlanOf(sql, row);
       result.failed++;
     } else {
       // In progress

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { getSql } from "../../../db.ts";
+import { createTenantFixture } from "../../testing/production-fixtures.ts";
 import {
   GeminiOmniVideoProvider,
   buildOmniTextToVideoPayload,
@@ -196,6 +198,7 @@ test("GeminiOmniVideoProvider supports image-to-video multimodal input structure
 
 test("E2E: Production poller consumes Omni Base64 video response and materializes real bytes to Drive", async () => {
   process.env.GEMINI_API_KEY = "test-gemini-key";
+  const sql = await getSql();
   const fakeVideoBytes = Buffer.from("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41test-omni-rendered-mp4-payload-bytes");
   const fakeBase64 = fakeVideoBytes.toString("base64");
   const expectedSha256 = createHash("sha256").update(fakeVideoBytes).digest("hex");
@@ -204,10 +207,10 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
   const mockDrive = {
     put: async (input: any) => {
       storedDrivePuts.push(input);
-      return { fileId: "drive-file-123", webViewLink: "https://drive.google.com/test" };
+      return { fileId: `drive-file-${randomUUID()}`, webViewLink: "https://drive.google.com/test" };
     },
-    get: async () => ({
-      fileId: "drive-file-123",
+    get: async (fileId: string) => ({
+      fileId,
       bytes: new Uint8Array(fakeVideoBytes),
       name: "artifact.mp4",
       mimeType: "video/mp4",
@@ -224,13 +227,7 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
         steps: [
           {
             type: "model_output",
-            content: [
-              {
-                type: "video",
-                mime_type: "video/mp4",
-                data: fakeBase64,
-              },
-            ],
+            content: [{ type: "video", mime_type: "video/mp4", data: fakeBase64 }],
           },
         ],
       }),
@@ -241,80 +238,58 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
   const omniProvider = new GeminiOmniVideoProvider({
     fetchImpl: mockOmniFetch as unknown as typeof fetch,
   });
-
   const mockRouter = {
     get: (id: string) => (id === "google_omni" || id === "omni" ? omniProvider : undefined),
   };
 
-  const dbUpdates: Array<string> = [];
-  let storageLookupCount = 0;
-  const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
-    const query = strings.join("?");
-    if (query.includes("with candidates as") && query.includes("returning jobs.id")) {
-      return [
-        {
-          id: "prod-job-omni-1",
-          organization_id: "org-1",
-          brand_id: "brand-1",
-          provider: "google_omni",
-          provider_job_id: "interactions/omni-e2e-poll-1",
-          request_id: null,
-          status_url: null,
-          cancel_url: null,
-          status: "RUNNING",
-          attempt_count: 0,
-          input: JSON.stringify({
-            creativeSpec: {
-              ...sampleSpec,
-              durationTargetSeconds: 5,
-            },
-            runId: "run-omni-1",
-          }),
-        },
-      ];
-    }
-    if (query.includes("select id from production_jobs")) {
-      return [{ id: "prod-job-omni-1" }];
-    }
-    if (query.includes("from storage_objects")) {
-      storageLookupCount += 1;
-      // First lookup finds no prior artifact; read-after-write returns the row inserted by the finalizer.
-      if (storageLookupCount === 1) return [];
-      return [{
-        id: "artifact-omni-1",
-        provider_file_id: "drive-file-123",
-        sha256: expectedSha256,
-        size_bytes: fakeVideoBytes.byteLength,
-        mime_type: "video/mp4",
-      }];
-    }
-    if (query.includes("update production_jobs")) {
-      dbUpdates.push(query);
-    }
-    return [];
-  }) as any;
+  // A real tenant and a durable job row, as the executor leaves it while the render is in flight.
+  const tenant = await createTenantFixture(sql, "omni-poll", 50, "google_omni", "gemini-omni-1.1-flash");
+  const jobId = `prod-job-omni-${randomUUID()}`;
+  const input = {
+    creativeSpec: { ...sampleSpec, durationTargetSeconds: 5 },
+    runId: `run-omni-${randomUUID()}`,
+    briefId: tenant.briefId,
+    planDeliverableId: "deliverable-omni",
+    manifest: { brand: { product: "Mesh sponge" }, hook: { type: "problem", text: "Tired" }, concept: { mechanism: "demo" } },
+  };
+  await sql`
+    insert into production_jobs (
+      id, organization_id, brand_id, provider, provider_job_id, status, cost_mode, estimated_cost_cents,
+      input, created_at, submitted_at, updated_at, creative_plan_id
+    ) values (
+      ${jobId}, ${tenant.organizationId}, ${tenant.brandId}, 'google_omni', 'interactions/omni-e2e-poll-1', 'RUNNING', 'BALANCED', 0,
+      ${JSON.stringify(input)}, now(), now(), now(), ${tenant.plan.id}
+    )
+  `;
 
   const { pollProductionJobs } = await import("../poller.ts");
-  const pollResult = await pollProductionJobs(mockSql, {
+  const pollResult = await pollProductionJobs(sql, {
     driveClient: mockDrive as any,
     router: mockRouter as any,
     fetchImpl: mockOmniFetch as unknown as typeof fetch,
   });
 
-  // Verify poller rendered 1 job
   assert.equal(pollResult.claimed, 1);
   assert.equal(pollResult.rendered, 1);
   assert.equal(pollResult.failed, 0);
 
-  // Verify bytes were materialized to Google Drive
+  // Bytes were materialized to Google Drive and match the provider payload.
   assert.equal(storedDrivePuts.length, 1);
   assert.equal(storedDrivePuts[0].bytes.byteLength, fakeVideoBytes.byteLength);
   assert.equal(storedDrivePuts[0].mimeType, "video/mp4");
   const actualHash = createHash("sha256").update(storedDrivePuts[0].bytes).digest("hex");
   assert.equal(actualHash, expectedSha256);
 
-  // Verify DB state updated to COMPLETED
-  assert.ok(dbUpdates.some((q) => q.includes("status = 'COMPLETED'")));
+  // Durable state: the job is COMPLETED with its artifact registered and materialized, and the
+  // resulting creative waits in human review.
+  const [row] = await sql<{ status: string; artifact_id: string | null; materialized_at: unknown }>`
+    select status, artifact_id, materialized_at from production_jobs where id = ${jobId}
+  `;
+  assert.equal(row!.status, "COMPLETED");
+  assert.ok(row!.artifact_id, "artifact is registered");
+  assert.ok(row!.materialized_at, "artifact is materialized");
+  const [creative] = await sql<{ status: string }>`select status from creative_records where id = ${`video-creative-${jobId}`}`;
+  assert.equal(creative!.status, "in_review");
 });
 
 test("ModelCapabilityRegistry tracks Veo 3.1 deprecation and Veo 2.0 shutdown", () => {
