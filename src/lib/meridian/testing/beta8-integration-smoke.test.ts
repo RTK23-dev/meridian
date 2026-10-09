@@ -300,7 +300,7 @@ test("Smoke 8: Durable Discovery Runs and Items Persist to Database (P1-A)", asy
   assert.ok(insertedRuns.length > 0, "Must insert run into discovery_runs");
 
   // Query run back from SQL (simulating restart)
-  const retrievedRun = await discovery.getDiscoveryRun(result.run.id, mockSql);
+  const retrievedRun = await discovery.getDiscoveryRun({ runId: result.run.id, organizationId: "org-test", brandId: "brand-test", sql: mockSql });
   assert.ok(retrievedRun, "Must load discovery run from SQL");
   assert.equal(retrievedRun?.organizationId, "org-test");
 });

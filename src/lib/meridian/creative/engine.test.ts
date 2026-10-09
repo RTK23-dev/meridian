@@ -88,6 +88,43 @@ test("CreativeDecisionEngine: research_only creates ZERO deliverables and ZERO p
   assert.equal(plan.estimatedCost.totalEstimatedUsd, 0);
 });
 
+test("CreativeDecisionEngine: provider selection resolves its own compatible registered model", () => {
+  const plan = CreativeDecisionEngine.createPlan({
+    scope: "video_only",
+    autonomy: "manual",
+    preferredVideoProvider: "hypit",
+    brief: sampleBrief,
+  });
+  assert.equal(plan.deliverables[0]?.provider, "hypit");
+  assert.equal(plan.deliverables[0]?.model, "hypit-hyperframes");
+  assert.equal(plan.productionPlan[0]?.providerId, "hypit");
+  assert.equal(plan.productionPlan[0]?.modelId, "hypit-hyperframes");
+});
+
+test("CreativeDecisionEngine: inadmissible JEV output blocks explicit creative scopes", () => {
+  for (const status of ["abstain_malformed", "abstain_insufficient_evidence", "abstain_rejected"] as const) {
+    const plan = CreativeDecisionEngine.createPlan({
+      scope: "video_only",
+      autonomy: "fully_automatic",
+      brief: sampleBrief,
+      jevJudgments: {
+        status,
+        decisionId: "decision-invalid",
+        recommendedFormats: [{ format: "video", rationale: "untrusted partial output", priority: 1 }],
+        formatSuitability: {},
+        evidenceRefs: [],
+        questionSetVersion: "v1",
+        provider: "test",
+        model: "test",
+      },
+    });
+
+    assert.equal(plan.deliverables.length, 0, `${status} must not create deliverables`);
+    assert.equal(plan.productionPlan.length, 0, `${status} must not create production steps`);
+    assert.ok(plan.status === "abstained" || plan.status === "rejected");
+  }
+});
+
 test("CreativeDecisionEngine: autonomy modes enforce approval gates", () => {
   // 1. Manual mode
   const manualPlan = CreativeDecisionEngine.createPlan({

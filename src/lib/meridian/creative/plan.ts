@@ -151,6 +151,7 @@ export interface ApprovalRequirement {
 export interface ProductionFallback {
   primaryProvider: string;
   fallbackProvider: string;
+  fallbackModel: string;
   triggerCondition: "provider_unavailable" | "timeout" | "qc_failure";
   permitted: boolean;
 }

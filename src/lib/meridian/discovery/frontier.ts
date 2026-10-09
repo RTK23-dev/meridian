@@ -94,6 +94,7 @@ export class DiscoveryFrontierService {
           select 1 from discovery_frontier
           where run_id = ${options.runId} and url = ${link.url}
         )
+        on conflict (run_id, url) do nothing
         returning id
       `;
 
@@ -189,6 +190,9 @@ export class DiscoveryFrontierService {
     options: {
       itemId: string;
       workerId: string;
+      organizationId: string;
+      brandId: string;
+      runId: string;
       leaseSeconds?: number;
     }
   ): Promise<boolean> {
@@ -197,6 +201,9 @@ export class DiscoveryFrontierService {
       update discovery_frontier
       set lease_expires_at = now() + (${leaseSeconds} || ' seconds')::interval
       where id = ${options.itemId}
+        and organization_id = ${options.organizationId}
+        and brand_id = ${options.brandId}
+        and run_id = ${options.runId}
         and lease_owner = ${options.workerId}
         and status in ('LEASED', 'PROCESSING')
       returning id
@@ -212,12 +219,18 @@ export class DiscoveryFrontierService {
     options: {
       itemId: string;
       workerId: string;
+      organizationId: string;
+      brandId: string;
+      runId: string;
     }
   ): Promise<boolean> {
     const rows = await sql`
       update discovery_frontier
       set status = 'PROCESSING'
       where id = ${options.itemId}
+        and organization_id = ${options.organizationId}
+        and brand_id = ${options.brandId}
+        and run_id = ${options.runId}
         and lease_owner = ${options.workerId}
         and status = 'LEASED'
       returning id
@@ -241,30 +254,32 @@ export class DiscoveryFrontierService {
       discoveredLinks?: string[];
     }
   ): Promise<void> {
-    await sql`
-      update discovery_frontier
-      set
-        status = 'COMPLETED',
-        completed_at = now(),
-        lease_owner = null,
-        lease_expires_at = null
-      where id = ${options.itemId}
-        and lease_owner = ${options.workerId}
-    `;
-
     const maxDepth = options.maxDepth ?? 3;
-    if (options.discoveredLinks && options.discoveredLinks.length > 0 && options.currentDepth < maxDepth) {
-      await this.enqueueLinks(sql, {
-        organizationId: options.organizationId,
-        brandId: options.brandId,
-        runId: options.runId,
-        links: options.discoveredLinks.map((url) => ({
-          url,
-          depth: options.currentDepth + 1,
-          priority: 0,
-        })),
-      });
-    }
+    const links = options.currentDepth < maxDepth
+      ? [...new Set(options.discoveredLinks || [])].map((url) => ({ url, depth: options.currentDepth + 1 }))
+      : [];
+    const completed = await sql<{ id: string }>`
+      with completed as (
+        update discovery_frontier
+        set status = 'COMPLETED', completed_at = now(), lease_owner = null, lease_expires_at = null
+        where id = ${options.itemId} and organization_id = ${options.organizationId}
+          and brand_id = ${options.brandId} and run_id = ${options.runId}
+          and lease_owner = ${options.workerId} and status in ('LEASED', 'PROCESSING')
+        returning id, organization_id, brand_id, run_id
+      ), expanded as (
+        insert into discovery_frontier (
+          id, organization_id, brand_id, run_id, url, canonical_url, depth, parent_url, status, priority, attempts, discovered_at
+        )
+        select 'front_' || md5(c.run_id || ':' || l.url), c.organization_id, c.brand_id, c.run_id,
+          l.url, l.url, l.depth, ${options.itemId}, 'PENDING', 0, 0, now()
+        from completed c
+        cross join jsonb_to_recordset(${JSON.stringify(links)}::jsonb) as l(url text, depth integer)
+        on conflict (run_id, url) do nothing
+        returning id
+      )
+      select id from completed
+    `;
+    if (completed.length === 0) throw new Error("Discovery frontier completion lost its lease or tenant scope.");
   }
 
   /**
@@ -275,6 +290,9 @@ export class DiscoveryFrontierService {
     options: {
       itemId: string;
       workerId: string;
+      organizationId: string;
+      brandId: string;
+      runId: string;
       error: string;
       policy?: CrawlerRetryPolicy;
     }
@@ -282,12 +300,16 @@ export class DiscoveryFrontierService {
     const policy = options.policy ?? DEFAULT_CRAWLER_RETRY_POLICY;
 
     const rows = await sql<Record<string, unknown>>`
-      select attempts from discovery_frontier where id = ${options.itemId}
+      select attempts from discovery_frontier
+      where id = ${options.itemId} and organization_id = ${options.organizationId}
+        and brand_id = ${options.brandId} and run_id = ${options.runId}
+        and lease_owner = ${options.workerId} and status in ('LEASED', 'PROCESSING')
     `;
+    if (rows.length === 0) throw new Error("Discovery frontier item is no longer leased to this worker.");
     const attempts = Number(rows[0]?.attempts || 1);
 
     if (attempts >= policy.maxAttempts) {
-      await sql`
+      const changed = await sql`
         update discovery_frontier
         set
           status = 'FAILED',
@@ -295,14 +317,18 @@ export class DiscoveryFrontierService {
           lease_owner = null,
           lease_expires_at = null,
           completed_at = now()
-        where id = ${options.itemId}
+        where id = ${options.itemId} and organization_id = ${options.organizationId}
+          and brand_id = ${options.brandId} and run_id = ${options.runId} and lease_owner = ${options.workerId}
+          and status in ('LEASED', 'PROCESSING')
+        returning id
       `;
+      if (changed.length === 0) throw new Error("Discovery frontier lease changed before failure was recorded.");
       return "FAILED";
     }
 
     const backoffSeconds = policy.backoffSeconds[Math.min(attempts - 1, policy.backoffSeconds.length - 1)] ?? 60;
 
-    await sql`
+    const changed = await sql`
       update discovery_frontier
       set
         status = 'RETRY',
@@ -310,8 +336,12 @@ export class DiscoveryFrontierService {
         next_attempt_at = now() + (${backoffSeconds} || ' seconds')::interval,
         lease_owner = null,
         lease_expires_at = null
-      where id = ${options.itemId}
+      where id = ${options.itemId} and organization_id = ${options.organizationId}
+        and brand_id = ${options.brandId} and run_id = ${options.runId} and lease_owner = ${options.workerId}
+        and status in ('LEASED', 'PROCESSING')
+      returning id
     `;
+    if (changed.length === 0) throw new Error("Discovery frontier lease changed before retry was recorded.");
     return "RETRY";
   }
 
@@ -321,27 +351,21 @@ export class DiscoveryFrontierService {
    */
   static async recoverStaleDiscoveryWork(
     sql: Sql,
-    options?: {
-      organizationId?: string;
-      brandId?: string;
+    options: {
+      organizationId: string;
+      brandId: string;
       policy?: CrawlerRetryPolicy;
     }
   ): Promise<{ recoveredCount: number; failedCount: number }> {
-    const policy = options?.policy ?? DEFAULT_CRAWLER_RETRY_POLICY;
+    const policy = options.policy ?? DEFAULT_CRAWLER_RETRY_POLICY;
 
-    const staleRows = options?.organizationId && options?.brandId
-      ? await sql<Record<string, unknown>>`
+    const staleRows = await sql<Record<string, unknown>>`
           select id, attempts from discovery_frontier
           where organization_id = ${options.organizationId}
             and brand_id = ${options.brandId}
             and status in ('LEASED', 'PROCESSING')
             and lease_expires_at < now()
         `
-      : await sql<Record<string, unknown>>`
-          select id, attempts from discovery_frontier
-          where status in ('LEASED', 'PROCESSING')
-            and lease_expires_at < now()
-        `;
 
     let recoveredCount = 0;
     let failedCount = 0;
@@ -351,7 +375,7 @@ export class DiscoveryFrontierService {
       const attempts = Number(row.attempts || 1);
 
       if (attempts >= policy.maxAttempts) {
-        await sql`
+        const changed = await sql`
           update discovery_frontier
           set
             status = 'FAILED',
@@ -359,12 +383,14 @@ export class DiscoveryFrontierService {
             lease_owner = null,
             lease_expires_at = null,
             completed_at = now()
-          where id = ${id}
+          where id = ${id} and organization_id = ${options.organizationId} and brand_id = ${options.brandId}
+            and status in ('LEASED', 'PROCESSING') and lease_expires_at < now()
+          returning id
         `;
-        failedCount++;
+        if (changed.length > 0) failedCount++;
       } else {
         const backoffSeconds = policy.backoffSeconds[Math.min(attempts - 1, policy.backoffSeconds.length - 1)] ?? 30;
-        await sql`
+        const changed = await sql`
           update discovery_frontier
           set
             status = 'RETRY',
@@ -372,9 +398,11 @@ export class DiscoveryFrontierService {
             next_attempt_at = now() + (${backoffSeconds} || ' seconds')::interval,
             lease_owner = null,
             lease_expires_at = null
-          where id = ${id}
+          where id = ${id} and organization_id = ${options.organizationId} and brand_id = ${options.brandId}
+            and status in ('LEASED', 'PROCESSING') and lease_expires_at < now()
+          returning id
         `;
-        recoveredCount++;
+        if (changed.length > 0) recoveredCount++;
       }
     }
 

@@ -79,6 +79,7 @@ interface ReservationRow {
   expires_at: string;
   released_at?: string;
   reconciled_at?: string;
+  actual_spent_micros?: string | number | bigint | null;
 }
 
 interface BalanceRow {
@@ -194,17 +195,39 @@ export class BudgetLedgerService {
 
     const account = await this.getOrCreateAccount(sql, params.organizationId, params.brandId);
 
-    // Atomic conditional update
-    const updatedAccounts = await sql<BalanceRow>`
-      update budget_accounts
-      set reserved_micros = reserved_micros + ${params.amountMicros.toString()}::bigint,
-          updated_at = now()
-      where id = ${account.id}
-        and (spent_micros + reserved_micros + ${params.amountMicros.toString()}::bigint) <= max_spend_micros
-      returning id, max_spend_micros, spent_micros, reserved_micros
+    const reservationId = randomUUID();
+    const resRows = await sql<ReservationRow>`
+      with updated_account as (
+        update budget_accounts
+        set reserved_micros = reserved_micros + ${params.amountMicros.toString()}::bigint,
+            updated_at = now()
+        where id = ${account.id}
+          and status = 'ACTIVE'
+          and (spent_micros + reserved_micros + ${params.amountMicros.toString()}::bigint) <= max_spend_micros
+        returning id, spent_micros, reserved_micros
+      ), inserted_reservation as (
+        insert into budget_reservations (
+          id, organization_id, brand_id, account_id, creative_plan_id, production_job_id, amount_micros, status
+        )
+        select ${reservationId}, ${params.organizationId}, ${params.brandId}, updated_account.id,
+          ${params.creativePlanId || null}, ${params.productionJobId || null}, ${params.amountMicros.toString()}::bigint, 'RESERVED'
+        from updated_account
+        returning id, organization_id, brand_id, account_id, creative_plan_id, production_job_id, amount_micros, status, created_at, expires_at
+      ), inserted_ledger as (
+        insert into budget_ledger_entries (
+          id, organization_id, brand_id, account_id, reservation_id, entry_type,
+          delta_spent_micros, delta_reserved_micros, balance_spent_micros, balance_reserved_micros, metadata
+        )
+        select ${randomUUID()}, r.organization_id, r.brand_id, r.account_id, r.id, 'RESERVATION_CREATED',
+          0, ${params.amountMicros.toString()}::bigint, a.spent_micros, a.reserved_micros,
+          ${JSON.stringify({ creativePlanId: params.creativePlanId, productionJobId: params.productionJobId })}::jsonb
+        from inserted_reservation r join updated_account a on a.id = r.account_id
+        returning id
+      )
+      select r.* from inserted_reservation r
     `;
 
-    if (updatedAccounts.length === 0) {
+    if (resRows.length === 0) {
       // Check current balances to provide helpful error
       const current = await sql<CapRow>`
         select max_spend_micros, spent_micros, reserved_micros
@@ -220,33 +243,7 @@ export class BudgetLedgerService {
       );
     }
 
-    const reservationId = randomUUID();
-    const resRows = await sql<ReservationRow>`
-      insert into budget_reservations (
-        id, organization_id, brand_id, account_id, creative_plan_id, production_job_id, amount_micros, status
-      ) values (
-        ${reservationId}, ${params.organizationId}, ${params.brandId}, ${account.id},
-        ${params.creativePlanId || null}, ${params.productionJobId || null},
-        ${params.amountMicros.toString()}::bigint, 'RESERVED'
-      )
-      returning id, organization_id, brand_id, account_id, creative_plan_id, production_job_id, amount_micros, status, created_at, expires_at
-    `;
-
     const res = resRows[0];
-    const updatedAcc = updatedAccounts[0];
-
-    // Double-entry ledger audit
-    await sql`
-      insert into budget_ledger_entries (
-        id, organization_id, brand_id, account_id, reservation_id, entry_type,
-        delta_spent_micros, delta_reserved_micros, balance_spent_micros, balance_reserved_micros, metadata
-      ) values (
-        ${randomUUID()}, ${params.organizationId}, ${params.brandId}, ${account.id}, ${reservationId},
-        'RESERVATION_CREATED', 0, ${params.amountMicros.toString()}::bigint,
-        ${updatedAcc.spent_micros}, ${updatedAcc.reserved_micros},
-        ${JSON.stringify({ creativePlanId: params.creativePlanId, productionJobId: params.productionJobId })}
-      )
-    `;
 
     return {
       id: res.id,
@@ -272,59 +269,62 @@ export class BudgetLedgerService {
       reservationId: string;
       actualSpentMicros: bigint;
     }
-  ): Promise<{ reservation: BudgetReservation; unusedReleasedMicros: bigint }> {
-    const reservations = await sql<ReservationRow>`
-      select id, organization_id, brand_id, account_id, amount_micros, status, created_at, expires_at
-      from budget_reservations
-      where id = ${params.reservationId} and status = 'RESERVED'
-      limit 1
+  ): Promise<{ reservation: BudgetReservation; unusedReleasedMicros: bigint; overageMicros: bigint; alreadyReconciled: boolean }> {
+    if (params.actualSpentMicros < 0n) throw new InvalidBudgetCapError("Actual spend cannot be negative.");
+    const actualSpentMicros = params.actualSpentMicros;
+    const finalized = await sql<ReservationRow & { overage_micros: string | number | bigint }>`
+      with claimed as (
+        update budget_reservations
+        set status = 'RECONCILED', actual_spent_micros = ${actualSpentMicros.toString()}::bigint, reconciled_at = now()
+        where id = ${params.reservationId} and status = 'RESERVED'
+        returning id, organization_id, brand_id, account_id, amount_micros, status, created_at, expires_at, actual_spent_micros
+      ), updated_account as (
+        update budget_accounts a
+        set spent_micros = a.spent_micros + ${actualSpentMicros.toString()}::bigint,
+            reserved_micros = a.reserved_micros - c.amount_micros,
+            status = case when ${actualSpentMicros.toString()}::bigint > c.amount_micros then 'EXCEEDED' else a.status end,
+            updated_at = now()
+        from claimed c
+        where a.id = c.account_id and a.reserved_micros >= c.amount_micros
+        returning a.id, a.spent_micros, a.reserved_micros
+      ), inserted_ledger as (
+        insert into budget_ledger_entries (
+          id, organization_id, brand_id, account_id, reservation_id, entry_type,
+          delta_spent_micros, delta_reserved_micros, balance_spent_micros, balance_reserved_micros, metadata
+        )
+        select ${randomUUID()}, c.organization_id, c.brand_id, c.account_id, c.id,
+          case when ${actualSpentMicros.toString()}::bigint > c.amount_micros then 'RESERVATION_OVERAGE' else 'RESERVATION_RECONCILED' end,
+          ${actualSpentMicros.toString()}::bigint, -c.amount_micros, a.spent_micros, a.reserved_micros,
+          jsonb_build_object('actualSpentMicros', ${actualSpentMicros.toString()}::text,
+            'overageMicros', greatest(${actualSpentMicros.toString()}::bigint - c.amount_micros, 0))
+        from claimed c join updated_account a on a.id = c.account_id
+        returning id
+      )
+      select c.*, greatest(c.actual_spent_micros - c.amount_micros, 0) as overage_micros
+      from claimed c join updated_account a on a.id = c.account_id
     `;
 
-    if (reservations.length === 0) {
-      throw new Error(`Reservation '${params.reservationId}' not found or already reconciled/released.`);
+    let res: (ReservationRow & { overage_micros?: string | number | bigint }) | undefined = finalized[0];
+    let alreadyReconciled = false;
+    if (!res) {
+      const existing = await sql<ReservationRow>`
+        select id, organization_id, brand_id, account_id, amount_micros, actual_spent_micros, status, created_at, expires_at
+        from budget_reservations where id = ${params.reservationId} limit 1
+      `;
+      res = existing[0];
+      if (!res || res.status !== "RECONCILED" || res.actual_spent_micros == null) {
+        throw new Error(`Reservation '${params.reservationId}' not found or already released.`);
+      }
+      alreadyReconciled = true;
+      res.overage_micros = BigInt(res.actual_spent_micros) > BigInt(res.amount_micros)
+        ? BigInt(res.actual_spent_micros) - BigInt(res.amount_micros)
+        : 0n;
     }
 
-    const res = reservations[0];
     const reservedMicros = BigInt(res.amount_micros);
-    const actualSpentMicros = params.actualSpentMicros;
-    const unusedReleasedMicros = reservedMicros > actualSpentMicros ? reservedMicros - actualSpentMicros : 0n;
-
-    // Update account balances atomically:
-    // spent += actualSpentMicros
-    // reserved -= reservedMicros
-    const updatedAccounts = await sql<BalanceRow>`
-      update budget_accounts
-      set spent_micros = spent_micros + ${actualSpentMicros.toString()}::bigint,
-          reserved_micros = reserved_micros - ${reservedMicros.toString()}::bigint,
-          updated_at = now()
-      where id = ${res.account_id}
-      returning id, spent_micros, reserved_micros
-    `;
-
-    const updatedAcc = updatedAccounts[0];
-
-    // Mark reservation RECONCILED
-    await sql`
-      update budget_reservations
-      set status = 'RECONCILED',
-          reconciled_at = now()
-      where id = ${res.id}
-    `;
-
-    // Audit in ledger
-    await sql`
-      insert into budget_ledger_entries (
-        id, organization_id, brand_id, account_id, reservation_id, entry_type,
-        delta_spent_micros, delta_reserved_micros, balance_spent_micros, balance_reserved_micros, metadata
-      ) values (
-        ${randomUUID()}, ${res.organization_id}, ${res.brand_id}, ${res.account_id}, ${res.id},
-        'RESERVATION_RECONCILED',
-        ${actualSpentMicros.toString()}::bigint,
-        -${reservedMicros.toString()}::bigint,
-        ${updatedAcc.spent_micros}, ${updatedAcc.reserved_micros},
-        ${JSON.stringify({ actualSpentMicros: actualSpentMicros.toString(), unusedReleasedMicros: unusedReleasedMicros.toString() })}
-      )
-    `;
+    const actualRecorded = BigInt(res.actual_spent_micros ?? actualSpentMicros);
+    const unusedReleasedMicros = reservedMicros > actualRecorded ? reservedMicros - actualRecorded : 0n;
+    const overageMicros = BigInt(res.overage_micros ?? 0);
 
     return {
       reservation: {
@@ -333,11 +333,13 @@ export class BudgetLedgerService {
         brandId: res.brand_id,
         accountId: res.account_id,
         amountMicros: reservedMicros,
-        status: "RECONCILED",
+        status: res.status,
         createdAt: res.created_at,
         expiresAt: res.expires_at,
       },
       unusedReleasedMicros,
+      overageMicros,
+      alreadyReconciled,
     };
   }
 
@@ -351,51 +353,27 @@ export class BudgetLedgerService {
       reason: string;
     }
   ): Promise<boolean> {
-    const reservations = await sql<ReservationRow>`
-      select id, organization_id, brand_id, account_id, amount_micros, status, created_at, expires_at
-      from budget_reservations
-      where id = ${params.reservationId} and status = 'RESERVED'
-      limit 1
-    `;
-
-    if (reservations.length === 0) {
-      return false; // Already finalized or doesn't exist
-    }
-
-    const res = reservations[0];
-    const reservedMicros = BigInt(res.amount_micros);
-
-    const updatedAccounts = await sql<BalanceRow>`
-      update budget_accounts
-      set reserved_micros = reserved_micros - ${reservedMicros.toString()}::bigint,
-          updated_at = now()
-      where id = ${res.account_id}
-      returning id, spent_micros, reserved_micros
-    `;
-
-    const updatedAcc = updatedAccounts[0];
-
-    await sql`
-      update budget_reservations
-      set status = 'RELEASED',
-          released_at = now()
-      where id = ${res.id}
-    `;
-
-    await sql`
-      insert into budget_ledger_entries (
-        id, organization_id, brand_id, account_id, reservation_id, entry_type,
-        delta_spent_micros, delta_reserved_micros, balance_spent_micros, balance_reserved_micros, metadata
-      ) values (
-        ${randomUUID()}, ${res.organization_id}, ${res.brand_id}, ${res.account_id}, ${res.id},
-        'RESERVATION_RELEASED',
-        0,
-        -${reservedMicros.toString()}::bigint,
-        ${updatedAcc.spent_micros}, ${updatedAcc.reserved_micros},
-        ${JSON.stringify({ reason: params.reason })}
+    const released = await sql<{ id: string }>`
+      with claimed as (
+        update budget_reservations
+        set status = 'RELEASED', released_at = now()
+        where id = ${params.reservationId} and status = 'RESERVED'
+        returning id, organization_id, brand_id, account_id, amount_micros
+      ), updated_account as (
+        update budget_accounts a set reserved_micros = a.reserved_micros - c.amount_micros, updated_at = now()
+        from claimed c where a.id = c.account_id and a.reserved_micros >= c.amount_micros
+        returning a.id, a.spent_micros, a.reserved_micros
+      ), inserted_ledger as (
+        insert into budget_ledger_entries (
+          id, organization_id, brand_id, account_id, reservation_id, entry_type,
+          delta_spent_micros, delta_reserved_micros, balance_spent_micros, balance_reserved_micros, metadata
+        )
+        select ${randomUUID()}, c.organization_id, c.brand_id, c.account_id, c.id, 'RESERVATION_RELEASED', 0,
+          -c.amount_micros, a.spent_micros, a.reserved_micros, ${JSON.stringify({ reason: params.reason })}::jsonb
+        from claimed c join updated_account a on a.id = c.account_id returning id
       )
+      select id from claimed
     `;
-
-    return true;
+    return released.length > 0;
   }
 }

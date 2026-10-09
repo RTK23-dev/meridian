@@ -194,7 +194,7 @@ export class ModelCapabilityRegistry {
 
     // 4. Higgsfield
     this.register({
-      model_id: "higgsfield-standard",
+      model_id: "higgsfield-video-v1",
       provider_id: "higgsfield",
       api_family: "higgsfield_v1",
       release_channel: "ga",
@@ -212,6 +212,87 @@ export class ModelCapabilityRegistry {
       last_verified_at: "2026-10-09",
       source_url: "https://open.higgsfield.ai/quick-start",
     });
+
+    this.register({
+      model_id: "hypit-hyperframes",
+      provider_id: "hypit",
+      api_family: "hypit_v1",
+      release_channel: "ga",
+      supported_modalities: ["text", "image", "video", "audio"],
+      supported_tasks: ["text-to-video", "image-to-video", "edit"],
+      durations: [3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 30, 60],
+      aspect_ratios: ["9:16", "16:9", "1:1", "4:5"],
+      resolutions: ["720p", "1080p"],
+      input_reference_types: ["image_uri", "video_uri"],
+      native_audio: true,
+      editing_support: true,
+      region_constraints: ["global"],
+      pricing_basis: "per_second",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-10-09",
+      source_url: "https://hypit.dev/docs",
+    });
+
+    this.register({
+      model_id: "manual-cloud",
+      provider_id: "manual_cloud",
+      api_family: "manual",
+      release_channel: "ga",
+      supported_modalities: ["text", "image", "video"],
+      supported_tasks: ["text-to-video", "image-to-video", "edit"],
+      durations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 30, 60],
+      aspect_ratios: ["9:16", "16:9", "1:1", "4:5"],
+      resolutions: ["720p", "1080p"],
+      input_reference_types: ["image_uri", "video_uri"],
+      native_audio: false,
+      editing_support: true,
+      region_constraints: ["global"],
+      pricing_basis: "manual",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-10-09",
+      source_url: "internal:manual-cloud",
+    });
+
+    this.register({
+      model_id: "test-video-model",
+      provider_id: "test:video",
+      api_family: "manual",
+      release_channel: "experimental",
+      supported_modalities: ["text", "image", "video", "audio"],
+      supported_tasks: ["text-to-video", "image-to-video", "edit"],
+      durations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 30, 60],
+      aspect_ratios: ["9:16", "16:9", "1:1", "4:5"],
+      resolutions: ["720p", "1080p"],
+      input_reference_types: ["image_uri", "video_uri"],
+      native_audio: true,
+      editing_support: true,
+      region_constraints: ["test"],
+      pricing_basis: "test",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-10-09",
+      source_url: "internal:test",
+    });
+
+    this.register({
+      model_id: "test-image-model",
+      provider_id: "test:image",
+      api_family: "manual",
+      release_channel: "experimental",
+      supported_modalities: ["text", "image"],
+      supported_tasks: ["text-to-image"],
+      durations: [],
+      aspect_ratios: ["1:1", "9:16", "16:9", "4:5"],
+      resolutions: ["1024x1024"],
+      input_reference_types: ["base64"],
+      native_audio: false,
+      editing_support: false,
+      region_constraints: ["test"],
+      pricing_basis: "test",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-10-09",
+      source_url: "internal:test",
+    });
+
   }
 
   register(record: ModelCapabilityRecord): void {

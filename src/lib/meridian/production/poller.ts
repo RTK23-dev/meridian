@@ -35,7 +35,10 @@ export async function pollProductionJobs(
   const drive = options.driveClient || googleDriveClient;
   const router = options.router || productionRouter;
 
-  // Claim pending production jobs
+  // Claim pending jobs atomically. A plain SELECT ... FOR UPDATE outside an explicit
+  // transaction releases its row locks as soon as the statement ends, allowing two
+  // pollers to submit the same provider request. next_poll_at is the durable lease:
+  // a crashed worker makes the job eligible again after two minutes.
   const activeJobs = await sql<{
     id: string;
     organization_id: string;
@@ -49,14 +52,21 @@ export async function pollProductionJobs(
     attempt_count: number;
     input: string | Record<string, unknown>;
   }>`
-    select id, organization_id, brand_id, provider, provider_job_id,
-           request_id, status_url, cancel_url, status, attempt_count, input
-    from production_jobs
-    where status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
-      and (next_poll_at is null or next_poll_at <= now())
-    order by created_at asc
-    limit ${limit}
-    for update skip locked
+    with candidates as (
+      select id
+      from production_jobs
+      where status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
+        and (next_poll_at is null or next_poll_at <= now())
+      order by created_at asc
+      limit ${limit}
+      for update skip locked
+    )
+    update production_jobs as jobs
+    set next_poll_at = now() + interval '2 minutes', updated_at = now()
+    from candidates
+    where jobs.id = candidates.id
+    returning jobs.id, jobs.organization_id, jobs.brand_id, jobs.provider, jobs.provider_job_id,
+              jobs.request_id, jobs.status_url, jobs.cancel_url, jobs.status, jobs.attempt_count, jobs.input
   `;
 
   const result: PollResult = {

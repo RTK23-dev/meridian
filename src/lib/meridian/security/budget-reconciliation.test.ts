@@ -30,7 +30,7 @@ test("Budget Reconciliation: actual spend transfers to spent and releases unused
 
   // 3. Reconcile with actual spend of $1.25
   const actualSpend = toMicros(1.25); // 1_250_000 micros
-  const { reservation: reconciled, unusedReleasedMicros } = await BudgetLedgerService.reconcile(sql, {
+  const { reservation: reconciled, unusedReleasedMicros, alreadyReconciled } = await BudgetLedgerService.reconcile(sql, {
     reservationId: reservation.id,
     actualSpentMicros: actualSpend,
   });
@@ -38,6 +38,14 @@ test("Budget Reconciliation: actual spend transfers to spent and releases unused
   // Verify unused released diff is $0.75
   assert.equal(unusedReleasedMicros, 750_000n, "Unused reservation diff of $0.75 must be released");
   assert.equal(reconciled.status, "RECONCILED");
+  assert.equal(alreadyReconciled, false);
+
+  const retry = await BudgetLedgerService.reconcile(sql, {
+    reservationId: reservation.id,
+    actualSpentMicros: actualSpend,
+  });
+  assert.equal(retry.alreadyReconciled, true);
+  assert.equal(retry.unusedReleasedMicros, unusedReleasedMicros);
 
   // Verify account balances
   account = await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId);
@@ -56,9 +64,47 @@ test("Budget Reconciliation: actual spend transfers to spent and releases unused
     where reservation_id = ${reservation.id}
     order by created_at asc
   `;
-  assert.equal(entries.length, 2, "Must contain RESERVATION_CREATED and RESERVATION_RECONCILED");
+  assert.equal(entries.length, 2, "Duplicate reconciliation must not add another ledger entry");
   assert.equal(entries[0].entry_type, "RESERVATION_CREATED");
   assert.equal(entries[1].entry_type, "RESERVATION_RECONCILED");
   assert.equal(BigInt(entries[1].delta_spent_micros), 1_250_000n);
   assert.equal(BigInt(entries[1].delta_reserved_micros), -2_000_000n);
+});
+
+test("Budget Reconciliation: overage is durable, explicit, and blocks new reservations", async () => {
+  const sql = await getSql();
+  const orgId = "org-overage-" + Date.now();
+  const brandId = "brand-overage-" + Date.now();
+
+  await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Overage Org', ${orgId}, 'user') on conflict do nothing`;
+  await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Overage Brand', 'user') on conflict do nothing`;
+  await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId, 20);
+  const reservation = await BudgetLedgerService.reserve(sql, {
+    organizationId: orgId,
+    brandId,
+    amountMicros: toMicros(1),
+  });
+
+  const result = await BudgetLedgerService.reconcile(sql, {
+    reservationId: reservation.id,
+    actualSpentMicros: toMicros(1.5),
+  });
+  assert.equal(result.overageMicros, toMicros(0.5));
+
+  const accountRows = await sql<{ status: string; spent_micros: string | number | bigint; reserved_micros: string | number | bigint }>`
+    select status, spent_micros, reserved_micros from budget_accounts
+    where organization_id = ${orgId} and brand_id = ${brandId}
+  `;
+  assert.equal(accountRows[0].status, "EXCEEDED");
+  assert.equal(BigInt(accountRows[0].spent_micros), toMicros(1.5));
+  assert.equal(BigInt(accountRows[0].reserved_micros), 0n);
+
+  const ledger = await sql<{ entry_type: string }>`
+    select entry_type from budget_ledger_entries where reservation_id = ${reservation.id} order by created_at desc limit 1
+  `;
+  assert.equal(ledger[0].entry_type, "RESERVATION_OVERAGE");
+  await assert.rejects(
+    BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(0.01) }),
+    /Budget limit exceeded/
+  );
 });

@@ -112,7 +112,8 @@ test("CreativePlan to Manifest Projection: preserves all semantic creative decis
     fallbackPlan: [
       {
         primaryProvider: "google_omni",
-        fallbackProvider: "test:video",
+        fallbackProvider: "higgsfield",
+        fallbackModel: "higgsfield-video-v1",
         triggerCondition: "provider_unavailable",
         permitted: true,
       },
@@ -163,9 +164,12 @@ test("CreativePlan to Manifest Projection: preserves all semantic creative decis
   const fallbackManifest = manifestFromCreativePlan(plan, deliverable, {
     checkProviderAvailability: (prov) => prov !== "google_omni", // simulate unavailable
   });
-  assert.equal(fallbackManifest.production?.provider, "test:video");
+  assert.equal(fallbackManifest.production?.provider, "higgsfield");
+  assert.equal(fallbackManifest.production?.model, "higgsfield-video-v1");
   assert.equal(fallbackManifest.production?.fallbackUsed, true);
   assert.equal(fallbackManifest.production?.fallbackReason, "provider_unavailable");
+  assert.equal(fallbackManifest.production?.requestedProvider, "google_omni");
+  assert.equal(fallbackManifest.production?.requestedModel, "gemini-omni-1.1-flash");
 
   // 7. Invariant: Unpermitted or missing fallback throws instead of silent change
   const planNoFallback: CreativePlan = {

@@ -226,6 +226,20 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     }
 
     const model = this.getModel();
+    if (spec.modelId && spec.modelId !== model) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "FAILED",
+        costEstimateUsd: costEstimate,
+        error: `CreativePlan model '${spec.modelId}' does not match configured provider model '${model}'.`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
     const lifecycle = modelCapabilityRegistry.checkModelLifecycle(model);
     if (!lifecycle.usable) {
       return {

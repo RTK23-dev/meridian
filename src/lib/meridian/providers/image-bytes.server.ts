@@ -10,6 +10,8 @@ export async function generateImageBytes(input: {
   seed: string;
   promptVersion: string;
   allowTest: boolean;
+  model?: string;
+  aspectRatio?: string;
 }): Promise<ImageResult> {
   if (input.provider === "test:image") {
     return testImageProvider(input.allowTest).generate({
@@ -19,7 +21,12 @@ export async function generateImageBytes(input: {
     });
   }
   if (input.provider === "google:nano-banana") {
-    return generateNanoBananaImage({ prompt: input.prompt, promptVersion: input.promptVersion });
+    return generateNanoBananaImage({
+      prompt: input.prompt,
+      promptVersion: input.promptVersion,
+      model: input.model,
+      aspectRatio: input.aspectRatio,
+    });
   }
   return { status: "NOT_CONNECTED", provider: input.provider || "unconfigured", error: "The selected image provider is unavailable. No image was generated." };
 }

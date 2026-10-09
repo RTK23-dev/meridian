@@ -48,10 +48,12 @@ export type CreativeSpec = {
   brandId: string;
   title: string;
   format: string;
-  aspectRatio: "9:16" | "16:9" | "1:1";
+  aspectRatio: "9:16" | "16:9" | "1:1" | "4:5";
   durationTargetSeconds: number;
   hookLine: string;
   script: string;
+  visualDirection?: string;
+  audioDirection?: string;
   sourceMediaUrl?: string;
   scenes: Array<{
     index: number;
@@ -65,6 +67,9 @@ export type CreativeSpec = {
     musicStyle?: string;
     voiceId?: string;
   };
+  providerId?: string;
+  modelId?: string;
+  assetIds?: string[];
 };
 
 export type ProductionJob = {

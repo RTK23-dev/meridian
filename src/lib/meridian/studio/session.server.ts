@@ -24,7 +24,6 @@ import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./featu
 import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
 import { productionRouter } from "../production/router.ts";
-import type { CreativeSpec } from "../production/types.ts";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store.ts";
 import { assessPublishing, type AccountSnapshot } from "../publishing/readiness.ts";
 import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure.ts";
@@ -33,6 +32,9 @@ import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativeFormatRecommendation, CreativePlan } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
+import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
+import { resolveProductionTarget } from "../production/target.ts";
+import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -641,6 +643,8 @@ export async function generateStudioVariants(
 
     // Canonicalize video provider (P0-B)
     data.videoProvider = data.videoProvider === "omni" ? "google_omni" : data.videoProvider;
+    data.imageProvider = data.imageProvider === "google:nano-banana" ? "google_nano_banana" : data.imageProvider;
+    if (data.videoProvider === "auto") data.videoProvider = "google_omni";
 
     const briefs = await sql<Record<string, unknown>>`
       select * from briefs
@@ -725,30 +729,23 @@ export async function generateStudioVariants(
           parsedResp = JSON.parse(dec.model_response || "{}");
           const validated = creativeJudgmentResponseSchemaV1.safeParse(parsedResp);
           if (validated.success) {
+            parsedResp = validated.data;
             isSchemaValid = true;
             recommendedFormats.push(...validated.data.recommendedFormats);
-          } else if (parsedResp.recommendedFormats && Array.isArray(parsedResp.recommendedFormats)) {
-            // Partial fallback if format recommendations exist
-            recommendedFormats.push(...parsedResp.recommendedFormats);
-            isSchemaValid = Boolean(parsedResp.creativeMechanism);
           }
         } catch {
           parsedResp = {};
           isSchemaValid = false;
         }
 
-        // If no model response recommendations, but brief has an approved format from human review
-        if (recommendedFormats.length === 0 && brief.format && typeof brief.format === "string") {
-          const fmt = (brief.format as string).toLowerCase();
-          if (fmt === "video" || fmt === "image" || fmt === "carousel" || fmt === "mixed") {
-            recommendedFormats.push({
-              format: fmt as any,
-              rationale: `Format specified by approved brief direction (${fmt}).`,
-              priority: 1,
-            });
-            isSchemaValid = true;
-          }
-        }
+        const modelDecision = typeof parsedResp.decision === "string" ? parsedResp.decision.toUpperCase() : "";
+        const jevStatus = !isSchemaValid
+          ? "abstain_malformed"
+          : modelDecision === "REJECT" || modelDecision === "ABSTAIN_REJECTED"
+            ? "abstain_rejected"
+            : modelDecision.startsWith("ABSTAIN_")
+              ? modelDecision.toLowerCase() as CreativeJudgmentBundle["status"]
+              : "admissible";
 
         // Map only authentic fields present in validated JEV record; zero fabricated confidence/scores
         jevBundle = {
@@ -760,7 +757,7 @@ export async function generateStudioVariants(
           brandFitScore: typeof parsedResp.brandFitScore === "number" ? parsedResp.brandFitScore : undefined,
           transferabilityScore: typeof parsedResp.transferabilityScore === "number" ? parsedResp.transferabilityScore : undefined,
           distributionSuitability: parsedResp.distributionSuitability,
-          status: isSchemaValid ? "admissible" : "abstain_malformed",
+          status: jevStatus,
           evidenceRefs,
           decisionId: dec.id,
           questionSetVersion: dec.question_version || "v1",
@@ -831,14 +828,8 @@ export async function generateStudioVariants(
       };
     }
 
-    const isTestRun = Boolean(
-      (data.imageProvider && data.imageProvider.startsWith("test:")) ||
-      (data.videoProvider && data.videoProvider.startsWith("test:")) ||
-      creativePlan.estimatedCost.totalEstimatedUsd === 0
-    );
-
     // Handle Manual or Semi-Automatic Approval Gate (P0-D)
-    if (!isTestRun && (autonomy === "manual" || autonomy === "semi_automatic")) {
+    if (autonomy === "manual" || autonomy === "semi_automatic") {
       return {
         status: "awaiting_approval",
         planId: creativePlan.id,
@@ -850,7 +841,7 @@ export async function generateStudioVariants(
     }
 
     // Handle Fully-Automatic exceeding spend cap (P0-D)
-    if (!isTestRun && creativePlan.status === "awaiting_approval") {
+    if (creativePlan.status === "awaiting_approval") {
       return {
         status: "awaiting_approval",
         planId: creativePlan.id,
@@ -861,17 +852,15 @@ export async function generateStudioVariants(
       };
     }
 
-    // If fully_automatic and approved: transition to executing and execute
-    await sql`
-      update creative_plans
-      set status = 'executing', updated_at = now()
-      where id = ${creativePlan.id}
-    `;
-
-    return executeApprovedCreativePlan(sql, access, context.userId, creativePlan, brief, {
-      imageProviderOverride: data.imageProvider !== "none" ? data.imageProvider : undefined,
-      videoProviderOverride: data.videoProvider !== "none" ? data.videoProvider : undefined,
+    await transitionCreativePlan(sql, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      planId: creativePlan.id,
+      actorId: context.userId,
+      target: "executing",
     });
+
+    return executeApprovedCreativePlan(sql, access, context.userId, creativePlan, brief);
 }
 
 export async function executeApprovedCreativePlan(
@@ -880,12 +869,16 @@ export async function executeApprovedCreativePlan(
   userId: string,
   creativePlan: CreativePlan,
   brief: Record<string, unknown>,
-  options?: {
-    imageProviderOverride?: string;
-    videoProviderOverride?: string;
-  },
 ) {
   const brandId = asText(brief.brand_id);
+  const persistedPlan = await sql<{ status: string }>`
+    select status from creative_plans
+    where id = ${creativePlan.id} and organization_id = ${access.organizationId} and brand_id = ${brandId}
+    limit 1
+  `;
+  if (persistedPlan[0]?.status !== "executing") {
+    throw new Error("CreativePlan must be durably approved and executing before provider calls.");
+  }
   const loaded = await loadBrandContext(sql, access.organizationId, brandId);
   assertSameTenant(loaded.creatives, access.organizationId, brandId);
   const productName = loaded.products[0]?.name || asText(brief.title);
@@ -1026,10 +1019,14 @@ export async function executeApprovedCreativePlan(
       });
       reservationId = reservation.id;
     } catch (budgetErr) {
-      await sql`
-        update creative_plans set status = 'failed', updated_at = now()
-        where id = ${creativePlan.id}
-      `.catch(() => {});
+      await transitionCreativePlan(sql, {
+        organizationId: access.organizationId,
+        brandId,
+        planId: creativePlan.id,
+        actorId: userId,
+        target: "failed",
+        reason: "Budget reservation failed before provider submission.",
+      }).catch(() => {});
       throw budgetErr;
     }
   }
@@ -1037,8 +1034,8 @@ export async function executeApprovedCreativePlan(
   const runId = crypto.randomUUID();
   const firstImgDeliv = creativePlan.deliverables.find((d) => d.kind === "image" || d.kind === "carousel_slide");
   const firstVidDeliv = creativePlan.deliverables.find((d) => d.kind === "video");
-  const effectiveImageProvider = options?.imageProviderOverride || firstImgDeliv?.provider || "none";
-  const effectiveVideoProvider = options?.videoProviderOverride || firstVidDeliv?.provider || "none";
+  const effectiveImageProvider = firstImgDeliv?.provider || "none";
+  const effectiveVideoProvider = firstVidDeliv?.provider || "none";
 
   await sql`
     insert into generation_runs (
@@ -1055,19 +1052,26 @@ export async function executeApprovedCreativePlan(
     for (const deliv of creativePlan.deliverables) {
       if (deliv.kind === "image" || deliv.kind === "carousel_slide") {
         const index = deliv.sequenceIndex ?? 0;
-        const delivManifest = deliverableManifests.find((m) => m.creativeId === deliv.id) || deliverableManifests[index];
+        const delivManifest = deliverableManifests.find((m) => m.deliverableId === deliv.id);
+        if (!delivManifest) throw new Error(`CreativePlan deliverable ${deliv.id} has no executable manifest.`);
         const prompt = variantPrompt({
           productName,
-          angle: delivManifest?.concept?.mechanism || asText(brief.angle),
-          hook: delivManifest?.hook?.text || asText(brief.hook),
-          audience: asText(brief.audience),
-          constraints: asText(brief.constraints),
+          angle: delivManifest.concept?.mechanism || "",
+          hook: delivManifest.hook?.text || "",
+          audience: delivManifest.brand.audience,
+          constraints: creativePlan.constraintsApplied.map((constraint) => `${constraint.constraintName}: ${String(constraint.constraintValue)}`).join("; "),
           index,
           kind: "image",
         });
         const creativeId = crypto.randomUUID();
         const assetId = crypto.randomUUID();
-        const imgProvider = options?.imageProviderOverride || deliv.provider || effectiveImageProvider;
+        const imageTarget = resolveProductionTarget({
+          provider: delivManifest.production!.provider,
+          model: delivManifest.production!.model,
+          capability: "IMAGE_GENERATION",
+          aspectRatio: delivManifest.format.aspectRatio,
+        });
+        const imgProvider = imageTarget.provider === "google_nano_banana" ? "google:nano-banana" : imageTarget.provider;
 
         const image = await generateImageBytes({
           provider: imgProvider,
@@ -1075,6 +1079,8 @@ export async function executeApprovedCreativePlan(
           seed: `${runId}:${deliv.kind}:${index}`,
           promptVersion: `${STUDIO_PROMPT_VERSION}#${deliv.kind}-${index + 1}`,
           allowTest: imgProvider === "test:image",
+          model: imageTarget.model,
+          aspectRatio: delivManifest.format.aspectRatio,
         });
 
         if (image.status !== "ready") {
@@ -1116,7 +1122,7 @@ export async function executeApprovedCreativePlan(
         const facts = factsFor(loaded, {
           kind: "image",
           productName,
-          angle: asText(brief.angle),
+          angle: delivManifest.concept?.mechanism || "",
           copy,
           prompt,
           mime: image.mediaType,
@@ -1152,8 +1158,8 @@ export async function executeApprovedCreativePlan(
             message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
           ) values (
             ${creativeId}, ${access.organizationId}, ${brandId}, 'generated', ${`${asText(brief.title)} ${itemLabel}`},
-            ${copy}, ${productName}, ${asText(brief.hook)}, ${"demonstration"}, ${asText(brief.angle)},
-            ${copy}, ${asText(brief.cta)}, ${asText(deliv.format || brief.format)}, ${asText(brief.proof_type)},
+            ${copy}, ${productName}, ${delivManifest.hook?.text || ""}, ${delivManifest.hook?.type || ""}, ${delivManifest.concept?.mechanism || ""},
+            ${copy}, ${""}, ${deliv.format}, ${""},
             ${asText(brief.opportunity_id) || null}, ${asText(brief.id)}, ${status}, ${userId},
             ${JSON.stringify({ generationRunId: runId, jevDecisionId: asText(brief.decision_id), provider: image.provider, model: image.model, promptVersion: image.promptVersion, kind: deliv.kind, variant: index + 1, planDeliverableId: deliv.id })}
           )
@@ -1216,26 +1222,24 @@ export async function executeApprovedCreativePlan(
           throw new Error("Brief requires human review approval before video generation.");
         }
 
-        const creativeSpec: CreativeSpec = {
-          id: manifest.creativeId,
+        const delivManifest = deliverableManifests.find((m) => m.deliverableId === deliv.id);
+        if (!delivManifest) throw new Error(`CreativePlan deliverable ${deliv.id} has no executable manifest.`);
+        const creativeSpec = creativeSpecFromManifest(delivManifest, {
           organizationId: access.organizationId,
           brandId,
           title: asText(brief.title),
-          format: asText(brief.format) || (mode === "video" ? "ugc" : mode),
-          aspectRatio: manifest.format.aspectRatio === "4:5" ? "1:1" : manifest.format.aspectRatio,
-          durationTargetSeconds: deliv.targetDurationSeconds ?? manifest.format.targetDurationSeconds ?? 8,
-          hookLine: asText(brief.hook),
-          script: `${asText(brief.hook)}\n${asText(brief.message)}\n${asText(brief.cta)}`,
-          scenes: manifest.beats.map((b, i) => ({
-            index: i,
-            description: b.visualInstruction,
-            durationSeconds: b.targetDurationSeconds ?? 2,
-            onScreenText: b.onScreenText,
-            voiceoverText: b.scriptOrCaption,
-          })),
-        };
+        });
 
-        const targetVidProvider = options?.videoProviderOverride || deliv.provider || effectiveVideoProvider;
+        const targetVidProvider = delivManifest.production!.provider;
+        const productionTarget = resolveProductionTarget({
+          provider: targetVidProvider,
+          model: creativeSpec.modelId!,
+          capability: "VIDEO_GENERATION",
+          aspectRatio: creativeSpec.aspectRatio,
+          durationSeconds: creativeSpec.durationTargetSeconds,
+        });
+        creativeSpec.providerId = productionTarget.provider;
+        creativeSpec.modelId = productionTarget.model;
         const provider = await productionRouter.route(
           creativeSpec,
           "BALANCED",
@@ -1259,7 +1263,7 @@ export async function executeApprovedCreativePlan(
             ${submittedJob.requestId || null}, ${submittedJob.statusUrl || null}, ${submittedJob.cancelUrl || null},
             ${submittedJob.status}, 'BALANCED',
             ${Math.round(submittedJob.costEstimateUsd * 100)},
-            ${JSON.stringify({ creativeSpec, runId, briefId: asText(brief.id), manifestId: manifest.creativeId, manifest, planDeliverableId: deliv.id })},
+            ${JSON.stringify({ creativeSpec, runId, briefId: asText(brief.id), manifestId: delivManifest.creativeId, manifest: delivManifest, planDeliverableId: deliv.id })},
             now(), now()
           )
           on conflict (id) do update set
@@ -1280,7 +1284,7 @@ export async function executeApprovedCreativePlan(
             rawArtifact: {
               uri: submittedJob.outputArtifactId,
               base64: (submittedJob.metadata?.videoBytesBase64 as string) || undefined,
-              mimeType: (submittedJob.metadata?.mimeType as string) || "video/mp4",
+              mimeType: (submittedJob.metadata?.mimeType as string) || undefined,
             },
             options: {
               durationMs: (creativeSpec.durationTargetSeconds ?? 8) * 1000,
@@ -1298,7 +1302,7 @@ export async function executeApprovedCreativePlan(
         } else if (finalResult?.success) {
           const videoCreativeId = crypto.randomUUID();
           const videoAssetId = crypto.randomUUID();
-          const videoCopy = `${productName}. ${asText(brief.hook)}`;
+          const videoCopy = `${productName}. ${creativeSpec.script}`;
           const storageKey = finalResult.storageKey || `${access.organizationId}/${brandId}/runs/${runId}/${videoAssetId}.mp4`;
 
           await sql`
@@ -1307,8 +1311,8 @@ export async function executeApprovedCreativePlan(
               message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
             ) values (
               ${videoCreativeId}, ${access.organizationId}, ${brandId}, 'generated', ${`${asText(brief.title)} video`},
-              ${videoCopy}, ${productName}, ${asText(brief.hook)}, ${"problem"}, ${asText(brief.angle)},
-              ${videoCopy}, ${asText(brief.cta)}, ${asText(brief.format)}, ${asText(brief.proof_type)},
+              ${videoCopy}, ${productName}, ${creativeSpec.hookLine}, ${"problem"}, ${delivManifest.concept?.mechanism || ""},
+              ${creativeSpec.script}, ${""}, ${creativeSpec.format}, ${""},
               ${asText(brief.opportunity_id) || null}, ${asText(brief.id)}, 'in_review', ${userId},
               ${JSON.stringify({
                 generationRunId: runId,
@@ -1322,7 +1326,8 @@ export async function executeApprovedCreativePlan(
             )
           `;
 
-          const videoMime = (submittedJob.metadata?.mimeType as string) || "video/mp4";
+          const videoMime = finalResult.mimeType;
+          if (!videoMime) throw new Error("Finalized video artifact has no verified MIME type.");
           await sql`
             insert into assets (
               id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
@@ -1354,7 +1359,7 @@ export async function executeApprovedCreativePlan(
         accounts: await accountSnapshots(sql, access.organizationId),
         provider: "test:publisher",
         kind: "video",
-        mime: asText(video.mime_type) || "video/mp4",
+        mime: asText(video.mime_type),
         width: video.width == null ? null : asNumber(video.width),
         height: video.height == null ? null : asNumber(video.height),
         byteSize: asNumber(video.byte_size),
@@ -1367,7 +1372,7 @@ export async function executeApprovedCreativePlan(
         angle: asText(video.angle),
         copy,
         prompt: copy,
-        mime: asText(video.mime_type) || "video/mp4",
+        mime: asText(video.mime_type),
         byteSize: asNumber(video.byte_size),
         width: video.width == null ? null : asNumber(video.width),
         height: video.height == null ? null : asNumber(video.height),
@@ -1414,7 +1419,10 @@ export async function executeApprovedCreativePlan(
 
     await sql`update briefs set status = 'used' where id = ${asText(brief.id)}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
-    await sql`update creative_plans set status = 'completed', updated_at = now() where id = ${creativePlan.id}`;
+    await transitionCreativePlan(sql, {
+      organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
+      target: "completed", reason: "All planned deliverables completed.",
+    });
     return loadSession(sql, access.organizationId, brandId, access.role);
   } catch (error) {
     if (reservationId) {
@@ -1427,10 +1435,10 @@ export async function executeApprovedCreativePlan(
       update generation_runs set status = 'failed'
       where id = ${runId} and organization_id = ${access.organizationId} and status = 'running'
     `;
-    await sql`
-      update creative_plans set status = 'failed', updated_at = now()
-      where id = ${creativePlan.id}
-    `.catch(() => {});
+    await transitionCreativePlan(sql, {
+      organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
+      target: "failed", reason: error instanceof Error ? error.message : String(error),
+    }).catch(() => {});
     throw error;
   }
 }
@@ -1442,8 +1450,7 @@ export async function approveAndExecuteCreativePlan(
   const sql = await getSql();
   const access = await requireBrand(sql, userId, data.brandId, "member");
 
-  // Atomic conditional update (P0-3)
-  const updatedPlans = await sql<{
+  const existingPlans = await sql<{
     id: string;
     organization_id: string;
     brand_id: string;
@@ -1457,16 +1464,12 @@ export async function approveAndExecuteCreativePlan(
     budget_reserved_usd: number;
     spend_cap_usd: number | null;
   }>`
-    update creative_plans
-    set status = 'executing', approved_by = ${userId}, approved_at = now(), updated_at = now()
-    where id = ${data.planId}
-      and brand_id = ${data.brandId}
-      and organization_id = ${access.organizationId}
-      and status in ('awaiting_approval', 'ready_for_approval', 'approved')
-    returning *;
+    select * from creative_plans
+    where id = ${data.planId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+    limit 1
   `;
 
-  const planRow = updatedPlans[0];
+  const planRow = existingPlans[0];
   if (!planRow) {
     const existing = await sql<{ id: string; status: string }>`
       select id, status from creative_plans
@@ -1510,6 +1513,20 @@ export async function approveAndExecuteCreativePlan(
     ? JSON.parse(planRow.plan_payload)
     : planRow.plan_payload;
 
+  await transitionCreativePlan(sql, {
+    organizationId: access.organizationId,
+    brandId: data.brandId,
+    planId: data.planId,
+    actorId: userId,
+    target: "approved",
+  });
+  await transitionCreativePlan(sql, {
+    organizationId: access.organizationId,
+    brandId: data.brandId,
+    planId: data.planId,
+    actorId: userId,
+    target: "executing",
+  });
   return executeApprovedCreativePlan(sql, access, userId, planPayload, brief);
 }
 
@@ -1520,18 +1537,14 @@ export async function rejectCreativePlan(
   const sql = await getSql();
   const access = await requireBrand(sql, userId, data.brandId, "member");
 
-  const updated = await sql`
-    update creative_plans
-    set status = 'rejected', updated_at = now()
-    where id = ${data.planId}
-      and brand_id = ${data.brandId}
-      and organization_id = ${access.organizationId}
-      and status in ('awaiting_approval', 'ready_for_approval', 'draft')
-    returning id;
-  `;
-  if (!updated[0]) {
-    throw new Error("Plan not found or not in a rejectable state.");
-  }
+  await transitionCreativePlan(sql, {
+    organizationId: access.organizationId,
+    brandId: data.brandId,
+    planId: data.planId,
+    actorId: userId,
+    target: "rejected",
+    reason: data.reason,
+  });
   return loadSession(sql, access.organizationId, data.brandId, access.role);
 }
 

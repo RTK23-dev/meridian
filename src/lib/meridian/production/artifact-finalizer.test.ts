@@ -50,6 +50,7 @@ test("finalizeProductionArtifact: persists valid media bytes to Drive and commit
   assert.equal(result.status, "COMPLETED");
   assert.equal(result.sha256, expectedSha256);
   assert.equal(result.byteSize, validMp4Bytes.byteLength);
+  assert.equal(result.mimeType, "video/mp4");
   assert.equal(storedDrivePuts.length, 1);
   assert.equal(storedDrivePuts[0].path, "org-1/brand-1/production/job-sync-101/artifact.mp4");
   assert.ok(queries.some((q) => q.includes("insert into storage_objects")));
@@ -123,4 +124,42 @@ test("finalizeProductionArtifact: missing bytes returns WAITING_FOR_ARTIFACT", a
 
   assert.equal(result.success, false);
   assert.equal(result.status, "WAITING_FOR_ARTIFACT");
+});
+
+test("finalizeProductionArtifact: verified retry reuses the stored artifact", async () => {
+  const bytes = Buffer.from("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41payload-video-sample-bytes");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  let puts = 0;
+  let gets = 0;
+  const drive = {
+    put: async () => { puts += 1; return { fileId: "unexpected" }; },
+    get: async (fileId: string) => {
+      gets += 1;
+      assert.equal(fileId, "drive-existing");
+      return { fileId, bytes: new Uint8Array(bytes), name: "artifact.mp4", mimeType: "video/mp4" };
+    },
+    delete: async () => {},
+    health: async () => ({ status: "CONFIGURED" as const, configured: true }),
+  };
+  const sql = (async (strings: TemplateStringsArray) => {
+    const query = strings.join("?");
+    if (query.includes("from storage_objects")) {
+      return [{ id: "artifact-existing", provider_file_id: "drive-existing", sha256, size_bytes: bytes.byteLength, mime_type: "video/mp4" }];
+    }
+    return [];
+  }) as unknown as Sql;
+
+  const result = await finalizeProductionArtifact(sql, {
+    jobId: "job-retry",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    provider: "google_omni",
+    rawArtifact: { bytes: new Uint8Array(bytes) },
+    options: { driveClient: drive as unknown as GoogleDriveClient },
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.artifactId, "artifact-existing");
+  assert.equal(puts, 0, "Retry must not create another Drive object");
+  assert.equal(gets, 1, "Existing object must be downloaded and verified");
 });

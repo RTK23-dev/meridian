@@ -24,6 +24,13 @@ import type {
   ProductionStep,
   AutonomyMode,
 } from "./plan.ts";
+import { modelCapabilityRegistry } from "../production/registry.ts";
+
+function modelFor(provider: string, capability: "IMAGE_GENERATION" | "VIDEO_GENERATION"): string {
+  const model = modelCapabilityRegistry.resolve({ provider, capability });
+  if (!model) throw new Error(`No registered ${capability} model is available for provider '${provider}'.`);
+  return model.model_id;
+}
 
 export interface CreativeDecisionInput {
   scope: CreationScope;
@@ -114,6 +121,17 @@ export class CreativeDecisionEngine {
         sourceId: input.jevJudgments.decisionId || "jev-rejected",
         detail: "Hard block: JEV decision is REJECT. Creative production is forbidden.",
       });
+    } else if (input.jevJudgments?.status?.startsWith("abstain_")) {
+      effectiveFormat = "abstain";
+      chosenFormatDesc = `JEV is inadmissible (${input.jevJudgments.status}); no production deliverables may be created.`;
+      whyOtherFormatsRejected.all_media = "JEV response was not admissible for production.";
+      rationales.push({
+        topic: "jev_admissibility_block",
+        claim: "JEV response is inadmissible",
+        groundedIn: "policy_rule",
+        sourceId: input.jevJudgments.decisionId || "jev-inadmissible",
+        detail: chosenFormatDesc,
+      });
     } else if (scope === "image_only") {
       effectiveFormat = "image";
       chosenFormatDesc = "User explicitly specified image_only scope.";
@@ -195,6 +213,8 @@ export class CreativeDecisionEngine {
     const vidProvider = (input.preferredVideoProvider && input.preferredVideoProvider !== "none")
       ? (input.preferredVideoProvider === "omni" ? "google_omni" : input.preferredVideoProvider)
       : "google_omni";
+    const imgModel = ["image", "carousel", "mixed"].includes(effectiveFormat) ? modelFor(imgProvider, "IMAGE_GENERATION") : "";
+    const vidModel = ["video", "mixed"].includes(effectiveFormat) ? modelFor(vidProvider, "VIDEO_GENERATION") : "";
 
     // 1. Build Deliverables & Production Steps strictly according to effectiveFormat
     if (effectiveFormat === "image") {
@@ -210,7 +230,7 @@ export class CreativeDecisionEngine {
           copy: `${input.brief.hook}\n${input.brief.message}\n${input.brief.cta}`,
           aspectRatio: input.brief.aspectRatio || "1:1",
           provider: imgProvider as any,
-          model: "gemini-nano-banana-2.1",
+          model: imgModel,
         });
 
         productionPlan.push({
@@ -218,7 +238,7 @@ export class CreativeDecisionEngine {
           deliverableId: delivId,
           action: "generate_image",
           providerId: imgProvider,
-          modelId: "gemini-nano-banana-2.1",
+          modelId: imgModel,
           estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
         });
       }
@@ -236,7 +256,7 @@ export class CreativeDecisionEngine {
         aspectRatio: input.brief.aspectRatio || "9:16",
         targetDurationSeconds: targetSec,
         provider: vidProvider as any,
-        model: "gemini-omni-1.1-flash",
+        model: vidModel,
       });
 
       productionPlan.push({
@@ -244,7 +264,7 @@ export class CreativeDecisionEngine {
         deliverableId: delivId,
         action: "generate_video",
         providerId: vidProvider,
-        modelId: "gemini-omni-1.1-flash",
+        modelId: vidModel,
         estimatedCostUsd: vidProvider.startsWith("test:") ? 0 : Number((targetSec * 0.15).toFixed(2)),
       });
     } else if (effectiveFormat === "carousel") {
@@ -267,7 +287,7 @@ export class CreativeDecisionEngine {
           altText: slides[i],
           aspectRatio: "1:1",
           provider: imgProvider as any,
-          model: "gemini-nano-banana-2.1",
+          model: imgModel,
         });
 
         productionPlan.push({
@@ -275,7 +295,7 @@ export class CreativeDecisionEngine {
           deliverableId: delivId,
           action: "generate_image",
           providerId: imgProvider,
-          modelId: "gemini-nano-banana-2.1",
+          modelId: imgModel,
           estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
         });
       }
@@ -292,14 +312,14 @@ export class CreativeDecisionEngine {
         aspectRatio: "9:16",
         targetDurationSeconds: 8,
         provider: vidProvider as any,
-        model: "gemini-omni-1.1-flash",
+        model: vidModel,
       });
       productionPlan.push({
         stepId: "step-mixed-vid",
         deliverableId: vidDelivId,
         action: "generate_video",
         providerId: vidProvider,
-        modelId: "gemini-omni-1.1-flash",
+        modelId: vidModel,
         estimatedCostUsd: vidProvider.startsWith("test:") ? 0 : 1.20,
       });
 
@@ -314,14 +334,14 @@ export class CreativeDecisionEngine {
           copy: input.brief.message,
           aspectRatio: "1:1",
           provider: imgProvider as any,
-          model: "gemini-nano-banana-2.1",
+          model: imgModel,
         });
         productionPlan.push({
           stepId: `step-mixed-slide-${i + 1}`,
           deliverableId: slideId,
           action: "generate_image",
           providerId: imgProvider,
-          modelId: "gemini-nano-banana-2.1",
+          modelId: imgModel,
           estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
         });
       }
@@ -337,14 +357,14 @@ export class CreativeDecisionEngine {
           copy: input.brief.cta,
           aspectRatio: "1:1",
           provider: imgProvider as any,
-          model: "gemini-nano-banana-2.1",
+          model: imgModel,
         });
         productionPlan.push({
           stepId: `step-mixed-img-${i + 1}`,
           deliverableId: imgId,
           action: "generate_image",
           providerId: imgProvider,
-          modelId: "gemini-nano-banana-2.1",
+          modelId: imgModel,
           estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
         });
       }
@@ -472,6 +492,7 @@ export class CreativeDecisionEngine {
         {
           primaryProvider: "google_omni",
           fallbackProvider: "higgsfield",
+          fallbackModel: "higgsfield-video-v1",
           triggerCondition: "provider_unavailable",
           permitted: true,
         },

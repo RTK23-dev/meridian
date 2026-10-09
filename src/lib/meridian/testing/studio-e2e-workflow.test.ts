@@ -82,7 +82,7 @@ test("Studio E2E Workflow 1: Single Source of Truth & Deliverables Fidelity", as
     brand_id: brandId,
     brief_id: briefId,
     version: plan.version,
-    status: "awaiting_approval",
+    status: "executing",
     scope: plan.scope,
     autonomy: plan.autonomy,
     objective: plan.objective,
@@ -94,30 +94,29 @@ test("Studio E2E Workflow 1: Single Source of Truth & Deliverables Fidelity", as
   const mockSql = (async (strings: TemplateStringsArray, ...values: any[]) => {
     const q = strings.join("?");
 
-    if (q.includes("update creative_plans") && q.includes("set status = 'executing'")) {
-      const p = dbPlans.get(values[4]);
-      if (p && p.status === "awaiting_approval") {
-        p.status = "executing";
-        p.approved_by = values[0];
-        p.approved_at = new Date().toISOString();
-        return [p];
+    if (q.includes("with updated as") && q.includes("update creative_plans")) {
+      const plan = dbPlans.get(values[4]);
+      if (plan) {
+        plan.status = values[0];
+        if (values[0] === "approved") plan.approved_by = values[2];
+        return [plan];
       }
       return [];
     }
 
-    if (q.includes("update creative_plans") && q.includes("set status = 'completed'")) {
-      const p = dbPlans.get(values[0]);
-      if (p) p.status = "completed";
-      return [];
+    if (q.includes("inserted_reservation")) {
+      return [{
+        id: "res-mock", organization_id: orgId, brand_id: brandId, account_id: "acct-mock",
+        creative_plan_id: plan.id, production_job_id: null, amount_micros: 1_000_000n,
+        status: "RESERVED", created_at: new Date().toISOString(), expires_at: new Date().toISOString(),
+      }];
     }
-
-    if (q.includes("update creative_plans") && q.includes("set status = 'rejected'")) {
-      const p = dbPlans.get(values[0]);
-      if (p && (p.status === "awaiting_approval" || p.status === "draft")) {
-        p.status = "rejected";
-        return [p];
-      }
-      return [];
+    if (q.includes("inserted_ledger") && q.includes("actual_spent_micros")) {
+      return [{
+        id: "res-mock", organization_id: orgId, brand_id: brandId, account_id: "acct-mock",
+        amount_micros: 1_000_000n, actual_spent_micros: 1_000_000n, status: "RECONCILED",
+        created_at: new Date().toISOString(), expires_at: new Date().toISOString(), overage_micros: 0n,
+      }];
     }
 
     if (q.includes("from creative_plans") && q.includes("where id =")) {

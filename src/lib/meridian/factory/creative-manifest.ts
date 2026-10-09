@@ -165,6 +165,8 @@ export interface CreativeManifest {
   production?: {
     provider: string;
     model: string;
+    requestedProvider?: string;
+    requestedModel?: string;
     fallbackUsed?: boolean;
     fallbackReason?: string;
   };
@@ -310,7 +312,7 @@ export function manifestFromCreativePlan(
 ): CreativeManifest {
   // 1. Resolve Provider via fallback plan if primary provider is unavailable
   let resolvedProvider = deliverable.provider;
-  const resolvedModel = deliverable.model;
+  let resolvedModel = deliverable.model;
   let fallbackUsed = false;
   let fallbackReason: string | undefined;
 
@@ -320,6 +322,10 @@ export function manifestFromCreativePlan(
     );
     if (fallback) {
       resolvedProvider = fallback.fallbackProvider;
+      if (!fallback.fallbackModel) {
+        throw new Error(`Fallback provider '${fallback.fallbackProvider}' has no paired fallback model in CreativePlan.`);
+      }
+      resolvedModel = fallback.fallbackModel;
       fallbackUsed = true;
       fallbackReason = fallback.triggerCondition;
     } else {
@@ -469,6 +475,8 @@ export function manifestFromCreativePlan(
     production: {
       provider: resolvedProvider,
       model: resolvedModel,
+      requestedProvider: deliverable.provider,
+      requestedModel: deliverable.model,
       fallbackUsed,
       fallbackReason,
     },

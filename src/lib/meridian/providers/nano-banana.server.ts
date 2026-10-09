@@ -88,6 +88,8 @@ export function normalizeGoogleImageResponse(body: unknown): NormalizedImageBloc
 export async function generateNanoBananaImage(input: {
   prompt: string;
   promptVersion: string;
+  model?: string;
+  aspectRatio?: string;
   env?: Record<string, string | undefined>;
   fetchImpl?: typeof fetch;
 }): Promise<ImageResult> {
@@ -102,6 +104,13 @@ export async function generateNanoBananaImage(input: {
   }
 
   const model = input.env?.GOOGLE_NANO_BANANA_MODEL?.trim() || resolved.imageModel;
+  if (input.model && input.model !== model) {
+    return {
+      status: "failed",
+      provider: "google:nano-banana",
+      error: `CreativePlan model '${input.model}' does not match configured image model '${model}'. No image was generated.`,
+    };
+  }
   const started = Date.now();
   const fetchImpl = input.fetchImpl ?? fetch;
 
@@ -118,7 +127,7 @@ export async function generateNanoBananaImage(input: {
         response_format: {
           type: "image",
           mime_type: "image/png",
-          aspect_ratio: "9:16",
+          aspect_ratio: input.aspectRatio || "9:16",
           image_size: "1K",
         },
       }),

@@ -112,7 +112,7 @@ export class ProviderConfigResolver {
     const model =
       (typeof input?.vaultCustomFields?.model === "string" ? input.vaultCustomFields.model.trim() : undefined) ||
       env.HIGGSFIELD_MODEL?.trim() ||
-      "higgsfield-standard";
+      "higgsfield-video-v1";
 
     return {
       apiKey,

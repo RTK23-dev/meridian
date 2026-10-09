@@ -177,11 +177,64 @@ export class GoogleDriveClient {
     });
 
     const sha256 = createHash("sha256").update(input.bytes).digest("hex");
+    const storageKeyHash = createHash("sha256").update(input.path).digest("hex");
+    const existingQuery = [
+      `'${parentFolderId}' in parents`,
+      `appProperties has { key='meridian_storage_key_hash' and value='${storageKeyHash}' }`,
+      "trashed = false",
+    ].join(" and ");
+    const existingRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(existingQuery)}&fields=files(id,name,mimeType,size,appProperties,webViewLink)`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!existingRes.ok) {
+      throw new Error(`Google Drive upload reconciliation failed (${existingRes.status}): ${await existingRes.text()}`);
+    }
+    const existingData = (await existingRes.json()) as {
+      files?: Array<{
+        id: string;
+        name: string;
+        mimeType: string;
+        size?: string;
+        webViewLink?: string;
+        appProperties?: Record<string, string>;
+      }>;
+    };
+    const existing = existingData.files?.[0];
+    if (existing) {
+      const properties = existing.appProperties || {};
+      if (
+        properties.organizationId !== input.organizationId ||
+        properties.brandId !== input.brandId ||
+        properties.sha256 !== sha256
+      ) {
+        throw new Error("Google Drive storage key already exists with different tenant ownership or content.");
+      }
+      const stored = await this.get(existing.id);
+      const storedSha256 = createHash("sha256").update(stored.bytes).digest("hex");
+      if (storedSha256 !== sha256 || stored.bytes.byteLength !== input.bytes.byteLength) {
+        throw new Error("Google Drive existing object failed idempotent upload verification.");
+      }
+      return {
+        fileId: existing.id,
+        name: existing.name,
+        mimeType: existing.mimeType || input.mimeType,
+        size: existing.size ? Number(existing.size) : stored.bytes.byteLength,
+        checksum: sha256,
+        webViewLink: existing.webViewLink,
+      };
+    }
 
     const fileMetadata = {
       name: fileName,
       parents: [parentFolderId],
       properties: {
+        sha256,
+        organizationId: input.organizationId,
+        brandId: input.brandId,
+      },
+      appProperties: {
+        meridian_storage_key_hash: storageKeyHash,
         sha256,
         organizationId: input.organizationId,
         brandId: input.brandId,

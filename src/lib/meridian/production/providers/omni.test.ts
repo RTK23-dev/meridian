@@ -228,7 +228,7 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
   const dbUpdates: Array<string> = [];
   const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
     const query = strings.join("?");
-    if (query.includes("select id, organization_id")) {
+    if (query.includes("with candidates as") && query.includes("returning jobs.id")) {
       return [
         {
           id: "prod-job-omni-1",

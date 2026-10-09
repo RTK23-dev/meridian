@@ -60,6 +60,7 @@ export interface ArtifactFinalizeResult {
   storageKey?: string;
   sha256?: string;
   byteSize?: number;
+  mimeType?: string;
   errorCode?: string;
   error?: string;
 }
@@ -206,6 +207,67 @@ export async function finalizeProductionArtifact(
   const isVideo = mimeType.startsWith("video/");
   const ext = isVideo ? "mp4" : mimeType === "image/jpeg" ? "jpg" : mimeType === "image/webp" ? "webp" : "png";
   const storageKey = `${input.organizationId}/${input.brandId}/production/${input.jobId}/artifact.${ext}`;
+
+  // Recover a prior verified write rather than creating another Drive object on retry.
+  const existingObjects = await sql<{
+    id: string;
+    provider_file_id: string;
+    sha256: string;
+    size_bytes: string | number | bigint;
+    mime_type: string;
+  }>`
+    select id, provider_file_id, sha256, size_bytes, mime_type
+    from storage_objects
+    where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and name = ${storageKey}
+    limit 1
+  `;
+  const existingObject = existingObjects[0];
+  if (existingObject) {
+    if (existingObject.sha256 !== sha256 || BigInt(existingObject.size_bytes) !== BigInt(byteSize) || existingObject.mime_type !== mimeType) {
+      return {
+        success: false,
+        status: "STORAGE_PERSISTENCE_FAILED",
+        errorCode: "ARTIFACT_IDEMPOTENCY_CONFLICT",
+        error: "This production job already has a different stored artifact; refusing to overwrite it.",
+      };
+    }
+    try {
+      const stored = await drive.get(existingObject.provider_file_id);
+      const storedHash = stored?.bytes ? createHash("sha256").update(stored.bytes).digest("hex") : "";
+      const storedType = stored?.bytes ? detectArtifactType(stored.bytes).mimeType : "";
+      if (!stored?.bytes || storedHash !== sha256 || stored.bytes.byteLength !== byteSize || storedType !== mimeType) {
+        throw new ArtifactIntegrityError("Existing stored artifact failed read-after-write verification.");
+      }
+      await sql`
+        update production_jobs set status = 'COMPLETED', artifact_id = ${existingObject.id},
+          error_code = null, last_polled_at = now(), updated_at = now()
+        where id = ${input.jobId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
+      `;
+      if (input.runId) {
+        await sql`
+          update assets set media_status = 'completed', lifecycle = 'stored', qa_decision = 'auto_approved',
+            checksum = ${sha256}, byte_size = ${byteSize}
+          where generation_run_id = ${input.runId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
+        `;
+      }
+      return {
+        success: true,
+        status: "COMPLETED",
+        artifactId: existingObject.id,
+        storageKey,
+        sha256,
+        byteSize,
+        mimeType,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        status: "STORAGE_PERSISTENCE_FAILED",
+        errorCode: "ARTIFACT_INTEGRITY_MISMATCH",
+        error: `Existing artifact retry verification failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
 
   // 5. Durably store in Google Drive object store
   let driveResult: { fileId: string; webViewLink?: string } | undefined;
@@ -360,5 +422,6 @@ export async function finalizeProductionArtifact(
     storageKey,
     sha256,
     byteSize,
+    mimeType,
   };
 }

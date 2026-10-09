@@ -55,6 +55,9 @@ test("Discovery Lease: safe claiming, heartbeat, and transactional expansion", a
   const heartbeated = await DiscoveryFrontierService.heartbeat(sql, {
     itemId: item1.id,
     workerId: "worker-1",
+    organizationId: orgId,
+    brandId,
+    runId,
     leaseSeconds: 60,
   });
   assert.equal(heartbeated, true, "Heartbeat must succeed for lease owner");
@@ -63,6 +66,9 @@ test("Discovery Lease: safe claiming, heartbeat, and transactional expansion", a
   const badHeartbeat = await DiscoveryFrontierService.heartbeat(sql, {
     itemId: item1.id,
     workerId: "worker-impostor",
+    organizationId: orgId,
+    brandId,
+    runId,
   });
   assert.equal(badHeartbeat, false, "Heartbeat by wrong worker must fail");
 
@@ -70,6 +76,9 @@ test("Discovery Lease: safe claiming, heartbeat, and transactional expansion", a
   const processing = await DiscoveryFrontierService.markProcessing(sql, {
     itemId: item1.id,
     workerId: "worker-1",
+    organizationId: orgId,
+    brandId,
+    runId,
   });
   assert.equal(processing, true, "Mark processing must succeed");
 
@@ -87,6 +96,20 @@ test("Discovery Lease: safe claiming, heartbeat, and transactional expansion", a
       "https://example.com/page-2",
     ],
   });
+
+  await assert.rejects(
+    DiscoveryFrontierService.completeItem(sql, {
+      itemId: item1.id,
+      workerId: "worker-1",
+      organizationId: orgId,
+      brandId,
+      runId,
+      currentDepth: 0,
+      maxDepth: 2,
+      discoveredLinks: ["https://example.com/duplicate-retry"],
+    }),
+    /lost its lease/,
+  );
 
   // Verify item1 is completed
   const rows = await sql<Record<string, unknown>>`
@@ -107,4 +130,10 @@ test("Discovery Lease: safe claiming, heartbeat, and transactional expansion", a
   assert.equal(expandedItem.status, FrontierStatus.LEASED);
   assert.equal(expandedItem.leaseOwner, "worker-2");
   assert.equal(expandedItem.depth, 1);
+
+  const urls = await sql<{ count: number }>`
+    select count(*)::int as count from discovery_frontier
+    where run_id = ${runId} and organization_id = ${orgId} and brand_id = ${brandId}
+  `;
+  assert.equal(urls[0].count, 3, "A failed completion retry must not expand links a second time.");
 });
