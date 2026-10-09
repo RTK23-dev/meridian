@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import type { Transport } from "../providers/http.ts";
 import { uploadMetaVideo } from "../providers/meta.ts";
-import { normalizeReviewerDecision } from "../jev/reviewer-decision.ts";
+import { evaluateJevGate } from "../jev/reviewer-decision.ts";
 
 type StoredVideo = {
   status: "stored"; externalId: string; reused: boolean;
@@ -92,8 +92,11 @@ export async function publishHypitVideoToMeta(
     where id = ${jevDecisionId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId} limit 1
   `;
   const decision = decisions[0];
-  if (!decision || !(decision.decision === "AUTO_APPROVE" ||
-      (decision.decision === "HUMAN_REVIEW" && normalizeReviewerDecision(asText(decision.reviewer_decision)) === "approved"))) {
+  const gate = evaluateJevGate({
+    decision: asText(decision?.decision),
+    reviewerDecision: asText(decision?.reviewer_decision),
+  });
+  if (!decision || gate.status !== "ALLOW") {
     return reject("JEV has not approved this creative. Nothing was sent.");
   }
   const blobs = await sql<Record<string, unknown>>`

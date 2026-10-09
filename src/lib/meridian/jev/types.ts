@@ -159,6 +159,9 @@ export type JevDecisionResponse = {
   cached: boolean;
   latencyMs: number;
   answers: Record<string, JevAnswer>;
+  requestedProvider?: string;
+  requestedModel?: string;
+  fallbackUsed?: boolean;
   fallbackFrom?: string;
   fallbackReason?: string;
   comparison?: {

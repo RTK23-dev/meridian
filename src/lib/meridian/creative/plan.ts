@@ -21,10 +21,12 @@ export type AutonomyMode =
 
 export type CreativePlanStatus =
   | "draft"
+  | "ready_for_approval"
   | "awaiting_approval"
   | "approved"
   | "executing"
   | "completed"
+  | "partially_completed"
   | "failed"
   | "cancelled"
   | "abstained"
@@ -77,6 +79,31 @@ export interface CreativeDeliverable {
   model: string;
   dependsOnDeliverableIds?: string[];
   metadata?: Record<string, any>;
+  hook?: {
+    type?: string;
+    text?: string;
+    visual?: string;
+  };
+  concept?: {
+    mechanism?: string;
+    theme?: string;
+  };
+  scenes?: Array<{
+    id?: string;
+    description: string;
+    durationSeconds?: number;
+    visualInstruction?: string;
+    scriptOrCaption?: string;
+    onScreenText?: string;
+  }>;
+  shots?: any[];
+  dialogue?: string;
+  narration?: string;
+  onScreenText?: string;
+  visualDirection?: string;
+  audioDirection?: string;
+  assets?: any[];
+  assetRequirements?: any[];
 }
 
 export interface DecisionRationale {

@@ -268,6 +268,30 @@ export class ModelCapabilityRegistry {
       usable: record.availability_state === "ACTIVE" || record.availability_state === "PREVIEW",
     };
   }
+
+  /**
+   * Resolves the active recommended model for a provider and capability.
+   */
+  resolve(options: {
+    provider: string;
+    capability: "VIDEO_GENERATION" | "IMAGE_GENERATION" | "EDIT" | "EXTEND";
+    asOfDate?: Date;
+  }): ModelCapabilityRecord | undefined {
+    const list = this.listModels(options.provider);
+    const taskMap: Record<string, string> = {
+      VIDEO_GENERATION: "text-to-video",
+      IMAGE_GENERATION: "text-to-image",
+      EDIT: "edit",
+      EXTEND: "extend",
+    };
+    const targetTask = taskMap[options.capability] || options.capability.toLowerCase();
+    const candidate = list.find((m) => {
+      const lifecycle = this.checkModelLifecycle(m.model_id, options.asOfDate);
+      return lifecycle.usable && m.supported_tasks.includes(targetTask);
+    });
+    return candidate;
+  }
 }
 
 export const modelCapabilityRegistry = new ModelCapabilityRegistry();
+export const ModelRegistry = modelCapabilityRegistry;

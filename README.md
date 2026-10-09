@@ -1,7 +1,7 @@
 # Meridian
 
-> **Multi-Tenant Autonomous Creative Operating System**  
-> Evidence-led advertising & organic content factory, JEV deterministic policy engine, multimodal video production, modular flow pipelines, and closed-loop Bayesian learning.
+> **Multi-Tenant Advertising Operating System**  
+> Evidence-led creative intelligence, deterministic policy gating, multimodal production routing, durable budget controls, and closed-loop telemetry learning. Built on TanStack Start, React 19, Tailwind v4, and PostgreSQL.
 
 [![CI](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml/badge.svg)](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -9,117 +9,83 @@
 
 ---
 
-## Autonomous Closed-Loop Architecture
+## Overview
 
-Meridian continuously harvests evidence, analyzes high-performing creative divergence, gates variants through deterministic policies, produces videos across AI rendering engines, distributes to paid and organic channels, and feeds verified telemetry back into Bayesian posteriors:
+Meridian automates the end-to-end advertising lifecycle with strict architectural guarantees:
 
+```text
+Research & Discovery (Durable Frontier Leased)
+  ↓
+Normalized Evidence (Tenant-Scoped)
+  ↓
+JEV Policy Gate (Deterministic Evaluation & Claims QA)
+  ↓
+Creative Plan (State Machine: Draft → Approved)
+  ↓
+Budget Ledger (Atomic Micro-Unit Reservation)
+  ↓
+Creative Manifest (Deterministic Projection from Plan)
+  ↓
+Production Router (Gemini Omni, Image, Higgsfield, Hypit, Manual)
+  ↓
+Artifact Finalizer (Byte-Hash Verification & Fail-Closed MIME)
+  ↓
+Postflight QC
+  ↓
+Publishing & Performance Telemetry
+  ↓
+Learning Flywheel (Bayesian Priors & Recency Weighting)
 ```
-┌───────────────────────────────────────────────────────────────────────────────┐
-│                           MERIDIAN AUTONOMOUS FLYWHEEL                        │
-└───────────────────────────────────────────────────────────────────────────────┘
-                                       │
-     1. DISCOVER                       ▼                       2. STUDY & GATE
- ┌──────────────────────┐    ┌────────────────────┐    ┌─────────────────────────┐
- │ Research Frontier    │───▶│ Deep Study Contrast│───▶│ JEV Decision Gates      │
- │ Crawl Ladder / Meta  │    │ 11D Angle Bible    │    │ Claim QA & Originality  │
- └──────────────────────┘    └────────────────────┘    └─────────────────────────┘
-                                                                    │
-                                                                    ▼
-     5. CONTINUOUS LEARNING            4. DISTRIBUTE           3. PRODUCE
- ┌──────────────────────┐    ┌────────────────────┐    ┌─────────────────────────┐
- │ Bayesian Posteriors  │◀───│ Selective Channels │◀───│ ProductionRouter        │
- │ Recency-Decay Weights│    │ Paid Ads & Organic │    │ Gemini Omni / Veo / ... │
- └──────────────────────┘    └────────────────────┘    └─────────────────────────┘
-```
-
-> **Core Invariant**: A provider or channel remains **NOT CONNECTED** until real credentials succeed. Meridian never invents ad accounts, delivery metrics, publish receipts, or connected states. Missing data is stored as `null`, never defaulted to synthetic zeros or fabricated certainty.
 
 ---
 
-## Core Capabilities
+## Core Guarantees
 
-### 1. JEV Deterministic Decision Engine & Dual Router
-- **Native System One Primitives**: Executes structured decisions using TypeSafe's native primitives:
-  - `choice`: Discrete classification with probability distributions.
-  - `noul`: Direct probabilistic necessity gate ($P \in [0, 1]$) with no fabricated confidence.
-  - `score`: Ordered rubric evaluation against explicit criteria.
-- **Dual Provider Routing**: `JevProviderRouter` supports direct TypeSafe AI (`typesafe_direct`) and OpenRouter Decisions API (`openrouter` with `typesafe/jev-1.13`) across `AUTO`, `TYPESAFE_DIRECT`, `OPENROUTER`, and `COMPARE` modes.
-- **Fail-Closed & Evidence Sufficiency**: Requires observed evidence declared in `evidenceRequirements`. If evidence is missing, JEV returns `abstain_insufficient_evidence` and halts rather than hallucinating answers. Never falls back to generic chat completions.
-- **Provenance Inspection**: The interactive `WhyThisDrawer` inspects question versions, model provenance, evidence references, and calibration lineage for any judgment.
+1. **Truthful States & No Invented Data**  
+   Meridian never fabricates ad accounts, performance metrics, publish receipts, or connected states. Unconfigured services visibly stay `NOT CONNECTED`. Missing metrics remain `null`, never coerced into synthetic zeros.
 
-### 2. Workspace Provider Configuration & Vault
-- **Encrypted Credential Storage**: All provider API keys and tokens are encrypted at rest with AES-256-GCM in the workspace vault (`credential_vault`).
-- **Zero Secrets Leaked**: The UI returns only masked key fingerprints (`...1234`), never raw tokens.
-- **SSRF Prevention**: All configurable endpoints (e.g. Cyclone Gateway, custom proxy URLs) are validated through strict SSRF address screening (`publicUrlIssue`) before any network probe.
-- **Interactive UI**: Manage credentials and operational parameters directly in the web app under **Settings → Provider Integrations** (`/settings`).
+2. **Deterministic Policy Evaluation (JEV)**  
+   Semantic decisions run through TypeSafe Decisions API and OpenRouter with strict evidence requirements. Missing evidence triggers an explicit abstention (`abstain_insufficient_evidence`) rather than hallucinated approvals. No generic chat fallback is ever used for decision gates.
 
-### 3. Research Frontier & Public Crawl Ladder
-- **Budgeted Crawl Ladder**: Safe, multi-step public crawler (`crawlLadderPage`):
-  1. SSRF destination screening.
-  2. Public HTTP fetch with size boundaries.
-  3. Structured OpenGraph, JSON-LD, and page metadata extraction.
-  4. Heuristic repeated content card detection (`<article>`, `.card`, `.post`).
-  5. Same-host outbound link discovery.
-- **Honest Metrics**: Cards without visible performance explicitly store `{ value: null, state: "UNAVAILABLE" }`, preventing fabricated vanity metrics.
+3. **Durable Budget Ledger & Concurrency Safety**  
+   Financial operations use integer micro-units (`1 USD = 1,000,000 micros`, `bigint`) to eliminate floating-point drift. Budget reservations are atomic conditional database updates. A two-phase lifecycle (`RESERVE` → `RECONCILE` / `RELEASE`) guarantees budget caps are strictly enforced even under concurrent executions.
 
-### 4. Deep Study, Contrast Engine & Concept Library
-- **Outlier vs. Baseline Contrast**: `DeepStudyContrastEngine` analyzes viral breakout reels against baseline controls to identify the causal drivers of engagement:
-  - Hook divergence and pattern interrupt mechanisms.
-  - Cut pacing and audio prosody.
-  - Comment objection and intent mining.
-- **11D Angle Bible & Concept Genome**: Maps observed mechanisms into the versioned 11D Angle Bible framework, generating structured `ConceptGenome` entities.
-- **Four Distinct Opportunity Targets**:
-  1. *Observed Breakout Score* (empirical lift over creator baseline).
-  2. *Creative Concept Strength* (Angle Bible dimension weights).
-  3. *Transfer Potential* (brand and product fit).
-  4. *Business Potential* (conversion and ROAS telemetry).
+4. **Byte-Verified Storage & Artifact Integrity**  
+   All rendered artifacts undergo magic-byte signature inspection (PNG, JPEG, MP4, WebM) and a post-upload SHA-256 round-trip verification. If bytes cannot be safely persisted and verified from storage, jobs fail closed (`STORAGE_PERSISTENCE_FAILED`).
 
-### 5. Creative Decision Engine & ProductionRouter
-- **Versioned Creative Plan**: `CreativeDecisionEngine` translates JEV semantic judgments and constraints into a typed `CreativePlan`, strictly respecting `creationScope` (`image_only`, `video_only`, `carousel_only`, `mixed_campaign`, `research_only`) and `autonomy` mode (`manual`, `semi_automatic`, `fully_automatic`). Research-only plans never trigger production jobs.
-- **Unified Media Production**: Production compiles to canonical `CreativeSpec` objects, routed across configured providers:
-  - **Google Gemini Omni Flash**: Generative video editing and text/image-to-video via official Interactions API.
-  - **Google Gemini Nano Banana**: High-fidelity creative image generation (`gemini-nano-banana-2.1`, `gemini-3.1-flash-lite-image`, `gemini-3-pro-image`, `gemini-3.1-flash-image`).
-  - **Google Veo**: Stable GA video models (`veo-2.0-generate-001`).
-  - **Higgsfield AI**: Camera-directed generative video.
-  - **Hypit Engine**: Local multi-track UGC video assembly bridge.
-  - **ManualCloud (Zero Spend)**: Generates production manifests and drop-folder structures for manual editing workflows.
-- **Durable Job Poller & Artifact Finalizer**: Claims jobs with `SELECT ... FOR UPDATE SKIP LOCKED`, normalizes media bytes, and commits to Google Drive object storage (`finalizeProductionArtifact`). Fails closed with `STORAGE_PERSISTENCE_FAILED` on storage failure—jobs are never marked `COMPLETED` prematurely.
+5. **Durable Discovery Frontier**  
+   Crawling and discovery queues are backed by PostgreSQL using atomic `SELECT ... FOR UPDATE SKIP LOCKED` leases, heartbeat renewal, and automated recovery of stale or interrupted work across restarts.
 
-### 6. Closed-Loop Bayesian Learning Flywheel
-- **Empirical Beta Posteriors**: Tracks winning formulas using conjugate Beta-binomial distributions from verified ad and organic telemetry.
-- **Exponential Recency-Decay**: 14-day half-life ensures recent performance informs upcoming briefs without historical campaign distortion.
-- **Hierarchical Cold-Start Priors**: Regularizes new brands using category baselines without compromising multi-tenant privacy.
-- **FDR Control**: Benjamini-Hochberg false-discovery rate filtering eliminates statistical anomalies.
+6. **Tenant Isolation & Security**  
+   Role checks (`hasRole`) protect every mutation, and strict tenant isolation protects every server function. Provider API keys are encrypted at rest with AES-256-GCM in the credential vault with SSRF screening on all outbound network requests.
 
 ---
 
 ## Quick Start
 
 ### Prerequisites
-- Node.js 22+
-- PostgreSQL 16+ (or local embedded PGlite for evaluation)
-- FFmpeg & FFprobe (optional for tests, required for real media processing)
+- **Node.js 22+**
+- **PostgreSQL 16+** (or embedded PGlite for local testing)
+- **FFmpeg & FFprobe** (optional for local testing, required for real video processing)
 
 ### 1. Installation
 ```bash
 git clone https://github.com/RTK23-dev/meridian.git
 cd meridian
-npm install
+npm ci
 cp .env.example .env
 ```
 
-### 2. Database Setup
+### 2. Database Migration
 ```bash
-# Set DATABASE_URL in .env, then apply migrations:
+# Migrates database when DATABASE_URL is set in .env
+# (PGlite embedded database migrates automatically when DATABASE_URL is unset)
 npm run db:migrate
-
-# Or launch local embedded PGlite database:
-npm run db:local
 ```
 
-### 3. Run Applications
+### 3. Running Services
 ```bash
-# Terminal 1: Web Interface & Server Functions (http://localhost:8080)
+# Terminal 1: Web Application (http://localhost:8080)
 npm run dev
 
 # Terminal 2: Background Job Worker
@@ -133,52 +99,54 @@ npm run scheduler
 
 ## Quality Gates & Verification
 
-All releases enforce complete verification before merge:
+Every merge and release candidate must pass all four quality gates:
 
 ```bash
-# Run 550 automated tests across 16 test suites (including 35 Historical Regressions and 9 Beta.8 Audit Gates)
+# 1. Run all unit and integration test suites (590+ tests)
 npm test
 
-# Verify strict TypeScript compilation (0 errors)
+# 2. Strict TypeScript type check
 npm run typecheck
 
-# Verify ESLint standards (0 errors, 0 warnings)
+# 3. Linting rules
 npm run lint
 
-# Compile production bundle with Nitro & PGlite assets
+# 4. Production build verification
 npm run build
 ```
 
 ---
 
-## Configuration & Environment Variables
+## Configuration
+
+Configure environment variables in `.env`:
 
 | Variable | Description | Default / Fallback |
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL connection string | PGlite embedded if unset |
-| `TOKEN_ENCRYPTION_KEY` | AES-256-GCM encryption key for vault | Required for credential vault |
+| `TOKEN_ENCRYPTION_KEY` | AES-256-GCM 32-byte hex key for vault | Required for credential vault |
 | `MERIDIAN_JEV_PROVIDER` | JEV provider (`typesafe_direct` or `openrouter`) | `typesafe_direct` |
-| `TYPESAFE_JEV_API_KEY` | Direct TypeSafe Decisions API key | Falls back to OpenRouter if unset |
-| `OPENROUTER_API_KEY` | OpenRouter gateway key for JEV and Research | Required for OpenRouter route |
-| `MERIDIAN_GEMINI_API_KEY` | Google AI Studio key for Gemini Omni / Veo | Required for Gemini production |
+| `TYPESAFE_JEV_API_KEY` | TypeSafe Decisions API key | Falls back to OpenRouter if unset |
+| `OPENROUTER_API_KEY` | OpenRouter API key | Required for OpenRouter route |
+| `MERIDIAN_GEMINI_API_KEY`| Google AI Studio key for Gemini Omni / Veo | Required for Gemini production |
 | `HIGGSFIELD_API_KEY` | Higgsfield AI video generation key | Required for Higgsfield models |
-| `GOOGLE_DRIVE_FOLDER_ID` | Root Google Drive folder for media storage | Required for Drive store |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Google Service Account credentials | Required for Drive store |
-| `HYPIT_BASE_URL` | Hypit local HTTP bridge URL | `HYPIT_NOT_CONNECTED` if unset |
+| `GOOGLE_DRIVE_FOLDER_ID`| Root Google Drive folder ID for object storage | Required for Drive store |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account credentials JSON | Required for Drive store |
+| `HYPIT_BASE_URL` | Local Hypit video assembly bridge URL | `HYPIT_NOT_CONNECTED` if unset |
 
 ---
 
-## Documentation Index
+## Documentation
 
-- [Local & Production Setup Guide](docs/SETUP.md)
-- [System Architecture & Design](docs/ARCHITECTURE.md)
-- [JEV Deterministic Policy & Decisions](docs/JEV.md)
-- [Content Factory & Creative DNA](docs/FACTORY.md)
-- [Telemetry & Bayesian Flywheel](docs/TELEMETRY_FLYWHEEL.md)
-- [Vault & Credential Security](docs/VAULT_AND_ACCOUNTS.md)
-- [Provider Integrations & Setup](docs/PROVIDERS.md)
-- [Publishing Orchestration](docs/PUBLISHING_ORCHESTRATION.md)
-- [Accessibility Standards (WCAG 2.2 AA)](docs/ACCESSIBILITY.md)
+- [Setup Guide](docs/SETUP.md) — Local development and production deployment.
+- [Architecture](docs/ARCHITECTURE.md) — System design, data flow, and module boundaries.
+- [JEV Policy Engine](docs/JEV.md) — Deterministic decision evaluation and rubrics.
+- [Content Factory](docs/FACTORY.md) — Creative planning, generation pipeline, and quality gates.
+- [Providers](docs/PROVIDERS.md) — Video, image, and publishing provider integrations.
+- [Telemetry Flywheel](docs/TELEMETRY_FLYWHEEL.md) — Closed-loop learning and performance feedback.
+- [Credential Vault](docs/VAULT_AND_ACCOUNTS.md) — Encryption and provider account management.
+- [Database Schema](docs/DATABASE.md) — PostgreSQL table schemas and migration order.
+- [Operator Guide](docs/OPERATOR_GUIDE.md) — Operational runbook for production operators.
 
 ---
 

@@ -425,12 +425,19 @@ export class JevRouter implements JevProviderRouter {
           const fallbackResp = await fallback.decide(request);
           return {
             ...fallbackResp,
+            fallbackUsed: true,
             fallbackFrom: preferredProviderId,
             fallbackReason: "Primary provider encountered provider_error on all questions.",
+            requestedProvider: preferredProviderId,
+            requestedModel: request.model,
           };
         }
       }
-      return resp;
+      return {
+        ...resp,
+        requestedProvider: preferredProviderId,
+        requestedModel: request.model,
+      };
     }
 
     // Preferred provider is not ready, fall back if enabled
@@ -441,8 +448,11 @@ export class JevRouter implements JevProviderRouter {
       const fallbackResp = await fallback.decide(request);
       return {
         ...fallbackResp,
+        fallbackUsed: true,
         fallbackFrom: preferredProviderId,
         fallbackReason: `Primary provider ${preferredProviderId} was NOT_CONFIGURED.`,
+        requestedProvider: preferredProviderId,
+        requestedModel: request.model,
       };
     }
 

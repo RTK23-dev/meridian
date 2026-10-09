@@ -14,7 +14,14 @@ import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { googleDriveClient, type GoogleDriveClient } from "../storage/drive.ts";
 import { evaluateProductionPostflight } from "./postflight.ts";
-import type { ProductionJob } from "./types.ts";
+import { detectArtifactType } from "./mime-detector.ts";
+
+export class ArtifactIntegrityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ArtifactIntegrityError";
+  }
+}
 
 export interface ArtifactFinalizeInput {
   jobId: string;
@@ -120,21 +127,28 @@ export async function finalizeProductionArtifact(
     };
   }
 
-  // Detect MIME type and validate container signature
-  let mimeType = raw.mimeType || "application/octet-stream";
-  if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
-    mimeType = "video/mp4";
-  } else if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    mimeType = "image/png";
-  } else if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    mimeType = "image/jpeg";
-  } else if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
-    mimeType = "image/webp";
-  } else if (input.provider.includes("nano") || input.provider.includes("image")) {
-    mimeType = "image/png";
-  } else {
-    mimeType = "video/mp4";
+  // 2b. Strict fail-closed magic byte MIME detection
+  let detected: import("./mime-detector.ts").DetectedArtifactFormat;
+  try {
+    detected = detectArtifactType(bytes);
+  } catch (err: any) {
+    await sql`
+      update production_jobs
+      set status = 'STORAGE_PERSISTENCE_FAILED',
+          error_code = 'UNRECOGNIZED_MEDIA_FORMAT',
+          last_polled_at = now(),
+          updated_at = now()
+      where id = ${input.jobId}
+    `;
+    return {
+      success: false,
+      status: "STORAGE_PERSISTENCE_FAILED",
+      errorCode: "UNRECOGNIZED_MEDIA_FORMAT",
+      error: `Artifact media type detection failed: ${err?.message}`,
+    };
   }
+
+  const mimeType = detected.mimeType;
 
   // 3. Postflight QC for video media
   if (!input.options?.skipPostflight && mimeType.startsWith("video/")) {
@@ -226,6 +240,42 @@ export async function finalizeProductionArtifact(
   // Therefore, `name` MUST be set to `storageKey` and `provider_file_id` MUST be `driveResult.fileId`.
   const artifactId = globalThis.crypto.randomUUID();
   const providerFileId = driveResult?.fileId || raw.uri || artifactId;
+
+  // 5b. Read-after-write byte-level integrity verification
+  try {
+    const downloaded = await drive.get(providerFileId);
+    if (!downloaded || !downloaded.bytes || downloaded.bytes.byteLength === 0) {
+      throw new ArtifactIntegrityError(
+        `Drive download returned empty or missing bytes for file ID '${providerFileId}'`
+      );
+    }
+    const downloadedHash = createHash("sha256").update(downloaded.bytes).digest("hex");
+    if (downloadedHash !== sha256) {
+      throw new ArtifactIntegrityError(
+        `Byte verification mismatch: uploaded sha256 (${sha256}) !== downloaded sha256 (${downloadedHash})`
+      );
+    }
+    if (downloaded.bytes.byteLength !== byteSize) {
+      throw new ArtifactIntegrityError(
+        `Byte size mismatch: uploaded size (${byteSize}) !== downloaded size (${downloaded.bytes.byteLength})`
+      );
+    }
+  } catch (err: any) {
+    await sql`
+      update production_jobs
+      set status = 'STORAGE_PERSISTENCE_FAILED',
+          error_code = 'ARTIFACT_INTEGRITY_MISMATCH',
+          last_polled_at = now(),
+          updated_at = now()
+      where id = ${input.jobId}
+    `;
+    return {
+      success: false,
+      status: "STORAGE_PERSISTENCE_FAILED",
+      errorCode: "ARTIFACT_INTEGRITY_MISMATCH",
+      error: `Artifact byte-level verification failed: ${err?.message}`,
+    };
+  }
 
   try {
     await sql`

@@ -18,6 +18,8 @@ import { decide } from "../jev/engine.ts";
 import { publishingReadiness } from "../jev/guards.ts";
 import { loadAppliedPolicies } from "../jev/policy.ts";
 import { generationAllowed } from "../security/budget.ts";
+import { evaluateJevGate } from "../jev/reviewer-decision.ts";
+import { creativeJudgmentResponseSchemaV1 } from "../jev/schemas/creative-judgment.v1.ts";
 import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features.ts";
 import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
@@ -30,6 +32,7 @@ import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativeFormatRecommendation, CreativePlan } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
+import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -678,13 +681,15 @@ export async function generateStudioVariants(
       `;
       const dec = decisionRows[0];
       if (dec) {
-        // Enforce Decision Semantics (P0-2)
-        // REJECT is a hard stop: creative production is blocked immediately
-        if (dec.decision === "REJECT") {
-          throw new Error("JEV policy rejected this brief. Creative production is blocked.");
+        // Enforce Decision Semantics via centralized evaluateJevGate (P0-2)
+        const gate = evaluateJevGate({
+          decision: dec.decision,
+          reviewerDecision: dec.reviewer_decision,
+        });
+        if (gate.status === "BLOCK") {
+          throw new Error(`JEV policy rejected this brief: ${gate.reason}. Creative production is blocked.`);
         }
-        // HUMAN_REVIEW means stop and require recorded human review; not equivalent to approved
-        if (dec.decision === "HUMAN_REVIEW" && dec.reviewer_decision !== "APPROVE") {
+        if (gate.status === "REQUIRE_HUMAN") {
           throw new Error("JEV requires recorded human review for this brief before production can proceed.");
         }
 
@@ -702,19 +707,22 @@ export async function generateStudioVariants(
 
         const recommendedFormats: CreativeFormatRecommendation[] = [];
         let parsedResp: Record<string, any> = {};
+        let isSchemaValid = false;
+
         try {
           parsedResp = JSON.parse(dec.model_response || "{}");
-          if (parsedResp.recommendedFormats && Array.isArray(parsedResp.recommendedFormats)) {
+          const validated = creativeJudgmentResponseSchemaV1.safeParse(parsedResp);
+          if (validated.success) {
+            isSchemaValid = true;
+            recommendedFormats.push(...validated.data.recommendedFormats);
+          } else if (parsedResp.recommendedFormats && Array.isArray(parsedResp.recommendedFormats)) {
+            // Partial fallback if format recommendations exist
             recommendedFormats.push(...parsedResp.recommendedFormats);
-          } else if (parsedResp.recommendedFormat) {
-            recommendedFormats.push({
-              format: parsedResp.recommendedFormat,
-              rationale: parsedResp.rationale || dec.reasons,
-              priority: 1,
-            });
+            isSchemaValid = Boolean(parsedResp.creativeMechanism);
           }
         } catch {
           parsedResp = {};
+          isSchemaValid = false;
         }
 
         // Map only authentic fields present in validated JEV record; zero fabricated confidence/scores
@@ -727,7 +735,7 @@ export async function generateStudioVariants(
           brandFitScore: typeof parsedResp.brandFitScore === "number" ? parsedResp.brandFitScore : undefined,
           transferabilityScore: typeof parsedResp.transferabilityScore === "number" ? parsedResp.transferabilityScore : undefined,
           distributionSuitability: parsedResp.distributionSuitability,
-          status: "admissible",
+          status: isSchemaValid ? "admissible" : "abstain_malformed",
           evidenceRefs,
           decisionId: dec.id,
           questionSetVersion: dec.question_version || "v1",
@@ -869,7 +877,16 @@ export async function executeApprovedCreativePlan(
     mode = "image_ad";
   }
 
-  const { validateCreationPlan, buildCreativeManifest } = await import("../factory/creative-manifest.ts");
+  const { validateCreationPlan, buildCreativeManifest, manifestFromCreativePlan } = await import("../factory/creative-manifest.ts");
+
+  const deliverableManifests = creativePlan.deliverables.map((d) =>
+    manifestFromCreativePlan(creativePlan, d, {
+      organizationId: access.organizationId,
+      brandId,
+      productName,
+      audience: asText(brief.audience),
+    })
+  );
 
   let beats: import("../factory/creative-manifest.ts").CreativeManifestBeat[] = [];
   let targetDurationSeconds: number | undefined;
@@ -878,40 +895,12 @@ export async function executeApprovedCreativePlan(
   if (mode === "research_only") {
     targetDurationSeconds = undefined;
     beats = [];
-  } else if (mode === "image_ad") {
-    targetDurationSeconds = undefined;
-    beats = [
-      {
-        id: "hero",
-        purpose: "hook",
-        visualInstruction: asText(brief.hook || brief.title),
-        onScreenText: asText(brief.cta || brief.hook),
-      },
-    ];
-  } else if (mode === "carousel") {
-    targetDurationSeconds = undefined;
-    beats = creativePlan.deliverables
-      .filter((d) => d.kind === "carousel_slide")
-      .map((d, i) => ({
-        id: `slide-${i + 1}`,
-        purpose: i === 0 ? "hook" : i === 1 ? "mechanism_proof" : "offer_cta",
-        visualInstruction: asText(d.title || brief.hook),
-        onScreenText: asText(d.copy || brief.cta),
-      }));
-    if (beats.length === 0) {
-      beats = [
-        { id: "slide-1", purpose: "hook", visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
-        { id: "slide-2", purpose: "mechanism_proof", visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
-        { id: "slide-3", purpose: "offer_cta", visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
-      ];
-    }
+  } else if (deliverableManifests.length > 0) {
+    beats = deliverableManifests.flatMap((m) => m.beats);
+    targetDurationSeconds = creativePlan.deliverables.find((d) => d.targetDurationSeconds)?.targetDurationSeconds || (hasVideo ? 8 : undefined);
   } else {
-    targetDurationSeconds = 8;
-    beats = [
-      { id: "beat-1", purpose: "hook", targetDurationSeconds: 2, visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
-      { id: "beat-2", purpose: "mechanism", targetDurationSeconds: 4, visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
-      { id: "beat-3", purpose: "payoff_cta", targetDurationSeconds: 2, visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
-    ];
+    targetDurationSeconds = undefined;
+    beats = [];
   }
 
   const plan = validateCreationPlan({
@@ -994,6 +983,26 @@ export async function executeApprovedCreativePlan(
     throw new Error(blocked.reason);
   }
 
+  let reservationId: string | null = null;
+  const estimatedUsd = creativePlan.estimatedCost?.totalEstimatedUsd ?? 0;
+  if (estimatedUsd > 0) {
+    try {
+      const reservation = await BudgetLedgerService.reserve(sql, {
+        organizationId: access.organizationId,
+        brandId,
+        amountMicros: toMicros(estimatedUsd),
+        creativePlanId: creativePlan.id,
+      });
+      reservationId = reservation.id;
+    } catch (budgetErr) {
+      await sql`
+        update creative_plans set status = 'failed', updated_at = now()
+        where id = ${creativePlan.id}
+      `.catch(() => {});
+      throw budgetErr;
+    }
+  }
+
   const runId = crypto.randomUUID();
   const firstImgDeliv = creativePlan.deliverables.find((d) => d.kind === "image" || d.kind === "carousel_slide");
   const firstVidDeliv = creativePlan.deliverables.find((d) => d.kind === "video");
@@ -1011,18 +1020,20 @@ export async function executeApprovedCreativePlan(
 
   try {
     const { generateImageBytes } = await import("../providers/image-bytes.server.ts");
-    const basePrompt = {
-      productName,
-      angle: asText(brief.angle),
-      hook: asText(brief.hook),
-      audience: asText(brief.audience),
-      constraints: asText(brief.constraints),
-    };
 
     for (const deliv of creativePlan.deliverables) {
       if (deliv.kind === "image" || deliv.kind === "carousel_slide") {
         const index = deliv.sequenceIndex ?? 0;
-        const prompt = variantPrompt({ ...basePrompt, index, kind: "image" });
+        const delivManifest = deliverableManifests.find((m) => m.creativeId === deliv.id) || deliverableManifests[index];
+        const prompt = variantPrompt({
+          productName,
+          angle: delivManifest?.concept?.mechanism || asText(brief.angle),
+          hook: delivManifest?.hook?.text || asText(brief.hook),
+          audience: asText(brief.audience),
+          constraints: asText(brief.constraints),
+          index,
+          kind: "image",
+        });
         const creativeId = crypto.randomUUID();
         const assetId = crypto.randomUUID();
         const imgProvider = options?.imageProviderOverride || deliv.provider || effectiveImageProvider;
@@ -1163,10 +1174,14 @@ export async function executeApprovedCreativePlan(
         `;
         const decisionRow = decisionRows[0];
         if (!decisionRow) throw new Error("JEV has not approved this creative. No video job was created.");
-        if (decisionRow.decision === "REJECT") {
-          throw new Error("Brief is rejected by Brand Guardian policy. Creative generation blocked.");
+        const gate = evaluateJevGate({
+          decision: decisionRow.decision,
+          reviewerDecision: decisionRow.reviewer_decision,
+        });
+        if (gate.status === "BLOCK") {
+          throw new Error(`Brief is rejected by Brand Guardian policy (${gate.reason}). Creative generation blocked.`);
         }
-        if (decisionRow.decision === "HUMAN_REVIEW" && decisionRow.reviewer_decision !== "approved") {
+        if (gate.status === "REQUIRE_HUMAN") {
           throw new Error("Brief requires human review approval before video generation.");
         }
 
@@ -1359,11 +1374,24 @@ export async function executeApprovedCreativePlan(
       }
     }
 
+    if (reservationId) {
+      await BudgetLedgerService.reconcile(sql, {
+        reservationId,
+        actualSpentMicros: toMicros(estimatedUsd),
+      }).catch(() => {});
+    }
+
     await sql`update briefs set status = 'used' where id = ${asText(brief.id)}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
     await sql`update creative_plans set status = 'completed', updated_at = now() where id = ${creativePlan.id}`;
     return loadSession(sql, access.organizationId, brandId, access.role);
   } catch (error) {
+    if (reservationId) {
+      await BudgetLedgerService.release(sql, {
+        reservationId,
+        reason: error instanceof Error ? error.message : String(error),
+      }).catch(() => {});
+    }
     await sql`
       update generation_runs set status = 'failed'
       where id = ${runId} and organization_id = ${access.organizationId} and status = 'running'
@@ -1403,7 +1431,7 @@ export async function approveAndExecuteCreativePlan(
     where id = ${data.planId}
       and brand_id = ${data.brandId}
       and organization_id = ${access.organizationId}
-      and status = 'awaiting_approval'
+      and status in ('awaiting_approval', 'ready_for_approval', 'approved')
     returning *;
   `;
 
@@ -1428,6 +1456,12 @@ export async function approveAndExecuteCreativePlan(
     }
     if (existing[0].status === "rejected") {
       throw new Error("Cannot execute a rejected plan.");
+    }
+    if (existing[0].status === "failed") {
+      throw new Error("Cannot execute a failed plan.");
+    }
+    if (existing[0].status === "draft") {
+      throw new Error("Cannot execute a draft plan without preparation.");
     }
     throw new Error(`Creative plan is not awaiting approval (status: ${existing[0].status}).`);
   }
@@ -1461,7 +1495,7 @@ export async function rejectCreativePlan(
     where id = ${data.planId}
       and brand_id = ${data.brandId}
       and organization_id = ${access.organizationId}
-      and status in ('awaiting_approval', 'draft')
+      and status in ('awaiting_approval', 'ready_for_approval', 'draft')
     returning id;
   `;
   if (!updated[0]) {

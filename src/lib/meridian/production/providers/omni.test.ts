@@ -185,7 +185,12 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
       storedDrivePuts.push(input);
       return { fileId: "drive-file-123", webViewLink: "https://drive.google.com/test" };
     },
-    get: async () => null,
+    get: async () => ({
+      fileId: "drive-file-123",
+      bytes: new Uint8Array(fakeVideoBytes),
+      name: "artifact.mp4",
+      mimeType: "video/mp4",
+    }),
     delete: async () => {},
     health: async () => ({ status: "CONFIGURED" as const, configured: true }),
   };

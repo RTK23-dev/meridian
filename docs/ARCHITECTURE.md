@@ -61,6 +61,8 @@ The web process does not execute the worker loop. `scripts/worker-entry.ts` clai
 | Telemetry & Flywheel | `learning/telemetry-engine.ts`| Unified multi-channel telemetry, 14-day exponential decay, closed-loop Bayesian priors |
 | Creative Decision Engine | `creative/engine.ts` | Versioned CreativePlan translating JEV judgments & constraints to exact deliverables |
 | Artifact Finalizer | `production/artifact-finalizer.ts` | Idempotent persistence to Google Drive; fail-closed on storage errors |
+| Budget Ledger | `security/budget-ledger.ts` | Micro-unit integer spend tracking, atomic conditional reservations, two-phase reconcile/release |
+| Discovery Frontier | `discovery/frontier.ts` | Durable PostgreSQL crawl queue, atomic `SKIP LOCKED` leases, heartbeat renewal & recovery |
 | Multi-Source Discovery | `discovery/planner.ts` | Multi-source discovery across web/social/search; Cyclone optional |
 | API | `machine.ts` | Persistence and tenant checks |
 

@@ -156,6 +156,28 @@ test("Studio E2E Workflow 1: Single Source of Truth & Deliverables Fidelity", as
       return [];
     }
 
+    if (q.includes("budget_accounts")) {
+      return [{
+        id: "acct-mock",
+        organization_id: orgId,
+        brand_id: brandId,
+        max_spend_micros: 100_000_000n,
+        spent_micros: 0n,
+        reserved_micros: 0n,
+      }];
+    }
+
+    if (q.includes("budget_reservations") || q.includes("budget_ledger_entries")) {
+      return [{
+        id: "res-mock",
+        organization_id: orgId,
+        brand_id: brandId,
+        account_id: "acct-mock",
+        amount_micros: 1_000_000n,
+        status: "RESERVED",
+      }];
+    }
+
     if (q.includes("from generation_runs") && q.includes("count(*)")) {
       return [{ runs_today: 0, running: 0, brand_runs_today: 0, brand_running: 0 }];
     }

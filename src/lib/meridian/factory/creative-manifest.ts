@@ -8,6 +8,14 @@
  *   cost, QC results, and telemetry join keys.
  */
 
+import type {
+  CreativePlan,
+  CreativeDeliverable,
+  DeliverableKind,
+  AppliedConstraint,
+  ApprovalRequirement,
+} from "../creative/plan.ts";
+
 export type CreationMode =
   | "research_only"
   | "image_ad"
@@ -127,6 +135,41 @@ export interface CreativeManifest {
   telemetryJoinKeys: Record<string, string>;
   createdAt: string;
   updatedAt: string;
+
+  // Semantic decision projections preserved from CreativePlan & CreativeDeliverable
+  deliverableId?: string;
+  deliverableType?: DeliverableKind;
+  hook?: {
+    type?: string;
+    text?: string;
+    visual?: string;
+  };
+  concept?: {
+    mechanism?: string;
+    theme?: string;
+  };
+  scenes?: Array<{
+    id?: string;
+    description: string;
+    durationSeconds?: number;
+    visualInstruction?: string;
+    scriptOrCaption?: string;
+    onScreenText?: string;
+  }>;
+  shots?: any[];
+  dialogue?: string;
+  narration?: string;
+  onScreenText?: string;
+  visualDirection?: string;
+  audioDirection?: string;
+  production?: {
+    provider: string;
+    model: string;
+    fallbackUsed?: boolean;
+    fallbackReason?: string;
+  };
+  constraints?: AppliedConstraint[];
+  qcRequirements?: ApprovalRequirement[];
 }
 
 /**
@@ -246,3 +289,193 @@ export function buildCreativeManifest(params: {
     updatedAt: now,
   };
 }
+
+/**
+ * Pure deterministic projection: transforms a CreativePlan and one of its deliverables
+ * into an executable CreativeManifest without re-consulting the brief or invoking JEV.
+ *
+ * Invariant: All creative decisions made in the plan (hook, mechanism, scenes, assets,
+ * duration, aspect ratio, provider, model, constraints) survive unmodified.
+ */
+export function manifestFromCreativePlan(
+  plan: CreativePlan,
+  deliverable: CreativeDeliverable,
+  options?: {
+    organizationId?: string;
+    brandId?: string;
+    productName?: string;
+    audience?: string;
+    checkProviderAvailability?: (provider: string) => boolean;
+  }
+): CreativeManifest {
+  // 1. Resolve Provider via fallback plan if primary provider is unavailable
+  let resolvedProvider = deliverable.provider;
+  const resolvedModel = deliverable.model;
+  let fallbackUsed = false;
+  let fallbackReason: string | undefined;
+
+  if (options?.checkProviderAvailability && !options.checkProviderAvailability(deliverable.provider)) {
+    const fallback = plan.fallbackPlan?.find(
+      (f) => f.primaryProvider === deliverable.provider && f.permitted
+    );
+    if (fallback) {
+      resolvedProvider = fallback.fallbackProvider;
+      fallbackUsed = true;
+      fallbackReason = fallback.triggerCondition;
+    } else {
+      throw new Error(`Provider '${deliverable.provider}' is unavailable and no permitted fallback is configured in CreativePlan.`);
+    }
+  }
+
+  // 2. Map mode
+  let mode: CreationMode;
+  if (deliverable.kind === "video") {
+    mode = "video";
+  } else if (deliverable.kind === "carousel_slide") {
+    mode = "carousel";
+  } else if (deliverable.kind === "image") {
+    mode = "image_ad";
+  } else {
+    mode = "research_only";
+  }
+
+  // 3. Map Beats from deliverable scenes or copy
+  let beats: CreativeManifestBeat[] = [];
+  if (deliverable.scenes && deliverable.scenes.length > 0) {
+    beats = deliverable.scenes.map((scene, idx) => ({
+      id: scene.id || `scene-${idx + 1}`,
+      purpose: scene.description || `Scene ${idx + 1}`,
+      targetDurationSeconds: scene.durationSeconds,
+      visualInstruction: scene.visualInstruction || scene.description,
+      scriptOrCaption: scene.scriptOrCaption,
+      onScreenText: scene.onScreenText,
+    }));
+  } else if (deliverable.kind === "video") {
+    beats = [
+      {
+        id: "hero",
+        purpose: "Visual Hook & Core Value Proposition",
+        targetDurationSeconds: deliverable.targetDurationSeconds || 6,
+        visualInstruction: deliverable.visualDirection || deliverable.title,
+        scriptOrCaption: deliverable.copy,
+        onScreenText: deliverable.onScreenText || deliverable.title,
+      },
+    ];
+  } else {
+    beats = [
+      {
+        id: `deliverable-${deliverable.sequenceIndex}`,
+        purpose: deliverable.title,
+        visualInstruction: deliverable.visualDirection || deliverable.title,
+        scriptOrCaption: deliverable.copy,
+        onScreenText: deliverable.onScreenText || deliverable.title,
+      },
+    ];
+  }
+
+  // 4. Map Assets from plan.assetPlan
+  const assets: CreativeManifestAsset[] = (plan.assetPlan || []).map((a) => ({
+    assetId: a.assetId,
+    type: a.role === "audio_track" ? "audio" : a.role === "b_roll" ? "footage" : "image",
+    provenance: a.provenance === "USER_PROVIDED" ? "USER_PROVIDED" : a.provenance === "AI_GENERATED" ? "AI_GENERATED" : "BRAND_OWNED",
+  }));
+
+  // 5. Cost
+  const costEstimateUsd = plan.estimatedCost?.perDeliverableUsd?.[deliverable.id] ??
+    (plan.estimatedCost?.totalEstimatedUsd ? plan.estimatedCost.totalEstimatedUsd / (plan.deliverables.length || 1) : 0);
+
+  const now = new Date().toISOString();
+
+  // 6. Project Manifest
+  const manifest: CreativeManifest = {
+    creativeId: deliverable.id,
+    version: plan.version,
+    conceptId: plan.selectedConceptId || plan.id,
+    conceptVersion: plan.version,
+    mode,
+    startingMaterial: "new_brief",
+    productionStrategy: "automated_provider",
+    brand: {
+      organizationId: options?.organizationId || "tenant-default",
+      brandId: options?.brandId || "brand-default",
+      product: options?.productName || "Product",
+      audience: options?.audience || "Target Audience",
+      objective: plan.objective,
+    },
+    format: {
+      channel: "multi_channel",
+      aspectRatio: (deliverable.aspectRatio as any) || "9:16",
+      targetDurationSeconds: deliverable.targetDurationSeconds,
+      slideCount: deliverable.kind === "carousel_slide" ? plan.deliverables.filter(d => d.kind === "carousel_slide").length : undefined,
+    },
+    beats,
+    assets,
+    layers: [
+      {
+        layerId: "main-synthesis",
+        provider: resolvedProvider,
+        model: resolvedModel,
+      },
+    ],
+    cost: {
+      estimateUsd: costEstimateUsd,
+    },
+    qc: {
+      status: "PENDING",
+      checks: {
+        claimsVerified: true,
+        originalityPassed: true,
+        rightsCleared: true,
+        craftAndSlopPassed: true,
+        aspectRatioCompliant: true,
+      },
+    },
+    outputArtifacts: [],
+    publishedPostIds: [],
+    telemetryJoinKeys: {
+      planId: plan.id,
+      deliverableId: deliverable.id,
+      conceptId: plan.selectedConceptId || plan.id,
+    },
+    createdAt: plan.createdAt || now,
+    updatedAt: now,
+
+    // Explicit preserved deliverable decisions
+    deliverableId: deliverable.id,
+    deliverableType: deliverable.kind,
+    hook: deliverable.hook || {
+      type: deliverable.metadata?.hookType,
+      text: deliverable.metadata?.hookText || deliverable.title,
+      visual: deliverable.metadata?.hookVisual,
+    },
+    concept: deliverable.concept || {
+      mechanism: deliverable.metadata?.mechanism || plan.rationale?.[0]?.claim,
+      theme: deliverable.metadata?.theme,
+    },
+    scenes: deliverable.scenes || beats.map((b) => ({
+      id: b.id,
+      description: b.purpose,
+      durationSeconds: b.targetDurationSeconds,
+      visualInstruction: b.visualInstruction,
+      scriptOrCaption: b.scriptOrCaption,
+      onScreenText: b.onScreenText,
+    })),
+    shots: deliverable.shots || [],
+    dialogue: deliverable.dialogue,
+    narration: deliverable.narration,
+    onScreenText: deliverable.onScreenText,
+    visualDirection: deliverable.visualDirection,
+    audioDirection: deliverable.audioDirection,
+    production: {
+      provider: resolvedProvider,
+      model: resolvedModel,
+      fallbackUsed,
+      fallbackReason,
+    },
+    constraints: plan.constraintsApplied || [],
+    qcRequirements: plan.approvalRequirements || [],
+  };
+
+  return manifest;
+}
+

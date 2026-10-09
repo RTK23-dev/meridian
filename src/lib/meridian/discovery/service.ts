@@ -10,6 +10,7 @@ import type { Sql } from "../learning/store.ts";
 import { sourceRegistry, SourceRegistry } from "../sources/registry.ts";
 import { crawlLadderPage } from "./crawler.ts";
 import { ResearchPlanner } from "./planner.ts";
+import { DiscoveryFrontierService } from "./frontier.ts";
 import type {
   DiscoveryScope,
   DiscoveryRun,
@@ -326,12 +327,20 @@ export class DiscoveryService {
   }
 
   async getDiscoveryRun(
-    runId: string,
+    runIdOrInput: string | { runId: string; organizationId?: string; brandId?: string; sql?: Sql },
     sqlOrOptions?: Sql | { sql?: Sql; organizationId?: string; brandId?: string },
   ): Promise<DiscoveryRun | undefined> {
-    const sql = typeof sqlOrOptions === "function" ? sqlOrOptions : sqlOrOptions?.sql;
-    const organizationId = typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.organizationId : undefined;
-    const brandId = typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.brandId : undefined;
+    const isInputObject = typeof runIdOrInput === "object" && runIdOrInput !== null;
+    const runId = isInputObject ? runIdOrInput.runId : runIdOrInput;
+    const sql = isInputObject
+      ? runIdOrInput.sql || (typeof sqlOrOptions === "function" ? sqlOrOptions : sqlOrOptions?.sql)
+      : typeof sqlOrOptions === "function" ? sqlOrOptions : sqlOrOptions?.sql;
+    const organizationId = isInputObject
+      ? runIdOrInput.organizationId
+      : typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.organizationId : undefined;
+    const brandId = isInputObject
+      ? runIdOrInput.brandId
+      : typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.brandId : undefined;
 
     if (sql) {
       let rows: Record<string, unknown>[];
@@ -367,12 +376,20 @@ export class DiscoveryService {
   }
 
   async getDiscoveredItems(
-    runId: string,
+    runIdOrInput: string | { runId: string; organizationId?: string; brandId?: string; sql?: Sql },
     sqlOrOptions?: Sql | { sql?: Sql; organizationId?: string; brandId?: string },
   ): Promise<DiscoveredItem[]> {
-    const sql = typeof sqlOrOptions === "function" ? sqlOrOptions : sqlOrOptions?.sql;
-    const organizationId = typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.organizationId : undefined;
-    const brandId = typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.brandId : undefined;
+    const isInputObject = typeof runIdOrInput === "object" && runIdOrInput !== null;
+    const runId = isInputObject ? runIdOrInput.runId : runIdOrInput;
+    const sql = isInputObject
+      ? runIdOrInput.sql || (typeof sqlOrOptions === "function" ? sqlOrOptions : sqlOrOptions?.sql)
+      : typeof sqlOrOptions === "function" ? sqlOrOptions : sqlOrOptions?.sql;
+    const organizationId = isInputObject
+      ? runIdOrInput.organizationId
+      : typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.organizationId : undefined;
+    const brandId = isInputObject
+      ? runIdOrInput.brandId
+      : typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.brandId : undefined;
 
     if (sql) {
       let rows: Record<string, unknown>[];
@@ -405,6 +422,19 @@ export class DiscoveryService {
       }
     }
     return inMemoryItems.get(runId) || [];
+  }
+
+  /**
+   * Recovers stale discovery work (crashed workers or expired leases).
+   */
+  async recoverStaleWork(
+    sql: Sql,
+    options?: {
+      organizationId?: string;
+      brandId?: string;
+    }
+  ) {
+    return DiscoveryFrontierService.recoverStaleDiscoveryWork(sql, options);
   }
 }
 

@@ -61,6 +61,18 @@ Every machine table below also stores `organization_id` and `brand_id`. Server f
 - `publishing_queues` — scheduled multi-account jobs with minute-normalized idempotency keys and exponential backoff
 - `publishing_receipts` — immutable execution receipts with verified platform post IDs and URLs
 
+## Production Jobs & Storage Objects (`0028`)
+
+- `production_jobs` — asynchronous rendering jobs with provider URLs, poll timestamps, spec hashes, and retry counters
+- `storage_objects` — authoritative Google Drive object repository linking provider file IDs, byte checksums, and mime types
+
+## Budget Ledger & Discovery Frontier (`0031`)
+
+- `budget_accounts` — tenant budget caps, spent micros, and reserved micros in micro-units (`bigint`)
+- `budget_reservations` — active, reconciled, or released budget reservations tied to plans and jobs
+- `budget_ledger_entries` — double-entry immutable audit trail of all balance changes
+- `discovery_frontier` — durable crawl queue with lease worker IDs, heartbeat expiration, and attempt counts
+
 Organization columns `brand_fit` through `risk` are scoring weights, not results.
 
 No migration inserts sample brands, ads, or metrics. Production fails closed without valid credentials.

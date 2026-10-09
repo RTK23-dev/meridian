@@ -15,7 +15,12 @@ test("finalizeProductionArtifact: persists valid media bytes to Drive and commit
       storedDrivePuts.push(input);
       return { fileId: "drive-file-123", webViewLink: "https://drive.google.com/test" };
     },
-    get: async () => null,
+    get: async () => ({
+      fileId: "drive-file-123",
+      bytes: new Uint8Array(validMp4Bytes),
+      name: "artifact.mp4",
+      mimeType: "video/mp4",
+    }),
     delete: async () => {},
     health: async () => ({ status: "CONFIGURED" as const, configured: true }),
   };
