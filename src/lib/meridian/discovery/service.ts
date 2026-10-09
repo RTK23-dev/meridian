@@ -12,6 +12,7 @@ import { crawlLadderPage } from "./crawler.ts";
 import { ResearchPlanner } from "./planner.ts";
 import { DiscoveryFrontierService } from "./frontier.ts";
 import { sourceExternalId } from "./source-identity.ts";
+import { persistPageEvidence } from "./page-evidence.ts";
 import type {
   DiscoveryScope,
   DiscoveryRun,
@@ -141,6 +142,7 @@ export class DiscoveryService {
           try {
             const pageResult = await this.crawlPage(seed, runId);
             run.progress.pagesCrawled++;
+            await persistPageEvidence(input.sql, { organizationId: input.organizationId, brandId: input.brandId, runId }, pageResult, run.perSourceErrors);
 
             // Top-level page record
             const topHash = createHash("sha256").update(pageResult.title + pageResult.description).digest("hex");
@@ -332,6 +334,7 @@ export class DiscoveryService {
       try {
         const pageResult = await this.crawlPage(current.url, run.id, budget.allowedHosts);
         run.progress.pagesCrawled += 1;
+        await persistPageEvidence(sql, { organizationId: run.organizationId, brandId: run.brandId, runId: run.id }, pageResult, run.perSourceErrors);
         const topHash = createHash("sha256").update(pageResult.title + pageResult.description).digest("hex");
         const pageItems: DiscoveredItem[] = [];
         if (!seenHashes.has(topHash)) {
