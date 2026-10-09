@@ -12,7 +12,7 @@
  */
 
 import type { EvidenceRef } from "../jev/types.ts";
-import { getBibleEntryBySlug } from "../study/bible.ts";
+import { ANGLE_BIBLE_DIMENSIONS, getBibleEntryBySlug, type AngleBibleEntry } from "../study/bible.ts";
 
 export type ObservedBreakoutScore = {
   score: number; // 0 to 1
@@ -138,9 +138,19 @@ export function calculateDecomposedOpportunityRating(input: {
     controlSetSize?: number;
   };
   conceptGenes?: string[]; // Angle Bible entry slugs
+  conceptEvaluations?: {
+    hookStrength?: number;
+    retentionArchitecture?: number;
+    emotionalArc?: number;
+    proofPayoff?: number;
+    shareTriggerStrength?: number;
+    executionCraft?: number;
+  };
   transferContext?: {
     brandFit?: number;
     productFit?: number;
+    productionFeasibility?: number;
+    audienceRelevance?: number;
     isMegaCreator?: boolean;
     highClaimRisk?: boolean;
   };
@@ -157,6 +167,10 @@ export function calculateDecomposedOpportunityRating(input: {
   let breakoutScoreVal = 0.5; // neutral baseline
   let viewsLift: number | undefined;
   let likesLift: number | undefined;
+  let commentsLift: number | undefined;
+  let sharesLift: number | undefined;
+  let savesLift: number | undefined;
+  let velocityLift: number | undefined;
   let epistemicState: "OBSERVED" | "COMPUTED" | "INFERRED" = "OBSERVED";
   const controlSize = input.observed?.controlSetSize ?? 0;
 
@@ -172,10 +186,35 @@ export function calculateDecomposedOpportunityRating(input: {
     }
   }
 
+  // Compute interaction engagement rates if denominator views is available and > 0
+  if (input.observed?.views !== undefined && input.observed.views > 0) {
+    if (input.observed.likes !== undefined) {
+      likesLift = Math.round((input.observed.likes / input.observed.views) * 1000) / 1000;
+    }
+    if (input.observed.comments !== undefined) {
+      commentsLift = Math.round((input.observed.comments / input.observed.views) * 1000) / 1000;
+    }
+    if (input.observed.shares !== undefined) {
+      sharesLift = Math.round((input.observed.shares / input.observed.views) * 1000) / 1000;
+    }
+    if (input.observed.saves !== undefined) {
+      savesLift = Math.round((input.observed.saves / input.observed.views) * 1000) / 1000;
+    }
+  }
+
+  // Velocity lift: views / age in hours
+  if (input.observed?.views !== undefined && input.observed.postAgeHours !== undefined && input.observed.postAgeHours > 0) {
+    velocityLift = Math.round((input.observed.views / input.observed.postAgeHours) * 10) / 10;
+  }
+
   const observedBreakout: ObservedBreakoutScore = {
     score: Math.round(breakoutScoreVal * 100) / 100,
     viewsLift,
     likesLift,
+    commentsLift,
+    sharesLift,
+    savesLift,
+    velocityLift,
     creatorMedianViews: input.observed?.creatorMedianViews,
     controlSetSize: controlSize,
     postAgeHours: input.observed?.postAgeHours,
@@ -186,39 +225,70 @@ export function calculateDecomposedOpportunityRating(input: {
   };
 
   // 2. Target 2: Creative Concept Strength
-  let geneWeightsSum = 0;
-  let geneCount = 0;
+  // Dynamically resolve strength per Angle Bible dimension
+  const matchedEntries: AngleBibleEntry[] = [];
   for (const slug of input.conceptGenes ?? []) {
     const entry = getBibleEntryBySlug(slug);
     if (entry) {
-      geneWeightsSum += entry.predictiveWeight;
-      geneCount++;
+      matchedEntries.push(entry);
     }
   }
-  const avgGeneStrength = geneCount > 0 ? geneWeightsSum / geneCount : 0.5;
+
+  const getDimensionStrength = (dimId: number, dimName: string): number => {
+    const found = matchedEntries.find((e) => e.dimensionId === dimId);
+    if (found) return found.predictiveWeight;
+    missingDimensions.push(dimName);
+    return 0.5; // neutral prior when unobserved
+  };
+
+  const hookStrength = input.conceptEvaluations?.hookStrength ?? getDimensionStrength(1, "dim_hook_mechanism");
+  const retentionArchitecture = input.conceptEvaluations?.retentionArchitecture ?? getDimensionStrength(4, "dim_retention_architecture");
+  const emotionalArc = input.conceptEvaluations?.emotionalArc ?? getDimensionStrength(3, "dim_emotional_driver");
+  const proofPayoff = input.conceptEvaluations?.proofPayoff ?? getDimensionStrength(9, "dim_conversion_pattern");
+  const shareTriggerStrength = input.conceptEvaluations?.shareTriggerStrength ?? getDimensionStrength(8, "dim_share_trigger");
+  const executionCraft = input.conceptEvaluations?.executionCraft ?? getDimensionStrength(5, "dim_visual_craft");
+
+  let geneWeightsSum = 0;
+  for (const entry of matchedEntries) {
+    geneWeightsSum += entry.predictiveWeight;
+  }
+  const avgGeneStrength = matchedEntries.length > 0 ? geneWeightsSum / matchedEntries.length : 0.5;
 
   const conceptStrength: CreativeConceptStrengthScore = {
     score: Math.round(Math.min(0.95, avgGeneStrength * 0.9) * 100) / 100,
-    hookStrength: 0.85,
-    retentionArchitecture: 0.8,
-    emotionalArc: 0.75,
-    proofPayoff: 0.7,
-    shareTriggerStrength: 0.7,
-    executionCraft: 0.8,
-    methodState: "seed_prior",
+    hookStrength,
+    retentionArchitecture,
+    emotionalArc,
+    proofPayoff,
+    shareTriggerStrength,
+    executionCraft,
+    methodState: matchedEntries.length > 0 ? "candidate_fit" : "seed_prior",
     evidenceRefs: refs.filter((r) => r.field === "transcript" || r.field === "scene" || r.field === "ocr"),
   };
 
   // 3. Target 3: Adaptation / Transfer Potential
   const isMega = input.transferContext?.isMegaCreator ?? false;
   const claimPenalty = input.transferContext?.highClaimRisk ? 0.3 : 0.0;
-  const brandFit = input.transferContext?.brandFit ?? 0.8;
-  const productFit = input.transferContext?.productFit ?? 0.8;
+  
+  let brandFit = input.transferContext?.brandFit;
+  if (brandFit === undefined) {
+    missingDimensions.push("brand_fit");
+    brandFit = 0.5; // neutral unconfigured prior
+  }
+
+  let productFit = input.transferContext?.productFit;
+  if (productFit === undefined) {
+    missingDimensions.push("product_fit");
+    productFit = 0.5; // neutral unconfigured prior
+  }
+
+  const productionFeasibility = input.transferContext?.productionFeasibility ?? 0.8;
+  const audienceRelevance = input.transferContext?.audienceRelevance ?? 0.75;
 
   const transferableFactors = [
     "Hook structure and pattern interrupt",
-    "Snappy cut pacing",
-    "Text caption safe-zone compliance",
+    "Pacing and shot timing grammar",
+    "Core cognitive motivation mechanism",
   ];
   const nonTransferableFactors: string[] = [];
   if (isMega) {
@@ -228,13 +298,13 @@ export function calculateDecomposedOpportunityRating(input: {
     nonTransferableFactors.push("High-stakes health/financial claim scrutiny");
   }
 
-  const rawTransfer = (brandFit * 0.4 + productFit * 0.4 + (isMega ? 0.4 : 0.8) * 0.2) - claimPenalty;
+  const rawTransfer = (brandFit * 0.35 + productFit * 0.35 + productionFeasibility * 0.15 + (isMega ? 0.3 : 0.8) * 0.15) - claimPenalty;
   const transferPotential: TransferPotentialScore = {
     score: Math.round(Math.max(0.1, Math.min(1.0, rawTransfer)) * 100) / 100,
     brandFit,
     productFit,
-    productionFeasibility: 0.85,
-    audienceRelevance: 0.8,
+    productionFeasibility,
+    audienceRelevance,
     claimRiskPenalty: claimPenalty,
     transferableFactors,
     nonTransferableFactors,
@@ -267,7 +337,7 @@ export function calculateDecomposedOpportunityRating(input: {
 
   // Composite 1-10 rating with evidence coverage calculation
   const totalTrackedDimensions = 4;
-  const observedCount = totalTrackedDimensions - missingDimensions.length;
+  const observedCount = Math.max(0, totalTrackedDimensions - (input.businessTelemetry ? 0 : 1) - (input.observed?.views ? 0 : 1));
   const evidenceCoverage = Math.round((observedCount / totalTrackedDimensions) * 100) / 100;
 
   // Rating out of 10 computed honestly: weighted by available component scores
@@ -330,4 +400,152 @@ export function buildConceptGenome(params: {
     loopBehavior: params.loopBehavior,
     audioRole: params.audioRole,
   };
+}
+
+/**
+ * Extracts and classifies candidate Angle Bible slugs from multimodal evidence
+ * (transcript text, detected OCR, visual cues).
+ */
+export function extractConceptGenomeFromEvidence(params: {
+  genomeId: string;
+  transcript?: string;
+  ocrText?: string[];
+  onScreenActions?: string[];
+  pacingSecondsPerShot?: number;
+  evidenceRefs?: EvidenceRef[];
+}): ConceptGenome {
+  const matchedSlugs = new Set<string>();
+  const combinedText = [
+    params.transcript ?? "",
+    ...(params.ocrText ?? []),
+    ...(params.onScreenActions ?? []),
+  ].join(" ").toLowerCase();
+
+  for (const dim of ANGLE_BIBLE_DIMENSIONS) {
+    for (const entry of dim.entries) {
+      // Check cues in transcript or on-screen actions
+      const matchCue = entry.onScreenCues.some((cue) => combinedText.includes(cue.toLowerCase()));
+      const matchSlug = combinedText.includes(entry.slug.replace(/-/g, " "));
+      if (matchCue || matchSlug) {
+        matchedSlugs.add(entry.slug);
+      }
+    }
+  }
+
+  return buildConceptGenome({
+    genomeId: params.genomeId,
+    slugs: Array.from(matchedSlugs),
+    pacingSecondsPerShot: params.pacingSecondsPerShot,
+    evidenceRefs: params.evidenceRefs,
+  });
+}
+
+/**
+ * Computes semantic dimension overlap and Jaccard similarity between two ConceptGenomes.
+ */
+export function compareConceptGenomes(a: ConceptGenome, b: ConceptGenome): {
+  similarity: number;
+  sharedDimensions: string[];
+  differingDimensions: string[];
+} {
+  const slugsA = new Set(a.angleBibleSlugs);
+  const slugsB = new Set(b.angleBibleSlugs);
+
+  const shared: string[] = [];
+  const differing: string[] = [];
+
+  for (const s of slugsA) {
+    if (slugsB.has(s)) {
+      shared.push(s);
+    } else {
+      differing.push(s);
+    }
+  }
+  for (const s of slugsB) {
+    if (!slugsA.has(s)) {
+      differing.push(s);
+    }
+  }
+
+  const totalDistinct = slugsA.size + slugsB.size - shared.length;
+  const similarity = totalDistinct > 0 ? Math.round((shared.length / totalDistinct) * 100) / 100 : 0;
+
+  return {
+    similarity,
+    sharedDimensions: shared,
+    differingDimensions: differing,
+  };
+}
+
+/**
+ * Assembles a complete, auditable CreativeConcept entity.
+ */
+export function createCreativeConcept(params: {
+  conceptId: string;
+  name: string;
+  mechanismDescription: string;
+  genome: ConceptGenome;
+  sourceCreativeIds?: string[];
+  artifactRefs?: EvidenceRef[];
+  positiveExamples?: string[];
+  negativeControls?: string[];
+  nicheApplicability?: string[];
+  productTransferConditions?: string[];
+  productionComplexity?: "LOW" | "MEDIUM" | "HIGH";
+  estimatedCostBand?: "ZERO_SPEND" | "LOW" | "STANDARD" | "HIGH";
+  scores: DecomposedOpportunityRating;
+}): CreativeConcept {
+  const now = new Date().toISOString();
+  return {
+    conceptId: params.conceptId,
+    version: "1.0.0",
+    name: params.name,
+    mechanismDescription: params.mechanismDescription,
+    genome: params.genome,
+    sourceCreativeIds: params.sourceCreativeIds ?? [],
+    artifactRefs: params.artifactRefs ?? [],
+    positiveExamples: params.positiveExamples ?? [],
+    negativeControls: params.negativeControls ?? [],
+    nicheApplicability: params.nicheApplicability ?? ["general"],
+    productTransferConditions: params.productTransferConditions ?? [],
+    productionComplexity: params.productionComplexity ?? "MEDIUM",
+    estimatedCostBand: params.estimatedCostBand ?? "LOW",
+    rightsConstraints: [],
+    fatigueState: "emerging",
+    scores: params.scores,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Produces an auditable, truth-first human-readable summary of the 4 opportunity targets.
+ */
+export function formatDecomposedOpportunityReport(rating: DecomposedOpportunityRating): string {
+  const lines: string[] = [
+    `=== Opportunity Score: ${rating.ratingOutOfTen.toFixed(1)}/10.0 (Coverage: ${(rating.evidenceCoverage * 100).toFixed(0)}%) ===`,
+    `Target: ${rating.target.toUpperCase()} | Version: ${rating.version}`,
+    "",
+    `1. Observed Breakout Score: ${rating.observedBreakout.score.toFixed(2)} [${rating.observedBreakout.epistemicState}]`,
+    `   - Views Lift: ${rating.observedBreakout.viewsLift !== undefined ? `${rating.observedBreakout.viewsLift}x` : "UNAVAILABLE"}`,
+    `   - Likes Lift: ${rating.observedBreakout.likesLift !== undefined ? `${rating.observedBreakout.likesLift}` : "UNAVAILABLE"}`,
+    `   - Control Set Size: ${rating.observedBreakout.controlSetSize} (Confidence: ${rating.observedBreakout.confidence})`,
+    "",
+    `2. Concept Strength Score: ${rating.conceptStrength.score.toFixed(2)} [State: ${rating.conceptStrength.methodState}]`,
+    `   - Hook: ${rating.conceptStrength.hookStrength.toFixed(2)} | Retention: ${rating.conceptStrength.retentionArchitecture.toFixed(2)}`,
+    `   - Emotion: ${rating.conceptStrength.emotionalArc.toFixed(2)} | Craft: ${rating.conceptStrength.executionCraft.toFixed(2)}`,
+    "",
+    `3. Transfer Potential Score: ${rating.transferPotential.score.toFixed(2)}`,
+    `   - Brand Fit: ${rating.transferPotential.brandFit.toFixed(2)} | Product Fit: ${rating.transferPotential.productFit.toFixed(2)}`,
+    `   - Transferable Factors: ${rating.transferPotential.transferableFactors.join(", ") || "None"}`,
+    "",
+    `4. Business Potential: ${rating.businessPotential.score !== null ? rating.businessPotential.score.toFixed(2) : "UNAVAILABLE (Awaiting Telemetry)"}`,
+    `   - Band: ${rating.businessPotential.downstreamValueBand}`,
+  ];
+
+  if (rating.missingDimensions.length > 0) {
+    lines.push("", `Missing Dimensions: ${rating.missingDimensions.join(", ")}`);
+  }
+
+  return lines.join("\n");
 }
