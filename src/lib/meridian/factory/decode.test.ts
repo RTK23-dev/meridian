@@ -180,9 +180,9 @@ test("Creative DNA v2: WhisperX segments align to scenes and construct beat sequ
   });
 
   const segments: ResearchSegment[] = [
-    { id: "t1", text: "Stop scrolling if your skin feels dry.", startMs: 200, endMs: 2800, role: "hook", confidence: 0.9 },
-    { id: "t2", text: "Here are the proven clinical results.", startMs: 3500, endMs: 5800, role: "proof", confidence: 0.85 },
-    { id: "t3", text: "Tap the link below to get yours now.", startMs: 6500, endMs: 8800, role: "cta", confidence: 0.9 },
+    { id: "t1", text: "Stop scrolling if your skin feels dry.", startMs: 200, endMs: 2800, role: "hook", confidence: 0.9, state: "OBSERVED" as const },
+    { id: "t2", text: "Here are the proven clinical results.", startMs: 3500, endMs: 5800, role: "proof", confidence: 0.85, state: "OBSERVED" as const },
+    { id: "t3", text: "Tap the link below to get yours now.", startMs: 6500, endMs: 8800, role: "cta", confidence: 0.9, state: "OBSERVED" as const },
   ];
 
   const dna = await decodeVideoDna({

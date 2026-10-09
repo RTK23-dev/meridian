@@ -10,7 +10,7 @@ import { fetchPublicHtml, fetchPublicMedia } from "../sources/fetch-page.server.
 import type { Sql } from "../learning/store.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import { rerankBrand } from "../opportunity/rerank.ts";
-import type { ResearchSegment } from "./schema.ts";
+import { RESEARCH_SCHEMA_VERSION, type ResearchSegment } from "./schema.ts";
 import { snapshotMediaAllowed } from "../factory/sources.ts";
 import { emptyYield, formatYield } from "../factory/yield.ts";
 import { jevDecisionService } from "../jev/service.ts";
@@ -172,7 +172,7 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
       const message = error instanceof Error ? error.message : "JEV Research analysis failed.";
       await sql`
         insert into model_runs (id, organization_id, brand_id, correlation_id, operation, provider, model, prompt_id, prompt_version, input_ref, latency_ms, status, error)
-        values (${randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${runId}, 'jev.research.analysis', ${provider!.id}, ${model!.model}, 'jev.research.analysis', 'jev.research-ad.v1', ${adId}, ${Date.now() - startedAt}, 'failed', ${message.slice(0, 500)})
+        values (${randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${runId}, 'jev.research.analysis', ${provider!.id}, ${model!.model}, 'jev.research.analysis', ${RESEARCH_SCHEMA_VERSION}, ${adId}, ${Date.now() - startedAt}, 'failed', ${message.slice(0, 500)})
       `;
       await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "analysis", status: "failed", message });
       return retryCollection(sql, job, runId, message);
@@ -182,7 +182,7 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
       if (analysis.status === "failed") {
         await sql`
           insert into model_runs (id, organization_id, brand_id, correlation_id, operation, provider, model, prompt_id, prompt_version, input_ref, latency_ms, status, error)
-          values (${randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${runId}, 'jev.research.analysis', ${provider!.id}, ${model!.model}, 'jev.research.analysis', 'jev.research-ad.v1', ${adId}, ${Date.now() - startedAt}, 'failed', ${analysis.error.slice(0, 500)})
+          values (${randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${runId}, 'jev.research.analysis', ${provider!.id}, ${model!.model}, 'jev.research.analysis', ${RESEARCH_SCHEMA_VERSION}, ${adId}, ${Date.now() - startedAt}, 'failed', ${analysis.error.slice(0, 500)})
         `;
         return retryCollection(sql, job, runId, analysis.error);
       }

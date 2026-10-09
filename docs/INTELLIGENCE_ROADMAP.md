@@ -15,7 +15,7 @@ Rules that bind every phase (from AGENTS.md and the audit):
 |---|---|---|
 | Discovery | Durable frontier, leases, run outcomes (D4 fixed) | Source rows are keyed by run-scoped item ids |
 | Dedupe | `evidence/dedupe.ts` (canonical URL, platform id, perceptual hash, embeddings) | `normalizeCanonicalUrl` drops every query parameter except tracking ones, so distinct products collapse; `http`/`https` and `www` are not reconciled |
-| Evidence | `evidence/types.ts` (OBSERVED / COMPUTED / INFERRED / LEARNED / VALIDATED), `evidence/bundle.ts`, research schema `jev.research-ad.v1` | Research fields carry `value`, `confidence`, `probability`, `evidence[]` with no observed-vs-inferred state |
+| Evidence | `evidence/types.ts` (OBSERVED / COMPUTED / INFERRED / LEARNED / VALIDATED), `evidence/bundle.ts`, research schema `jev.research-ad.v1` | Transcript segments are checked against the supplied input (text and timestamps), so observation integrity holds. Field labels, claims, and confidences carried no state, so a consumer could not tell an observation from a model inference |
 | Opportunities | `opportunity/` (candidates, catalog, posterior, rerank) | Ranking runs after research; no cheap pre-perception filter |
 | JEV | `jev/engine`, `evaluateJevGate`, `loadGatedJevDecision` (M2 fail-closed) | Creative judgments are not yet the only input to `CreativePlan` |
 | Creative | `creative/engine`, `CreativePlan` state machine (CAS transitions) | Plan lineage to evidence refs is recorded, not enforced |
@@ -47,7 +47,7 @@ Goal: identify hooks, formats, and patterns from evidence, keep observation sepa
 
 Slices:
 
-- **P2a**: field-level epistemic state. Extend research fields with `state` (`OBSERVED`, `INFERRED`, `LEARNED`, `VALIDATED`), reusing the evidence state vocabulary. Migrate the research schema version. No change to existing scores.
+- **P2a** (done): epistemic state. Schema `jev.research-ad.v2`. Transcript segments are `OBSERVED`. Field labels and claims are `INFERRED`. Each field's confidence is labelled `confidenceSource: model_self_report`, so it is not presented as calibrated. The validator sets these states, so a model cannot relabel its own inference. Existing v1 cached analyses are not reused, so each ad is analyzed once more.
 - **P2b**: cheap ranking gate. Deterministic features (copy length, format, platform, recency, duplicate status) rank candidates before the multimodal scorer (`jev/multimodal-scorer.ts`) runs. Only the top N reach perception. The gate records why each candidate was skipped.
 - **P2c**: hook, format, and pattern extraction carries evidence references for each extracted pattern. A pattern without evidence refs cannot be used by P3.
 

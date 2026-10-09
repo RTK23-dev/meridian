@@ -1,4 +1,11 @@
-export const RESEARCH_SCHEMA_VERSION = "jev.research-ad.v1" as const;
+export const RESEARCH_SCHEMA_VERSION = "jev.research-ad.v2" as const;
+
+/**
+ * Epistemic state. OBSERVED is transcript text and timestamps, verified against the supplied segments.
+ * INFERRED is a model label drawn from those segments. Confidence on an INFERRED field is the model's
+ * own self-report, so it is labelled as such and is not a calibrated score (see docs/INTELLIGENCE_ROADMAP.md).
+ */
+export const CONFIDENCE_SOURCE = "model_self_report" as const;
 
 export const OPENING_MOVES = ["question", "problem", "bold_claim", "story", "demonstration", "product_first", "offer_first", "social_proof", "other", "unclear"] as const;
 export const HOOK_MECHANISMS = ["curiosity", "pain_point", "contrast", "aspiration", "proof", "urgency", "humor", "authority", "demonstration", "offer", "other", "unclear"] as const;
@@ -11,7 +18,9 @@ export const SEGMENT_ROLES = ["hook", "setup", "problem", "example", "advice", "
 
 export type ResearchField<T extends string = string> = {
   value: T;
+  state: "INFERRED";
   confidence: number;
+  confidenceSource: typeof CONFIDENCE_SOURCE;
   probability?: number;
   evidence: string[];
 };
@@ -23,12 +32,14 @@ export type ResearchSegment = {
   endMs: number | null;
   role: (typeof SEGMENT_ROLES)[number];
   confidence: number;
+  state: "OBSERVED";
 };
 
 export type ResearchClaim = {
   text: string;
   type: "product_benefit" | "performance" | "health" | "financial" | "comparative" | "other";
   evidence: string[];
+  state: "INFERRED";
 };
 
 export type ResearchAnalysis = {
@@ -69,7 +80,9 @@ function field<T extends string>(value: unknown, name: string, allowed?: readonl
   if (allowed && !allowed.includes(label)) throw new Error(`${name} has an unknown answer.`);
   return {
     value: label,
+    state: "INFERRED",
     confidence: unit(input.confidence, `${name}.confidence`),
+    confidenceSource: CONFIDENCE_SOURCE,
     ...(input.probability === undefined ? {} : { probability: unit(input.probability, `${name}.probability`) }),
     evidence: evidenceRefs(input.evidence, name),
   };
@@ -87,7 +100,7 @@ export function validateResearchAnalysis(value: unknown): ResearchAnalysis {
     const startMs = segment.startMs === null ? null : Number(segment.startMs);
     const endMs = segment.endMs === null ? null : Number(segment.endMs);
     if ((startMs !== null && (!Number.isFinite(startMs) || startMs < 0)) || (endMs !== null && (!Number.isFinite(endMs) || endMs < 0)) || (startMs !== null && endMs !== null && endMs < startMs)) throw new Error("Segment timestamps are invalid.");
-    return { id: segment.id, text: segment.text, startMs, endMs, role: segment.role as ResearchSegment["role"], confidence: unit(segment.confidence, `segments[${index}].confidence`) };
+    return { id: segment.id, text: segment.text, startMs, endMs, role: segment.role as ResearchSegment["role"], confidence: unit(segment.confidence, `segments[${index}].confidence`), state: "OBSERVED" };
   });
   const segmentIds = new Set(segments.map((segment) => segment.id));
   if (segmentIds.size !== segments.length) throw new Error("Segment ids must be unique.");
@@ -114,7 +127,7 @@ export function validateResearchAnalysis(value: unknown): ResearchAnalysis {
     if (typeof claim.text !== "string" || !claim.text.trim() || typeof claim.type !== "string" || !types.includes(claim.type as (typeof types)[number])) throw new Error("A claim has invalid text or type.");
     const refs = evidenceRefs(claim.evidence, `claims[${index}]`);
     if (refs.some((id) => !segmentIds.has(id))) throw new Error("A claim cites an unknown transcript segment.");
-    return { text: claim.text.trim(), type: claim.type as ResearchClaim["type"], evidence: refs };
+    return { text: claim.text.trim(), type: claim.type as ResearchClaim["type"], evidence: refs, state: "INFERRED" };
   });
   const reviewRequired = Object.values(fields).some((answer) => answer.confidence < 0.65 || answer.value === "unclear") || segments.some((segment) => segment.confidence < 0.65);
   return { schemaVersion: RESEARCH_SCHEMA_VERSION, ...fields, segments, claims, reviewRequired };
