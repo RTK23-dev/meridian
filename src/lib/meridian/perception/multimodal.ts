@@ -152,8 +152,8 @@ Output ONLY the JSON array.`;
               },
               ocrText: obs?.ocrText || undefined,
               state: "OBSERVED",
+              methodId: "gemini_visual_perception.v1",
               modelQualityEstimate: 0.85,
-              confidence: 0.85,
             };
           });
 
@@ -185,7 +185,8 @@ Output ONLY the JSON array.`;
           productPresence: undefined,
           setting: "unknown",
         },
-        confidence: 0.5,
+        state: "INFERRED",
+        methodId: "hash_keyframe_fallback.v1",
       };
     });
 

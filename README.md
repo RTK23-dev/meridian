@@ -39,10 +39,10 @@ Meridian continuously analyzes evidence, generates video variants, enforces safe
 ## Key Capabilities
 
 ### 1. ProductionRouter & Multi-Provider Video Engines
-- **Provider-Neutral Creative Generation**: Studio requests compile to a canonical `CreativeSpec`, routed dynamically via `ProductionRouter.route()` across healthy providers (`veo`, `higgsfield`, `hypit`, `manual_cloud`).
-- **Durable PostgreSQL Job State**: Complete job lifecycle (`request_id`, `status_url`, `cancel_url`, `spec_hash`, polling timestamps) is persisted in `production_jobs` table (migration `0028`), ensuring resilience across worker restarts.
+- **Provider-Neutral Creative Generation**: Studio requests compile to a canonical `CreativeSpec`, routed dynamically via `ProductionRouter.route()` across healthy providers (`veo`, `higgsfield`, `hypit`, `manual_cloud`). Studio executes strictly through the unified provider job lifecycle.
+- **Durable PostgreSQL Job State & Poller Worker**: Complete job lifecycle (`request_id`, `status_url`, `cancel_url`, `spec_hash`, polling timestamps) is persisted in `production_jobs` table (migration `0028`). The durable worker poller (`pollProductionJobs`) claims active jobs via `SELECT ... FOR UPDATE SKIP LOCKED`, checks provider status, collects rendered videos to Google Drive, and validates postflight QC.
 - **Strict Testing Runtime Isolation**: `test:video` cannot be resolved in `ProductionRuntime` and is strictly confined to `TestingRuntime` via dependency injection.
-- **Model-Accurate Adapters**: Google Veo validates model-specific `VideoCapability` boundaries before network calls; Higgsfield supports model selection (`dop-v1`, `higgsfield-video-v1`) with official `Key` headers and verbatim status URLs.
+- **Model-Accurate Adapters & Registries**: Google Veo validates model-specific `VideoCapability` boundaries before network calls (Veo 3.1: 8s, 9:16 / 16:9, native audio); Higgsfield integrates `HiggsfieldModelRegistry` with model-specific endpoints (`dop-v1`, `higgsfield-video-v1`, `genjutsu-v1`, `seedance-v1`) and official `Key` headers; ManualCloud operates with zero in-memory authority, reconstructing state from database metadata and drop folder scanning.
 
 ### 2. Modular Engine & n8n-Style Flow Connectors
 - **Decoupled Swappable Engines**: Cleanly separated contracts for `GradingEngine`, `PlannerEngine`, `PublishEngine`, `VideoEngine`, and `SourceAdapter`.
@@ -139,7 +139,7 @@ npm run scheduler
 Every pull request and release is validated across rigorous automated test suites:
 
 ```bash
-# Run 464 automated tests across 16 test suites (including 28 Historical Regressions and 4 End-to-End Integration Paths)
+# Run 465 automated tests across 16 test suites (including 28 Historical Regressions and 5 End-to-End Integration Paths)
 npm test
 
 # Verify strict TypeScript types (0 errors)
@@ -161,6 +161,11 @@ npm run build
 | `DATABASE_URL` | PostgreSQL connection string | PGlite embedded if unset |
 | `TOKEN_ENCRYPTION_KEY` | AES-256-GCM key for tenant tokens | Required for OAuth tokens |
 | `OPENROUTER_API_KEY` | Model gateway for JEV decisions | Required for model evaluations |
+| `GEMINI_API_KEY` | Gemini multimodal perception & Veo video | Required for Veo / perception |
+| `HIGGSFIELD_API_KEY` | Higgsfield AI video generation key | Required for Higgsfield models |
+| `HIGGSFIELD_MODEL` | Selected Higgsfield model (`dop-v1`, `higgsfield-video-v1`, etc.) | Defaults to `higgsfield-video-v1` |
+| `GOOGLE_DRIVE_FOLDER_ID` | Root Google Drive folder for media storage | Required for Google Drive store |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account JSON credentials for Drive | Required for Google Drive store |
 | `HYPIT_BASE_URL` | Hypit 0.2.17 video generation service | Reports `HYPIT_NOT_CONNECTED` if unset |
 | `META_ACCESS_TOKEN` | Meta Graph API access token | Meta publishing stays paused |
 | `TIKTOK_ACCESS_TOKEN` | TikTok Marketing API access token | TikTok publishing stays disabled |

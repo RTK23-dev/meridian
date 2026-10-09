@@ -27,7 +27,11 @@ export type CreativeSegment = {
   role: SegmentRole;
   startMs: number;
   endMs: number;
-  confidence: number;
+  confidence?: number;
+  probability?: number;
+  heuristicScore?: number;
+  modelQualityEstimate?: number;
+  evidenceState?: "OBSERVED" | "COMPUTED" | "INFERRED" | "LEARNED" | "VALIDATED";
   description?: string;
   evidenceRef?: string;
 };
@@ -128,7 +132,11 @@ export type DnaFieldSource = {
 
 export type DnaField<T> = {
   value: T;
-  confidence: number;
+  confidence?: number;
+  probability?: number;
+  heuristicScore?: number;
+  modelQualityEstimate?: number;
+  evidenceState?: "OBSERVED" | "COMPUTED" | "INFERRED" | "LEARNED" | "VALIDATED";
   source: DnaFieldSource;
 };
 
@@ -150,7 +158,10 @@ export type OnScreenTextItem = {
   text: string;
   startMs: number;
   role: "hook_line" | "benefit" | "price" | "cta" | "other" | string;
-  confidence: number;
+  confidence?: number;
+  probability?: number;
+  heuristicScore?: number;
+  evidenceState?: "OBSERVED" | "COMPUTED" | "INFERRED";
   source?: DnaFieldSource;
 };
 
@@ -158,6 +169,7 @@ export type CreativeDna = {
   schema: CreativeDnaSchema;
   adId: string;
   durationMs: number;
+  legacyAdFallback?: boolean;
   scenes: SceneDna[];
   cutsPerSecond: number;
   hook: {
@@ -214,7 +226,7 @@ export function emptyCreativeDna(
   };
 }
 
-export function dnaFromTranscript(input: {
+export function dnaFromAdTranscriptFallback(input: {
   adId: string;
   durationMs: number;
   transcript: string;
@@ -225,6 +237,7 @@ export function dnaFromTranscript(input: {
 }): CreativeDna {
   const schema = input.schema ?? CREATIVE_DNA_V1;
   const dna = emptyCreativeDna(input.adId, input.durationMs, schema);
+  dna.legacyAdFallback = true;
   const text = input.transcript.trim();
   if (!text) return dna;
   const seconds = Math.max(1, input.durationMs / 1000);
@@ -267,6 +280,9 @@ export function dnaFromTranscript(input: {
   return dna;
 }
 
+/** Legacy alias for backwards compatibility. Organic ingestion should avoid legacy ad fallbacks. */
+export const dnaFromTranscript = dnaFromAdTranscriptFallback;
+
 export function decodeOk(dna: CreativeDna): boolean {
   return (
     dna.adId.trim().length > 0 &&
@@ -275,9 +291,54 @@ export function decodeOk(dna: CreativeDna): boolean {
 }
 
 /**
+ * Deterministic candidate generator for high-level structure kinds.
+ */
+export function generateCandidateCreativeStructureKind(input: {
+  allText: string;
+  onScreenText: OnScreenTextItem[];
+  scenes: SceneDna[];
+}): CreativeStructureKind {
+  const allText = input.allText.toLowerCase();
+
+  if (allText.includes("pov:") || allText.includes("pov ")) {
+    return "pov";
+  }
+  if (
+    allText.includes("reasons why") ||
+    allText.includes("top 3") ||
+    allText.includes("top 5") ||
+    input.onScreenText.some((t) => /^\d+\./.test(t.text))
+  ) {
+    return "listicle";
+  }
+  if (allText.includes("how to") || allText.includes("tutorial") || allText.includes("step 1")) {
+    return "tutorial";
+  }
+  if (allText.includes("storytime") || allText.includes("so basically")) {
+    return "storytime";
+  }
+  if (allText.includes("before and after") || allText.includes("transformation")) {
+    return "transformation";
+  }
+  if (allText.includes("review") || allText.includes("honest review")) {
+    return "review";
+  }
+  if (allText.includes("vs ") || allText.includes("compared to")) {
+    return "comparison";
+  }
+  if (allText.includes("wait for the loop") || allText.includes("seamless loop")) {
+    return "loop";
+  }
+  if (input.scenes.some((s) => s.overlay.value.includes("skit") || s.presenter.value.includes("character"))) {
+    return "skit";
+  }
+
+  return "organic_short";
+}
+
+/**
  * Builds canonical CreativeStructure classifying native organic structures
- * (pov, skit, storytime, listicle, tutorial, reaction, loop, transformation, review, comparison, organic_short)
- * or dynamic ad narrative.
+ * or dynamic ad narrative using multimodal evidence (scenes, OCR, transcript, pacing).
  */
 export function buildCanonicalCreativeStructure(input: {
   scenes: SceneDna[];
@@ -289,49 +350,75 @@ export function buildCanonicalCreativeStructure(input: {
 }): CreativeStructure {
   const allText = (input.transcript || input.segments.map((s) => s.text).join(" ")).toLowerCase();
 
-  let kind: CreativeStructureKind = "organic_short";
-  if (allText.includes("pov:") || allText.includes("pov ")) {
-    kind = "pov";
-  } else if (
-    allText.includes("reasons why") ||
-    allText.includes("top 3") ||
-    allText.includes("top 5") ||
-    input.onScreenText.some((t) => /^\d+\./.test(t.text))
-  ) {
-    kind = "listicle";
-  } else if (allText.includes("how to") || allText.includes("tutorial") || allText.includes("step 1")) {
-    kind = "tutorial";
-  } else if (allText.includes("storytime") || allText.includes("so basically")) {
-    kind = "storytime";
-  } else if (allText.includes("before and after") || allText.includes("transformation")) {
-    kind = "transformation";
-  } else if (allText.includes("review") || allText.includes("honest review")) {
-    kind = "review";
-  } else if (allText.includes("vs ") || allText.includes("compared to")) {
-    kind = "comparison";
-  } else if (allText.includes("wait for the loop") || allText.includes("seamless loop")) {
-    kind = "loop";
-  } else if (input.scenes.some((s) => s.overlay.value.includes("skit") || s.presenter.value.includes("character"))) {
-    kind = "skit";
-  }
+  // 1. Generate candidate structure kind
+  const kind = generateCandidateCreativeStructureKind({
+    allText,
+    onScreenText: input.onScreenText,
+    scenes: input.scenes,
+  });
 
+  // 2. Classify segments using evidence from scene observations, OCR, and transcripts
   const structureSegments: CreativeStructureSegment[] = input.scenes.map((s, idx) => {
+    // Collect on-screen OCR text for this scene's window
+    const sceneOcr = input.onScreenText.filter(
+      (t) => t.startMs >= s.startMs && t.startMs < s.endMs,
+    );
+    const ocrSummary = sceneOcr.map((t) => t.text).join(" ").toLowerCase();
+
+    // Collect aligned dialogue for this scene's window
+    const sceneDialogue = input.segments
+      .filter((seg) => seg.startMs != null && seg.startMs >= s.startMs && seg.startMs < s.endMs)
+      .map((seg) => seg.text)
+      .join(" ");
+
+    const textContent = (sceneDialogue || s.transcript || ocrSummary).toLowerCase();
+
+    // Semantic role deduction based on multimodal evidence
     let role = "content";
-    if (idx === 0) role = "opening";
-    else if (idx === input.scenes.length - 1) role = "closing";
-    else if (s.productOnScreen.value) role = "demonstration";
+    let visualFunction = s.shotType.value || undefined;
+    let dialogueFunction: string | undefined;
+
+    if (idx === 0) {
+      role = "opening";
+      dialogueFunction = "hook";
+    } else if (idx === input.scenes.length - 1) {
+      if (ocrSummary.includes("link") || ocrSummary.includes("shop") || ocrSummary.includes("bio") || textContent.includes("comment") || textContent.includes("follow")) {
+        role = "closing";
+        dialogueFunction = "call_to_action";
+      } else {
+        role = "closing";
+      }
+    } else if (s.productOnScreen.value) {
+      role = "demonstration";
+      visualFunction = s.shotType.value ? `${s.shotType.value}_product` : "product_showcase";
+    } else if (textContent.includes("because") || textContent.includes("reason") || textContent.includes("why")) {
+      role = "explanation";
+      dialogueFunction = "explanation";
+    } else if (s.presenter.value && (s.shotType.value === "close_up" || s.shotType.value === "medium_shot")) {
+      role = "commentary";
+      dialogueFunction = "presenter_statement";
+    }
+
+    const evidenceRefs: string[] = [];
+    if (s.keyframeRef) evidenceRefs.push(s.keyframeRef);
+    if (sceneOcr.length > 0) evidenceRefs.push(`ocr:${s.index}`);
+    if (sceneDialogue) evidenceRefs.push(`transcript:${s.index}`);
 
     return {
       index: s.index,
       startMs: s.startMs,
       endMs: s.endMs,
       role,
-      visualFunction: s.shotType.value || undefined,
-      description: s.transcript || undefined,
+      visualFunction,
+      dialogueFunction,
+      evidenceRefs: evidenceRefs.length > 0 ? evidenceRefs : undefined,
+      description: sceneDialogue || s.transcript || (sceneOcr[0]?.text) || undefined,
     };
   });
 
   const openingShotMs = input.scenes[0] ? input.scenes[0].endMs - input.scenes[0].startMs : undefined;
+  const shotDurations = input.scenes.map((s) => s.endMs - s.startMs).sort((a, b) => a - b);
+  const medianShotMs = shotDurations.length > 0 ? shotDurations[Math.floor(shotDurations.length / 2)] : undefined;
 
   return {
     kind,
@@ -343,6 +430,7 @@ export function buildCanonicalCreativeStructure(input: {
     pacing: {
       cutsPerMinute: Math.round(input.cutsPerSecond * 60),
       openingShotMs,
+      medianShotMs,
     },
     structureType: kind === "organic_short" ? "organic_short" : "dynamic",
   };

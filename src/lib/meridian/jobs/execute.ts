@@ -259,6 +259,13 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     const syncRes = await syncTelemetryToLearning(sql, job.organization_id, job.brand_id);
     return `synced:${syncRes.syncedRecords}:patterns:${syncRes.patternsLearned}`;
   }
+  if (job.job_type === "production.poll") {
+    const { pollProductionJobs } = await import("../production/poller.ts");
+    const pollResult = await pollProductionJobs(sql, {
+      limit: typeof payload.limit === "number" ? payload.limit : 10,
+    });
+    return `claimed:${pollResult.claimed}:polled:${pollResult.polled}:rendered:${pollResult.rendered}:failed:${pollResult.failed}`;
+  }
   if (job.job_type === "market.normalize" || job.job_type === "creative.analyze" || job.job_type === "cluster.refresh" || job.job_type === "asset.process") {
     throw new Error(`${job.job_type} has no payload work in this claim. It was not marked done.`);
   }

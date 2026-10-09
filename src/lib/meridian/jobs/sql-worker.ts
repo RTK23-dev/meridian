@@ -74,6 +74,12 @@ export async function tickSqlJobs(sql: Sql): Promise<{ claimed: number; stopped:
     set status = 'cancelled', updated_at = now(), lease_until = null
     where cancel_requested = true and status in ('queued', 'retry')
   `;
+  try {
+    const { pollProductionJobs } = await import("../production/poller.ts");
+    await pollProductionJobs(sql, { limit: 5 });
+  } catch {
+    // Non-blocking in case production_jobs is not yet migrated or DB error
+  }
   const due = await sql<ExecutableJob>`
     select id, organization_id, brand_id, job_type, payload, attempts, max_attempts
     from jobs

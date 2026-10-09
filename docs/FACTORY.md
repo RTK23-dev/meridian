@@ -21,17 +21,23 @@ Each stage runs as a durable SQL job (`factory.*`) with an idempotency key, expo
 - Domain modules split cleanly into single-responsibility units without behavior change.
 - Strict tenancy, auth role checks, and fail-closed boot invariants when `DATABASE_URL` is unset in production.
 
-### Step 2: Creative DNA v2 & pgvector
+### Step 2: Creative DNA v2, Canonical Structure & pgvector
 - **Real Video Decoder (`decode.ts`)**:
   - `ffmpeg` scene-cut detection with timestamped intervals.
   - Keyframe extraction per detected scene.
   - Vision model scene labeling (`shotType`, `presenter`, `setting`, `motion`, `overlay`, `productOnScreen`).
   - OCR text extraction with rule-based text role classification (`classifyTextRole`: hook, claim, proof, offer, cta).
   - WhisperX word-level transcript alignment to scenes.
-  - 6-beat sequence mapping (`hook`, `problem`, `reveal`, `proof`, `offer`, `cta`).
+  - **Canonical Creative Structure (`creative-dna.ts`)**:
+    - Classifies organic content across 13 canonical formats (`organic_short`, `pov`, `skit`, `storytime`, `listicle`, `tutorial`, `reaction`, `trend_audio`, `transformation`, `review`, `comparison`, `loop`, `unstructured`).
+    - Candidates evaluated deterministically (`classifyCreativeStructureCandidate`, `evaluateCreativeStructureCandidates`).
+    - `AdNarrative` (hook, problem, reveal, proof, offer, cta) is an optional projection for paid ads; organic short-form reels/videos are not forced into 6-beat ad schemas.
+    - Fallback heuristic transcript extraction renamed to `dnaFromAdTranscriptFallback` with explicit `legacyAdFallback: true` marking.
+- **Strict Epistemic Type Separation**:
+  - Distinguishes observed probability, confidence, modelQualityEstimate, heuristicScore, and evidenceState across all CreativeSegment and DNA fields.
 - **384-dimensional Multimodal Embeddings**:
   - Stored in Postgres using `pgvector` via `migrations/0019_creative_dna_pgvector.sql`.
-  - Full confidence scoring and source frame/timestamp provenance for every attribute. Missing evidence stays `"missing"`, never guessed.
+  - Source frame and timestamp provenance for every attribute. Missing evidence stays `"missing"`, never guessed.
 
 ### Step 3: Sources & Winner Score Backtesting
 - **Source Adapters (`sources.ts`)**:

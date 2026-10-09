@@ -613,10 +613,12 @@ export async function syncTelemetryToLearning(
     .slice(0, 5);
 
   // 4. Update JEV account profiles for this brand
-  const topHooksJson = JSON.stringify(topHooks.length > 0 ? topHooks : ["contrarian", "question", "statistic"]);
-  const avgEng = records.length > 0
-    ? records.reduce((acc, r) => acc + (r.views != null && r.views > 0 && r.engagements != null ? r.engagements / r.views : 0), 0) / records.length
-    : 0.05;
+  // No synthetic priors: topHooks is fitted strictly from observed data (empty if no posterior yet)
+  const topHooksJson = JSON.stringify(topHooks);
+  const recordsWithViews = records.filter((r) => r.views != null && r.views > 0);
+  const avgEng = recordsWithViews.length > 0
+    ? recordsWithViews.reduce((acc, r) => acc + (r.engagements != null ? r.engagements / r.views! : 0), 0) / recordsWithViews.length
+    : 0;
 
   try {
     const existingProfiles = await sql`

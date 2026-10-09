@@ -18,17 +18,17 @@ export type VideoCapability = {
 
 export const VEO_MODEL_CAPABILITIES: Record<string, VideoCapability> = {
   "veo-3.1-generate-preview": {
-    supportedDurations: [5, 6, 7, 8, 9, 10],
-    supportedAspectRatios: ["9:16", "16:9", "1:1"],
+    supportedDurations: [8],
+    supportedAspectRatios: ["9:16", "16:9"],
     supportedResolutions: ["720p", "1080p"],
     imageToVideo: false,
     videoToVideo: false,
     referenceImages: false,
-    nativeAudio: false,
+    nativeAudio: true,
   },
   "veo-2.0-generate-001": {
-    supportedDurations: [5, 6, 7, 8, 9, 10],
-    supportedAspectRatios: ["9:16", "16:9", "1:1"],
+    supportedDurations: [5, 6, 7, 8],
+    supportedAspectRatios: ["9:16", "16:9"],
     supportedResolutions: ["720p"],
     imageToVideo: false,
     videoToVideo: false,

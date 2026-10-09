@@ -95,9 +95,11 @@ export type AnsweredJevAnswer = {
   status: "answered";
   choice?: string;
   noul?: number;
+  noulProbability?: number;
   score?: number;
   answer: string | boolean | number;
   probability?: number;
+  policyDecision?: string | boolean;
   probabilities?: Record<string, number>;
   distribution?: Record<string, number>;
   confidence?: number;

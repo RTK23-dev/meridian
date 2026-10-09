@@ -35,11 +35,11 @@ export type SceneVisualFeatures = {
 
 export type AudioProsodyFeatures = {
   /** Average words per minute in the audio track (typical range 120-220). */
-  speechWpm: number;
+  speechWpm?: number;
   /** Normalized RMS audio energy (0-1). */
-  audioEnergy: number;
+  audioEnergy?: number;
   /** Proportion of silence or dead air in opening 5s (0-1). Lower is better. */
-  silenceRatio: number;
+  silenceRatio?: number;
   /** Background music tempo in BPM, if present. */
   musicBpm?: number;
 };
@@ -159,10 +159,14 @@ export function predictHookRetention(
   let silencePenalty = 0;
 
   if (audio) {
-    const energy = clamp01(audio.audioEnergy);
-    const silence = clamp01(audio.silenceRatio);
-    audioEnergyContrib = energy * HOOK_RETENTION_WEIGHTS.audioEnergy;
-    silencePenalty = silence * HOOK_RETENTION_WEIGHTS.silencePenalty;
+    if (audio.audioEnergy !== undefined) {
+      const energy = clamp01(audio.audioEnergy);
+      audioEnergyContrib = energy * HOOK_RETENTION_WEIGHTS.audioEnergy;
+    }
+    if (audio.silenceRatio !== undefined) {
+      const silence = clamp01(audio.silenceRatio);
+      silencePenalty = silence * HOOK_RETENTION_WEIGHTS.silencePenalty;
+    }
   }
 
   const logit =
@@ -209,7 +213,9 @@ export function scoreSpeechProsody(audio?: AudioProsodyFeatures): {
   const wpm = audio.speechWpm;
   let wpmScore = 0.5;
 
-  if (wpm <= 0) {
+  if (wpm === undefined) {
+    wpmScore = 0.5;
+  } else if (wpm <= 0) {
     wpmScore = 0.2; // music-only or silent
   } else if (wpm >= OPTIMAL_SPEECH_WPM.targetMin && wpm <= OPTIMAL_SPEECH_WPM.targetMax) {
     wpmScore = 1.0; // sweet spot
@@ -223,8 +229,8 @@ export function scoreSpeechProsody(audio?: AudioProsodyFeatures): {
     wpmScore = clamp01(1.0 - (excess / (OPTIMAL_SPEECH_WPM.max - OPTIMAL_SPEECH_WPM.targetMax || 1)) * 0.7);
   }
 
-  const energyScore = clamp01(audio.audioEnergy);
-  const silence = clamp01(audio.silenceRatio);
+  const energyScore = audio.audioEnergy !== undefined ? clamp01(audio.audioEnergy) : 0.5;
+  const silence = audio.silenceRatio !== undefined ? clamp01(audio.silenceRatio) : 0;
   const silencePenalty = silence * 0.5;
 
   const prosodyScore = clamp01(wpmScore * 0.45 + energyScore * 0.45 - silencePenalty + 0.1);

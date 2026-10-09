@@ -387,8 +387,12 @@ export class OpenRouterJevClient implements JevClient {
               provider,
               status: "answered",
               noul: rawProb,
+              noulProbability: rawProb,
               probability: rawProb,
               answer: typeof item.answer === "boolean" ? item.answer : rawProb >= 0.5,
+              policyDecision: typeof item.policyDecision === "boolean"
+                ? item.policyDecision
+                : (typeof item.answer === "boolean" ? item.answer : rawProb >= 0.5),
               confidence: undefined,
               evidenceRefs: inputEvidenceRefs,
               evaluatedAt: new Date().toISOString(),

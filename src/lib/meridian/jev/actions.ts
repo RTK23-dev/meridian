@@ -159,23 +159,17 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
           textDensity: item.textDensity,
           // Unobserved features remain undefined; never fabricated
         },
-        audio: (item.speechWpm || item.audioEnergyScore) ? {
-          speechWpm: item.speechWpm ?? 0,
-          audioEnergy: item.audioEnergyScore ?? 0,
-          silenceRatio: 0,
+        audio: (item.speechWpm != null || item.audioEnergyScore != null) ? {
+          speechWpm: item.speechWpm ?? undefined,
+          audioEnergy: item.audioEnergyScore ?? undefined,
         } : undefined,
         historicalThreeSecondRetention: item.threeSecondRetention ?? undefined,
         historicalCompletionRate: item.completionRate ?? undefined,
       });
 
-      // Observed beats: hook is evaluated from visual cues; unobserved beats are not mocked
-      const observedNarrativeBeats: Record<NarrativeBeat, number> = {
+      // Observed beats: hook is evaluated from visual cues; unobserved beats are not mocked with fake numbers
+      const observedNarrativeBeats: Partial<Record<NarrativeBeat, number>> = {
         hook: evaluation.hookVisualScore,
-        problem: 0,
-        reveal: 0,
-        proof: 0,
-        offer: 0,
-        cta: 0,
       };
 
       await saveContentAnalysis(sql, {
@@ -183,16 +177,16 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
         brandId: data.brandId,
         postId: item.postId,
         hookVisualScore: evaluation.hookVisualScore,
-        audioEnergyScore: item.audioEnergyScore ?? 0,
-        speechWpm: item.speechWpm ?? 0,
+        audioEnergyScore: item.audioEnergyScore ?? null,
+        speechWpm: item.speechWpm ?? null,
         narrativeBeats: observedNarrativeBeats,
         detectedObjections: evaluation.detectedObjections,
         topCommentsSummary: "",
-        visualStyle: item.visualStyle ?? "ugc",
-        motionIntensity: item.motionIntensity ?? 0.5,
-        textDensity: item.textDensity ?? 0.3,
-        hookType: item.hookType ?? "question",
-        ctaType: item.ctaType ?? "comment",
+        visualStyle: item.visualStyle ?? null,
+        motionIntensity: item.motionIntensity ?? null,
+        textDensity: item.textDensity ?? null,
+        hookType: item.hookType ?? null,
+        ctaType: item.ctaType ?? null,
         views: item.views,
         likes: item.likes,
         comments: item.comments,

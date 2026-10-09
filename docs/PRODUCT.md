@@ -14,20 +14,24 @@ This repository is original software under the MIT License. It is not a fork of 
 - Observed cross-ad patterns can inform existing opportunities. Pattern summaries report frequency rather than advertising effectiveness; organization summaries are aggregate-only and require the existing brand opt-in.
 - Opportunity scoring from that evidence, with JEV gates.
 - Briefs that carry learned patterns and past rejections.
-- Approved JEV briefs can be handed to the separate Hypit video process. Verified stored Hypit MP4s can be uploaded through the existing Meta provider and placed in a paused campaign/ad-set/ad chain after tenant and JEV lineage checks.
+- Approved JEV briefs compile to a canonical `CreativeSpec` and execute across configured video engines (`veo`, `higgsfield`, `hypit`, `manual_cloud`) via `ProductionRouter`.
+- Durable PostgreSQL job tracking (`production_jobs`) with an asynchronous poller worker (`pollProductionJobs`) using `SELECT ... FOR UPDATE SKIP LOCKED` for atomic status polling, video download, postflight QC, and Google Drive primary storage registration.
+- Google Drive authoritative binary storage with resumable chunked uploads for media > 5MB.
+- Dynamic Creative Structure classification across 13 canonical formats (`organic_short`, `pov`, `skit`, `storytime`, etc.) with `AdNarrative` as an optional projection for paid ads.
 - Human-written scripts, plus text generation when a provider key is configured.
 - Text guardian, PNG logo comparison, and a review queue.
 - Manual performance, and a normalizer that a live feed must pass before learning.
+- Closed-loop Bayesian learning flywheel with 14-day exponential recency decay, Benjamini-Hochberg FDR filtering, and cold-start priors.
 - A worker process and a scheduler process when `DATABASE_URL` is set on a long-lived host.
-- Provider clients that can probe and create paused campaigns when credentials exist and a request succeeds. Meta Hypit-video upload retries reconcile the prior upload; no success is recorded before Meta confirms an id.
+- Provider clients that can probe and create paused campaigns when credentials exist and a request succeeds. Meta video upload retries reconcile the prior upload; no success is recorded before Meta confirms an id.
 - Tenant-scoped Meta performance sync that validates creative/ad ownership and the selected ad account before storing observations for learning.
 
 ## What this version does not do
 
 - Invent competitor ads, metrics, or publish receipts.
 - Treat credentials as a connection before a provider request succeeds.
-- Bundle a video-generation runtime; Studio video uses the separately configured Hypit process.
-- Automatically activate Meta campaigns, ad sets, or ads; Hypit video publishing leaves them paused.
+- Bundle an embedded generative video renderer; Studio delegates to external engines (Veo, Higgsfield, Hypit, ManualCloud).
+- Automatically activate Meta campaigns, ad sets, or ads; video publishing leaves them paused.
 - Keep the worker alive on a serverless host.
 - Claim WCAG certification. The accessibility notes are in [ACCESSIBILITY.md](ACCESSIBILITY.md).
 

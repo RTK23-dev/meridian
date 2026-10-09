@@ -391,7 +391,7 @@ test("13. Regression: Higgsfield uses Authorization: Key and status_url contract
   let capturedAuth = "";
   const fakeFetch: typeof fetch = async (url, init) => {
     capturedAuth = (init?.headers as Record<string, string>)?.["Authorization"] || "";
-    if (String(url).includes("/requests") && init?.method === "POST") {
+    if ((String(url).includes("/requests") || String(url).includes("/higgsfield/")) && init?.method === "POST") {
       return new Response(
         JSON.stringify({
           request_id: "req_999",

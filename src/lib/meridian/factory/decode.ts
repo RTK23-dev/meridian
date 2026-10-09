@@ -506,11 +506,12 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
     dna.hook.type = missingField("");
   }
 
-  if (firstScene && firstScene.shotType.confidence > 0) {
+  const shotConfidence = firstScene?.shotType.confidence ?? 0;
+  if (firstScene && shotConfidence > 0) {
     const visualDesc = [firstScene.shotType.value, firstScene.presenter.value, firstScene.motion.value]
       .filter(Boolean)
       .join(" ");
-    dna.hook.visual = dnaField(visualDesc, firstScene.shotType.confidence, {
+    dna.hook.visual = dnaField(visualDesc, shotConfidence, {
       kind: "frame",
       at: 0,
       ref: firstScene.keyframeRef,

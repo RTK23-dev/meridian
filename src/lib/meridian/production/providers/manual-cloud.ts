@@ -29,7 +29,6 @@ export class ManualCloudProvider implements ProductionProvider {
   };
 
   private drive: GoogleDriveClient;
-  private jobs = new Map<string, ProductionJob>();
 
   constructor(drive = googleDriveClient) {
     this.drive = drive;
@@ -126,40 +125,61 @@ export class ManualCloudProvider implements ProductionProvider {
       costEstimateUsd: 0.0,
       costActualUsd: 0.0,
       dropFolderUrl,
+      metadata: {
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        dropFolderUrl,
+        creativeSpec: spec,
+      },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    this.jobs.set(jobId, job);
     return job;
   }
 
-  async checkJobStatus(jobId: string): Promise<ProductionJob> {
-    const job = this.jobs.get(jobId);
-    if (!job) {
-      throw new Error(`Job not found: ${jobId}`);
-    }
+  async checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob> {
+    const orgId = typeof metadata?.organizationId === "string" ? metadata.organizationId : "";
+    const brandId = typeof metadata?.brandId === "string" ? metadata.brandId : "";
+    const dropFolderUrl = typeof metadata?.dropFolderUrl === "string" ? metadata.dropFolderUrl : undefined;
 
-    // Check if output artifact has been uploaded to Drive
-    try {
-      const outputs = await this.drive.syncDropFolder({
-        organizationId: job.organizationId,
-        brandId: job.brandId,
-        jobId,
-      });
+    let status: ProductionJob["status"] = "WAITING_FOR_EXTERNAL_ARTIFACT";
+    let outputArtifactId: string | undefined;
 
-      const videoFile = outputs.find(
-        (f) => (f.mimeType.includes("video") || f.name.endsWith(".mp4")) && f.size > 0,
-      );
-      if (videoFile) {
-        job.status = "RENDERED";
-        job.outputArtifactId = videoFile.fileId;
-        job.updatedAt = new Date().toISOString();
+    // Check if output artifact has been uploaded to Drive drop-folder
+    if (orgId && brandId) {
+      try {
+        const outputs = await this.drive.syncDropFolder({
+          organizationId: orgId,
+          brandId,
+          jobId,
+        });
+
+        const videoFile = outputs.find(
+          (f) => (f.mimeType.includes("video") || f.name.endsWith(".mp4")) && f.size > 0,
+        );
+        if (videoFile) {
+          status = "RENDERED";
+          outputArtifactId = videoFile.fileId;
+        }
+      } catch {
+        // Keep waiting status if scan fails
       }
-    } catch {
-      // Keep existing waiting status if Drive scan fails
     }
 
-    return job;
+    return {
+      jobId,
+      organizationId: orgId,
+      brandId,
+      creativeSpec: (metadata?.creativeSpec as CreativeSpec) || ({} as CreativeSpec),
+      providerId: this.id,
+      status,
+      costEstimateUsd: 0.0,
+      costActualUsd: 0.0,
+      dropFolderUrl,
+      outputArtifactId,
+      createdAt: (metadata?.createdAt as string) || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
   }
 }

@@ -33,8 +33,11 @@ export type SceneObservation = {
   audio?: AudioSceneFeatures;
   ocrText?: string;
   state?: "OBSERVED" | "INFERRED";
+  methodId?: string;
   modelQualityEstimate?: number;
   confidence?: number;
+  probability?: number;
+  heuristicScore?: number;
 };
 
 export type PerceptionTranscriptSegment = {

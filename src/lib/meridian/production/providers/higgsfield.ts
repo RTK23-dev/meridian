@@ -16,7 +16,55 @@ import type {
   ProviderHealth,
 } from "../types.ts";
 
-export type HiggsfieldModel = "higgsfield-video-v1" | "dop-v1" | "seedance-v1";
+export type HiggsfieldModelDefinition = {
+  path: string;
+  supportedAspectRatios: string[];
+  buildPayload: (spec: CreativeSpec) => Record<string, unknown>;
+};
+
+export const HIGGSFIELD_MODELS: Record<string, HiggsfieldModelDefinition> = {
+  "higgsfield-video-v1": {
+    path: "/higgsfield/video/v1.0",
+    supportedAspectRatios: ["9:16", "16:9", "1:1"],
+    buildPayload: (spec: CreativeSpec) => ({
+      prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
+      duration: spec.durationTargetSeconds,
+      aspect_ratio: spec.aspectRatio,
+    }),
+  },
+  "dop-v1": {
+    path: "/higgsfield/dop/v1.0",
+    supportedAspectRatios: ["9:16", "16:9"],
+    buildPayload: (spec: CreativeSpec) => ({
+      prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
+      duration: spec.durationTargetSeconds,
+      aspect_ratio: spec.aspectRatio,
+      camera_motion: "pan_zoom_auto",
+    }),
+  },
+  "genjutsu-v1": {
+    path: "/higgsfield/genjutsu/restyle/v1.0",
+    supportedAspectRatios: ["9:16", "16:9"],
+    buildPayload: (spec: CreativeSpec) => ({
+      prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
+      duration: spec.durationTargetSeconds,
+      aspect_ratio: spec.aspectRatio,
+    }),
+  },
+  "seedance-v1": {
+    path: "/seedance/v1.0",
+    supportedAspectRatios: ["9:16", "16:9"],
+    buildPayload: (spec: CreativeSpec) => ({
+      prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
+      duration: spec.durationTargetSeconds,
+      aspect_ratio: spec.aspectRatio,
+    }),
+  },
+};
+
+export const HiggsfieldModelRegistry = HIGGSFIELD_MODELS;
+
+export type HiggsfieldModel = keyof typeof HIGGSFIELD_MODELS;
 
 export class HiggsfieldProvider implements ProductionProvider {
   readonly id = "higgsfield";
@@ -42,8 +90,8 @@ export class HiggsfieldProvider implements ProductionProvider {
 
   getModel(): HiggsfieldModel {
     const configured = process.env.HIGGSFIELD_MODEL?.trim();
-    if (configured === "dop-v1" || configured === "seedance-v1") {
-      return configured;
+    if (configured && configured in HIGGSFIELD_MODELS) {
+      return configured as HiggsfieldModel;
     }
     return "higgsfield-video-v1";
   }
@@ -89,19 +137,9 @@ export class HiggsfieldProvider implements ProductionProvider {
     }
 
     const model = this.getModel();
-    const endpoint = "https://api.higgsfield.ai/v1/requests";
-
-    // Model-specific payload configuration
-    const basePayload = {
-      model,
-      prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
-      duration: spec.durationTargetSeconds,
-      aspect_ratio: spec.aspectRatio,
-    };
-
-    const payload = model === "dop-v1"
-      ? { ...basePayload, camera_motion: "pan_zoom_auto" }
-      : basePayload;
+    const modelDef = HIGGSFIELD_MODELS[model] || HIGGSFIELD_MODELS["higgsfield-video-v1"];
+    const endpoint = `https://api.higgsfield.ai${modelDef.path}`;
+    const payload = modelDef.buildPayload(spec);
 
     try {
       const res = await this.fetchImpl(endpoint, {
