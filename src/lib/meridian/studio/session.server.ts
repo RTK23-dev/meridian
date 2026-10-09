@@ -15,6 +15,7 @@ import { publishThrough } from "../providers/boundaries.ts";
 import { testProviderPerformance } from "../providers/test-provider.ts";
 import { claimAndRun } from "../jobs/sql-worker.ts";
 import { decide } from "../jev/engine.ts";
+import { decisionRecordFields, ruleDecisionRecordFields } from "../jev/decision-record.ts";
 import { publishingReadiness } from "../jev/guards.ts";
 import { loadAppliedPolicies } from "../jev/policy.ts";
 import { generationAllowed } from "../security/budget.ts";
@@ -469,19 +470,20 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       if (gate.decision === "REJECT") {
         throw new Error("The brief gate rejected this. A person was not asked to ignore a stored rejection.");
       }
+      const gateRecord = decisionRecordFields(gate);
       await sql`
         insert into jev_decisions (
           id, organization_id, brand_id, correlation_id, question_id, question_version,
           subject_type, subject_id, input, evidence, probability, confidence, thresholds, decision, reasons,
           provider, model, answer, schema_version, policy_version, calibration_version,
-          reviewer_id, reviewer_decision, reviewed_at
+          reviewer_id, reviewer_decision, reviewed_at, decision_fingerprint, outcome_digest
         ) values (
           ${decisionId}, ${access.organizationId}, ${data.brandId}, ${crypto.randomUUID()},
           ${gate.questionId}, ${gate.questionVersion}, 'brief', ${briefId}, ${JSON.stringify(gate.features)},
           ${JSON.stringify(gate.evidence)}, ${gate.probability}, ${gate.confidence}, ${JSON.stringify(gate.policy)},
           ${gate.decision}, ${JSON.stringify(gate.reasons)}, ${gate.provider}, ${gate.modelVersion},
           ${JSON.stringify(gate.answer)}, ${gate.schemaVersion}, ${gate.policyVersion}, ${gate.calibrationVersion ?? ""},
-          ${context.userId}, 'approve', now()
+          ${context.userId}, 'approve', now(), ${gateRecord.decisionFingerprint}, ${gateRecord.outcomeDigest}
         )
       `;
       await sql`
@@ -601,7 +603,7 @@ function factsFor(
   };
 }
 
-async function writeJudgment(
+export async function writeJudgment(
   sql: Sql,
   input: { organizationId: string; brandId: string; creativeId: string; facts: MediaFacts },
 ): Promise<{ rollup: string; decisionId: string }> {
@@ -612,18 +614,20 @@ async function writeJudgment(
   for (const decision of decisions) {
     const id = crypto.randomUUID();
     if (!pointed && decision.decision === rollup) pointed = id;
+    const record = decisionRecordFields(decision);
     await sql`
       insert into jev_decisions (
         id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,
         input, evidence, probability, confidence, thresholds, decision, reasons, provider, model,
-        answer, schema_version, policy_version, calibration_version
+        answer, schema_version, policy_version, calibration_version, decision_fingerprint, outcome_digest
       ) values (
         ${id}, ${input.organizationId}, ${input.brandId}, ${input.creativeId}, ${decision.questionId},
         ${decision.questionVersion}, 'creative', ${input.creativeId}, ${JSON.stringify(decision.features)},
         ${JSON.stringify(decision.evidence)}, ${decision.probability}, ${decision.confidence},
         ${JSON.stringify(decision.policy)}, ${decision.decision}, ${JSON.stringify(decision.reasons)},
         ${decision.provider}, ${decision.modelVersion},
-        ${JSON.stringify(decision.answer)}, ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""}
+        ${JSON.stringify(decision.answer)}, ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""},
+        ${record.decisionFingerprint}, ${record.outcomeDigest}
       )
     `;
   }
@@ -1763,18 +1767,23 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
       const reasons = decision.reasons.some((line) => line === readiness.summary)
         ? decision.reasons
         : [...decision.reasons, readiness.summary];
+      const publishInput = { state: readiness.state };
+      const publishEvidence = decision.evidence.length > 0 ? decision.evidence : [{ id: "publish", source: "provider_connections", summary: readiness.summary }];
+      // The stored reasons may add the readiness summary, so the digest covers what the row says, not the raw rule output.
+      const publishRecord = ruleDecisionRecordFields({ ...decision, reasons }, { input: publishInput, evidence: publishEvidence });
       await sql`
         insert into jev_decisions (
           id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,
           input, evidence, probability, confidence, thresholds, decision, reasons, provider, model,
-          answer, schema_version, policy_version, calibration_version
+          answer, schema_version, policy_version, calibration_version, decision_fingerprint, outcome_digest
         ) values (
           ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${data.creativeId}, ${decision.questionId},
-          ${decision.questionVersion}, 'creative', ${data.creativeId}, ${JSON.stringify({ state: readiness.state })},
-          ${JSON.stringify(decision.evidence.length > 0 ? decision.evidence : [{ id: "publish", source: "provider_connections", summary: readiness.summary }])},
+          ${decision.questionVersion}, 'creative', ${data.creativeId}, ${JSON.stringify(publishInput)},
+          ${JSON.stringify(publishEvidence)},
           ${decision.probability}, ${decision.confidence}, ${JSON.stringify(decision.thresholds)},
           ${decision.decision}, ${JSON.stringify(reasons)}, ${decision.provider}, ${decision.model},
-          ${JSON.stringify(decision.answer)}, ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""}
+          ${JSON.stringify(decision.answer)}, ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""},
+          ${publishRecord.decisionFingerprint}, ${publishRecord.outcomeDigest}
         )
       `;
       const isTest = data.publisher === "test";
