@@ -178,7 +178,10 @@ export class BudgetLedgerService {
 
   /**
    * Atomically reserve budget funds using conditional DB update.
-   * Invariant: spent_micros + reserved_micros + amountMicros <= max_spend_micros
+   * Invariants, enforced in one statement:
+   * - spent_micros + reserved_micros + amountMicros <= max_spend_micros (account cap)
+   * - when creativePlanId is set: the plan must belong to this organization and brand, and
+   *   plan_reserved_micros + amountMicros <= spend_cap_usd (plan cap; a null cap is not limited here)
    */
   static async reserve(
     sql: Sql,
@@ -197,21 +200,41 @@ export class BudgetLedgerService {
     const account = await this.getOrCreateAccount(sql, params.organizationId, params.brandId);
 
     const reservationId = randomUUID();
+    const amount = params.amountMicros.toString();
+    const planId = params.creativePlanId || null;
+    // One statement, so the plan lock, the cap check, the account update, the plan
+    // total and the reservation row commit or fail together. The plan row lock is
+    // taken first; a concurrent reservation for the same plan re-reads the locked
+    // row's latest plan_reserved_micros before it can pass the cap check.
     const resRows = await sql<ReservationRow>`
-      with updated_account as (
+      with locked_plan as (
+        select id from creative_plans
+        where id = ${planId}
+          and organization_id = ${params.organizationId}
+          and brand_id = ${params.brandId}
+          and (spend_cap_usd is null or plan_reserved_micros + ${amount}::bigint <= round(spend_cap_usd * 1000000)::bigint)
+        for update
+      ), updated_account as (
         update budget_accounts
-        set reserved_micros = reserved_micros + ${params.amountMicros.toString()}::bigint,
+        set reserved_micros = reserved_micros + ${amount}::bigint,
             updated_at = now()
         where id = ${account.id}
           and status = 'ACTIVE'
-          and (spent_micros + reserved_micros + ${params.amountMicros.toString()}::bigint) <= max_spend_micros
+          and (spent_micros + reserved_micros + ${amount}::bigint) <= max_spend_micros
+          and (${planId}::text is null or exists (select 1 from locked_plan))
         returning id, spent_micros, reserved_micros
+      ), claimed_plan as (
+        update creative_plans p
+        set plan_reserved_micros = p.plan_reserved_micros + ${amount}::bigint
+        from locked_plan lp
+        where p.id = lp.id and exists (select 1 from updated_account)
+        returning p.id
       ), inserted_reservation as (
         insert into budget_reservations (
           id, organization_id, brand_id, account_id, creative_plan_id, production_job_id, amount_micros, status
         )
         select ${reservationId}, ${params.organizationId}, ${params.brandId}, updated_account.id,
-          ${params.creativePlanId || null}, ${params.productionJobId || null}, ${params.amountMicros.toString()}::bigint, 'RESERVED'
+          ${planId}, ${params.productionJobId || null}, ${amount}::bigint, 'RESERVED'
         from updated_account
         returning id, organization_id, brand_id, account_id, creative_plan_id, production_job_id, amount_micros, status, created_at, expires_at
       ), inserted_ledger as (
@@ -229,6 +252,26 @@ export class BudgetLedgerService {
     `;
 
     if (resRows.length === 0) {
+      if (planId) {
+        const plans = await sql<{ spend_cap_usd: number | null; plan_reserved_micros: string | number | bigint }>`
+          select spend_cap_usd, plan_reserved_micros from creative_plans
+          where id = ${planId} and organization_id = ${params.organizationId} and brand_id = ${params.brandId}
+          limit 1
+        `;
+        const plan = plans[0];
+        if (!plan) {
+          throw new Error("CreativePlan not found for this organization and brand. Budget reservation refused.");
+        }
+        if (plan.spend_cap_usd != null) {
+          const planCapMicros = BigInt(Math.round(plan.spend_cap_usd * 1_000_000));
+          const planReservedMicros = BigInt(plan.plan_reserved_micros);
+          if (planReservedMicros + params.amountMicros > planCapMicros) {
+            throw new BudgetExceededError(
+              `CreativePlan spend cap exceeded. Requested: $${toUsd(params.amountMicros).toFixed(2)}, Already reserved for plan: $${toUsd(planReservedMicros).toFixed(2)}, Plan cap: $${toUsd(planCapMicros).toFixed(2)}`
+            );
+          }
+        }
+      }
       // Check current balances to provide helpful error
       const current = await sql<CapRow>`
         select max_spend_micros, spent_micros, reserved_micros
