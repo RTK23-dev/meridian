@@ -20,7 +20,7 @@ import { loadAppliedPolicies } from "../jev/policy.ts";
 import { generationAllowed } from "../security/budget.ts";
 import { evaluateJevGate } from "../jev/reviewer-decision.ts";
 import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features.ts";
-import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work.ts";
+import { STUDIO_PROMPT_VERSION, isTestingRuntime, storeBlob, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
 import { productionRouter } from "../production/router.ts";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store.ts";
@@ -652,6 +652,10 @@ export async function generateStudioVariants(
     data.videoProvider = data.videoProvider === "omni" ? "google_omni" : data.videoProvider;
     data.imageProvider = data.imageProvider === "google:nano-banana" ? "google_nano_banana" : data.imageProvider;
     if (data.videoProvider === "auto") data.videoProvider = "google_omni";
+    // The placeholder image provider is isolated to TestingRuntime. Refuse before any write.
+    if (data.imageProvider === "test:image" && !isTestingRuntime()) {
+      throw new Error("The test image provider is isolated to TestingRuntime. Choose a live image provider or no images.");
+    }
 
     const briefs = await sql<Record<string, unknown>>`
       select * from briefs
@@ -1123,7 +1127,7 @@ export async function executeApprovedCreativePlan(
           prompt,
           seed: `${runId}:${deliv.kind}:${index}`,
           promptVersion: `${STUDIO_PROMPT_VERSION}#${deliv.kind}-${index + 1}`,
-          allowTest: imgProvider === "test:image",
+          allowTest: imgProvider === "test:image" && isTestingRuntime(),
           model: imageTarget.model,
           aspectRatio: delivManifest.format.aspectRatio,
         });

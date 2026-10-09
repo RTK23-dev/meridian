@@ -5,6 +5,9 @@ import type { CreativeJudgmentBundle, CreativePlan } from "../creative/plan.ts";
 import { executeApprovedCreativePlan } from "../studio/session.server.ts";
 import type { Sql } from "../learning/store.ts";
 
+// This file executes plans that use the placeholder image provider, which is isolated to TestingRuntime.
+process.env.MERIDIAN_TESTING_RUNTIME = "true";
+
 test("Studio E2E Workflow 1: Single Source of Truth & Deliverables Fidelity", async () => {
   // 1. Authentic JEV decision bundle (P0-2: no fabricated scores)
   const jevJudgments: CreativeJudgmentBundle = {
