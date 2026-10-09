@@ -385,11 +385,17 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
         where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
       `;
     }
-    const existing = await sql<{ id: string }>`
-      select id from briefs
+    const existing = await sql<{ id: string; decision_id: string }>`
+      select id, decision_id from briefs
       where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
       order by created_at desc limit 1
     `;
+    if (existing[0]?.decision_id) {
+      await sql`
+        update jev_decisions set reviewer_id = ${context.userId}, reviewer_decision = 'approve', reviewed_at = now()
+        where id = ${existing[0].decision_id} and organization_id = ${access.organizationId}
+      `;
+    }
     if (!existing[0]) {
       const draft: OpportunityDraft = {
         hypothesisId: asText(row.hypothesis_id),
@@ -456,13 +462,15 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
         insert into jev_decisions (
           id, organization_id, brand_id, correlation_id, question_id, question_version,
           subject_type, subject_id, input, evidence, probability, confidence, thresholds, decision, reasons,
-          provider, model, answer, schema_version, policy_version, calibration_version
+          provider, model, answer, schema_version, policy_version, calibration_version,
+          reviewer_id, reviewer_decision, reviewed_at
         ) values (
           ${decisionId}, ${access.organizationId}, ${data.brandId}, ${crypto.randomUUID()},
           ${gate.questionId}, ${gate.questionVersion}, 'brief', ${briefId}, ${JSON.stringify(gate.features)},
           ${JSON.stringify(gate.evidence)}, ${gate.probability}, ${gate.confidence}, ${JSON.stringify(gate.policy)},
           ${gate.decision}, ${JSON.stringify(gate.reasons)}, ${gate.provider}, ${gate.modelVersion},
-          ${JSON.stringify(gate.answer)}, ${gate.schemaVersion}, ${gate.policyVersion}, ${gate.calibrationVersion ?? ""}
+          ${JSON.stringify(gate.answer)}, ${gate.schemaVersion}, ${gate.policyVersion}, ${gate.calibrationVersion ?? ""},
+          ${context.userId}, 'approve', now()
         )
       `;
       await sql`
