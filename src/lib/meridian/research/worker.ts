@@ -11,6 +11,7 @@ import type { Sql } from "../learning/store.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import { rerankBrand } from "../opportunity/rerank.ts";
 import { RESEARCH_SCHEMA_VERSION, type ResearchSegment } from "./schema.ts";
+import { applyCheapGate, gateMaxAdsPerRun } from "./gate.ts";
 import { snapshotMediaAllowed } from "../factory/sources.ts";
 import { emptyYield, formatYield } from "../factory/yield.ts";
 import { jevDecisionService } from "../jev/service.ts";
@@ -91,8 +92,25 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
   const allowSnapshotMedia = snapshotMediaAllowed();
   const yieldRow = emptyYield(searchTerms);
   yieldRow.snapshotMediaEnabled = allowSnapshotMedia;
+  // Persist every ad first, so the cheap gate ranks the whole run before any media is downloaded (research/gate.ts).
+  const persisted: { ad: (typeof collected.ads)[number]; adId: string }[] = [];
   for (const ad of collected.ads) {
-    const adId = await persistMetaAd(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId, ad });
+    persisted.push({ ad, adId: await persistMetaAd(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId, ad }) });
+  }
+  const gateSkipped = new Set<string>();
+  if (allowSnapshotMedia) {
+    const gate = await applyCheapGate(sql, {
+      organizationId: job.organization_id,
+      brandId: job.brand_id,
+      maxAdsPerRun: gateMaxAdsPerRun(),
+      candidates: persisted.filter(({ ad }) => ad.mediaType === "VIDEO").map(({ ad, adId }) => ({
+        adId, externalId: ad.externalId, copy: ad.copy, headline: ad.headline, description: ad.description, capturedAt: ad.capturedAt, publishedAt: ad.publishedAt,
+      })),
+    });
+    for (const item of gate.skipped) gateSkipped.add(item.adId);
+  }
+  for (const { ad, adId } of persisted) {
+    if (gateSkipped.has(adId)) continue;
     if (ad.mediaType !== "VIDEO") {
       await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "media", status: "unavailable", message: "This archived record is not a video ad." });
       snapshotWithoutVideo += 1;
