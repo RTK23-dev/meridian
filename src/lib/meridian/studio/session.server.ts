@@ -1330,7 +1330,7 @@ export async function executeApprovedCreativePlan(
         if (finalResult && !finalResult.success) {
           await sql`
             update production_jobs
-            set status = ${finalResult.status}, error = ${finalResult.error || "Storage persistence failed"}, updated_at = now()
+            set status = ${finalResult.status}, error_message = ${finalResult.error || "Storage persistence failed"}, updated_at = now()
             where id = ${prodJobId}
           `;
         } else if (finalResult?.success) {

@@ -284,3 +284,25 @@ test("zero estimate is accepted only when the registry establishes the provider 
     injected.restore();
   }
 });
+
+test("artifact finalization failure after a completed submission records its error in the real production_jobs schema", async () => {
+  const sql = await getSql();
+  const tenant = await createTenantFixture(sql, "finalize", 50, "google_omni", "gemini-omni-1.1-flash");
+  // COMPLETED with no bytes and no artifact URI: the finalizer returns WAITING_FOR_ARTIFACT,
+  // which drives the storage-persistence failure branch of the executor.
+  const injected = injectProvider("google_omni", async (spec) => job(spec, "COMPLETED", { providerJobId: "omni-1" }));
+  try {
+    await execute(sql, tenant, tenant.plan, tenant.brief);
+
+    assert.equal(injected.submitted.length, 1);
+    const rows = await sql<{ status: string; error_message: string | null }>`
+      select status, error_message from production_jobs
+      where organization_id = ${tenant.organizationId} and brand_id = ${tenant.brandId}
+    `;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.status, "WAITING_FOR_ARTIFACT");
+    assert.match(rows[0]!.error_message ?? "", /Artifact media bytes are not available/);
+  } finally {
+    injected.restore();
+  }
+});
