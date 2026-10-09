@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { googleDriveClient, type GoogleDriveClient } from "../storage/drive.ts";
 import { evaluateProductionPostflight } from "./postflight.ts";
+import type { ProductionJob } from "./types.ts";
 import { detectArtifactType } from "./mime-detector.ts";
 
 export class ArtifactIntegrityError extends Error {
