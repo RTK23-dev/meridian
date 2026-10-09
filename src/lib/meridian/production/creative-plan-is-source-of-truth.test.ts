@@ -7,6 +7,7 @@ import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
 
 const plan: CreativePlan = {
   lineage: TEST_PLAN_LINEAGE,
+  productionContext: null,
   id: "plan-1", version: "1", status: "approved", scope: "video_only", autonomy: "manual",
   objective: "conversion", selectedConceptId: "concept-1", rationale: [],
   assetPlan: [{ assetId: "asset-approved", role: "primary_visual", rightsConfirmed: true, provenance: "USER_PROVIDED" }], productionPlan: [],

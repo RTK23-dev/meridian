@@ -4,7 +4,7 @@ import { getSql } from "../../db.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { Sql } from "../learning/store.ts";
 import { executeApprovedCreativePlan, generateStudioVariants } from "./session.server.ts";
-import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
 
 /** Runs `run` with the given runtime variables, then restores the prior values. */
 async function withRuntime<T>(
@@ -96,7 +96,8 @@ test("executeApprovedCreativePlan refuses to generate placeholder images outside
   const sql = await getSql();
   const tenant = await studioTenant(sql, "executor");
   const plan = CreativeDecisionEngine.createPlan({
-    lineage: TEST_PLAN_LINEAGE,
+    lineage: { decisionId: tenant.decisionId, evidenceRefs: TEST_PLAN_LINEAGE.evidenceRefs },
+    productionContext: TEST_PRODUCTION_CONTEXT,
     scope: "image_only",
     autonomy: "semi_automatic",
     preferredImageProvider: "test:image",
@@ -124,7 +125,7 @@ test("executeApprovedCreativePlan refuses to generate placeholder images outside
 
   await withRuntime({ NODE_ENV: "production", MERIDIAN_TESTING_RUNTIME: undefined }, async () => {
     await assert.rejects(
-      executeApprovedCreativePlan(sql, { organizationId: tenant.organizationId, role: "member" }, tenant.userId, plan, tenant.brief),
+      executeApprovedCreativePlan(sql, { organizationId: tenant.organizationId, role: "member" }, tenant.userId, plan),
       /test image provider is not enabled/,
     );
   });
@@ -135,7 +136,8 @@ test("executeApprovedCreativePlan still generates placeholder images in TestingR
   const sql = await getSql();
   const tenant = await studioTenant(sql, "control");
   const plan = CreativeDecisionEngine.createPlan({
-    lineage: TEST_PLAN_LINEAGE,
+    lineage: { decisionId: tenant.decisionId, evidenceRefs: TEST_PLAN_LINEAGE.evidenceRefs },
+    productionContext: TEST_PRODUCTION_CONTEXT,
     scope: "image_only",
     autonomy: "semi_automatic",
     preferredImageProvider: "test:image",
@@ -161,7 +163,7 @@ test("executeApprovedCreativePlan still generates placeholder images in TestingR
   `;
 
   await withRuntime({ NODE_ENV: undefined, MERIDIAN_TESTING_RUNTIME: "true" }, async () => {
-    await executeApprovedCreativePlan(sql, { organizationId: tenant.organizationId, role: "member" }, tenant.userId, plan, tenant.brief);
+    await executeApprovedCreativePlan(sql, { organizationId: tenant.organizationId, role: "member" }, tenant.userId, plan);
   });
   assert.equal(await countCreatives(sql, tenant.brandId), plan.deliverables.length);
 });

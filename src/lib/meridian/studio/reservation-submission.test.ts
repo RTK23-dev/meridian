@@ -8,7 +8,7 @@ import { productionRouter } from "../production/router.ts";
 import type { CreativeSpec, ProductionJob, ProductionProvider } from "../production/types.ts";
 import { BudgetExceededError, BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { executeApprovedCreativePlan } from "./session.server.ts";
-import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
 
 type Outcome = (spec: CreativeSpec) => Promise<ProductionJob>;
 
@@ -81,7 +81,8 @@ async function createTenantFixture(sql: Sql, label: string, planCapUsd: number |
   `;
 
   const plan: CreativePlan = CreativeDecisionEngine.createPlan({
-    lineage: TEST_PLAN_LINEAGE,
+    lineage: { decisionId, evidenceRefs: TEST_PLAN_LINEAGE.evidenceRefs },
+    productionContext: TEST_PRODUCTION_CONTEXT,
     scope: "video_only",
     autonomy: "semi_automatic",
     preferredVideoProvider: providerId,
@@ -116,8 +117,8 @@ async function createTenantFixture(sql: Sql, label: string, planCapUsd: number |
   return { organizationId, brandId, briefId, plan, brief };
 }
 
-async function execute(sql: Sql, tenant: { organizationId: string }, plan: CreativePlan, brief: Record<string, unknown>) {
-  return executeApprovedCreativePlan(sql, { organizationId: tenant.organizationId, role: "member" }, "test-user", plan, brief);
+async function execute(sql: Sql, tenant: { organizationId: string }, plan: CreativePlan) {
+  return executeApprovedCreativePlan(sql, { organizationId: tenant.organizationId, role: "member" }, "test-user", plan);
 }
 
 async function reservationsFor(sql: Sql, planId: string) {
@@ -150,7 +151,7 @@ test("ambiguous submission (thrown): the reservation stays held, the job is reco
     throw new Error("socket hang up after the request was written");
   });
   try {
-    await assert.rejects(execute(sql, tenant, tenant.plan, tenant.brief), /outcome is unknown/);
+    await assert.rejects(execute(sql, tenant, tenant.plan), /outcome is unknown/);
 
     assert.equal(injected.submitted.length, 1, "the provider was called exactly once");
     const reservations = await reservationsFor(sql, tenant.plan.id);
@@ -161,7 +162,7 @@ test("ambiguous submission (thrown): the reservation stays held, the job is reco
     assert.equal(await planStatus(sql, tenant.plan.id), "failed");
 
     // The plan is no longer executable, so a retry cannot submit the possibly-billable job again.
-    await assert.rejects(execute(sql, tenant, tenant.plan, tenant.brief), /must be durably approved and executing/);
+    await assert.rejects(execute(sql, tenant, tenant.plan), /must be durably approved and executing/);
     assert.equal(injected.submitted.length, 1, "no resubmission");
   } finally {
     injected.restore();
@@ -176,7 +177,7 @@ test("ambiguous submission (reported SUBMISSION_UNKNOWN): the reservation stays 
     job(spec, "SUBMISSION_UNKNOWN", { error: "timed out waiting for acceptance" }),
   );
   try {
-    await assert.rejects(execute(sql, tenant, tenant.plan, tenant.brief), /outcome is unknown/);
+    await assert.rejects(execute(sql, tenant, tenant.plan), /outcome is unknown/);
 
     assert.equal(injected.submitted.length, 1);
     assert.deepEqual((await reservationsFor(sql, tenant.plan.id)).map((r) => r.status), ["RESERVED"]);
@@ -194,7 +195,7 @@ test("definitive provider rejection: the reservation is released and the budget 
     job(spec, "FAILED", { error: "quota rejected before any work started", errorCode: "QUOTA" }),
   );
   try {
-    await assert.rejects(execute(sql, tenant, tenant.plan, tenant.brief), /Video production failed/);
+    await assert.rejects(execute(sql, tenant, tenant.plan), /Video production failed/);
 
     assert.equal(injected.submitted.length, 1);
     assert.deepEqual((await reservationsFor(sql, tenant.plan.id)).map((r) => r.status), ["RELEASED"]);
@@ -212,7 +213,7 @@ test("plan spend cap is enforced before any provider call", async () => {
   assert.ok(tenant.plan.estimatedCost.totalEstimatedUsd > 0.5, "fixture: estimate must exceed the plan cap");
   const injected = injectProvider("google_omni", async (spec) => job(spec, "QUEUED", { providerJobId: "never" }));
   try {
-    await assert.rejects(execute(sql, tenant, tenant.plan, tenant.brief), (error: unknown) =>
+    await assert.rejects(execute(sql, tenant, tenant.plan), (error: unknown) =>
       error instanceof BudgetExceededError && /CreativePlan spend cap exceeded/.test((error as Error).message),
     );
 
@@ -231,7 +232,7 @@ test("zero estimate on a billable provider is refused before any provider call",
   const plan = { ...tenant.plan, estimatedCost: { ...tenant.plan.estimatedCost, totalEstimatedUsd: 0 } };
   const injected = injectProvider("google_omni", async (spec) => job(spec, "QUEUED", { providerJobId: "never" }));
   try {
-    await assert.rejects(execute(sql, tenant, plan, tenant.brief), /Zero cost estimate for a billable provider/);
+    await assert.rejects(execute(sql, tenant, plan), /Zero cost estimate for a billable provider/);
 
     assert.equal(injected.submitted.length, 0);
     assert.deepEqual(await reservationsFor(sql, tenant.plan.id), []);
@@ -247,7 +248,7 @@ test("missing estimate on a billable provider is refused before any provider cal
   const plan = { ...tenant.plan, estimatedCost: undefined } as unknown as CreativePlan;
   const injected = injectProvider("google_omni", async (spec) => job(spec, "QUEUED", { providerJobId: "never" }));
   try {
-    await assert.rejects(execute(sql, tenant, plan, tenant.brief), /Cost estimate is missing or invalid/);
+    await assert.rejects(execute(sql, tenant, plan), /Cost estimate is missing or invalid/);
 
     assert.equal(injected.submitted.length, 0);
     assert.deepEqual(await reservationsFor(sql, tenant.plan.id), []);
@@ -262,7 +263,7 @@ test("non-finite estimate on a billable provider is refused before any provider 
   const plan = { ...tenant.plan, estimatedCost: { ...tenant.plan.estimatedCost, totalEstimatedUsd: Number.NaN } };
   const injected = injectProvider("google_omni", async (spec) => job(spec, "QUEUED", { providerJobId: "never" }));
   try {
-    await assert.rejects(execute(sql, tenant, plan, tenant.brief), /Cost estimate is missing or invalid/);
+    await assert.rejects(execute(sql, tenant, plan), /Cost estimate is missing or invalid/);
 
     assert.equal(injected.submitted.length, 0);
     assert.deepEqual(await reservationsFor(sql, tenant.plan.id), []);
@@ -277,7 +278,7 @@ test("zero estimate is accepted only when the registry establishes the provider 
   const plan = { ...tenant.plan, estimatedCost: { ...tenant.plan.estimatedCost, totalEstimatedUsd: 0 } };
   const injected = injectProvider("manual_cloud", async (spec) => job(spec, "QUEUED", { providerJobId: "drop-1" }));
   try {
-    await execute(sql, tenant, plan, tenant.brief);
+    await execute(sql, tenant, plan);
 
     assert.equal(injected.submitted.length, 1, "the registry-free provider is called");
     assert.deepEqual(await reservationsFor(sql, tenant.plan.id), [], "no reservation is needed for a free provider");
@@ -294,7 +295,7 @@ test("artifact finalization failure after a completed submission records its err
   // which drives the storage-persistence failure branch of the executor.
   const injected = injectProvider("google_omni", async (spec) => job(spec, "COMPLETED", { providerJobId: "omni-1" }));
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
 
     assert.equal(injected.submitted.length, 1);
     const rows = await sql<{ status: string; error_message: string | null }>`
