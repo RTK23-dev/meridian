@@ -1,3 +1,4 @@
+import type { HeldReservationResolution } from "../security/held-reservations.ts";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
@@ -136,4 +137,42 @@ export const recordStudioTestPerformance = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const api = await import("./session.server");
     return api.recordStudioTestPerformance(context.userId, data);
+  });
+
+export const listHeldBudgetReservations = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const brandId = clip((input as { brandId?: unknown })?.brandId);
+    if (!brandId) throw new Error("Choose a brand.");
+    return { brandId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { getSql } = await import("../../db.ts");
+    const api = await import("../security/held-reservations.ts");
+    return api.listHeldReservations(await getSql(), context.userId, data.brandId);
+  });
+
+export const resolveHeldBudgetReservation = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const raw = (input ?? {}) as Record<string, unknown>;
+    const brandId = clip(raw.brandId);
+    const reservationId = clip(raw.reservationId);
+    if (!brandId || !reservationId) throw new Error("Choose a held reservation.");
+    const resolution: HeldReservationResolution | null =
+      raw.resolution === "not_accepted" || raw.resolution === "billed_no_artifact" ? raw.resolution : null;
+    if (!resolution) throw new Error("Choose how the provider outcome was resolved.");
+    return {
+      brandId,
+      reservationId,
+      resolution,
+      note: typeof raw.note === "string" ? raw.note.trim() : "",
+      providerReference: typeof raw.providerReference === "string" ? raw.providerReference.trim() : undefined,
+      observedSpendUsd: typeof raw.observedSpendUsd === "number" ? raw.observedSpendUsd : undefined,
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { getSql } = await import("../../db.ts");
+    const api = await import("../security/held-reservations.ts");
+    return api.resolveHeldReservation(await getSql(), context.userId, data);
   });
