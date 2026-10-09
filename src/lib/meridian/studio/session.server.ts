@@ -1365,16 +1365,19 @@ export async function executeApprovedCreativePlan(
         });
         creativeSpec.providerId = productionTarget.provider;
         creativeSpec.modelId = productionTarget.model;
-        const provider = await productionRouter.route(
+        // P4a: the provider and model are chosen by the capability matrix, and the choice is recorded on the job.
+        const { provider, selection } = await productionRouter.selectForSpec(
           creativeSpec,
           "BALANCED",
           targetVidProvider === "auto" ? undefined : targetVidProvider,
         );
+        creativeSpec.providerId = provider.id;
+        creativeSpec.modelId = selection.chosen?.modelId ?? creativeSpec.modelId;
         const prodJobId = productionJobIds.get(deliv.id) ?? crypto.randomUUID();
         creativeSpec.idempotencyKey = prodJobId;
         const durableInput = JSON.stringify({
           creativeSpec, runId, briefId: briefId, manifestId: delivManifest.creativeId,
-          manifest: delivManifest, planDeliverableId: deliv.id,
+          manifest: delivManifest, planDeliverableId: deliv.id, providerSelection: selection,
         });
         await sql`
           insert into production_jobs (
