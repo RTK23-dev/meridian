@@ -48,7 +48,7 @@ test("JEV Research validates typed, evidence-backed analyses and flags uncertain
     claims: [],
   });
   assert.equal(parsed.reviewRequired, true);
-  assert.equal(parsed.schemaVersion, "jev.research-ad.v1");
+  assert.equal(parsed.schemaVersion, "jev.research-ad.v2");
   assert.throws(() => validateResearchAnalysis({ ...parsed, openingMove: { value: "invented", confidence: 0.8, evidence: ["seg-1"] } }));
 });
 
@@ -237,7 +237,7 @@ test("Meta Ad Library collection is explicit when disconnected and bounded/dedup
 });
 
 test("JEV Research analysis is idempotent by source/transcript/schema/model and rejects changed evidence", async () => {
-  const segments = [{ id: "t0", text: "Try this soap. Shop now.", startMs: 0, endMs: 3000, role: "other" as const, confidence: 1 }];
+  const segments = [{ id: "t0", text: "Try this soap. Shop now.", startMs: 0, endMs: 3000, role: "other" as const, confidence: 1, state: "OBSERVED" as const }];
   const response = {
     topic: { value: "hand care", confidence: 0.9, evidence: ["t0"] },
     openingMove: { value: "problem", confidence: 0.8, evidence: ["t0"] },
@@ -273,13 +273,13 @@ test("stored JEV Research analysis is reusable only through its tenant, brand, a
     statement = strings.join(" ");
     parameters.push(...values);
     return [{
-      result: JSON.stringify({ schemaVersion: "jev.research-ad.v1" }),
-      cache_key: "cache-key", provider: "fixture", model: "model-1", prompt_version: "jev.research-ad.v1", latency_ms: 12, tokens: 30,
+      result: JSON.stringify({ schemaVersion: "jev.research-ad.v2" }),
+      cache_key: "cache-key", provider: "fixture", model: "model-1", prompt_version: "jev.research-ad.v2", latency_ms: 12, tokens: 30,
     }];
   }) as unknown as import("./learning/store.ts").Sql;
   const cached = await loadReusableResearchAnalysis(sql, { organizationId: "org-a", brandId: "brand-a", researchAdId: "ad-a", videoHash: "hash-a" });
   assert.equal(cached?.cacheKey, "cache-key");
-  assert.equal(cached?.analysis.schemaVersion, "jev.research-ad.v1");
+  assert.equal(cached?.analysis.schemaVersion, "jev.research-ad.v2");
   assert.match(statement, /t\.content_hash/);
   assert.match(statement, /r\.schema_version/);
   assert.deepEqual(parameters.slice(0, 4), ["ad-a", "org-a", "brand-a", "hash-a"]);

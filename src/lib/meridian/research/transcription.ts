@@ -87,10 +87,11 @@ function transcriptSegments(body: unknown): { text: string; segments: ResearchSe
       endMs: Number.isFinite(end) && end >= start ? Math.round(end * 1000) : null,
       role: "unclear",
       confidence: 0.5,
+      state: "OBSERVED",
     }];
   }) : [];
   if (segments.length === 0 && text) {
-    return { text, segments: [{ id: "t1", text, startMs: null, endMs: null, role: "unclear", confidence: 0.5 }] };
+    return { text, segments: [{ id: "t1", text, startMs: null, endMs: null, role: "unclear", confidence: 0.5, state: "OBSERVED" }] };
   }
   return { text: text || segments.map((segment) => segment.text).join(" "), segments };
 }
