@@ -47,6 +47,19 @@ test("a persisted negative brief answer blocks creative production", () => {
   assert.equal(creativeJudgmentsFromStoredDecision({ ...base, answer, decision: "HUMAN_REVIEW" }).status, "abstain_rejected");
 });
 
+test("a deterministic brief uncertainty proceeds only after recorded human approval", () => {
+  const answer = JSON.stringify({
+    schemaVersion: ANSWER_SCHEMA_VERSION,
+    value: "uncertain",
+    score: 0.8,
+    probability: 0.8,
+    confidence: 0.61,
+  });
+  const pendingReview = { ...base, answer, decision: "HUMAN_REVIEW" };
+  assert.equal(creativeJudgmentsFromStoredDecision(pendingReview).status, "abstain_insufficient_evidence");
+  assert.equal(creativeJudgmentsFromStoredDecision({ ...pendingReview, reviewerDecision: "approve" }).status, "admissible");
+});
+
 test("schema-valid strategic model response preserves its explicit recommendation", () => {
   const bundle = creativeJudgmentsFromStoredDecision({
     ...base,

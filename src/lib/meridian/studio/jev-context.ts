@@ -58,9 +58,11 @@ export function creativeJudgmentsFromStoredDecision(input: {
 
   if (storedAnswer?.success) {
     const decision = input.decision.toUpperCase();
+    const humanReviewedUncertainty = storedAnswer.data.value === "uncertain" &&
+      decision === "HUMAN_REVIEW" && input.reviewerDecision?.trim().toLowerCase() === "approve";
     const status = decision === "REJECT" || storedAnswer.data.value === "no" || storedAnswer.data.value === "violation"
       ? "abstain_rejected"
-      : storedAnswer.data.value === "uncertain" || storedAnswer.data.value === "insufficient"
+      : storedAnswer.data.value === "insufficient" || (storedAnswer.data.value === "uncertain" && !humanReviewedUncertainty)
         ? "abstain_insufficient_evidence"
         : "admissible";
     return {
