@@ -32,6 +32,12 @@ import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativePlan 
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 import { BudgetLedgerService, InvalidBudgetCapError, toMicros } from "../security/budget-ledger.ts";
 import { modelCapabilityRegistry } from "../production/registry.ts";
+import {
+  completeVideoJob,
+  ESTIMATOR_VERSION,
+  openVideoReview,
+  settleCreativePlanIfComplete,
+} from "../production/materialization.ts";
 import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
 import { resolveProductionTarget } from "../production/target.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
@@ -827,13 +833,15 @@ export async function generateStudioVariants(
 }
 
 /**
- * Budget reservation amount for an approved plan. Fails closed.
- * A missing, non-finite, negative, or zero estimate reserves nothing only when every
+ * Budget reservation shares for an approved plan, keyed by deliverable id. Fails closed.
+ * A missing, non-finite, negative, or zero plan estimate reserves nothing only when every
  * deliverable's provider/model pair is registered as free of charge. Otherwise it is refused
- * before any provider call. A positive estimate is reserved exactly, in integer micros.
+ * before any provider call. Billable deliverables need their own finite estimate, and the
+ * shares must add up to the plan estimate (to within one cent of rounding).
  */
-function planReservationMicros(plan: CreativePlan): bigint | null {
-  const allFree = plan.deliverables.every((d) => modelCapabilityRegistry.isEstablishedFree(d.provider, d.model));
+function planReservationShares(plan: CreativePlan): Map<string, bigint> | null {
+  const isFree = (d: CreativePlan["deliverables"][number]) => modelCapabilityRegistry.isEstablishedFree(d.provider, d.model);
+  const allFree = plan.deliverables.every(isFree);
   const total = plan.estimatedCost?.totalEstimatedUsd;
   if (typeof total !== "number" || !Number.isFinite(total) || total < 0) {
     if (allFree) return null;
@@ -847,7 +855,41 @@ function planReservationMicros(plan: CreativePlan): bigint | null {
       "Zero cost estimate for a billable provider. Budget reservation refused; no provider was called."
     );
   }
-  return toMicros(total);
+  const totalMicros = toMicros(total);
+  const perDeliverable = plan.estimatedCost?.perDeliverableUsd ?? {};
+  const shares = new Map<string, bigint>();
+  let sum = 0n;
+  for (const deliverable of plan.deliverables) {
+    const raw = perDeliverable[deliverable.id];
+    if (raw === undefined && isFree(deliverable)) continue;
+    if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) {
+      throw new InvalidBudgetCapError(
+        `Deliverable '${deliverable.id}' has no valid cost estimate. Budget reservation refused; no provider was called.`
+      );
+    }
+    const micros = toMicros(raw);
+    sum += micros;
+    if (micros > 0n) shares.set(deliverable.id, micros);
+  }
+  const drift = sum > totalMicros ? sum - totalMicros : totalMicros - sum;
+  if (drift > 10_000n) {
+    throw new InvalidBudgetCapError(
+      "Per-deliverable estimates do not add up to the plan estimate. Budget reservation refused; no provider was called."
+    );
+  }
+  return shares;
+}
+
+/** Releases every reservation that no provider submission can be holding. Held ones stay for reconciliation. */
+async function releaseUnheldReservations(
+  sql: Sql,
+  reservations: Map<string, { id: string; held: boolean }>,
+  reason: string,
+) {
+  for (const reservation of reservations.values()) {
+    if (reservation.held) continue;
+    await BudgetLedgerService.release(sql, { reservationId: reservation.id, reason }).catch(() => {});
+  }
 }
 
 export async function executeApprovedCreativePlan(
@@ -1001,24 +1043,28 @@ export async function executeApprovedCreativePlan(
     throw new Error(blocked.reason);
   }
 
-  let reservationId: string | null = null;
-  // Set once provider I/O may have begun, and cleared only when the provider definitively
-  // rejects the job. While set, the reservation is never released: the job may be billable.
-  let reservationHeld = false;
+  // One reservation per deliverable that carries spend. Each video reservation is linked to its
+  // production job id before any provider call, so its budget line is settled or held per job.
+  const reservations = new Map<string, { id: string; amountMicros: bigint; held: boolean }>();
+  const productionJobIds = new Map<string, string>();
+  for (const deliverable of creativePlan.deliverables) {
+    if (deliverable.kind === "video") productionJobIds.set(deliverable.id, crypto.randomUUID());
+  }
   let providerSubmissionUnknown = false;
-  const estimatedUsd = creativePlan.estimatedCost?.totalEstimatedUsd ?? 0;
   try {
-    const reservationMicros = planReservationMicros(creativePlan);
-    if (reservationMicros !== null) {
+    const shares = planReservationShares(creativePlan);
+    for (const [deliverableId, amountMicros] of shares ?? []) {
       const reservation = await BudgetLedgerService.reserve(sql, {
         organizationId: access.organizationId,
         brandId,
-        amountMicros: reservationMicros,
+        amountMicros,
         creativePlanId: creativePlan.id,
+        productionJobId: productionJobIds.get(deliverableId),
       });
-      reservationId = reservation.id;
+      reservations.set(deliverableId, { id: reservation.id, amountMicros, held: false });
     }
   } catch (budgetErr) {
+    await releaseUnheldReservations(sql, reservations, "Budget reservation failed before provider submission.");
     await transitionCreativePlan(sql, {
       organizationId: access.organizationId,
       brandId,
@@ -1244,7 +1290,7 @@ export async function executeApprovedCreativePlan(
           "BALANCED",
           targetVidProvider === "auto" ? undefined : targetVidProvider,
         );
-        const prodJobId = crypto.randomUUID();
+        const prodJobId = productionJobIds.get(deliv.id) ?? crypto.randomUUID();
         creativeSpec.idempotencyKey = prodJobId;
         const durableInput = JSON.stringify({
           creativeSpec, runId, briefId: asText(brief.id), manifestId: delivManifest.creativeId,
@@ -1253,16 +1299,17 @@ export async function executeApprovedCreativePlan(
         await sql`
           insert into production_jobs (
             id, organization_id, brand_id, provider, provider_job_id, request_id, status_url, cancel_url,
-            status, cost_mode, estimated_cost_cents, input, created_at, submitted_at, updated_at
+            status, cost_mode, estimated_cost_cents, input, created_at, submitted_at, updated_at, creative_plan_id
           ) values (
             ${prodJobId}, ${access.organizationId}, ${brandId}, ${provider.id}, null, null, null, null,
             'SUBMITTING', 'BALANCED', ${Math.round(creativeSpec.durationTargetSeconds * provider.capabilities.costPerSecondEstimateUsd * 100)},
-            ${durableInput}, now(), null, now()
+            ${durableInput}, now(), null, now(), ${creativePlan.id}
           )
           on conflict (id) do nothing
         `;
         let submittedJob: import("../production/types.ts").ProductionJob;
-        reservationHeld = true;
+        const videoReservation = reservations.get(deliv.id);
+        if (videoReservation) videoReservation.held = true;
         try {
           submittedJob = await provider.submitJob(creativeSpec);
         } catch (submitError) {
@@ -1288,7 +1335,7 @@ export async function executeApprovedCreativePlan(
         }
         if (submittedJob.status === "FAILED" || submittedJob.status === "PREFLIGHT_FAILED" || submittedJob.status === "NOT_CONFIGURED") {
           // Definitive provider rejection: nothing was accepted, so the reservation may be released.
-          reservationHeld = false;
+          if (videoReservation) videoReservation.held = false;
           await sql`
             update production_jobs set status = 'FAILED', error_code = ${submittedJob.errorCode || submittedJob.status},
               error_message = ${submittedJob.error || "Provider rejected the request."}, updated_at = now()
@@ -1334,46 +1381,8 @@ export async function executeApprovedCreativePlan(
             where id = ${prodJobId}
           `;
         } else if (finalResult?.success) {
-          const videoCreativeId = crypto.randomUUID();
-          const videoAssetId = crypto.randomUUID();
-          const videoCopy = `${productName}. ${creativeSpec.script}`;
-          const storageKey = finalResult.storageKey || `${access.organizationId}/${brandId}/runs/${runId}/${videoAssetId}.mp4`;
-
-          await sql`
-            insert into creative_records (
-              id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
-              message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
-            ) values (
-              ${videoCreativeId}, ${access.organizationId}, ${brandId}, 'generated', ${`${asText(brief.title)} video`},
-              ${videoCopy}, ${productName}, ${creativeSpec.hookLine}, ${"problem"}, ${delivManifest.concept?.mechanism || ""},
-              ${creativeSpec.script}, ${""}, ${creativeSpec.format}, ${""},
-              ${asText(brief.opportunity_id) || null}, ${asText(brief.id)}, 'in_review', ${userId},
-              ${JSON.stringify({
-                generationRunId: runId,
-                provider: provider.id,
-                providerJobId: submittedJob.jobId,
-                productionJobId: prodJobId,
-                jevDecisionId: asText(brief.decision_id),
-                kind: "video",
-                planDeliverableId: deliv.id,
-              })}
-            )
-          `;
-
-          const videoMime = finalResult.mimeType;
-          if (!videoMime) throw new Error("Finalized video artifact has no verified MIME type.");
-          await sql`
-            insert into assets (
-              id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
-              lifecycle, checksum, width, height, byte_size, duration_ms, provider, model, prompt_version, generation_run_id,
-              kind, qa_decision, review_status, media_status, variant_index, provenance
-            ) values (
-              ${videoAssetId}, ${access.organizationId}, ${brandId}, ${videoCreativeId}, 1, ${storageKey}, ${finalResult.sha256 || ""},
-              ${videoMime}, ${provider.id}, 'stored', 'qa_required', ${finalResult.sha256 || ""}, 1080, 1920,
-              ${finalResult.byteSize || 0}, 8000, ${provider.id}, ${provider.id}, 'studio_video_v1', ${runId},
-              'video', '', 'in_review', 'completed', 0, 'generated'
-            )
-          `;
+          // Shared with the poller: creates the creative, asset, and settles this job's reservation.
+          await completeVideoJob(sql, { organizationId: access.organizationId, brandId, productionJobId: prodJobId });
         }
       }
     }
@@ -1437,42 +1446,46 @@ export async function executeApprovedCreativePlan(
         where id = ${asText(video.id)}
       `;
       if (status === "in_review") {
-        await sql`
-          insert into reviews (id, organization_id, brand_id, decision_id, creative_id, subject_label)
-          values (${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${judged.decisionId}, ${asText(video.creative_id)}, 'Video')
-        `;
+        await openVideoReview(sql, {
+          organizationId: access.organizationId,
+          brandId,
+          creativeId: asText(video.creative_id),
+          decisionId: asText(brief.decision_id),
+        });
       }
     }
 
-    if (reservationId && !providerSubmissionUnknown) {
+    // Image spend settles now. Video spend settles per job when its artifact is materialized.
+    for (const [deliverableId, reservation] of reservations) {
+      if (productionJobIds.has(deliverableId)) continue;
       await BudgetLedgerService.reconcile(sql, {
-        reservationId,
-        cost: { basis: "ESTIMATED", amountMicros: toMicros(estimatedUsd), estimatorVersion: "creative-plan-estimate-v1" },
+        reservationId: reservation.id,
+        cost: { basis: "ESTIMATED", amountMicros: reservation.amountMicros, estimatorVersion: ESTIMATOR_VERSION },
       });
     }
 
     await sql`update briefs set status = 'used' where id = ${asText(brief.id)}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
-    await transitionCreativePlan(sql, {
-      organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
-      target: "completed", reason: "All planned deliverables completed.",
+    await settleCreativePlanIfComplete(sql, {
+      organizationId: access.organizationId,
+      brandId,
+      planId: creativePlan.id,
+      actorId: userId,
     });
     return loadSession(sql, access.organizationId, brandId, access.role);
   } catch (error) {
-    if (reservationId && !reservationHeld) {
-      await BudgetLedgerService.release(sql, {
-        reservationId,
-        reason: error instanceof Error ? error.message : String(error),
-      }).catch(() => {});
-    }
+    await releaseUnheldReservations(sql, reservations, error instanceof Error ? error.message : String(error));
     await sql`
       update generation_runs set status = 'failed'
       where id = ${runId} and organization_id = ${access.organizationId} and status = 'running'
     `;
-    await transitionCreativePlan(sql, {
-      organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
-      target: "failed", reason: error instanceof Error ? error.message : String(error),
-    }).catch(() => {});
+    const acceptedJobInFlight = !providerSubmissionUnknown && [...reservations.values()].some((r) => r.held);
+    if (!acceptedJobInFlight) {
+      await transitionCreativePlan(sql, {
+        organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
+        target: "failed", reason: error instanceof Error ? error.message : String(error),
+      }).catch(() => {});
+    }
     throw error;
   }
 }

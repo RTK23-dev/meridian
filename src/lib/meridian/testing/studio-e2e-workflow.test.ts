@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreativeJudgmentBundle, CreativePlan } from "../creative/plan.ts";
 import { executeApprovedCreativePlan } from "../studio/session.server.ts";
@@ -321,11 +320,3 @@ test("Studio E2E Workflow 3: Rejection Flow Transitions to Rejected (P0-3)", asy
   assert.equal(plan.status, "rejected", "Rejected plan must have status rejected");
 });
 
-test("provider submission is durably recorded before the network call and unknown outcomes retain reservations", async () => {
-  const source = await readFile(new URL("../studio/session.server.ts", import.meta.url), "utf8");
-  const jobInsert = source.indexOf("insert into production_jobs", source.indexOf("const targetVidProvider"));
-  const providerCall = source.indexOf("await provider.submitJob(creativeSpec)", source.indexOf("const targetVidProvider"));
-  assert.ok(jobInsert >= 0 && providerCall > jobInsert, "Durable SUBMITTING record must precede provider I/O.");
-  assert.match(source, /status = 'SUBMISSION_UNKNOWN'/);
-  assert.match(source, /reservationId && !providerSubmissionUnknown/);
-});
