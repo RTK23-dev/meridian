@@ -160,7 +160,7 @@ export function PipelineEditor({
             onClick={() => setActiveTab("pipeline")}
             className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
               activeTab === "pipeline"
-                ? "bg-brass text-black shadow-sm"
+                ? "bg-accent text-accent-fg shadow-sm"
                 : "text-muted hover:text-foreground hover:bg-surface-elevated/40"
             }`}
           >
@@ -171,7 +171,7 @@ export function PipelineEditor({
             onClick={() => setActiveTab("volume")}
             className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
               activeTab === "volume"
-                ? "bg-brass text-black shadow-sm"
+                ? "bg-accent text-accent-fg shadow-sm"
                 : "text-muted hover:text-foreground hover:bg-surface-elevated/40"
             }`}
           >
@@ -182,7 +182,7 @@ export function PipelineEditor({
             onClick={() => setActiveTab("grading")}
             className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
               activeTab === "grading"
-                ? "bg-brass text-black shadow-sm"
+                ? "bg-accent text-accent-fg shadow-sm"
                 : "text-muted hover:text-foreground hover:bg-surface-elevated/40"
             }`}
           >
@@ -193,7 +193,7 @@ export function PipelineEditor({
             onClick={() => setActiveTab("prompts")}
             className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
               activeTab === "prompts"
-                ? "bg-brass text-black shadow-sm"
+                ? "bg-accent text-accent-fg shadow-sm"
                 : "text-muted hover:text-foreground hover:bg-surface-elevated/40"
             }`}
           >
@@ -206,7 +206,7 @@ export function PipelineEditor({
             type="button"
             onClick={() => void handleSave()}
             disabled={isSaving}
-            className="flex items-center gap-2 rounded-lg bg-brass px-4 py-1.5 text-xs font-semibold text-black shadow hover:brightness-110 active:scale-95 transition"
+            className="flex items-center gap-2 rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-fg shadow hover:brightness-110 active:scale-95 transition"
           >
             {isSaving ? "Saving..." : "Save Pipeline Process"}
           </button>
@@ -350,7 +350,7 @@ export function PipelineEditor({
                           }))}
                           className={`rounded px-2.5 py-1 text-xs font-semibold transition ${
                             config.generationParams.videoCount === num
-                              ? "bg-brass text-black"
+                              ? "bg-accent text-accent-fg shadow-sm"
                               : "border border-line bg-surface text-muted hover:text-foreground"
                           }`}
                         >
@@ -587,7 +587,7 @@ export function PipelineEditor({
                     }))}
                     className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${
                       config.generationParams.videoCount === count
-                        ? "bg-brass text-black shadow-sm"
+                        ? "bg-accent text-accent-fg shadow-sm"
                         : "border border-line bg-surface text-muted hover:text-foreground hover:border-line-strong"
                     }`}
                   >
@@ -624,7 +624,7 @@ export function PipelineEditor({
                     }))}
                     className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
                       config.generationParams.aspectRatio === opt.value
-                        ? "bg-brass text-black shadow-sm"
+                        ? "bg-accent text-accent-fg shadow-sm"
                         : "border border-line bg-surface text-muted hover:text-foreground hover:border-line-strong"
                     }`}
                   >
@@ -653,7 +653,7 @@ export function PipelineEditor({
                     }))}
                     className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${
                       config.generationParams.durationSeconds === dur
-                        ? "bg-brass text-black shadow-sm"
+                        ? "bg-accent text-accent-fg shadow-sm"
                         : "border border-line bg-surface text-muted hover:text-foreground hover:border-line-strong"
                     }`}
                   >
@@ -851,7 +851,7 @@ export function PipelineEditor({
               }))}
               className={`rounded-full px-3.5 py-1 text-xs font-semibold transition ${
                 config.gradingThresholds.autoApproveEnabled
-                  ? "bg-emerald-500 text-black shadow-sm"
+                  ? "bg-success-soft text-success border border-success/30 shadow-sm"
                   : "bg-surface border border-line text-muted"
               }`}
             >
