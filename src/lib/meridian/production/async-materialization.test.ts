@@ -94,7 +94,7 @@ test("synchronous completion materializes through the shared service: one creati
   const tenant = await createTenantFixture(sql, "sync", 50, "google_omni", MODEL);
   const injected = injectProvider("google_omni", async (spec) => job(spec, "COMPLETED", { metadata: { videoBytesBase64: MP4_BASE64, mimeType: "video/mp4" } } as Partial<ProductionJob>));
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
 
     assert.equal(injected.submitted.length, 1);
     const [row] = await productionJobs(sql, tenant);
@@ -121,7 +121,7 @@ test("queued to completed: the poller materializes the artifact and completes th
   const tenant = await createTenantFixture(sql, "queued", 50, "google_omni", MODEL);
   const injected = injectProvider("google_omni", async (_spec, index) => queued(index), async (id) => completedWithBytes(id));
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
 
     // Accepted but not finished: nothing is materialized and the plan is still executing.
     assert.equal(await planStatus(sql, tenant.plan.id), "executing");
@@ -159,7 +159,7 @@ test("poller materializes a job finalized before a crash, without contacting the
     throw new Error(`provider must not be polled for ${id}`);
   });
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
     const [row] = await productionJobs(sql, tenant);
     // Simulate a crash after artifact finalization but before materialization.
     const finalized = await finalizeProductionArtifact(sql, {
@@ -191,7 +191,7 @@ test("duplicate polls never duplicate creative, asset, review, or ledger rows", 
   const tenant = await createTenantFixture(sql, "dupe", 50, "google_omni", MODEL);
   const injected = injectProvider("google_omni", async (_spec, index) => queued(index), async (id) => completedWithBytes(id));
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
     await pollProductionJobs(sql, { driveClient: googleDriveClient });
     const [reservation] = await reservationsFor(sql, tenant.plan.id);
 
@@ -219,7 +219,7 @@ test("crash mid-materialization: a partial write is completed exactly once on re
   const tenant = await createTenantFixture(sql, "crash", 50, "google_omni", MODEL);
   const injected = injectProvider("google_omni", async (_spec, index) => queued(index), async (id) => completedWithBytes(id));
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
     const [row] = await productionJobs(sql, tenant);
     await finalizeProductionArtifact(sql, {
       jobId: row!.id,
@@ -255,7 +255,7 @@ test("multiple jobs in one plan: the plan completes only after every job is mate
     id === "pj-1" ? completedWithBytes(id) : ({ jobId: id, providerJobId: id, status: "RUNNING" } as unknown as ProductionJob),
   );
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
     assert.equal(injected.submitted.length, 2);
     const reservations = await reservationsFor(sql, tenant.plan.id);
     assert.equal(reservations.length, 2, "one reservation per video job");
@@ -287,7 +287,7 @@ test("failed async job: the reservation is held for reconciliation and the plan 
     ({ jobId: id, providerJobId: id, status: "FAILED", error: "render rejected after acceptance" } as unknown as ProductionJob),
   );
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
     await pollProductionJobs(sql);
 
     const [row] = await productionJobs(sql, tenant);
@@ -309,7 +309,7 @@ test("ambiguous financial outcome: a completed render whose artifact never arriv
     ({ jobId: id, providerJobId: id, status: "COMPLETED" } as unknown as ProductionJob),
   );
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
     // The provider reported completion, but no bytes or URL are available. The final attempt gives up.
     await sql`update production_jobs set attempt_count = 4 where organization_id = ${tenant.organizationId}`;
     await pollProductionJobs(sql);
@@ -325,13 +325,42 @@ test("ambiguous financial outcome: a completed render whose artifact never arriv
   }
 });
 
+test("a brief edited while production is in flight does not change the creative the poller materializes", async () => {
+  const sql = await getSql();
+  const drive = installDrive();
+  const tenant = await createTenantFixture(sql, "in-flight", 50, "google_omni", MODEL);
+  const injected = injectProvider("google_omni", async (_spec, index) => queued(index), async (id) => completedWithBytes(id));
+  try {
+    await execute(sql, tenant, tenant.plan);
+    const [row] = await productionJobs(sql, tenant);
+    await finalizeProductionArtifact(sql, {
+      jobId: row!.id,
+      organizationId: tenant.organizationId,
+      brandId: tenant.brandId,
+      provider: "google_omni",
+      rawArtifact: { base64: MP4_BASE64 },
+      options: { durationMs: 8000 },
+    });
+    await sql`update briefs set title = 'EDITED TITLE' where id = ${tenant.briefId}`;
+
+    await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    const [creative] = await sql<{ title: string; workflow: string }>`select title, workflow from creative_records where brief_id = ${tenant.briefId}`;
+    assert.ok(creative, "a creative is materialized");
+    assert.equal(creative.title, "Kitchen sponge video", "the title is the plan's, not the edited brief's");
+    assert.equal(JSON.parse(creative.workflow).jevDecisionId, tenant.decisionId, "lineage is the plan's decision");
+  } finally {
+    injected.restore();
+    drive.restore();
+  }
+});
+
 test("artifact integrity: a corrupt stored record is never materialized, and a retry after repair completes once", async () => {
   const sql = await getSql();
   const drive = installDrive();
   const tenant = await createTenantFixture(sql, "integrity", 50, "google_omni", MODEL);
   const injected = injectProvider("google_omni", async (_spec, index) => queued(index), async (id) => completedWithBytes(id));
   try {
-    await execute(sql, tenant, tenant.plan, tenant.brief);
+    await execute(sql, tenant, tenant.plan);
     const [row] = await productionJobs(sql, tenant);
     await finalizeProductionArtifact(sql, {
       jobId: row!.id,

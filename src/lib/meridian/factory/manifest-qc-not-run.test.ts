@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import { manifestFromCreativePlan } from "./creative-manifest.ts";
-import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
 
 test("a manifest built from a plan reports QC as pending with no check claimed as passed", () => {
   const plan = CreativeDecisionEngine.createPlan({
     lineage: TEST_PLAN_LINEAGE,
+    productionContext: TEST_PRODUCTION_CONTEXT,
     scope: "image_only",
     autonomy: "semi_automatic",
     preferredImageProvider: "test:image",

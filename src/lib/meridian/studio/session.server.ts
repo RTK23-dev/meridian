@@ -691,10 +691,11 @@ export async function loadGatedJevDecision(
   organizationId: string,
   brandId: string,
   decisionId: unknown,
+  subject: "brief" | "plan" = "brief",
 ): Promise<StoredJevDecision> {
   const id = asText(decisionId).trim();
   if (!id) {
-    throw new Error("Brief has no JEV decision. Creative production is refused before any provider call.");
+    throw new Error(`${subject === "plan" ? "CreativePlan" : "Brief"} has no JEV decision. Creative production is refused before any provider call.`);
   }
   const rows = await sql<StoredJevDecision>`
     select id, decision, reviewer_decision, evidence, answer, subject_type, schema_version,
@@ -705,7 +706,7 @@ export async function loadGatedJevDecision(
   `;
   const dec = rows[0];
   if (!dec) {
-    throw new Error("The JEV decision for this brief was not found in this brand. Creative production is refused before any provider call.");
+    throw new Error(`The JEV decision for this ${subject} was not found in this brand. Creative production is refused before any provider call.`);
   }
   // Enforce Decision Semantics via centralized evaluateJevGate (P0-2)
   const gate = evaluateJevGate({ decision: dec.decision, reviewerDecision: dec.reviewer_decision });
@@ -795,6 +796,14 @@ export async function generateStudioVariants(
     const creativePlan = CreativeDecisionEngine.createPlan({
       // Lineage is the gated decision and the evidence it cited, not the brief's free-text fields (P3a).
       lineage: { decisionId: dec.id, evidenceRefs: jevBundle.evidenceRefs },
+      // The brief, read once here, is copied into the plan. Production never reads it again (P3c).
+      productionContext: {
+        title: asText(brief.title),
+        audience: asText(brief.audience),
+        angle: asText(brief.angle),
+        productName,
+        opportunityId: asText(brief.opportunity_id) || null,
+      },
       scope: creationScope,
       autonomy,
       preferredImageProvider: data.imageProvider,
@@ -878,7 +887,7 @@ export async function generateStudioVariants(
       target: "executing",
     });
 
-    return executeApprovedCreativePlan(sql, access, context.userId, creativePlan, brief);
+    return executeApprovedCreativePlan(sql, access, context.userId, creativePlan);
 }
 
 /**
@@ -946,21 +955,27 @@ export async function executeApprovedCreativePlan(
   access: { organizationId: string; role: Role },
   userId: string,
   creativePlan: CreativePlan,
-  brief: Record<string, unknown>,
 ) {
-  const brandId = asText(brief.brand_id);
-  const persistedPlan = await sql<{ status: string }>`
-    select status from creative_plans
-    where id = ${creativePlan.id} and organization_id = ${access.organizationId} and brand_id = ${brandId}
+  // P3c: production runs on the plan row and its snapshot. The brief row is never read here, so an edit to it cannot
+  // change what the plan produces. The brief id is kept only as a reference, and its status is updated by id.
+  const persistedPlan = await sql<{ status: string; brand_id: string; decision_id: string | null; brief_id: string | null }>`
+    select status, brand_id, decision_id, brief_id from creative_plans
+    where id = ${creativePlan.id} and organization_id = ${access.organizationId}
     limit 1
   `;
-  if (persistedPlan[0]?.status !== "executing") {
+  const planRow = persistedPlan[0];
+  if (planRow?.status !== "executing") {
     throw new Error("CreativePlan must be durably approved and executing before provider calls.");
   }
-  // M2: approval reaches this executor without generateStudioVariants, so the JEV gate is enforced
-  // here too, before any reservation or provider call. A refusal closes the plan as failed.
+  const brandId = planRow.brand_id;
+  const briefId = planRow.brief_id ?? "";
+  const decisionId = planRow.decision_id ?? "";
+  const context = creativePlan.productionContext;
+  // M2 and P3c: the gate runs on the decision the plan recorded, before any reservation or provider call. A refusal
+  // closes the plan as failed.
   try {
-    await loadGatedJevDecision(sql, access.organizationId, brandId, brief.decision_id);
+    if (!context) throw new Error("CreativePlan has no production context; refusing to execute it. Re-plan from the brief.");
+    await loadGatedJevDecision(sql, access.organizationId, brandId, decisionId, "plan");
   } catch (gateErr) {
     await transitionCreativePlan(sql, {
       organizationId: access.organizationId,
@@ -975,7 +990,7 @@ export async function executeApprovedCreativePlan(
 
   const loaded = await loadBrandContext(sql, access.organizationId, brandId);
   assertSameTenant(loaded.creatives, access.organizationId, brandId);
-  const productName = loaded.products[0]?.name || asText(brief.title);
+  const productName = context.productName;
 
   // Derive concrete creation mode and beats from creativePlan.deliverables
   const hasVideo = creativePlan.deliverables.some((d) => d.kind === "video");
@@ -1002,7 +1017,7 @@ export async function executeApprovedCreativePlan(
       organizationId: access.organizationId,
       brandId,
       productName,
-      audience: asText(brief.audience),
+      audience: context.audience,
     })
   );
 
@@ -1037,7 +1052,7 @@ export async function executeApprovedCreativePlan(
   const aspectRatio: "9:16" | "16:9" | "1:1" | "4:5" = (rawRatio === "16:9" || rawRatio === "1:1" || rawRatio === "4:5") ? rawRatio : "9:16";
   const manifest = buildCreativeManifest({
     creativeId: crypto.randomUUID(),
-    conceptId: asText(brief.opportunity_id) || crypto.randomUUID(),
+    conceptId: context.opportunityId || creativePlan.id,
     mode,
     startingMaterial: "new_brief",
     productionStrategy: "automated_provider",
@@ -1045,8 +1060,8 @@ export async function executeApprovedCreativePlan(
       organizationId: access.organizationId,
       brandId,
       product: productName,
-      audience: asText(brief.audience),
-      objective: asText(brief.angle),
+      audience: context.audience,
+      objective: context.angle,
     },
     format: {
       channel: "multi_channel",
@@ -1062,11 +1077,11 @@ export async function executeApprovedCreativePlan(
       insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
       values (
         ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${userId},
-        'studio.research_manifest_created', 'brief', ${asText(brief.id)},
+        'studio.research_manifest_created', 'brief', ${briefId},
         ${JSON.stringify({ manifestId: manifest.creativeId, mode: manifest.mode, beats: manifest.beats.length, planId: creativePlan.id })}
       )
     `;
-    await sql`update briefs set status = 'used' where id = ${asText(brief.id)}`;
+    await sql`update briefs set status = 'used' where id = ${briefId}`;
     await transitionCreativePlan(sql, {
       organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
       target: "executing", reason: "Approved research manifest is being finalized.",
@@ -1151,7 +1166,7 @@ export async function executeApprovedCreativePlan(
     insert into generation_runs (
       id, organization_id, brand_id, opportunity_id, brief_id, prompt_version, image_provider, video_provider, status, created_by
     ) values (
-      ${runId}, ${access.organizationId}, ${brandId}, ${asText(brief.opportunity_id) || null}, ${asText(brief.id)},
+      ${runId}, ${access.organizationId}, ${brandId}, ${context.opportunityId}, ${briefId},
       ${STUDIO_PROMPT_VERSION}, ${effectiveImageProvider}, ${effectiveVideoProvider}, 'running', ${userId}
     )
   `;
@@ -1199,7 +1214,7 @@ export async function executeApprovedCreativePlan(
               id, organization_id, brand_id, brief_id, correlation_id, provider, model, prompt_id, prompt_version,
               status, error, created_by
             ) values (
-              ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${asText(brief.id)}, ${runId},
+              ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${briefId}, ${runId},
               ${image.provider}, '', 'studio_media', ${`${STUDIO_PROMPT_VERSION}#${deliv.kind}-${index + 1}`},
               ${image.status}, ${image.error.slice(0, 500)}, ${userId}
             )
@@ -1267,11 +1282,11 @@ export async function executeApprovedCreativePlan(
             id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
             message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
           ) values (
-            ${creativeId}, ${access.organizationId}, ${brandId}, 'generated', ${`${asText(brief.title)} ${itemLabel}`},
+            ${creativeId}, ${access.organizationId}, ${brandId}, 'generated', ${`${context.title} ${itemLabel}`},
             ${copy}, ${productName}, ${delivManifest.hook?.text || ""}, ${delivManifest.hook?.type || ""}, ${delivManifest.concept?.mechanism || ""},
             ${copy}, ${""}, ${deliv.format}, ${""},
-            ${asText(brief.opportunity_id) || null}, ${asText(brief.id)}, ${status}, ${userId},
-            ${JSON.stringify({ generationRunId: runId, jevDecisionId: asText(brief.decision_id), provider: image.provider, model: image.model, promptVersion: image.promptVersion, kind: deliv.kind, variant: index + 1, planDeliverableId: deliv.id })}
+            ${context.opportunityId}, ${briefId}, ${status}, ${userId},
+            ${JSON.stringify({ generationRunId: runId, jevDecisionId: decisionId, provider: image.provider, model: image.model, promptVersion: image.promptVersion, kind: deliv.kind, variant: index + 1, planDeliverableId: deliv.id })}
           )
         `;
         await sql`
@@ -1297,7 +1312,7 @@ export async function executeApprovedCreativePlan(
             id, organization_id, brand_id, brief_id, correlation_id, provider, model, prompt_id, prompt_version,
             status, output, creative_id, created_by
           ) values (
-            ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${asText(brief.id)}, ${runId},
+            ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${briefId}, ${runId},
             ${image.provider}, ${image.model}, 'studio_media', ${image.promptVersion}, 'completed',
             ${prompt.slice(0, 2000)}, ${creativeId}, ${userId}
           )
@@ -1316,7 +1331,7 @@ export async function executeApprovedCreativePlan(
         }>`
           select id, organization_id, brand_id, question_id, policy_version, decision, reviewer_decision, reasons, evidence
           from jev_decisions
-          where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${brandId}
+          where id = ${decisionId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
           limit 1
         `;
         const decisionRow = decisionRows[0];
@@ -1337,7 +1352,7 @@ export async function executeApprovedCreativePlan(
         const creativeSpec = creativeSpecFromManifest(delivManifest, {
           organizationId: access.organizationId,
           brandId,
-          title: asText(brief.title),
+          title: context.title,
         });
 
         const targetVidProvider = delivManifest.production!.provider;
@@ -1358,7 +1373,7 @@ export async function executeApprovedCreativePlan(
         const prodJobId = productionJobIds.get(deliv.id) ?? crypto.randomUUID();
         creativeSpec.idempotencyKey = prodJobId;
         const durableInput = JSON.stringify({
-          creativeSpec, runId, briefId: asText(brief.id), manifestId: delivManifest.creativeId,
+          creativeSpec, runId, briefId: briefId, manifestId: delivManifest.creativeId,
           manifest: delivManifest, planDeliverableId: deliv.id,
         });
         await sql`
@@ -1515,7 +1530,7 @@ export async function executeApprovedCreativePlan(
           organizationId: access.organizationId,
           brandId,
           creativeId: asText(video.creative_id),
-          decisionId: asText(brief.decision_id),
+          decisionId: decisionId,
         });
       }
     }
@@ -1529,7 +1544,7 @@ export async function executeApprovedCreativePlan(
       });
     }
 
-    await sql`update briefs set status = 'used' where id = ${asText(brief.id)}`;
+    await sql`update briefs set status = 'used' where id = ${briefId}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
     await settleCreativePlanIfComplete(sql, {
       organizationId: access.organizationId,
@@ -1639,7 +1654,7 @@ export async function approveAndExecuteCreativePlan(
     actorId: userId,
     target: "executing",
   });
-  return executeApprovedCreativePlan(sql, access, userId, planPayload, brief);
+  return executeApprovedCreativePlan(sql, access, userId, planPayload);
 }
 
 export async function rejectCreativePlan(

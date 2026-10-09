@@ -86,11 +86,10 @@ export async function materializeVideoArtifact(sql: Sql, ref: ProductionJobRef):
 
   const input = parseJson(job.input);
   const runId = text(input.runId);
-  const briefId = text(input.briefId);
   const deliverableId = text(input.planDeliverableId);
   const spec = (input.creativeSpec ?? null) as CreativeSpec | null;
   const manifest = (input.manifest ?? {}) as ManifestLike;
-  if (!runId || !briefId || !spec) throw new Error("Production job input is incomplete; the artifact cannot be materialized.");
+  if (!runId || !spec) throw new Error("Production job input is incomplete; the artifact cannot be materialized.");
 
   // The artifact row is the authority for bytes: refuse anything that is not a verified video.
   const artifacts = await sql<{ name: string; sha256: string; size_bytes: string | number | bigint; mime_type: string }>`
@@ -104,15 +103,25 @@ export async function materializeVideoArtifact(sql: Sql, ref: ProductionJobRef):
   if (BigInt(artifact.size_bytes) <= 0n) throw new Error("Stored artifact is empty; refusing to materialize.");
   if (!artifact.mime_type.startsWith("video/")) throw new Error(`Stored artifact is '${artifact.mime_type}', not video.`);
 
-  const briefs = await sql<{ id: string; title: string; opportunity_id: string | null; decision_id: string | null; created_by: string }>`
-    select id, title, opportunity_id, decision_id, created_by from briefs
-    where id = ${briefId} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
+  // P3c: the materialized creative is made from the CreativePlan this job belongs to, never from the brief, which may
+  // have been edited while production was in flight. The plan row supplies lineage and ownership; its snapshot supplies
+  // the title and the opportunity link.
+  if (!job.creative_plan_id) throw new Error("Production job belongs to no CreativePlan; refusing to materialize it.");
+  const plans = await sql<{ plan_payload: unknown; decision_id: string | null; brief_id: string | null; approved_by: string | null }>`
+    select plan_payload, decision_id, brief_id, approved_by from creative_plans
+    where id = ${job.creative_plan_id} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
     limit 1
   `;
-  const brief = briefs[0];
-  if (!brief) throw new Error("Brief for this production job was not found in this tenant.");
-  // A review is only meaningful with the JEV decision that authorized the brief.
-  if (!brief.decision_id) throw new Error("Brief has no JEV decision; refusing to create a review without lineage.");
+  const planRow = plans[0];
+  if (!planRow) throw new Error("CreativePlan for this production job was not found in this tenant.");
+  // A review is only meaningful with the JEV decision that authorized the plan.
+  if (!planRow.decision_id) throw new Error("CreativePlan has no JEV decision; refusing to create a review without lineage.");
+  if (!planRow.approved_by) throw new Error("CreativePlan has no approver; refusing to attribute a creative to nobody.");
+  const planContext = (parseJson(planRow.plan_payload).productionContext ?? null) as { title?: unknown; opportunityId?: unknown } | null;
+  if (!planContext) throw new Error("CreativePlan has no production context; refusing to materialize it.");
+  const planTitle = text(planContext.title);
+  const planOpportunityId = text(planContext.opportunityId) || null;
+  const decisionId = planRow.decision_id;
 
   const creativeId = `video-creative-${job.id}`;
   const assetId = `video-asset-${job.id}`;
@@ -125,15 +134,15 @@ export async function materializeVideoArtifact(sql: Sql, ref: ProductionJobRef):
       id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
       message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
     ) values (
-      ${creativeId}, ${ref.organizationId}, ${ref.brandId}, 'generated', ${`${brief.title} video`},
+      ${creativeId}, ${ref.organizationId}, ${ref.brandId}, 'generated', ${planTitle ? `${planTitle} video` : "Video"},
       ${`${product}. ${text(spec.script)}`}, ${product}, ${text(spec.hookLine) || text(manifest.hook?.text)},
       ${text(manifest.hook?.type)}, ${text(manifest.concept?.mechanism)},
-      ${text(spec.script)}, '', ${text(spec.format)}, '', ${brief.opportunity_id}, ${brief.id}, 'in_review', ${brief.created_by},
+      ${text(spec.script)}, '', ${text(spec.format)}, '', ${planOpportunityId}, ${planRow.brief_id}, 'in_review', ${planRow.approved_by},
       ${JSON.stringify({
         generationRunId: runId,
         provider: job.provider,
         productionJobId: job.id,
-        jevDecisionId: brief.decision_id,
+        jevDecisionId: decisionId,
         kind: "video",
         planDeliverableId: deliverableId,
       })}
@@ -166,7 +175,7 @@ export async function materializeVideoArtifact(sql: Sql, ref: ProductionJobRef):
   return {
     creativeId,
     assetId,
-    decisionId: brief.decision_id,
+    decisionId,
     creativePlanId: job.creative_plan_id,
     alreadyMaterialized: job.materialized_at != null,
   };

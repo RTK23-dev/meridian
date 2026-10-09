@@ -26,6 +26,7 @@ import type {
 } from "./plan.ts";
 import { modelCapabilityRegistry } from "../production/registry.ts";
 import { requireCitedDeliverables, validatePlanLineage, type PlanLineage } from "./lineage.ts";
+import type { PlanProductionContext } from "./plan.ts";
 
 function modelFor(provider: string, capability: "IMAGE_GENERATION" | "VIDEO_GENERATION"): string {
   const model = modelCapabilityRegistry.resolve({ provider, capability });
@@ -36,6 +37,8 @@ function modelFor(provider: string, capability: "IMAGE_GENERATION" | "VIDEO_GENE
 export interface CreativeDecisionInput {
   /** The persisted JEV decision this plan came from. Required: a plan without lineage is refused (lineage.ts). */
   lineage: PlanLineage;
+  /** The brief snapshot production will run on (P3c). Omit only for plans that are never executed. */
+  productionContext?: PlanProductionContext;
   scope: CreationScope;
   autonomy: AutonomyMode;
   objective?: CampaignObjective;
@@ -483,6 +486,7 @@ export class CreativeDecisionEngine {
     return {
       id: planId,
       lineage,
+      productionContext: input.productionContext ?? null,
       version,
       status: planStatus,
       scope,

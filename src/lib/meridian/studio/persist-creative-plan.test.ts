@@ -5,7 +5,7 @@ import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import type { Sql } from "../learning/store.ts";
 import { persistCreativePlanRow } from "./session.server.ts";
-import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
 
 async function tenant(sql: Sql, label: string) {
   const suffix = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -38,6 +38,7 @@ async function tenant(sql: Sql, label: string) {
 function planFor(decisionId: string) {
   return CreativeDecisionEngine.createPlan({
     lineage: TEST_PLAN_LINEAGE,
+    productionContext: TEST_PRODUCTION_CONTEXT,
     scope: "image_only",
     autonomy: "semi_automatic",
     preferredImageProvider: "test:image",

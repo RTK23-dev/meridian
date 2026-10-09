@@ -59,6 +59,7 @@ test("CreativePlan to Manifest Projection: preserves all semantic creative decis
 
   const plan: CreativePlan = {
     lineage: TEST_PLAN_LINEAGE,
+    productionContext: null,
     id: "plan-durable-99",
     version: "2026.10.1",
     status: "approved",

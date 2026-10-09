@@ -164,6 +164,18 @@ export interface AppliedConstraint {
   source: "user_intent" | "brand_guideline" | "platform_spec" | "spend_cap";
 }
 
+/**
+ * What production needs from the brief, copied when the plan is made. Production reads this snapshot, never the brief row,
+ * so a brief edited after planning cannot change what a plan produces (P3c).
+ */
+export interface PlanProductionContext {
+  title: string;
+  audience: string;
+  angle: string;
+  productName: string;
+  opportunityId: string | null;
+}
+
 export interface CreativePlan {
   id: string;
   version: string;
@@ -185,4 +197,6 @@ export interface CreativePlan {
   createdAt: string;
   /** The persisted JEV decision and evidence refs this plan was produced under (lineage.ts). */
   lineage: PlanLineage;
+  /** The brief snapshot production runs on. Null for a plan made without one, which production refuses. */
+  productionContext: PlanProductionContext | null;
 }

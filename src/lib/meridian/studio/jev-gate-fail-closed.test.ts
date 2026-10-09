@@ -149,7 +149,7 @@ test("generateStudioVariants refuses a REJECT decision before any write", async 
   assert.equal(await count(sql, "creative_plans", fixture.brandId), 0, "no plan may be persisted");
 });
 
-test("executeApprovedCreativePlan refuses an approved plan whose brief has no JEV decision, and closes the plan", async () => {
+test("executeApprovedCreativePlan refuses an approved plan whose recorded JEV decision is gone, and closes the plan", async () => {
   const sql = await getSql();
   const fixture = await tenant(sql, "exec-null", { kind: "none" });
   const plan = CreativeDecisionEngine.createPlan({
@@ -166,6 +166,7 @@ test("executeApprovedCreativePlan refuses an approved plan whose brief has no JE
       productName: "Mesh sponge",
       aspectRatio: "9:16",
     },
+    productionContext: { title: "Kitchen sponge", audience: "", angle: "live demonstration", productName: "Mesh sponge", opportunityId: null },
     constraints: {},
   });
   await sql`
@@ -176,10 +177,12 @@ test("executeApprovedCreativePlan refuses an approved plan whose brief has no JE
       ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, null, ${plan.lineage.decisionId}
     )
   `;
+  // The trigger refuses new plans without a decision, so the decision is removed after the plan is persisted.
+  await sql`update creative_plans set decision_id = null where id = ${plan.id}`;
   await inProduction(async () => {
     await assert.rejects(
-      executeApprovedCreativePlan(sql, { organizationId: fixture.organizationId, role: "member" }, fixture.userId, plan, fixture.brief),
-      /Brief has no JEV decision/,
+      executeApprovedCreativePlan(sql, { organizationId: fixture.organizationId, role: "member" }, fixture.userId, plan),
+      /CreativePlan has no JEV decision/,
     );
   });
   const rows = await sql<{ status: string }>`select status from creative_plans where id = ${plan.id}`;
