@@ -159,8 +159,8 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "instagram",
       description: "Full-screen vertical short-form organic video (9:16) with captions and hashtag targeting.",
-      connected: connectionsByPlatform.has("instagram") || true, // Test mock allowed
-      accountName: connectionsByPlatform.get("instagram") ?? "@brand_official (Instagram)",
+      connected: connectionsByPlatform.has("instagram"),
+      accountName: connectionsByPlatform.get("instagram"),
     },
     {
       id: "facebook-pages",
@@ -168,8 +168,8 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "facebook",
       description: "Organic feed videos and Reels distributed to page followers and algorithmic recommendations.",
-      connected: connectionsByPlatform.has("facebook") || true,
-      accountName: connectionsByPlatform.get("facebook") ?? "Brand Official Page",
+      connected: connectionsByPlatform.has("facebook"),
+      accountName: connectionsByPlatform.get("facebook"),
     },
     {
       id: "youtube-shorts",
@@ -177,8 +177,8 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "youtube",
       description: "Organic short-form vertical video (<=60s) published to the brand's official YouTube channel.",
-      connected: connectionsByPlatform.has("youtube") || true,
-      accountName: connectionsByPlatform.get("youtube") ?? "Brand Channel (YouTube)",
+      connected: connectionsByPlatform.has("youtube"),
+      accountName: connectionsByPlatform.get("youtube"),
     },
   ];
 }
@@ -277,19 +277,53 @@ export async function publishCreativeToChannels(
 
     const scheduledDate = input.scheduledFor ? new Date(input.scheduledFor) : undefined;
 
+    if (!asset) {
+      results.push({
+        channelId,
+        platform: organicChannel.platform,
+        type: "organic",
+        status: "failed",
+        error: "Missing video asset for creative. Stored artifact required for publishing.",
+      });
+      continue;
+    }
+
+    let mediaBytes: Uint8Array | null = null;
+    try {
+      const { createFilesystemObjectStore } = await import("../storage/filesystem.ts");
+      const store = createFilesystemObjectStore(process.env.STORAGE_ROOT || ".meridian/storage");
+      const stored = store.get(access.organizationId, asset.storage_key);
+      if (stored?.bytes && stored.bytes.byteLength > 0) {
+        mediaBytes = stored.bytes;
+      }
+    } catch {
+      // storage unavailable
+    }
+
+    if (!mediaBytes || mediaBytes.byteLength === 0) {
+      results.push({
+        channelId,
+        platform: organicChannel.platform,
+        type: "organic",
+        status: "failed",
+        error: "Stored media artifact bytes not found. Cannot publish empty or placeholder media.",
+      });
+      continue;
+    }
+
     try {
       const publishReceipt = await organicChannel.publish({
         brandId: input.brandId,
         organizationId: access.organizationId,
         creativeId: input.creativeId,
-        assetId: asset?.id ?? "asset-stub",
-        mediaBytes: new Uint8Array([0, 1, 2, 3]),
-        mimeType: asset?.mime_type || "video/mp4",
+        assetId: asset.id,
+        mediaBytes,
+        mimeType: asset.mime_type || "video/mp4",
         caption,
         title,
         scheduledFor: scheduledDate ? scheduledDate.toISOString() : undefined,
         aspectRatio: "9:16",
-        allowTestProvider: true,
+        allowTestProvider: false,
       });
 
       const postId = globalThis.crypto.randomUUID();
@@ -399,8 +433,8 @@ export async function recordOrganicTelemetryAndLearn(
 ): Promise<{ recorded: number; learnedPatterns: number }> {
   await requireBrandAccess(sql, userId, brandId, "member");
 
-  const publishedPosts = await sql<{ id: string; creative_id: string; platform: string }>`
-    select id, creative_id, platform from organic_posts
+  const publishedPosts = await sql<{ id: string; creative_id: string; platform: string; post_url: string | null }>`
+    select id, creative_id, platform, post_url from organic_posts
     where brand_id = ${brandId} and organization_id = ${organizationId} and status = 'published'
   `;
 
@@ -408,40 +442,15 @@ export async function recordOrganicTelemetryAndLearn(
     throw new Error("Publish an organic post before recording telemetry.");
   }
 
-  let recordedCount = 0;
-  for (const post of publishedPosts) {
-    const prior = await sql<{ id: string }>`
-      select id from organic_observations
-      where organic_post_id = ${post.id}
-      limit 1
-    `;
-    if (prior.length > 0) continue;
-
-    // Deterministic organic observations based on creative ID
-    const seed = post.creative_id.length % 5;
-    const views = 2400 + seed * 600;
-    const retentionRate = 0.45 + (seed * 0.08); // 45% - 77%
-    const threeSecondViews = Math.round(views * retentionRate);
-    const completionRate = Number((0.25 + seed * 0.05).toFixed(4));
-    const shares = Math.round(views * (0.02 + seed * 0.01));
-    const likes = Math.round(views * 0.08);
-
-    await sql`
-      insert into organic_observations (
-        id, organization_id, brand_id, organic_post_id, creative_id, platform,
-        views, reach, three_second_views, average_watch_time_seconds, completion_rate,
-        likes, comments, shares, saves, observed_on, raw_metrics
-      ) values (
-        ${globalThis.crypto.randomUUID()}, ${organizationId}, ${brandId}, ${post.id},
-        ${post.creative_id}, ${post.platform}, ${views}, ${views}, ${threeSecondViews},
-        ${14.5}, ${completionRate}, ${likes}, ${Math.round(likes * 0.15)}, ${shares},
-        ${Math.round(likes * 0.2)}, current_date,
-        ${JSON.stringify({ simulated: true, retentionRate, shares })}
-      )
-    `;
-    recordedCount++;
-  }
+  // Check for real non-synthetic observations; never fabricate numbers
+  const realObservations = await sql<{ id: string }>`
+    select id from organic_observations
+    where brand_id = ${brandId}
+      and organization_id = ${organizationId}
+      and (raw_metrics->>'synthetic' is null or raw_metrics->>'synthetic' != 'true')
+      and (raw_metrics->>'simulated' is null or raw_metrics->>'simulated' != 'true')
+  `;
 
   const learnedCount = await applyLearnedPatterns(sql, organizationId, brandId);
-  return { recorded: recordedCount, learnedPatterns: learnedCount };
+  return { recorded: realObservations.length, learnedPatterns: learnedCount };
 }

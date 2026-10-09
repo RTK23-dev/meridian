@@ -1,24 +1,33 @@
-# JEV
+# JEV (TypeSafe Decisions API)
 
-JEV is the deterministic gate around evidence. It is not a prompt and it does not see pixels.
+JEV is the deterministic epistemic gate around evidence. It executes typed semantic judgments using TypeSafe's native Decisions API served through OpenRouter:
+- **Endpoint**: `POST https://openrouter.ai/api/alpha/decisions`
+- **Model**: `typesafe/jev-1.13`
+- **Supported Question Primitives**:
+  - `choice`: One-of-N classification with probability distribution and confidence.
+  - `noul`: Independent probabilistic judgment returning direct probability in `noul` (confidence is never fabricated).
+  - `score`: Ordered discrete scoring with probability distribution, legend, and confidence.
+- **Fail-Closed Policy**: If the remote Decisions API returns an error or is unreachable, the client abstains (`abstain_uncertain`). It never falls back to generic chat models (`/chat/completions`) pretending to be JEV.
+- **State Minimization**: Only strictly required evidence fields, captions, transcripts, and controls are passed in the request state. Tokens, credentials, and unrelated tenant data are stripped.
 
-JEV Research is a separate upstream intelligence layer. It collects public Meta Ad Library video records, transcribes available audio, and stores typed, confidence-rated transcript analysis with source evidence. It discovers recurring patterns but makes no approval decision and does not claim that frequency predicts performance. Its patterns become evidence for the existing opportunity ranker and JEV decision questions; an approved decision can continue through the brief and Hypit handoff. A verified stored Hypit MP4 may then be uploaded to Meta and published only as a paused campaign chain after the tenant, approval, lineage, and artifact checks pass.
+JEV Research is a separate upstream intelligence layer. It collects public social media artifacts (Reels, TikTok, Shorts, Meta Ad Library), transcribes available audio, and stores typed, confidence-rated transcript analysis with source evidence. It discovers recurring patterns across organic and paid content but makes no approval decision and does not claim that frequency predicts performance. Its patterns become evidence for the existing opportunity ranker and JEV decision questions; an approved decision can continue through the brief and production router.
 
 ## Path
 
 ```
-stored evidence
-  → versioned question (id + schema version + evaluator)
-  → probabilistic answer (yes, no, uncertain, insufficient, or violation)
-  → calibration, only when an admin has approved a version
-  → policy thresholds
+EvidenceBundle
+  → state projection (minimized)
+  → OpenRouter Decisions API (typesafe/jev-1.13)
+  → typed answers (choice / noul / score)
+  → provenance preservation (EvidenceRefs)
+  → calibration & policy thresholds
   → AUTO_APPROVE | HUMAN_REVIEW | REJECT
-  → jev_decisions row
+  → persisted decision run & answers
 ```
 
 Missing evidence and contradictory evidence stay in human review. A violation is a reject. Neither case can auto-approve. Calibration changes the next decision only. It does not rewrite a stored decision, and it does not move thresholds until an admin approves a proposal.
 
-Code: `src/lib/meridian/jev/engine.ts`, `src/lib/meridian/jev/questions.ts`, `src/lib/meridian/jev/judgment.ts`, and `src/lib/meridian/jev/policy.ts`.
+Code: `src/lib/meridian/jev/client.ts`, `src/lib/meridian/jev/engine.ts`, `src/lib/meridian/jev/questions.ts`, `src/lib/meridian/jev/judgment.ts`, and `src/lib/meridian/jev/policy.ts`.
 
 `decide()` clamps probability and confidence, then:
 
@@ -68,8 +77,10 @@ JEV's learning feedback loop updates Beta-binomial conjugate posteriors from obs
 
 Introduced in migration `0022_jev_account_intelligence.sql` (`src/lib/meridian/jev/account-engine.ts` and `src/lib/meridian/jev/multimodal-scorer.ts`), JEV expands from isolated variant evaluation into comprehensive account-level intelligence and portfolio analysis.
 
-### 1. 6-Beat Short-Form Narrative Decomposition
-Every video creative is decomposed into a structured 6-beat narrative arc:
+### 1. Canonical CreativeStructure vs Optional Ad Narrative
+Meridian models creative videos using canonical `CreativeStructure`:
+- **Organic Content**: Preserves native creative formats (`pov`, `skit`, `storytime`, `listicle`, `tutorial`, `reaction`, `trend_audio`, `transformation`, `review`, `comparison`, `loop`, `organic_short`). Heuristic classifications are strictly marked `state: "INFERRED"` and `methodId: "creative_structure_classifier.v1"` with inspectable `heuristicScore`, never masquerading as calibrated confidence.
+- **Paid Ads (AdNarrative)**: The legacy 6-beat ad narrative is an optional projection derived solely for direct-response paid ads:
 
 | Beat | Window | Analytical Focus |
 |---|---|---|
@@ -79,6 +90,14 @@ Every video creative is decomposed into a structured 6-beat narrative arc:
 | **4. Proof** | `15 - 25s` | Side-by-side demo, customer review, clinical data, social proof |
 | **5. Offer** | `25 - 30s` | Value proposition, bundle discount, guarantee, scarcity |
 | **6. CTA** | `30 - 35s` | Clear directional action (verbal cue + visual text sticker) |
+
+### 2. Question-Aware Evidence Compression (`compressEvidenceForJev`)
+To prevent token waste and focus JEV's attention, evidence bundles are compressed dynamically based on the specific question requested:
+- `organic.visual_craft`: Includes scene detection, shot types, keyframes, and OCR text overlays.
+- `organic.retention_architecture`: Includes scene cuts, pacing cadence, and timestamped transcripts.
+- `organic.share_trigger`: Includes audience comments, intent categories, and creator baseline.
+- `organic.transferability`: Includes creator and category comparative outlier context.
+Every compressed fact retains structured `EvidenceRef` lineage pointing back to source media and offsets.
 
 ### 2. Decile Trait Separation
 JEV categorizes an account's content portfolio into top decile (top 10%) vs. bottom decile (bottom 10%) by blended engagement and retention, calculating exact creative differentiators:
@@ -108,10 +127,33 @@ Located at `/brands/$brandId/intelligence`:
 
 ---
 
+## Native TypeSafe JEV Decision Engine (v1.13)
+
+JEV is built around TypeSafe's System One decision primitives:
+- **`noul`**: Boolean necessity / compliance gates ($P \in [0, 1]$).
+- **`choice`**: Selection across discrete categories with probability distributions.
+- **`score`**: Ordered rubric evaluations across defined quality criteria.
+
+### Structured Decision Flow
+1. **Evidence Sufficiency Gate**: Questions declare strict `evidenceRequirements`. If required evidence is missing, the engine abstains (`abstain_insufficient_evidence`) with zero confidence and explicit reasons, rather than hallucinating answers.
+2. **Deterministic Input Hashing**: Evaluates hash over tenant state, questions, and model parameters to power bounded in-memory caching.
+3. **OpenRouter Gateway**: All JEV calls execute via OpenRouter (`JEV_PROVIDER=openrouter`, `JEV_MODEL=typesafe/jev-1.13`).
+4. **Deterministic Policy Evaluator**:
+   - `AUTO_APPROVE`: Average probability $\ge 0.85$ and minimum confidence $\ge 0.75$ with zero policy violations.
+   - `HUMAN_REVIEW`: Any missing evidence, uncertainty, or average probability in $[0.50, 0.85)$.
+   - `REJECT`: Any hard policy violation or low probability $< 0.50$.
+5. **Dynamic Creative Structures**: Short-form videos use dynamic discovered segments (`CreativeStructure`), where narrative beats are an optional specialization rather than an enforced rigid structure.
+6. **Calibration & Reliability**: Evaluated via Brier score, empirical log loss, and binned calibration curves before any seed prior is considered calibrated.
+
+---
+
 ## Tests
 
 - `src/lib/meridian/loop.test.ts`: End-to-end evidence, decision, and brief loop.
-- `src/lib/meridian/jev/account.test.ts`: 12 comprehensive unit and integration tests for Account DNA, 6-beat scoring, decile separation, and whitespace detection (< 1.5s on 500-post dataset).
-- `src/lib/meridian/learning/decay.test.ts`: Recency decay math, weighted beta updating, and cold-start priors.
+- `src/lib/meridian/jev/unified-engine.test.ts`: Native TypeSafe JEV engine tests (abstention, policy, Brier score, calibration).
+- `src/lib/meridian/evidence/unified-evidence.test.ts`: Normalized evidence bundles, deduplication, and compression.
+- `src/lib/meridian/production/unified-production.test.ts`: Production router, ManualCloud zero spend, and QC gates.
+- `src/lib/meridian/learning/unified-learning.test.ts`: Learning guardrails, parameter lifecycle, and fatigue tracking.
+- `src/lib/meridian/storage/unified-storage.test.ts`: Google Drive primary storage tests.
 - `evals/jev/cases.json`: Ground-truth calibration test cases.
 

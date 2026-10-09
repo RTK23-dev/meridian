@@ -314,7 +314,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div className="rounded bg-panel/80 p-2">
                             <span className="text-muted block">3s Retention</span>
-                            <span className="font-semibold text-emerald-400">
+                            <span className="font-semibold text-emerald-800 dark:text-emerald-400">
                               {((item.threeSecondRetention ?? 0) * 100).toFixed(1)}%
                             </span>
                           </div>
@@ -428,7 +428,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                       </div>
                       <div className="rounded bg-panel/80 p-3">
                         <span className="text-muted block">Win Probability</span>
-                        <span className="font-semibold text-emerald-400 text-sm">
+                        <span className="font-semibold text-emerald-800 dark:text-emerald-400 text-sm">
                           {(opp.expectedWinProbability * 100).toFixed(1)}%
                         </span>
                         <span className="text-[10px] text-muted block mt-0.5">Bayesian prior model</span>
@@ -458,7 +458,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                           <Button
                             size="sm"
                             variant="secondary"
-                            className="h-8 text-xs text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                            className="h-8 text-xs text-emerald-800 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
                             disabled={updateStatusMutation.isPending}
                             onClick={() =>
                               updateStatusMutation.mutate({

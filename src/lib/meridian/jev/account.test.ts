@@ -68,7 +68,7 @@ test("JEV Account: engagement rate math never invents data and clamps strictly",
     completionRate: 0.20,
   };
   // (100 + 20 + 10) / 1000 = 0.13
-  assert.equal(Math.round(engagementRate(normalItem) * 1000) / 1000, 0.13);
+  assert.equal(Math.round(engagementRate(normalItem)! * 1000) / 1000, 0.13);
 
   // Empty list average
   assert.equal(averageEngagementRate([]), 0);

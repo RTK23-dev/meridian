@@ -59,14 +59,19 @@ export function hypitVideoEngine(): VideoEngine {
   };
 }
 
-export function timelineVideoEngine(): VideoEngine {
+/**
+ * Timeline Fixture Provider:
+ * Generates synthetic test clip fixtures for automated test suites.
+ * Explicitly labeled as a test fixture to ensure it is never confused with a production renderer.
+ */
+export function timelineFixtureProvider(): VideoEngine {
   return {
     id: "timeline",
     status() {
       return {
         status: "CONFIGURED",
         provider: "timeline",
-        detail: "Timeline renderer is configured for multi-aspect video assembly (9:16, 4:5, 1:1, 16:9).",
+        detail: "Timeline test fixture provider for unit/integration testing only. Produces synthetic test clips.",
       };
     },
     async submit(contract) {
@@ -110,8 +115,10 @@ export function timelineVideoEngine(): VideoEngine {
   };
 }
 
+export const timelineVideoEngine = timelineFixtureProvider;
+
 export function videoEngineById(id: string): VideoEngine {
   if (id === "hypit") return hypitVideoEngine();
-  if (id === "timeline") return timelineVideoEngine();
-  throw new Error(`Unknown video engine "${id}". Supported: hypit, timeline.`);
+  if (id === "timeline" || id === "timeline_fixture") return timelineFixtureProvider();
+  throw new Error(`Unknown video engine "${id}". Supported: hypit, timeline_fixture.`);
 }

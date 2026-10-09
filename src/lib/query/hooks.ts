@@ -19,6 +19,7 @@ import {
   recordTelemetryAction,
   syncTelemetryPriorsAction,
 } from "@/lib/meridian/learning/telemetry-actions";
+import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { qk, userScopedQueryKey } from "./keys";
 
@@ -248,4 +249,14 @@ export const useSyncTelemetry = (brandId: string) => {
     },
   });
 };
+
+export const usePipelineConfigQuery = (brandId: string, enabled = true) => {
+  const scope = useUserScopedKey(qk.pipelineConfig(brandId));
+  return useQuery({
+    ...scope,
+    queryFn: () => getPipelineConfig({ data: { brandId } }),
+    enabled: scope.enabled && enabled && !!brandId,
+  });
+};
+
 

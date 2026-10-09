@@ -7,6 +7,7 @@ import type { ResearchSegment } from "../research/schema.ts";
 import { inspectVideo } from "../video/inspect.ts";
 import {
   CREATIVE_DNA_V2,
+  buildCanonicalCreativeStructure,
   dnaField,
   emptyCreativeDna,
   missingField,
@@ -303,11 +304,19 @@ export function buildBeatSequence(
   durationMs: number,
 ): CreativeDna["beats"] {
   const beats: CreativeDna["beats"] = [];
-  const hookEndMs = Math.min(durationMs, 3000);
-  const ctaStartMs = Math.max(0, durationMs - 3000);
+  // Dynamically detect hook boundary from first segment or scene boundary, defaulting to min(durationMs, 3000)
+  const firstSegment = segments.find((s) => (s.startMs ?? 0) < 5000);
+  const firstScene = scenes[0];
+  let hookEndMs = Math.min(durationMs, 3000);
+  if (firstSegment?.endMs && firstSegment.endMs >= 1000 && firstSegment.endMs <= 6000) {
+    hookEndMs = Math.min(durationMs, firstSegment.endMs);
+  } else if (firstScene?.endMs && firstScene.endMs >= 1000 && firstScene.endMs <= 5000) {
+    hookEndMs = Math.min(durationMs, firstScene.endMs);
+  }
+  const ctaStartMs = Math.max(hookEndMs, durationMs - 3000);
 
   // Hook beat
-  const hookText = segments.find((s) => (s.startMs ?? 0) < 3000)?.text || onScreenText.find((t) => t.startMs < 3000)?.text;
+  const hookText = segments.find((s) => (s.startMs ?? 0) < hookEndMs)?.text || onScreenText.find((t) => t.startMs < hookEndMs)?.text;
   beats.push({
     role: "hook",
     startMs: 0,
@@ -317,7 +326,7 @@ export function buildBeatSequence(
 
   // Middle scenes
   for (const scene of scenes) {
-    if (scene.startMs >= 3000 && scene.endMs <= ctaStartMs) {
+    if (scene.startMs >= hookEndMs && scene.endMs <= ctaStartMs) {
       const transcript = scene.transcript?.toLowerCase() || "";
       const overlay = scene.overlay.value.toLowerCase();
       const product = scene.productOnScreen.value;
@@ -359,6 +368,8 @@ export function buildBeatSequence(
 
   return uniqueBeats;
 }
+
+export { buildCanonicalCreativeStructure } from "./creative-dna.ts";
 
 /**
  * Real creative DNA decoder replacing dnaFromTranscript.
@@ -495,11 +506,12 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
     dna.hook.type = missingField("");
   }
 
-  if (firstScene && firstScene.shotType.confidence > 0) {
+  const shotConfidence = firstScene?.shotType.confidence ?? 0;
+  if (firstScene && shotConfidence > 0) {
     const visualDesc = [firstScene.shotType.value, firstScene.presenter.value, firstScene.motion.value]
       .filter(Boolean)
       .join(" ");
-    dna.hook.visual = dnaField(visualDesc, firstScene.shotType.confidence, {
+    dna.hook.visual = dnaField(visualDesc, shotConfidence, {
       kind: "frame",
       at: 0,
       ref: firstScene.keyframeRef,
@@ -508,7 +520,17 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
     dna.hook.visual = missingField("");
   }
 
-  // Beats sequence
+  // Canonical CreativeStructure & Beats
+  dna.structure = buildCanonicalCreativeStructure({
+    scenes: sceneDnaList,
+    segments,
+    onScreenText: onScreenTextList,
+    durationMs,
+    cutsPerSecond,
+    transcript: allTranscript,
+  });
+
+  // Beats sequence (ad narrative projection)
   dna.beats = buildBeatSequence(sceneDnaList, segments, onScreenTextList, durationMs);
 
   // Format and angle detection

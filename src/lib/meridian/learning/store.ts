@@ -67,16 +67,22 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
       from organic_observations
       where brand_id = ${brandId} and organization_id = ${organizationId} and creative_id is not null
     `;
+function optionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
     organicObservations = organicRows.map((row) => ({
       creativeId: asText(row.creative_id),
       organizationId: asText(row.organization_id),
       brandId: asText(row.brand_id),
-      views: asNumber(row.views),
-      threeSecondViews: asNumber(row.three_second_views),
-      completionRate: asNumber(row.completion_rate),
-      shares: asNumber(row.shares),
-      likes: asNumber(row.likes),
-      comments: asNumber(row.comments),
+      views: optionalNumber(row.views),
+      threeSecondViews: optionalNumber(row.three_second_views),
+      completionRate: optionalNumber(row.completion_rate),
+      shares: optionalNumber(row.shares),
+      likes: optionalNumber(row.likes),
+      comments: optionalNumber(row.comments),
     }));
   } catch {
     organicObservations = [];

@@ -63,13 +63,13 @@ async function discoverRoutes(page, seededBrandId) {
     const route = file === "index.tsx"
       ? ""
       : file
-          .split(sep)
-          .join("/")
-          .replace(/\.tsx$/, "")
-          .replace(/\/index$/, "")
-          .split("/")
-          .map((part) => part.replace(/^\[([^\]]+)\]$/, "$1"))
-          .join("/");
+        .split(sep)
+        .join("/")
+        .replace(/\.tsx$/, "")
+        .replace(/\/index$/, "")
+        .split("/")
+        .map((part) => part.replace(/^\[([^\]]+)\]$/, "$1"))
+        .join("/");
     return `/${route.split("/").map((part) => {
       if (!part.startsWith("$")) return part;
       if (!brandId) throw new Error(`Cannot capture dynamic route ${file}: no seeded brand route was discovered.`);

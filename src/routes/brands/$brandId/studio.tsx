@@ -825,7 +825,7 @@ function Studio({ brandId }: { brandId: string }) {
                 {queueReceipts.length > 0 && (
                   <Panel className="space-y-3">
                     <h3 className="font-display text-lg font-semibold flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      <CheckCircle2 className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
                       Live Execution Receipts
                     </h3>
                     <div className="space-y-2">

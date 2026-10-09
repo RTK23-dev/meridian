@@ -136,13 +136,29 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   }
   if (job.job_type === "publishing.dispatch") {
     const creativeId = typeof payload.creativeId === "string" ? payload.creativeId : "";
-    const provider = payload.provider === "test" ? "test" : "meta";
-    const result = publishThrough({
-      provider,
-      creativeId,
-      allowTestProvider: payload.allowTestProvider === true,
-    });
-    return result.externalId ? `${result.status}:${result.externalId}` : result.status;
+    if (creativeId) {
+      if (payload.storageObjectId) {
+        const storageRows = await sql<{ size_bytes: number; mime_type: string; sha256: string; lifecycle: string }>`
+          select size_bytes, mime_type, sha256, lifecycle from storage_objects
+          where id = ${String(payload.storageObjectId)} and organization_id = ${job.organization_id}
+          limit 1
+        `;
+        const storageObj = storageRows[0];
+        if (!storageObj || Number(storageObj.size_bytes) <= 0 || !storageObj.sha256 || (storageObj.lifecycle !== "approved" && storageObj.lifecycle !== "stored")) {
+          return "REJECTED:unverified-media-artifact";
+        }
+      }
+      const provider = payload.provider === "test" ? "test" : "meta";
+      const result = publishThrough({
+        provider,
+        creativeId,
+        allowTestProvider: payload.allowTestProvider === true,
+      });
+      return result.externalId ? `${result.status}:${result.externalId}` : result.status;
+    }
+    const { claimScheduledJobs } = await import("../publishing/orchestrator.ts");
+    const claimed = await claimScheduledJobs(sql, 10);
+    return `claimed:${claimed.length}`;
   }
   if (job.job_type === "performance.ingest" || job.job_type === "performance.sync") {
     const { runPerformanceSync } = await import("../performance/job.ts");
@@ -237,16 +253,18 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     `;
     return "dispatched";
   }
-  if (job.job_type === "publishing.dispatch") {
-    const { claimScheduledJobs } = await import("../publishing/orchestrator.ts");
-    const claimed = await claimScheduledJobs(sql, 10);
-    return `claimed:${claimed.length}`;
-  }
   if (job.job_type === "telemetry.sync") {
     if (!job.brand_id) throw new Error("Telemetry sync needs a brand.");
     const { syncTelemetryToLearning } = await import("../learning/telemetry-engine.ts");
     const syncRes = await syncTelemetryToLearning(sql, job.organization_id, job.brand_id);
     return `synced:${syncRes.syncedRecords}:patterns:${syncRes.patternsLearned}`;
+  }
+  if (job.job_type === "production.poll") {
+    const { pollProductionJobs } = await import("../production/poller.ts");
+    const pollResult = await pollProductionJobs(sql, {
+      limit: typeof payload.limit === "number" ? payload.limit : 10,
+    });
+    return `claimed:${pollResult.claimed}:polled:${pollResult.polled}:rendered:${pollResult.rendered}:failed:${pollResult.failed}`;
   }
   if (job.job_type === "market.normalize" || job.job_type === "creative.analyze" || job.job_type === "cluster.refresh" || job.job_type === "asset.process") {
     throw new Error(`${job.job_type} has no payload work in this claim. It was not marked done.`);

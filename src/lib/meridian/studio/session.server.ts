@@ -20,8 +20,9 @@ import { loadAppliedPolicies } from "@/lib/meridian/jev/policy";
 import { generationAllowed } from "@/lib/meridian/security/budget";
 import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features";
 import { STUDIO_PROMPT_VERSION, storeBlob, variantPrompt } from "./media-work";
-import { generateHypitStudioVideo, publishStudioHypitVideo } from "./hypit-run";
-import { normalizeReviewerDecision } from "../jev/reviewer-decision.ts";
+import { publishStudioHypitVideo } from "./hypit-run.ts";
+import { productionRouter } from "../production/router.ts";
+import type { CreativeSpec } from "../production/types.ts";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store";
 import { assessPublishing, type AccountSnapshot } from "../publishing/readiness";
 import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure";
@@ -786,59 +787,115 @@ export async function generateStudioVariants(
         )
       `;
     }
-    if (data.videoProvider === "hypit") {
-    const decisionRows = await sql<{
-      id: string;
-      organization_id: string;
-      brand_id: string;
-      question_id: string;
-      policy_version: string;
-      decision: string;
-      reviewer_decision: string | null;
-      reasons: string;
-      evidence: string;
-    }>`
-      select id, organization_id, brand_id, question_id, policy_version, decision, reviewer_decision, reasons, evidence
-      from jev_decisions
-      where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
-      limit 1
-    `;
-    const decisionRow = decisionRows[0];
-    if (!decisionRow) throw new Error("JEV has not approved this creative. No Hypit job was created.");
-    const decisionValue = decisionRow.decision === "AUTO_APPROVE" || decisionRow.decision === "HUMAN_REVIEW" || decisionRow.decision === "REJECT"
-      ? decisionRow.decision
-      : "HUMAN_REVIEW";
-    await generateHypitStudioVideo(sql, {
-      organizationId: access.organizationId,
-      brandId: data.brandId,
-      runId,
-      actorId: context.userId,
-      productName,
-      opportunityId: asText(brief.opportunity_id),
-      brief: {
-        id: data.briefId,
+    if (data.videoProvider && data.videoProvider !== "none") {
+      const decisionRows = await sql<{
+        id: string;
+        organization_id: string;
+        brand_id: string;
+        question_id: string;
+        policy_version: string;
+        decision: string;
+        reviewer_decision: string | null;
+        reasons: string;
+        evidence: string;
+      }>`
+        select id, organization_id, brand_id, question_id, policy_version, decision, reviewer_decision, reasons, evidence
+        from jev_decisions
+        where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
+        limit 1
+      `;
+      const decisionRow = decisionRows[0];
+      if (!decisionRow) throw new Error("JEV has not approved this creative. No video job was created.");
+      const _decisionValue = decisionRow.decision === "AUTO_APPROVE" || decisionRow.decision === "HUMAN_REVIEW" || decisionRow.decision === "REJECT"
+        ? decisionRow.decision
+        : "HUMAN_REVIEW";
+
+      const creativeSpec: CreativeSpec = {
+        id: crypto.randomUUID(),
+        organizationId: access.organizationId,
+        brandId: data.brandId,
         title: asText(brief.title),
-        angle: asText(brief.angle),
-        hook: asText(brief.hook),
-        message: asText(brief.message),
-        cta: asText(brief.cta),
-        format: asText(brief.format),
-        proofType: asText(brief.proof_type),
-        constraints: asText(brief.constraints),
-      },
-      decision: {
-        id: decisionRow.id,
-        organizationId: decisionRow.organization_id,
-        brandId: decisionRow.brand_id,
-        questionId: decisionRow.question_id,
-        policyVersion: decisionRow.policy_version,
-        decision: decisionValue,
-        reviewerDecision: normalizeReviewerDecision(decisionRow.reviewer_decision),
-        reasons: asJson<string[]>(decisionRow.reasons, []),
-        evidence: asJson<{ id: string; source: string; summary: string }[]>(decisionRow.evidence, []),
-      },
-      tone: loaded.brain.tone,
-    });
+        format: asText(brief.format) || "ugc",
+        aspectRatio: "9:16",
+        durationTargetSeconds: 8,
+        hookLine: asText(brief.hook),
+        script: `${asText(brief.hook)}\n${asText(brief.message)}\n${asText(brief.cta)}`,
+        scenes: [
+          { index: 0, description: asText(brief.hook), durationSeconds: 2, onScreenText: asText(brief.hook) },
+          { index: 1, description: asText(brief.message), durationSeconds: 4, voiceoverText: asText(brief.message) },
+          { index: 2, description: asText(brief.cta), durationSeconds: 2, onScreenText: asText(brief.cta) },
+        ],
+      };
+
+      const provider = await productionRouter.route(
+        creativeSpec,
+        "BALANCED",
+        data.videoProvider === "auto" ? undefined : data.videoProvider,
+      );
+
+      const submittedJob = await provider.submitJob(creativeSpec);
+      if (submittedJob.status === "FAILED" || submittedJob.status === "PREFLIGHT_FAILED" || submittedJob.status === "NOT_CONFIGURED") {
+        throw new Error(`Video production failed (${submittedJob.status}): ${submittedJob.error || "Provider rejected job."}`);
+      }
+
+      const prodJobId = submittedJob.meridianJobId || submittedJob.jobId || crypto.randomUUID();
+      await sql`
+        insert into production_jobs (
+          id, organization_id, brand_id, provider, provider_job_id,
+          request_id, status_url, cancel_url, status, cost_mode,
+          estimated_cost_cents, input, created_at, submitted_at
+        ) values (
+          ${prodJobId}, ${access.organizationId}, ${data.brandId}, ${provider.id},
+          ${submittedJob.providerJobId || submittedJob.jobId || null},
+          ${submittedJob.requestId || null}, ${submittedJob.statusUrl || null}, ${submittedJob.cancelUrl || null},
+          ${submittedJob.status}, 'BALANCED',
+          ${Math.round(submittedJob.costEstimateUsd * 100)},
+          ${JSON.stringify({ creativeSpec, runId, briefId: data.briefId })},
+          now(), now()
+        )
+        on conflict (id) do update set
+          status = excluded.status,
+          provider_job_id = excluded.provider_job_id,
+          updated_at = now()
+      `;
+
+      const videoCreativeId = crypto.randomUUID();
+      const videoAssetId = crypto.randomUUID();
+      const videoCopy = `${productName}. ${asText(brief.hook)}`;
+      const storageKey = `${access.organizationId}/${data.brandId}/runs/${runId}/${videoAssetId}.mp4`;
+
+      await sql`
+        insert into creative_records (
+          id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
+          message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
+        ) values (
+          ${videoCreativeId}, ${access.organizationId}, ${data.brandId}, 'generated', ${`${asText(brief.title)} video`},
+          ${videoCopy}, ${productName}, ${asText(brief.hook)}, ${"problem"}, ${asText(brief.angle)},
+          ${videoCopy}, ${asText(brief.cta)}, ${asText(brief.format)}, ${asText(brief.proof_type)},
+          ${asText(brief.opportunity_id) || null}, ${data.briefId}, 'in_review', ${context.userId},
+          ${JSON.stringify({
+            generationRunId: runId,
+            provider: provider.id,
+            providerJobId: submittedJob.jobId,
+            productionJobId: prodJobId,
+            jevDecisionId: asText(brief.decision_id),
+            kind: "video",
+          })}
+        )
+      `;
+
+      await sql`
+        insert into assets (
+          id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
+          lifecycle, checksum, width, height, byte_size, duration_ms, provider, model, prompt_version, generation_run_id,
+          kind, qa_decision, review_status, media_status, variant_index, provenance
+        ) values (
+          ${videoAssetId}, ${access.organizationId}, ${data.brandId}, ${videoCreativeId}, 1, ${storageKey}, ${""},
+          'video/mp4', ${provider.id}, 'stored', 'qa_required', ${""}, 1080, 1920,
+          0, 8000, ${provider.id}, ${provider.id}, 'studio_video_v1', ${runId},
+          'video', '', 'in_review', ${submittedJob.status === "RENDERED" || submittedJob.status === "COMPLETED" ? "completed" : "submitted"}, 0, 'generated'
+        )
+      `;
     const videos = await sql<Record<string, unknown>>`
       select a.id, a.creative_id, a.storage_key, a.media_status, a.byte_size, a.width, a.height, a.duration_ms, a.transcript,
              a.scenes, a.checksum, a.mime_type, a.prompt_version, c.raw_text, c.angle
@@ -1038,13 +1095,25 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
           ${JSON.stringify(decision.answer)}, ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""}
         )
       `;
-      const result = publishThrough({ provider: "test", creativeId: data.creativeId, allowTestProvider: true });
-      if (!result.externalId) throw new Error("The publisher did not return an id. Nothing was stored.");
+      const isTest = data.publisher === "test";
+      const isTestRuntime = process.env.NODE_ENV !== "production" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
+      if (isTest && !isTestRuntime) {
+        throw new Error("The test publisher is isolated to TestingRuntime and cannot be used in ProductionRuntime. Connect a live channel to publish.");
+      }
+      const publisherProvider = isTest ? "test" : (data.publisher as any);
+      const result = publishThrough({
+        provider: publisherProvider,
+        creativeId: data.creativeId,
+        allowTestProvider: isTest && isTestRuntime,
+      });
+      if (!result.externalId) {
+        throw new Error(`The publisher (${data.publisher}) did not return an external id (${result.status}). Nothing was stored.`);
+      }
       await sql`
         insert into provider_objects (
           id, organization_id, brand_id, provider, object_type, idempotency_key, external_id, status
         ) values (
-          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, 'test', 'ad', ${data.creativeId},
+          ${crypto.randomUUID()}, ${access.organizationId}, ${data.brandId}, ${publisherProvider}, 'ad', ${data.creativeId},
           ${result.externalId}, ${result.status}
         )
       `;

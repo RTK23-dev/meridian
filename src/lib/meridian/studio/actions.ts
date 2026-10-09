@@ -42,8 +42,18 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
     if (imageProvider !== "none" && imageProvider !== "test:image" && imageProvider !== "google:nano-banana") {
       throw new Error("Choose no image provider or an optional supported image provider.");
     }
-    if (videoProvider !== "hypit" && videoProvider !== "none") {
-      throw new Error("Video generation uses the separate Hypit runtime.");
+    const isTestRuntime = process.env.NODE_ENV === "test" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
+    const allowedVideoProviders = new Set([
+      "none",
+      "auto",
+      "manual_cloud",
+      "veo",
+      "higgsfield",
+      "hypit",
+      ...(isTestRuntime ? ["test:video"] : []),
+    ]);
+    if (!allowedVideoProviders.has(videoProvider)) {
+      throw new Error(`Unsupported video provider: ${videoProvider}. Allowed: auto, manual_cloud, veo, higgsfield, hypit, none.`);
     }
     return { brandId, briefId, imageProvider, videoProvider };
   })

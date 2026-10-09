@@ -5,7 +5,7 @@
 
 [![CI](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml/badge.svg)](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status: Beta](https://img.shields.io/badge/Release-0.1.0--beta.5-emerald.svg)](CHANGELOG.md)
+[![Status: Beta](https://img.shields.io/badge/Release-0.1.0--beta.6-emerald.svg)](CHANGELOG.md)
 
 ---
 
@@ -38,48 +38,57 @@ Meridian continuously analyzes evidence, generates video variants, enforces safe
 
 ## Key Capabilities
 
-### 1. Modular Engine & n8n-Style Flow Connectors
+### 1. ProductionRouter & Multi-Provider Video Engines
+- **Provider-Neutral Creative Generation**: Studio requests compile to a canonical `CreativeSpec`, routed dynamically via `ProductionRouter.route()` across healthy providers (`veo`, `higgsfield`, `hypit`, `manual_cloud`). Studio executes strictly through the unified provider job lifecycle.
+- **Durable PostgreSQL Job State & Poller Worker**: Complete job lifecycle (`request_id`, `status_url`, `cancel_url`, `spec_hash`, polling timestamps) is persisted in `production_jobs` table (migration `0028`). The durable worker poller (`pollProductionJobs`) claims active jobs via `SELECT ... FOR UPDATE SKIP LOCKED`, checks provider status, collects rendered videos to Google Drive, and validates postflight QC.
+- **Strict Testing Runtime Isolation**: `test:video` cannot be resolved in `ProductionRuntime` and is strictly confined to `TestingRuntime` via dependency injection.
+- **Model-Accurate Adapters & Registries**: Google Veo validates model-specific `VideoCapability` boundaries before network calls (Veo 3.1: 8s, 9:16 / 16:9, native audio); Higgsfield integrates `HiggsfieldModelRegistry` with model-specific endpoints (`dop-v1`, `higgsfield-video-v1`, `genjutsu-v1`, `seedance-v1`) and official `Key` headers; ManualCloud operates with zero in-memory authority, reconstructing state from database metadata and drop folder scanning.
+
+### 2. Modular Engine & n8n-Style Flow Connectors
 - **Decoupled Swappable Engines**: Cleanly separated contracts for `GradingEngine`, `PlannerEngine`, `PublishEngine`, `VideoEngine`, and `SourceAdapter`.
 - **Chainable Pipelines**: Connect engines with standardized `FlowNode` contracts and `createFlow("pipeline-id")` runners (identical to n8n node graphs).
 - **Extensible Registry**: Register custom video renderers or ad networks without modifying core routing or database schemas.
 
-### 2. Multi-Channel Selective Distribution
+### 3. Multi-Channel Selective Distribution
 - **Paid Advertising**: Paused campaign staging for **Meta Ads**, **TikTok Ads**, and **Google Ads**.
 - **Organic Social**: Native connectors for **Instagram Reels**, **Facebook Pages**, and **YouTube Shorts**.
 - **Per-Channel Targeting**: Interactive modal lets operators selectively pick which channels receive paid test spend vs. organic distribution for each creative variant.
 
-### 3. Creative DNA v2 & Content Factory
+### 4. Dynamic Creative Structure & Primary Object Storage
+- **Dynamic Creative Structures**: Canonical structure modeling (`organic_short`, `pov`, `skit`, `storytime`, `listicle`, `tutorial`, `reaction`, `trend_audio`, `transformation`, `review`, `comparison`, `loop`, `unstructured`) with inferred heuristic classifications. The legacy 6-beat `AdNarrative` is an optional projection for paid ads only.
+- **Google Drive Primary Storage**: Authoritative binary object store mapped via Postgres `storage_objects`, featuring resumable uploads for media > 5MB.
 - **Multimodal Video Decomposition**: `ffmpeg` scene detection, keyframe vision analysis, OCR text role classification, and WhisperX timestamp alignment.
-- **pgvector Semantic Retrieval**: 384-dimensional embeddings stored in Postgres with cosine similarity index (`migrations/0019_creative_dna_pgvector.sql`).
 - **Originality & Claim Gates**: 64-bit perceptual hashing with Hamming distance checks block copycat variants. Claims missing proof stay in human review.
 
-### 4. Advanced JEV & Bayesian Learning Flywheel
-- **Multi-Objective Telemetry**: Ingests both paid performance (CTR, CVR, ROAS) and organic engagement (3s hook retention, completion rate, shares).
+### 5. Advanced JEV & Bayesian Learning Flywheel
+- **TypeSafe Decisions API**: Native integration with OpenRouter's `/api/alpha/decisions` (`typesafe/jev-1.13`) providing strictly typed `choice`, `noul`, and `score` decisions without chat fallback coercion or fake confidence.
+- **Question-Aware Evidence Compression**: Evidence bundles filter selectively by question domain (`visual_craft`, `retention_architecture`, `share_trigger`, `transferability`) while preserving `EvidenceRef` lineage.
+- **Truthful Nullable Telemetry**: Ingests multi-objective telemetry with strict nullable semantics (`optionalNumber`), preserving observed zeros while keeping unobserved metrics as `null`.
 - **Exponential Recency-Decay Weighting**: Half-life decay (14-day) ensures fresh performance informs new briefs without being skewed by months-old ad campaigns.
 - **Hierarchical Cold-Start Priors**: Smoothly regularizes new brands using vertical category baselines while preserving strict multi-tenant isolation.
 - **Benjamini-Hochberg FDR Control**: False-discovery rate filtering weeds out random statistical noise.
 - **Complete Guide**: [Unified Telemetry & Flywheel Guide](docs/TELEMETRY_FLYWHEEL.md).
 
-### 5. Encrypted Credential Vault & Multi-Account Management
+### 6. Encrypted Credential Vault & Multi-Account Management
 - **AES-256-GCM Encryption**: Secure at-rest encryption for OAuth tokens, refresh tokens, and webhook secrets with random 96-bit IVs and 128-bit authentication tags.
 - **Multi-Account Scale**: Connect dozens of Instagram Pages, TikTok accounts, YouTube channels, and Meta Ad accounts per brand.
 - **Cryptographic Tamper-Proofing**: Fail-closed integrity validation prevents unauthorized token modifications.
 - **Complete Guide**: [Vault & Accounts Guide](docs/VAULT_AND_ACCOUNTS.md).
 
-### 6. Multi-Account Publishing Orchestrator
+### 7. Multi-Account Publishing Orchestrator
 - **Deterministic Idempotency**: Minute-normalized SHA-256 keys prevent duplicate posting across retries and concurrent schedules.
 - **Atomic Worker Claiming**: Concurrency-safe job execution using Postgres `SELECT ... FOR UPDATE SKIP LOCKED`.
 - **Exponential Backoff & Rate Limits**: Automated retry progression with per-platform rate limiting.
 - **Immutable Receipts**: Verified live execution receipts with direct external post IDs and links.
 - **Complete Guide**: [Publishing Orchestration Guide](docs/PUBLISHING_ORCHESTRATION.md).
 
-### 7. JEV Large-Scale Cognitive Intelligence & Whitespace Radar
-- **6-Beat Short-Form Decomposition**: Real-time evaluation of Hook (0-3s), Problem (3-7s), Reveal (7-15s), Proof (15-25s), Offer (25-30s), and CTA (30-35s).
+### 8. JEV Cognitive Intelligence & Whitespace Radar
+- **Universal Structure Intelligence**: Native timeline evaluation across scenes, visual pacing, and optional ad-narrative beats (hook, problem, reveal, proof, offer, cta).
 - **Decile Creative Differentiators**: Isolates top 10% vs bottom 10% content drivers across speech WPM, audio energy, motion intensity, and text density.
 - **Competitor Whitespace Radar**: Identifies un-saturated angles with high win probabilities for instant promotion into briefs.
 - **Complete Guide**: [JEV Intelligence Architecture](docs/JEV.md).
 
-### 8. Operator Control Center & Keyboard Fast-Path
+### 9. Operator Control Center & Keyboard Fast-Path
 - **Global Command Palette (`Cmd+K`)**: Rapid brand switching, instant screen routing, and one-click execution actions.
 - **Two-Key Vim Navigation**: Instant chords (`G O`, `G S`, `G R`, `G I`, `G L`, `G F`, `G A`).
 - **Distributed Observability**: Real-time worker monitoring, job queues, and `/api/health` monitoring.
@@ -130,7 +139,7 @@ npm run scheduler
 Every pull request and release is validated across rigorous automated test suites:
 
 ```bash
-# Run 326+ automated tests across 16 test suites
+# Run 465 automated tests across 16 test suites (including 28 Historical Regressions and 5 End-to-End Integration Paths)
 npm test
 
 # Verify strict TypeScript types (0 errors)
@@ -152,6 +161,11 @@ npm run build
 | `DATABASE_URL` | PostgreSQL connection string | PGlite embedded if unset |
 | `TOKEN_ENCRYPTION_KEY` | AES-256-GCM key for tenant tokens | Required for OAuth tokens |
 | `OPENROUTER_API_KEY` | Model gateway for JEV decisions | Required for model evaluations |
+| `GEMINI_API_KEY` | Gemini multimodal perception & Veo video | Required for Veo / perception |
+| `HIGGSFIELD_API_KEY` | Higgsfield AI video generation key | Required for Higgsfield models |
+| `HIGGSFIELD_MODEL` | Selected Higgsfield model (`dop-v1`, `higgsfield-video-v1`, etc.) | Defaults to `higgsfield-video-v1` |
+| `GOOGLE_DRIVE_FOLDER_ID` | Root Google Drive folder for media storage | Required for Google Drive store |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account JSON credentials for Drive | Required for Google Drive store |
 | `HYPIT_BASE_URL` | Hypit 0.2.17 video generation service | Reports `HYPIT_NOT_CONNECTED` if unset |
 | `META_ACCESS_TOKEN` | Meta Graph API access token | Meta publishing stays paused |
 | `TIKTOK_ACCESS_TOKEN` | TikTok Marketing API access token | TikTok publishing stays disabled |

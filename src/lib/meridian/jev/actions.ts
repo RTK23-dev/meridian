@@ -103,6 +103,12 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
 
     if (!brandId) throw new Error("Choose a brand.");
 
+    function optionalNumber(value: unknown): number | null {
+      if (value === null || value === undefined || value === "") return null;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
     const items: ContentItem[] = rawItems.map((r: any, idx: number) => ({
       id: clip(r.id) || `post-${idx}`,
       platform: clip(r.platform) || platform,
@@ -113,16 +119,16 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
       ctaType: typeof r.ctaType === "string" ? clip(r.ctaType) : undefined,
       visualStyle: typeof r.visualStyle === "string" ? clip(r.visualStyle) : undefined,
       angle: typeof r.angle === "string" ? clip(r.angle) : undefined,
-      views: Number(r.views) || 0,
-      likes: Number(r.likes) || 0,
-      comments: Number(r.comments) || 0,
-      shares: Number(r.shares) || 0,
-      threeSecondRetention: Number(r.threeSecondRetention) || 0,
-      completionRate: Number(r.completionRate) || 0,
-      motionIntensity: Number(r.motionIntensity) || 0,
-      textDensity: Number(r.textDensity) || 0,
-      speechWpm: Number(r.speechWpm) || 0,
-      audioEnergyScore: Number(r.audioEnergyScore) || 0,
+      views: optionalNumber(r.views),
+      likes: optionalNumber(r.likes),
+      comments: optionalNumber(r.comments),
+      shares: optionalNumber(r.shares),
+      threeSecondRetention: optionalNumber(r.threeSecondRetention),
+      completionRate: optionalNumber(r.completionRate),
+      motionIntensity: optionalNumber(r.motionIntensity) ?? undefined,
+      textDensity: optionalNumber(r.textDensity) ?? undefined,
+      speechWpm: optionalNumber(r.speechWpm) ?? undefined,
+      audioEnergyScore: optionalNumber(r.audioEnergyScore) ?? undefined,
       publishedAt: typeof r.publishedAt === "string" ? r.publishedAt : undefined,
     }));
 
@@ -149,28 +155,21 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
     for (const item of data.items) {
       const evaluation = evaluateMultimodalCreative({
         visual: {
-          motionIntensity: item.motionIntensity ?? 0.5,
-          facePresence: 0.5,
-          textDensity: item.textDensity ?? 0.3,
-          contrastRatio: 0.6,
-          typographyWeight: 0.7,
+          motionIntensity: item.motionIntensity,
+          textDensity: item.textDensity,
+          // Unobserved features remain undefined; never fabricated
         },
-        audio: {
-          speechWpm: item.speechWpm ?? 160,
-          audioEnergy: item.audioEnergyScore ?? 0.6,
-          silenceRatio: 0.05,
-        },
-        historicalThreeSecondRetention: item.threeSecondRetention,
-        historicalCompletionRate: item.completionRate,
+        audio: (item.speechWpm != null || item.audioEnergyScore != null) ? {
+          speechWpm: item.speechWpm ?? undefined,
+          audioEnergy: item.audioEnergyScore ?? undefined,
+        } : undefined,
+        historicalThreeSecondRetention: item.threeSecondRetention ?? undefined,
+        historicalCompletionRate: item.completionRate ?? undefined,
       });
 
-      const mockNarrativeBeats: Record<NarrativeBeat, number> = {
+      // Observed beats: hook is evaluated from visual cues; unobserved beats are not mocked with fake numbers
+      const observedNarrativeBeats: Partial<Record<NarrativeBeat, number>> = {
         hook: evaluation.hookVisualScore,
-        problem: 0.7,
-        reveal: 0.8,
-        proof: 0.75,
-        offer: 0.7,
-        cta: 0.65,
       };
 
       await saveContentAnalysis(sql, {
@@ -178,16 +177,16 @@ export const runAccountIntelligenceAnalysisFn = createServerFn({ method: "POST" 
         brandId: data.brandId,
         postId: item.postId,
         hookVisualScore: evaluation.hookVisualScore,
-        audioEnergyScore: item.audioEnergyScore ?? 0.6,
-        speechWpm: item.speechWpm ?? 160,
-        narrativeBeats: mockNarrativeBeats,
+        audioEnergyScore: item.audioEnergyScore ?? null,
+        speechWpm: item.speechWpm ?? null,
+        narrativeBeats: observedNarrativeBeats,
         detectedObjections: evaluation.detectedObjections,
         topCommentsSummary: "",
-        visualStyle: item.visualStyle ?? "ugc",
-        motionIntensity: item.motionIntensity ?? 0.5,
-        textDensity: item.textDensity ?? 0.3,
-        hookType: item.hookType ?? "question",
-        ctaType: item.ctaType ?? "comment",
+        visualStyle: item.visualStyle ?? null,
+        motionIntensity: item.motionIntensity ?? null,
+        textDensity: item.textDensity ?? null,
+        hookType: item.hookType ?? null,
+        ctaType: item.ctaType ?? null,
         views: item.views,
         likes: item.likes,
         comments: item.comments,

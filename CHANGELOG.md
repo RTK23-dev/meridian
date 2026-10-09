@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.0-beta.6 — 2026-10-09
+
+Final Runtime Integration & Hardening: ProductionRouter, Durable PostgreSQL Jobs, Model-Accurate Adapters, Truthful Nullable Semantics, and End-to-End Integration Gates.
+
+- **ProductionRouter Integration**: Studio generation path completely decouples provider specifics, routing via `CreativeSpec` to `ProductionRouter.route()` across Veo, Higgsfield, Hypit, and ManualCloud.
+- **Strict Testing Runtime Isolation**: `test:video` cannot be resolved in `ProductionRuntime` and is strictly confined to `TestingRuntime` via dependency injection.
+- **Durable PostgreSQL Job State**: Added migration `0028_durable_production_jobs.sql` persisting `request_id`, `status_url`, `cancel_url`, `spec_hash`, polling timestamps, and resumption metadata to guarantee persistence across worker restarts.
+- **Model-Accurate Video Adapters**:
+  - `Google Veo Provider`: Validates model-specific `VideoCapability` specifications before remote network calls; parses REST `generatedSamples` for output artifacts.
+  - `Higgsfield Provider`: Implements model selection (`dop-v1`, `higgsfield-video-v1`) with official `Authorization: Key` contract and preserves exact upstream request/status/cancel URLs.
+- **Truthful Nullable Telemetry & Metrology**: Search-and-replace elimination of `Number(...) || 0` coercion; unobserved views, shares, and completion rates are strictly preserved as `null`, preventing false negatives in Bayesian updates and outlier scoring.
+- **Native JEV Decisions API & Strict Protocol**: Strict enforcement of the `answers` object protocol from OpenRouter Decisions API, preserving unadulterated `noul` probabilities without fake confidence, and recording true `NULL` database values.
+- **Canonical CreativeStructure**: Formats modeled canonically (`organic_short`, `pov`, `skit`, `listicle`, etc.) with inferred classification heuristics (`heuristicScore`), reserving the 6-beat `AdNarrative` as an optional projection for paid ads.
+- **Loud Migration Validation**: Removed `when others then null` in migration `0027` to ensure schema reconciliation fails loudly rather than corrupting tenant state.
+- **Comprehensive End-to-End Integration Testing**: 4 representative boundary tests covering organic discovery, production routing, publishing gating, and closed-loop telemetry updates (464/464 total automated tests passing).
+
 ## 0.1.0-beta.5 — 2026-10-08
 
 Enterprise JEV Account Intelligence, Multi-Account Credential Vault, Publishing Orchestrator, Unified Telemetry Flywheel, and Operator Control Center.

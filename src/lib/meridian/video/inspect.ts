@@ -1,4 +1,6 @@
-import { PNG } from "pngjs";
+import { createRequire } from "node:module";
+
+const nodeRequire = createRequire(import.meta.url);
 
 export type VideoInspection = {
   durationMs: number | null;
@@ -29,6 +31,7 @@ export function inspectVideo(bytes: Uint8Array): VideoInspection {
 }
 
 export function solidFrame(width: number, height: number, rgb: [number, number, number]): Uint8Array {
+  const { PNG } = nodeRequire("pngjs");
   const png = new PNG({ width, height });
   for (let index = 0; index < width * height; index += 1) {
     png.data[index * 4] = rgb[0];

@@ -36,18 +36,24 @@ export const recordTelemetryAction = createServerFn({ method: "POST" })
     const angle = clip(body.angle);
     const format = clip(body.format);
 
-    const views = Number(body.views) || 0;
-    const impressions = Number(body.impressions) || 0;
-    const reach = Number(body.reach) || 0;
-    const clicks = Number(body.clicks) || 0;
-    const engagements = Number(body.engagements) || 0;
-    const shares = Number(body.shares) || 0;
-    const saves = Number(body.saves) || 0;
-    const conversions = Number(body.conversions) || 0;
-    const spendCents = Number(body.spendCents) || 0;
-    const revenueCents = Number(body.revenueCents) || 0;
-    const hookRetention3s = Number(body.hookRetention3s) || 0;
-    const completionRate = Number(body.completionRate) || 0;
+    function optionalNumber(value: unknown): number | null {
+      if (value === null || value === undefined || value === "") return null;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    const views = optionalNumber(body.views);
+    const impressions = optionalNumber(body.impressions);
+    const reach = optionalNumber(body.reach);
+    const clicks = optionalNumber(body.clicks);
+    const engagements = optionalNumber(body.engagements);
+    const shares = optionalNumber(body.shares);
+    const saves = optionalNumber(body.saves);
+    const conversions = optionalNumber(body.conversions);
+    const spendCents = optionalNumber(body.spendCents);
+    const revenueCents = optionalNumber(body.revenueCents);
+    const hookRetention3s = optionalNumber(body.hookRetention3s);
+    const completionRate = optionalNumber(body.completionRate);
 
     return {
       brandId,
