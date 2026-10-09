@@ -7,6 +7,7 @@ import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, E
 import { BrandNav } from "@/components/brand-nav";
 import { MediaPlayer } from "@/components/media-player";
 import { Term } from "@/components/term";
+import { HeldReservationsPanel } from "@/components/held-reservations-panel";
 import { providerLabel, statusLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import {
@@ -369,7 +370,7 @@ function Studio({ brandId }: { brandId: string }) {
               <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently." error={generationForm.formState.errors.imageProvider?.message}>
                 <SelectInput {...generationForm.register("imageProvider")} required>
                   <option value="none">No images</option>
-                  <option value="test:image">Test image</option>
+                  {session.testImageAllowed ? <option value="test:image">Test image</option> : null}
                   <option value="google:nano-banana">Google AI Studio · Nano Banana</option>
                 </SelectInput>
               </Field>
@@ -378,6 +379,7 @@ function Studio({ brandId }: { brandId: string }) {
           </Panel>
         </TabsContent>
         <TabsContent value="review" className="space-y-5">
+          {hasRole(session.role, "admin") ? <HeldReservationsPanel brandId={brandId} /> : null}
       <section className="space-y-4" aria-label="Variants">
         <h2 className="font-display text-2xl">Variants</h2>
         {session.variants.length === 0 ? <p className="text-sm text-muted">No media yet.</p> : null}

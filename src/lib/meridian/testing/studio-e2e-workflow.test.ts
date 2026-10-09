@@ -127,6 +127,16 @@ test("Studio E2E Workflow 1: Single Source of Truth & Deliverables Fidelity", as
       return p ? [p] : [];
     }
 
+    if (q.includes("from jev_decisions") && q.includes("where id =")) {
+      // The brief's persisted JEV decision for this tenant. The executor's gate refuses a brief without one.
+      return [{
+        id: values[0], organization_id: orgId, brand_id: brandId, decision: "AUTO_APPROVE", reviewer_decision: null,
+        evidence: "[]", answer: "{}", subject_type: "brief", schema_version: "2", model_response: "{}",
+        provider: "typesafe_direct", model: "gemini-2.5-flash", question_id: "opportunity_gate.v2", question_version: "2",
+        reasons: "[]", probability: 0.95, confidence: 0.9, policy_version: "1",
+      }];
+    }
+
     if (q.includes("from briefs") && q.includes("where id =")) {
       const b = dbBriefs.get(values[0]);
       return b ? [b] : [];

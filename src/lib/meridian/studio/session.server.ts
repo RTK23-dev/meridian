@@ -28,7 +28,7 @@ import { assessPublishing, type AccountSnapshot } from "../publishing/readiness.
 import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure.ts";
 import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
-import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativePlan } from "../creative/plan.ts";
+import type { CreationScope, AutonomyMode, CreativePlan } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 import { BudgetLedgerService, InvalidBudgetCapError, toMicros } from "../security/budget-ledger.ts";
 import { modelCapabilityRegistry } from "../production/registry.ts";
@@ -222,6 +222,8 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
   });
   return {
     role,
+    // The server decides whether the placeholder image provider is offered. Production hides it.
+    testImageAllowed: isTestingRuntime(),
     observationCount: loaded.creatives.filter((item) => item.origin === "competitor").length,
     recommendation: top
       ? {
@@ -653,6 +655,61 @@ export async function persistCreativePlanRow(
   if (inserted.length === 0) throw new Error(`Creative plan '${plan.id}' already exists; refusing to overwrite it.`);
 }
 
+type StoredJevDecision = {
+  id: string;
+  decision: string;
+  reviewer_decision: string | null;
+  evidence: string;
+  answer: string;
+  subject_type: string;
+  schema_version: string;
+  model_response: string;
+  provider: string;
+  model: string;
+  question_id: string;
+  question_version: string;
+  reasons: string;
+  probability: number;
+  confidence: number;
+};
+
+/**
+ * Loads the JEV decision a brief was produced under and applies the centralized gate.
+ * Fails closed: a missing decision id, a row that is absent from this tenant and brand,
+ * a BLOCK, and a REQUIRE_HUMAN outcome all throw. Callers run it before any write or billable call.
+ */
+export async function loadGatedJevDecision(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  decisionId: unknown,
+): Promise<StoredJevDecision> {
+  const id = asText(decisionId).trim();
+  if (!id) {
+    throw new Error("Brief has no JEV decision. Creative production is refused before any provider call.");
+  }
+  const rows = await sql<StoredJevDecision>`
+    select id, decision, reviewer_decision, evidence, answer, subject_type, schema_version,
+           model_response, provider, model, question_id, question_version, reasons, probability, confidence
+    from jev_decisions
+    where id = ${id} and organization_id = ${organizationId} and brand_id = ${brandId}
+    limit 1
+  `;
+  const dec = rows[0];
+  if (!dec) {
+    throw new Error("The JEV decision for this brief was not found in this brand. Creative production is refused before any provider call.");
+  }
+  // Enforce Decision Semantics via centralized evaluateJevGate (P0-2)
+  const gate = evaluateJevGate({ decision: dec.decision, reviewerDecision: dec.reviewer_decision });
+  if (gate.status === "BLOCK") {
+    throw new Error(`JEV policy rejected this brief: ${gate.reason}. Creative production is blocked.`);
+  }
+  if (gate.status === "REQUIRE_HUMAN") {
+    throw new Error("JEV requires recorded human review for this brief before production can proceed.");
+  }
+  return dec;
+}
+
 export async function generateStudioVariants(
   userId: string,
   data: {
@@ -708,62 +765,23 @@ export async function generateStudioVariants(
       );
     const autonomy: AutonomyMode = data.autonomy || "semi_automatic";
 
-    // Load persisted JEV decision bundle (P0-A, P0-2)
-    let jevBundle: CreativeJudgmentBundle | undefined;
-    if (brief.decision_id) {
-      const decisionRows = await sql<{
-        id: string;
-        decision: string;
-        reviewer_decision: string | null;
-        evidence: string;
-        answer: string;
-        subject_type: string;
-        schema_version: string;
-        model_response: string;
-        provider: string;
-        model: string;
-        question_id: string;
-        question_version: string;
-        reasons: string;
-        probability: number;
-        confidence: number;
-      }>`
-        select id, decision, reviewer_decision, evidence, answer, subject_type, schema_version,
-               model_response, provider, model, question_id, question_version, reasons, probability, confidence
-        from jev_decisions
-        where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
-        limit 1
-      `;
-      const dec = decisionRows[0];
-      if (dec) {
-        // Enforce Decision Semantics via centralized evaluateJevGate (P0-2)
-        const gate = evaluateJevGate({
-          decision: dec.decision,
-          reviewerDecision: dec.reviewer_decision,
-        });
-        if (gate.status === "BLOCK") {
-          throw new Error(`JEV policy rejected this brief: ${gate.reason}. Creative production is blocked.`);
-        }
-        if (gate.status === "REQUIRE_HUMAN") {
-          throw new Error("JEV requires recorded human review for this brief before production can proceed.");
-        }
-
-        jevBundle = creativeJudgmentsFromStoredDecision({
-          id: dec.id,
-          subjectType: dec.subject_type,
-          questionId: dec.question_id,
-          questionVersion: dec.question_version,
-          schemaVersion: dec.schema_version,
-          decision: dec.decision,
-          reviewerDecision: dec.reviewer_decision,
-          answer: dec.answer,
-          modelResponse: dec.model_response,
-          evidence: dec.evidence,
-          provider: dec.provider,
-          model: dec.model,
-        });
-      }
-    }
+    // Load the JEV decision this brief was produced under and gate it before any plan is written
+    // or any provider is called. A null decision id or a missing row is refused, never skipped (M2).
+    const dec = await loadGatedJevDecision(sql, access.organizationId, data.brandId, brief.decision_id);
+    const jevBundle = creativeJudgmentsFromStoredDecision({
+      id: dec.id,
+      subjectType: dec.subject_type,
+      questionId: dec.question_id,
+      questionVersion: dec.question_version,
+      schemaVersion: dec.schema_version,
+      decision: dec.decision,
+      reviewerDecision: dec.reviewer_decision,
+      answer: dec.answer,
+      modelResponse: dec.model_response,
+      evidence: dec.evidence,
+      provider: dec.provider,
+      model: dec.model,
+    });
 
     // Build CreativePlan via CreativeDecisionEngine (P0.5, P1.1, P0-A)
     const creativePlan = CreativeDecisionEngine.createPlan({
@@ -929,6 +947,22 @@ export async function executeApprovedCreativePlan(
   if (persistedPlan[0]?.status !== "executing") {
     throw new Error("CreativePlan must be durably approved and executing before provider calls.");
   }
+  // M2: approval reaches this executor without generateStudioVariants, so the JEV gate is enforced
+  // here too, before any reservation or provider call. A refusal closes the plan as failed.
+  try {
+    await loadGatedJevDecision(sql, access.organizationId, brandId, brief.decision_id);
+  } catch (gateErr) {
+    await transitionCreativePlan(sql, {
+      organizationId: access.organizationId,
+      brandId,
+      planId: creativePlan.id,
+      actorId: userId,
+      target: "failed",
+      reason: "JEV gate refused production before provider submission.",
+    }).catch(() => {});
+    throw gateErr;
+  }
+
   const loaded = await loadBrandContext(sql, access.organizationId, brandId);
   assertSameTenant(loaded.creatives, access.organizationId, brandId);
   const productName = loaded.products[0]?.name || asText(brief.title);
