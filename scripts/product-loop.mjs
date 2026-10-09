@@ -128,6 +128,10 @@ try {
   await page.locator("select[name='imageProvider']").selectOption("test:image");
   await page.locator("select[name='videoProvider']").selectOption("none");
   await page.getByRole("button", { name: "Generate variants" }).click();
+  const planReview = page.getByRole("dialog", { name: "Review Creative Plan" });
+  await planReview.waitFor({ state: "visible" });
+  await planReview.getByRole("button", { name: "Approve & Generate" }).click();
+  await planReview.waitFor({ state: "hidden" });
   await page.getByRole("tab", { name: "4. Review" }).click();
   await page.getByRole("img", { name: /test:image image variant/ }).first().waitFor({ timeout: 60000 });
   const previewCount = await page.getByRole("img", { name: /test:image image variant/ }).count();
