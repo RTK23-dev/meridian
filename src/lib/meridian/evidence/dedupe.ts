@@ -52,21 +52,42 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return denominator > 0 ? dotProduct / denominator : 0;
 }
 
+const TRACKING_PARAMS = new Set(["fbclid", "gclid", "dclid", "msclkid", "igshid", "igsh", "si", "mc_cid", "mc_eid", "ref_src", "ref_url"]);
+const DEFAULT_PORTS = new Set(["80", "443"]);
+
+function isTrackingParam(name: string): boolean {
+  const key = name.toLowerCase();
+  return key.startsWith("utm_") || TRACKING_PARAMS.has(key);
+}
+
+/**
+ * Canonical form of a URL for identity, not for display. Query parameters that name the resource
+ * (such as `?id=`) are kept: two products on one path are two sources. Tracking parameters, the
+ * fragment, the scheme (http and https serve the same page here), default ports, and trailing
+ * slashes are removed. `www.` and path case are kept, because they can name different resources.
+ * Input that is not an http(s) URL is returned trimmed and lower-cased, so it can still be compared.
+ */
 export function normalizeCanonicalUrl(url?: string | null): string | null {
-  if (!url) return null;
+  const trimmed = url?.trim();
+  if (!trimmed) return null;
+  let parsed: URL;
   try {
-    const parsed = new URL(url.trim());
-    // Strip trailing slash and tracking query params
-    parsed.searchParams.delete("utm_source");
-    parsed.searchParams.delete("utm_medium");
-    parsed.searchParams.delete("utm_campaign");
-    parsed.searchParams.delete("igsh");
-    parsed.searchParams.delete("fbclid");
-    parsed.searchParams.delete("si");
-    return parsed.origin + parsed.pathname.replace(/\/+$/, "");
+    parsed = new URL(trimmed);
   } catch {
-    return url.trim().toLowerCase();
+    return trimmed.toLowerCase();
   }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return trimmed.toLowerCase();
+  const port = parsed.port && !DEFAULT_PORTS.has(parsed.port) ? `:${parsed.port}` : "";
+  const path = parsed.pathname.replace(/\/+$/, "");
+  const kept = [...parsed.searchParams.entries()]
+    .filter(([name]) => !isTrackingParam(name))
+    .sort(([nameA, valueA], [nameB, valueB]) => (nameA === nameB ? compareText(valueA, valueB) : compareText(nameA, nameB)));
+  const query = kept.length > 0 ? `?${new URLSearchParams(kept).toString()}` : "";
+  return `https://${parsed.hostname}${port}${path}${query}`;
+}
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 export function findDuplicateEvidence(
