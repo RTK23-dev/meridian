@@ -18,11 +18,23 @@ import type {
   CrawlBudget,
 } from "./types.ts";
 
+export type PageCrawler = typeof crawlLadderPage;
+
+/**
+ * True when any discovered item was not fully stored. Such a run cannot report `completed`, because
+ * the caller would otherwise believe every discovered item is durable.
+ */
+function hasPersistenceFailure(errors: Record<string, string>): boolean {
+  return Object.keys(errors).some((key) => key.startsWith("persist_") || key.startsWith("source_"));
+}
+
 export class DiscoveryService {
   private registry: SourceRegistry;
+  private crawlPage: PageCrawler;
 
-  constructor(registry: SourceRegistry = sourceRegistry) {
+  constructor(registry: SourceRegistry = sourceRegistry, crawlPage: PageCrawler = crawlLadderPage) {
     this.registry = registry;
+    this.crawlPage = crawlPage;
   }
 
   /**
@@ -81,6 +93,7 @@ export class DiscoveryService {
 
     const discoveredItems: DiscoveredItem[] = [];
     const seenHashes = new Set<string>();
+    let crawlFailures = 0;
 
     const persistItem = async (item: DiscoveredItem) => {
       discoveredItems.push(item);
@@ -125,7 +138,7 @@ export class DiscoveryService {
       if (input.scope === "scrape_page") {
         for (const seed of input.seeds) {
           try {
-            const pageResult = await crawlLadderPage(seed, runId);
+            const pageResult = await this.crawlPage(seed, runId);
             run.progress.pagesCrawled++;
 
             // Top-level page record
@@ -162,10 +175,13 @@ export class DiscoveryService {
             }
           } catch (err) {
             run.perSourceErrors[seed] = err instanceof Error ? err.message : String(err);
+            crawlFailures += 1;
           }
         }
 
-        run.status = Object.keys(run.perSourceErrors).length > 0 && run.progress.pagesCrawled === 0 ? "failed" : "completed";
+        run.status = crawlFailures > 0 && run.progress.pagesCrawled === 0
+          ? "failed"
+          : crawlFailures > 0 || hasPersistenceFailure(run.perSourceErrors) ? "partial" : "completed";
       } else if (input.scope === "page_plus_links" || input.scope === "domain") {
         if (input.sql) {
           await DiscoveryFrontierService.enqueueLinks(input.sql, {
@@ -192,6 +208,8 @@ export class DiscoveryService {
           budget,
         });
 
+        let adaptersRun = 0;
+        let adapterFailures = 0;
         for (const exec of plan.executions) {
           if (exec.status !== "eligible") {
             run.perSourceErrors[exec.adapterId] = exec.reason || `Source ${exec.adapterId} not configured.`;
@@ -200,6 +218,7 @@ export class DiscoveryService {
 
           const adapter = this.registry.get(exec.adapterId);
           if (!adapter) continue;
+          adaptersRun += 1;
 
           try {
             const refs = await adapter.discover({
@@ -233,10 +252,13 @@ export class DiscoveryService {
             }
           } catch (err) {
             run.perSourceErrors[exec.adapterId] = err instanceof Error ? err.message : String(err);
+            adapterFailures += 1;
             // Non-fatal for optional adapters (e.g. Cyclone): mission continues
           }
         }
-        run.status = "completed";
+        run.status = adaptersRun > 0 && adapterFailures === adaptersRun && discoveredItems.length === 0
+          ? "failed"
+          : adapterFailures > 0 || hasPersistenceFailure(run.perSourceErrors) ? "partial" : "completed";
       }
     } catch (fatalErr) {
       run.status = "failed";
@@ -307,7 +329,7 @@ export class DiscoveryService {
         }).catch(() => undefined);
       }, 30_000);
       try {
-        const pageResult = await crawlLadderPage(current.url, run.id, budget.allowedHosts);
+        const pageResult = await this.crawlPage(current.url, run.id, budget.allowedHosts);
         run.progress.pagesCrawled += 1;
         const topHash = createHash("sha256").update(pageResult.title + pageResult.description).digest("hex");
         const pageItems: DiscoveredItem[] = [];
@@ -406,11 +428,20 @@ export class DiscoveryService {
       where run_id = ${run.id} and organization_id = ${run.organizationId} and brand_id = ${run.brandId}
         and status in ('PENDING', 'RETRY', 'LEASED', 'PROCESSING')
     `;
+    const terminalFailures = await sql<{ count: number }>`
+      select count(*)::int as count from discovery_frontier
+      where run_id = ${run.id} and organization_id = ${run.organizationId} and brand_id = ${run.brandId}
+        and status = 'FAILED'
+    `;
     if (Number(remaining[0]?.count || 0) > 0) {
       run.status = "partial";
       run.caveat = `Crawl paused with ${remaining[0]?.count || 0} durable frontier item(s) remaining.`;
+    } else if (run.progress.pagesCrawled === 0 && Object.keys(run.perSourceErrors).length) {
+      run.status = "failed";
     } else {
-      run.status = run.progress.pagesCrawled === 0 && Object.keys(run.perSourceErrors).length ? "failed" : "completed";
+      // A page that failed terminally was never crawled, so the run is partial, not completed.
+      const failedItems = Number(terminalFailures[0]?.count || 0);
+      run.status = failedItems > 0 || hasPersistenceFailure(run.perSourceErrors) ? "partial" : "completed";
     }
   }
 
@@ -448,6 +479,16 @@ export class DiscoveryService {
     `;
     run.progress.pagesCrawled = Math.max(run.progress.pagesCrawled, Number(completedFrontier[0]?.count || 0));
     const hashes = new Set(items.map((item) => item.contentHash));
+    if (run.scope === "page_plus_links" || run.scope === "domain") {
+      // A crash during the original seed enqueue leaves seeds missing. Re-enqueueing is idempotent,
+      // so existing frontier rows are untouched and missing seeds are added.
+      await DiscoveryFrontierService.enqueueLinks(input.sql, {
+        organizationId: input.organizationId,
+        brandId: input.brandId,
+        runId: run.id,
+        links: run.seeds.map((url) => ({ url, canonicalUrl: url, depth: 1, priority: 10 })),
+      });
+    }
     await this.processDurableFrontier({
       sql: input.sql,
       run,
