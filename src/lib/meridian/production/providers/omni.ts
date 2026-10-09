@@ -44,6 +44,9 @@ export interface OmniTextToVideoOptions {
 }
 
 export function buildOmniTextToVideoPayload(options: OmniTextToVideoOptions): Record<string, unknown> {
+  if (options.durationSeconds !== undefined && (options.durationSeconds < 3 || options.durationSeconds > 10)) {
+    throw new Error(`Gemini Omni supports video durations between 3 and 10 seconds. Provided: ${options.durationSeconds}s.`);
+  }
   const aspectRatio = options.aspectRatio || "9:16";
   return {
     model: options.model,
@@ -73,6 +76,9 @@ export function buildOmniImageToVideoPayload(options: OmniImageToVideoOptions): 
   const { model, prompt, referenceImageUri } = options;
   if (!referenceImageUri || !referenceImageUri.trim()) {
     throw new Error("image_to_video requires a valid reference image URI or base64 data");
+  }
+  if (options.durationSeconds !== undefined && (options.durationSeconds < 3 || options.durationSeconds > 10)) {
+    throw new Error(`Gemini Omni supports video durations between 3 and 10 seconds. Provided: ${options.durationSeconds}s.`);
   }
 
   const aspectRatio = options.aspectRatio || "9:16";
@@ -240,6 +246,21 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     const meridianJobId = `job-omni-${globalThis.crypto.randomUUID()}`;
     const aspectRatio = spec.aspectRatio || "9:16";
     const durationSeconds = spec.durationTargetSeconds;
+
+    if (durationSeconds !== undefined && (durationSeconds < 3 || durationSeconds > 10)) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "FAILED",
+        costEstimateUsd: costEstimate,
+        error: `Gemini Omni supports video durations between 3 and 10 seconds. Requested: ${durationSeconds}s.`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
 
     const referenceUri = spec.sourceMediaUrl || (spec as any).referenceImageUri;
 
@@ -454,7 +475,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
   /**
    * Extracts output video artifact from official steps/content REST response.
    */
-  private extractVideoArtifact(body: OmniInteractionResponse): {
+  public extractVideoArtifact(body: OmniInteractionResponse): {
     uri: string;
     mimeType: string;
     sha256?: string;

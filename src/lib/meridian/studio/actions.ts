@@ -61,19 +61,25 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
       "google_omni",
       ...(isTestRuntime ? ["test:video"] : []),
     ]);
-    if (videoProvider && !allowedVideoProviders.has(videoProvider)) {
-      throw new Error(`Unsupported video provider: ${videoProvider}. Allowed: auto, manual_cloud, veo, higgsfield, hypit, omni, google_omni, none.`);
+    if (videoProvider === "veo") {
+      throw new Error("Google Veo 3.1 (Preview) is deprecated and shut down. Please select Google Gemini Omni (google_omni).");
     }
+    const canonicalVideoProvider = videoProvider === "omni" ? "google_omni" : videoProvider;
+    if (canonicalVideoProvider && !allowedVideoProviders.has(canonicalVideoProvider)) {
+      throw new Error(`Unsupported video provider: ${canonicalVideoProvider}. Allowed: auto, manual_cloud, higgsfield, hypit, google_omni, none.`);
+    }
+    const maxSpendUsd = typeof body.maxSpendUsd === "number" && !Number.isNaN(body.maxSpendUsd) ? body.maxSpendUsd : undefined;
     return {
       brandId,
       briefId,
       imageProvider: imageProvider || "none",
-      videoProvider: videoProvider || "none",
-      mode: (mode || (videoProvider && videoProvider !== "none" ? "video" : "image_ad")) as import("@/lib/meridian/factory/creative-manifest").CreationMode,
+      videoProvider: canonicalVideoProvider || "none",
+      mode: (mode || (canonicalVideoProvider && canonicalVideoProvider !== "none" ? "video" : "image_ad")) as import("@/lib/meridian/factory/creative-manifest").CreationMode,
       creationScope: creationScope as import("@/lib/meridian/creative/plan").CreationScope | undefined,
       autonomy: autonomy as import("@/lib/meridian/creative/plan").AutonomyMode | undefined,
+      maxSpendUsd,
       source: (source || "new_brief") as import("@/lib/meridian/factory/creative-manifest").StartingMaterialType,
-      productionMode: (productionMode || (videoProvider === "manual_cloud" ? "manual_cloud" : "automated_provider")) as import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType,
+      productionMode: (productionMode || (canonicalVideoProvider === "manual_cloud" ? "manual_cloud" : "automated_provider")) as import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType,
       aspectRatio: (aspectRatio === "16:9" || aspectRatio === "1:1" ? aspectRatio : "9:16") as "9:16" | "16:9" | "1:1" | "4:5",
     };
   })
@@ -82,6 +88,21 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
     refuseIfLimited(modelLimit, context.userId);
     const api = await import("./session.server");
     return api.generateStudioVariants(context.userId, data);
+  });
+
+export const approveAndExecuteCreativePlan = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+    const brandId = clip(body.brandId);
+    const planId = clip(body.planId);
+    if (!brandId || !planId) throw new Error("Choose a valid brand and creative plan.");
+    return { brandId, planId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    refuseIfLimited(modelLimit, context.userId);
+    const api = await import("./session.server");
+    return api.approveAndExecuteCreativePlan(context.userId, data);
   });
 
 export const reviewStudioVariant = createServerFn({ method: "POST" })

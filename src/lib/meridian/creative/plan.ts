@@ -19,6 +19,40 @@ export type AutonomyMode =
   | "semi_automatic"
   | "fully_automatic";
 
+export type CreativePlanStatus =
+  | "draft"
+  | "awaiting_approval"
+  | "approved"
+  | "executing"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "abstained";
+
+export interface CreativeFormatRecommendation {
+  format: "image" | "video" | "carousel";
+  rationale: string;
+  priority: number;
+}
+
+export interface CreativeJudgmentBundle {
+  conceptStrengthScore?: number;
+  isOutlier?: boolean;
+  creativeMechanism?: string;
+  recommendedFormats: CreativeFormatRecommendation[];
+  formatSuitability: Record<string, { suitable: boolean; rationale: string }>;
+  brandFitScore?: number;
+  transferabilityScore?: number;
+  creatorDependency?: boolean;
+  distributionSuitability?: "paid_only" | "organic_only" | "both";
+  status: "admissible" | "abstain_insufficient_evidence" | "abstain_rejected" | "abstain_malformed";
+  evidenceRefs: string[];
+  decisionId: string;
+  questionSetVersion: string;
+  provider: string;
+  model: string;
+}
+
 export type CampaignObjective =
   | "awareness"
   | "engagement"
@@ -41,7 +75,7 @@ export interface CreativeDeliverable {
   provider: string;
   model: string;
   dependsOnDeliverableIds?: string[];
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, any>;
 }
 
 export interface DecisionRationale {
@@ -95,13 +129,14 @@ export interface ProductionFallback {
 
 export interface AppliedConstraint {
   constraintName: string;
-  constraintValue: unknown;
+  constraintValue: any;
   source: "user_intent" | "brand_guideline" | "platform_spec" | "spend_cap";
 }
 
 export interface CreativePlan {
   id: string;
   version: string;
+  status: CreativePlanStatus;
   scope: CreationScope;
   autonomy: AutonomyMode;
   objective: CampaignObjective;

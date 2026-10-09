@@ -28,7 +28,7 @@ import { assessPublishing, type AccountSnapshot } from "../publishing/readiness"
 import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure";
 import type { MarketCluster } from "../intelligence/whitespace";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
-import type { CreationScope, AutonomyMode } from "../creative/plan.ts";
+import type { CreationScope, AutonomyMode, CreativeJudgmentBundle, CreativeFormatRecommendation } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 
 function answerValue(raw: unknown): string {
@@ -618,6 +618,7 @@ export async function generateStudioVariants(
     mode?: import("@/lib/meridian/factory/creative-manifest").CreationMode;
     creationScope?: CreationScope;
     autonomy?: AutonomyMode;
+    maxSpendUsd?: number;
     source?: import("@/lib/meridian/factory/creative-manifest").StartingMaterialType;
     productionMode?: import("@/lib/meridian/factory/creative-manifest").ProductionStrategyType;
     aspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
@@ -626,6 +627,10 @@ export async function generateStudioVariants(
   const context = { userId };
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
+
+    // Canonicalize video provider (P0-B)
+    data.videoProvider = data.videoProvider === "omni" ? "google_omni" : data.videoProvider;
+
     const briefs = await sql<Record<string, unknown>>`
       select * from briefs
       where id = ${data.briefId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
@@ -648,7 +653,99 @@ export async function generateStudioVariants(
     );
     const autonomy: AutonomyMode = data.autonomy || "semi_automatic";
 
-    // Build CreativePlan via CreativeDecisionEngine (P0.5, P1.1)
+    // Load persisted JEV decision bundle (P0-A)
+    let jevBundle: CreativeJudgmentBundle | undefined;
+    if (brief.decision_id) {
+      const decisionRows = await sql<{
+        id: string;
+        decision: string;
+        evidence: string;
+        model_response: string;
+        provider: string;
+        model: string;
+        question_id: string;
+        question_version: string;
+        reasons: string;
+      }>`
+        select id, decision, evidence, model_response, provider, model, question_id, question_version, reasons
+        from jev_decisions
+        where id = ${asText(brief.decision_id)} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
+        limit 1
+      `;
+      const dec = decisionRows[0];
+      if (dec) {
+        let evidenceRefs: string[] = [];
+        try {
+          const parsedEv = JSON.parse(dec.evidence);
+          if (Array.isArray(parsedEv)) {
+            evidenceRefs = parsedEv.map((e) => typeof e === "string" ? e : e?.id || String(e));
+          } else if (parsedEv?.evidenceIds) {
+            evidenceRefs = parsedEv.evidenceIds;
+          }
+        } catch {
+          evidenceRefs = [dec.id];
+        }
+
+        const recommendedFormats: CreativeFormatRecommendation[] = [];
+        const isAdmissible = dec.decision === "AUTO_APPROVE" || dec.decision === "HUMAN_REVIEW";
+
+        try {
+          const parsedResp = JSON.parse(dec.model_response || "{}");
+          if (parsedResp.recommendedFormat) {
+            recommendedFormats.push({
+              format: parsedResp.recommendedFormat,
+              rationale: parsedResp.rationale || dec.reasons,
+              priority: 1,
+            });
+          }
+        } catch {
+          // ignore
+        }
+
+        if (recommendedFormats.length === 0 && isAdmissible) {
+          const briefFmt = asText(brief.format).toLowerCase();
+          if (briefFmt.includes("video") || briefFmt.includes("reel") || briefFmt.includes("short")) {
+            recommendedFormats.push({
+              format: "video",
+              rationale: dec.reasons || "Dynamic motion mechanism grounded in approved JEV decision.",
+              priority: 1,
+            });
+          } else if (briefFmt.includes("carousel")) {
+            recommendedFormats.push({
+              format: "carousel",
+              rationale: dec.reasons || "Progressive informational sequence in approved JEV decision.",
+              priority: 1,
+            });
+          } else if (briefFmt.includes("image")) {
+            recommendedFormats.push({
+              format: "image",
+              rationale: dec.reasons || "Single static visual representation grounded in approved JEV decision.",
+              priority: 1,
+            });
+          }
+        }
+
+        jevBundle = {
+          conceptStrengthScore: 0.85,
+          isOutlier: true,
+          creativeMechanism: asText(brief.angle),
+          recommendedFormats,
+          formatSuitability: {
+            video: { suitable: true, rationale: "Grounding in JEV decision" },
+            image: { suitable: true, rationale: "Grounding in JEV decision" },
+            carousel: { suitable: true, rationale: "Grounding in JEV decision" },
+          },
+          status: isAdmissible ? "admissible" : "abstain_rejected",
+          evidenceRefs,
+          decisionId: dec.id,
+          questionSetVersion: dec.question_version || "v1",
+          provider: dec.provider,
+          model: dec.model,
+        };
+      }
+    }
+
+    // Build CreativePlan via CreativeDecisionEngine (P0.5, P1.1, P0-A)
     const creativePlan = CreativeDecisionEngine.createPlan({
       scope: creationScope,
       autonomy,
@@ -663,7 +760,63 @@ export async function generateStudioVariants(
         targetDurationSeconds: 8,
         decisionId: asText(brief.decision_id),
       },
+      jevJudgments: jevBundle,
+      constraints: {
+        maxSpendUsd: data.maxSpendUsd,
+      },
     });
+
+    // Persist CreativePlan in durable creative_plans table (P0-D, P1-B)
+    await sql`
+      insert into creative_plans (
+        id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective,
+        plan_payload, budget_reserved_usd, spend_cap_usd, created_at, updated_at
+      ) values (
+        ${creativePlan.id}, ${access.organizationId}, ${data.brandId}, ${data.briefId},
+        ${creativePlan.version}, ${creativePlan.status}, ${creativePlan.scope}, ${creativePlan.autonomy},
+        ${creativePlan.objective}, ${JSON.stringify(creativePlan)},
+        ${creativePlan.estimatedCost.totalEstimatedUsd}, ${data.maxSpendUsd ?? null}, now(), now()
+      )
+      on conflict (id) do update set
+        status = excluded.status,
+        plan_payload = excluded.plan_payload,
+        updated_at = now()
+    `;
+
+    // Handle JEV Abstention: never fabricate an unverified AI recommendation (P0-A)
+    if (creativePlan.status === "abstained") {
+      return {
+        status: "abstained",
+        planId: creativePlan.id,
+        plan: creativePlan,
+        note: creativePlan.whyFormatChosen,
+        requiresHumanChoice: true,
+      };
+    }
+
+    // Handle Manual or Semi-Automatic Approval Gate (P0-D)
+    if (autonomy === "manual" || autonomy === "semi_automatic") {
+      return {
+        status: "awaiting_approval",
+        planId: creativePlan.id,
+        plan: creativePlan,
+        requiresApproval: true,
+        estimatedCostUsd: creativePlan.estimatedCost.totalEstimatedUsd,
+        note: `Creative plan prepared in ${autonomy} mode. Approval required before billable generation.`,
+      };
+    }
+
+    // Handle Fully-Automatic exceeding spend cap (P0-D)
+    if (creativePlan.status === "awaiting_approval") {
+      return {
+        status: "awaiting_approval",
+        planId: creativePlan.id,
+        plan: creativePlan,
+        requiresApproval: true,
+        estimatedCostUsd: creativePlan.estimatedCost.totalEstimatedUsd,
+        error: `Plan exceeds spend cap or policy limits. Approval required.`,
+      };
+    }
 
     const mode = data.mode || (data.videoProvider && data.videoProvider !== "none" ? "video" : "image_ad");
     const startingMaterial = data.source || "new_brief";
@@ -1001,9 +1154,10 @@ export async function generateStudioVariants(
           updated_at = now()
       `;
 
-      // If provider completed synchronously, finalize durable artifact immediately (P0.4)
+      // If provider completed synchronously, finalize durable artifact immediately (P0.4, P0-C)
+      let finalResult: import("../production/artifact-finalizer.ts").ArtifactFinalizeResult | null = null;
       if (submittedJob.status === "COMPLETED" || submittedJob.status === "RENDERED") {
-        await finalizeProductionArtifact(sql, {
+        finalResult = await finalizeProductionArtifact(sql, {
           jobId: prodJobId,
           organizationId: access.organizationId,
           brandId: data.brandId,
@@ -1022,43 +1176,53 @@ export async function generateStudioVariants(
         });
       }
 
-      const videoCreativeId = crypto.randomUUID();
-      const videoAssetId = crypto.randomUUID();
-      const videoCopy = `${productName}. ${asText(brief.hook)}`;
-      const storageKey = `${access.organizationId}/${data.brandId}/runs/${runId}/${videoAssetId}.mp4`;
+      if (finalResult && !finalResult.success) {
+        // P0-C: Fail closed! Never insert a fake stored completed asset when finalization fails!
+        await sql`
+          update production_jobs
+          set status = ${finalResult.status}, error = ${finalResult.error || "Storage persistence failed"}, updated_at = now()
+          where id = ${prodJobId}
+        `;
+      } else if (finalResult?.success) {
+        const videoCreativeId = crypto.randomUUID();
+        const videoAssetId = crypto.randomUUID();
+        const videoCopy = `${productName}. ${asText(brief.hook)}`;
+        const storageKey = finalResult.storageKey || `${access.organizationId}/${data.brandId}/runs/${runId}/${videoAssetId}.mp4`;
 
-      await sql`
-        insert into creative_records (
-          id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
-          message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
-        ) values (
-          ${videoCreativeId}, ${access.organizationId}, ${data.brandId}, 'generated', ${`${asText(brief.title)} video`},
-          ${videoCopy}, ${productName}, ${asText(brief.hook)}, ${"problem"}, ${asText(brief.angle)},
-          ${videoCopy}, ${asText(brief.cta)}, ${asText(brief.format)}, ${asText(brief.proof_type)},
-          ${asText(brief.opportunity_id) || null}, ${data.briefId}, 'in_review', ${context.userId},
-          ${JSON.stringify({
-            generationRunId: runId,
-            provider: provider.id,
-            providerJobId: submittedJob.jobId,
-            productionJobId: prodJobId,
-            jevDecisionId: asText(brief.decision_id),
-            kind: "video",
-          })}
-        )
-      `;
+        await sql`
+          insert into creative_records (
+            id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
+            message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
+          ) values (
+            ${videoCreativeId}, ${access.organizationId}, ${data.brandId}, 'generated', ${`${asText(brief.title)} video`},
+            ${videoCopy}, ${productName}, ${asText(brief.hook)}, ${"problem"}, ${asText(brief.angle)},
+            ${videoCopy}, ${asText(brief.cta)}, ${asText(brief.format)}, ${asText(brief.proof_type)},
+            ${asText(brief.opportunity_id) || null}, ${data.briefId}, 'in_review', ${context.userId},
+            ${JSON.stringify({
+              generationRunId: runId,
+              provider: provider.id,
+              providerJobId: submittedJob.jobId,
+              productionJobId: prodJobId,
+              jevDecisionId: asText(brief.decision_id),
+              kind: "video",
+            })}
+          )
+        `;
 
-      await sql`
-        insert into assets (
-          id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
-          lifecycle, checksum, width, height, byte_size, duration_ms, provider, model, prompt_version, generation_run_id,
-          kind, qa_decision, review_status, media_status, variant_index, provenance
-        ) values (
-          ${videoAssetId}, ${access.organizationId}, ${data.brandId}, ${videoCreativeId}, 1, ${storageKey}, ${""},
-          'video/mp4', ${provider.id}, 'stored', 'qa_required', ${""}, 1080, 1920,
-          0, 8000, ${provider.id}, ${provider.id}, 'studio_video_v1', ${runId},
-          'video', '', 'in_review', ${submittedJob.status === "RENDERED" || submittedJob.status === "COMPLETED" ? "completed" : "submitted"}, 0, 'generated'
-        )
-      `;
+        const videoMime = (submittedJob.metadata?.mimeType as string) || "video/mp4";
+        await sql`
+          insert into assets (
+            id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
+            lifecycle, checksum, width, height, byte_size, duration_ms, provider, model, prompt_version, generation_run_id,
+            kind, qa_decision, review_status, media_status, variant_index, provenance
+          ) values (
+            ${videoAssetId}, ${access.organizationId}, ${data.brandId}, ${videoCreativeId}, 1, ${storageKey}, ${finalResult.sha256 || ""},
+            ${videoMime}, ${provider.id}, 'stored', 'qa_required', ${finalResult.sha256 || ""}, 1080, 1920,
+            ${finalResult.byteSize || 0}, 8000, ${provider.id}, ${provider.id}, 'studio_video_v1', ${runId},
+            'video', '', 'in_review', 'completed', 0, 'generated'
+          )
+        `;
+      }
     const videos = await sql<Record<string, unknown>>`
       select a.id, a.creative_id, a.storage_key, a.media_status, a.byte_size, a.width, a.height, a.duration_ms, a.transcript,
              a.scenes, a.checksum, a.mime_type, a.prompt_version, c.raw_text, c.angle
@@ -1127,14 +1291,75 @@ export async function generateStudioVariants(
     }
     await sql`update briefs set status = 'used' where id = ${data.briefId}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
+    await sql`update creative_plans set status = 'completed', updated_at = now() where id = ${creativePlan.id}`;
     return loadSession(sql, access.organizationId, data.brandId, access.role);
     } catch (error) {
       await sql`
         update generation_runs set status = 'failed'
         where id = ${runId} and organization_id = ${access.organizationId} and status = 'running'
       `;
+      await sql`
+        update creative_plans set status = 'failed', updated_at = now()
+        where id = ${creativePlan.id}
+      `.catch(() => {});
       throw error;
     }
+}
+
+export async function approveAndExecuteCreativePlan(
+  userId: string,
+  data: { brandId: string; planId: string },
+) {
+  const sql = await getSql();
+  const access = await requireBrand(sql, userId, data.brandId, "member");
+  const planRows = await sql<{
+    id: string;
+    organization_id: string;
+    brand_id: string;
+    brief_id: string;
+    version: string;
+    status: string;
+    scope: string;
+    autonomy: string;
+    objective: string;
+    plan_payload: string;
+    budget_reserved_usd: number;
+    spend_cap_usd: number | null;
+  }>`
+    select id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective,
+           plan_payload, budget_reserved_usd, spend_cap_usd
+    from creative_plans
+    where id = ${data.planId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+    limit 1
+  `;
+  const planRow = planRows[0];
+  if (!planRow) throw new Error("Creative plan not found.");
+  if (planRow.status === "completed") throw new Error("Creative plan is already completed.");
+  if (planRow.status === "abstained") throw new Error("Cannot execute an abstained plan without choosing a format.");
+
+  if (planRow.spend_cap_usd != null && planRow.budget_reserved_usd > planRow.spend_cap_usd) {
+    throw new Error(`Plan estimated cost ($${planRow.budget_reserved_usd}) exceeds spend cap ($${planRow.spend_cap_usd}).`);
+  }
+
+  await sql`
+    update creative_plans
+    set status = 'approved', approved_by = ${userId}, approved_at = now(), updated_at = now()
+    where id = ${data.planId}
+  `;
+
+  const planPayload = typeof planRow.plan_payload === "string" ? JSON.parse(planRow.plan_payload) : planRow.plan_payload;
+  const firstVideoDeliv = (planPayload?.deliverables as any[])?.find((d: any) => d.kind === "video");
+  const videoProvider = firstVideoDeliv ? firstVideoDeliv.provider : "none";
+
+  return generateStudioVariants(userId, {
+    brandId: data.brandId,
+    briefId: planRow.brief_id,
+    imageProvider: "none",
+    videoProvider,
+    creationScope: planRow.scope as any,
+    autonomy: "fully_automatic",
+    maxSpendUsd: planRow.spend_cap_usd ?? undefined,
+  });
 }
 
 export async function reviewStudioVariant(

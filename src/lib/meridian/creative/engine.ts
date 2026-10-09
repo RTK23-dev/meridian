@@ -18,6 +18,8 @@ import type {
   CreationScope,
   CreativeDeliverable,
   CreativePlan,
+  CreativePlanStatus,
+  CreativeJudgmentBundle,
   DecisionRationale,
   ProductionStep,
   AutonomyMode,
@@ -39,13 +41,18 @@ export interface CreativeDecisionInput {
     targetDurationSeconds?: number;
     decisionId?: string;
   };
-  jevJudgments?: {
+  jevJudgments?: CreativeJudgmentBundle | {
     isOutlier?: boolean;
     creativeMechanism?: string;
     transferabilityScore?: number;
     brandFitScore?: number;
     recommendedFormat?: "image" | "video" | "carousel";
     reasons?: string[];
+    recommendedFormats?: Array<{ format: "image" | "video" | "carousel"; rationale: string; priority: number }>;
+    status?: "admissible" | "abstain_insufficient_evidence" | "abstain_rejected" | "abstain_malformed";
+    evidenceRefs?: string[];
+    decisionId?: string;
+    questionSetVersion?: string;
   };
   constraints?: {
     maxSpendUsd?: number;
@@ -93,7 +100,7 @@ export class CreativeDecisionEngine {
     }
 
     // Determine target format
-    let effectiveFormat: "image" | "video" | "carousel" | "mixed" | "research";
+    let effectiveFormat: "image" | "video" | "carousel" | "mixed" | "research" | "abstain";
     if (scope === "image_only") {
       effectiveFormat = "image";
       chosenFormatDesc = "User explicitly specified image_only scope.";
@@ -117,20 +124,44 @@ export class CreativeDecisionEngine {
       chosenFormatDesc = "Research-only mode selected: zero production deliverables created.";
       whyOtherFormatsRejected.all_media = "Zero deliverables created in research_only mode.";
     } else {
-      // auto_choose: use JEV judgments
-      const jevRec = input.jevJudgments?.recommendedFormat;
-      if (jevRec === "video") {
+      // auto_choose: rely strictly on JEV judgments (P0-A)
+      const judgments = input.jevJudgments;
+      const isAdmissible = judgments && (judgments.status === undefined || judgments.status === "admissible");
+      const recFormat = judgments?.recommendedFormats?.[0]?.format || (judgments as any)?.recommendedFormat;
+      const recRationale = judgments?.recommendedFormats?.[0]?.rationale || (judgments as any)?.reasons?.[0];
+
+      if (!judgments || !isAdmissible || !recFormat) {
+        // Explicit Abstention (P0-A: never invent a decision or default to image pretending it was JEV)
+        effectiveFormat = "abstain";
+        chosenFormatDesc = "JEV abstained: insufficient or unavailable evidence. Format selection deferred to human choice.";
+        whyOtherFormatsRejected.video = "JEV provided no admissible evidence-backed recommendation for video.";
+        whyOtherFormatsRejected.image = "JEV provided no admissible evidence-backed recommendation for image.";
+        whyOtherFormatsRejected.carousel = "JEV provided no admissible evidence-backed recommendation for carousel.";
+
+        rationales.push({
+          topic: "format_selection_abstention",
+          claim: "Format selection requires explicit human choice",
+          groundedIn: "policy_rule",
+          sourceId: judgments?.decisionId || input.brief.decisionId || "policy-abstain",
+          detail: judgments?.status
+            ? `JEV status is '${judgments.status}'. No evidence-backed format recommendation.`
+            : "No persisted JEV judgments available for this brief.",
+        });
+      } else if (recFormat === "video") {
         effectiveFormat = "video";
-        chosenFormatDesc = "JEV recommended video based on dynamic motion mechanism in evidence.";
+        chosenFormatDesc = `JEV recommended video: ${recRationale || "Dynamic motion mechanism grounded in evidence."}`;
         whyOtherFormatsRejected.image = "Mechanism requires motion and audio pacing.";
-      } else if (jevRec === "carousel") {
+        whyOtherFormatsRejected.carousel = "Mechanism requires single continuous motion narrative.";
+      } else if (recFormat === "carousel") {
         effectiveFormat = "carousel";
-        chosenFormatDesc = "JEV recommended carousel for multi-step demonstration.";
+        chosenFormatDesc = `JEV recommended carousel: ${recRationale || "Multi-step demonstration in evidence."}`;
         whyOtherFormatsRejected.single_image = "Demonstration requires progressive information disclosure.";
+        whyOtherFormatsRejected.video = "Step-by-step structure best suited for user-paced swipe carousel.";
       } else {
         effectiveFormat = "image";
-        chosenFormatDesc = "JEV recommended static image for concise, high-clarity visual impact.";
+        chosenFormatDesc = `JEV recommended static image: ${recRationale || "Concise static visual impact."}`;
         whyOtherFormatsRejected.video = "High production cost with no evidence of motion requirement.";
+        whyOtherFormatsRejected.carousel = "Single visual punch without progressive steps.";
       }
     }
 
@@ -322,7 +353,19 @@ export class CreativeDecisionEngine {
     // Approval requirements based on autonomy mode
     const approvalRequirements: ApprovalRequirement[] = [];
 
-    if (autonomy === "manual") {
+    let planStatus: CreativePlanStatus = "draft";
+
+    if (effectiveFormat === "abstain") {
+      planStatus = "abstained";
+      approvalRequirements.push({
+        id: `appr-abstain-${planId}`,
+        level: "human_creative_director",
+        status: "pending",
+        reason: "JEV abstained due to missing or insufficient evidence. User must explicitly select format.",
+        requiredBeforeAction: "production_execution",
+      });
+    } else if (autonomy === "manual") {
+      planStatus = "draft";
       approvalRequirements.push({
         id: `appr-manual-${planId}`,
         level: "human_creative_director",
@@ -331,6 +374,7 @@ export class CreativeDecisionEngine {
         requiredBeforeAction: "production_execution",
       });
     } else if (autonomy === "semi_automatic") {
+      planStatus = "awaiting_approval";
       approvalRequirements.push({
         id: `appr-semiauto-${planId}`,
         level: "human_creative_director",
@@ -342,6 +386,7 @@ export class CreativeDecisionEngine {
       // fully_automatic
       const maxSpend = input.constraints?.maxSpendUsd ?? 10.0;
       if (totalEstimatedUsd > maxSpend) {
+        planStatus = "awaiting_approval";
         approvalRequirements.push({
           id: `appr-spend-${planId}`,
           level: "spend_threshold",
@@ -350,6 +395,7 @@ export class CreativeDecisionEngine {
           requiredBeforeAction: "production_execution",
         });
       } else if (input.constraints?.requireHumanReview) {
+        planStatus = "awaiting_approval";
         approvalRequirements.push({
           id: `appr-policy-${planId}`,
           level: "compliance_gate",
@@ -358,6 +404,7 @@ export class CreativeDecisionEngine {
           requiredBeforeAction: "production_execution",
         });
       } else {
+        planStatus = "approved";
         approvalRequirements.push({
           id: `appr-auto-${planId}`,
           level: "spend_threshold",
@@ -368,9 +415,20 @@ export class CreativeDecisionEngine {
       }
     }
 
+    if (input.jevJudgments && "evidenceRefs" in input.jevJudgments && input.jevJudgments.evidenceRefs?.length) {
+      rationales.push({
+        topic: "jev_evidence_grounding",
+        claim: "Judgments grounded in observed evidence",
+        groundedIn: "jev_answer",
+        sourceId: input.jevJudgments.decisionId || input.brief.decisionId || "jev-evidence",
+        detail: `Evidence refs: ${input.jevJudgments.evidenceRefs.join(", ")} (Question Set: ${input.jevJudgments.questionSetVersion || "v1"})`,
+      });
+    }
+
     return {
       id: planId,
       version,
+      status: planStatus,
       scope,
       autonomy,
       objective,

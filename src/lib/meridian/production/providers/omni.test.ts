@@ -350,3 +350,18 @@ test("Omni task payloads include documented generation_config.video_config.task"
     /Unsupported Omni task 'unsupported_video_edit'/
   );
 });
+
+test("Omni payload builder rejects durations outside 3-10 seconds", () => {
+  assert.throws(
+    () => buildOmniTextToVideoPayload({ model: "gemini-omni-1.1-flash", prompt: "test", durationSeconds: 15 }),
+    /Gemini Omni supports video durations between 3 and 10 seconds/
+  );
+  assert.throws(
+    () => buildOmniTextToVideoPayload({ model: "gemini-omni-1.1-flash", prompt: "test", durationSeconds: 2 }),
+    /Gemini Omni supports video durations between 3 and 10 seconds/
+  );
+  assert.throws(
+    () => buildOmniImageToVideoPayload({ model: "gemini-omni-1.1-flash", prompt: "test", referenceImageUri: "https://example.com/img.jpg", durationSeconds: 30 }),
+    /Gemini Omni supports video durations between 3 and 10 seconds/
+  );
+});

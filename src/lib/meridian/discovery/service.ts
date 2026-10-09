@@ -69,6 +69,23 @@ export class DiscoveryService {
 
     inMemoryRuns.set(runId, run);
 
+    if (input.sql) {
+      try {
+        const sql = input.sql;
+        await sql`
+          insert into discovery_runs (
+            id, organization_id, brand_id, scope, status, seeds, budget, progress, per_source_errors, started_at
+          ) values (
+            ${runId}, ${input.organizationId}, ${input.brandId}, ${input.scope}, 'running',
+            ${JSON.stringify(input.seeds)}, ${JSON.stringify(budget)}, ${JSON.stringify(run.progress)},
+            ${JSON.stringify(run.perSourceErrors)}, now()
+          )
+        `;
+      } catch (dbErr: any) {
+        run.perSourceErrors["database_init"] = dbErr.message || String(dbErr);
+      }
+    }
+
     const discoveredItems: DiscoveredItem[] = [];
     const seenUrls = new Set<string>();
     const seenHashes = new Set<string>();
@@ -247,11 +264,25 @@ export class DiscoveryService {
     run.progress.discoveredCards = discoveredItems.filter((i) => i.source === "repeated_card_discovery").length;
     run.progress.discoveredUrls = discoveredItems.length;
 
-    // Durable DB persistence if SQL provided
+    // Durable DB persistence if SQL provided (P1-A)
     if (input.sql) {
       try {
         const sql = input.sql;
         for (const item of discoveredItems) {
+          await sql`
+            insert into discovered_items (
+              id, run_id, organization_id, brand_id, source, url, canonical_url,
+              card_type, title, text_content, metrics, content_hash, source_location, discovered_at
+            ) values (
+              ${item.id}, ${runId}, ${input.organizationId}, ${input.brandId},
+              ${item.source}, ${item.url}, ${item.canonicalUrl || null},
+              ${item.cardType}, ${item.title || null}, ${item.text || null},
+              ${JSON.stringify(item.metrics || {})}, ${item.contentHash},
+              ${item.sourceLocation || null}, now()
+            )
+            on conflict (id) do nothing
+          `;
+
           const sourceId = `src_${item.id}`;
           await sql`
             insert into sources (
@@ -268,8 +299,18 @@ export class DiscoveryService {
               updated_at = now()
           `;
         }
-      } catch {
-        // Graceful error handling for DB persistence
+
+        await sql`
+          update discovery_runs
+          set status = ${run.status}, progress = ${JSON.stringify(run.progress)},
+              per_source_errors = ${JSON.stringify(run.perSourceErrors)},
+              completed_at = now(), updated_at = now()
+          where id = ${runId}
+        `;
+      } catch (dbErr: any) {
+        // Record persistence error transparently; don't return completed if required persistence failed
+        run.status = "failed";
+        run.perSourceErrors["database_persistence"] = dbErr.message || String(dbErr);
       }
     }
 
@@ -282,11 +323,53 @@ export class DiscoveryService {
     };
   }
 
-  getDiscoveryRun(runId: string): DiscoveryRun | undefined {
+  async getDiscoveryRun(runId: string, sql?: Sql): Promise<DiscoveryRun | undefined> {
+    if (sql) {
+      const rows = await sql<Record<string, unknown>>`
+        select * from discovery_runs where id = ${runId} limit 1
+      `;
+      const row = rows[0];
+      if (row) {
+        return {
+          id: String(row.id),
+          organizationId: String(row.organization_id),
+          brandId: String(row.brand_id),
+          scope: row.scope as any,
+          seeds: typeof row.seeds === "string" ? JSON.parse(row.seeds) : (row.seeds as any),
+          budget: typeof row.budget === "string" ? JSON.parse(row.budget) : (row.budget as any),
+          status: row.status as any,
+          progress: typeof row.progress === "string" ? JSON.parse(row.progress) : (row.progress as any),
+          perSourceErrors: typeof row.per_source_errors === "string" ? JSON.parse(row.per_source_errors) : ((row.per_source_errors as any) || {}),
+          startedAt: String(row.started_at),
+          completedAt: row.completed_at ? String(row.completed_at) : undefined,
+        };
+      }
+    }
     return inMemoryRuns.get(runId);
   }
 
-  getDiscoveredItems(runId: string): DiscoveredItem[] {
+  async getDiscoveredItems(runId: string, sql?: Sql): Promise<DiscoveredItem[]> {
+    if (sql) {
+      const rows = await sql<Record<string, unknown>>`
+        select * from discovered_items where run_id = ${runId} order by discovered_at asc
+      `;
+      if (rows.length > 0) {
+        return rows.map((row) => ({
+          id: String(row.id),
+          runId: String(row.run_id),
+          url: String(row.url),
+          canonicalUrl: row.canonical_url ? String(row.canonical_url) : String(row.url),
+          source: String(row.source),
+          cardType: (row.card_type as any) || "article",
+          title: row.title ? String(row.title) : undefined,
+          text: row.text_content ? String(row.text_content) : undefined,
+          metrics: typeof row.metrics === "string" ? JSON.parse(row.metrics) : ((row.metrics as any) || {}),
+          contentHash: String(row.content_hash),
+          sourceLocation: row.source_location ? String(row.source_location) : String(row.url),
+          discoveredAt: String(row.discovered_at),
+        }));
+      }
+    }
     return inMemoryItems.get(runId) || [];
   }
 }

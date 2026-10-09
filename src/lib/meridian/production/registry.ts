@@ -49,7 +49,7 @@ export class ModelCapabilityRegistry {
       release_channel: "ga",
       supported_modalities: ["text", "image", "video"],
       supported_tasks: ["text-to-video", "image-to-video", "edit", "extend"],
-      durations: [5, 10, 15, 30],
+      durations: [3, 4, 5, 6, 7, 8, 9, 10],
       aspect_ratios: ["9:16", "16:9", "1:1"],
       resolutions: ["720p", "1080p"],
       input_reference_types: ["image_uri", "video_uri"],

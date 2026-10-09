@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useBusy } from "@/components/gate";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Input, Notice, Panel, SelectInput, Skeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
 import { BrandNav } from "@/components/brand-nav";
 import { MediaPlayer } from "@/components/media-player";
 import { Term } from "@/components/term";
@@ -83,7 +83,10 @@ function Studio({ brandId }: { brandId: string }) {
     defaultValues: {
       imageProvider: "none",
       videoProvider: "auto",
-      mode: "video",
+      creationScope: "auto_choose",
+      autonomy: "semi_automatic",
+      maxSpendUsd: 10,
+      mode: "auto_choose",
       source: "new_brief",
       aspectRatio: "9:16",
     },
@@ -273,14 +276,25 @@ function Studio({ brandId }: { brandId: string }) {
             <h2 className="font-display text-2xl">Generate from the approved brief</h2>
             {brief ? <p className="mt-2 text-sm text-muted">Current brief: {brief.title}. A non-ready brief cannot be used for generation.</p> : <p className="mt-2 text-sm text-muted">Write or accept a brief before generating.</p>}
             {canEdit && brief ? <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={generationForm.handleSubmit(generate)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); event.currentTarget.requestSubmit(); } }}>
-              <Field label="Creation mode" hint="Format strategy for this generation run.">
-                <SelectInput {...generationForm.register("mode")}>
-                  <option value="video">Video (Reel / Short)</option>
-                  <option value="image_ad">Static image ad</option>
-                  <option value="carousel">Multi-slide carousel</option>
-                  <option value="mixed_format">Mixed format campaign</option>
-                  <option value="research_only">Research-only (no rendering)</option>
+              <Field label="What to create" hint="Deliverable format strategy for this creative plan.">
+                <SelectInput {...generationForm.register("creationScope")}>
+                  <option value="auto_choose">Auto (JEV evidence recommendation)</option>
+                  <option value="video_only">Video only (Reel / Short / UGC)</option>
+                  <option value="image_only">Static image only</option>
+                  <option value="carousel_only">Multi-slide carousel</option>
+                  <option value="mixed_campaign">Mixed campaign (video + static)</option>
+                  <option value="research_only">Research-only (no deliverables)</option>
                 </SelectInput>
+              </Field>
+              <Field label="Automation level" hint="Governs human approval gates and billable execution.">
+                <SelectInput {...generationForm.register("autonomy")}>
+                  <option value="manual">Manual (Plan & recommend only; require approval)</option>
+                  <option value="semi_automatic">Semi-automatic (Review plan and quote before executing)</option>
+                  <option value="fully_automatic">Fully automatic (Execute within spend cap)</option>
+                </SelectInput>
+              </Field>
+              <Field label="Spend cap (USD)" hint="Authoritative hard budget cap. Generation halts if exceeded.">
+                <Input type="number" step="0.5" min="0" max="500" {...generationForm.register("maxSpendUsd", { valueAsNumber: true })} />
               </Field>
               <Field label="Starting material" hint="Source lineage used to anchor the creative.">
                 <SelectInput {...generationForm.register("source")}>
@@ -291,12 +305,11 @@ function Studio({ brandId }: { brandId: string }) {
                   <option value="creator_footage">Creator / UGC footage</option>
                 </SelectInput>
               </Field>
-              <Field label="Video provider" hint="Remote synthesis provider. Omni and Hypit run asynchronously off-device." error={generationForm.formState.errors.videoProvider?.message}>
+              <Field label="Video provider" hint="Remote synthesis provider. Omni runs asynchronously off-device." error={generationForm.formState.errors.videoProvider?.message}>
                 <SelectInput {...generationForm.register("videoProvider")} required>
                   <option value="auto">Auto (healthy supported provider)</option>
-                  <option value="omni">Google Gemini Omni (gemini-omni-1.1-flash)</option>
+                  <option value="google_omni">Google Gemini Omni (gemini-omni-1.1-flash)</option>
                   <option value="hypit">Hypit video</option>
-                  <option value="veo">Google Veo 3.1 (Preview)</option>
                   <option value="higgsfield">Higgsfield AI</option>
                   <option value="manual_cloud">Manual Cloud (Google Drive)</option>
                   <option value="none">No video in this run</option>
