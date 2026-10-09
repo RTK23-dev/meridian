@@ -3,7 +3,8 @@ import type { BrainSlice, LearnedPattern, ObservedCreative, ProductFact, Rejecti
 import type { ScoreWeights } from "../scoring.ts";
 import { weightsFromUnknown } from "../scoring.ts";
 import type { Sql } from "../learning/store.ts";
-import type { ResearchPattern } from "../research/patterns.ts";
+import { parsePatternEvidence, type ResearchPattern } from "../research/patterns.ts";
+import { CONFIDENCE_SOURCE } from "../research/schema.ts";
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -77,7 +78,7 @@ export async function loadBrandContext(sql: Sql, organizationId: string, brandId
   const flag = settingRows[0]?.use_organization_learning;
   const useOrganizationLearning = flag === true || flag === "t" || flag === "true";
   const researchRows = await sql<Record<string, unknown>>`
-    select dimension, value, state, sample_count, corpus_size, prevalence, confidence, analysis_ids, example_creative_ids, summary, scope
+    select dimension, value, state, sample_count, corpus_size, prevalence, confidence, analysis_ids, example_creative_ids, evidence_refs, summary, scope
     from research_patterns where organization_id = ${organizationId}
       and (brand_id = ${brandId} or (scope = 'organization' and ${useOrganizationLearning}))
     order by sample_count desc, dimension asc limit 200
@@ -86,13 +87,16 @@ export async function loadBrandContext(sql: Sql, organizationId: string, brandId
     dimension: asText(row.dimension) as ResearchPattern["dimension"],
     scope: asText(row.scope) === "organization" ? "organization" : "brand",
     value: asText(row.value),
-    state: asText(row.state) === "INFERRED" || asText(row.state) === "VALIDATED" ? asText(row.state) as ResearchPattern["state"] : "OBSERVED",
+    // Every research pattern counts model labels, so it is an inference. Rows that still say OBSERVED are relabelled.
+    state: "INFERRED",
     sampleCount: asNumber(row.sample_count),
     corpusSize: asNumber(row.corpus_size),
     prevalence: asNumber(row.prevalence),
     confidence: asNumber(row.confidence),
+    confidenceSource: CONFIDENCE_SOURCE,
     exampleAnalysisIds: asText(row.scope) === "organization" ? [] : (() => { try { const value = JSON.parse(asText(row.analysis_ids)) as unknown; return Array.isArray(value) ? value.map(asText).filter(Boolean) : []; } catch { return []; } })(),
     exampleAdIds: asText(row.scope) === "organization" ? [] : (() => { try { const value = JSON.parse(asText(row.example_creative_ids)) as unknown; return Array.isArray(value) ? value.map(asText).filter(Boolean) : []; } catch { return []; } })(),
+    evidence: asText(row.scope) === "organization" ? [] : parsePatternEvidence(asText(row.evidence_refs)),
     summary: asText(row.summary),
   }));
   const patterns: LearnedPattern[] = patternRows.map((row) => ({

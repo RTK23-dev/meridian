@@ -227,9 +227,9 @@ export async function rebuildResearchPatterns(sql: Sql, organizationId: string, 
   const patterns = aggregateResearchPatterns(analyses.map((row) => ({ adId: row.creativeId, analysisId: row.analysisId, analysis: row.analysis })));
   for (const pattern of patterns) {
     await sql`
-      insert into research_patterns (id, organization_id, brand_id, scope, dimension, value, state, sample_count, corpus_size, prevalence, confidence, analysis_ids, example_creative_ids, summary)
-      values (${randomUUID()}, ${organizationId}, ${brandId}, 'brand', ${pattern.dimension}, ${pattern.value}, ${pattern.state}, ${pattern.sampleCount}, ${pattern.corpusSize}, ${pattern.prevalence}, ${pattern.confidence}, ${JSON.stringify(pattern.exampleAnalysisIds ?? [])}, ${JSON.stringify(pattern.exampleAdIds)}, ${pattern.summary})
-      on conflict (organization_id, brand_id, dimension, value) do update set state = excluded.state, sample_count = excluded.sample_count, corpus_size = excluded.corpus_size, prevalence = excluded.prevalence, confidence = excluded.confidence, analysis_ids = excluded.analysis_ids, example_creative_ids = excluded.example_creative_ids, summary = excluded.summary, created_at = now()
+      insert into research_patterns (id, organization_id, brand_id, scope, dimension, value, state, sample_count, corpus_size, prevalence, confidence, analysis_ids, example_creative_ids, evidence_refs, summary)
+      values (${randomUUID()}, ${organizationId}, ${brandId}, 'brand', ${pattern.dimension}, ${pattern.value}, ${pattern.state}, ${pattern.sampleCount}, ${pattern.corpusSize}, ${pattern.prevalence}, ${pattern.confidence}, ${JSON.stringify(pattern.exampleAnalysisIds ?? [])}, ${JSON.stringify(pattern.exampleAdIds)}, ${JSON.stringify(pattern.evidence)}, ${pattern.summary})
+      on conflict (organization_id, brand_id, dimension, value) do update set state = excluded.state, sample_count = excluded.sample_count, corpus_size = excluded.corpus_size, prevalence = excluded.prevalence, confidence = excluded.confidence, analysis_ids = excluded.analysis_ids, example_creative_ids = excluded.example_creative_ids, evidence_refs = excluded.evidence_refs, summary = excluded.summary, created_at = now()
     `;
   }
   return patterns;
@@ -251,12 +251,12 @@ export async function rebuildOrganizationResearchPatterns(sql: Sql, organization
   const patterns = aggregateResearchPatterns(analyses.map((row) => ({ adId: row.creativeId, analysisId: row.analysisId, analysis: row.analysis })));
   for (const pattern of patterns) {
     await sql`
-      insert into research_patterns (id, organization_id, brand_id, scope, dimension, value, state, sample_count, corpus_size, prevalence, confidence, analysis_ids, example_creative_ids, summary)
-      values (${randomUUID()}, ${organizationId}, null, 'organization', ${pattern.dimension}, ${pattern.value}, ${pattern.state}, ${pattern.sampleCount}, ${pattern.corpusSize}, ${pattern.prevalence}, ${pattern.confidence}, '[]', '[]', ${pattern.summary})
-      on conflict (organization_id, dimension, value) where scope = 'organization' do update set state = excluded.state, sample_count = excluded.sample_count, corpus_size = excluded.corpus_size, prevalence = excluded.prevalence, confidence = excluded.confidence, analysis_ids = '[]', example_creative_ids = '[]', summary = excluded.summary, created_at = now()
+      insert into research_patterns (id, organization_id, brand_id, scope, dimension, value, state, sample_count, corpus_size, prevalence, confidence, analysis_ids, example_creative_ids, evidence_refs, summary)
+      values (${randomUUID()}, ${organizationId}, null, 'organization', ${pattern.dimension}, ${pattern.value}, ${pattern.state}, ${pattern.sampleCount}, ${pattern.corpusSize}, ${pattern.prevalence}, ${pattern.confidence}, '[]', '[]', '[]', ${pattern.summary})
+      on conflict (organization_id, dimension, value) where scope = 'organization' do update set state = excluded.state, sample_count = excluded.sample_count, corpus_size = excluded.corpus_size, prevalence = excluded.prevalence, confidence = excluded.confidence, analysis_ids = '[]', example_creative_ids = '[]', evidence_refs = '[]', summary = excluded.summary, created_at = now()
     `;
   }
-  return patterns.map((pattern) => ({ ...pattern, scope: "organization", exampleAdIds: [], exampleAnalysisIds: [] }));
+  return patterns.map((pattern) => ({ ...pattern, scope: "organization", exampleAdIds: [], exampleAnalysisIds: [], evidence: [] }));
 }
 
 export function sha256(bytes: Uint8Array): string { return createHash("sha256").update(bytes).digest("hex"); }
