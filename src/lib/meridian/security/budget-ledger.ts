@@ -90,13 +90,6 @@ export type CostObservation =
   | { basis: "ESTIMATED"; amountMicros: bigint; estimatorVersion: string }
   | { basis: "UNKNOWN" };
 
-interface BalanceRow {
-  id: string;
-  spent_micros: string | number | bigint;
-  reserved_micros: string | number | bigint;
-  max_spend_micros?: string | number | bigint;
-}
-
 interface CapRow {
   max_spend_micros: string | number | bigint;
   spent_micros: string | number | bigint;
