@@ -426,15 +426,10 @@ export function manifestFromCreativePlan(
     cost: {
       estimateUsd: costEstimateUsd,
     },
+    // No QC check has run when the manifest is built. Absent flags mean "not run", never "passed".
     qc: {
       status: "PENDING",
-      checks: {
-        claimsVerified: true,
-        originalityPassed: true,
-        rightsCleared: true,
-        craftAndSlopPassed: true,
-        aspectRatioCompliant: true,
-      },
+      checks: {},
     },
     outputArtifacts: [],
     publishedPostIds: [],

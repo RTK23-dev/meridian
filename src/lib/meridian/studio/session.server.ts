@@ -628,6 +628,31 @@ async function writeJudgment(
   return { rollup, decisionId: pointed };
 }
 
+/**
+ * Inserts a new CreativePlan row. An existing row with the same id is never rewritten: lifecycle
+ * status changes only through transitionCreativePlan, so a collision is refused instead.
+ */
+export async function persistCreativePlanRow(
+  sql: Sql,
+  input: { plan: CreativePlan; organizationId: string; brandId: string; briefId: string; maxSpendUsd?: number },
+): Promise<void> {
+  const { plan } = input;
+  const inserted = await sql<{ id: string }>`
+    insert into creative_plans (
+      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective,
+      plan_payload, budget_reserved_usd, spend_cap_usd, created_at, updated_at
+    ) values (
+      ${plan.id}, ${input.organizationId}, ${input.brandId}, ${input.briefId},
+      ${plan.version}, ${plan.status}, ${plan.scope}, ${plan.autonomy},
+      ${plan.objective}, ${JSON.stringify(plan)},
+      ${plan.estimatedCost.totalEstimatedUsd}, ${input.maxSpendUsd ?? null}, now(), now()
+    )
+    on conflict (id) do nothing
+    returning id
+  `;
+  if (inserted.length === 0) throw new Error(`Creative plan '${plan.id}' already exists; refusing to overwrite it.`);
+}
+
 export async function generateStudioVariants(
   userId: string,
   data: {
@@ -760,21 +785,13 @@ export async function generateStudioVariants(
     });
 
     // Persist CreativePlan in durable creative_plans table (P0-D, P1-B)
-    await sql`
-      insert into creative_plans (
-        id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective,
-        plan_payload, budget_reserved_usd, spend_cap_usd, created_at, updated_at
-      ) values (
-        ${creativePlan.id}, ${access.organizationId}, ${data.brandId}, ${data.briefId},
-        ${creativePlan.version}, ${creativePlan.status}, ${creativePlan.scope}, ${creativePlan.autonomy},
-        ${creativePlan.objective}, ${JSON.stringify(creativePlan)},
-        ${creativePlan.estimatedCost.totalEstimatedUsd}, ${data.maxSpendUsd ?? null}, now(), now()
-      )
-      on conflict (id) do update set
-        status = excluded.status,
-        plan_payload = excluded.plan_payload,
-        updated_at = now()
-    `;
+    await persistCreativePlanRow(sql, {
+      plan: creativePlan,
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      briefId: data.briefId,
+      maxSpendUsd: data.maxSpendUsd,
+    });
 
     // Handle JEV Abstention: never fabricate an unverified AI recommendation (P0-A)
     if (creativePlan.status === "abstained") {
