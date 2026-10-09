@@ -7,6 +7,7 @@ import {
   extractOutboundLinks,
 } from "./crawler.ts";
 import { DiscoveryService } from "./service.ts";
+import { getSql } from "../../db.ts";
 
 const sampleHtml = `
 <!DOCTYPE html>
@@ -103,17 +104,30 @@ test("Crawl Ladder: filters outbound links to same origin and strips hashes", ()
 
 test("DiscoveryService: coordinates discovery run with honest caveat on budget limit", async () => {
   const service = new DiscoveryService();
+  const sql = await getSql();
+  const orgId = `org-discovery-${Date.now()}`;
+  const brandId = `brand-discovery-${Date.now()}`;
+  await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Discovery Org', ${orgId}, 'test-user')`;
+  await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Discovery Brand', 'test-user')`;
 
   // Test url_list / seed discovery
   const result = await service.startDiscoveryRun({
-    organizationId: "org-disc-1",
-    brandId: "brand-disc-1",
+    organizationId: orgId,
+    brandId,
     scope: "url_list",
     seeds: ["https://example.com/fitness"],
     budget: { maxPages: 2 },
+    sql,
   });
 
   assert.ok(result.run.id.startsWith("crawll_"));
   assert.equal(result.run.status, "completed");
   assert.ok(result.items.length >= 0);
+});
+
+test("DiscoveryService: refuses SQL-less execution instead of falling back to process memory", async () => {
+  const service = new DiscoveryService();
+  await assert.rejects((service.startDiscoveryRun as any)({
+    organizationId: "org-test", brandId: "brand-test", scope: "page_plus_links", seeds: ["https://example.com"],
+  }), /Durable SQL is required/);
 });

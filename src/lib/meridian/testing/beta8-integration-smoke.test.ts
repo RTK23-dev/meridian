@@ -124,6 +124,7 @@ test("Smoke 4: Artifact Finalizer Fail-Closed Contract (P0-C)", async () => {
   let updateCalled = false;
   const mockSql: any = async (strings: TemplateStringsArray, ..._values: any[]) => {
     const query = strings.join("?");
+    if (query.includes("select id from production_jobs")) return [{ id: "job-fail-test" }];
     if (query.includes("update production_jobs")) {
       updateCalled = true;
       return [];

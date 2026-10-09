@@ -80,7 +80,15 @@ interface ReservationRow {
   released_at?: string;
   reconciled_at?: string;
   actual_spent_micros?: string | number | bigint | null;
+  estimated_spent_micros?: string | number | bigint | null;
+  settled_spend_micros?: string | number | bigint | null;
+  cost_basis?: "PROVIDER_ACTUAL" | "ESTIMATED" | "LEGACY_UNVERIFIED" | null;
 }
+
+export type CostObservation =
+  | { basis: "PROVIDER_ACTUAL"; amountMicros: bigint }
+  | { basis: "ESTIMATED"; amountMicros: bigint; estimatorVersion: string }
+  | { basis: "UNKNOWN" };
 
 interface BalanceRow {
   id: string;
@@ -267,63 +275,80 @@ export class BudgetLedgerService {
     sql: Sql,
     params: {
       reservationId: string;
-      actualSpentMicros: bigint;
+      actualSpentMicros?: bigint;
+      cost?: CostObservation;
     }
   ): Promise<{ reservation: BudgetReservation; unusedReleasedMicros: bigint; overageMicros: bigint; alreadyReconciled: boolean }> {
-    if (params.actualSpentMicros < 0n) throw new InvalidBudgetCapError("Actual spend cannot be negative.");
-    const actualSpentMicros = params.actualSpentMicros;
+    const cost: CostObservation = params.cost ?? { basis: "PROVIDER_ACTUAL", amountMicros: params.actualSpentMicros ?? -1n };
+    if (cost.basis === "UNKNOWN") throw new InvalidBudgetCapError("Unknown provider cost cannot be settled; the reservation remains held for reconciliation.");
+    if (cost.amountMicros < 0n) throw new InvalidBudgetCapError("Observed cost cannot be negative.");
+    const settlementMicros = cost.amountMicros;
+    const actualSpentMicros = cost.basis === "PROVIDER_ACTUAL" ? cost.amountMicros : null;
+    const estimatedSpentMicros = cost.basis === "ESTIMATED" ? cost.amountMicros : null;
+    const estimatorVersion = cost.basis === "ESTIMATED" ? cost.estimatorVersion : null;
     const finalized = await sql<ReservationRow & { overage_micros: string | number | bigint }>`
-      with claimed as (
-        update budget_reservations
-        set status = 'RECONCILED', actual_spent_micros = ${actualSpentMicros.toString()}::bigint, reconciled_at = now()
-        where id = ${params.reservationId} and status = 'RESERVED'
-        returning id, organization_id, brand_id, account_id, amount_micros, status, created_at, expires_at, actual_spent_micros
+      with locked as materialized (
+        select id, organization_id, brand_id, account_id, amount_micros
+        from budget_reservations where id = ${params.reservationId} and status = 'RESERVED'
+        for update
       ), updated_account as (
         update budget_accounts a
-        set spent_micros = a.spent_micros + ${actualSpentMicros.toString()}::bigint,
-            reserved_micros = a.reserved_micros - c.amount_micros,
-            status = case when ${actualSpentMicros.toString()}::bigint > c.amount_micros then 'EXCEEDED' else a.status end,
+        set spent_micros = a.spent_micros + ${settlementMicros.toString()}::bigint,
+            reserved_micros = a.reserved_micros - r.amount_micros,
+            status = case when ${settlementMicros.toString()}::bigint > r.amount_micros then 'EXCEEDED' else a.status end,
             updated_at = now()
-        from claimed c
-        where a.id = c.account_id and a.reserved_micros >= c.amount_micros
-        returning a.id, a.spent_micros, a.reserved_micros
+        from locked r
+        where a.id = r.account_id and a.organization_id = r.organization_id and a.brand_id = r.brand_id
+          and a.reserved_micros >= r.amount_micros
+        returning a.id, a.organization_id, a.brand_id, a.spent_micros, a.reserved_micros
+      ), claimed as (
+        update budget_reservations r
+        set status = 'RECONCILED', actual_spent_micros = ${actualSpentMicros === null ? null : actualSpentMicros.toString()}::bigint,
+            estimated_spent_micros = ${estimatedSpentMicros === null ? null : estimatedSpentMicros.toString()}::bigint,
+            settled_spend_micros = ${settlementMicros.toString()}::bigint,
+            cost_basis = ${cost.basis}, estimator_version = ${estimatorVersion}, reconciled_at = now()
+        from locked l join updated_account a on a.id = l.account_id
+        where r.id = l.id and r.status = 'RESERVED'
+        returning r.id, r.organization_id, r.brand_id, r.account_id, r.amount_micros, r.status,
+          r.created_at, r.expires_at, r.actual_spent_micros, r.estimated_spent_micros, r.settled_spend_micros, r.cost_basis
       ), inserted_ledger as (
         insert into budget_ledger_entries (
           id, organization_id, brand_id, account_id, reservation_id, entry_type,
           delta_spent_micros, delta_reserved_micros, balance_spent_micros, balance_reserved_micros, metadata
         )
         select ${randomUUID()}, c.organization_id, c.brand_id, c.account_id, c.id,
-          case when ${actualSpentMicros.toString()}::bigint > c.amount_micros then 'RESERVATION_OVERAGE' else 'RESERVATION_RECONCILED' end,
-          ${actualSpentMicros.toString()}::bigint, -c.amount_micros, a.spent_micros, a.reserved_micros,
-          jsonb_build_object('actualSpentMicros', ${actualSpentMicros.toString()}::text,
-            'overageMicros', greatest(${actualSpentMicros.toString()}::bigint - c.amount_micros, 0))
+          case when ${settlementMicros.toString()}::bigint > c.amount_micros then 'RESERVATION_OVERAGE' else 'RESERVATION_RECONCILED' end,
+          ${settlementMicros.toString()}::bigint, -c.amount_micros, a.spent_micros, a.reserved_micros,
+          jsonb_build_object('costBasis', ${cost.basis}::text, 'settledSpendMicros', ${settlementMicros.toString()}::text,
+            'estimatorVersion', ${estimatorVersion}::text, 'overageMicros', greatest(${settlementMicros.toString()}::bigint - c.amount_micros, 0))
         from claimed c join updated_account a on a.id = c.account_id
         returning id
       )
-      select c.*, greatest(c.actual_spent_micros - c.amount_micros, 0) as overage_micros
-      from claimed c join updated_account a on a.id = c.account_id
+      select c.*, greatest(c.settled_spend_micros - c.amount_micros, 0) as overage_micros
+      from claimed c join inserted_ledger l on true
     `;
 
     let res: (ReservationRow & { overage_micros?: string | number | bigint }) | undefined = finalized[0];
     let alreadyReconciled = false;
     if (!res) {
       const existing = await sql<ReservationRow>`
-        select id, organization_id, brand_id, account_id, amount_micros, actual_spent_micros, status, created_at, expires_at
+        select id, organization_id, brand_id, account_id, amount_micros, actual_spent_micros, estimated_spent_micros,
+          settled_spend_micros, cost_basis, status, created_at, expires_at
         from budget_reservations where id = ${params.reservationId} limit 1
       `;
       res = existing[0];
-      if (!res || res.status !== "RECONCILED" || res.actual_spent_micros == null) {
+      if (!res || res.status !== "RECONCILED" || res.settled_spend_micros == null) {
         throw new Error(`Reservation '${params.reservationId}' not found or already released.`);
       }
       alreadyReconciled = true;
-      res.overage_micros = BigInt(res.actual_spent_micros) > BigInt(res.amount_micros)
-        ? BigInt(res.actual_spent_micros) - BigInt(res.amount_micros)
+      res.overage_micros = BigInt(res.settled_spend_micros) > BigInt(res.amount_micros)
+        ? BigInt(res.settled_spend_micros) - BigInt(res.amount_micros)
         : 0n;
     }
 
     const reservedMicros = BigInt(res.amount_micros);
-    const actualRecorded = BigInt(res.actual_spent_micros ?? actualSpentMicros);
-    const unusedReleasedMicros = reservedMicros > actualRecorded ? reservedMicros - actualRecorded : 0n;
+    const settledRecorded = BigInt(res.settled_spend_micros ?? settlementMicros);
+    const unusedReleasedMicros = reservedMicros > settledRecorded ? reservedMicros - settledRecorded : 0n;
     const overageMicros = BigInt(res.overage_micros ?? 0);
 
     return {
@@ -354,15 +379,20 @@ export class BudgetLedgerService {
     }
   ): Promise<boolean> {
     const released = await sql<{ id: string }>`
-      with claimed as (
-        update budget_reservations
-        set status = 'RELEASED', released_at = now()
-        where id = ${params.reservationId} and status = 'RESERVED'
-        returning id, organization_id, brand_id, account_id, amount_micros
+      with locked as materialized (
+        select id, organization_id, brand_id, account_id, amount_micros
+        from budget_reservations where id = ${params.reservationId} and status = 'RESERVED'
+        for update
       ), updated_account as (
-        update budget_accounts a set reserved_micros = a.reserved_micros - c.amount_micros, updated_at = now()
-        from claimed c where a.id = c.account_id and a.reserved_micros >= c.amount_micros
-        returning a.id, a.spent_micros, a.reserved_micros
+        update budget_accounts a set reserved_micros = a.reserved_micros - r.amount_micros, updated_at = now()
+        from locked r where a.id = r.account_id and a.organization_id = r.organization_id
+          and a.brand_id = r.brand_id and a.reserved_micros >= r.amount_micros
+        returning a.id, a.organization_id, a.brand_id, a.spent_micros, a.reserved_micros
+      ), claimed as (
+        update budget_reservations r set status = 'RELEASED', released_at = now()
+        from locked l join updated_account a on a.id = l.account_id
+        where r.id = l.id and r.status = 'RESERVED'
+        returning r.id, r.organization_id, r.brand_id, r.account_id, r.amount_micros
       ), inserted_ledger as (
         insert into budget_ledger_entries (
           id, organization_id, brand_id, account_id, reservation_id, entry_type,
@@ -372,7 +402,7 @@ export class BudgetLedgerService {
           -c.amount_micros, a.spent_micros, a.reserved_micros, ${JSON.stringify({ reason: params.reason })}::jsonb
         from claimed c join updated_account a on a.id = c.account_id returning id
       )
-      select id from claimed
+      select c.id from claimed c join inserted_ledger l on true
     `;
     return released.length > 0;
   }

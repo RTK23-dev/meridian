@@ -257,7 +257,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     }
 
     const prompt = spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script;
-    const meridianJobId = `job-omni-${globalThis.crypto.randomUUID()}`;
+    const meridianJobId = spec.idempotencyKey || `job-omni-${globalThis.crypto.randomUUID()}`;
     const aspectRatio = spec.aspectRatio || "9:16";
     const durationSeconds = spec.durationTargetSeconds;
 
@@ -319,7 +319,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
           brandId: spec.brandId,
           creativeSpec: spec,
           providerId: this.id,
-          status: "FAILED",
+          status: res.status >= 500 ? "SUBMISSION_UNKNOWN" : "FAILED",
           costEstimateUsd: costEstimate,
           error: `Interactions API error (${res.status}): ${errorText.slice(0, 300)}`,
           createdAt: new Date().toISOString(),
@@ -328,7 +328,21 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
       }
 
       const body = (await res.json()) as OmniInteractionResponse;
-      const interactionId = body.interaction_id || body.id || `interactions/${meridianJobId}`;
+      const interactionId = body.interaction_id || body.id;
+      if (!interactionId) {
+        return {
+          jobId: "",
+          organizationId: spec.organizationId,
+          brandId: spec.brandId,
+          creativeSpec: spec,
+          providerId: this.id,
+          status: "SUBMISSION_UNKNOWN",
+          costEstimateUsd: costEstimate,
+          error: "Interactions API accepted the request without returning a provider request ID; automatic retry is disabled.",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
 
       // Extract output video from documented steps[].content[] structure
       const parsed = this.extractVideoArtifact(body);
@@ -368,7 +382,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         brandId: spec.brandId,
         creativeSpec: spec,
         providerId: this.id,
-        status: "FAILED",
+        status: "SUBMISSION_UNKNOWN",
         costEstimateUsd: costEstimate,
         error: `Failed to submit Omni job: ${err.message}`,
         createdAt: new Date().toISOString(),

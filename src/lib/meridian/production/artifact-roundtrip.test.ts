@@ -45,6 +45,7 @@ test("Artifact Finalizer Round-Trip: Finalize -> Drive Object Store Get -> Byte-
 
   const mockSql = (async (strings: TemplateStringsArray, ...values: any[]) => {
     const query = strings.join("?");
+    if (query.includes("select id from production_jobs")) return [{ id: values[0] }];
     if (query.includes("insert into storage_objects")) {
       const [id, orgId, brandId, providerFileId, name, mimeType, sizeBytes, sha256] = values;
       dbStorageObjects.set(`${orgId}:${brandId}:${name}`, {
@@ -60,7 +61,7 @@ test("Artifact Finalizer Round-Trip: Finalize -> Drive Object Store Get -> Byte-
       });
       return [];
     }
-    if (query.includes("select provider_file_id, size_bytes, sha256")) {
+    if (query.includes("from storage_objects")) {
       const [orgId, brandId, name] = values;
       const found = dbStorageObjects.get(`${orgId}:${brandId}:${name}`);
       return found ? [found] : [];

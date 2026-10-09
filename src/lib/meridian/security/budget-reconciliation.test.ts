@@ -108,3 +108,71 @@ test("Budget Reconciliation: overage is durable, explicit, and blocks new reserv
     /Budget limit exceeded/
   );
 });
+
+test("Budget Reconciliation: estimated cost is settled with provenance and never stored as provider actual", async () => {
+  const sql = await getSql();
+  const suffix = Date.now();
+  const orgId = `org-estimated-${suffix}`;
+  const brandId = `brand-estimated-${suffix}`;
+  await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Estimated Org', ${orgId}, 'user')`;
+  await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Estimated Brand', 'user')`;
+  await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId, 10);
+  const reservation = await BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(2) });
+
+  await BudgetLedgerService.reconcile(sql, {
+    reservationId: reservation.id,
+    cost: { basis: "ESTIMATED", amountMicros: toMicros(1.25), estimatorVersion: "test-estimator-v1" },
+  });
+  const rows = await sql<{ actual_spent_micros: unknown; estimated_spent_micros: unknown; settled_spend_micros: unknown; cost_basis: string; estimator_version: string }>`
+    select actual_spent_micros, estimated_spent_micros, settled_spend_micros, cost_basis, estimator_version
+    from budget_reservations where id = ${reservation.id}
+  `;
+  assert.equal(rows[0].actual_spent_micros, null);
+  assert.equal(BigInt(rows[0].estimated_spent_micros as string), toMicros(1.25));
+  assert.equal(BigInt(rows[0].settled_spend_micros as string), toMicros(1.25));
+  assert.equal(rows[0].cost_basis, "ESTIMATED");
+  assert.equal(rows[0].estimator_version, "test-estimator-v1");
+});
+
+test("Budget Reconciliation: unknown cost remains reserved instead of being represented as actual", async () => {
+  const sql = await getSql();
+  const suffix = Date.now();
+  const orgId = `org-unknown-${suffix}`;
+  const brandId = `brand-unknown-${suffix}`;
+  await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Unknown Org', ${orgId}, 'user')`;
+  await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Unknown Brand', 'user')`;
+  await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId, 10);
+  const reservation = await BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(2) });
+
+  await assert.rejects(BudgetLedgerService.reconcile(sql, { reservationId: reservation.id, cost: { basis: "UNKNOWN" } }), /Unknown provider cost/);
+  const rows = await sql<{ status: string; actual_spent_micros: unknown; reserved_micros: string | number | bigint }>`
+    select r.status, r.actual_spent_micros, a.reserved_micros
+    from budget_reservations r join budget_accounts a on a.id = r.account_id where r.id = ${reservation.id}
+  `;
+  assert.equal(rows[0].status, "RESERVED");
+  assert.equal(rows[0].actual_spent_micros, null);
+  assert.equal(BigInt(rows[0].reserved_micros), toMicros(2));
+});
+
+test("Budget Reconciliation: inconsistent account balance cannot partially finalize or release a reservation", async () => {
+  const sql = await getSql();
+  const suffix = Date.now();
+  const orgId = `org-inconsistent-${suffix}`;
+  const brandId = `brand-inconsistent-${suffix}`;
+  await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Inconsistent Org', ${orgId}, 'user')`;
+  await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Inconsistent Brand', 'user')`;
+  const account = await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId, 10);
+  const reservation = await BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(2) });
+  await sql`update budget_accounts set reserved_micros = 0 where id = ${account.id}`;
+
+  await assert.rejects(BudgetLedgerService.reconcile(sql, { reservationId: reservation.id, actualSpentMicros: toMicros(1) }), /already released/);
+  assert.equal(await BudgetLedgerService.release(sql, { reservationId: reservation.id, reason: "test" }), false);
+  const rows = await sql<{ status: string; actual_spent_micros: unknown; ledger_count: number }>`
+    select r.status, r.actual_spent_micros,
+      (select count(*)::int from budget_ledger_entries l where l.reservation_id = r.id) as ledger_count
+    from budget_reservations r where r.id = ${reservation.id}
+  `;
+  assert.equal(rows[0].status, "RESERVED");
+  assert.equal(rows[0].actual_spent_micros, null);
+  assert.equal(rows[0].ledger_count, 1);
+});

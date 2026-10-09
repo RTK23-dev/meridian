@@ -26,8 +26,16 @@ test("finalizeProductionArtifact: persists valid media bytes to Drive and commit
   };
 
   const queries: string[] = [];
+  let stored: { id: string; provider_file_id: string; size_bytes: number; sha256: string; mime_type: string } | undefined;
   const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
-    queries.push(strings.join("?"));
+    const query = strings.join("?");
+    queries.push(query);
+    if (query.includes("select id from production_jobs")) return [{ id: "job-sync-101" }];
+    if (query.includes("insert into storage_objects")) {
+      const values = _values as unknown[];
+      stored = { id: String(values[0]), provider_file_id: String(values[3]), mime_type: String(values[5]), size_bytes: Number(values[6]), sha256: String(values[7]) };
+    }
+    if (query.includes("select id, provider_file_id, size_bytes, sha256, mime_type")) return stored ? [stored] : [];
     return [];
   }) as unknown as Sql;
 
@@ -46,7 +54,7 @@ test("finalizeProductionArtifact: persists valid media bytes to Drive and commit
     },
   });
 
-  assert.equal(result.success, true);
+  assert.ok(result.success, JSON.stringify(result));
   assert.equal(result.status, "COMPLETED");
   assert.equal(result.sha256, expectedSha256);
   assert.equal(result.byteSize, validMp4Bytes.byteLength);
@@ -55,6 +63,31 @@ test("finalizeProductionArtifact: persists valid media bytes to Drive and commit
   assert.equal(storedDrivePuts[0].path, "org-1/brand-1/production/job-sync-101/artifact.mp4");
   assert.ok(queries.some((q) => q.includes("insert into storage_objects")));
   assert.ok(queries.some((q) => q.includes("status = 'COMPLETED'")));
+  assert.ok(queries.filter((q) => q.includes("update production_jobs")).every((q) =>
+    q.includes("organization_id = ?") && q.includes("brand_id = ?"),
+  ), "Every job transition must be tenant scoped.");
+});
+
+test("finalizeProductionArtifact: refuses a job outside the supplied tenant before storage", async () => {
+  let drivePuts = 0;
+  const sql = (async (strings: TemplateStringsArray) => {
+    if (strings.join("?").includes("select id from production_jobs")) return [];
+    return [];
+  }) as unknown as Sql;
+  const drive = {
+    put: async () => { drivePuts += 1; return { fileId: "unexpected" }; },
+    get: async () => null,
+    delete: async () => {},
+    health: async () => ({ status: "CONFIGURED" as const, configured: true }),
+  };
+  const result = await finalizeProductionArtifact(sql, {
+    jobId: "another-tenant-job", organizationId: "org-1", brandId: "brand-1", provider: "google_omni",
+    rawArtifact: { bytes: new Uint8Array(Buffer.from("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41payload-video-sample-bytes")) },
+    options: { driveClient: drive as unknown as GoogleDriveClient },
+  });
+  assert.equal(result.success, false);
+  assert.equal(result.errorCode, "PRODUCTION_JOB_SCOPE_MISMATCH");
+  assert.equal(drivePuts, 0);
 });
 
 test("finalizeProductionArtifact: Drive storage failure fails closed with STORAGE_PERSISTENCE_FAILED", async () => {
@@ -71,7 +104,9 @@ test("finalizeProductionArtifact: Drive storage failure fails closed with STORAG
 
   const queries: string[] = [];
   const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
-    queries.push(strings.join("?"));
+    const query = strings.join("?");
+    queries.push(query);
+    if (query.includes("select id from production_jobs")) return [{ id: "job-fail-storage-1" }];
     return [];
   }) as unknown as Sql;
 
@@ -107,7 +142,9 @@ test("finalizeProductionArtifact: missing bytes returns WAITING_FOR_ARTIFACT", a
 
   const queries: string[] = [];
   const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
-    queries.push(strings.join("?"));
+    const query = strings.join("?");
+    queries.push(query);
+    if (query.includes("select id from production_jobs")) return [{ id: "job-waiting-1" }];
     return [];
   }) as unknown as Sql;
 
@@ -143,6 +180,7 @@ test("finalizeProductionArtifact: verified retry reuses the stored artifact", as
   };
   const sql = (async (strings: TemplateStringsArray) => {
     const query = strings.join("?");
+    if (query.includes("select id from production_jobs")) return [{ id: "job-retry" }];
     if (query.includes("from storage_objects")) {
       return [{ id: "artifact-existing", provider_file_id: "drive-existing", sha256, size_bytes: bytes.byteLength, mime_type: "video/mp4" }];
     }
@@ -158,7 +196,7 @@ test("finalizeProductionArtifact: verified retry reuses the stored artifact", as
     options: { driveClient: drive as unknown as GoogleDriveClient },
   });
 
-  assert.equal(result.success, true);
+  assert.ok(result.success, JSON.stringify(result));
   assert.equal(result.artifactId, "artifact-existing");
   assert.equal(puts, 0, "Retry must not create another Drive object");
   assert.equal(gets, 1, "Existing object must be downloaded and verified");

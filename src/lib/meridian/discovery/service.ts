@@ -18,9 +18,6 @@ import type {
   CrawlBudget,
 } from "./types.ts";
 
-const inMemoryRuns = new Map<string, DiscoveryRun>();
-const inMemoryItems = new Map<string, DiscoveredItem[]>();
-
 export class DiscoveryService {
   private registry: SourceRegistry;
 
@@ -37,11 +34,12 @@ export class DiscoveryService {
     scope: DiscoveryScope;
     seeds: string[];
     budget?: Partial<CrawlBudget>;
-    sql?: Sql;
+    sql: Sql;
   }): Promise<{
     run: DiscoveryRun;
     items: DiscoveredItem[];
   }> {
+    if (!input.sql) throw new Error("Durable SQL is required for discovery; in-memory discovery is disabled.");
     const runId = `crawll_${randomUUID()}`;
     const budget: CrawlBudget = {
       maxPages: Math.min(Math.max(1, input.budget?.maxPages || 10), 100),
@@ -68,9 +66,7 @@ export class DiscoveryService {
       startedAt: new Date().toISOString(),
     };
 
-    inMemoryRuns.set(runId, run);
-
-    if (input.sql) {
+    {
       const sql = input.sql;
       await sql`
         insert into discovery_runs (
@@ -84,12 +80,11 @@ export class DiscoveryService {
     }
 
     const discoveredItems: DiscoveredItem[] = [];
-    const seenUrls = new Set<string>();
     const seenHashes = new Set<string>();
 
     const persistItem = async (item: DiscoveredItem) => {
       discoveredItems.push(item);
-      if (input.sql) {
+      {
         try {
           await input.sql`
             insert into discovered_items (
@@ -188,72 +183,6 @@ export class DiscoveryService {
             sql: input.sql, run, budget, maxPages: input.scope === "page_plus_links" ? Math.min(budget.maxPages, 5) : budget.maxPages,
             items: discoveredItems, seenHashes,
           });
-        } else {
-          // Ephemeral frontier is retained only for test/offline runs without a durable SQL client.
-        const queue: Array<{ url: string; depth: number }> = input.seeds.map((s) => ({ url: s, depth: 1 }));
-        const maxPages = input.scope === "page_plus_links" ? Math.min(budget.maxPages, 5) : budget.maxPages;
-
-        while (queue.length > 0 && run.progress.pagesCrawled < maxPages) {
-          const current = queue.shift()!;
-          if (seenUrls.has(current.url)) continue;
-          seenUrls.add(current.url);
-
-          try {
-            const pageResult = await crawlLadderPage(current.url, runId, budget.allowedHosts);
-            run.progress.pagesCrawled++;
-
-            // Top-level page item
-            const topHash = createHash("sha256").update(pageResult.title + pageResult.description).digest("hex");
-            if (!seenHashes.has(topHash)) {
-              seenHashes.add(topHash);
-              await persistItem({
-                id: `item_${runId}_${discoveredItems.length}`,
-                runId,
-                url: pageResult.finalUrl,
-                canonicalUrl: pageResult.canonicalUrl,
-                source: "website",
-                cardType: "article",
-                title: pageResult.title,
-                text: pageResult.description,
-                mediaUrl: pageResult.openGraph["og:image"] || pageResult.openGraph["og:video"],
-                metrics: {
-                  views: { value: null, state: "UNAVAILABLE" },
-                  likes: { value: null, state: "UNAVAILABLE" },
-                  comments: { value: null, state: "UNAVAILABLE" },
-                },
-                contentHash: topHash,
-                sourceLocation: pageResult.finalUrl,
-                discoveredAt: new Date().toISOString(),
-              });
-            }
-
-            // Repeated cards on this page
-            for (const card of pageResult.cards) {
-              if (!seenHashes.has(card.contentHash)) {
-                seenHashes.add(card.contentHash);
-                await persistItem(card);
-              }
-            }
-
-            // Enqueue outbound links if depth permits
-            if (current.depth < budget.maxDepth) {
-              for (const nextLink of pageResult.outboundLinks) {
-                if (!seenUrls.has(nextLink)) {
-                  queue.push({ url: nextLink, depth: current.depth + 1 });
-                }
-              }
-            }
-          } catch (err) {
-            run.perSourceErrors[current.url] = err instanceof Error ? err.message : String(err);
-          }
-        }
-
-        if (queue.length > 0 && run.progress.pagesCrawled >= maxPages) {
-          run.caveat = `Crawl reached maximum page budget of ${maxPages} before exhausting all frontier links.`;
-          run.status = "partial";
-        } else {
-          run.status = "completed";
-        }
         }
       } else {
         // Niche, Profile, or URL List - leverage ResearchPlanner across registered adapters
@@ -319,7 +248,7 @@ export class DiscoveryService {
     run.progress.discoveredUrls = discoveredItems.length;
 
     // Durable DB run status persistence if SQL provided
-    if (input.sql) {
+    {
       try {
         const sql = input.sql;
         await sql`
@@ -334,9 +263,6 @@ export class DiscoveryService {
         run.perSourceErrors["database_persistence"] = dbErr.message || String(dbErr);
       }
     }
-
-    inMemoryRuns.set(runId, run);
-    inMemoryItems.set(runId, discoveredItems);
 
     return {
       run,
@@ -555,10 +481,11 @@ export class DiscoveryService {
       ? runIdOrInput.brandId
       : typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.brandId : undefined;
 
-    if (sql) {
-      if (!organizationId || !brandId) {
-        throw new Error("Tenant scope is required to read a durable discovery run.");
-      }
+    if (!sql) throw new Error("Durable SQL and tenant scope are required to read a discovery run.");
+    if (!organizationId || !brandId) {
+      throw new Error("Tenant scope is required to read a durable discovery run.");
+    }
+    {
       const rows = await sql<Record<string, unknown>>`
         select * from discovery_runs
         where id = ${runId} and organization_id = ${organizationId} and brand_id = ${brandId}
@@ -582,7 +509,6 @@ export class DiscoveryService {
       }
       return undefined;
     }
-    return inMemoryRuns.get(runId);
   }
 
   async getDiscoveredItems(
@@ -601,10 +527,11 @@ export class DiscoveryService {
       ? runIdOrInput.brandId
       : typeof sqlOrOptions === "object" && sqlOrOptions !== null ? sqlOrOptions.brandId : undefined;
 
-    if (sql) {
-      if (!organizationId || !brandId) {
-        throw new Error("Tenant scope is required to read durable discovery items.");
-      }
+    if (!sql) throw new Error("Durable SQL and tenant scope are required to read discovery items.");
+    if (!organizationId || !brandId) {
+      throw new Error("Tenant scope is required to read durable discovery items.");
+    }
+    {
       const rows = await sql<Record<string, unknown>>`
         select * from discovered_items
         where run_id = ${runId} and organization_id = ${organizationId} and brand_id = ${brandId}
@@ -628,7 +555,6 @@ export class DiscoveryService {
       }
       return [];
     }
-    return inMemoryItems.get(runId) || [];
   }
 
   /**

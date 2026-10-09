@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import { getSql } from "../../db.ts";
 import { transitionCreativePlan } from "./state-transition.server.ts";
 
@@ -57,4 +58,9 @@ test("duplicate approval transition is idempotent and cannot create duplicate au
     select count(*)::int as count from audit_log where object_type = 'creative_plan' and object_id = ${plan.id}
   `;
   assert.equal(rows[0].count, 1);
+});
+
+test("Studio production flow cannot bypass CreativePlan transition authority", async () => {
+  const source = await readFile(new URL("../studio/session.server.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /update\s+creative_plans/i);
 });

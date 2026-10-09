@@ -206,6 +206,7 @@ export class DiscoveryFrontierService {
         and run_id = ${options.runId}
         and lease_owner = ${options.workerId}
         and status in ('LEASED', 'PROCESSING')
+        and lease_expires_at > now()
       returning id
     `;
     return rows.length > 0;
@@ -233,6 +234,7 @@ export class DiscoveryFrontierService {
         and run_id = ${options.runId}
         and lease_owner = ${options.workerId}
         and status = 'LEASED'
+        and lease_expires_at > now()
       returning id
     `;
     return rows.length > 0;
@@ -265,6 +267,7 @@ export class DiscoveryFrontierService {
         where id = ${options.itemId} and organization_id = ${options.organizationId}
           and brand_id = ${options.brandId} and run_id = ${options.runId}
           and lease_owner = ${options.workerId} and status in ('LEASED', 'PROCESSING')
+          and lease_expires_at > now()
         returning id, organization_id, brand_id, run_id
       ), expanded as (
         insert into discovery_frontier (
@@ -304,6 +307,7 @@ export class DiscoveryFrontierService {
       where id = ${options.itemId} and organization_id = ${options.organizationId}
         and brand_id = ${options.brandId} and run_id = ${options.runId}
         and lease_owner = ${options.workerId} and status in ('LEASED', 'PROCESSING')
+        and lease_expires_at > now()
     `;
     if (rows.length === 0) throw new Error("Discovery frontier item is no longer leased to this worker.");
     const attempts = Number(rows[0]?.attempts || 1);
@@ -319,7 +323,7 @@ export class DiscoveryFrontierService {
           completed_at = now()
         where id = ${options.itemId} and organization_id = ${options.organizationId}
           and brand_id = ${options.brandId} and run_id = ${options.runId} and lease_owner = ${options.workerId}
-          and status in ('LEASED', 'PROCESSING')
+          and status in ('LEASED', 'PROCESSING') and lease_expires_at > now()
         returning id
       `;
       if (changed.length === 0) throw new Error("Discovery frontier lease changed before failure was recorded.");

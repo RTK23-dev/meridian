@@ -72,6 +72,20 @@ export async function finalizeProductionArtifact(
   const fetchImpl = input.options?.fetchImpl || globalThis.fetch;
   const drive = input.options?.driveClient || googleDriveClient;
 
+  const ownedJob = await sql<{ id: string }>`
+    select id from production_jobs
+    where id = ${input.jobId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
+    limit 1
+  `;
+  if (!ownedJob[0]) {
+    return {
+      success: false,
+      status: "FAILED",
+      errorCode: "PRODUCTION_JOB_SCOPE_MISMATCH",
+      error: "Production job was not found in the requested tenant scope.",
+    };
+  }
+
   // 1. Normalize and extract complete bytes
   let bytes: Uint8Array | null = null;
   const raw = input.rawArtifact;
@@ -131,6 +145,7 @@ export async function finalizeProductionArtifact(
 
   // 2b. Strict fail-closed magic byte MIME detection
   let detected: import("./mime-detector.ts").DetectedArtifactFormat;
+  let canonicalArtifactId: string;
   try {
     detected = detectArtifactType(bytes);
   } catch (err: any) {
@@ -141,6 +156,7 @@ export async function finalizeProductionArtifact(
           last_polled_at = now(),
           updated_at = now()
       where id = ${input.jobId}
+        and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
     `;
     return {
       success: false,
@@ -180,6 +196,7 @@ export async function finalizeProductionArtifact(
             last_polled_at = now(),
             updated_at = now()
         where id = ${input.jobId}
+          and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
       `;
 
       if (input.runId) {
@@ -288,6 +305,7 @@ export async function finalizeProductionArtifact(
           last_polled_at = now(),
           updated_at = now()
       where id = ${input.jobId}
+        and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
     `;
 
     return {
@@ -331,6 +349,7 @@ export async function finalizeProductionArtifact(
           last_polled_at = now(),
           updated_at = now()
       where id = ${input.jobId}
+        and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
     `;
     return {
       success: false,
@@ -350,18 +369,12 @@ export async function finalizeProductionArtifact(
         ${storageKey}, ${mimeType}, ${byteSize}, ${sha256}, 'approved',
         ${JSON.stringify({ key: storageKey, fileId: providerFileId })}, now(), now()
       )
-      on conflict (organization_id, brand_id, name) do update set
-        provider_file_id = excluded.provider_file_id,
-        mime_type = excluded.mime_type,
-        size_bytes = excluded.size_bytes,
-        sha256 = excluded.sha256,
-        metadata = excluded.metadata,
-        updated_at = now()
+      on conflict (organization_id, brand_id, name) do nothing
     `;
 
     // Read-after-write verification: ensure stored metadata matches
-    const verifiedRows = await sql<{ provider_file_id: string; size_bytes: number; sha256: string }>`
-      select provider_file_id, size_bytes, sha256
+    const verifiedRows = await sql<{ id: string; provider_file_id: string; size_bytes: number; sha256: string; mime_type: string }>`
+      select id, provider_file_id, size_bytes, sha256, mime_type
       from storage_objects
       where organization_id = ${input.organizationId}
         and brand_id = ${input.brandId}
@@ -369,11 +382,13 @@ export async function finalizeProductionArtifact(
       limit 1
     `;
 
-    if (verifiedRows && verifiedRows.length > 0) {
-      if (verifiedRows[0].sha256 !== sha256 || Number(verifiedRows[0].size_bytes) !== byteSize) {
-        throw new Error("Read-after-write verification failed: stored metadata does not match computed checksum/size");
-      }
+    if (!verifiedRows[0]) {
+      throw new Error("Read-after-write verification failed: storage metadata row is missing.");
     }
+    if (verifiedRows[0].sha256 !== sha256 || Number(verifiedRows[0].size_bytes) !== byteSize || verifiedRows[0].mime_type !== mimeType) {
+      throw new Error("Read-after-write verification failed: another finalizer stored different artifact bytes for this job.");
+    }
+    canonicalArtifactId = verifiedRows[0].id;
   } catch (dbErr: any) {
     await sql`
       update production_jobs
@@ -382,6 +397,7 @@ export async function finalizeProductionArtifact(
           last_polled_at = now(),
           updated_at = now()
       where id = ${input.jobId}
+        and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
     `;
 
     return {
@@ -396,11 +412,11 @@ export async function finalizeProductionArtifact(
   await sql`
     update production_jobs
     set status = 'COMPLETED',
-        artifact_id = ${artifactId},
+        artifact_id = ${canonicalArtifactId},
         error_code = null,
         last_polled_at = now(),
         updated_at = now()
-    where id = ${input.jobId}
+    where id = ${input.jobId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
   `;
 
   if (input.runId) {
@@ -418,7 +434,7 @@ export async function finalizeProductionArtifact(
   return {
     success: true,
     status: "COMPLETED",
-    artifactId,
+    artifactId: canonicalArtifactId,
     storageKey,
     sha256,
     byteSize,

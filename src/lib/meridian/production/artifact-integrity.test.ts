@@ -5,8 +5,14 @@ import type { GoogleDriveClient } from "../storage/drive.ts";
 
 test("Artifact Integrity: verifies downloaded bytes against uploaded SHA-256 before marking COMPLETED", async () => {
   const jobRows: any[] = [];
+  let storedObject: any;
   const mockSql = (async (strings: TemplateStringsArray, ...values: any[]) => {
     const query = strings.join("?");
+    if (query.includes("select id from production_jobs")) return [{ id: values[0] }];
+    if (query.includes("insert into storage_objects")) {
+      storedObject = { id: values[0], provider_file_id: values[3], mime_type: values[5], size_bytes: values[6], sha256: values[7] };
+    }
+    if (query.includes("from storage_objects")) return storedObject ? [storedObject] : [];
     if (query.includes("update production_jobs")) {
       jobRows.push({ query, values });
     }

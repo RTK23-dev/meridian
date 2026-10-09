@@ -935,7 +935,14 @@ export async function executeApprovedCreativePlan(
       )
     `;
     await sql`update briefs set status = 'used' where id = ${asText(brief.id)}`;
-    await sql`update creative_plans set status = 'completed', updated_at = now() where id = ${creativePlan.id}`;
+    await transitionCreativePlan(sql, {
+      organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
+      target: "executing", reason: "Approved research manifest is being finalized.",
+    });
+    await transitionCreativePlan(sql, {
+      organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
+      target: "completed", reason: "Research-only manifest completed without production jobs.",
+    });
     return loadSession(sql, access.organizationId, brandId, access.role);
   }
 
@@ -970,6 +977,7 @@ export async function executeApprovedCreativePlan(
   }
 
   let reservationId: string | null = null;
+  let providerSubmissionUnknown = false;
   const estimatedUsd = creativePlan.estimatedCost?.totalEstimatedUsd ?? 0;
   if (estimatedUsd > 0) {
     try {
@@ -1207,31 +1215,63 @@ export async function executeApprovedCreativePlan(
           "BALANCED",
           targetVidProvider === "auto" ? undefined : targetVidProvider,
         );
-
-        const submittedJob = await provider.submitJob(creativeSpec);
+        const prodJobId = crypto.randomUUID();
+        creativeSpec.idempotencyKey = prodJobId;
+        const durableInput = JSON.stringify({
+          creativeSpec, runId, briefId: asText(brief.id), manifestId: delivManifest.creativeId,
+          manifest: delivManifest, planDeliverableId: deliv.id,
+        });
+        await sql`
+          insert into production_jobs (
+            id, organization_id, brand_id, provider, provider_job_id, request_id, status_url, cancel_url,
+            status, cost_mode, estimated_cost_cents, input, created_at, submitted_at, updated_at
+          ) values (
+            ${prodJobId}, ${access.organizationId}, ${brandId}, ${provider.id}, null, null, null, null,
+            'SUBMITTING', 'BALANCED', ${Math.round(creativeSpec.durationTargetSeconds * provider.capabilities.costPerSecondEstimateUsd * 100)},
+            ${durableInput}, now(), null, now()
+          )
+          on conflict (id) do nothing
+        `;
+        let submittedJob: import("../production/types.ts").ProductionJob;
+        try {
+          submittedJob = await provider.submitJob(creativeSpec);
+        } catch (submitError) {
+          providerSubmissionUnknown = true;
+          await sql`
+            update production_jobs
+            set status = 'SUBMISSION_UNKNOWN', error_code = 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
+              error = ${submitError instanceof Error ? submitError.message : String(submitError)}, updated_at = now()
+            where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
+          `;
+          throw new Error("Provider submission outcome is unknown. The durable job and budget reservation are held for reconciliation; it was not resubmitted.");
+        }
+        if (submittedJob.status === "SUBMISSION_UNKNOWN") {
+          providerSubmissionUnknown = true;
+          await sql`
+            update production_jobs
+            set status = 'SUBMISSION_UNKNOWN', error_code = 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
+              error = ${submittedJob.error || "Provider submission outcome is unknown; automatic retry is disabled."},
+              updated_at = now()
+            where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
+          `;
+          throw new Error("Provider submission outcome is unknown. The durable job and budget reservation are held for reconciliation; it was not resubmitted.");
+        }
         if (submittedJob.status === "FAILED" || submittedJob.status === "PREFLIGHT_FAILED" || submittedJob.status === "NOT_CONFIGURED") {
+          await sql`
+            update production_jobs set status = 'FAILED', error_code = ${submittedJob.errorCode || submittedJob.status},
+              error = ${submittedJob.error || "Provider rejected the request."}, updated_at = now()
+            where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
+          `;
           throw new Error(`Video production failed (${submittedJob.status}): ${submittedJob.error || "Provider rejected job."}`);
         }
 
-        const prodJobId = submittedJob.meridianJobId || submittedJob.jobId || crypto.randomUUID();
         await sql`
-          insert into production_jobs (
-            id, organization_id, brand_id, provider, provider_job_id,
-            request_id, status_url, cancel_url, status, cost_mode,
-            estimated_cost_cents, input, created_at, submitted_at
-          ) values (
-            ${prodJobId}, ${access.organizationId}, ${brandId}, ${provider.id},
-            ${submittedJob.providerJobId || submittedJob.jobId || null},
-            ${submittedJob.requestId || null}, ${submittedJob.statusUrl || null}, ${submittedJob.cancelUrl || null},
-            ${submittedJob.status}, 'BALANCED',
-            ${Math.round(submittedJob.costEstimateUsd * 100)},
-            ${JSON.stringify({ creativeSpec, runId, briefId: asText(brief.id), manifestId: delivManifest.creativeId, manifest: delivManifest, planDeliverableId: deliv.id })},
-            now(), now()
-          )
-          on conflict (id) do update set
-            status = excluded.status,
-            provider_job_id = excluded.provider_job_id,
-            updated_at = now()
+          update production_jobs set status = ${submittedJob.status},
+            provider_job_id = ${submittedJob.providerJobId || submittedJob.jobId || null},
+            request_id = ${submittedJob.requestId || null}, status_url = ${submittedJob.statusUrl || null},
+            cancel_url = ${submittedJob.cancelUrl || null}, submitted_at = now(), error_code = null,
+            error = null, updated_at = now()
+          where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
         `;
 
         let finalResult: import("../production/artifact-finalizer.ts").ArtifactFinalizeResult | null = null;
@@ -1372,11 +1412,11 @@ export async function executeApprovedCreativePlan(
       }
     }
 
-    if (reservationId) {
+    if (reservationId && !providerSubmissionUnknown) {
       await BudgetLedgerService.reconcile(sql, {
         reservationId,
-        actualSpentMicros: toMicros(estimatedUsd),
-      }).catch(() => {});
+        cost: { basis: "ESTIMATED", amountMicros: toMicros(estimatedUsd), estimatorVersion: "creative-plan-estimate-v1" },
+      });
     }
 
     await sql`update briefs set status = 'used' where id = ${asText(brief.id)}`;

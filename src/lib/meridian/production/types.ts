@@ -12,6 +12,7 @@ export type ProductionJobState =
   | "PENDING_PREFLIGHT"
   | "PREFLIGHT_FAILED"
   | "SUBMITTING"
+  | "SUBMISSION_UNKNOWN"
   | "QUEUED"
   | "RUNNING"
   | "RENDERING"
@@ -70,6 +71,8 @@ export type CreativeSpec = {
   providerId?: string;
   modelId?: string;
   assetIds?: string[];
+  /** Stable Meridian key used to correlate one durable submission attempt. */
+  idempotencyKey?: string;
 };
 
 export type ProductionJob = {

@@ -85,6 +85,27 @@ test("GeminiOmniVideoProvider submits official REST Interactions API payload", a
   assert.equal(job.providerId, "google_omni");
 });
 
+test("Gemini Omni preserves an ambiguous submission as unknown and never synthesizes a provider request id", async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  try {
+    const transportFailure = new GeminiOmniVideoProvider({
+      fetchImpl: (async () => { throw new Error("connection reset after request write"); }) as unknown as typeof fetch,
+    });
+    assert.equal((await transportFailure.submitJob({ ...sampleSpec, idempotencyKey: "durable-job-key" })).status, "SUBMISSION_UNKNOWN");
+
+    const missingProviderId = new GeminiOmniVideoProvider({
+      fetchImpl: (async () => new Response(JSON.stringify({ status: "in_progress" }), { status: 200 })) as unknown as typeof fetch,
+    });
+    const result = await missingProviderId.submitJob({ ...sampleSpec, idempotencyKey: "durable-job-key" });
+    assert.equal(result.status, "SUBMISSION_UNKNOWN");
+    assert.equal(result.providerJobId, undefined);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
 test("GeminiOmniVideoProvider parses official REST steps[].content[] Base64 video and lowercase completed", async () => {
   process.env.GEMINI_API_KEY = "test-gemini-key";
   const fakeBase64 = Buffer.from("fake-mp4-video-stream-content").toString("base64");
@@ -226,6 +247,7 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
   };
 
   const dbUpdates: Array<string> = [];
+  let storageLookupCount = 0;
   const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
     const query = strings.join("?");
     if (query.includes("with candidates as") && query.includes("returning jobs.id")) {
@@ -250,6 +272,21 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
           }),
         },
       ];
+    }
+    if (query.includes("select id from production_jobs")) {
+      return [{ id: "prod-job-omni-1" }];
+    }
+    if (query.includes("from storage_objects")) {
+      storageLookupCount += 1;
+      // First lookup finds no prior artifact; read-after-write returns the row inserted by the finalizer.
+      if (storageLookupCount === 1) return [];
+      return [{
+        id: "artifact-omni-1",
+        provider_file_id: "drive-file-123",
+        sha256: expectedSha256,
+        size_bytes: fakeVideoBytes.byteLength,
+        mime_type: "video/mp4",
+      }];
     }
     if (query.includes("update production_jobs")) {
       dbUpdates.push(query);

@@ -236,6 +236,10 @@ test("HypitProvider returns NOT_CONFIGURED without URL and executes real HTTP wh
         return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
       }
       if (String(url).endsWith("/v1/jobs") && init?.method === "POST") {
+        const headers = init.headers as Record<string, string>;
+        assert.equal(headers["idempotency-key"], "durable-job-key");
+        const body = JSON.parse(String(init.body));
+        assert.equal(body.meridianJobId, "prod_hypit_durable-job-key");
         return new Response(JSON.stringify({ id: "hypit-job-456", status: "queued" }), { status: 200 });
       }
       return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
@@ -257,12 +261,32 @@ test("HypitProvider returns NOT_CONFIGURED without URL and executes real HTTP wh
       hookLine: "Hook",
       script: "Script",
       scenes: [],
+      idempotencyKey: "durable-job-key",
     });
     assert.equal(submittedJob.status, "RUNNING");
     assert.equal(submittedJob.jobId, "hypit-job-456");
     assert.ok(calledEndpoints.some((ep) => ep.includes("/v1/jobs")));
   } finally {
     if (origUrl) process.env.HYPIT_BASE_URL = origUrl;
+    else delete process.env.HYPIT_BASE_URL;
+  }
+});
+
+test("Hypit submission transport failure is explicitly unknown, not safely retryable", async () => {
+  const originalUrl = process.env.HYPIT_BASE_URL;
+  process.env.HYPIT_BASE_URL = "https://hypit.internal";
+  try {
+    const { HypitProvider } = await import("./providers/hypit.ts");
+    const provider = new HypitProvider({ fetchImpl: async () => { throw new Error("connection reset after request write"); } });
+    const result = await provider.submitJob({
+      id: "spec-unknown", idempotencyKey: "durable-job-key", organizationId: "org-1", brandId: "brand-1",
+      title: "Unknown outcome", format: "ugc", aspectRatio: "9:16", durationTargetSeconds: 8,
+      hookLine: "Hook", script: "Script", scenes: [],
+    });
+    assert.equal(result.status, "SUBMISSION_UNKNOWN");
+    assert.equal(result.jobId, "");
+  } finally {
+    if (originalUrl) process.env.HYPIT_BASE_URL = originalUrl;
     else delete process.env.HYPIT_BASE_URL;
   }
 });

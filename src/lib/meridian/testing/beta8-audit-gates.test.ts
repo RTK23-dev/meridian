@@ -115,8 +115,10 @@ test("Gate 4: Durable Artifact Finalizer & Storage Failure Closed Invariant (P0.
   };
 
   const executedQueries: string[] = [];
-  const mockSql = (async (strings: TemplateStringsArray) => {
-    executedQueries.push(strings.join("?"));
+  const mockSql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const query = strings.join("?");
+    executedQueries.push(query);
+    if (query.includes("select id from production_jobs")) return [{ id: values[0] }];
     return [];
   }) as unknown as Sql;
 
@@ -227,11 +229,13 @@ test("Gate 7: Multi-Source Discovery with Cyclone Optional (P1.3, P1.4)", async 
   assert.equal(cyclone.status, "not_configured");
 
   const service = new DiscoveryService(registry);
+  const mockSql = (async () => []) as unknown as Sql;
   const result = await service.startDiscoveryRun({
     organizationId: "org-1",
     brandId: "brand-1",
     scope: "niche",
     seeds: ["vintage denim"],
+    sql: mockSql,
   });
   // Mission completes successfully without Cyclone
   assert.equal(result.run.status, "completed");

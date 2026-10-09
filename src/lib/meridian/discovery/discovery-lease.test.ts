@@ -131,6 +131,15 @@ test("Discovery Lease: safe claiming, heartbeat, and transactional expansion", a
   assert.equal(expandedItem.leaseOwner, "worker-2");
   assert.equal(expandedItem.depth, 1);
 
+  await sql`update discovery_frontier set lease_expires_at = now() - interval '1 second' where id = ${expandedItem.id}`;
+  assert.equal(await DiscoveryFrontierService.heartbeat(sql, {
+    itemId: expandedItem.id, workerId: "worker-2", organizationId: orgId, brandId, runId,
+  }), false, "An expired worker cannot resurrect its lease with a heartbeat.");
+  await assert.rejects(DiscoveryFrontierService.completeItem(sql, {
+    itemId: expandedItem.id, workerId: "worker-2", organizationId: orgId, brandId, runId,
+    currentDepth: 1, discoveredLinks: ["https://example.com/expired-worker-link"],
+  }), /lost its lease/);
+
   const urls = await sql<{ count: number }>`
     select count(*)::int as count from discovery_frontier
     where run_id = ${runId} and organization_id = ${orgId} and brand_id = ${brandId}
