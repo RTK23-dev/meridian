@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ANSWER_SCHEMA_VERSION } from "../jev/engine.ts";
+import { normalizeReviewerDecision } from "../jev/reviewer-decision.ts";
 import { creativeJudgmentResponseSchemaV1 } from "../jev/schemas/creative-judgment.v1.ts";
 import type { CreativeJudgmentBundle } from "../creative/plan.ts";
 
@@ -59,7 +60,7 @@ export function creativeJudgmentsFromStoredDecision(input: {
   if (storedAnswer?.success) {
     const decision = input.decision.toUpperCase();
     const humanReviewedUncertainty = storedAnswer.data.value === "uncertain" &&
-      decision === "HUMAN_REVIEW" && input.reviewerDecision?.trim().toLowerCase() === "approve";
+      decision === "HUMAN_REVIEW" && normalizeReviewerDecision(input.reviewerDecision) === "approved";
     const status = decision === "REJECT" || storedAnswer.data.value === "no" || storedAnswer.data.value === "violation"
       ? "abstain_rejected"
       : storedAnswer.data.value === "insufficient" || (storedAnswer.data.value === "uncertain" && !humanReviewedUncertainty)

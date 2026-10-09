@@ -58,6 +58,7 @@ test("a deterministic brief uncertainty proceeds only after recorded human appro
   const pendingReview = { ...base, answer, decision: "HUMAN_REVIEW" };
   assert.equal(creativeJudgmentsFromStoredDecision(pendingReview).status, "abstain_insufficient_evidence");
   assert.equal(creativeJudgmentsFromStoredDecision({ ...pendingReview, reviewerDecision: "approve" }).status, "admissible");
+  assert.equal(creativeJudgmentsFromStoredDecision({ ...pendingReview, reviewerDecision: "approved" }).status, "admissible");
 });
 
 test("schema-valid strategic model response preserves its explicit recommendation", () => {
