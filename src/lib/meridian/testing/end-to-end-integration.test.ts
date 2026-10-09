@@ -525,19 +525,24 @@ test("E2E Path 5: Durable Production Jobs Poller Worker Loop", async () => {
           id: values[0],
           organization_id: values[1],
           brand_id: values[2],
-          provider_file_id: values[4],
-          name: values[5],
-          size_bytes: values[7],
-          sha256: values[8],
-          lifecycle: values[9],
+          provider_file_id: values[3],
+          name: values[4],
+          mime_type: values[5],
+          size_bytes: values[6],
+          sha256: values[7],
+          lifecycle: "approved",
         });
         return [];
       }
+      if (query.includes("from storage_objects")) {
+        return dbStorageObjects;
+      }
       if (query.includes("update production_jobs")) {
-        const jobId = values[values.length - 1];
+        const isCompletion = query.includes("status = 'COMPLETED'");
+        const jobId = isCompletion ? values[1] : values[values.length - 1];
         const job = dbProductionJobs.find((j) => j.id === jobId);
         if (job) {
-          if (query.includes("status = 'COMPLETED'")) {
+          if (isCompletion) {
             job.status = "COMPLETED";
             job.artifact_id = values[0];
           } else if (query.includes("status = 'FAILED'")) {
