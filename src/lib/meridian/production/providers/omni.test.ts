@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import { GeminiOmniVideoProvider } from "./omni.ts";
 import { modelCapabilityRegistry } from "../registry.ts";
 import type { CreativeSpec } from "../types.ts";
@@ -118,16 +119,20 @@ test("GeminiOmniVideoProvider parses official REST steps[].content[] Base64 vide
   assert.ok((polled.metadata?.byteSize as number) > 0);
 });
 
-test("GeminiOmniVideoProvider supports image-to-video multimodal task structure", async () => {
+test("GeminiOmniVideoProvider supports image-to-video multimodal input structure", async () => {
   process.env.GEMINI_API_KEY = "test-gemini-key";
 
   const mockFetch = async (url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(init?.body as string);
     assert.equal(body.model, "gemini-omni-1.1-flash");
     assert.ok(Array.isArray(body.input));
-    assert.equal(body.input[0].text, "Stop scrolling!\nHere is the proof why this works.");
-    assert.equal(body.input[1].image.uri, "https://storage.googleapis.com/test-bucket/product.jpg");
-    assert.equal(body.generation_config.video_config.task, "image-to-video");
+    // Official typed input array: image part followed by text instruction
+    assert.equal(body.input[0].type, "image");
+    assert.equal(body.input[0].uri, "https://storage.googleapis.com/test-bucket/product.jpg");
+    assert.equal(body.input[1].type, "text");
+    assert.equal(body.input[1].text, "Stop scrolling!\nHere is the proof why this works.");
+    assert.equal(body.response_format.type, "video");
+    assert.equal(body.response_format.aspect_ratio, "9:16");
 
     return new Response(
       JSON.stringify({
@@ -161,6 +166,108 @@ test("GeminiOmniVideoProvider supports image-to-video multimodal task structure"
   const job = await provider.submitJob(specWithImage);
   assert.equal(job.status, "COMPLETED");
   assert.equal(job.outputArtifactId, "https://storage.googleapis.com/test-bucket/output.mp4");
+});
+
+test("E2E: Production poller consumes Omni Base64 video response and materializes real bytes to Drive", async () => {
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  const fakeVideoBytes = Buffer.from("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41test-omni-rendered-mp4-payload-bytes");
+  const fakeBase64 = fakeVideoBytes.toString("base64");
+  const expectedSha256 = createHash("sha256").update(fakeVideoBytes).digest("hex");
+
+  const storedDrivePuts: Array<{ path: string; bytes: Uint8Array; mimeType: string }> = [];
+  const mockDrive = {
+    put: async (input: any) => {
+      storedDrivePuts.push(input);
+      return { fileId: "drive-file-123", webViewLink: "https://drive.google.com/test" };
+    },
+    get: async () => null,
+    delete: async () => {},
+    health: async () => ({ status: "CONFIGURED" as const, configured: true }),
+  };
+
+  const mockOmniFetch = async (_url: string | URL | Request) => {
+    return new Response(
+      JSON.stringify({
+        interaction_id: "interactions/omni-e2e-poll-1",
+        status: "completed",
+        steps: [
+          {
+            type: "model_output",
+            content: [
+              {
+                type: "video",
+                mime_type: "video/mp4",
+                data: fakeBase64,
+              },
+            ],
+          },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const omniProvider = new GeminiOmniVideoProvider({
+    fetchImpl: mockOmniFetch as unknown as typeof fetch,
+  });
+
+  const mockRouter = {
+    get: (id: string) => (id === "google_omni" || id === "omni" ? omniProvider : undefined),
+  };
+
+  const dbUpdates: Array<string> = [];
+  const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
+    const query = strings.join("?");
+    if (query.includes("select id, organization_id")) {
+      return [
+        {
+          id: "prod-job-omni-1",
+          organization_id: "org-1",
+          brand_id: "brand-1",
+          provider: "google_omni",
+          provider_job_id: "interactions/omni-e2e-poll-1",
+          request_id: null,
+          status_url: null,
+          cancel_url: null,
+          status: "RUNNING",
+          attempt_count: 0,
+          input: JSON.stringify({
+            creativeSpec: {
+              ...sampleSpec,
+              durationTargetSeconds: 5,
+            },
+            runId: "run-omni-1",
+          }),
+        },
+      ];
+    }
+    if (query.includes("update production_jobs")) {
+      dbUpdates.push(query);
+    }
+    return [];
+  }) as any;
+
+  const { pollProductionJobs } = await import("../poller.ts");
+  const pollResult = await pollProductionJobs(mockSql, {
+    driveClient: mockDrive as any,
+    router: mockRouter as any,
+    fetchImpl: mockOmniFetch as unknown as typeof fetch,
+  });
+
+  // Verify poller rendered 1 job
+  assert.equal(pollResult.claimed, 1);
+  assert.equal(pollResult.rendered, 1);
+  assert.equal(pollResult.failed, 0);
+
+  // Verify bytes were materialized to Google Drive
+  assert.equal(storedDrivePuts.length, 1);
+  assert.equal(storedDrivePuts[0].bytes.byteLength, fakeVideoBytes.byteLength);
+  assert.equal(storedDrivePuts[0].mimeType, "video/mp4");
+  const actualHash = createHash("sha256").update(storedDrivePuts[0].bytes).digest("hex");
+  assert.equal(actualHash, expectedSha256);
+
+  // Verify DB state updated to COMPLETED
+  assert.ok(dbUpdates.some((q) => q.includes("status = 'COMPLETED'")));
 });
 
 test("ModelCapabilityRegistry tracks Veo 3.1 deprecation and Veo 2.0 shutdown", () => {

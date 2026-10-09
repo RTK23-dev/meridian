@@ -51,7 +51,85 @@ test("calculateDecomposedOpportunityRating handles missing views and baselines w
   assert.ok(rating.missingDimensions.includes("creator_baseline_median_views"));
   assert.ok(rating.missingDimensions.includes("observed_views"));
   assert.equal(rating.observedBreakout.viewsLift, undefined);
-  assert.equal(rating.observedBreakout.confidence, 0.45);
+  assert.equal(rating.observedBreakout.uncalibratedPrior, true);
+  assert.equal(rating.observedBreakout.confidence, undefined);
+  assert.equal(rating.ratingStatus, "INSUFFICIENT_EVIDENCE");
+  assert.equal(rating.isCalibrated, false);
+});
+
+test("Gold-Set Benchmark: Distinguishes genuine viral outliers, ordinary baseline, false positives, and missing evidence", () => {
+  // Case A: Genuine viral outlier on a 20k creator (10x lift, validated angle bible genes, strong brand fit)
+  const genuineOutlier = calculateDecomposedOpportunityRating({
+    observed: {
+      views: 200000,
+      creatorMedianViews: 20000,
+      likes: 18000,
+      comments: 1400,
+      controlSetSize: 15,
+      postAgeHours: 24,
+    },
+    conceptGenes: ["result-first", "cinematic-cut"],
+    transferContext: {
+      brandFit: 0.9,
+      productFit: 0.85,
+      productionFeasibility: 0.9,
+      isMegaCreator: false,
+    },
+  });
+
+  // Case B: Ordinary baseline performance on same creator (1.0x lift)
+  const ordinaryContent = calculateDecomposedOpportunityRating({
+    observed: {
+      views: 20000,
+      creatorMedianViews: 20000,
+      likes: 1200,
+      comments: 90,
+      controlSetSize: 15,
+      postAgeHours: 24,
+    },
+    conceptGenes: ["result-first"],
+    transferContext: {
+      brandFit: 0.7,
+      productFit: 0.7,
+      isMegaCreator: false,
+    },
+  });
+
+  // Case C: False positive: Mega celebrity with 1M absolute views, but creator median is 3M (0.33x lift) and celebrity affinity is non-transferable
+  const celebrityFalsePositive = calculateDecomposedOpportunityRating({
+    observed: {
+      views: 1000000,
+      creatorMedianViews: 3000000,
+      likes: 40000,
+      comments: 1200,
+      controlSetSize: 20,
+      postAgeHours: 24,
+    },
+    conceptGenes: [],
+    transferContext: {
+      brandFit: 0.5,
+      productFit: 0.5,
+      isMegaCreator: true,
+    },
+  });
+
+  // Case D: Missing evidence / uncalibrated prior
+  const uncalibratedPriorCase = calculateDecomposedOpportunityRating({
+    conceptGenes: [],
+  });
+
+  // Assertions establishing gold-set ordering & calibration honesty:
+  assert.ok(genuineOutlier.ratingOutOfTen > ordinaryContent.ratingOutOfTen);
+  assert.ok(ordinaryContent.ratingOutOfTen > celebrityFalsePositive.ratingOutOfTen);
+  assert.ok(genuineOutlier.ratingOutOfTen >= 7.5, "Outlier should rank high");
+  assert.ok(celebrityFalsePositive.ratingOutOfTen <= 4.5, "False positive with sub-baseline views should be penalized");
+  assert.equal(celebrityFalsePositive.observedBreakout.viewsLift, 0.33);
+
+  // Calibration honesty assertions:
+  assert.equal(genuineOutlier.isCalibrated, false);
+  assert.equal(uncalibratedPriorCase.ratingStatus, "INSUFFICIENT_EVIDENCE");
+  assert.equal(uncalibratedPriorCase.uncalibratedPrior, true);
+  assert.equal(uncalibratedPriorCase.evidenceCoverage, 0); // zero free dimensions!
 });
 
 test("buildConceptGenome maps Angle Bible dimensions with verified definitions", () => {

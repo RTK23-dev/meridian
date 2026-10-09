@@ -76,4 +76,7 @@ export const jevRegistry = {
   list: () => Object.values(UNIFIED_QUESTION_REGISTRY),
   getByCategory: listQuestionsByCategory,
   getRequiredEvidence: getRequiredEvidenceForQuestions,
+  register: (question: JevQuestionSpec) => {
+    UNIFIED_QUESTION_REGISTRY[question.id] = question;
+  },
 };

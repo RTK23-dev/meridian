@@ -25,9 +25,11 @@ export type ObservedBreakoutScore = {
   creatorMedianViews?: number;
   controlSetSize: number;
   postAgeHours?: number;
-  epistemicState: "OBSERVED" | "COMPUTED" | "INFERRED";
-  confidence: number;
+  epistemicState: "OBSERVED" | "COMPUTED" | "INFERRED" | "UNKNOWN";
+  confidence?: number;
   uncertainty?: number;
+  isCalibrated: boolean;
+  uncalibratedPrior?: boolean;
   evidenceRefs: EvidenceRef[];
 };
 
@@ -40,6 +42,7 @@ export type CreativeConceptStrengthScore = {
   shareTriggerStrength: number;
   executionCraft: number;
   methodState: "seed_prior" | "candidate_fit" | "fitted" | "validated";
+  uncalibratedPrior?: boolean;
   evidenceRefs: EvidenceRef[];
 };
 
@@ -52,6 +55,7 @@ export type TransferPotentialScore = {
   claimRiskPenalty: number;
   nonTransferableFactors: string[];
   transferableFactors: string[];
+  uncalibratedPrior?: boolean;
   evidenceRefs: EvidenceRef[];
 };
 
@@ -66,8 +70,10 @@ export type BusinessPotentialScore = {
 
 export type DecomposedOpportunityRating = {
   ratingOutOfTen: number; // 1.0 to 10.0
-  ratingStatus?: "CALCULATED" | "INSUFFICIENT_EVIDENCE" | "LOW_EVIDENCE";
+  ratingStatus?: "CALCULATED" | "INSUFFICIENT_EVIDENCE" | "LOW_EVIDENCE" | "UNCALIBRATED_PRIOR";
   target: "breakout" | "concept_strength" | "transfer_potential" | "composite";
+  isCalibrated: boolean;
+  uncalibratedPrior?: boolean;
   observedBreakout: ObservedBreakoutScore;
   conceptStrength: CreativeConceptStrengthScore;
   transferPotential: TransferPotentialScore;
@@ -165,6 +171,7 @@ export function calculateDecomposedOpportunityRating(input: {
   const missingDimensions: string[] = [];
 
   // 1. Target 1: Observed Breakout Score
+  let uncalibratedPrior = false;
   let breakoutScoreVal = 0.5; // neutral baseline
   let viewsLift: number | undefined;
   let likesLift: number | undefined;
@@ -172,7 +179,7 @@ export function calculateDecomposedOpportunityRating(input: {
   let sharesLift: number | undefined;
   let savesLift: number | undefined;
   let velocityLift: number | undefined;
-  let epistemicState: "OBSERVED" | "COMPUTED" | "INFERRED" = "OBSERVED";
+  let epistemicState: "OBSERVED" | "COMPUTED" | "INFERRED" | "UNKNOWN" = "UNKNOWN";
   const controlSize = input.observed?.controlSetSize ?? 0;
 
   if (input.observed?.views !== undefined && input.observed?.creatorMedianViews !== undefined && input.observed.creatorMedianViews > 0) {
@@ -181,6 +188,8 @@ export function calculateDecomposedOpportunityRating(input: {
     breakoutScoreVal = Math.min(0.99, Math.max(0.1, 0.5 + Math.log2(viewsLift) * 0.2));
     epistemicState = "COMPUTED";
   } else {
+    uncalibratedPrior = true;
+    epistemicState = "INFERRED";
     missingDimensions.push("creator_baseline_median_views");
     if (input.observed?.views === undefined) {
       missingDimensions.push("observed_views");
@@ -208,6 +217,9 @@ export function calculateDecomposedOpportunityRating(input: {
     velocityLift = Math.round((input.observed.views / input.observed.postAgeHours) * 10) / 10;
   }
 
+  const confidence = uncalibratedPrior ? undefined : (controlSize >= 5 ? 0.7 : 0.4);
+  const uncertainty = uncalibratedPrior ? undefined : (controlSize >= 5 ? 0.2 : 0.4);
+
   const observedBreakout: ObservedBreakoutScore = {
     score: Math.round(breakoutScoreVal * 100) / 100,
     viewsLift,
@@ -220,8 +232,10 @@ export function calculateDecomposedOpportunityRating(input: {
     controlSetSize: controlSize,
     postAgeHours: input.observed?.postAgeHours,
     epistemicState,
-    confidence: controlSize >= 5 ? 0.85 : 0.45,
-    uncertainty: controlSize >= 5 ? 0.1 : 0.35,
+    confidence,
+    uncertainty,
+    isCalibrated: false,
+    uncalibratedPrior,
     evidenceRefs: refs.filter((r) => r.field === "performance" || r.field === "metadata"),
   };
 
@@ -254,6 +268,7 @@ export function calculateDecomposedOpportunityRating(input: {
     geneWeightsSum += entry.predictiveWeight;
   }
   const avgGeneStrength = matchedEntries.length > 0 ? geneWeightsSum / matchedEntries.length : 0.5;
+  const hasConceptInput = (input.conceptGenes && input.conceptGenes.length > 0) || input.conceptEvaluations !== undefined;
 
   const conceptStrength: CreativeConceptStrengthScore = {
     score: Math.round(Math.min(0.95, avgGeneStrength * 0.9) * 100) / 100,
@@ -264,6 +279,7 @@ export function calculateDecomposedOpportunityRating(input: {
     shareTriggerStrength,
     executionCraft,
     methodState: matchedEntries.length > 0 ? "candidate_fit" : "seed_prior",
+    uncalibratedPrior: !hasConceptInput,
     evidenceRefs: refs.filter((r) => r.field === "transcript" || r.field === "scene" || r.field === "ocr"),
   };
 
@@ -285,6 +301,7 @@ export function calculateDecomposedOpportunityRating(input: {
 
   const productionFeasibility = input.transferContext?.productionFeasibility ?? 0.8;
   const audienceRelevance = input.transferContext?.audienceRelevance ?? 0.75;
+  const hasTransferInput = input.transferContext?.brandFit !== undefined || input.transferContext?.productFit !== undefined;
 
   const transferableFactors = [
     "Hook structure and pattern interrupt",
@@ -309,6 +326,7 @@ export function calculateDecomposedOpportunityRating(input: {
     claimRiskPenalty: claimPenalty,
     transferableFactors,
     nonTransferableFactors,
+    uncalibratedPrior: !hasTransferInput,
     evidenceRefs: refs,
   };
 
@@ -355,11 +373,18 @@ export function calculateDecomposedOpportunityRating(input: {
     };
   }
 
-  // Composite 1-10 rating with evidence coverage calculation
-  const totalTrackedDimensions = 4;
-  const hasBreakoutEvidence = input.observed?.views !== undefined && input.observed.views !== null;
+  // Honest evidence-coverage calculation: no free starter dimensions
+  const hasBreakoutEvidence = viewsLift !== undefined;
+  const hasConceptEvidence = hasConceptInput && matchedEntries.length > 0;
+  const hasTransferEvidence = hasTransferInput;
   const hasBusinessEvidence = hasRoas || hasConversion;
-  const observedCount = 2 + (hasBreakoutEvidence ? 1 : 0) + (hasBusinessEvidence ? 1 : 0);
+
+  const totalTrackedDimensions = 4;
+  const observedCount =
+    (hasBreakoutEvidence ? 1 : 0) +
+    (hasConceptEvidence ? 1 : 0) +
+    (hasTransferEvidence ? 1 : 0) +
+    (hasBusinessEvidence ? 1 : 0);
   const evidenceCoverage = Math.round((observedCount / totalTrackedDimensions) * 100) / 100;
 
   // Rating out of 10 computed honestly: weighted by available component scores
@@ -368,12 +393,22 @@ export function calculateDecomposedOpportunityRating(input: {
     composite = (conceptStrength.score * 0.3 + transferPotential.score * 0.3 + breakoutScoreVal * 0.15 + businessPotential.score * 0.25) * 10;
   }
   const ratingOutOfTen = Math.round(Math.max(1.0, Math.min(10.0, composite)) * 10) / 10;
-  const ratingStatus = evidenceCoverage < 0.6 ? "LOW_EVIDENCE" : "CALCULATED";
+
+  let ratingStatus: "CALCULATED" | "INSUFFICIENT_EVIDENCE" | "LOW_EVIDENCE" | "UNCALIBRATED_PRIOR";
+  if (uncalibratedPrior || evidenceCoverage < 0.5) {
+    ratingStatus = "INSUFFICIENT_EVIDENCE";
+  } else if (evidenceCoverage < 0.75) {
+    ratingStatus = "LOW_EVIDENCE";
+  } else {
+    ratingStatus = "CALCULATED";
+  }
 
   return {
     ratingOutOfTen,
     ratingStatus,
     target: "composite",
+    isCalibrated: false,
+    uncalibratedPrior: uncalibratedPrior || !hasConceptInput || !hasTransferInput,
     observedBreakout,
     conceptStrength,
     transferPotential,

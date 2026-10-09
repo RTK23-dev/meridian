@@ -77,11 +77,11 @@ export function compressEvidenceForJev(
   if (bundle.comparisonContext) availableEvidence.push("comparison_context");
 
   const evidenceRefs: import("../jev/types.ts").EvidenceRef[] = [];
-  if (bundle.provenance.sourceUrl) {
+  if (bundle.provenance?.sourceUrl) {
     evidenceRefs.push({
       kind: "url",
       path: bundle.provenance.sourceUrl,
-      summary: `Source: ${bundle.source.platform}`,
+      summary: `Source: ${bundle.source?.platform || "media"}`,
     });
   }
 
@@ -172,10 +172,10 @@ export function compressEvidenceForJev(
     : undefined;
 
   return {
-    description: `${bundle.content.title || "Untitled"} - ${bundle.content.caption || ""}`,
-    source: bundle.source.canonicalUrl || bundle.source.externalId || bundle.id,
-    platform: bundle.source.platform,
-    contentType: bundle.content.type,
+    description: `${bundle.content?.title || "Untitled"} - ${bundle.content?.caption || ""}`,
+    source: bundle.source?.canonicalUrl || bundle.source?.externalId || bundle.id,
+    platform: bundle.source?.platform || "media",
+    contentType: bundle.content?.type || "video",
     metrics: {
       views: getNumericEvidence(bundle.performance?.views),
       likes: getNumericEvidence(bundle.performance?.likes),

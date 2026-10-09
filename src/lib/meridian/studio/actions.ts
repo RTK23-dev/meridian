@@ -55,10 +55,12 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
       "veo",
       "higgsfield",
       "hypit",
+      "omni",
+      "google_omni",
       ...(isTestRuntime ? ["test:video"] : []),
     ]);
     if (videoProvider && !allowedVideoProviders.has(videoProvider)) {
-      throw new Error(`Unsupported video provider: ${videoProvider}. Allowed: auto, manual_cloud, veo, higgsfield, hypit, none.`);
+      throw new Error(`Unsupported video provider: ${videoProvider}. Allowed: auto, manual_cloud, veo, higgsfield, hypit, omni, google_omni, none.`);
     }
     return {
       brandId,

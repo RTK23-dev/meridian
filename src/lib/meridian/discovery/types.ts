@@ -30,6 +30,10 @@ export interface DiscoveredReelItem {
   discoveredAt: string;
   discoveryTier: DiscoverySourceTier;
   scoutDeviceId?: string;
+  scoutSessionId?: string;
+  scoutObservationTime?: string;
+  screenshotArtifactId?: string;
+  screenshotUrl?: string;
   metrics: {
     views?: number;
     likes?: number;

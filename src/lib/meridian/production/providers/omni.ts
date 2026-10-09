@@ -168,18 +168,24 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     const referenceUri = spec.sourceMediaUrl || (spec as any).referenceImageUri;
 
     if (referenceUri) {
-      // Image-to-video mode using documented generation_config & content parts
+      // Official Gemini Interactions API image-to-video input structure:
+      // Array of typed input objects: image part followed by text instruction
+      const isBase64 = referenceUri.startsWith("data:") || !referenceUri.startsWith("http");
+      const base64Data = referenceUri.startsWith("data:")
+        ? referenceUri.replace(/^data:[^;]+;base64,/, "")
+        : referenceUri;
+      const mimeType = referenceUri.startsWith("data:")
+        ? (referenceUri.match(/^data:([^;]+);/)?.[1] || "image/jpeg")
+        : "image/jpeg";
+
       payload = {
         model,
         input: [
-          { text: prompt },
-          { image: { uri: referenceUri } },
+          isBase64 && !referenceUri.startsWith("http")
+            ? { type: "image", data: base64Data, mime_type: mimeType }
+            : { type: "image", uri: referenceUri, mime_type: mimeType },
+          { type: "text", text: prompt },
         ],
-        generation_config: {
-          video_config: {
-            task: "image-to-video",
-          },
-        },
         response_format: {
           type: "video",
           aspect_ratio: aspectRatio,
@@ -255,6 +261,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
           mimeType: parsed?.mimeType,
           sha256: parsed?.sha256,
           byteSize: parsed?.byteSize,
+          videoBytesBase64: parsed?.videoBytesBase64,
         },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -363,6 +370,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
           mimeType: parsed?.mimeType,
           sha256: parsed?.sha256,
           byteSize: parsed?.byteSize,
+          videoBytesBase64: parsed?.videoBytesBase64,
         },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -391,6 +399,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     mimeType: string;
     sha256?: string;
     byteSize?: number;
+    videoBytesBase64?: string;
   } | null {
     if (!body.steps || !Array.isArray(body.steps)) return null;
 
@@ -405,10 +414,11 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
                 const sha256 = createHash("sha256").update(bytes).digest("hex");
                 const mime = item.mime_type || "video/mp4";
                 return {
-                  uri: item.uri || `data:${mime};base64,${item.data.slice(0, 100)}...`,
+                  uri: item.uri || `data:${mime};base64,${item.data}`,
                   mimeType: mime,
                   sha256,
                   byteSize: bytes.byteLength,
+                  videoBytesBase64: item.data,
                 };
               }
             } else if (item.uri) {

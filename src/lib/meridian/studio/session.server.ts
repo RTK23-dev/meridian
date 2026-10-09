@@ -638,15 +638,48 @@ export async function generateStudioVariants(
     const aspectRatio = data.aspectRatio || "9:16";
 
     const { validateCreationPlan, buildCreativeManifest } = await import("@/lib/meridian/factory/creative-manifest");
+
+    let beats: import("@/lib/meridian/factory/creative-manifest").CreativeManifestBeat[] = [];
+    let targetDurationSeconds: number | undefined;
+    let slideCount: number | undefined;
+
+    if (mode === "research_only") {
+      targetDurationSeconds = undefined;
+      beats = [];
+    } else if (mode === "image_ad" || mode === "organic_image") {
+      targetDurationSeconds = undefined;
+      beats = [
+        {
+          id: "hero",
+          purpose: "hook",
+          visualInstruction: asText(brief.hook || brief.title),
+          onScreenText: asText(brief.cta || brief.hook),
+        },
+      ];
+    } else if (mode === "carousel") {
+      slideCount = 3;
+      targetDurationSeconds = undefined;
+      beats = [
+        { id: "slide-1", purpose: "hook", visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
+        { id: "slide-2", purpose: "mechanism_proof", visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
+        { id: "slide-3", purpose: "offer_cta", visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
+      ];
+    } else {
+      // video, video_reel_short, mixed_format
+      targetDurationSeconds = 8;
+      beats = [
+        { id: "beat-1", purpose: "hook", targetDurationSeconds: 2, visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
+        { id: "beat-2", purpose: "mechanism", targetDurationSeconds: 4, visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
+        { id: "beat-3", purpose: "payoff_cta", targetDurationSeconds: 2, visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
+      ];
+    }
+
     const plan = validateCreationPlan({
       mode,
       startingMaterial,
       productionStrategy,
-      beats: [
-        { id: "beat-1", purpose: "hook", targetDurationSeconds: 2, visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
-        { id: "beat-2", purpose: "mechanism", targetDurationSeconds: 4, visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
-        { id: "beat-3", purpose: "payoff_cta", targetDurationSeconds: 2, visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
-      ],
+      slideCount,
+      beats,
     });
 
     if (!plan.valid) {
@@ -669,14 +702,10 @@ export async function generateStudioVariants(
       format: {
         channel: "multi_channel",
         aspectRatio,
-        targetDurationSeconds: 8,
-        slideCount: mode === "carousel" ? 3 : undefined,
+        targetDurationSeconds,
+        slideCount,
       },
-      beats: [
-        { id: "beat-1", purpose: "hook", targetDurationSeconds: 2, visualInstruction: asText(brief.hook), onScreenText: asText(brief.hook) },
-        { id: "beat-2", purpose: "mechanism", targetDurationSeconds: 4, visualInstruction: asText(brief.message), scriptOrCaption: asText(brief.message) },
-        { id: "beat-3", purpose: "payoff_cta", targetDurationSeconds: 2, visualInstruction: asText(brief.cta), onScreenText: asText(brief.cta) },
-      ],
+      beats,
     });
 
     if (!plan.willCreateProductionJob || mode === "research_only") {

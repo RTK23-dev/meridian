@@ -80,7 +80,13 @@ function Studio({ brandId }: { brandId: string }) {
   const organicTelemetryAction = useBusy([qk.studio(brandId), qk.organic(brandId), qk.learning(brandId)]);
   const generationForm = useForm<StudioGeneration>({
     resolver: zodResolver(studioGenerationSchema),
-    defaultValues: { imageProvider: "none", videoProvider: "hypit" },
+    defaultValues: {
+      imageProvider: "none",
+      videoProvider: "auto",
+      mode: "video",
+      source: "new_brief",
+      aspectRatio: "9:16",
+    },
     mode: "onBlur",
   });
   const generationDirty = generationForm.formState.isDirty;
@@ -267,8 +273,50 @@ function Studio({ brandId }: { brandId: string }) {
             <h2 className="font-display text-2xl">Generate from the approved brief</h2>
             {brief ? <p className="mt-2 text-sm text-muted">Current brief: {brief.title}. A non-ready brief cannot be used for generation.</p> : <p className="mt-2 text-sm text-muted">Write or accept a brief before generating.</p>}
             {canEdit && brief ? <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={generationForm.handleSubmit(generate)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); event.currentTarget.requestSubmit(); } }}>
-              <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently." error={generationForm.formState.errors.imageProvider?.message}><SelectInput {...generationForm.register("imageProvider")} required><option value="none">No images</option><option value="test:image">Test image</option><option value="google:nano-banana">Google AI Studio · Nano Banana</option></SelectInput></Field>
-              <Field label="Video" hint="Hypit renders the approved brief. It is not connected until HYPIT_BASE_URL is set. No clip is invented." error={generationForm.formState.errors.videoProvider?.message}><SelectInput {...generationForm.register("videoProvider")} required><option value="hypit">Hypit video</option><option value="none">No video in this run</option></SelectInput></Field>
+              <Field label="Creation mode" hint="Format strategy for this generation run.">
+                <SelectInput {...generationForm.register("mode")}>
+                  <option value="video">Video (Reel / Short)</option>
+                  <option value="image_ad">Static image ad</option>
+                  <option value="carousel">Multi-slide carousel</option>
+                  <option value="mixed_format">Mixed format campaign</option>
+                  <option value="research_only">Research-only (no rendering)</option>
+                </SelectInput>
+              </Field>
+              <Field label="Starting material" hint="Source lineage used to anchor the creative.">
+                <SelectInput {...generationForm.register("source")}>
+                  <option value="new_brief">New approved brief</option>
+                  <option value="winning_reference">Winning organic / competitor reference</option>
+                  <option value="existing_meridian_creative">Existing Meridian creative</option>
+                  <option value="brand_assets">Brand asset library</option>
+                  <option value="creator_footage">Creator / UGC footage</option>
+                </SelectInput>
+              </Field>
+              <Field label="Video provider" hint="Remote synthesis provider. Omni and Hypit run asynchronously off-device." error={generationForm.formState.errors.videoProvider?.message}>
+                <SelectInput {...generationForm.register("videoProvider")} required>
+                  <option value="auto">Auto (healthy supported provider)</option>
+                  <option value="omni">Google Gemini Omni (gemini-omni-1.1-flash)</option>
+                  <option value="hypit">Hypit video</option>
+                  <option value="veo">Google Veo 3.1 (Preview)</option>
+                  <option value="higgsfield">Higgsfield AI</option>
+                  <option value="manual_cloud">Manual Cloud (Google Drive)</option>
+                  <option value="none">No video in this run</option>
+                </SelectInput>
+              </Field>
+              <Field label="Aspect ratio" hint="Format canvas geometry.">
+                <SelectInput {...generationForm.register("aspectRatio")}>
+                  <option value="9:16">9:16 Vertical (Reels / TikTok / Shorts)</option>
+                  <option value="16:9">16:9 Landscape (YouTube / Desktop)</option>
+                  <option value="1:1">1:1 Square (Feed)</option>
+                  <option value="4:5">4:5 Portrait (Instagram Feed)</option>
+                </SelectInput>
+              </Field>
+              <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently." error={generationForm.formState.errors.imageProvider?.message}>
+                <SelectInput {...generationForm.register("imageProvider")} required>
+                  <option value="none">No images</option>
+                  <option value="test:image">Test image</option>
+                  <option value="google:nano-banana">Google AI Studio · Nano Banana</option>
+                </SelectInput>
+              </Field>
               <div className="md:col-span-2">{generationDirty ? <div role="status" className="mb-3 flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => generationForm.reset()}>Discard</Button></div> : null}<Button type="submit" disabled={generationAction.pending || generationForm.formState.isSubmitting || brief.status !== "ready"}>{generationForm.formState.isSubmitting ? "Generating…" : "Generate variants"}</Button><p className="mt-2 text-sm text-muted">Estimated cost appears only when a provider returns one. Daily or concurrency limits can block a run.</p></div>
             </form> : null}
           </Panel>

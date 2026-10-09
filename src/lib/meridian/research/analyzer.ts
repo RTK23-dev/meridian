@@ -77,22 +77,26 @@ export async function synthesizeResearchTranscript(input: {
 
 export const analyzeResearchTranscript = synthesizeResearchTranscript;
 
-import { jevRouter } from "../jev/router.ts";
-import type { JevProviderRouter } from "../jev/types.ts";
+import { jevRouter, OpenRouterJevProvider, JevRouter } from "../jev/router.ts";
+import type { JevProviderRouter, JevRoutingPolicy } from "../jev/types.ts";
 import { compressEvidenceForJev } from "../evidence/bundle.ts";
 
 /**
  * Executes structured JEV questions against a normalized EvidenceBundle.
- * Uses shared JevRouter for authoritative decisions.
+ * Uses shared JevRouter for authoritative decisions across all configured provider modes.
  */
 export async function analyzeEvidenceWithJev(input: {
   bundle: EvidenceBundle;
   questionIds?: string[];
   client?: OpenRouterJevClient;
   router?: JevProviderRouter;
+  policy?: JevRoutingPolicy;
 }): Promise<{
   bundleId: string;
   answers: JevAnswer[];
+  provider?: string;
+  comparison?: any;
+  fallbackFrom?: string;
 }> {
   const questionIds = input.questionIds || [
     "org_hook_intent",
@@ -101,21 +105,10 @@ export async function analyzeEvidenceWithJev(input: {
     "safe_substantiation_present",
   ];
 
-  if (input.client) {
-    const answers: JevAnswer[] = [];
-    for (const qid of questionIds) {
-      const question = jevRegistry.get(qid);
-      if (!question) continue;
-      const answer = await input.client.answer({
-        evidenceBundle: input.bundle,
-        question,
-      });
-      answers.push(answer);
-    }
-    return { bundleId: input.bundle.id, answers };
-  }
+  const router =
+    input.router ||
+    (input.client ? new JevRouter({ openrouterProvider: new OpenRouterJevProvider(input.client) }) : jevRouter);
 
-  const router = input.router || jevRouter;
   const questionsRecord: Record<string, any> = {};
   for (const qid of questionIds) {
     const q = jevRegistry.get(qid);
@@ -129,24 +122,30 @@ export async function analyzeEvidenceWithJev(input: {
   const firstQ = Object.values(questionsRecord)[0];
   const compressed = compressEvidenceForJev(input.bundle, firstQ);
 
-  const res = await router.decide({
-    organizationId: input.bundle.organizationId || "global",
-    brandId: input.bundle.brandId || "global",
-    state: {
-      description: compressed.description,
-      bundleId: input.bundle.id,
-      availableEvidence: compressed.availableEvidence,
-      evidenceRefs: compressed.evidenceRefs,
-      source: compressed.source,
-      metrics: compressed.metrics,
-      transcriptSummary: compressed.transcriptSummary,
-      sceneSummary: compressed.sceneSummary,
+  const res = await router.decide(
+    {
+      organizationId: input.bundle.organizationId || "global",
+      brandId: input.bundle.brandId || "global",
+      state: {
+        description: compressed.description,
+        bundleId: input.bundle.id,
+        availableEvidence: compressed.availableEvidence,
+        evidenceRefs: compressed.evidenceRefs,
+        source: compressed.source,
+        metrics: compressed.metrics,
+        transcriptSummary: compressed.transcriptSummary,
+        sceneSummary: compressed.sceneSummary,
+      },
+      questions: questionsRecord,
     },
-    questions: questionsRecord,
-  });
+    input.policy
+  );
 
   return {
     bundleId: input.bundle.id,
     answers: Object.values(res.answers),
+    provider: res.provider,
+    comparison: res.comparison,
+    fallbackFrom: res.fallbackFrom,
   };
 }

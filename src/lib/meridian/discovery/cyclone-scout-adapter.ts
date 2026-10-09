@@ -82,26 +82,69 @@ export class CycloneScoutSourceAdapter {
 
     try {
       const base = this.config.gatewayUrl.replace(/\/+$/, "");
-      // Supported Cyclone Gateway health / device readiness routes
-      const pingUrl = `${base}/health`;
-      let res = await this.fetchFn(pingUrl, {
+      // Cyclone V3.5 Protocol: GET /v1/device/status or GET /v1/devices
+      // Never mark Cyclone as connected merely because a generic /health route responded.
+      let res = await this.fetchFn(`${base}/v1/device/status?device_id=${encodeURIComponent(this.config.deviceId)}`, {
         headers: this.getHeaders(),
       });
 
       if (!res.ok) {
-        // Fallback to /api/v1/devices
-        res = await this.fetchFn(`${base}/api/v1/devices`, {
+        // Fall back to fleet device listing GET /v1/devices
+        res = await this.fetchFn(`${base}/v1/devices`, {
           headers: this.getHeaders(),
         });
-        if (!res.ok) {
-          return {
-            connected: false,
-            reason: `Cyclone gateway returned HTTP ${res.status}`,
-          };
-        }
       }
 
-      const body = (await res.json().catch(() => ({}))) as { status?: string; devices?: any[] };
+      if (!res.ok) {
+        // Fall back to capability discovery GET /v1/capabilities
+        res = await this.fetchFn(`${base}/v1/capabilities`, {
+          headers: this.getHeaders(),
+        });
+      }
+
+      if (!res.ok) {
+        return {
+          connected: false,
+          reason: `Cyclone gateway returned HTTP ${res.status}`,
+        };
+      }
+
+      const body = (await res.json().catch(() => ({}))) as {
+        status?: string;
+        connected?: boolean;
+        devices?: Array<{ deviceId?: string; device_id?: string; status?: string }>;
+      };
+
+      // Check device-specific readiness
+      if (Array.isArray(body.devices)) {
+        const target = body.devices.find(
+          (d) => (d.deviceId || d.device_id) === this.config?.deviceId
+        );
+        if (!target) {
+          return {
+            connected: false,
+            reason: `Device ${this.config.deviceId} is not registered in Cyclone gateway devices fleet.`,
+          };
+        }
+        const devStatus = target.status ?? "ready";
+        if (devStatus === "offline" || devStatus === "error") {
+          return {
+            connected: false,
+            deviceStatus: devStatus,
+            reason: `Target device ${this.config.deviceId} status is ${devStatus}`,
+          };
+        }
+        return { connected: true, deviceStatus: devStatus };
+      }
+
+      if (body.connected === false || body.status === "offline" || body.status === "error") {
+        return {
+          connected: false,
+          deviceStatus: body.status ?? "offline",
+          reason: `Device status returned ${body.status}`,
+        };
+      }
+
       return { connected: true, deviceStatus: body.status ?? "ready" };
     } catch (err) {
       return {
@@ -115,7 +158,7 @@ export class CycloneScoutSourceAdapter {
     if (!this.config?.gatewayUrl) return [];
     try {
       const base = this.config.gatewayUrl.replace(/\/+$/, "");
-      const res = await this.fetchFn(`${base}/api/v1/devices`, {
+      const res = await this.fetchFn(`${base}/v1/devices`, {
         headers: this.getHeaders(),
       });
       if (!res.ok) return [];
@@ -127,44 +170,128 @@ export class CycloneScoutSourceAdapter {
     }
   }
 
-  async observeFeed(request: { niche: string; budget?: number; sessionId?: string }): Promise<DiscoveredReelItem[]> {
+  async observeFeed(request: {
+    niche: string;
+    budget?: number;
+    sessionId?: string;
+    includeScreenshot?: boolean;
+  }): Promise<DiscoveredReelItem[]> {
     if (!this.config?.gatewayUrl || !this.config?.deviceId) {
       throw new Error("Cyclone Gateway or Device is not configured.");
     }
     const base = this.config.gatewayUrl.replace(/\/+$/, "");
-    const res = await this.fetchFn(`${base}/api/v1/devices/${encodeURIComponent(this.config.deviceId)}/observe`, {
+    const sessionId = request.sessionId || "default-foreground";
+
+    // Cyclone V3.5 MCP contract: POST /v1/capabilities/observe
+    const observePayload = {
+      device_id: this.config.deviceId,
+      session_id: sessionId,
+      mode: "compact",
+      include_screenshot: request.includeScreenshot ?? true,
+      niche: request.niche,
+      budget: request.budget || 5,
+    };
+
+    let res = await this.fetchFn(`${base}/v1/capabilities/observe`, {
       method: "POST",
       headers: this.getHeaders(),
-      body: JSON.stringify({
-        niche: request.niche,
-        budget: request.budget || 5,
-        session_id: request.sessionId,
-      }),
+      body: JSON.stringify(observePayload),
     });
+
+    // Fallback to legacy observe endpoint POST /v1/observe
+    if (!res.ok && res.status === 404) {
+      res = await this.fetchFn(`${base}/v1/observe`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify(observePayload),
+      });
+    }
+
     if (!res.ok) {
       throw new Error(`Failed to observe feed via Cyclone: HTTP ${res.status}`);
     }
-    const body = (await res.json()) as { pageCards?: CyclonePageCard[]; card?: CyclonePageCard };
-    const cards = body.pageCards || (body.card ? [body.card] : []);
+
+    const body = (await res.json()) as {
+      page_card?: CyclonePageCard;
+      page_cards?: CyclonePageCard[];
+      pageCards?: CyclonePageCard[];
+      card?: CyclonePageCard;
+      candidates?: CyclonePageCard[];
+      screenshot?: string;
+      screenshot_url?: string;
+      screenshot_path?: string;
+      screenshot_id?: string;
+      timestamp?: string;
+      observed_at?: string;
+      session_id?: string;
+    };
+
+    const cards: CyclonePageCard[] = [];
+    if (body.page_cards) cards.push(...body.page_cards);
+    if (body.pageCards) cards.push(...body.pageCards);
+    if (body.candidates) cards.push(...body.candidates);
+    if (body.page_card) cards.push(body.page_card);
+    if (body.card) cards.push(body.card);
+
+    const observedAt = body.observed_at || body.timestamp || new Date().toISOString();
+    const screenshotUrl = body.screenshot_url || body.screenshot;
+    const screenshotArtifactId = body.screenshot_id || (body.screenshot_path ? `cyclone-${body.screenshot_path}` : undefined);
+
     const reels: DiscoveredReelItem[] = [];
     for (const c of cards) {
-      const reel = this.parsePageCardToReel(c, request.niche);
+      const reel = this.parsePageCardToReel(c, request.niche, {
+        sessionId: body.session_id || sessionId,
+        observedAt,
+        screenshotUrl,
+        screenshotArtifactId,
+      });
       if (reel) reels.push(reel);
     }
     return reels;
   }
 
-  async captureEvidence(request?: { sessionId?: string }): Promise<{ screenshotUrl?: string; artifactId?: string } | null> {
+  async captureEvidence(request?: { sessionId?: string }): Promise<{
+    screenshotUrl?: string;
+    artifactId?: string;
+    sessionId?: string;
+    deviceId?: string;
+    timestamp?: string;
+  } | null> {
     if (!this.config?.gatewayUrl || !this.config?.deviceId) return null;
     try {
       const base = this.config.gatewayUrl.replace(/\/+$/, "");
-      const res = await this.fetchFn(`${base}/api/v1/devices/${encodeURIComponent(this.config.deviceId)}/screenshot`, {
+      const sessionId = request?.sessionId || "default-foreground";
+      // Cyclone V3.5 MCP contract: POST /v1/capabilities/observe with include_screenshot: true
+      const res = await this.fetchFn(`${base}/v1/capabilities/observe`, {
         method: "POST",
         headers: this.getHeaders(),
-        body: JSON.stringify({ session_id: request?.sessionId }),
+        body: JSON.stringify({
+          device_id: this.config.deviceId,
+          session_id: sessionId,
+          mode: "compact",
+          include_screenshot: true,
+        }),
       });
+
       if (!res.ok) return null;
-      return (await res.json()) as { screenshotUrl?: string; artifactId?: string };
+      const body = (await res.json()) as {
+        screenshot?: string;
+        screenshot_url?: string;
+        screenshot_id?: string;
+        screenshot_path?: string;
+        session_id?: string;
+        device_id?: string;
+        observed_at?: string;
+        timestamp?: string;
+      };
+
+      return {
+        screenshotUrl: body.screenshot_url || body.screenshot,
+        artifactId: body.screenshot_id || body.screenshot_path,
+        sessionId: body.session_id || sessionId,
+        deviceId: body.device_id || this.config.deviceId,
+        timestamp: body.observed_at || body.timestamp || new Date().toISOString(),
+      };
     } catch {
       return null;
     }
@@ -174,7 +301,16 @@ export class CycloneScoutSourceAdapter {
    * Parses accessibility tree nodes (Page Card) captured by the device into structured Reel items.
    * Truth-first: unobserved permalinks, post dates, and view counts are strictly undefined.
    */
-  parsePageCardToReel(card: CyclonePageCard, niche: string): DiscoveredReelItem | null {
+  parsePageCardToReel(
+    card: CyclonePageCard,
+    niche: string,
+    context?: {
+      sessionId?: string;
+      observedAt?: string;
+      screenshotUrl?: string;
+      screenshotArtifactId?: string;
+    }
+  ): DiscoveredReelItem | null {
     const textNodes: string[] = [];
     collectText(card, textNodes);
 
@@ -240,6 +376,10 @@ export class CycloneScoutSourceAdapter {
       discoveredAt: new Date().toISOString(),
       discoveryTier: "cyclone_scout",
       scoutDeviceId: this.config?.deviceId,
+      scoutSessionId: context?.sessionId,
+      scoutObservationTime: context?.observedAt,
+      screenshotUrl: context?.screenshotUrl,
+      screenshotArtifactId: context?.screenshotArtifactId,
       metrics: {
         views: views !== undefined && views > 0 ? views : undefined,
         likes: likes !== undefined && likes > 0 ? likes : undefined,
@@ -252,6 +392,7 @@ export class CycloneScoutSourceAdapter {
     const headers: Record<string, string> = {
       Accept: "application/json",
       "Content-Type": "application/json",
+      "X-Cyclone-Protocol": "cyclone.gateway.capability.v1",
     };
     if (this.config?.apiKey) {
       headers["Authorization"] = `Bearer ${this.config.apiKey}`;

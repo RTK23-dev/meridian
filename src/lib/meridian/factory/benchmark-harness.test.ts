@@ -62,8 +62,9 @@ test("D.5 Acceptance 4: Default prior is labeled seed_prior and does not claim v
   });
 
   assert.equal(rating.conceptStrength.methodState, "seed_prior");
-  assert.equal(rating.observedBreakout.confidence, 0.45); // low confidence when control set is missing
-  assert.equal(rating.ratingStatus, "LOW_EVIDENCE");
+  assert.equal(rating.observedBreakout.confidence, undefined); // no fabricated confidence until calibrated
+  assert.equal(rating.observedBreakout.uncalibratedPrior, true);
+  assert.equal(rating.ratingStatus, "INSUFFICIENT_EVIDENCE");
 });
 
 test("D.5 Acceptance 5: Missing ROAS never becomes 1.0 observed", () => {

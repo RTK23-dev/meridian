@@ -11,7 +11,10 @@ import type {
   JevDecisionRequest,
   JevDecisionResponse,
   JevQuestionSpec,
+  JevProviderRouter,
+  JevRoutingPolicy,
 } from "./types.ts";
+import { jevRouter } from "./router.ts";
 
 export type BatchJevRecord = {
   id: string;
@@ -30,8 +33,9 @@ export type BatchJevInput = {
 };
 
 export async function executeBatchJev(
-  client: JevClient,
+  clientOrRouter: JevClient | JevProviderRouter = jevRouter,
   input: BatchJevInput,
+  policy?: JevRoutingPolicy,
 ): Promise<JevDecisionResponse[]> {
   const maxBatchSize = input.maxBatchSize ?? 10;
   const batches: BatchJevRecord[][] = [];
@@ -50,7 +54,7 @@ export async function executeBatchJev(
       },
       questions: input.questions,
     };
-    const res = await client.decide(singleReq);
+    const res = await (clientOrRouter as any).decide(singleReq, policy);
     return [res];
   }
 
@@ -66,7 +70,7 @@ export async function executeBatchJev(
       questions: input.questions,
     };
 
-    const res = await client.decide(req);
+    const res = await (clientOrRouter as any).decide(req, policy);
     responses.push(res);
   }
 

@@ -144,6 +144,27 @@ export async function pollProductionJobs(
         } catch {
           // Download failed
         }
+      } else if (polledJob.outputArtifactId && polledJob.outputArtifactId.startsWith("data:")) {
+        try {
+          const match = polledJob.outputArtifactId.match(/^data:([^;]+);base64,(.+)$/);
+          if (match && match[2]) {
+            const buf = Buffer.from(match[2], "base64");
+            if (buf.byteLength > 0) {
+              videoBytes = new Uint8Array(buf);
+            }
+          }
+        } catch {
+          // Data URI decode failed
+        }
+      } else if (polledJob.metadata?.videoBytesBase64 && typeof polledJob.metadata.videoBytesBase64 === "string") {
+        try {
+          const buf = Buffer.from(polledJob.metadata.videoBytesBase64, "base64");
+          if (buf.byteLength > 0) {
+            videoBytes = new Uint8Array(buf);
+          }
+        } catch {
+          // Metadata Base64 decode failed
+        }
       } else if (polledJob.outputArtifactId && row.provider === "manual_cloud") {
         try {
           const driveFile = await drive.get(polledJob.outputArtifactId);
@@ -235,22 +256,36 @@ export async function pollProductionJobs(
 
         result.rendered++;
       } else {
-        // Rendered reported by provider without binary bytes downloaded immediately
-        await sql`
-          update production_jobs
-          set status = 'COMPLETED',
-              artifact_id = ${polledJob.outputArtifactId || null},
-              last_polled_at = now(),
-              updated_at = now()
-          where id = ${row.id}
-        `;
-        await sql`
-          update assets
-          set media_status = 'completed',
-              lifecycle = 'stored'
-          where generation_run_id = ${typeof parsedInput.runId === "string" ? parsedInput.runId : ""}
-        `;
-        result.rendered++;
+        // Missing bytes: do NOT mark as COMPLETED.
+        const newAttempts = (row.attempt_count || 0) + 1;
+        if (newAttempts < 5) {
+          await sql`
+            update production_jobs
+            set status = 'WAITING_FOR_ARTIFACT',
+                attempt_count = ${newAttempts},
+                last_polled_at = now(),
+                next_poll_at = now() + (least(${newAttempts}, 6) * interval '5 seconds'),
+                updated_at = now()
+            where id = ${row.id}
+          `;
+          result.polled++;
+        } else {
+          await sql`
+            update production_jobs
+            set status = 'FAILED',
+                error_code = 'MISSING_ARTIFACT_BYTES',
+                last_polled_at = now(),
+                updated_at = now()
+            where id = ${row.id}
+          `;
+          await sql`
+            update assets
+            set media_status = 'failed',
+                lifecycle = 'rejected'
+            where generation_run_id = ${typeof parsedInput.runId === "string" ? parsedInput.runId : ""}
+          `;
+          result.failed++;
+        }
       }
     } else if (polledJob.status === "FAILED") {
       await sql`

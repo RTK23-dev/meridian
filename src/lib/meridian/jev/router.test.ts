@@ -293,3 +293,140 @@ test("JevRouter COMPARE mode preserves both provider answers and reports agreeme
   assert.equal(res.comparison.agreementRate, 1.0);
   assert.equal(res.comparison.comparedResponse.provider, "openrouter");
 });
+
+test("Real application path (analyzeEvidenceWithJev) honors direct TypeSafe, OpenRouter, auto-fallback, and compare modes", async () => {
+  const { analyzeEvidenceWithJev } = await import("../research/analyzer.ts");
+  const { jevRegistry } = await import("./registry.ts");
+
+  jevRegistry.register({
+    id: "org_hook_intent",
+    version: "1.0",
+    type: "noul",
+    instructions: "Does this hook immediately declare intent?",
+    criteria: { true: "yes", false: "no" },
+    evidenceRequirements: ["transcriptSummary"],
+  });
+
+  const bundle: any = {
+    id: "bundle-test-456",
+    organizationId: "org-test",
+    brandId: "brand-test",
+    source: { platform: "instagram", externalId: "post-123" },
+    content: { title: "Fitness coaching ad hook", type: "video" },
+    availableEvidence: ["transcriptSummary"],
+    evidenceRefs: [],
+  };
+
+  const mockDirectProvider: JevProvider = {
+    id: "typesafe_direct",
+    capabilities: () => ({ primitives: ["noul", "choice", "score"], batchDecisions: true, explanation: false }),
+    health: async () => ({ status: "READY" }),
+    decide: async () => ({
+      runId: "run-direct-app",
+      model: "typesafe/jev-1.13",
+      provider: "typesafe_direct",
+      inputHash: "hash-d",
+      cached: false,
+      latencyMs: 12,
+      answers: {
+        org_hook_intent: {
+          questionId: "org_hook_intent",
+          questionVersion: "1.0",
+          model: "typesafe/jev-1.13",
+          provider: "typesafe_direct",
+          status: "answered",
+          answer: 0.92,
+          noul: 0.92,
+          evidenceRefs: [],
+          evaluatedAt: new Date().toISOString(),
+        },
+      },
+    }),
+  };
+
+  const mockOpenRouterProvider: JevProvider = {
+    id: "openrouter",
+    capabilities: () => ({ primitives: ["noul", "choice", "score"], batchDecisions: true, explanation: false }),
+    health: async () => ({ status: "READY" }),
+    decide: async () => ({
+      runId: "run-openrouter-app",
+      model: "typesafe/jev-1.13",
+      provider: "openrouter",
+      inputHash: "hash-o",
+      cached: false,
+      latencyMs: 22,
+      answers: {
+        org_hook_intent: {
+          questionId: "org_hook_intent",
+          questionVersion: "1.0",
+          model: "typesafe/jev-1.13",
+          provider: "openrouter",
+          status: "answered",
+          answer: 0.88,
+          noul: 0.88,
+          evidenceRefs: [],
+          evaluatedAt: new Date().toISOString(),
+        },
+      },
+    }),
+  };
+
+  const appRouter = new JevRouter({
+    typesafeProvider: mockDirectProvider,
+    openrouterProvider: mockOpenRouterProvider,
+  });
+
+  // 1. Direct TypeSafe mode
+  const resDirect = await analyzeEvidenceWithJev({
+    bundle,
+    questionIds: ["org_hook_intent"],
+    router: appRouter,
+    policy: { mode: "typesafe_direct" },
+  });
+  assert.equal(resDirect.provider, "typesafe_direct");
+  assert.equal(resDirect.answers[0].noul, 0.92);
+
+  // 2. OpenRouter mode
+  const resOpenRouter = await analyzeEvidenceWithJev({
+    bundle,
+    questionIds: ["org_hook_intent"],
+    router: appRouter,
+    policy: { mode: "openrouter" },
+  });
+  assert.equal(resOpenRouter.provider, "openrouter");
+  assert.equal(resOpenRouter.answers[0].noul, 0.88);
+
+  // 3. Auto-fallback mode (when TypeSafe is unconfigured)
+  const unconfiguredDirect: JevProvider = {
+    id: "typesafe_direct",
+    capabilities: () => ({ primitives: ["noul", "choice", "score"], batchDecisions: true, explanation: false }),
+    health: async () => ({ status: "NOT_CONFIGURED", message: "Missing key" }),
+    decide: async () => { throw new Error("Should not be called"); },
+  };
+  const fallbackRouter = new JevRouter({
+    typesafeProvider: unconfiguredDirect,
+    openrouterProvider: mockOpenRouterProvider,
+  });
+  const resFallback = await analyzeEvidenceWithJev({
+    bundle,
+    questionIds: ["org_hook_intent"],
+    router: fallbackRouter,
+    policy: { mode: "auto", preferredProvider: "typesafe_direct", fallbackEnabled: true },
+  });
+  assert.equal(resFallback.provider, "openrouter");
+  assert.equal(resFallback.fallbackFrom, "typesafe_direct");
+  assert.equal(resFallback.answers[0].noul, 0.88);
+
+  // 4. Comparison mode
+  const resCompare = await analyzeEvidenceWithJev({
+    bundle,
+    questionIds: ["org_hook_intent"],
+    router: appRouter,
+    policy: { mode: "compare", preferredProvider: "typesafe_direct" },
+  });
+  assert.equal(resCompare.provider, "typesafe_direct");
+  assert.ok(resCompare.comparison);
+  assert.equal(resCompare.comparison.comparedWith, "openrouter");
+  assert.equal(resCompare.comparison.comparedResponse.provider, "openrouter");
+});
+
