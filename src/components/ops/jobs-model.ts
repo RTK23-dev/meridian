@@ -78,11 +78,7 @@ export function attemptsLabel(attempts: number, maxAttempts: number): string {
   return `${attempts} of ${maxAttempts > 0 ? maxAttempts : "unknown"}`;
 }
 
-/** A stored timestamp in this browser's time zone, or "Unknown" when the value is missing or unreadable. */
-export function timestampLabel(iso: string | null | undefined): string {
-  if (!iso || !Number.isFinite(Date.parse(iso))) return "Unknown";
-  return new Date(iso).toLocaleString();
-}
+export { pageSpan, timestampLabel } from "./format";
 
 /**
  * Which row actions show. The server flags say whether the job is in a state that allows the action. Admin is the screen's
@@ -115,12 +111,4 @@ export function payloadLines(fields: readonly { name: string; kind: string }[]):
 
 export function shortJobId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
-}
-
-/** The visible range and page count for a page of results. Totals of zero show zero rows and one page. */
-export function pageSpan(page: number, pageSize: number, total: number): { first: number; last: number; pageCount: number } {
-  const size = pageSize > 0 ? pageSize : 1;
-  const first = total === 0 ? 0 : page * size + 1;
-  const last = Math.min(total, (page + 1) * size);
-  return { first, last, pageCount: Math.max(1, Math.ceil(total / size)) };
 }
