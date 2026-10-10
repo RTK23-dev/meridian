@@ -29,6 +29,12 @@ import {
 } from "@/lib/meridian/factory/pipeline";
 
 export type EditorTab = "flow" | "volume" | "grading" | "prompts";
+export const TAB_LABEL: Record<EditorTab, string> = {
+  flow: "Flow",
+  volume: "Volume and engine",
+  grading: "Grading levels",
+  prompts: "System prompts",
+};
 export type PromptKey = keyof PipelinePrompts;
 export type GradingKey = "winnerScoreMin" | "pBeatMin" | "retention3sMin" | "confidenceMin";
 export type NumericRange = { min: number; max: number };
