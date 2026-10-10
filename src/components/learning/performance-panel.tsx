@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import {
   Button, Card, EmptyState, ErrorState, Field, SelectInput, Skeleton, Stat, TextInput,
 } from "@/components/ui";
@@ -13,7 +15,10 @@ import { userScopedQueryKey } from "@/lib/query/keys";
 import { ChartFigure, ValueBarChart, ValueLineChart, ValueTable } from "./charts";
 import { hasSample, formatSignedPercent } from "./lift";
 import { NOT_ENOUGH_RESULTS, PERFORMANCE_METRICS, formatImpressions, formatMetric, groupByCreative, groupByDay, sumRows, type PerformanceMetric } from "./metrics";
-import { parseTelemetryForm, type TelemetryFormFields } from "./telemetry-input";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { telemetryFormSchema, telemetryPayload, type TelemetryFormFields } from "./telemetry-input";
 
 const ROW_LIMIT = 10_000;
 const TELEMETRY_SUMMARY_LIMIT = 100;
@@ -224,42 +229,44 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
 
 function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; onSaved: (message: string) => void; onCancel: () => void }) {
   const recordTelemetry = useRecordTelemetry(brandId);
-  const [fields, setFields] = useState<TelemetryFormFields>({
-    platform: "", sourceType: "organic", creativeId: "", views: "", hookRetention3s: "", completionRate: "", engagements: "", shares: "", hookType: "", angle: "",
-  });
   const [formError, setFormError] = useState<PlainError | null>(null);
+  const [cancelRequested, setCancelRequested] = useState(false);
+  const form = useForm<TelemetryFormFields>({
+    resolver: zodResolver(telemetryFormSchema),
+    defaultValues: { platform: "", sourceType: "organic", creativeId: "", views: "", hookRetention3s: "", completionRate: "", engagements: "", shares: "", hookType: "", angle: "" },
+    mode: "onBlur",
+  });
+  const { register, formState } = form;
+  const dirty = formState.isDirty;
 
-  function update<K extends keyof TelemetryFormFields>(key: K, value: TelemetryFormFields[K]) {
-    setFields((current) => ({ ...current, [key]: value }));
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = parseTelemetryForm(fields);
-    if (!parsed.ok) {
-      setFormError({ message: parsed.message, raw: "" });
-      return;
-    }
+  async function submit(values: TelemetryFormFields) {
     setFormError(null);
     try {
-      await recordTelemetry.mutateAsync(parsed.payload);
+      await recordTelemetry.mutateAsync(telemetryPayload(values));
       onSaved("Recorded new performance observation into telemetry store.");
     } catch (error) {
       setFormError(plainError(error));
     }
   }
 
-  return <form id="telemetry-form" onSubmit={submit} aria-labelledby="telemetry-form-title" className="space-y-6 rounded-lg border border-border bg-surface p-5">
+  // Cancel closes the row. A row with typed values asks first.
+  function requestCancel() {
+    if (dirty) setCancelRequested(true);
+    else onCancel();
+  }
+
+  return <form id="telemetry-form" onSubmit={form.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} noValidate aria-labelledby="telemetry-form-title" className="space-y-6 rounded-lg border border-border bg-surface p-5">
+    <UnsavedChangesGuard dirty={dirty} />
     <div className="space-y-1">
-      <h3 id="telemetry-form-title" className="text-base font-semibold">Add a telemetry row</h3>
+      <h3 id="telemetry-form-title" className="text-base font-semibold text-fg">Add a telemetry row</h3>
       <p className="text-sm text-fg-muted">Enter numbers you measured. Leave an optional field blank if you do not have it; it is stored as unknown, not as 0.</p>
     </div>
     {formError ? <PlainErrorMessage message={formError.message} raw={formError.raw} /> : null}
 
     <fieldset className="grid gap-4 sm:grid-cols-3">
       <legend className="mb-2 text-sm font-semibold text-fg">Where it ran</legend>
-      <Field label="Platform" required>
-        <SelectInput value={fields.platform} required onChange={(event) => update("platform", event.target.value)}>
+      <Field label="Platform" required error={formState.errors.platform?.message}>
+        <SelectInput {...register("platform")} required>
           <option value="">Choose a platform</option>
           <option value="tiktok">TikTok</option>
           <option value="instagram">Instagram</option>
@@ -269,40 +276,40 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
         </SelectInput>
       </Field>
       <Field label="Source type">
-        <SelectInput value={fields.sourceType} onChange={(event) => update("sourceType", event.target.value as TelemetryFormFields["sourceType"])}>
+        <SelectInput {...register("sourceType")}>
           <option value="organic">Organic social</option>
           <option value="paid">Paid campaign</option>
           <option value="hybrid">Hybrid / whitelisted</option>
         </SelectInput>
       </Field>
       <Field label="Creative ID (optional)">
-        <TextInput value={fields.creativeId} onChange={(event) => update("creativeId", event.target.value)} placeholder="cr_..." />
+        <TextInput {...register("creativeId")} placeholder="cr_..." />
       </Field>
     </fieldset>
 
     <fieldset className="grid gap-4 sm:grid-cols-3">
       <legend className="mb-2 text-sm font-semibold text-fg">Measured results</legend>
-      <Field label="Views" required>
-        <TextInput type="number" inputMode="numeric" value={fields.views} onChange={(event) => update("views", event.target.value)} required />
+      <Field label="Views" required error={formState.errors.views?.message}>
+        <TextInput {...register("views")} type="number" inputMode="numeric" required />
       </Field>
-      <Field label="3-second hook retention (0 to 1)" required>
-        <TextInput type="number" step="0.01" inputMode="decimal" value={fields.hookRetention3s} onChange={(event) => update("hookRetention3s", event.target.value)} required />
+      <Field label="3-second hook retention (0 to 1)" required error={formState.errors.hookRetention3s?.message}>
+        <TextInput {...register("hookRetention3s")} type="number" step="0.01" inputMode="decimal" required />
       </Field>
-      <Field label="Completion rate (0 to 1, optional)">
-        <TextInput type="number" step="0.01" inputMode="decimal" value={fields.completionRate} onChange={(event) => update("completionRate", event.target.value)} />
+      <Field label="Completion rate (0 to 1, optional)" error={formState.errors.completionRate?.message}>
+        <TextInput {...register("completionRate")} type="number" step="0.01" inputMode="decimal" />
       </Field>
-      <Field label="Engagements (optional)">
-        <TextInput type="number" inputMode="numeric" value={fields.engagements} onChange={(event) => update("engagements", event.target.value)} />
+      <Field label="Engagements (optional)" error={formState.errors.engagements?.message}>
+        <TextInput {...register("engagements")} type="number" inputMode="numeric" />
       </Field>
-      <Field label="Shares (optional)">
-        <TextInput type="number" inputMode="numeric" value={fields.shares} onChange={(event) => update("shares", event.target.value)} />
+      <Field label="Shares (optional)" error={formState.errors.shares?.message}>
+        <TextInput {...register("shares")} type="number" inputMode="numeric" />
       </Field>
     </fieldset>
 
     <fieldset className="grid gap-4 sm:grid-cols-2">
       <legend className="mb-2 text-sm font-semibold text-fg">Creative attributes</legend>
       <Field label="Hook type">
-        <SelectInput value={fields.hookType} onChange={(event) => update("hookType", event.target.value)}>
+        <SelectInput {...register("hookType")}>
           <option value="">Not recorded</option>
           <option value="contrarian">Contrarian</option>
           <option value="question">Question</option>
@@ -313,13 +320,20 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
         </SelectInput>
       </Field>
       <Field label="Creative angle (optional)">
-        <TextInput value={fields.angle} onChange={(event) => update("angle", event.target.value)} placeholder="founder_story, how_to..." />
+        <TextInput {...register("angle")} placeholder="founder_story, how_to..." />
       </Field>
     </fieldset>
 
+    <UnsavedChangesBar
+      dirty={dirty}
+      subject="telemetry row"
+      confirming={cancelRequested}
+      onConfirmingChange={setCancelRequested}
+      onDiscard={onCancel}
+    />
     <div className="flex flex-wrap justify-end gap-2">
-      <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
-      <Button type="submit" disabled={recordTelemetry.isPending}>{recordTelemetry.isPending ? "Recording…" : "Save telemetry row"}</Button>
+      <Button type="button" variant="secondary" onClick={requestCancel}>Cancel</Button>
+      <Button type="submit" disabled={recordTelemetry.isPending || formState.isSubmitting}>{recordTelemetry.isPending || formState.isSubmitting ? "Recording…" : "Save telemetry row"}</Button>
     </div>
   </form>;
 }

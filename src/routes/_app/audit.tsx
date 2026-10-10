@@ -1,8 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { useWorkspace } from "@/components/workspace";
-import { Button, Panel, Skeleton, TextInput } from "@/components/ui";
+import { Button, Field, Panel, Skeleton, TextInput } from "@/components/ui";
+import { auditFilterSchema, type AuditFilterInput } from "@/components/forms/client-schemas";
+import { submitOnShortcut } from "@/components/forms/shortcut";
 import { PlainErrorState } from "@/components/plain-error";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listAuditPage } from "@/lib/meridian/observability/actions";
@@ -12,13 +16,14 @@ export const Route = createFileRoute("/_app/audit")({ staticData: { pageTitle: "
 
 type Filters = { actor: string; action: string; brandId: string; from: string; to: string };
 const EMPTY_FILTERS: Filters = { actor: "", action: "", brandId: "", from: "", to: "" };
+const EMPTY_DRAFT: AuditFilterInput = { ...EMPTY_FILTERS };
 
 function AuditPage() {
   const { user } = useCurrentUserState();
   const { data: workspace } = useWorkspace();
   const organizationId = workspace?.active?.id ?? "";
-  const [draft, setDraft] = useState(EMPTY_FILTERS);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const filterForm = useForm<AuditFilterInput>({ resolver: zodResolver(auditFilterSchema), defaultValues: EMPTY_DRAFT, mode: "onBlur" });
   const [page, setPage] = useState(0);
   const query = useQuery({
     queryKey: userScopedQueryKey(user?.id, [...qk.audit(organizationId), filters, page]),
@@ -30,21 +35,21 @@ function AuditPage() {
 
   const data = query.data;
   const pageCount = Math.max(1, Math.ceil(data.total / 50));
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const errors = filterForm.formState.errors;
+  function submit(values: AuditFilterInput) {
     setPage(0);
-    setFilters({ actor: draft.actor.trim(), action: draft.action.trim(), brandId: draft.brandId.trim(), from: draft.from, to: draft.to });
+    setFilters({ actor: values.actor.trim(), action: values.action.trim(), brandId: values.brandId.trim(), from: values.from, to: values.to });
   }
 
   return <div className="space-y-6">
     <header><p className="text-xs font-semibold uppercase tracking-widest text-brass">Workspace operations</p><h1 className="font-display text-4xl">Audit log</h1><p className="mt-2 max-w-2xl text-muted">Workspace administrative history. Entries are scoped to this workspace and shown newest first.</p></header>
-    <form onSubmit={submit} className="grid gap-3 rounded-lg border border-line bg-panel p-4 sm:grid-cols-2 xl:grid-cols-5">
-      <label className="text-sm">Actor name or ID<TextInput value={draft.actor} onChange={(event) => setDraft({ ...draft, actor: event.target.value })} /></label>
-      <label className="text-sm">Action<TextInput value={draft.action} onChange={(event) => setDraft({ ...draft, action: event.target.value })} placeholder="decision.approved" /></label>
-      <label className="text-sm">Brand ID<TextInput value={draft.brandId} onChange={(event) => setDraft({ ...draft, brandId: event.target.value })} /></label>
-      <label className="text-sm">From<TextInput type="date" value={draft.from} onChange={(event) => setDraft({ ...draft, from: event.target.value })} /></label>
-      <label className="text-sm">To<TextInput type="date" value={draft.to} onChange={(event) => setDraft({ ...draft, to: event.target.value })} /></label>
-      <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-5"><Button type="submit">Apply filters</Button><Button type="button" variant="quiet" disabled={!data.entries.length} onClick={() => downloadCsv(data.entries)}>Download this page as CSV</Button></div>
+    <form onSubmit={filterForm.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} noValidate className="grid gap-3 rounded-lg border border-line bg-panel p-4 sm:grid-cols-2 xl:grid-cols-5">
+      <Field label="Actor name or ID" error={errors.actor?.message}><TextInput {...filterForm.register("actor")} maxLength={100} /></Field>
+      <Field label="Action" error={errors.action?.message}><TextInput {...filterForm.register("action")} maxLength={100} placeholder="decision.approved" /></Field>
+      <Field label="Brand ID" error={errors.brandId?.message}><TextInput {...filterForm.register("brandId")} /></Field>
+      <Field label="From" error={errors.from?.message}><TextInput {...filterForm.register("from")} type="date" /></Field>
+      <Field label="To" error={errors.to?.message}><TextInput {...filterForm.register("to")} type="date" /></Field>
+      <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-5"><Button type="submit" disabled={filterForm.formState.isSubmitting}>Apply filters</Button><Button type="button" variant="quiet" disabled={!data.entries.length} onClick={() => downloadCsv(data.entries)}>Download this page as CSV</Button></div>
     </form>
     <p className="text-sm text-muted">{data.total.toLocaleString()} matching entr{data.total === 1 ? "y" : "ies"} · page {page + 1} of {pageCount}</p>
     {data.entries.length === 0 ? <Panel>No audit entries match these filters.</Panel> : <div className="overflow-x-auto rounded-lg border border-line"><table className="w-full min-w-[58rem] text-left text-sm"><thead className="bg-paper text-muted"><tr><th className="px-4 py-3 font-medium">When</th><th className="px-4 py-3 font-medium">Actor</th><th className="px-4 py-3 font-medium">Action</th><th className="px-4 py-3 font-medium">Brand</th><th className="px-4 py-3 font-medium">Object</th><th className="px-4 py-3 font-medium">Metadata</th></tr></thead><tbody>{data.entries.map((entry) => <tr key={entry.id} className="border-t border-line align-top"><td className="whitespace-nowrap px-4 py-3">{new Date(entry.createdAt).toLocaleString()}</td><td className="px-4 py-3">{entry.actorName || entry.actorId}</td><td className="px-4 py-3">{entry.action}</td><td className="px-4 py-3">{entry.brandName || "Workspace"}</td><td className="px-4 py-3">{entry.objectType} · <span className="font-mono text-xs">{entry.objectId}</span></td><td className="max-w-64 break-words px-4 py-3 text-xs text-muted">{formatMetadata(entry.metadata)}</td></tr>)}</tbody></table></div>}

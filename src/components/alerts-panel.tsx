@@ -1,7 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { refreshAlerts, saveDeliveryTarget } from "@/lib/meridian/alerts/actions";
-import { Button, ErrorState, Panel, Skeleton, TextInput } from "@/components/ui";
+import { Button, ErrorState, Field, Panel, Skeleton, TextInput } from "@/components/ui";
 import { PlainErrorNotice } from "@/components/plain-error";
+import { FormDiscardBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { deliveryTargetSchema, type DeliveryTargetInput } from "@/components/forms/client-schemas";
 import { StatusText } from "@/components/status";
 import { qk } from "@/lib/query/keys";
 import { useAcknowledgeAlert, useAlertsQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
@@ -35,6 +41,7 @@ export function AlertsPanel({ organizationId }: { organizationId: string }) {
   });
   const pending = check.isPending || saveTarget.isPending;
   const error = [check.error, saveTarget.error, acknowledge.error].find(Boolean);
+  const targetForm = useForm<DeliveryTargetInput>({ resolver: zodResolver(deliveryTargetSchema), defaultValues: { url: "" }, mode: "onBlur" });
 
   // A failed read is shown as a failure. It is never shown as "not configured", because that would be a claim about the target.
   if (alerts.isError && !data) {
@@ -46,6 +53,7 @@ export function AlertsPanel({ organizationId }: { organizationId: string }) {
 
   return (
     <Panel>
+      <UnsavedChangesGuard dirty={targetForm.formState.isDirty} />
       <h2 className="font-display text-2xl">Alerts</h2>
       <p className="mt-2 text-sm text-muted">
         These are in-app records. External paging is {data.target}. A webhook is queued for the worker only after you save an https target. Nothing is marked delivered until that target accepts it.
@@ -82,19 +90,18 @@ export function AlertsPanel({ organizationId }: { organizationId: string }) {
           </li>
         ))}
       </ul>
+      {/* noValidate: the rule is shown next to the field in plain words, not by the browser's own popup. */}
       <form
         className="mt-4 flex flex-wrap items-end gap-3"
-        onSubmit={(event: FormEvent<HTMLFormElement>) => {
-          event.preventDefault();
-          const url = String(new FormData(event.currentTarget).get("url") ?? "");
-          void saveTarget.mutateAsync(url).catch(() => undefined);
-        }}
+        noValidate
+        onSubmit={targetForm.handleSubmit((values) => { void saveTarget.mutateAsync(values.url).catch(() => undefined); })}
+        onKeyDown={(event) => submitOnShortcut(event)}
       >
-        <label className="block min-w-64 flex-1 text-sm font-semibold">
-          Webhook URL
-          <TextInput name="url" type="url" placeholder="https://example.com/alerts" className="mt-1" />
-        </label>
-        <Button type="submit" variant="quiet" disabled={pending}>Save target</Button>
+        <Field label="Webhook URL" error={targetForm.formState.errors.url?.message} className="min-w-64 flex-1">
+          <TextInput {...targetForm.register("url")} type="url" placeholder="https://example.com/alerts" />
+        </Field>
+        <Button type="submit" variant="quiet" disabled={pending || targetForm.formState.isSubmitting}>{pending || targetForm.formState.isSubmitting ? "Saving…" : "Save target"}</Button>
+        <FormDiscardBar dirty={targetForm.formState.isDirty} subject="webhook target" onDiscard={() => targetForm.reset({ url: "" })} className="basis-full" />
       </form>
     </Panel>
   );
