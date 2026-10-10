@@ -1,5 +1,10 @@
-import { useId, useState } from "react";
+import { useId } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, TextArea } from "@/components/ui";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { copy, providerLabel, serverCodeMessage, statusLabel } from "@/lib/copy";
 import { cn } from "@/lib/cn";
@@ -28,6 +33,14 @@ export type PublishChannel = {
 
 const CAPTION_MAX = 1000;
 
+/** distribution publish: at least one destination, and the caption is trimmed and cut at 1000 characters. */
+const publishFormSchema = z.object({
+  channelIds: z.array(z.string()).min(1, "Select at least one destination channel."),
+  caption: z.string().trim().max(CAPTION_MAX, `Use ${CAPTION_MAX} characters or fewer.`),
+});
+
+type PublishFormValues = z.output<typeof publishFormSchema>;
+
 type PublishDialogProps = {
   target: PublishTarget | null;
   channels: readonly PublishChannel[];
@@ -42,20 +55,27 @@ type PublishDialogProps = {
  * be chosen. The parent remounts the dialog for each opening, so the selection and caption start from the stored values.
  */
 export function PublishDialog({ target, channels, pending, results, onClose, onConfirm }: PublishDialogProps) {
-  const [selected, setSelected] = useState<string[]>(() => channels.filter((channel) => channel.connected).map((channel) => channel.id));
-  const [caption, setCaption] = useState(target?.defaultCaption ?? "");
+  const defaults = { channelIds: channels.filter((channel) => channel.connected).map((channel) => channel.id), caption: target?.defaultCaption ?? "" };
+  const form = useForm<{ channelIds: string[]; caption: string }, unknown, PublishFormValues>({
+    resolver: zodResolver(publishFormSchema),
+    defaultValues: defaults,
+    mode: "onChange",
+  });
+  const { register, formState: { errors, isDirty } } = form;
+  const selected = form.watch("channelIds");
   const descriptionId = useId();
   const captionId = useId();
   const frame = frameShape(target?.width, target?.height);
   const names = new Map(channels.map((channel) => [channel.id, channel.name] as const));
   const selectedNames = selected.map((id) => names.get(id) ?? id);
-
-  function toggle(id: string, on: boolean) {
-    setSelected((current) => on ? [...new Set([...current, id])] : current.filter((item) => item !== id));
-  }
+  const dismiss = useDirtyDismiss({
+    dirty: isDirty && !!target,
+    onOpenChange: (open) => { if (!open && !pending) onClose(); },
+    onDiscard: () => form.reset(defaults),
+  });
 
   return (
-    <Dialog open={!!target} onOpenChange={(open) => { if (!open && !pending) onClose(); }}>
+    <Dialog open={!!target} onOpenChange={dismiss.requestOpenChange}>
       {target ? (
         <DialogContent aria-describedby={descriptionId} className="max-w-2xl">
           <DialogTitle className="font-display text-2xl">Publish this variant</DialogTitle>
@@ -63,6 +83,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
             Choose where it goes. Nothing is sent to a destination you do not select. Each destination returns its own receipt.
           </DialogDescription>
 
+          <form noValidate onSubmit={form.handleSubmit((values) => onConfirm(values.channelIds, values.caption))} className="contents">
           <div className="mt-4 space-y-4">
             {(["paid", "organic"] as const).map((type) => {
               const group = channels.filter((channel) => channel.type === type);
@@ -71,8 +92,8 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
                 <fieldset key={type} className="space-y-2">
                   <legend className="text-sm font-semibold">{type === "paid" ? "Paid advertising" : "Organic social"}</legend>
                   {group.map((channel) => {
-                    const checked = selected.includes(channel.id);
                     const reasonId = `${captionId}-${channel.id}-reason`;
+                    const checked = selected.includes(channel.id);
                     return (
                       <label
                         key={channel.id}
@@ -84,11 +105,11 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
                       >
                         <input
                           type="checkbox"
+                          value={channel.id}
+                          {...register("channelIds")}
                           className="mt-1 size-4 shrink-0"
-                          checked={checked}
                           disabled={!channel.connected || pending}
                           aria-describedby={channel.connected ? undefined : reasonId}
-                          onChange={(event) => toggle(channel.id, event.currentTarget.checked)}
                         />
                         <span className="min-w-0 space-y-0.5">
                           <span className="block font-semibold">{channel.name}</span>
@@ -105,6 +126,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
               );
             })}
             {channels.length === 0 ? <p className="text-sm text-fg-muted">No destination is listed for this brand.</p> : null}
+            {errors.channelIds?.message ? <p role="alert" className="text-sm text-danger">{errors.channelIds.message}</p> : null}
           </div>
 
           <dl className="mt-4 grid gap-2 rounded-md border border-border bg-surface-2 p-3 text-sm sm:grid-cols-2">
@@ -114,9 +136,16 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           </dl>
 
           <div className="mt-4 space-y-2">
-            <Field label="Caption and hashtags" hint="Organic channels send this caption. The test publisher records an id and does not use it.">
-              <TextArea rows={3} maxLength={CAPTION_MAX} value={caption} disabled={pending} onChange={(event) => setCaption(event.currentTarget.value)} />
+            <Field label="Caption and hashtags" hint="Organic channels send this caption. The test publisher records an id and does not use it." error={errors.caption?.message}>
+              <TextArea {...register("caption")} rows={3} maxLength={CAPTION_MAX} disabled={pending} />
             </Field>
+            <UnsavedChangesBar
+              dirty={isDirty}
+              subject="publish"
+              confirming={dismiss.confirming}
+              onConfirmingChange={dismiss.setConfirming}
+              onDiscard={dismiss.discard}
+            />
           </div>
 
           {results ? (
@@ -143,15 +172,12 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           ) : null}
 
           <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-            <Button type="button" variant="quiet" disabled={pending} onClick={onClose}>Close</Button>
-            <Button
-              type="button"
-              disabled={pending || selected.length === 0}
-              onClick={() => onConfirm(selected, caption.trim())}
-            >
+            <Button type="button" variant="quiet" disabled={pending} onClick={() => dismiss.requestOpenChange(false)}>Close</Button>
+            <Button type="submit" disabled={pending || selected.length === 0}>
               {pending ? "Publishing…" : `Publish to ${selected.length} destination${selected.length === 1 ? "" : "s"}`}
             </Button>
           </div>
+          </form>
         </DialogContent>
       ) : null}
     </Dialog>

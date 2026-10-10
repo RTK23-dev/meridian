@@ -1,5 +1,10 @@
-import { useId, useState } from "react";
+import { useId, useMemo } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, SelectInput, TextArea } from "@/components/ui";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { cn } from "@/lib/cn";
 import {
   REVIEW_ACTIONS,
@@ -14,6 +19,7 @@ import {
   type ReviewAction,
   type ReviewPayload,
 } from "./review-rules.ts";
+import { reviewFormSchema, type ReviewFormInput } from "./review-form.ts";
 
 export type ReviewTarget = { creativeId: string; title: string; action: ReviewAction };
 
@@ -33,37 +39,35 @@ type ReviewDialogProps = {
  * empty.
  */
 export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit }: ReviewDialogProps) {
-  const [action, setAction] = useState<ReviewAction>(target?.action ?? "approve");
-  const [reasonCode, setReasonCode] = useState("");
-  const [note, setNote] = useState("");
+  const defaults: ReviewFormInput = { action: target?.action ?? "approve", reasonCode: "", note: "" };
+  const schema = useMemo(() => reviewFormSchema(allowedCodes), [allowedCodes]);
+  const form = useForm<ReviewFormInput, unknown, ReviewPayload>({ resolver: zodResolver(schema), defaultValues: defaults, mode: "onChange" });
+  const { register, formState: { errors, isDirty } } = form;
+  const watched = form.watch();
+  const action = watched.action as ReviewAction;
   const groupName = useId();
   const descriptionId = useId();
+  const check = checkReview({ action, reasonCode: watched.reasonCode, note: watched.note }, allowedCodes);
+  const dismiss = useDirtyDismiss({
+    dirty: isDirty && !!target,
+    onOpenChange: (open) => { if (!open && !pending) onClose(); },
+    onDiscard: () => form.reset(defaults),
+  });
 
-  const check = checkReview({ action, reasonCode, note }, allowedCodes);
-
-  function submit() {
-    if (!target || !check.ok || pending) return;
-    onSubmit(target.creativeId, check.payload);
+  function submit(values: ReviewPayload) {
+    if (!target || pending) return;
+    onSubmit(target.creativeId, values);
   }
 
   return (
-    <Dialog open={!!target} onOpenChange={(open) => { if (!open && !pending) onClose(); }}>
+    <Dialog open={!!target} onOpenChange={dismiss.requestOpenChange}>
       {target ? (
-        <DialogContent
-          aria-describedby={descriptionId}
-          className="max-w-lg"
-          onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-              event.preventDefault();
-              submit();
-            }
-          }}
-        >
+        <DialogContent aria-describedby={descriptionId} className="max-w-lg">
           <DialogTitle className="font-display text-2xl">{reviewDialogTitle(action)}</DialogTitle>
           <DialogDescription id={descriptionId} className="mt-2 text-sm text-fg-muted">
             {target.title}. The decision, the reason and the note stay with this review.
           </DialogDescription>
-          <div className="mt-4 space-y-4">
+          <form noValidate className="mt-4 space-y-4" onKeyDown={(event) => submitOnShortcut(event)} onSubmit={form.handleSubmit(submit)}>
             <fieldset className="space-y-2">
               <legend className="text-sm font-semibold">Decision</legend>
               <div className="grid gap-2 sm:grid-cols-3">
@@ -77,11 +81,10 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
                   >
                     <input
                       type="radio"
+                      {...register("action")}
                       name={groupName}
                       value={option}
-                      checked={action === option}
                       disabled={pending}
-                      onChange={() => setAction(option)}
                       className="size-4"
                     />
                     {reviewActionLabel(option)}
@@ -91,8 +94,8 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
             </fieldset>
 
             {reasonRequired(action) ? (
-              <Field label="Reason" hint="These are the reasons the server records. Choose the one that matches the problem." required>
-                <SelectInput value={reasonCode} required disabled={pending} onChange={(event) => setReasonCode(event.currentTarget.value)}>
+              <Field label="Reason" hint="These are the reasons the server records. Choose the one that matches the problem." required error={errors.reasonCode?.message}>
+                <SelectInput {...register("reasonCode")} required disabled={pending}>
                   <option value="">Choose a reason</option>
                   {allowedCodes.map((code) => <option key={code} value={code}>{reasonLabel(code)}</option>)}
                 </SelectInput>
@@ -103,28 +106,36 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
               label={noteRequired(action) ? "Reviewer note (required)" : "Reviewer note (optional)"}
               hint={`Up to ${REVIEW_NOTE_MAX} characters.`}
               required={noteRequired(action)}
+              error={errors.note?.message}
             >
               <TextArea
+                {...register("note")}
                 rows={3}
                 maxLength={REVIEW_NOTE_MAX}
-                value={note}
                 required={noteRequired(action)}
                 disabled={pending}
-                onChange={(event) => setNote(event.currentTarget.value)}
               />
             </Field>
+
+            <UnsavedChangesBar
+              dirty={isDirty}
+              subject="review"
+              confirming={dismiss.confirming}
+              onConfirmingChange={dismiss.setConfirming}
+              onDiscard={dismiss.discard}
+            />
 
             <p role="status" aria-live="polite" className={cn("text-sm", check.ok ? "text-fg-muted" : "text-danger")}>
               {check.ok ? "Ready to send." : check.message}
             </p>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="quiet" disabled={pending} onClick={onClose}>Cancel</Button>
-              <Button type="button" variant={action === "reject" ? "danger" : "primary"} disabled={!check.ok || pending} onClick={submit}>
+              <Button type="button" variant="quiet" disabled={pending} onClick={() => dismiss.requestOpenChange(false)}>Cancel</Button>
+              <Button type="submit" variant={action === "reject" ? "danger" : "primary"} disabled={!check.ok || pending}>
                 {pending ? "Sending…" : reviewConfirmLabel(action)}
               </Button>
             </div>
-          </div>
+          </form>
         </DialogContent>
       ) : null}
     </Dialog>

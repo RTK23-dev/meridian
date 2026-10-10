@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Button, Panel, TextArea } from "@/components/ui";
+import type { UseFormRegisterReturn } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Button, Field, Panel, TextArea } from "@/components/ui";
+import { FormDiscardBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { IdeaToTestBadge, Term } from "@/components/glossary";
 import { copy, decisionOutcome, percentOrUnknown } from "@/lib/copy";
 import { alternativeDirections, directionSourceLabel, type DirectionCandidate } from "./direction.ts";
@@ -8,19 +14,27 @@ import type { StudioData } from "./types.ts";
 /** The shortest reason that can accept a direction. The server enforces the same length. */
 export const DIRECTION_REASON_MIN = 20;
 
+/** The reason that accepts a direction or asks for the next brief. Trimmed, and at least the server's length. */
+export const directionReasonSchema = z.object({
+  reason: z.string().trim().min(DIRECTION_REASON_MIN, `Write at least ${DIRECTION_REASON_MIN} characters.`),
+});
+
+export type DirectionReasonInput = z.input<typeof directionReasonSchema>;
+
 /**
  * The required reason for accepting a direction. It is recorded with the decision, who made it and when. It does not mean
  * the brief has passed its gate: the brief is judged separately when it is written.
  */
-export function DirectionReasonField({ value, onChange, id }: { value: string; onChange: (value: string) => void; id: string }) {
+export function DirectionReasonField({ id, registration, error }: { id: string; registration: UseFormRegisterReturn; error?: string }) {
   return (
-    <label htmlFor={id} className="block text-sm">
-      <span className="text-fg-muted">
-        Why accept this direction (at least {DIRECTION_REASON_MIN} characters). This is recorded with your decision. It does not
-        mean the brief has passed its gate.
-      </span>
-      <TextArea id={id} className="mt-1" rows={2} value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
+    <Field
+      id={id}
+      label={`Why accept this direction (at least ${DIRECTION_REASON_MIN} characters)`}
+      hint="This is recorded with your decision. It does not mean the brief has passed its gate."
+      error={error}
+    >
+      <TextArea rows={2} {...registration} />
+    </Field>
   );
 }
 
@@ -35,7 +49,9 @@ type DirectionStepProps = {
 
 /** Step 1. The recommended direction, the alternatives the stored opportunities show, and the accept action. */
 export function DirectionStep({ session, canEdit, pending, opportunities, opportunitiesFailed, onAccept }: DirectionStepProps) {
-  const [reason, setReason] = useState("");
+  const reasonForm = useForm<DirectionReasonInput>({ resolver: zodResolver(directionReasonSchema), defaultValues: { reason: "" }, mode: "onChange" });
+  const reason = reasonForm.watch("reason");
+  const reasonDirty = reasonForm.formState.isDirty;
   const recommendation = session.recommendation;
   const alternatives = recommendation ? alternativeDirections(opportunities ?? [], recommendation.opportunityId) : [];
 
@@ -71,12 +87,16 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
           </ul>
           {canEdit ? (
             <div className="mt-4 space-y-3">
-              <DirectionReasonField id="direction-reason" value={reason} onChange={setReason} />
+              <UnsavedChangesGuard dirty={reasonDirty} />
+              <DirectionReasonField id="direction-reason" registration={reasonForm.register("reason")} error={reasonForm.formState.errors.reason?.message} />
+              <FormDiscardBar dirty={reasonDirty} subject="direction reason" onDiscard={() => reasonForm.reset({ reason: "" })} />
               <Button
                 type="button"
-                disabled={pending || reason.trim().length < DIRECTION_REASON_MIN}
+                disabled={pending || (reason ?? "").trim().length < DIRECTION_REASON_MIN}
                 onClick={() => {
-                  void onAccept(reason.trim()).then(() => setReason(""), () => undefined);
+                  void reasonForm.handleSubmit(async (values) => {
+                    await onAccept(values.reason).then(() => reasonForm.reset({ reason: "" }), () => undefined);
+                  })();
                 }}
               >
                 Accept direction and write the brief
