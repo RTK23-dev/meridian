@@ -105,7 +105,7 @@ export function UserButton() {
       <DropdownMenuTrigger asChild>
         <button type="button" aria-label="Account and appearance settings" title={label} className="flex min-h-10 min-w-10 items-center gap-2 rounded-md px-1 text-sm text-fg hover:bg-surface-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
           {user.profileImageUrl ? (
-            <img src={user.profileImageUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+            <img src={user.profileImageUrl} alt="" width={32} height={32} loading="lazy" decoding="async" className="h-8 w-8 rounded-full object-cover" />
           ) : (
             <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-fg">
               {label.charAt(0).toUpperCase()}
