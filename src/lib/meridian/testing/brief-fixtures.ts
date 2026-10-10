@@ -53,10 +53,25 @@ export function answeredProbability(spec: JevQuestionSpec, probability: number):
   } as JevAnswer;
 }
 
-/** Answers every brief question as a clear approval. */
+/**
+ * The same probability, reported as calibrated. Only a calibrated probability can approve or reject (contract section 6).
+ * The engines report uncalibrated values today, so a test that is about approval or rejection must say it is calibrated.
+ */
+export function calibratedProbability(spec: JevQuestionSpec, probability: number): JevAnswer {
+  return { ...answeredProbability(spec, probability), calibrationStatus: "calibrated" } as JevAnswer;
+}
+
+/** Answers every brief question as a clear approval, as the engines report it today: uncalibrated, so held for review. */
 export const approvesBrief: StubResponder = (spec) => {
   if (spec.id === BRAND_QUESTION || spec.id === OPPORTUNITY_QUESTION) return answeredProbability(spec, 0.95);
   if (spec.id === CLAIM_QUESTION) return answeredProbability(spec, 0.99);
+  return undefined;
+};
+
+/** Answers every brief question as a calibrated approval. Used where a test is about an automatic approval. */
+export const approvesBriefCalibrated: StubResponder = (spec) => {
+  if (spec.id === BRAND_QUESTION || spec.id === OPPORTUNITY_QUESTION) return calibratedProbability(spec, 0.95);
+  if (spec.id === CLAIM_QUESTION) return calibratedProbability(spec, 0.99);
   return undefined;
 };
 

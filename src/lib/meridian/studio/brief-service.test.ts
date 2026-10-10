@@ -3,7 +3,17 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { BRAIN, BRIEF, CLAIM_QUESTION, answeredProbability, approvesBrief, registryWith, stubEngine } from "../testing/brief-fixtures.ts";
+import {
+  BRAIN,
+  BRIEF,
+  CLAIM_QUESTION,
+  answeredProbability,
+  approvesBrief,
+  approvesBriefCalibrated,
+  calibratedProbability,
+  registryWith,
+  stubEngine,
+} from "../testing/brief-fixtures.ts";
 import {
   addMember,
   failingSql,
@@ -31,12 +41,13 @@ const REVIEW_REASON = "Reviewed the disclosed failure. The brand fit is clear fr
 
 /**
  * The gate setup that produces each outcome. The engines are stubs; the gate, its policy and the writer are the real ones.
- * HUMAN_REVIEW is a provider failure on the selected engine. REJECT is a claim-compliance answer below its policy.
+ * AUTO_APPROVE and REJECT are calibrated answers: an uncalibrated probability can only go to review (contract section 6), so
+ * a test about approval or rejection must report calibrated values. HUMAN_REVIEW is a provider failure on the selected engine.
  */
 function gateFor(outcome: Outcome): BriefGateOptions {
   if (outcome === "AUTO_APPROVE") {
     return {
-      engines: registryWith(stubEngine("jev", { respond: approvesBrief }), stubEngine("openai-decisions")),
+      engines: registryWith(stubEngine("jev", { respond: approvesBriefCalibrated }), stubEngine("openai-decisions")),
       selection: { engineId: "jev", source: "workspace" },
     };
   }
@@ -47,7 +58,7 @@ function gateFor(outcome: Outcome): BriefGateOptions {
     };
   }
   const jev = stubEngine("jev", {
-    respond: (spec) => (spec.id === CLAIM_QUESTION ? answeredProbability(spec, 0.2) : approvesBrief(spec)),
+    respond: (spec) => (spec.id === CLAIM_QUESTION ? calibratedProbability(spec, 0.2) : approvesBriefCalibrated(spec)),
   });
   return { engines: registryWith(jev, stubEngine("openai-decisions")), selection: { engineId: "jev", source: "workspace" } };
 }
@@ -176,6 +187,52 @@ for (const outcome of OUTCOMES) {
     assert.equal(decision?.decision, outcome);
   });
 }
+
+test("an uncalibrated approval is held for review on every creation path, and is never stored as ready", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "svc-cap-approve");
+  await seedBrandBrain(sql, tenant);
+  const uncalibrated: BriefGateOptions = {
+    engines: registryWith(stubEngine("jev", { respond: approvesBrief }), stubEngine("openai-decisions")),
+    selection: { engineId: "jev", source: "workspace" },
+  };
+  const first = await seedOpportunity(sql, tenant);
+  const direct = await createGatedBrief(sql, {
+    organizationId: tenant.organizationId,
+    brandId: tenant.brandId,
+    createdBy: tenant.userId,
+    brief: briefRecord(first.opportunityId),
+    judge: judgeFor(sql, tenant, uncalibrated),
+  });
+  assert.equal(direct.action, "HUMAN_REVIEW", "an uncalibrated approval is capped to review");
+  assert.equal(direct.status, "awaiting_review");
+  const [decision] = await sql<{ reasons: string }>`select reasons from jev_decisions where id = ${direct.decisionId}`;
+  assert.match(decision?.reasons ?? "", /uncalibrated/, "the recorded reason says why it was held");
+
+  const second = await seedOpportunity(sql, tenant);
+  const made = await createBriefFromOpportunityFor(tenant.userId, { brandId: tenant.brandId, opportunityId: second.opportunityId }, uncalibrated);
+  assert.equal(made.decision, "HUMAN_REVIEW", "the opportunity path is capped the same way");
+  const [brief] = await sql<{ status: string }>`select status from briefs where id = ${made.id}`;
+  assert.equal(brief?.status, "awaiting_review");
+});
+
+test("an uncalibrated claim-compliance rejection is held for review, not rejected: only a calibrated probability rejects", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "svc-cap-reject");
+  const opportunity = await seedOpportunity(sql, tenant);
+  const jev = stubEngine("jev", {
+    respond: (spec) => (spec.id === CLAIM_QUESTION ? answeredProbability(spec, 0.2) : approvesBriefCalibrated(spec)),
+  });
+  const created = await createGatedBrief(sql, {
+    organizationId: tenant.organizationId,
+    brandId: tenant.brandId,
+    createdBy: tenant.userId,
+    brief: briefRecord(opportunity.opportunityId),
+    judge: judgeFor(sql, tenant, { engines: registryWith(jev, stubEngine("openai-decisions")), selection: { engineId: "jev", source: "workspace" } }),
+  });
+  assert.equal(created.action, "HUMAN_REVIEW", "an uncalibrated low claim score is review, not a rejection");
+  assert.equal(created.status, "awaiting_review");
+});
 
 test("a HUMAN_REVIEW brief from an opportunity is held, reviewable with its engine outcome, and an admin can release it", async () => {
   const sql = await getSql();
