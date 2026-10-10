@@ -1,14 +1,10 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
-import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { GROK_PROVIDERS, signIn } from "@/lib/auth/client";
 import { SignInGate } from "@/lib/auth/gates";
 import { EmailAuth } from "@/components/email-auth";
 import { Shell } from "@/components/shell";
 import { useWorkspace } from "@/components/workspace";
-import { ErrorState, Skeleton, errorText, toast } from "@/components/ui";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { userScopedQueryKey } from "@/lib/query/keys";
+import { ErrorState, ScreenSkeleton } from "@/components/ui";
 
 export function ProtectedApp({ children }: { children: ReactNode }) {
   return (
@@ -23,7 +19,7 @@ export function ProtectedApp({ children }: { children: ReactNode }) {
 function Ready({ children }: { children: ReactNode }) {
   const { data, loading, error, reload } = useWorkspace();
   if (loading && !data) {
-    return <div role="status" aria-label="Loading workspace" className="mx-auto max-w-3xl space-y-3 p-6"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+    return <div className="mx-auto max-w-3xl p-6"><ScreenSkeleton label="Loading workspace" shape="cards" /></div>;
   }
   if (error && !data) return <ErrorState message={error} onRetry={() => void reload()} />;
   return <>{children}</>;
@@ -60,26 +56,3 @@ export function Welcome() {
   );
 }
 
-export function useBusy(invalidate: readonly QueryKey[] = []) {
-  const [error, setError] = useState<string | null>(null);
-  const queryClient = useQueryClient();
-  const { user } = useCurrentUserState();
-  const mutation = useMutation({
-    mutationFn: (task: () => Promise<void>) => task(),
-    onSuccess: async () => {
-      await Promise.all(invalidate.map((key) => queryClient.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, key) })));
-    },
-    onError: (caught) => toast.error(errorText(caught)),
-  });
-  async function run(task: () => Promise<void>): Promise<boolean> {
-    setError(null);
-    try {
-      await mutation.mutateAsync(task);
-      return true;
-    } catch (caught) {
-      setError(errorText(caught));
-      return false;
-    }
-  }
-  return { pending: mutation.isPending, error, run };
-}
