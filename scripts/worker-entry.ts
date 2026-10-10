@@ -1,6 +1,6 @@
 import pg from "pg";
 import { tickSqlJobs, requestWorkerStop } from "../src/lib/meridian/jobs/sql-worker.ts";
-import type { Sql } from "../src/lib/meridian/learning/store.ts";
+import { createPoolSql } from "../src/lib/meridian/learning/pool-sql.ts";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) {
@@ -14,21 +14,8 @@ const pool = new pg.Pool({
   ssl: databaseUrl.includes("sslmode=disable") ? false : undefined,
 });
 
-function sqlClient(): Sql {
-  const sql = (async <T = Record<string, unknown>>(strings: TemplateStringsArray, ...values: unknown[]) => {
-    let text = strings[0] ?? "";
-    for (let index = 0; index < values.length; index += 1) text += `$${index + 1}${strings[index + 1] ?? ""}`;
-    const result = await pool.query(text, values);
-    return result.rows as T[];
-  }) as Sql;
-  sql.query = async <T = Record<string, unknown>>(text: string, params: unknown[] = []) => {
-    const result = await pool.query(text, params);
-    return result.rows as T[];
-  };
-  return sql;
-}
-
-const sql = sqlClient();
+// The same Sql the web server uses on Postgres: it provides transactions, so jobs that write several rows run atomically.
+const sql = createPoolSql(pool);
 let timer: NodeJS.Timeout | null = null;
 let running = false;
 let shutdownRequested = false;
