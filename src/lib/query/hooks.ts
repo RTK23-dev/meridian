@@ -208,7 +208,8 @@ export const useStudioQuery = (brandId: string, enabled = true) => {
   return useQuery({
     ...studioQueryOptions(userId, brandId),
     enabled: ready && enabled && !!brandId,
-    refetchInterval: (query) => query.state.data?.variants.some((variant) => variant.mediaStatus === "queued" || variant.mediaStatus === "running") ? ACTIVE_POLL_MS : false,
+    // A variant that is queued, running or submitted to the provider is polled until it settles.
+    refetchInterval: (query) => query.state.data?.variants.some((variant) => variant.mediaStatus === "queued" || variant.mediaStatus === "running" || variant.mediaStatus === "submitted") ? ACTIVE_POLL_MS : false,
   });
 };
 

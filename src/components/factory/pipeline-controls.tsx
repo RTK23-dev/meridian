@@ -53,7 +53,7 @@ export function ChoiceGroup<T extends string | number>({
               />
               <label
                 htmlFor={id}
-                className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border-strong bg-surface px-3 text-sm font-medium text-fg hover:bg-surface-2 peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-semibold peer-checked:ring-1 peer-checked:ring-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-disabled:cursor-not-allowed peer-disabled:opacity-55 sm:min-h-9"
+                className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border-strong bg-surface px-3 text-sm font-medium text-fg hover:bg-surface-2 peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-semibold peer-checked:ring-1 peer-checked:ring-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed peer-disabled:opacity-55 sm:min-h-9"
               >
                 {checked ? <Check aria-hidden="true" className="size-4 text-accent" /> : null}
                 {option.label}
@@ -155,7 +155,7 @@ export function SettingSwitch({
             onCheckedChange={onCheckedChange}
             aria-labelledby={labelId}
             aria-describedby={hintId}
-            className="relative h-6 w-11 rounded-full bg-border-strong outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent data-[state=checked]:bg-accent disabled:cursor-not-allowed disabled:opacity-55"
+            className="touch-hit-44 h-6 w-11 rounded-full bg-border-strong transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent data-[state=checked]:bg-accent disabled:cursor-not-allowed disabled:opacity-55"
           >
             <SwitchPrimitive.Thumb className="block size-5 translate-x-0.5 rounded-full bg-surface shadow transition-transform data-[state=checked]:translate-x-[22px]" />
           </SwitchPrimitive.Root>
@@ -228,7 +228,7 @@ export function FeedbackLine({ feedback, onDismiss }: { feedback: Feedback | nul
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss message"
-        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <X aria-hidden="true" className="size-4" />
       </button>

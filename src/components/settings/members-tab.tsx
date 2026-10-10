@@ -2,11 +2,7 @@ import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogTitle, Badge, Button, Dialog, DialogContent, DialogDescription,
-  DialogTitle, DataTable, Field, SelectInput, TextInput, errorText,
-} from "@/components/ui";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, DataTable, Field, SelectInput, Input, errorText } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -193,7 +189,7 @@ function InviteDialog({ open, onOpenChange, organizationId, onInvited }: {
         </DialogDescription>
         <form className="mt-4 space-y-4" onSubmit={form.handleSubmit((values) => { void invite.mutateAsync(values).catch(() => undefined); })} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
           <Field label="Email" error={form.formState.errors.email?.message} required>
-            <TextInput {...form.register("email")} type="email" autoComplete="email" maxLength={200} required />
+            <Input {...form.register("email")} type="email" autoComplete="email" maxLength={200} required />
           </Field>
           <Field label="Role" error={form.formState.errors.role?.message} required>
             <SelectInput {...form.register("role")}>

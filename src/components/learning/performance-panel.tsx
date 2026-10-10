@@ -2,9 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import {
-  Button, Card, EmptyState, ErrorState, Field, SelectInput, Skeleton, Stat, TextInput,
-} from "@/components/ui";
+import { Button, Card, EmptyState, ErrorState, Field, SelectInput, Skeleton, Stat, Input } from "@/components/ui";
 import { PlainErrorMessage, PlainErrorNotice } from "@/components/plain-error";
 import { copy, plainError, type PlainError } from "@/lib/copy";
 import { downloadCsv } from "@/lib/csv";
@@ -283,26 +281,26 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
         </SelectInput>
       </Field>
       <Field label="Creative ID (optional)">
-        <TextInput {...register("creativeId")} placeholder="cr_..." />
+        <Input {...register("creativeId")} placeholder="cr_..." />
       </Field>
     </fieldset>
 
     <fieldset className="grid gap-4 sm:grid-cols-3">
       <legend className="mb-2 text-sm font-semibold text-fg">Measured results</legend>
       <Field label="Views" required error={formState.errors.views?.message}>
-        <TextInput {...register("views")} type="number" inputMode="numeric" required />
+        <Input {...register("views")} type="number" inputMode="numeric" required />
       </Field>
       <Field label="3-second hook retention (0 to 1)" required error={formState.errors.hookRetention3s?.message}>
-        <TextInput {...register("hookRetention3s")} type="number" step="0.01" inputMode="decimal" required />
+        <Input {...register("hookRetention3s")} type="number" step="0.01" inputMode="decimal" required />
       </Field>
       <Field label="Completion rate (0 to 1, optional)" error={formState.errors.completionRate?.message}>
-        <TextInput {...register("completionRate")} type="number" step="0.01" inputMode="decimal" />
+        <Input {...register("completionRate")} type="number" step="0.01" inputMode="decimal" />
       </Field>
       <Field label="Engagements (optional)" error={formState.errors.engagements?.message}>
-        <TextInput {...register("engagements")} type="number" inputMode="numeric" />
+        <Input {...register("engagements")} type="number" inputMode="numeric" />
       </Field>
       <Field label="Shares (optional)" error={formState.errors.shares?.message}>
-        <TextInput {...register("shares")} type="number" inputMode="numeric" />
+        <Input {...register("shares")} type="number" inputMode="numeric" />
       </Field>
     </fieldset>
 
@@ -320,7 +318,7 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
         </SelectInput>
       </Field>
       <Field label="Creative angle (optional)">
-        <TextInput {...register("angle")} placeholder="founder_story, how_to..." />
+        <Input {...register("angle")} placeholder="founder_story, how_to..." />
       </Field>
     </fieldset>
 

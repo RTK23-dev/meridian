@@ -1,4 +1,4 @@
-import { Button, Field, SelectInput, TextInput } from "@/components/ui";
+import { Button, Field, SelectInput, Input } from "@/components/ui";
 import { countActiveFilters, NO_LIBRARY_FILTERS, type LibraryFilters } from "./library-model";
 
 const KIND_OPTIONS = [
@@ -27,7 +27,7 @@ export function LibraryFilterBar({
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Field label="Search">
-          <TextInput value={filters.search} onChange={(event) => set("search", event.currentTarget.value)} placeholder="Title, hook, angle" />
+          <Input value={filters.search} onChange={(event) => set("search", event.currentTarget.value)} placeholder="Title, hook, angle" />
         </Field>
         <Field label="Status">
           <SelectInput value={filters.status} onChange={(event) => set("status", event.currentTarget.value)}>
@@ -53,10 +53,10 @@ export function LibraryFilterBar({
           </SelectInput>
         </Field>
         <Field label="Created after">
-          <TextInput type="date" value={filters.createdAfter} onChange={(event) => set("createdAfter", event.currentTarget.value)} />
+          <Input type="date" value={filters.createdAfter} onChange={(event) => set("createdAfter", event.currentTarget.value)} />
         </Field>
         <Field label="Created before">
-          <TextInput type="date" value={filters.createdBefore} onChange={(event) => set("createdBefore", event.currentTarget.value)} />
+          <Input type="date" value={filters.createdBefore} onChange={(event) => set("createdBefore", event.currentTarget.value)} />
         </Field>
         <div className="flex items-end">
           <Button type="button" variant="quiet" size="md" disabled={active === 0} onClick={() => onChange(NO_LIBRARY_FILTERS)}>

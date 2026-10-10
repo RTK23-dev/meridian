@@ -2,7 +2,7 @@ import { useState, type KeyboardEvent } from "react";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui";
 import { assetRoute } from "./asset-url.ts";
 
-export type LightboxTarget = { assetId: string; title: string; alt: string };
+export type LightboxTarget = { assetId: string; title: string; alt: string; width?: number | null; height?: number | null };
 
 const ZOOM_STEPS = [1, 1.5, 2, 3] as const;
 
@@ -44,6 +44,8 @@ export function ImageLightbox({ target, onClose }: { target: LightboxTarget | nu
               <img
                 src={assetRoute(target.assetId)}
                 alt={target.alt}
+                width={target.width ?? undefined}
+                height={target.height ?? undefined}
                 decoding="async"
                 className="block h-auto max-w-none"
                 style={{ width: `${zoom * 100}%` }}

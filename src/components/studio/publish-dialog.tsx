@@ -2,7 +2,7 @@ import { useId } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, TextArea } from "@/components/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Textarea } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { PlainErrorMessage } from "@/components/plain-error";
@@ -145,7 +145,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
 
           <div className="mt-4 space-y-2">
             <Field label="Caption and hashtags" hint="Organic channels send this caption. The test publisher records an id and does not use it." error={errors.caption?.message}>
-              <TextArea {...register("caption")} rows={3} maxLength={CAPTION_MAX} disabled={pending} />
+              <Textarea {...register("caption")} rows={3} maxLength={CAPTION_MAX} disabled={pending} />
             </Field>
             <UnsavedChangesBar
               dirty={isDirty}

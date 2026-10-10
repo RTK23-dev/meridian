@@ -1,9 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
-import {
-  Button, Field, Sheet, SheetContent, SheetDescription, SheetTitle, TextArea, TextInput,
-} from "@/components/ui";
+import { Button, Field, Sheet, SheetContent, SheetDescription, SheetTitle, Textarea, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -97,31 +95,31 @@ export function ProductSheet({ brandId, open, product, onOpenChange }: {
         <form onSubmit={handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} className="mt-6 flex min-h-0 flex-1 flex-col">
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto pb-2 md:grid-cols-2">
           <Field label="Name" error={errors.name?.message} required>
-            <TextInput {...register("name")} required maxLength={160} />
+            <Input {...register("name")} required maxLength={160} />
           </Field>
           <Field label="Price" error={errors.price?.message}>
-            <TextInput {...register("price")} maxLength={80} />
+            <Input {...register("price")} maxLength={80} />
           </Field>
           <div className="md:col-span-2">
             <Field label="Description" error={errors.description?.message}>
-              <TextArea {...register("description")} maxLength={4000} />
+              <Textarea {...register("description")} maxLength={4000} />
             </Field>
           </div>
           <Field label="Features" error={errors.features?.message}>
-            <TextArea {...register("features")} maxLength={4000} />
+            <Textarea {...register("features")} maxLength={4000} />
           </Field>
           <Field label="Benefits" error={errors.benefits?.message}>
-            <TextArea {...register("benefits")} maxLength={4000} />
+            <Textarea {...register("benefits")} maxLength={4000} />
           </Field>
           <Field label="Allowed claims" error={errors.allowedClaims?.message}>
-            <TextArea {...register("allowedClaims")} maxLength={2000} />
+            <Textarea {...register("allowedClaims")} maxLength={2000} />
           </Field>
           <Field label="Prohibited claims" error={errors.prohibitedClaims?.message}>
-            <TextArea {...register("prohibitedClaims")} maxLength={2000} />
+            <Textarea {...register("prohibitedClaims")} maxLength={2000} />
           </Field>
           <div className="md:col-span-2">
             <Field label="Product URL" error={errors.url?.message}>
-              <TextInput {...register("url")} maxLength={500} placeholder="https://example.test" />
+              <Input {...register("url")} maxLength={500} placeholder="https://example.test" />
             </Field>
           </div>
           {saveError ? <div className="md:col-span-2"><PlainErrorMessage message={saveError.message} raw={saveError.raw} /></div> : null}

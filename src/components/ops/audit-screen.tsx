@@ -3,7 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Button, DataTable, Field, PageHeader, ScreenSkeleton, SelectInput, TextInput } from "@/components/ui";
+import { Button, DataTable, Field, PageHeader, ScreenSkeleton, SelectInput, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { auditFilterSchema, type AuditFilterInput } from "@/components/forms/client-schemas";
@@ -115,10 +115,10 @@ export function AuditScreen() {
 
       <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-2 xl:grid-cols-5" onSubmit={applyFilters} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
         <Field label="Actor name or ID" error={errors.actor?.message}>
-          <TextInput {...filterForm.register("actor")} maxLength={100} />
+          <Input {...filterForm.register("actor")} maxLength={100} />
         </Field>
         <Field label="Action" hint="Part of the action code, such as calibration or job." error={errors.action?.message}>
-          <TextInput {...filterForm.register("action")} maxLength={100} placeholder="calibration.approved" />
+          <Input {...filterForm.register("action")} maxLength={100} placeholder="calibration.approved" />
         </Field>
         <Field label="Brand" error={errors.brandId?.message}>
           <SelectInput {...filterForm.register("brandId")}>
@@ -127,10 +127,10 @@ export function AuditScreen() {
           </SelectInput>
         </Field>
         <Field label="From date" error={errors.from?.message}>
-          <TextInput {...filterForm.register("from")} type="date" />
+          <Input {...filterForm.register("from")} type="date" />
         </Field>
         <Field label="To date" error={errors.to?.message}>
-          <TextInput {...filterForm.register("to")} type="date" />
+          <Input {...filterForm.register("to")} type="date" />
         </Field>
         <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-5">
           <Button type="submit">Apply filters</Button>

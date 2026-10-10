@@ -1,13 +1,10 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, type FieldPath } from "react-hook-form";
-import {
-  Button, ErrorState, Field, Panel, SelectInput, TextInput,
-} from "@/components/ui";
+import { Button, ErrorState, Field, Card, SelectInput, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
-import { submitOnShortcut } from "@/components/forms/shortcut";
 import { providerFieldsSchema, type ProviderFieldsInput } from "@/components/forms/client-schemas";
 import { plainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
@@ -216,7 +213,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   const activeSummary = summaries ? summaries[activeTab] : null;
 
   return (
-    <Panel className="space-y-6">
+    <Card className="space-y-6">
       <UnsavedChangesGuard dirty={providerDirty} />
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
         <div>
@@ -328,11 +325,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">TypeSafe JEV transport</p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="JEV Routing Mode">
-                <TextInput value={String(activeSummary.settings.mode)} readOnly />
+                <Input value={String(activeSummary.settings.mode)} readOnly />
               </Field>
 
               <Field label="Preferred Provider">
-                <TextInput value={String(activeSummary.settings.preferredProvider)} readOnly />
+                <Input value={String(activeSummary.settings.preferredProvider)} readOnly />
               </Field>
 
               <p className="sm:col-span-2 text-xs text-muted">
@@ -361,7 +358,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               </p>
               <div className="sm:col-span-2">
                 <Field label="TypeSafe JEV API key (saved per workspace)" error={fieldErrors.jevKey?.message}>
-                  <TextInput
+                  <Input
                     type="password"
                     placeholder="Enter a TypeSafe JEV key to save or replace it..."
                     {...providerForm.register("jevKey")}
@@ -389,7 +386,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
               <div className="sm:col-span-2">
                 <Field label="Gemini production API key (Omni video, Veo, image)" error={fieldErrors.productionKey?.message}>
-                  <TextInput
+                  <Input
                     type="password"
                     placeholder="Enter a Gemini API key to save or replace it..."
                     {...providerForm.register("productionKey")}
@@ -411,7 +408,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           {activeTab === "cyclone" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Cyclone Gateway URL" error={fieldErrors.gatewayUrl?.message}>
-                <TextInput
+                <Input
                   {...providerForm.register("gatewayUrl")}
                   placeholder="http://127.0.0.1:4000"
                   disabled={!canAdmin}
@@ -428,7 +425,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           {activeTab === "sources" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Max Crawl Pages Per Run" error={fieldErrors.maxPages?.message}>
-                <TextInput
+                <Input
                   {...providerForm.register("maxPages")}
                   type="number"
                   disabled={!canAdmin}
@@ -441,7 +438,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <Field label="Gemini API Key (perception)" error={fieldErrors.perceptionKey?.message}>
-                  <TextInput
+                  <Input
                     type="password"
                     placeholder="Enter a Gemini API key..."
                     {...providerForm.register("perceptionKey")}
@@ -475,6 +472,6 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           ) : null}
         </div>
       ) : null}
-    </Panel>
+    </Card>
   );
 }

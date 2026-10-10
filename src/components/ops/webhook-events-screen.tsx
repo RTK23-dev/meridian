@@ -3,7 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Button, DataTable, Field, PageHeader, ScreenSkeleton, TextInput } from "@/components/ui";
+import { Button, DataTable, Field, PageHeader, ScreenSkeleton, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { webhookFilterSchema, type WebhookFilterInput } from "@/components/forms/client-schemas";
@@ -70,7 +70,7 @@ export function WebhookEventsScreen() {
 
       <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-[1fr_auto] sm:items-end" onSubmit={applyFilter} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
         <Field label="Provider" hint="The provider key as stored, such as meta or tiktok. Leave empty for all providers." error={filterForm.formState.errors.provider?.message}>
-          <TextInput {...filterForm.register("provider")} maxLength={80} placeholder="meta" />
+          <Input {...filterForm.register("provider")} maxLength={80} placeholder="meta" />
         </Field>
         <Button type="submit">Apply filter</Button>
       </form>

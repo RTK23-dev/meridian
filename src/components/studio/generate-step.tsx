@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
-import { Button, Field, Input, Panel, SelectInput } from "@/components/ui";
+import { Button, Field, Input, Card, SelectInput } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import type { StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
@@ -34,7 +34,7 @@ export function GenerateStep({ brief, canEdit, form, testImageAllowed, productio
   const [discardRequested, setDiscardRequested] = useState(false);
 
   return (
-    <Panel>
+    <Card>
       <h2 className="font-display text-2xl">Generate from the approved brief</h2>
       {brief ? (
         <p className="mt-2 text-sm text-fg-muted">Current brief: {brief.title}. A brief that is not ready cannot be used for generation.</p>
@@ -143,6 +143,6 @@ export function GenerateStep({ brief, canEdit, form, testImageAllowed, productio
           </div>
         </form>
       ) : null}
-    </Panel>
+    </Card>
   );
 }

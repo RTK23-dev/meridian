@@ -2,9 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import {
-  Button, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea, TextInput,
-} from "@/components/ui";
+import { Button, Field, ErrorNotice, Card, ScreenSkeleton, SelectInput, Textarea, Input } from "@/components/ui";
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -195,9 +193,9 @@ function MarketPage({ brandId }: { brandId: string }) {
           </li>
         ))}
       </ul>
-      {note ? <Notice>{note}</Notice> : null}
+      {note ? <ErrorNotice>{note}</ErrorNotice> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
-      <Panel>
+      <Card>
         <div className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">JEV Research</p>
           <h2 className="mt-2 font-display text-2xl">Collect external video-ad evidence</h2>
@@ -205,8 +203,8 @@ function MarketPage({ brandId }: { brandId: string }) {
         </div>
         {canEdit ? (
           <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={researchForm.handleSubmit(collectResearch)} onKeyDown={(event) => submitOnShortcut(event)}>
-            <Field label="Search ads" error={researchForm.formState.errors.searchTerms?.message} required><TextInput {...researchForm.register("searchTerms")} required maxLength={100} placeholder="Brand, product, or category" /></Field>
-            <Field label="Country" error={researchForm.formState.errors.country?.message} required><TextInput {...researchForm.register("country")} required maxLength={2} /></Field>
+            <Field label="Search ads" error={researchForm.formState.errors.searchTerms?.message} required><Input {...researchForm.register("searchTerms")} required maxLength={100} placeholder="Brand, product, or category" /></Field>
+            <Field label="Country" error={researchForm.formState.errors.country?.message} required><Input {...researchForm.register("country")} required maxLength={2} /></Field>
             <Field label="Maximum ads" error={researchForm.formState.errors.limit?.message} required><SelectInput {...researchForm.register("limit", { valueAsNumber: true })}><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></SelectInput></Field>
             <div className="flex items-end gap-2"><Button type="submit" disabled={startResearch.isPending || researchForm.formState.isSubmitting}>{startResearch.isPending || researchForm.formState.isSubmitting ? "Starting…" : "Start collection"}</Button></div>
             <FormDiscardBar dirty={researchForm.formState.isDirty} subject="research search" onDiscard={() => researchForm.reset()} className="md:col-span-4" />
@@ -227,8 +225,8 @@ function MarketPage({ brandId }: { brandId: string }) {
           <p className="mt-1 text-sm text-muted">Counts describe the collected corpus, not ad effectiveness or causation.</p>
           {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="rounded border border-line p-3"><p className="text-xs font-semibold uppercase tracking-widest text-brass">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No repeated, confidence-rated ad patterns are stored.</p>}
         </div>
-      </Panel>
-      <Panel>
+      </Card>
+      <Card>
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-2xl">Analyzed ads</h2><p className="text-sm text-muted">Showing saved source, media, transcript, and analysis states.</p></div><div role="group" className="flex gap-2" aria-label="Research display mode"><Button type="button" variant={researchView === "gallery" ? "primary" : "secondary"} aria-pressed={researchView === "gallery"} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant={researchView === "table" ? "primary" : "secondary"} aria-pressed={researchView === "table"} onClick={() => setResearchView("table")}>Table</Button></div></div>
         <div className="mt-4">
           <ResearchFilterBar
@@ -243,8 +241,8 @@ function MarketPage({ brandId }: { brandId: string }) {
         </div>
         {researchFilters.visible.length ? <div className="mt-4"><ResearchList view={researchView} ads={researchFilters.visible} onView={setSelectedAdId} /></div> : <p className="mt-4 text-sm text-muted">No ads match these filters.</p>}
         <ResearchDetailSheet ad={selectedAd} onOpenChange={(open) => { if (!open) setSelectedAdId(null); }} />
-      </Panel>
-      <Panel>
+      </Card>
+      <Card>
         <h2 className="font-display text-2xl">Competitors</h2>
         {market.competitors.filter((item) => item.status === "confirmed").length === 0 ? (
           <p className="mt-3 text-muted">No competitors yet. Add one you actually compete with.</p>
@@ -283,10 +281,10 @@ function MarketPage({ brandId }: { brandId: string }) {
             onKeyDown={(event) => submitOnShortcut(event)}
           >
             <Field label="Name" error={competitorForm.formState.errors.name?.message} required>
-              <TextInput {...competitorForm.register("name")} required maxLength={120} />
+              <Input {...competitorForm.register("name")} required maxLength={120} />
             </Field>
             <Field label="Website" hint="Optional. Stored, not crawled." error={competitorForm.formState.errors.website?.message}>
-              <TextInput {...competitorForm.register("website")} maxLength={500} />
+              <Input {...competitorForm.register("website")} maxLength={500} />
             </Field>
             <Field label="Kind" error={competitorForm.formState.errors.kind?.message}>
               <SelectInput {...competitorForm.register("kind")}>
@@ -301,8 +299,8 @@ function MarketPage({ brandId }: { brandId: string }) {
             </div>
           </form>
         ) : null}
-      </Panel>
-      <Panel>
+      </Card>
+      <Card>
         <h2 className="font-display text-2xl">Observed creatives</h2>
         <p className="mt-2 text-sm text-muted">These rows are the only competitor evidence the ranker will use.</p>
         {market.observations.length === 0 ? <p className="mt-3 text-muted">No observations stored.</p> : (
@@ -339,32 +337,32 @@ function MarketPage({ brandId }: { brandId: string }) {
               </SelectInput>
             </Field>
             <Field label="Observed angle, if it is not in the list" error={observationForm.formState.errors.observedAngle?.message}>
-              <TextInput {...observationForm.register("observedAngle")} placeholder="unboxing" maxLength={48} />
+              <Input {...observationForm.register("observedAngle")} placeholder="unboxing" maxLength={48} />
             </Field>
             <div className="grid gap-3 md:grid-cols-3">
-              <Field label="Hook type" error={observationForm.formState.errors.hookType?.message}><TextInput {...observationForm.register("hookType")} placeholder="defaults from the preset" maxLength={48} /></Field>
-              <Field label="Format" error={observationForm.formState.errors.format?.message}><TextInput {...observationForm.register("format")} placeholder="short_ugc" maxLength={48} /></Field>
-              <Field label="Proof" error={observationForm.formState.errors.proofType?.message}><TextInput {...observationForm.register("proofType")} placeholder="demonstration" maxLength={48} /></Field>
+              <Field label="Hook type" error={observationForm.formState.errors.hookType?.message}><Input {...observationForm.register("hookType")} placeholder="defaults from the preset" maxLength={48} /></Field>
+              <Field label="Format" error={observationForm.formState.errors.format?.message}><Input {...observationForm.register("format")} placeholder="short_ugc" maxLength={48} /></Field>
+              <Field label="Proof" error={observationForm.formState.errors.proofType?.message}><Input {...observationForm.register("proofType")} placeholder="demonstration" maxLength={48} /></Field>
             </div>
             <Field label="Hook" error={observationForm.formState.errors.hook?.message} required>
-              <TextInput {...observationForm.register("hook")} required maxLength={400} />
+              <Input {...observationForm.register("hook")} required maxLength={400} />
             </Field>
             <Field label="What the creative says" error={observationForm.formState.errors.message?.message} required>
-              <TextArea {...observationForm.register("message")} required maxLength={4000} />
+              <Textarea {...observationForm.register("message")} required maxLength={4000} />
             </Field>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Offer" error={observationForm.formState.errors.offer?.message}><TextInput {...observationForm.register("offer")} maxLength={400} /></Field>
-              <Field label="Call to action" error={observationForm.formState.errors.cta?.message}><TextInput {...observationForm.register("cta")} maxLength={240} /></Field>
-              <Field label="Claim you saw" error={observationForm.formState.errors.claim?.message}><TextInput {...observationForm.register("claim")} maxLength={400} /></Field>
-              <Field label="Platform" error={observationForm.formState.errors.platform?.message}><TextInput {...observationForm.register("platform")} maxLength={80} /></Field>
-              <Field label="Source URL" error={observationForm.formState.errors.sourceUrl?.message}><TextInput {...observationForm.register("sourceUrl")} maxLength={500} /></Field>
+              <Field label="Offer" error={observationForm.formState.errors.offer?.message}><Input {...observationForm.register("offer")} maxLength={400} /></Field>
+              <Field label="Call to action" error={observationForm.formState.errors.cta?.message}><Input {...observationForm.register("cta")} maxLength={240} /></Field>
+              <Field label="Claim you saw" error={observationForm.formState.errors.claim?.message}><Input {...observationForm.register("claim")} maxLength={400} /></Field>
+              <Field label="Platform" error={observationForm.formState.errors.platform?.message}><Input {...observationForm.register("platform")} maxLength={80} /></Field>
+              <Field label="Source URL" error={observationForm.formState.errors.sourceUrl?.message}><Input {...observationForm.register("sourceUrl")} maxLength={500} /></Field>
             </div>
             <FormDiscardBar dirty={observationForm.formState.isDirty} subject="observation" onDiscard={() => observationForm.reset()} />
             <div className="flex flex-wrap gap-2"><Button type="submit" disabled={storeObservationMutation.isPending || observationForm.formState.isSubmitting}>{storeObservationMutation.isPending || observationForm.formState.isSubmitting ? "Storing…" : "Store observation"}</Button></div>
           </form>
         ) : null}
-      </Panel>
-      <Panel>
+      </Card>
+      <Card>
         <h2 className="font-display text-2xl">Public page</h2>
         <p className="mt-2 text-sm text-muted">The text is stored as untrusted data. It does not change the brand brain unless you accept a suggestion.</p>
         {canEdit ? (
@@ -374,7 +372,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             onKeyDown={(event) => submitOnShortcut(event)}
           >
             <Field label="Public page URL" error={pageForm.formState.errors.url?.message} required className="min-w-64 flex-1">
-              <TextInput {...pageForm.register("url")} placeholder="https://" className="max-w-md" required maxLength={500} />
+              <Input {...pageForm.register("url")} placeholder="https://" className="max-w-md" required maxLength={500} />
             </Field>
             <div className="flex items-end gap-2"><Button type="submit" disabled={fetchPageMutation.isPending || pageForm.formState.isSubmitting}>{fetchPageMutation.isPending || pageForm.formState.isSubmitting ? "Fetching…" : "Fetch page"}</Button></div>
             <FormDiscardBar dirty={pageForm.formState.isDirty} subject="page" onDiscard={() => pageForm.reset()} className="basis-full" />
@@ -429,7 +427,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             ))}
           </div>
         ) : null}
-      </Panel>
+      </Card>
     </div>
   );
 }

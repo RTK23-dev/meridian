@@ -1,7 +1,7 @@
 import { useId, useMemo } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, SelectInput, TextArea } from "@/components/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, SelectInput, Textarea } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
@@ -106,7 +106,7 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
               required={noteRequired(action)}
               error={errors.note?.message}
             >
-              <TextArea
+              <Textarea
                 {...register("note")}
                 rows={3}
                 maxLength={REVIEW_NOTE_MAX}

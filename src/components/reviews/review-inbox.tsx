@@ -17,7 +17,7 @@ export function ReviewInbox({
   onSelect: (index: number) => void;
 }) {
   return (
-    <nav aria-label="Review inbox">
+    <section aria-label="Review inbox">
       <ul className="space-y-2">
         {items.map((item, index) => {
           const age = ageBadge(item.createdAt, now);
@@ -45,6 +45,6 @@ export function ReviewInbox({
           );
         })}
       </ul>
-    </nav>
+    </section>
   );
 }
