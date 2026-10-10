@@ -28,7 +28,9 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
       { id: "integrations", label: "Integrations", to: "/integrations" },
       { id: "settings", label: "Settings", to: "/settings" },
       { id: "audit", label: "Audit log", to: "/audit" },
+      { id: "exports", label: "Exports", to: "/exports" },
       { id: "webhooks", label: "Webhook events", to: "/webhooks" },
+      { id: "notifications", label: "Notification preferences", to: "/notifications" },
     ],
   };
   if (!brandId) {

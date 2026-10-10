@@ -32,6 +32,7 @@ export const WORKSPACE_SCREEN_LINKS: { label: string; to: string }[] = [
   { label: "Integrations", to: "/integrations" },
   { label: "Settings", to: "/settings" },
   { label: "Audit log", to: "/audit" },
+  { label: "Exports", to: "/exports" },
   { label: "Webhook events", to: "/webhooks" },
   { label: "Notification preferences", to: "/notifications" },
 ];

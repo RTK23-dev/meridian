@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, BarChart3, Bell, Brain, ChevronDown, ClipboardCheck, FileClock, FlaskConical, GraduationCap, House, Layers3, Library, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, Bell, BellRing, Brain, ChevronDown, ClipboardCheck, Download, FileClock, FlaskConical, GraduationCap, House, Layers3, Library, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { hasRole } from "@/lib/meridian/access";
@@ -39,7 +39,9 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   integrations: Plug,
   settings: Settings,
   audit: FileClock,
+  exports: Download,
   webhooks: Webhook,
+  notifications: BellRing,
 };
 
 /** The shell owns the page-command registry, so screens inside it can register actions. */
