@@ -204,11 +204,12 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
       return { present: false, features: [feat("missing", 1, "product", "products", "No product name is stored for this variant.")] };
     }
     const mentioned = hasWord(text, facts.productName) || text.toLowerCase().includes(facts.productName.toLowerCase());
+    // A literal miss is a deterministic rejection, so it is a violation, not a score. Same as a measured logo mismatch.
     return {
       present: true,
       features: [
         feat(
-          mentioned ? "aligned" : "mismatch",
+          mentioned ? "aligned" : "violation",
           1,
           "product",
           "products",

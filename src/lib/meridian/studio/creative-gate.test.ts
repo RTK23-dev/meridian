@@ -21,7 +21,8 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MediaFacts } from "./features.ts";
+import { judgeMedia, type MediaFacts } from "./features.ts";
+import { QUESTION_SPECS } from "../jev/judgment.ts";
 
 const ffmpegAvailable = spawnSync("ffmpeg", ["-version"]).status === 0;
 
@@ -210,6 +211,30 @@ test("a local deterministic rejection is final: a prohibited phrase rejects the 
   `;
   assert.equal(record?.engine_called, false);
   assert.equal(record?.action, "REJECT");
+});
+
+test("a product missing from the creative's text is a final local rejection, calibrated or not, and no engine is asked", async () => {
+  // The variant text is the copy, the generation prompt, and the transcript. None of them names the product here.
+  const unnamed = { ...facts, copy: "A calm dinner in ten minutes, with nothing named.", prompt: "A calm dinner still.", transcript: "" };
+  const productOf = (decisions: ReturnType<typeof judgeMedia>) => decisions.find((item) => item.questionId === "product_match");
+  // The production creative check, judgeMedia, with no calibration: a violation rejects.
+  assert.equal(productOf(judgeMedia(unnamed))?.decision, "REJECT");
+  // The same check with a calibration step. A violation is evidence, not a score, so it still rejects.
+  const spec = QUESTION_SPECS.find((item) => item.id === "product_match");
+  assert.ok(spec, "the product question is registered");
+  const policies = new Map([
+    ["product_match", { thresholds: spec.thresholds, policyVersion: "product.test.v1", calibration: { version: "identity.product.v1", apply: (score: number) => score } }],
+  ]);
+  assert.equal(productOf(judgeMedia(unnamed, policies))?.decision, "REJECT");
+  // The production path end to end: the creative is judged, the literal miss is final, and no engine is asked.
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-product-missing");
+  const jev = stubEngine("jev", { respond: textApproves });
+  const openai = stubEngine("openai-decisions", { respond: textApproves });
+  const judged = await judge({ tenant, creativeId: `creative-${randomUUID()}`, facts: unnamed, engines: registryWith(jev, openai), selectedEngine: "jev" });
+  assert.equal(judged.rollup, "REJECT");
+  assert.equal(judged.gateEngineCalled, false, "the engine is not asked to override a literal miss");
+  assert.equal(jev.requests.length + openai.requests.length, 0, "no engine request is made");
 });
 
 test("under JEV, the visual checks are unsupported: the creative goes to review, OpenAI is never called, and JEV gets no image", async () => {
