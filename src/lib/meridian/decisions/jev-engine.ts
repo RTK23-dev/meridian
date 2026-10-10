@@ -18,6 +18,7 @@ import { resolveJevConfig } from "../jev/config.ts";
 import type { JevProviderRouter, JevRoutingPolicy } from "../jev/types.ts";
 import {
   abstainAll,
+  type DecisionCallContext,
   type DecisionCapabilities,
   type DecisionEngine,
   type DecisionEngineHealth,
@@ -58,8 +59,8 @@ export class JevDecisionEngine implements DecisionEngine {
     };
   }
 
-  async health(): Promise<DecisionEngineHealth> {
-    const transports = await this.router.health();
+  async health(context?: DecisionCallContext): Promise<DecisionEngineHealth> {
+    const transports = await this.router.health(undefined, context);
     const config = resolveJevConfig();
     const preferred = transports[config.preferredProvider];
     if (preferred?.status === "READY") return { status: "READY", message: `JEV via ${config.preferredProvider}.` };
@@ -75,7 +76,7 @@ export class JevDecisionEngine implements DecisionEngine {
     }
     return {
       status: "NOT_CONFIGURED",
-      message: "No JEV transport is configured. Set TYPESAFE_JEV_API_KEY or OPENROUTER_API_KEY.",
+      message: "No JEV transport is configured. Save a TypeSafe key in this workspace's settings, or set OPENROUTER_API_KEY on the deployment.",
     };
   }
 
@@ -86,7 +87,7 @@ export class JevDecisionEngine implements DecisionEngine {
     return { mode, preferredProvider: config.preferredProvider, fallbackEnabled: config.fallbackEnabled };
   }
 
-  async decide(request: DecisionRequest): Promise<DecisionResult> {
+  async decide(request: DecisionRequest, context?: DecisionCallContext): Promise<DecisionResult> {
     const config = resolveJevConfig();
     const requestedModel =
       request.model ?? (config.preferredProvider === "openrouter" ? config.openrouter.model : config.typesafe.model);
@@ -117,7 +118,7 @@ export class JevDecisionEngine implements DecisionEngine {
     const { images: _images, imagePolicy: _policy, routingPolicy, ...jevRequest } = request;
     void _images;
     void _policy;
-    const response = await this.router.decide(jevRequest, routingPolicy ?? this.routingPolicy());
+    const response = await this.router.decide(jevRequest, routingPolicy ?? this.routingPolicy(), context);
     // Give every answered value the same semantics and calibration fields the other engine returns.
     for (const answer of Object.values(response.answers)) {
       if (answer.status !== "answered") continue;

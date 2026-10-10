@@ -7,6 +7,7 @@
  * is not part of this function.
  */
 import type { Sql } from "../learning/store.ts";
+import { resolveCredential } from "../credentials/resolve.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
 import { OpenAiDecisionsEngine } from "./openai-engine.ts";
 import { persistDecisionLineage } from "./lineage.ts";
@@ -14,6 +15,7 @@ import { resolveActiveEngine, type EngineSelection } from "./selection.ts";
 import type { JevProviderRouter } from "../jev/types.ts";
 import {
   DECISION_ENGINE_IDS,
+  type DecisionCallContext,
   type DecisionEngine,
   type DecisionEngineId,
   type DecisionRequest,
@@ -38,6 +40,15 @@ export function createDecisionEngines(options: {
   };
 }
 
+/**
+ * The TypeSafe key a JEV call for this organization may use, from the one credential resolver. Without a database
+ * connection, or without an organization, no workspace key can be read, so the TypeSafe transport is not available.
+ */
+export async function jevCallContext(sql: Sql | undefined, organizationId: string | undefined): Promise<DecisionCallContext> {
+  const resolution = await resolveCredential(sql, organizationId ?? "", "jev");
+  return resolution.status === "ready" ? { typesafeKey: resolution.secret } : {};
+}
+
 export type DispatchedDecision = DecisionResult & {
   selection: EngineSelection;
   persisted: boolean;
@@ -57,7 +68,8 @@ export async function decideWithActiveEngine(input: {
   if (!engine) {
     throw new Error(`No decision engine is registered for '${selection.engineId}'.`);
   }
-  const result = await engine.decide(input.request);
+  const context = selection.engineId === "jev" ? await jevCallContext(input.sql, input.request.organizationId) : undefined;
+  const result = await engine.decide(input.request, context);
   const persisted = input.sql
     ? await persistDecisionLineage(input.sql, input.request, result, input.recordId)
     : false;

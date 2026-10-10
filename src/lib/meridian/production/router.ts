@@ -9,6 +9,7 @@ import type {
   CostMode,
   CreativeSpec,
   ProductionProvider,
+  ProductionCallContext,
 } from "./types.ts";
 import { ManualCloudProvider } from "./providers/manual-cloud.ts";
 import { HypitProvider } from "./providers/hypit.ts";
@@ -204,14 +205,14 @@ export class ProductionRouter {
   /**
    * Explicit provider routing: verifies requested provider without silent fallback.
    */
-  async routeExplicit(id: string, _spec: CreativeSpec): Promise<ProductionProvider> {
+  async routeExplicit(id: string, _spec: CreativeSpec, context?: ProductionCallContext): Promise<ProductionProvider> {
     const provider = this.get(id);
     if (!provider) {
       throw new Error(
         `Production provider '${id}' is not registered or cannot be resolved in ${this.runtime} runtime.`,
       );
     }
-    const health = await provider.health();
+    const health = await provider.health(context);
     if (health.state === "NOT_CONFIGURED") {
       throw new Error(`Provider '${id}' is NOT_CONFIGURED: ${health.detail || "Credentials missing."}`);
     }
@@ -229,14 +230,21 @@ export class ProductionRouter {
     spec: CreativeSpec,
     mode: CostMode = "ZERO_SPEND",
     requestedProvider?: string,
+    context?: ProductionCallContext,
   ): Promise<ProductionProvider> {
-    return (await this.selectForSpec(spec, mode, requestedProvider)).provider;
+    return (await this.selectForSpec(spec, mode, requestedProvider, context)).provider;
   }
 
-  async selectForSpec(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND", requestedProvider?: string): Promise<ProviderSelection> {
+  /** `context` carries the Gemini key the caller resolved for this spec's organization. Health is checked with it. */
+  async selectForSpec(
+    spec: CreativeSpec,
+    mode: CostMode = "ZERO_SPEND",
+    requestedProvider?: string,
+    context?: ProductionCallContext,
+  ): Promise<ProviderSelection> {
     const requirement = requirementFor(spec);
     if (requestedProvider && requestedProvider !== "auto") {
-      const provider = await this.routeExplicit(requestedProvider, spec);
+      const provider = await this.routeExplicit(requestedProvider, spec, context);
       // An explicit provider is a deliberate choice: deprecated, zero-spend and unpriced candidates are allowed, and recorded.
       const selection = selectOffer({
         candidates: this.candidatesFor([provider], requirement.modality),
@@ -254,7 +262,7 @@ export class ProductionRouter {
       return { provider, selection };
     }
 
-    const healthy = await this.healthyProviders();
+    const healthy = await this.healthyProviders(context);
     if (mode === "ZERO_SPEND") {
       const manualCloud = healthy.find((p) => p.id === "manual_cloud");
       if (!manualCloud) throw new Error("ManualCloud provider is NOT_CONFIGURED (Google Drive not connected).");
@@ -299,6 +307,7 @@ export class ProductionRouter {
   async selectImageForSpec(
     spec: CreativeSpec,
     options: { requestedProvider?: string; allowUnknownCost: boolean },
+    context?: ProductionCallContext,
   ): Promise<ImageProviderSelection> {
     const requirement = requirementForImage(spec);
     const requested = options.requestedProvider && options.requestedProvider !== "auto" ? options.requestedProvider : null;
@@ -308,7 +317,7 @@ export class ProductionRouter {
         if (requested === "test:image") throw new Error("The test image provider is not enabled outside the testing runtime.");
         throw new Error(`Image provider '${requested}' is not registered or cannot be resolved in ${this.runtime} runtime.`);
       }
-      const health = await provider.health();
+      const health = await provider.health(context);
       if (health.state === "NOT_CONFIGURED") throw new Error(`Provider '${requested}' is NOT_CONFIGURED: ${health.detail || "Credentials missing."}`);
       if (health.state === "UNAVAILABLE" || health.state === "AUTH_FAILED") throw new Error(`Provider '${requested}' is ${health.state}: ${health.detail || "Provider offline."}`);
       const selection = selectOffer({
@@ -325,7 +334,7 @@ export class ProductionRouter {
       return { provider, selection };
     }
 
-    const healthy = await this.healthyImageProviders();
+    const healthy = await this.healthyImageProviders(context);
     if (healthy.length === 0) throw new Error("No configured image provider is available.");
     const selection = selectOffer({
       candidates: this.candidatesFor(healthy, "image"),
@@ -341,15 +350,15 @@ export class ProductionRouter {
     return { provider, selection };
   }
 
-  private async healthyImageProviders(): Promise<ProductionImageProvider[]> {
+  private async healthyImageProviders(context?: ProductionCallContext): Promise<ProductionImageProvider[]> {
     const usable = Array.from(this.imageProviders.values()).filter((p) => p.id !== "test:image" || testingRuntimeNow());
-    const checks = await Promise.all(usable.map(async (p) => ({ provider: p, health: await p.health() })));
+    const checks = await Promise.all(usable.map(async (p) => ({ provider: p, health: await p.health(context) })));
     return checks.filter((c) => c.health.state === "HEALTHY" || c.health.state === "CONFIGURED").map((c) => c.provider);
   }
 
-  private async healthyProviders(): Promise<ProductionProvider[]> {
+  private async healthyProviders(context?: ProductionCallContext): Promise<ProductionProvider[]> {
     const checks = await Promise.all(
-      Array.from(this.providers.values()).map(async (p) => ({ provider: p, health: await p.health() })),
+      Array.from(this.providers.values()).map(async (p) => ({ provider: p, health: await p.health(context) })),
     );
     return checks.filter((c) => c.health.state === "HEALTHY" || c.health.state === "CONFIGURED").map((c) => c.provider);
   }

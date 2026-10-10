@@ -10,6 +10,7 @@ import type { Sql } from "../learning/store.ts";
 import { productionRouter, type ProductionRouter } from "./router.ts";
 import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
 import type { ProductionJob } from "./types.ts";
+import { productionCallContext } from "./call-context.ts";
 import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
 import { completeProductionJob, settleCarouselParent, settleCreativePlanIfComplete } from "./materialization.ts";
 
@@ -249,7 +250,8 @@ export async function pollProductionJobs(
     let polledJob: ProductionJob;
 
     try {
-      polledJob = await provider.checkJobStatus(externalJobId, metadata);
+      // Each job is polled with its own organization's key, so one tenant's job never uses another tenant's key.
+      polledJob = await provider.checkJobStatus(externalJobId, metadata, await productionCallContext(sql, row.organization_id));
     } catch {
       const newAttempts = (row.attempt_count || 0) + 1;
       await sql`

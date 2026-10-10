@@ -12,6 +12,8 @@ export async function generateImageBytes(input: {
   allowTest: boolean;
   model?: string;
   aspectRatio?: string;
+  /** The Gemini key for this organization's call. Only the Google provider uses it. */
+  apiKey?: string;
 }): Promise<ImageResult> {
   if (input.provider === "test:image") {
     return testImageProvider(input.allowTest).generate({
@@ -26,6 +28,7 @@ export async function generateImageBytes(input: {
       promptVersion: input.promptVersion,
       model: input.model,
       aspectRatio: input.aspectRatio,
+      apiKey: input.apiKey,
     });
   }
   return { status: "NOT_CONNECTED", provider: input.provider || "unconfigured", error: "The selected image provider is unavailable. No image was generated." };

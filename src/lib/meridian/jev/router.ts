@@ -13,6 +13,7 @@
  */
 
 import type {
+  JevCallContext,
   JevProvider,
   JevProviderId,
   JevCapabilities,
@@ -34,15 +35,23 @@ export class TypeSafeDirectJevProvider implements JevProvider {
   private baseUrl?: string;
   private fetchImpl: typeof fetch;
 
+  /**
+   * The key is never read from the deployment here. A call carries the key its organization may use (see JevCallContext),
+   * and `apiKey` is only for a transport built with a key explicitly, such as a test double.
+   */
   constructor(options?: {
     apiKey?: string;
     baseUrl?: string;
     fetchImpl?: typeof fetch;
   }) {
     const config = resolveJevConfig();
-    this.apiKey = options?.apiKey ?? (config.typesafe.apiKey || undefined);
+    this.apiKey = options?.apiKey;
     this.baseUrl = options?.baseUrl ?? config.typesafe.baseUrl;
     this.fetchImpl = options?.fetchImpl ?? globalThis.fetch;
+  }
+
+  private keyFor(context?: JevCallContext): string | undefined {
+    return context?.typesafeKey ?? this.apiKey;
   }
 
   private getEndpoint(): string {
@@ -68,18 +77,18 @@ export class TypeSafeDirectJevProvider implements JevProvider {
     };
   }
 
-  async health(): Promise<JevProviderHealth> {
-    if (!this.apiKey) {
+  async health(context?: JevCallContext): Promise<JevProviderHealth> {
+    if (!this.keyFor(context)) {
       return {
         status: "NOT_CONFIGURED",
-        message: "TYPESAFE_JEV_API_KEY is not configured for direct TypeSafe JEV.",
+        message: "No TypeSafe JEV key is available for this workspace. Save a key in the settings, or set JEV_SHARED_DEFAULT=deployment with TYPESAFE_JEV_API_KEY.",
       };
     }
     return { status: "READY" };
   }
 
-  async decide(request: JevDecisionRequest): Promise<JevDecisionResponse> {
-    const health = await this.health();
+  async decide(request: JevDecisionRequest, context?: JevCallContext): Promise<JevDecisionResponse> {
+    const health = await this.health(context);
     if (health.status !== "READY") {
       const answers: Record<string, JevAnswer> = {};
       const now = new Date().toISOString();
@@ -170,7 +179,7 @@ export class TypeSafeDirectJevProvider implements JevProvider {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.keyFor(context)}`,
         },
         body: JSON.stringify(payload),
       });
@@ -320,20 +329,21 @@ export class JevRouter implements JevProviderRouter {
     return p;
   }
 
-  async health(id?: JevProviderId): Promise<Record<JevProviderId, JevProviderHealth>> {
+  async health(id?: JevProviderId, context?: JevCallContext): Promise<Record<JevProviderId, JevProviderHealth>> {
     if (id) {
-      return { [id]: await this.getProvider(id).health() } as Record<JevProviderId, JevProviderHealth>;
+      return { [id]: await this.getProvider(id).health(context) } as Record<JevProviderId, JevProviderHealth>;
     }
     const result: Record<string, JevProviderHealth> = {};
     for (const [pId, prov] of this.providers.entries()) {
-      result[pId] = await prov.health();
+      result[pId] = await prov.health(context);
     }
     return result as Record<JevProviderId, JevProviderHealth>;
   }
 
   async decide(
     request: JevDecisionRequest,
-    policy?: JevRoutingPolicy
+    policy?: JevRoutingPolicy,
+    context?: JevCallContext,
   ): Promise<JevDecisionResponse> {
     const config = resolveJevConfig();
     const rawMode = (policy?.mode ?? config.mode).toLowerCase();
@@ -352,7 +362,7 @@ export class JevRouter implements JevProviderRouter {
         ? "typesafe_direct"
         : rawPref === "openrouter"
           ? "openrouter"
-          : config.typesafe.apiKey
+          : context?.typesafeKey
             ? "typesafe_direct"
             : "openrouter";
 
@@ -360,17 +370,17 @@ export class JevRouter implements JevProviderRouter {
       policy?.fallbackEnabled ?? config.fallbackEnabled;
 
     if (mode === "typesafe_direct") {
-      return this.getProvider("typesafe_direct").decide(request);
+      return this.getProvider("typesafe_direct").decide(request, context);
     }
 
     if (mode === "openrouter") {
-      return this.getProvider("openrouter").decide(request);
+      return this.getProvider("openrouter").decide(request, context);
     }
 
     if (mode === "compare") {
       const [directRes, openrouterRes] = await Promise.all([
-        this.getProvider("typesafe_direct").decide(request),
-        this.getProvider("openrouter").decide(request),
+        this.getProvider("typesafe_direct").decide(request, context),
+        this.getProvider("openrouter").decide(request, context),
       ]);
 
       const primary = preferredProviderId === "typesafe_direct" ? directRes : openrouterRes;
@@ -408,10 +418,10 @@ export class JevRouter implements JevProviderRouter {
 
     // AUTO mode: prefer configured provider, fall back on eligible transport failure
     const preferred = this.getProvider(preferredProviderId);
-    const prefHealth = await preferred.health();
+    const prefHealth = await preferred.health(context);
 
     if (prefHealth.status === "READY") {
-      const resp = await preferred.decide(request);
+      const resp = await preferred.decide(request, context);
       // Check if all answers failed with provider_error
       const allFailed = Object.values(resp.answers).every(
         (a) => a.status === "provider_error" || a.status === "not_configured"
@@ -420,9 +430,9 @@ export class JevRouter implements JevProviderRouter {
         const fallbackId: JevProviderId =
           preferredProviderId === "typesafe_direct" ? "openrouter" : "typesafe_direct";
         const fallback = this.getProvider(fallbackId);
-        const fbHealth = await fallback.health();
+        const fbHealth = await fallback.health(context);
         if (fbHealth.status === "READY") {
-          const fallbackResp = await fallback.decide(request);
+          const fallbackResp = await fallback.decide(request, context);
           return {
             ...fallbackResp,
             fallbackUsed: true,
@@ -445,7 +455,7 @@ export class JevRouter implements JevProviderRouter {
       const fallbackId: JevProviderId =
         preferredProviderId === "typesafe_direct" ? "openrouter" : "typesafe_direct";
       const fallback = this.getProvider(fallbackId);
-      const fallbackResp = await fallback.decide(request);
+      const fallbackResp = await fallback.decide(request, context);
       return {
         ...fallbackResp,
         fallbackUsed: true,
@@ -457,7 +467,7 @@ export class JevRouter implements JevProviderRouter {
     }
 
     // Otherwise return preferred decision (which will yield NOT_CONFIGURED answers)
-    return preferred.decide(request);
+    return preferred.decide(request, context);
   }
 }
 

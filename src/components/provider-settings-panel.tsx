@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Button, Field, Notice, Panel, SelectInput, TextInput } from "@/components/ui";
+import { Button, Field, Notice, Panel, TextInput } from "@/components/ui";
 import {
   getProviderSettings,
   saveProviderConfig,
@@ -56,9 +56,8 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
   // Form states for active category
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [modeInput, setModeInput] = useState("auto");
-  const [preferredProviderInput, setPreferredProviderInput] = useState("typesafe_direct");
-  const [costPreferenceInput, setCostPreferenceInput] = useState("BALANCED");
+  // Bumped on every reload, so the decision-engine card re-reads its status after a key is saved or removed.
+  const [loadCount, setLoadCount] = useState(0);
   const [gatewayUrlInput, setGatewayUrlInput] = useState("http://127.0.0.1:4000");
   const [maxPagesInput, setMaxPagesInput] = useState("50");
 
@@ -68,13 +67,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
     try {
       const data = await getProviderSettings({ data: { organizationId } });
       setSummaries(data);
-      if (data.jev) {
-        setModeInput(String(data.jev.settings.mode || "auto"));
-        setPreferredProviderInput(String(data.jev.settings.preferredProvider || "typesafe_direct"));
-      }
-      if (data.production) {
-        setCostPreferenceInput(String(data.production.settings.costPreference || "BALANCED"));
-      }
+      setLoadCount((count) => count + 1);
       if (data.cyclone) {
         setGatewayUrlInput(String(data.cyclone.settings.gatewayUrl || "http://127.0.0.1:4000"));
       }
@@ -120,12 +113,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
       }
 
       const settings: Record<string, unknown> = {};
-      if (category === "jev") {
-        settings.mode = modeInput;
-        settings.preferredProvider = preferredProviderInput;
-      } else if (category === "production") {
-        settings.costPreference = costPreferenceInput;
-      } else if (category === "cyclone") {
+      if (category === "cyclone") {
         settings.gatewayUrl = gatewayUrlInput;
       } else if (category === "sources") {
         settings.maxPages = Number(maxPagesInput);
@@ -277,34 +265,18 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           {/* Tab Specific Content */}
           {activeTab === "jev" ? (
             <div className="space-y-6">
-              <DecisionEngineSelector organizationId={organizationId} canAdmin={canAdmin} />
+              <DecisionEngineSelector key={loadCount} organizationId={organizationId} canAdmin={canAdmin} />
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">TypeSafe JEV transport</p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="JEV Routing Mode">
-                <SelectInput
-                  value={modeInput}
-                  onChange={(e) => setModeInput(e.target.value)}
-                  disabled={!canAdmin}
-                >
-                  <option value="auto">Auto (Prefer configured provider with fallback)</option>
-                  <option value="typesafe_direct">TypeSafe Direct (System One endpoint only)</option>
-                  <option value="openrouter">OpenRouter Decisions API (Strict)</option>
-                  <option value="compare">Compare Mode (Run both providers & audit agreement)</option>
-                </SelectInput>
+                <TextInput value={String(activeSummary.settings.mode)} readOnly />
               </Field>
 
               <Field label="Preferred Provider">
-                <SelectInput
-                  value={preferredProviderInput}
-                  onChange={(e) => setPreferredProviderInput(e.target.value)}
-                  disabled={!canAdmin}
-                >
-                  <option value="typesafe_direct">TypeSafe Direct</option>
-                  <option value="openrouter">OpenRouter Decisions</option>
-                </SelectInput>
+                <TextInput value={String(activeSummary.settings.preferredProvider)} readOnly />
               </Field>
 
-              {modeInput === "compare" ? (
+              {activeSummary.settings.mode === "compare" ? (
                 <div className="sm:col-span-2 rounded border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
                   ⚠️ <strong>Compare Mode Active</strong>: Runs both TypeSafe and OpenRouter in parallel to evaluate
                   decision agreement. Incurs dual API provider fees.
@@ -312,7 +284,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               ) : null}
 
               <div className="sm:col-span-2">
-                <Field label="Replace API Key (Encrypted in Vault)">
+                <Field label="Replace TypeSafe API Key (Encrypted in Vault)">
                   <TextInput
                     type="password"
                     placeholder="Enter new key to update..."
@@ -322,25 +294,16 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                   />
                 </Field>
               </div>
+              <p className="sm:col-span-2 text-xs text-muted">
+                Routing is set on the deployment (MERIDIAN_JEV_PROVIDER_MODE, MERIDIAN_JEV_PREFERRED_PROVIDER). The OpenRouter key is set on the deployment (OPENROUTER_API_KEY) and is not stored in this workspace.
+                Without a saved TypeSafe key, the deployment&apos;s TypeSafe key is used only when JEV_SHARED_DEFAULT=deployment is set.
+              </p>
             </div>
             </div>
           ) : null}
 
           {activeTab === "production" ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Cost Preference Strategy">
-                <SelectInput
-                  value={costPreferenceInput}
-                  onChange={(e) => setCostPreferenceInput(e.target.value)}
-                  disabled={!canAdmin}
-                >
-                  <option value="BALANCED">Balanced (Standard quality and cost curve)</option>
-                  <option value="ZERO_SPEND">Zero Spend / Manual Cloud Handoff</option>
-                  <option value="LOWEST_COST">Lowest Cost First</option>
-                  <option value="QUALITY_FIRST">Quality First (Gemini Omni / High-Res)</option>
-                </SelectInput>
-              </Field>
-
               <div className="sm:col-span-2">
                 <Field label="Replace Production Provider Key (Omni / Google AI Studio)">
                   <TextInput
@@ -352,6 +315,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                   />
                 </Field>
               </div>
+              <p className="sm:col-span-2 text-xs text-muted">
+                Models are set on the deployment (MERIDIAN_GEMINI_OMNI_MODEL, MERIDIAN_IMAGE_MODEL): {String(activeSummary.settings.omniModel)} and {String(activeSummary.settings.imageModel)}.
+                Without a saved key, the deployment&apos;s Gemini key is used only when PRODUCTION_SHARED_DEFAULT=deployment is set.
+                Hypit video runtime: {activeSummary.settings.hypitConfigured ? "HYPIT_BASE_URL is set." : "HYPIT_BASE_URL is not set."}
+              </p>
             </div>
           ) : null}
 

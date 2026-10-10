@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
+import { resolveCredential } from "@/lib/meridian/credentials/resolve";
 import { buildBrief, renderGenerationPrompt, type BriefDraft } from "@/lib/meridian/brief/engine";
 import { decideForTenant } from "@/lib/meridian/jev/engine";
 import { creativeQa, visualQa } from "@/lib/meridian/jev/questions";
@@ -602,7 +603,13 @@ export const attachCreativeImage = createServerFn({ method: "POST" })
     const jevDecisionId = briefRows[0]?.decision_id ?? "";
     const { generateNanoBananaImage } = await import("@/lib/meridian/providers/nano-banana.server");
     const prompt = `Advertising still for ${creative.title}. ${creative.hook}. ${creative.raw_text}`.slice(0, 1800);
-    const image = await generateNanoBananaImage({ prompt, promptVersion: "creative-image-v1" });
+    // The Gemini key is this organization's own (or the shared default). The adapter reads no key itself.
+    const googleKey = await resolveCredential(sql, access.organizationId, "production");
+    const image = await generateNanoBananaImage({
+      prompt,
+      promptVersion: "creative-image-v1",
+      apiKey: googleKey.status === "ready" ? googleKey.secret : undefined,
+    });
     if (image.status !== "ready") return { status: image.status, message: image.error };
     const assetId = id();
     const storageKey = `${access.organizationId}/${data.brandId}/creative/${data.creativeId}/${assetId}.png`;

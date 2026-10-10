@@ -20,6 +20,7 @@ import { createHash } from "node:crypto";
 import type {
   CreativeSpec,
   ProductionCapabilities,
+  ProductionCallContext,
   ProductionJob,
   ProductionProvider,
   ProviderHealth,
@@ -163,23 +164,24 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     this.fetchImpl = options?.fetchImpl || globalThis.fetch;
   }
 
-  private getApiKey(): string | undefined {
-    return ProviderConfigResolver.resolveGoogle().apiKey;
+  /** The key for this call's organization. The provider never reads a key from the vault or the environment itself. */
+  private getApiKey(context?: ProductionCallContext): string | undefined {
+    return context?.googleKey;
   }
 
   private getModel(): string {
     return ProviderConfigResolver.resolveGoogle().omniModel;
   }
 
-  async health(): Promise<ProviderHealth> {
+  async health(context?: ProductionCallContext): Promise<ProviderHealth> {
     const googleConfig = ProviderConfigResolver.resolveGoogle();
-    const key = googleConfig.apiKey;
+    const key = this.getApiKey(context);
     if (!key) {
       return {
         id: this.id,
         state: "NOT_CONFIGURED",
         capabilities: [],
-        detail: "Google Gemini Omni requires MERIDIAN_GEMINI_API_KEY (or GEMINI_API_KEY / GOOGLE_API_KEY).",
+        detail: "Google Gemini Omni has no key for this workspace. Save a Gemini key in the settings, or share the deployment's key.",
         checkedAt: new Date().toISOString(),
       };
     }
@@ -206,8 +208,8 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     };
   }
 
-  async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
-    const apiKey = this.getApiKey();
+  async submitJob(spec: CreativeSpec, context?: ProductionCallContext): Promise<ProductionJob> {
+    const apiKey = this.getApiKey(context);
     const costEstimate = (spec.durationTargetSeconds || 5) * this.capabilities.costPerSecondEstimateUsd;
 
     if (!apiKey) {
@@ -391,8 +393,8 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     }
   }
 
-  async checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob> {
-    const apiKey = this.getApiKey();
+  async checkJobStatus(jobId: string, metadata?: Record<string, unknown>, context?: ProductionCallContext): Promise<ProductionJob> {
+    const apiKey = this.getApiKey(context);
     const interactionId = (metadata?.interactionId as string) || (metadata?.operationName as string) || jobId;
 
     if (!apiKey) {

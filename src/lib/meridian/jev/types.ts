@@ -244,11 +244,18 @@ export type JevProviderHealth =
   | { status: "NOT_CONFIGURED"; message: string }
   | { status: "DEGRADED" | "UNAVAILABLE"; message: string };
 
+/**
+ * The per-call credential for the TypeSafe transport. The caller resolves it for the request's organization through
+ * credentials/resolve.ts, so the transport never reads the workspace vault itself. Absent means the transport is not
+ * available for this call. OpenRouter keeps its deployment key and ignores this.
+ */
+export type JevCallContext = { typesafeKey?: string };
+
 export interface JevProvider {
   readonly id: JevProviderId;
   capabilities(): JevCapabilities;
-  health(): Promise<JevProviderHealth>;
-  decide(request: JevDecisionRequest): Promise<JevDecisionResponse>;
+  health(context?: JevCallContext): Promise<JevProviderHealth>;
+  decide(request: JevDecisionRequest, context?: JevCallContext): Promise<JevDecisionResponse>;
 }
 
 export type JevRoutingMode = "auto" | "typesafe_direct" | "openrouter" | "compare";
@@ -261,8 +268,8 @@ export interface JevRoutingPolicy {
 }
 
 export interface JevProviderRouter {
-  decide(request: JevDecisionRequest, policy?: JevRoutingPolicy): Promise<JevDecisionResponse>;
+  decide(request: JevDecisionRequest, policy?: JevRoutingPolicy, context?: JevCallContext): Promise<JevDecisionResponse>;
   getProvider(id: JevProviderId): JevProvider;
-  health(id?: JevProviderId): Promise<Record<JevProviderId, JevProviderHealth>>;
+  health(id?: JevProviderId, context?: JevCallContext): Promise<Record<JevProviderId, JevProviderHealth>>;
 }
 

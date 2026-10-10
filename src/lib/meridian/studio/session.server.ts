@@ -24,6 +24,7 @@ import { briefStatusFor } from "./brief-review.server.ts";
 import { STUDIO_PROMPT_VERSION, isTestingRuntime, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
 import { productionRouter, type ImageProviderSelection } from "../production/router.ts";
+import { productionCallContext } from "../production/call-context.ts";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
 import { combineLogoFrames, combinePaletteFrames } from "../vision/measure.ts";
@@ -1236,7 +1237,11 @@ export async function executeApprovedCreativePlan(
 
         let selected: ImageProviderSelection;
         try {
-          selected = await productionRouter.selectImageForSpec(spec, { requestedProvider: imageTarget.provider, allowUnknownCost: unpriced });
+          selected = await productionRouter.selectImageForSpec(
+            spec,
+            { requestedProvider: imageTarget.provider, allowUnknownCost: unpriced },
+            await productionCallContext(sql, spec.organizationId),
+          );
         } catch (refusal) {
           // Refused before any provider call. The refusal is recorded on the job, and its reservation is released.
           await insertImageJobRow(sql, {
@@ -1385,10 +1390,13 @@ export async function executeApprovedCreativePlan(
         creativeSpec.providerId = productionTarget.provider;
         creativeSpec.modelId = productionTarget.model;
         // P4a: the provider and model are chosen by the capability matrix, and the choice is recorded on the job.
+        // The Gemini key is this workspace's own (or the shared default), resolved once and used for selection and submit.
+        const productionContext = await productionCallContext(sql, creativeSpec.organizationId);
         const { provider, selection } = await productionRouter.selectForSpec(
           creativeSpec,
           "BALANCED",
           targetVidProvider === "auto" ? undefined : targetVidProvider,
+          productionContext,
         );
         creativeSpec.providerId = provider.id;
         creativeSpec.modelId = selection.chosen?.modelId ?? creativeSpec.modelId;
@@ -1418,7 +1426,7 @@ export async function executeApprovedCreativePlan(
         const videoReservation = reservations.get(deliv.id);
         if (videoReservation) videoReservation.held = true;
         try {
-          submittedJob = await provider.submitJob(creativeSpec);
+          submittedJob = await provider.submitJob(creativeSpec, productionContext);
         } catch (submitError) {
           providerSubmissionUnknown = true;
           await sql`

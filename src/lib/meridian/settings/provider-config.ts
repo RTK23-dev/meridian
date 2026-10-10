@@ -11,13 +11,16 @@ import { selectPerceptionProvider } from "../perception/run.ts";
  * - Never returns raw secret keys or tokens back to the browser; returns only fingerprints.
  * - Enforces SSRF prevention via publicUrlIssue before testing any configurable endpoint.
  * - Audits all credential mutations without logging secret values.
- * - Precedence: Workspace DB vault -> Deployment env fallback -> Default.
+ * - JEV and production keys come from credentials/resolve.ts, the resolver their runtimes call: the workspace's saved key
+ *   first, and the deployment key only when JEV_SHARED_DEFAULT or PRODUCTION_SHARED_DEFAULT is set to "deployment".
  */
 
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { storeVaultCredential, retrieveVaultCredential, deleteVaultCredential, type VaultCredentialPayload } from "../vault/service.ts";
 import { resolveJevConfig } from "../jev/config.ts";
+import { resolveCredential } from "../credentials/resolve.ts";
+import { ProviderConfigResolver } from "../config/resolver.ts";
 import { jevRouter } from "../jev/router.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
@@ -93,36 +96,36 @@ export async function getWorkspaceProviderSettings(
     vaultMap.set(r.credential_type, { id: r.id, updatedAt: r.updated_at });
   }
 
-  // 1. JEV Category
-  const jevVaultEntry = vaultMap.get(vaultTypeForCategory("jev"));
-  let jevCreds: VaultCredentialPayload | null = null;
-  if (jevVaultEntry) {
-    try {
-      jevCreds = await retrieveVaultCredential(sql, organizationId, jevVaultEntry.id);
-    } catch {
-      // Ignored
-    }
-  }
-
+  // 1. JEV Category. The TypeSafe key is this workspace's saved key, resolved by the same resolver the JEV transport uses
+  // for each call (credentials/resolve.ts). The OpenRouter key stays on the deployment. Mode and routing come from the
+  // deployment environment, because that is what the JEV runtime reads.
+  const jevCredential = await resolveCredential(sql, organizationId, "jev");
   const deploymentJev = resolveJevConfig();
-  const jevConfigured = Boolean(jevCreds?.apiKey || deploymentJev.typesafe.apiKey || deploymentJev.openrouter.apiKey);
-  const jevSource = jevCreds?.apiKey ? "workspace" : (deploymentJev.typesafe.apiKey || deploymentJev.openrouter.apiKey ? "deployment" : "default");
+  const openrouterConfigured = Boolean(deploymentJev.openrouter.apiKey);
+  const jevConfigured = jevCredential.status === "ready" || openrouterConfigured;
+  const jevState: PerceptionCredentialState =
+    jevCredential.status === "ready" ? "usable" : jevCredential.status === "unusable" ? "unusable" : openrouterConfigured ? "usable" : "not_configured";
 
   const jevSummary: ProviderConfigSummary = {
     category: "jev",
     configured: jevConfigured,
-    source: jevSource,
-    keyFingerprint: fingerprint(jevCreds?.apiKey || deploymentJev.typesafe.apiKey || deploymentJev.openrouter.apiKey),
-    lastTestedStatus: (jevCreds?.customFields?.lastTestedStatus as any) || (jevConfigured ? "READY" : "NOT_CONFIGURED"),
-    lastTestedAt: (jevCreds?.customFields?.lastTestedAt as string) || (jevVaultEntry?.updatedAt ?? undefined),
-    lastTestedMessage: jevCreds?.customFields?.lastTestedMessage as string,
+    source:
+      jevCredential.status === "ready"
+        ? jevCredential.source === "workspace" ? "workspace" : "deployment"
+        : jevCredential.status === "unusable" ? "workspace" : openrouterConfigured ? "deployment" : "not_configured",
+    credentialState: jevState,
+    credentialReason: jevCredential.status === "ready" || jevState === "usable" ? undefined : jevCredential.reason,
+    keyFingerprint: jevCredential.status === "ready" ? jevCredential.fingerprint : undefined,
+    lastTestedStatus: jevConfigured ? "READY" : jevCredential.status === "unusable" ? "ERROR" : "NOT_CONFIGURED",
+    lastTestedMessage: jevCredential.status === "unusable" ? jevCredential.reason : undefined,
     settings: {
-      mode: jevCreds?.customFields?.mode || deploymentJev.mode,
-      preferredProvider: jevCreds?.customFields?.preferredProvider || deploymentJev.preferredProvider,
-      fallbackEnabled: jevCreds?.customFields?.fallbackEnabled ?? deploymentJev.fallbackEnabled,
-      timeoutMs: jevCreds?.customFields?.timeoutMs || deploymentJev.timeoutMs,
-      typesafeModel: jevCreds?.customFields?.typesafeModel || deploymentJev.typesafe.model,
-      openrouterModel: jevCreds?.customFields?.openrouterModel || deploymentJev.openrouter.model,
+      mode: deploymentJev.mode,
+      preferredProvider: deploymentJev.preferredProvider,
+      fallbackEnabled: deploymentJev.fallbackEnabled,
+      timeoutMs: deploymentJev.timeoutMs,
+      typesafeModel: deploymentJev.typesafe.model,
+      openrouterModel: deploymentJev.openrouter.model,
+      openrouterKeyConfigured: openrouterConfigured,
     },
     capabilities: ["choice_decisions", "score_decisions", "noul_probabilities", "evidence_audit_trail"],
   };
@@ -183,29 +186,28 @@ export async function getWorkspaceProviderSettings(
     capabilities: ["public_page_scrape", "meta_ad_library", "open_graph", "json_ld", "repeated_card_discovery"],
   };
 
-  // 4. Production Category
-  const prodVaultEntry = vaultMap.get(vaultTypeForCategory("production"));
-  let prodCreds: VaultCredentialPayload | null = null;
-  if (prodVaultEntry) {
-    try {
-      prodCreds = await retrieveVaultCredential(sql, organizationId, prodVaultEntry.id);
-    } catch {
-      // Ignored
-    }
-  }
-  const deploymentOmniKey = process.env.MERIDIAN_GEMINI_API_KEY || process.env.GOOGLE_AI_STUDIO_API_KEY;
-  const prodConfigured = Boolean(prodCreds?.apiKey || deploymentOmniKey);
-  const prodSource = prodCreds?.apiKey ? "workspace" : (deploymentOmniKey ? "deployment" : "default");
+  // 4. Production Category. The Gemini key is this workspace's saved key, resolved by the same resolver the production
+  // providers call for each job (credentials/resolve.ts). Models and Hypit come from the deployment environment, which is
+  // what those runtimes read.
+  const productionCredential = await resolveCredential(sql, organizationId, "production");
+  const google = ProviderConfigResolver.resolveGoogle();
+  const prodConfigured = productionCredential.status === "ready";
 
   const prodSummary: ProviderConfigSummary = {
     category: "production",
     configured: prodConfigured,
-    source: prodSource,
-    keyFingerprint: fingerprint(prodCreds?.apiKey || deploymentOmniKey),
+    source:
+      productionCredential.status === "ready"
+        ? productionCredential.source === "workspace" ? "workspace" : "deployment"
+        : productionCredential.status === "unusable" ? "workspace" : "not_configured",
+    credentialState: productionCredential.status === "ready" ? "usable" : productionCredential.status,
+    credentialReason: productionCredential.status === "ready" ? undefined : productionCredential.reason,
+    keyFingerprint: productionCredential.status === "ready" ? productionCredential.fingerprint : undefined,
+    lastTestedStatus: prodConfigured ? "READY" : productionCredential.status === "unusable" ? "ERROR" : "NOT_CONFIGURED",
     settings: {
-      costPreference: prodCreds?.customFields?.costPreference || process.env.PRODUCTION_COST_PREFERENCE || "BALANCED",
-      preferredEngine: prodCreds?.customFields?.preferredEngine || "gemini_omni",
-      hypitConfigured: Boolean(process.env.HYPIT_BASE_URL),
+      omniModel: google.omniModel,
+      imageModel: google.imageModel,
+      hypitConfigured: Boolean(process.env.HYPIT_BASE_URL?.trim()),
     },
     capabilities: ["gemini_omni_video", "image_to_video", "manual_cloud_handoff", "durable_job_polling"],
   };
@@ -318,7 +320,8 @@ export async function saveWorkspaceProviderConfig(
     accessToken: input.credentials?.accessToken || "",
     apiKey: input.credentials?.apiKey || "",
     refreshToken: input.credentials?.refreshToken || "",
-    customFields: input.settings || {},
+    // JEV and production read their routing and models from the deployment, so a saved setting for them would never be used.
+    customFields: input.category === "jev" || input.category === "production" ? {} : input.settings || {},
   };
 
   await storeVaultCredential(sql, input.organizationId, credentialType, payload);
@@ -395,12 +398,15 @@ export async function testWorkspaceProviderConnection(
 
   try {
     if (input.category === "jev") {
-      const health = await jevRouter.health();
+      // The same key the JEV transport uses for this organization. READY means a usable key is in place, and the live
+      // TypeSafe API is not called here.
+      const credential = await resolveCredential(sql, input.organizationId, "jev");
+      const health = await jevRouter.health(undefined, credential.status === "ready" ? { typesafeKey: credential.secret } : undefined);
       const ready = Object.values(health).some((h) => h.status === "READY");
       const latencyMs = Date.now() - started;
       return {
         status: ready ? "READY" : "ERROR",
-        message: ready ? "JEV provider responded with READY status." : "Configured JEV provider is not ready.",
+        message: ready ? "A usable JEV key is in place. The live provider was not called by this check." : "No usable JEV key is in place for this workspace.",
         latencyMs,
       };
     }
@@ -417,6 +423,18 @@ export async function testWorkspaceProviderConnection(
           message: `Gemini credential is usable (${source}). The live Gemini API was not called by this check.`,
           latencyMs,
         };
+      }
+      return { status: "ERROR", message: credential.reason, latencyMs };
+    }
+
+    if (input.category === "production") {
+      // The same key the production providers use for this organization. It does not call Gemini, so READY means a usable
+      // key is in place, not that the live API answered.
+      const credential = await resolveCredential(sql, input.organizationId, "production");
+      const latencyMs = Date.now() - started;
+      if (credential.status === "ready") {
+        const source = credential.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
+        return { status: "READY", message: `Gemini production key is usable (${source}). The live Gemini API was not called by this check.`, latencyMs };
       }
       return { status: "ERROR", message: credential.reason, latencyMs };
     }

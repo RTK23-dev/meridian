@@ -90,16 +90,18 @@ export async function generateNanoBananaImage(input: {
   promptVersion: string;
   model?: string;
   aspectRatio?: string;
+  /** The Gemini key for this call's organization, resolved by the caller. The adapter reads no key itself. */
+  apiKey?: string;
   env?: Record<string, string | undefined>;
   fetchImpl?: typeof fetch;
 }): Promise<ImageResult> {
   const resolved = ProviderConfigResolver.resolveGoogle({ env: input.env });
-  const apiKey = resolved.apiKey;
+  const apiKey = input.apiKey?.trim() || undefined;
   if (!apiKey) {
     return {
       status: "NOT_CONNECTED",
       provider: "google:nano-banana",
-      error: "Google Gemini image credentials are not configured (MERIDIAN_GEMINI_API_KEY). Image generation is optional; no image was created.",
+      error: "No Gemini key is available for this workspace. Save a key in the settings, or share the deployment's key. Image generation is optional; no image was created.",
     };
   }
 

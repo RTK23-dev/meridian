@@ -16,6 +16,7 @@ import type {
   JevDecisionResponse,
   JevQuestionType,
   JevRoutingPolicy,
+  JevCallContext,
 } from "../jev/types.ts";
 
 export const DECISION_ENGINE_IDS = ["jev", "openai-decisions"] as const;
@@ -127,12 +128,18 @@ export type DecisionResult = JevDecisionResponse & {
   failure?: { kind: DecisionFailureKind; message: string };
 };
 
+/**
+ * Per-call credentials the caller resolved for the request's organization. Only the JEV engine reads it, for its TypeSafe
+ * transport. Other engines ignore it. A call without it cannot use a workspace's key.
+ */
+export type DecisionCallContext = JevCallContext;
+
 export interface DecisionEngine {
   readonly id: DecisionEngineId;
   readonly adapterVersion: string;
   capabilities(): DecisionCapabilities;
-  health(): Promise<DecisionEngineHealth>;
-  decide(request: DecisionRequest): Promise<DecisionResult>;
+  health(context?: DecisionCallContext): Promise<DecisionEngineHealth>;
+  decide(request: DecisionRequest, context?: DecisionCallContext): Promise<DecisionResult>;
 }
 
 /** Builds the same abstained answer for every question in a request. */

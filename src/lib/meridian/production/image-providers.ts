@@ -5,9 +5,8 @@
  * budget reservation exist before the call, and the bytes are stored and verified by the shared artifact finalizer
  * after it. The generator never writes creative, asset, or review rows.
  */
-import type { ProviderHealth } from "./types.ts";
+import type { ProductionCallContext, ProviderHealth } from "./types.ts";
 import { generateImageBytes } from "../providers/image-bytes.server.ts";
-import { ProviderConfigResolver } from "../config/resolver.ts";
 import { isTestingRuntimeNow as testingRuntimeNow } from "../runtime-mode.ts";
 
 export interface ImageGenerationInput {
@@ -43,8 +42,8 @@ export interface ProductionImageProvider {
     /** Declared per-image price. Absent means no image price is declared, so the cost is unknown. */
     costPerImageEstimateUsd?: number;
   };
-  health(): Promise<ProviderHealth>;
-  generate(input: ImageGenerationInput): Promise<ImageGenerationOutcome>;
+  health(context?: ProductionCallContext): Promise<ProviderHealth>;
+  generate(input: ImageGenerationInput, context?: ProductionCallContext): Promise<ImageGenerationOutcome>;
 }
 
 function health(id: string, configured: boolean, detail: string): ProviderHealth {
@@ -62,12 +61,12 @@ export class GoogleNanoBananaImageProvider implements ProductionImageProvider {
   readonly id = "google_nano_banana";
   readonly capabilities = { zeroSpend: false };
 
-  async health(): Promise<ProviderHealth> {
-    const configured = Boolean(ProviderConfigResolver.resolveGoogle().apiKey);
+  async health(context?: ProductionCallContext): Promise<ProviderHealth> {
+    const configured = Boolean(context?.googleKey);
     return health(this.id, configured, configured ? "Google image credentials are configured." : "Google image credentials are not configured.");
   }
 
-  async generate(input: ImageGenerationInput): Promise<ImageGenerationOutcome> {
+  async generate(input: ImageGenerationInput, context?: ProductionCallContext): Promise<ImageGenerationOutcome> {
     const result = await generateImageBytes({
       provider: "google:nano-banana",
       prompt: input.prompt,
@@ -76,6 +75,7 @@ export class GoogleNanoBananaImageProvider implements ProductionImageProvider {
       allowTest: false,
       model: input.model,
       aspectRatio: input.aspectRatio,
+      apiKey: context?.googleKey,
     });
     return toOutcome(result);
   }

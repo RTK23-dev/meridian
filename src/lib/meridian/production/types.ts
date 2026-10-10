@@ -113,12 +113,18 @@ export type ProductionJob = {
   updatedAt: string;
 };
 
+/**
+ * Per-call credentials the caller resolved for the job's organization (credentials/resolve.ts). Only Gemini providers
+ * read it. Absent means a Gemini provider has no key for this call and reports NOT_CONFIGURED.
+ */
+export type ProductionCallContext = { googleKey?: string };
+
 export interface ProductionProvider {
   readonly id: string;
   readonly capabilities: ProductionCapabilities;
 
-  health(): Promise<ProviderHealth>;
-  submitJob(spec: CreativeSpec): Promise<ProductionJob>;
-  checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob>;
+  health(context?: ProductionCallContext): Promise<ProviderHealth>;
+  submitJob(spec: CreativeSpec, context?: ProductionCallContext): Promise<ProductionJob>;
+  checkJobStatus(jobId: string, metadata?: Record<string, unknown>, context?: ProductionCallContext): Promise<ProductionJob>;
   cancelJob?(jobId: string): Promise<void>;
 }

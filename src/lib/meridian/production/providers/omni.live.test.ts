@@ -76,10 +76,8 @@ test("GeminiOmniVideoProvider Contract & Duration Limits Validation", async () =
     "Omni must reject duration < 3s",
   );
 
-  // 3. submitJob returns FAILED if duration is out of range
-  const oldKey = process.env.MERIDIAN_GEMINI_API_KEY;
-  try {
-    process.env.MERIDIAN_GEMINI_API_KEY = "test-key-contract";
+  // 3. submitJob returns FAILED if duration is out of range. The key is passed per call, as production passes it.
+  {
     const invalidSpec: CreativeSpec = {
       id: "spec-invalid-dur",
       organizationId: "org-test",
@@ -92,10 +90,8 @@ test("GeminiOmniVideoProvider Contract & Duration Limits Validation", async () =
       script: "Script",
       scenes: [],
     };
-    const failedJob = await provider.submitJob(invalidSpec);
+    const failedJob = await provider.submitJob(invalidSpec, { googleKey: "test-key-contract" });
     assert.equal(failedJob.status, "FAILED");
     assert.ok(failedJob.error?.includes("duration"), "Error must cite duration limit");
-  } finally {
-    process.env.MERIDIAN_GEMINI_API_KEY = oldKey;
   }
 });

@@ -5,7 +5,7 @@
  * status here means the required credentials and settings are present, not that the provider has been reached.
  */
 import type { Sql } from "../learning/store.ts";
-import { DECISION_ENGINE_LABELS, createDecisionEngines, type DecisionEngineRegistry } from "./dispatcher.ts";
+import { DECISION_ENGINE_LABELS, createDecisionEngines, jevCallContext, type DecisionEngineRegistry } from "./dispatcher.ts";
 import { resolveActiveEngine, type EngineSelection } from "./selection.ts";
 import { DECISION_ENGINE_IDS, type DecisionCapabilities, type DecisionEngineHealth, type DecisionEngineId } from "./types.ts";
 
@@ -34,7 +34,7 @@ export async function getDecisionEngineStatus(
         id,
         label: DECISION_ENGINE_LABELS[id],
         isActive: id === active.engineId,
-        health: await engine.health(),
+        health: await engine.health(id === "jev" ? await jevCallContext(sql, organizationId) : undefined),
         adapterVersion: engine.adapterVersion,
         capabilities: engine.capabilities(),
       };

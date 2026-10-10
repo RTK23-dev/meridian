@@ -12,6 +12,9 @@ import {
 import { modelCapabilityRegistry } from "../registry.ts";
 import type { CreativeSpec } from "../types.ts";
 
+/** The organization's Gemini key, passed per call the way production passes it. */
+const GOOGLE = { googleKey: "test-gemini-key" };
+
 const sampleSpec: CreativeSpec = {
   id: "spec-test-1",
   organizationId: "org-test",
@@ -81,7 +84,7 @@ test("GeminiOmniVideoProvider submits official REST Interactions API payload", a
     fetchImpl: mockFetch as unknown as typeof fetch,
   });
 
-  const job = await provider.submitJob(sampleSpec);
+  const job = await provider.submitJob(sampleSpec, GOOGLE);
   assert.equal(job.status, "RUNNING");
   assert.equal(job.providerJobId, "interactions/omni-job-999");
   assert.equal(job.providerId, "google_omni");
@@ -94,12 +97,12 @@ test("Gemini Omni preserves an ambiguous submission as unknown and never synthes
     const transportFailure = new GeminiOmniVideoProvider({
       fetchImpl: (async () => { throw new Error("connection reset after request write"); }) as unknown as typeof fetch,
     });
-    assert.equal((await transportFailure.submitJob({ ...sampleSpec, idempotencyKey: "durable-job-key" })).status, "SUBMISSION_UNKNOWN");
+    assert.equal((await transportFailure.submitJob({ ...sampleSpec, idempotencyKey: "durable-job-key" }, GOOGLE)).status, "SUBMISSION_UNKNOWN");
 
     const missingProviderId = new GeminiOmniVideoProvider({
       fetchImpl: (async () => new Response(JSON.stringify({ status: "in_progress" }), { status: 200 })) as unknown as typeof fetch,
     });
-    const result = await missingProviderId.submitJob({ ...sampleSpec, idempotencyKey: "durable-job-key" });
+    const result = await missingProviderId.submitJob({ ...sampleSpec, idempotencyKey: "durable-job-key" }, GOOGLE);
     assert.equal(result.status, "SUBMISSION_UNKNOWN");
     assert.equal(result.providerJobId, undefined);
   } finally {
@@ -140,7 +143,7 @@ test("GeminiOmniVideoProvider parses official REST steps[].content[] Base64 vide
     fetchImpl: mockFetch as unknown as typeof fetch,
   });
 
-  const polled = await provider.checkJobStatus("interactions/omni-job-999");
+  const polled = await provider.checkJobStatus("interactions/omni-job-999", undefined, GOOGLE);
   assert.equal(polled.status, "COMPLETED");
   assert.ok(polled.metadata?.sha256);
   assert.equal(polled.metadata?.mimeType, "video/mp4");
@@ -191,13 +194,16 @@ test("GeminiOmniVideoProvider supports image-to-video multimodal input structure
     sourceMediaUrl: "https://storage.googleapis.com/test-bucket/product.jpg",
   };
 
-  const job = await provider.submitJob(specWithImage);
+  const job = await provider.submitJob(specWithImage, GOOGLE);
   assert.equal(job.status, "COMPLETED");
   assert.equal(job.outputArtifactId, "https://storage.googleapis.com/test-bucket/output.mp4");
 });
 
 test("E2E: Production poller consumes Omni Base64 video response and materializes real bytes to Drive", async () => {
+  // The poller resolves the key per job organization. The deployment key is used here only because the operator shares it.
+  const previousShared = process.env.PRODUCTION_SHARED_DEFAULT;
   process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.PRODUCTION_SHARED_DEFAULT = "deployment";
   const sql = await getSql();
   const fakeVideoBytes = Buffer.from("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41test-omni-rendered-mp4-payload-bytes");
   const fakeBase64 = fakeVideoBytes.toString("base64");
@@ -291,6 +297,8 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
   assert.ok(row!.materialized_at, "artifact is materialized");
   const [creative] = await sql<{ status: string }>`select status from creative_records where id = ${`video-creative-${jobId}`}`;
   assert.equal(creative!.status, "in_review");
+  if (previousShared === undefined) delete process.env.PRODUCTION_SHARED_DEFAULT;
+  else process.env.PRODUCTION_SHARED_DEFAULT = previousShared;
 });
 
 test("ModelCapabilityRegistry tracks Veo 3.1 deprecation and Veo 2.0 shutdown", () => {

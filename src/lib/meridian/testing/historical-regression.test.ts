@@ -911,7 +911,6 @@ test("32. Regression: GeminiOmniVideoProvider uses Interactions API contract", a
     );
   };
 
-  process.env.GEMINI_API_KEY = "test-key";
   const provider = new GeminiOmniVideoProvider({ fetchImpl: mockFetch as unknown as typeof fetch });
   const job = await provider.submitJob({
     id: "spec-1",
@@ -924,7 +923,7 @@ test("32. Regression: GeminiOmniVideoProvider uses Interactions API contract", a
     hookLine: "Hook",
     script: "Script",
     scenes: [],
-  });
+  }, { googleKey: "test-key" });
 
   assert.ok(calledEndpoint.includes("/interactions"));
   assert.equal(job.status, "COMPLETED");
