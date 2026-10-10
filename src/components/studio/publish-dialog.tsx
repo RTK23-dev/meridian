@@ -83,7 +83,15 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
             Choose where it goes. Nothing is sent to a destination you do not select. Each destination returns its own receipt.
           </DialogDescription>
 
-          <form noValidate onSubmit={form.handleSubmit((values) => onConfirm(values.channelIds, values.caption))} className="contents">
+          <form
+            noValidate
+            className="contents"
+            onSubmit={form.handleSubmit((values) => {
+              onConfirm(values.channelIds, values.caption);
+              // The dialog stays open to show the receipts, so the sent choice becomes the baseline. Closing does not ask.
+              form.reset(values, { keepValues: true });
+            })}
+          >
           <div className="mt-4 space-y-4">
             {(["paid", "organic"] as const).map((type) => {
               const group = channels.filter((channel) => channel.type === type);

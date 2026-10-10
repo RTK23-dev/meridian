@@ -270,7 +270,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
               <form
                 className="grid gap-3 md:grid-cols-2"
                 onSubmit={controlsForm.handleSubmit((values) => {
-                  void saveControls.mutateAsync(factoryControlsPayload(values, board.cap)).catch(() => undefined);
+                  void saveControls.mutateAsync(factoryControlsPayload(values, board.cap)).then(() => controlsForm.reset(values, { keepValues: true }), () => undefined);
                 })}
                 onKeyDown={(event) => submitOnShortcut(event)}
               >

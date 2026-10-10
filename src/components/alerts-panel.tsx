@@ -94,7 +94,9 @@ export function AlertsPanel({ organizationId }: { organizationId: string }) {
       <form
         className="mt-4 flex flex-wrap items-end gap-3"
         noValidate
-        onSubmit={targetForm.handleSubmit((values) => { void saveTarget.mutateAsync(values.url).catch(() => undefined); })}
+        onSubmit={targetForm.handleSubmit((values) => {
+          void saveTarget.mutateAsync(values.url).then(() => targetForm.reset({ url: values.url }, { keepValues: true }), () => undefined);
+        })}
         onKeyDown={(event) => submitOnShortcut(event)}
       >
         <Field label="Webhook URL" error={targetForm.formState.errors.url?.message} className="min-w-64 flex-1">
