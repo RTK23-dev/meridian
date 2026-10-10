@@ -177,14 +177,17 @@ export function JobsScreen() {
             {page.total === 0 ? "No jobs to show" : `Showing ${span.first}–${span.last} of ${page.total.toLocaleString()} jobs`}
           </p>
         ) : null}
-        <DataTable
-          data={page?.jobs ?? []}
-          columns={columns}
-          getRowId={(row) => row.id}
-          loading={!page && !jobs.isError}
-          emptyTitle={filtered ? "No jobs match these filters" : "No jobs are stored yet"}
-          emptyReason={filtered ? "Clear the filters to see every job in this workspace." : "Jobs appear here when the workspace starts work that the worker runs."}
-        />
+        {/* A failed list shows the error above, not an empty table that would read as "no jobs". */}
+        {!jobs.isError || page ? (
+          <DataTable
+            data={page?.jobs ?? []}
+            columns={columns}
+            getRowId={(row) => row.id}
+            loading={!page}
+            emptyTitle={filtered ? "No jobs match these filters" : "No jobs are stored yet"}
+            emptyReason={filtered ? "Clear the filters to see every job in this workspace." : "Jobs appear here when the workspace starts work that the worker runs."}
+          />
+        ) : null}
         {page && span ? (
           <div className="flex items-center justify-between gap-3">
             <Button type="button" variant="secondary" size="md" disabled={filters.page === 0 || jobs.isFetching} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Previous page</Button>

@@ -12,7 +12,7 @@ import { qk, userScopedQueryKey } from "@/lib/query/keys";
 import { AdminOnlyNotice, RefusalNotice } from "./ops-shared";
 import { exportFilename, pageSpan, timestampLabel } from "./format";
 import {
-  actionLabel, auditDetailsText, AUDIT_PAGE_SIZE, auditExportNote, dateRangeProblem, EMPTY_AUDIT_FILTERS, type AuditFilters,
+  actionLabel, auditDetailsText, AUDIT_EXPORT_CAP, AUDIT_PAGE_SIZE, auditExportNote, dateRangeProblem, EMPTY_AUDIT_FILTERS, type AuditFilters,
 } from "./audit-model";
 
 type AuditEntry = Awaited<ReturnType<typeof listAuditPage>>["entries"][number];
@@ -130,12 +130,12 @@ export function AuditScreen() {
           <Button type="button" variant="quiet" disabled={!filtered && !hasDraft} onClick={clearFilters}>Clear</Button>
         </div>
       </form>
-      {formError ? <RefusalNotice error={new Error(formError)} /> : null}
+      {formError ? <p role="alert" className="text-sm text-danger">{formError}</p> : null}
 
       <section aria-labelledby="export-heading" className="space-y-3 rounded-lg border border-border bg-surface p-4">
         <h2 id="export-heading" className="text-section font-semibold">Export CSV</h2>
         <p className="text-sm text-fg-muted">
-          Exports are generated when you click. The file uses the filters above and downloads to this device.
+          Exports are generated when you click. The file uses the filters above, holds at most {AUDIT_EXPORT_CAP.toLocaleString()} of the newest matching entries, and downloads to this device.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="secondary" loading={exporter.isPending} onClick={() => exporter.mutate()}>Export matching entries</Button>
