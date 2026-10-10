@@ -89,13 +89,15 @@ export function failingSql(base: Sql, pattern: RegExp, message = "injected write
 
 /**
  * Brand facts the brief builder and the gate read. Without them a discovered brief has no audience and no message, and the
- * gate rejects it on its mandatory fields before any engine is asked.
+ * gate rejects it on its mandatory fields before any engine is asked. The prohibited claims are recorded, because claim
+ * compliance is judged against them: a blank brand fact is not evidence, so that question would abstain and the brief would
+ * go to review.
  */
 export async function seedBrandBrain(sql: Sql, tenant: { brandId: string; userId: string }): Promise<void> {
   await sql`
-    insert into brand_brains (brand_id, target_customers, positioning, value_proposition, tone, updated_by)
+    insert into brand_brains (brand_id, target_customers, positioning, value_proposition, tone, prohibited_claims, updated_by)
     values (${tenant.brandId}, 'Busy parents', 'Helps busy parents plan a calm dinner in ten minutes.',
-      'Planned dinners with no planning.', 'warm', ${tenant.userId})
+      'Planned dinners with no planning.', 'warm', 'guaranteed', ${tenant.userId})
   `;
 }
 
