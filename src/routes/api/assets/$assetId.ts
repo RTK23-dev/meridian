@@ -1,13 +1,82 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createHash } from "node:crypto";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { DEV_USER_ID, authConfigured } from "@/lib/auth/verify.server";
 import { gateIdentityEnabled } from "@/lib/auth/gate-identity.server";
-import { canAccessStoredAsset, isPreviewableMime, parseByteRange } from "@/lib/meridian/storage/media-access";
+import {
+  canAccessStoredAsset,
+  contentDispositionFor,
+  framePosterStorageKey,
+  isInActiveWorkspace,
+  isNotModified,
+  parseByteRange,
+  pickActiveOrganization,
+  storedBytesMatch,
+  verifiedMediaMime,
+} from "@/lib/meridian/storage/media-access";
 import { createRateLimit } from "@/lib/meridian/security/limits";
 
 const assetReadLimit = createRateLimit(120, 60_000);
+
+/** Missing, unavailable and other-workspace assets all get this response, so existence is not revealed. */
+const notFound = () => new Response("Not found", { status: 404 });
+
+type StoredSource = {
+  organizationId: string;
+  brandId: string;
+  mimeType: string;
+  byteSize: number;
+  sha256Hex: string;
+  bytes: Uint8Array<ArrayBuffer>;
+};
+
+/**
+ * Loads the stored bytes for one storage key within one workspace and brand. Studio, Hypit and creative-image writes land
+ * in asset_blobs. Production artifacts land in the artifact store (Google Drive), indexed by storage_objects, so that is
+ * read when no blob exists. Call this only after the caller has been checked against the workspace.
+ */
+async function loadStoredSource(
+  sql: Sql,
+  scope: { storageKey: string; organizationId: string; brandId: string },
+): Promise<StoredSource | null> {
+  const blobs = await sql<Record<string, unknown>>`
+    select organization_id, brand_id, body, mime_type, checksum, byte_size
+    from asset_blobs
+    where storage_key = ${scope.storageKey} and organization_id = ${scope.organizationId}
+      and brand_id = ${scope.brandId} and lifecycle = 'stored'
+    limit 1
+  `;
+  const blob = blobs[0];
+  if (blob) {
+    return {
+      organizationId: String(blob.organization_id),
+      brandId: String(blob.brand_id),
+      mimeType: String(blob.mime_type ?? ""),
+      byteSize: Number(blob.byte_size),
+      sha256Hex: String(blob.checksum ?? ""),
+      bytes: Buffer.from(String(blob.body ?? ""), "base64"),
+    };
+  }
+  const objects = await sql<Record<string, unknown>>`
+    select organization_id, brand_id, provider_file_id, mime_type, size_bytes, sha256
+    from storage_objects
+    where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and name = ${scope.storageKey}
+    limit 1
+  `;
+  const object = objects[0];
+  if (!object) return null;
+  const { defaultArtifactDrive } = await import("@/lib/meridian/storage/artifact-drive");
+  const file = await defaultArtifactDrive().get(String(object.provider_file_id));
+  return {
+    organizationId: String(object.organization_id),
+    brandId: String(object.brand_id),
+    mimeType: String(object.mime_type ?? ""),
+    byteSize: Number(object.size_bytes),
+    sha256Hex: String(object.sha256 ?? ""),
+    bytes: new Uint8Array(file.bytes),
+  };
+}
 
 export const Route = createFileRoute("/api/assets/$assetId")({
   server: {
@@ -18,48 +87,87 @@ export const Route = createFileRoute("/api/assets/$assetId")({
         const userId = session?.user?.id ?? (devFallbackAllowed ? DEV_USER_ID : "");
         if (!userId) return new Response("Unauthorized", { status: 401 });
         if (!assetReadLimit.allow(userId, Date.now())) return new Response("Too many asset requests", { status: 429, headers: { "Retry-After": "60" } });
+
         const sql = await getSql();
-        const rows = await sql<Record<string, unknown>>`
-          select a.organization_id as asset_organization_id, a.brand_id as asset_brand_id,
-                 a.storage_key, b.organization_id as blob_organization_id, b.brand_id as blob_brand_id,
-                 b.body, b.mime_type, b.checksum, b.byte_size
+        const memberships = await sql<{ organization_id: string; role: string }>`
+          select m.organization_id, m.role
+          from memberships m
+          join organizations o on o.id = m.organization_id
+          where m.user_id = ${userId}
+          order by o.created_at asc
+        `;
+        const preferences = await sql<{ active_organization_id: string | null }>`
+          select active_organization_id from user_settings where user_id = ${userId} limit 1
+        `;
+        const active = pickActiveOrganization(
+          preferences[0]?.active_organization_id,
+          memberships.map((row) => ({ organizationId: String(row.organization_id), role: String(row.role) })),
+        );
+        if (!active) return notFound();
+
+        const assets = await sql<Record<string, unknown>>`
+          select a.organization_id, a.brand_id, a.storage_key
           from assets a
           join brands brand_scope on brand_scope.id = a.brand_id and brand_scope.organization_id = a.organization_id
-          join asset_blobs b on b.storage_key = a.storage_key
-            and b.organization_id = brand_scope.organization_id and b.brand_id = brand_scope.id
-          where a.id = ${params.assetId} and b.lifecycle = 'stored'
+            and brand_scope.deleted_at is null
+          where a.id = ${params.assetId} and a.status = 'stored'
           limit 1
         `;
-        const row = rows[0];
-        if (!row) return new Response("Not found", { status: 404 });
-        const members = await sql<{ organization_id: string }>`
-          select organization_id from memberships where user_id = ${userId}
-        `;
-        const memberOrganizationIds = members.map((member) => String(member.organization_id));
-        if (!canAccessStoredAsset({
-          assetOrganizationId: String(row.asset_organization_id),
-          blobOrganizationId: String(row.blob_organization_id),
-          assetBrandId: String(row.asset_brand_id),
-          blobBrandId: String(row.blob_brand_id),
-          memberOrganizationIds,
-        })) return new Response("Not found", { status: 404 });
+        const asset = assets[0];
+        if (!asset) return notFound();
+        const assetOrganizationId = String(asset.organization_id);
+        const assetBrandId = String(asset.brand_id);
+        if (!isInActiveWorkspace(assetOrganizationId, active)) return notFound();
 
-        const mime = String(row.mime_type ?? "").toLowerCase();
-        if (!isPreviewableMime(mime)) return new Response("Not found", { status: 404 });
-        const bytes = Buffer.from(String(row.body ?? ""), "base64");
-        if (bytes.byteLength !== Number(row.byte_size) || createHash("sha256").update(bytes).digest("hex") !== String(row.checksum)) {
+        const url = new URL(request.url);
+        // ?thumb=1 serves the stored still of a video. When no still exists the answer is 404, never a stand-in image.
+        const wantsPoster = url.searchParams.get("thumb") === "1";
+        const storageKey = wantsPoster ? framePosterStorageKey(String(asset.storage_key)) : String(asset.storage_key);
+
+        let source: StoredSource | null;
+        try {
+          source = await loadStoredSource(sql, { storageKey, organizationId: assetOrganizationId, brandId: assetBrandId });
+        } catch (error) {
+          console.error("[assets] stored bytes could not be read", error instanceof Error ? error.name : "unknown");
+          return new Response("The stored file could not be read right now. Try again shortly.", { status: 503, headers: { "Retry-After": "30" } });
+        }
+        if (!source) return notFound();
+        if (!canAccessStoredAsset({
+          assetOrganizationId,
+          blobOrganizationId: source.organizationId,
+          assetBrandId,
+          blobBrandId: source.brandId,
+          memberOrganizationIds: [active.organizationId],
+        })) return notFound();
+
+        const bytes = source.bytes;
+        const mime = verifiedMediaMime(bytes, source.mimeType);
+        if (!mime) return notFound();
+        const sha256Hex = createHash("sha256").update(bytes).digest("hex");
+        if (!storedBytesMatch({ byteLength: bytes.byteLength, sha256Hex }, { byteSize: source.byteSize, sha256Hex: source.sha256Hex })) {
           return new Response("Asset unavailable", { status: 404 });
+        }
+
+        const etag = `"${sha256Hex}"`;
+        if (isNotModified(request.headers.get("if-none-match"), etag)) {
+          return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, max-age=3600" } });
         }
         const headers = new Headers({
           "Content-Type": mime,
           "Content-Length": String(bytes.byteLength),
-          ETag: `"${String(row.checksum)}"`,
+          ETag: etag,
           "Cache-Control": "private, max-age=3600",
-          "Content-Disposition": new URL(request.url).searchParams.get("download") === "1" ? "attachment" : "inline",
+          "Content-Disposition": contentDispositionFor({
+            download: !wantsPoster && url.searchParams.get("download") === "1",
+            assetId: params.assetId,
+            mimeType: mime,
+          }),
           "X-Content-Type-Options": "nosniff",
           "Content-Security-Policy": "default-src 'none'; sandbox",
-          "Accept-Ranges": "bytes",
         });
+        // A poster is a single still, so it is always served whole. Only the video itself supports Range requests.
+        if (wantsPoster) return new Response(bytes, { status: 200, headers });
+        headers.set("Accept-Ranges", "bytes");
         const range = parseByteRange(request.headers.get("range"), bytes.byteLength);
         if (range === "invalid") {
           headers.set("Content-Range", `bytes */${bytes.byteLength}`);

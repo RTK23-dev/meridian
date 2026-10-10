@@ -1,11 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { formatDistanceToNowStrict } from "date-fns";
-import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextInput, errorText } from "@/components/ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Group, Panel as ResizablePanel, Separator } from "react-resizable-panels";
+import { Inbox } from "lucide-react";
+import { EmptyState, ScreenSkeleton } from "@/components/ui";
+import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
+import { ReviewDetail } from "@/components/reviews/review-detail";
+import { ReviewInbox } from "@/components/reviews/review-inbox";
+import {
+  EMPTY_REVIEW_DRAFT,
+  REVIEW_LIST_LIMIT,
+  isQueueConfirmedEmpty,
+  isTypingTarget,
+  openCountLabel,
+  triageAction,
+  type ReviewDraft,
+  type ReviewRow,
+} from "@/components/reviews/review-model";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { hasRole } from "@/lib/meridian/access";
-import { REVIEW_REASON_CODES, listReviews } from "@/lib/meridian/machine";
 import { useResolveReview, usePendingVariables, useReviewsQuery } from "@/lib/query/hooks";
-import { Term } from "@/components/term";
 
 export const Route = createFileRoute("/_app/brands/$brandId/reviews")({ staticData: { pageTitle: "Reviews" }, component: Page });
 
@@ -24,87 +37,129 @@ function Reviews({ brandId }: { brandId: string }) {
   const resolving = usePendingVariables<{ reviewId: string }>(["mutation", "review.resolve", brandId]).map((vars) => vars.reviewId);
   const { mutateAsync: resolveReviewAsync } = resolve;
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
+  const [reasonErrorFor, setReasonErrorFor] = useState<string | null>(null);
+  const wide = useMediaQuery("(min-width: 1024px)");
   const canEdit = data ? hasRole(data.role, "member") : false;
   const open = useMemo(() => data?.reviews.filter((item) => item.status === "open") ?? [], [data?.reviews]);
+  const index = Math.min(selectedIndex, Math.max(open.length - 1, 0));
+  const selected = open[index] ?? null;
+  const selectedId = selected?.id ?? null;
+
+  const draftFor = (id: string): ReviewDraft => drafts[id] ?? EMPTY_REVIEW_DRAFT;
+  const patchDraft = (id: string, patch: Partial<ReviewDraft>) => {
+    setDrafts((current) => ({ ...current, [id]: { ...(current[id] ?? EMPTY_REVIEW_DRAFT), ...patch } }));
+  };
+
+  // A reject needs a reason the reviewer chose. Without one, the reason field is focused and says so, and nothing is sent.
+  const decide = useCallback((item: ReviewRow, action: "approve" | "reject") => {
+    const draft = drafts[item.id] ?? EMPTY_REVIEW_DRAFT;
+    if (action === "reject" && !draft.reason) {
+      setReasonErrorFor(item.id);
+      document.getElementById(`review-reason-${item.id}`)?.focus();
+      return;
+    }
+    void resolveReviewAsync({
+      reviewId: item.id,
+      action,
+      reasonCode: action === "approve" ? draft.reason || "other" : draft.reason,
+      note: draft.note,
+    }).catch(() => undefined);
+  }, [drafts, resolveReviewAsync]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      if (target?.matches("input, textarea, select, [contenteditable='true']") || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === "j") { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(open.length - 1, 0))); }
-      if (event.key === "k") { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)); }
-      const item = open[selectedIndex];
-      if (!item || !canEdit) return;
-      if (event.key.toLowerCase() === "a") void resolveReviewAsync({ reviewId: item.id, action: "approve", reasonCode: "other", note: "" }).catch(() => undefined);
-      if (event.key.toLowerCase() === "r") void resolveReviewAsync({ reviewId: item.id, action: "reject", reasonCode: REVIEW_REASON_CODES[0] ?? "other", note: "" }).catch(() => undefined);
+      const action = triageAction(event.key, {
+        canDecide: canEdit,
+        typing: isTypingTarget(event.target as HTMLElement | null),
+        modifier: event.metaKey || event.ctrlKey || event.altKey,
+      });
+      if (!action) return;
+      event.preventDefault();
+      if (action === "next") { setSelectedIndex(Math.min(index + 1, Math.max(open.length - 1, 0))); return; }
+      if (action === "previous") { setSelectedIndex(Math.max(index - 1, 0)); return; }
+      if (selected) decide(selected, action);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, selectedIndex, canEdit, resolveReviewAsync]);
+  }, [canEdit, decide, index, open.length, selected]);
 
-  if (query.isError && !data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  // Keeps the keyboard-selected row in view in the inbox.
+  useEffect(() => {
+    if (selectedId) document.getElementById(`review-option-${selectedId}`)?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
+
+  if (query.isError && !data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!data) return <ScreenSkeleton label="Loading reviews" shape="rows" />;
+
+  const now = new Date();
+  const loaded = data.reviews.length;
+  const resolvedInList = loaded - open.length;
+  const confirmedEmpty = isQueueConfirmedEmpty({ loaded, open: open.length, limit: REVIEW_LIST_LIMIT });
+  const detail = selected ? (
+    <ReviewDetail
+      key={selected.id}
+      item={selected}
+      now={now}
+      canEdit={canEdit}
+      pending={resolving.includes(selected.id)}
+      draft={draftFor(selected.id)}
+      reasonError={reasonErrorFor === selected.id}
+      onDraftChange={(patch) => patchDraft(selected.id, patch)}
+      onApprove={() => decide(selected, "approve")}
+      onReject={() => decide(selected, "reject")}
+    />
+  ) : null;
 
   return (
     <div className="space-y-8">
       <div className="max-w-2xl space-y-3">
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Reviews</p>
         <h1 className="font-display text-4xl">Holds a person has to clear</h1>
-        <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject.</p>
+        <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject. A reject needs a reason.</p>
       </div>
-      {resolve.error ? <Notice>{errorText(resolve.error)}</Notice> : null}
-      {open.length === 0 ? <Panel>No open reviews.</Panel> : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.6fr)]">
-          <nav aria-label="Review inbox" className="space-y-2">
-            {open.map((item, index) => <button key={item.id} type="button" aria-current={index === selectedIndex ? "true" : undefined} onClick={() => setSelectedIndex(index)} className={`w-full rounded-lg border p-3 text-left ${index === selectedIndex ? "border-brass bg-panel" : "border-line"}`}>
-              <span className="block truncate font-semibold">{item.label || "Untitled review"}</span>
-              <span className="mt-1 block text-xs text-muted">{formatDistanceToNowStrict(new Date(item.createdAt), { addSuffix: true })} · {item.decision} · {item.question}</span>
-              <span className="mt-2 inline-flex rounded-full border border-line px-2 py-0.5 text-xs">{item.confidence >= 0.8 ? "High confidence" : item.confidence >= 0.5 ? "Review" : "Low confidence"}</span>
-            </button>)}
-          </nav>
-          {open[selectedIndex] ? <ReviewCard item={open[selectedIndex]} canEdit={canEdit} pending={resolving.includes(open[selectedIndex].id)} onResolve={(action, reasonCode, note) => { void resolveReviewAsync({ reviewId: open[selectedIndex].id, action, reasonCode, note }).catch(() => undefined); }} /> : null}
+      {resolve.error ? <PlainErrorNotice error={resolve.error} /> : null}
+      {open.length === 0 ? (
+        confirmedEmpty ? (
+          <EmptyState
+            icon={<Inbox aria-hidden="true" className="size-5" />}
+            title="Queue clear"
+            reason={loaded === 0
+              ? "0 open reviews. No reviews have been created for this brand yet."
+              : `0 open reviews. ${resolvedInList} resolved in the list. Nothing is waiting for a person.`}
+          />
+        ) : (
+          <EmptyState
+            icon={<Inbox aria-hidden="true" className="size-5" />}
+            title={`No open reviews in the ${REVIEW_LIST_LIMIT} most recent`}
+            reason="Older reviews are not loaded here, so this does not confirm the queue is empty. Reload the page after a while to check again."
+          />
+        )
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-muted" aria-live="polite">
+            {openCountLabel(open.length, loaded, REVIEW_LIST_LIMIT)}{resolvedInList > 0 ? `, ${resolvedInList} resolved in the list` : ""}.
+          </p>
+          {wide ? (
+            <Group orientation="horizontal" className="min-h-[32rem] items-stretch gap-2">
+              <ResizablePanel defaultSize="36%" minSize="24%" className="min-w-0">
+                <div className="max-h-[75vh] overflow-y-auto pr-2">
+                  <ReviewInbox items={open} selectedIndex={index} now={now} onSelect={setSelectedIndex} />
+                </div>
+              </ResizablePanel>
+              <Separator aria-label="Resize the review list" className="relative w-2 shrink-0 rounded-full bg-border hover:bg-border-strong focus-visible:outline-2 focus-visible:outline-accent before:absolute before:inset-y-0 before:-inset-x-2 before:content-[''] pointer-coarse:before:-inset-x-[18px]" />
+              <ResizablePanel defaultSize="64%" minSize="40%" className="min-w-0">
+                <div className="max-h-[75vh] overflow-y-auto pl-1">{detail}</div>
+              </ResizablePanel>
+            </Group>
+          ) : (
+            <div className="space-y-4">
+              <ReviewInbox items={open} selectedIndex={index} now={now} onSelect={setSelectedIndex} />
+              {detail}
+            </div>
+          )}
         </div>
       )}
     </div>
-  );
-}
-
-function ReviewCard({
-  item,
-  canEdit,
-  pending,
-  onResolve,
-}: {
-  item: Awaited<ReturnType<typeof listReviews>>["reviews"][number];
-  canEdit: boolean;
-  pending: boolean;
-  onResolve: (action: "approve" | "reject", reasonCode: string, note: string) => void;
-}) {
-  const [reason, setReason] = useState<string>(REVIEW_REASON_CODES[0] ?? "other");
-  const [note, setNote] = useState("");
-  return (
-    <Panel aria-label="Selected review">
-      <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.question} · {item.decision} · answer {item.answer || "unrecorded"} · score {item.probability.toFixed(2)} · <Term id="confidence" /> {item.confidence.toFixed(2)}</p>
-      <h2 className="mt-2 font-display text-2xl">{item.label || "Untitled"}</h2>
-      <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted">
-        {item.reasons.map((reasonLine) => <li key={reasonLine}>{reasonLine}</li>)}
-      </ul>
-      {canEdit ? (
-        <div className="mt-4 grid gap-3">
-          <Field label="If you reject, why">
-            <SelectInput value={reason} onChange={(event) => setReason(event.target.value)}>
-              {REVIEW_REASON_CODES.map((code) => <option key={code} value={code}>{code.replaceAll("_", " ")}</option>)}
-            </SelectInput>
-          </Field>
-          <Field label="Note">
-            <TextInput value={note} onChange={(event) => setNote(event.target.value)} />
-          </Field>
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={pending} onClick={() => onResolve("approve", reason, note)}>Approve</Button>
-            <Button variant="danger" disabled={pending} onClick={() => onResolve("reject", reason, note)}>Reject</Button>
-          </div>
-        </div>
-      ) : null}
-    </Panel>
   );
 }

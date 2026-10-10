@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased — UI overhaul
+
+The interface was rebuilt in phases (plan in `docs/UI_OVERHAUL.md`). Server-side role checks, tenancy checks, auth and provider logic did not change.
+
+- **Shell and navigation**: the workspace picker sits at the top of the sidebar and the brand picker sits below it on brand pages. The header is one row. Both pickers are in the mobile navigation.
+- **Data layer**: reads and writes go through React Query. Writes report pending, success and failure through one hook.
+- **Screens**: Home, Settings, Market, Opportunities, Studio, Library, Reviews, Learning, Brain and Factory were redesigned on one design system. The library trace opens in a sheet.
+- **Media**: generated images and videos are served from `/api/assets/:assetId`, which checks tenancy and supports byte ranges and cache validators.
+- **Operations**: Jobs, Usage, Audit, Alerts, Calibration, Exports and Webhook events have their own screens.
+- **Forms**: typed validation shares one schema between browser and server. Field errors and unsaved-change guards appear before submit.
+- **Provider keys**: a key typed for one provider category is no longer sent when another category is saved.
+- **Accessibility**: one visible focus outline, 44px touch targets on touch screens, one `main` landmark per screen, and tables become cards below the `md` breakpoint. See `docs/ACCESSIBILITY.md`. The repository is not certified.
+- **Cleanup**: removed the legacy `components/ui.tsx` shim, `components/status.tsx`, and the unused `email-auth`, `audit` and `why-this-drawer` components. Removed the unused `--color-ink` token and the unused `zustand` dependency.
+
+Not verified yet: the unit test suite, the production build, the browser end-to-end suite and axe audits of the redesigned screens. Those run in the testing pass.
+
 ## 0.1.0-beta.8 — 2026-10-09
 
 Meridian beta.7 Stabilization Hotfix:

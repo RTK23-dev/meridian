@@ -91,13 +91,13 @@ async function prepareFixtureWorkspace(page) {
   if (await page.getByRole("button", { name: "Create account", exact: true }).count()) {
     await page.getByLabel("Your name").fill(testUser.name);
     await page.getByLabel("Email").fill(testUser.email);
-    await page.getByLabel("Password").fill(testUser.password);
+    await page.getByLabel(/^Password/).fill(testUser.password);
     await page.getByRole("button", { name: "Create account", exact: true }).click();
     await page.waitForTimeout(800);
     if (await page.getByRole("button", { name: "Create account", exact: true }).count()) {
       await page.getByRole("button", { name: "I already have an account" }).click();
       await page.getByLabel("Email").fill(testUser.email);
-      await page.getByLabel("Password").fill(testUser.password);
+      await page.getByLabel(/^Password/).fill(testUser.password);
       await page.getByRole("button", { name: "Sign in with email" }).click();
     }
   }
