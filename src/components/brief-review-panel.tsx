@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { useBusy } from "@/components/gate";
-import { Button, Notice, Panel, Skeleton, TextArea, errorText } from "@/components/ui";
+import { Button, ErrorState, Notice, Panel, Skeleton, TextArea, errorText } from "@/components/ui";
 import { hasRole, type Role } from "@/lib/meridian/access";
 import { reviewStudioBrief } from "@/lib/meridian/studio/actions";
-import { useBriefReviewQuery } from "@/lib/query/hooks";
+import { useBriefReviewQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 
 const MIN_REASON = 20;
@@ -15,18 +14,22 @@ const MIN_REASON = 20;
  */
 export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: string; briefId: string; title: string; role: Role }) {
   const review = useBriefReviewQuery(brandId, briefId);
-  const action = useBusy([qk.studio(brandId), qk.briefReview(brandId, briefId)]);
   const [acknowledged, setAcknowledged] = useState(false);
   const [reason, setReason] = useState("");
+  const decision = useScopedMutation({
+    mutationKey: ["mutation", "brief-review.decide", brandId, briefId],
+    mutationFn: (action: "approve" | "reject") => reviewStudioBrief({ data: { brandId, briefId, action, reason: reason.trim(), acknowledged } }),
+    invalidate: () => [qk.studio(brandId), qk.briefReview(brandId, briefId)],
+    onSuccess: () => {
+      setAcknowledged(false);
+      setReason("");
+    },
+  });
   const canReview = hasRole(role, "admin");
   const data = review.data;
 
-  function decide(decision: "approve" | "reject") {
-    void action.run(async () => {
-      await reviewStudioBrief({ data: { brandId, briefId, action: decision, reason: reason.trim(), acknowledged } });
-      setAcknowledged(false);
-      setReason("");
-    });
+  function decide(action: "approve" | "reject") {
+    void decision.mutateAsync(action).catch(() => undefined);
   }
 
   return (
@@ -38,7 +41,7 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
         </p>
       </div>
       {review.isPending ? <Skeleton variant="card" /> : null}
-      {review.error ? <Notice>{errorText(review.error)}</Notice> : null}
+      {review.isError && !data ? <ErrorState message="This brief review could not be loaded." onRetry={() => void review.refetch()} /> : null}
       {data ? (
         <>
           <dl className="grid gap-2 text-sm md:grid-cols-2">
@@ -95,12 +98,12 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
                 <span className="text-muted">Reason (at least {MIN_REASON} characters). This is recorded with your review.</span>
                 <TextArea className="mt-1" rows={3} value={reason} onChange={(event) => setReason(event.target.value)} />
               </label>
-              {action.error ? <Notice>{action.error}</Notice> : null}
+              {decision.error ? <Notice>{errorText(decision.error)}</Notice> : null}
               <div className="flex flex-wrap gap-2">
-                <Button type="button" disabled={action.pending || !acknowledged || reason.trim().length < MIN_REASON} onClick={() => decide("approve")}>
+                <Button type="button" disabled={decision.isPending || !acknowledged || reason.trim().length < MIN_REASON} onClick={() => decide("approve")}>
                   Approve for production
                 </Button>
-                <Button type="button" variant="quiet" disabled={action.pending || !acknowledged || reason.trim().length < MIN_REASON} onClick={() => decide("reject")}>
+                <Button type="button" variant="quiet" disabled={decision.isPending || !acknowledged || reason.trim().length < MIN_REASON} onClick={() => decide("reject")}>
                   Reject brief
                 </Button>
               </div>

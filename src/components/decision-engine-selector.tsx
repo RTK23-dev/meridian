@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
-import { Button, Field, Notice, SelectInput } from "@/components/ui";
-import { getDecisionEngines, saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
+import { useState } from "react";
+import { Button, ErrorState, Field, Notice, SelectInput, errorText } from "@/components/ui";
+import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
+import { qk } from "@/lib/query/keys";
+import { useDecisionEnginesQuery, useScopedMutation } from "@/lib/query/hooks";
 
 type EngineStatus = {
   id: "jev" | "openai-decisions";
@@ -31,52 +33,42 @@ interface DecisionEngineSelectorProps {
  * the chosen engine is configured, and the active engine is shown with the reason it is active.
  */
 export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEngineSelectorProps) {
-  const [status, setStatus] = useState<Status | null>(null);
-  const [choice, setChoice] = useState<string>("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const engines = useDecisionEnginesQuery(organizationId);
+  const status = (engines.data as Status | undefined) ?? null;
+  // The selection follows the stored engine until the user picks another one.
+  const [choiceDraft, setChoice] = useState<string | null>(null);
+  const choice = choiceDraft ?? status?.active.engineId ?? "";
   const [message, setMessage] = useState<string | null>(null);
-
-  async function load() {
-    try {
-      const data = (await getDecisionEngines({ data: { organizationId } })) as Status;
-      setStatus(data);
-      setChoice(data.active.engineId);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load the decision engine status.");
-    }
-  }
-
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationId]);
-
-  async function handleSave() {
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const result = (await saveDecisionEngine({ data: { organizationId, engineId: choice } })) as
+  const save = useScopedMutation({
+    mutationKey: ["mutation", "decision-engine.save", organizationId],
+    mutationFn: async (engineId: string) => {
+      const result = (await saveDecisionEngine({ data: { organizationId, engineId } })) as
         | { ok: true; engineId: string }
         | { ok: false; reason: string; activeEngineId?: string };
-      if (result.ok) {
-        setMessage(`Decision engine set to ${result.engineId}. Only this engine now receives decisions for this workspace.`);
-        await load();
-      } else {
-        setError(`${result.reason} The active engine is unchanged.`);
-        await load();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Saving the decision engine failed.");
-    } finally {
-      setSaving(false);
-    }
-  }
+      // A refused choice is an error the user must see, so it is thrown and shown rather than returned as a result.
+      if (!result.ok) throw new Error(`${result.reason} The active engine is unchanged.`);
+      return result;
+    },
+    invalidate: () => [qk.decisionEngines(organizationId)],
+    success: (_engineId, result) => `Decision engine set to ${result.engineId}.`,
+    onSuccess: (result) => {
+      setMessage(`Decision engine set to ${result.engineId}. Only this engine now receives decisions for this workspace.`);
+      setChoice(null);
+    },
+  });
+  const saving = save.isPending;
+  const error = save.error ? errorText(save.error) : null;
 
+  if (engines.isError && !status) {
+    return <ErrorState message="The decision engine status could not be loaded." onRetry={() => void engines.refetch()} />;
+  }
   if (!status) {
     return <p className="text-muted text-sm">Loading decision engine status...</p>;
+  }
+
+  async function handleSave() {
+    setMessage(null);
+    await save.mutateAsync(choice).catch(() => undefined);
   }
 
   const activeLabel = status.engines.find((engine) => engine.isActive)?.label ?? status.active.engineId;

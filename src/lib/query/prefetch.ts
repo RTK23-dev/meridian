@@ -68,7 +68,7 @@ export function screenWarmers({ userId, organizationId }: PrefetchScope, to: str
     case "/usage": return [(qc) => qc.prefetchQuery(usageQueryOptions(userId, organizationId))];
     case "/alerts": return [(qc) => qc.prefetchQuery(alertsQueryOptions(userId, organizationId))];
     case "/notifications": return [(qc) => qc.prefetchQuery(notificationsQueryOptions(userId, organizationId))];
-    case "/settings": return [(qc) => qc.prefetchQuery(providerSettingsQueryOptions(userId, organizationId)), (qc) => qc.prefetchQuery(alertsQueryOptions(userId, organizationId))];
+    case "/settings": return [(qc) => qc.prefetchQuery(providerSettingsQueryOptions(userId, organizationId))];
     default: return [];
   }
 }

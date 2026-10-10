@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { Button, Field, Notice, Panel, SelectInput, TextInput } from "@/components/ui";
+import { useState } from "react";
+import { Button, ErrorState, Field, Notice, Panel, SelectInput, TextInput, errorText } from "@/components/ui";
+import { qk } from "@/lib/query/keys";
+import { useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import {
-  getProviderSettings,
   saveProviderConfig,
   removeProviderConfig,
   testProviderConnection,
@@ -47,118 +48,98 @@ function sourceLabelOf(summary: ProviderConfigSummary): string {
 }
 
 export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSettingsPanelProps) {
-  const [loading, setLoading] = useState(true);
-  const [summaries, setSummaries] = useState<Record<ProviderCategory, ProviderConfigSummary> | null>(null);
+  const settings = useProviderSettingsQuery(organizationId);
+  const summaries = settings.data ? (settings.data as Record<ProviderCategory, ProviderConfigSummary>) : null;
+  const loading = settings.isPending;
   const [activeTab, setActiveTab] = useState<ProviderCategory>("jev");
   const [testResult, setTestResult] = useState<{ status: string; message: string; latencyMs?: number } | null>(null);
-  const [testing, setTesting] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Form states for active category
+  // Form states for active category. A draft stays unset until the user edits it, so each field shows the stored value.
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [costPreferenceInput, setCostPreferenceInput] = useState("BALANCED");
-  // Bumped on every reload, so the decision-engine card re-reads its status after a key is saved or removed.
-  const [loadCount, setLoadCount] = useState(0);
-  const [gatewayUrlInput, setGatewayUrlInput] = useState("http://127.0.0.1:4000");
-  const [maxPagesInput, setMaxPagesInput] = useState("50");
+  const [costPreferenceDraft, setCostPreferenceInput] = useState<string | null>(null);
+  const [gatewayUrlDraft, setGatewayUrlInput] = useState<string | null>(null);
+  const [maxPagesDraft, setMaxPagesInput] = useState<string | null>(null);
+  const costPreferenceInput = costPreferenceDraft ?? String(summaries?.production?.settings.costPreference || "BALANCED");
+  const gatewayUrlInput = gatewayUrlDraft ?? String(summaries?.cyclone?.settings.gatewayUrl || "http://127.0.0.1:4000");
+  const maxPagesInput = maxPagesDraft ?? String(summaries?.sources?.settings.maxPagesPerRun || "50");
 
-  async function loadSettings() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getProviderSettings({ data: { organizationId } });
-      setSummaries(data);
-      setLoadCount((count) => count + 1);
-      if (data.production) {
-        setCostPreferenceInput(String(data.production.settings.costPreference || "BALANCED"));
-      }
-      if (data.cyclone) {
-        setGatewayUrlInput(String(data.cyclone.settings.gatewayUrl || "http://127.0.0.1:4000"));
-      }
-      if (data.sources) {
-        setMaxPagesInput(String(data.sources.settings.maxPagesPerRun || "50"));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load provider settings.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationId]);
+  // Saving or removing a credential changes the decision-engine card and the integration status, so those refresh too.
+  const saveConfig = useScopedMutation({
+    mutationKey: ["mutation", "provider.save", organizationId],
+    mutationFn: (input: { category: ProviderCategory; credentials?: Record<string, string>; settings: Record<string, unknown> }) =>
+      saveProviderConfig({ data: { organizationId, category: input.category, credentials: input.credentials, settings: input.settings } }),
+    invalidate: () => [qk.providerSettings(organizationId), qk.decisionEngines(organizationId), qk.integrations(organizationId)],
+    success: (input) => `${input.category.toUpperCase()} configuration saved.`,
+    onSuccess: (_data, input) => {
+      setMessage(`${input.category.toUpperCase()} configuration saved.`);
+      setApiKeyInput("");
+      setCostPreferenceInput(null);
+      setGatewayUrlInput(null);
+      setMaxPagesInput(null);
+    },
+  });
+  const removeConfig = useScopedMutation({
+    mutationKey: ["mutation", "provider.remove", organizationId],
+    mutationFn: (category: ProviderCategory) => removeProviderConfig({ data: { organizationId, category } }),
+    invalidate: () => [qk.providerSettings(organizationId), qk.decisionEngines(organizationId), qk.integrations(organizationId)],
+    success: (category) => `Workspace ${category} credentials removed.`,
+    onSuccess: (_data, category) => {
+      setMessage(`Workspace ${category} credentials removed.`);
+    },
+  });
+  // A connection test reads the provider and changes no stored state, so it invalidates nothing.
+  const testConnection = useScopedMutation({
+    mutationKey: ["mutation", "provider.test", organizationId],
+    mutationFn: (category: ProviderCategory) => testProviderConnection({ data: { organizationId, category } }),
+  });
+  const testing = testConnection.isPending;
+  const saving = saveConfig.isPending || removeConfig.isPending;
+  const failure = [saveConfig.error, removeConfig.error].find(Boolean);
+  const error = failure ? errorText(failure) : null;
 
   async function handleTest(category: ProviderCategory) {
-    setTesting(true);
     setTestResult(null);
     try {
-      const res = await testProviderConnection({ data: { organizationId, category } });
+      const res = await testConnection.mutateAsync(category);
       setTestResult(res);
     } catch (err) {
       setTestResult({
         status: "ERROR",
         message: err instanceof Error ? err.message : "Test failed.",
       });
-    } finally {
-      setTesting(false);
     }
   }
 
   async function handleSave(category: ProviderCategory) {
-    setSaving(true);
-    setError(null);
     setMessage(null);
-    try {
-      const credentials: Record<string, string> = {};
-      if (apiKeyInput.trim()) {
-        credentials.apiKey = apiKeyInput.trim();
-      }
-
-      const settings: Record<string, unknown> = {};
-      if (category === "production") {
-        settings.costPreference = costPreferenceInput;
-      } else if (category === "cyclone") {
-        settings.gatewayUrl = gatewayUrlInput;
-      } else if (category === "sources") {
-        settings.maxPages = Number(maxPagesInput);
-      }
-
-      await saveProviderConfig({
-        data: {
-          organizationId,
-          category,
-          credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
-          settings,
-        },
-      });
-
-      setMessage(`${category.toUpperCase()} configuration saved.`);
-      setApiKeyInput("");
-      await loadSettings();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed.");
-    } finally {
-      setSaving(false);
+    const credentials: Record<string, string> = {};
+    if (apiKeyInput.trim()) {
+      credentials.apiKey = apiKeyInput.trim();
     }
+
+    const settingsToSave: Record<string, unknown> = {};
+    if (category === "production") {
+      settingsToSave.costPreference = costPreferenceInput;
+    } else if (category === "cyclone") {
+      settingsToSave.gatewayUrl = gatewayUrlInput;
+    } else if (category === "sources") {
+      settingsToSave.maxPages = Number(maxPagesInput);
+    }
+
+    await saveConfig
+      .mutateAsync({ category, credentials: Object.keys(credentials).length > 0 ? credentials : undefined, settings: settingsToSave })
+      .catch(() => undefined);
   }
 
   async function handleRemove(category: ProviderCategory) {
-    setSaving(true);
-    try {
-      await removeProviderConfig({ data: { organizationId, category } });
-      setMessage(`Workspace ${category} credentials removed.`);
-      await loadSettings();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove credential.");
-    } finally {
-      setSaving(false);
-    }
+    setMessage(null);
+    await removeConfig.mutateAsync(category).catch(() => undefined);
   }
 
+  if (settings.isError && !summaries) {
+    return <ErrorState message="Provider settings could not be loaded." onRetry={() => void settings.refetch()} />;
+  }
   if (loading && !summaries) {
     return <p className="text-muted text-sm">Loading AI and Provider configuration...</p>;
   }
@@ -186,7 +167,6 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 onClick={() => {
                   setActiveTab(tab);
                   setTestResult(null);
-                  setError(null);
                   setMessage(null);
                 }}
                 className={`rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
@@ -273,7 +253,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           {/* Tab Specific Content */}
           {activeTab === "jev" ? (
             <div className="space-y-6">
-              <DecisionEngineSelector key={loadCount} organizationId={organizationId} canAdmin={canAdmin} />
+              <DecisionEngineSelector organizationId={organizationId} canAdmin={canAdmin} />
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">TypeSafe JEV transport</p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="JEV Routing Mode">

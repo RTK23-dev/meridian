@@ -25,7 +25,7 @@ import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
 import { getDecisionEngines, getProviderSettings } from "@/lib/meridian/settings/server-actions";
-import { cancelJob, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
+import { listJobs, listUsage } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";
 

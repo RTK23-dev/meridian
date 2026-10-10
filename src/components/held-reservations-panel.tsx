@@ -1,12 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useBusy } from "@/components/gate";
-import { Button, Field, Input, Notice, Panel, TextArea, errorText } from "@/components/ui";
-import { listHeldBudgetReservations, resolveHeldBudgetReservation } from "@/lib/meridian/studio/actions";
+import { Button, ErrorState, Field, Input, Notice, Panel, TextArea, errorText } from "@/components/ui";
+import { resolveHeldBudgetReservation } from "@/lib/meridian/studio/actions";
 import type { HeldReservationResolution } from "@/lib/meridian/security/held-reservations";
+import { qk } from "@/lib/query/keys";
+import { useHeldReservationsQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 
 type Draft = { note: string; reference: string; spend: string };
 const EMPTY_DRAFT: Draft = { note: "", reference: "", spend: "" };
+
+type ResolveVars = {
+  reservationId: string;
+  resolution: HeldReservationResolution;
+  note: string;
+  reference: string;
+  observed: number | undefined;
+};
 
 /**
  * Admin-only list of budget reservations held for an uncertain provider outcome. Each row is
@@ -14,14 +22,34 @@ const EMPTY_DRAFT: Draft = { note: "", reference: "", spend: "" };
  * the billed amount with the invoice reference. The server re-checks the role and the tenant.
  */
 export function HeldReservationsPanel({ brandId }: { brandId: string }) {
-  const queryKey = ["held-reservations", brandId] as const;
-  const held = useQuery({
-    queryKey,
-    queryFn: () => listHeldBudgetReservations({ data: { brandId } }),
-  });
-  const action = useBusy([queryKey]);
+  const held = useHeldReservationsQuery(brandId);
+  const resolveKey = ["mutation", "held-reservation.resolve", brandId] as const;
+  const resolving = usePendingVariables<ResolveVars>(resolveKey).map((vars) => vars.reservationId);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [notice, setNotice] = useState<string | null>(null);
+  const resolveAction = useScopedMutation({
+    mutationKey: resolveKey,
+    mutationFn: (vars: ResolveVars) => resolveHeldBudgetReservation({
+      data: {
+        brandId,
+        reservationId: vars.reservationId,
+        resolution: vars.resolution,
+        note: vars.note,
+        providerReference: vars.reference,
+        observedSpendUsd: vars.observed,
+      },
+    }),
+    // A resolved reservation changes the held list and the budget shown on the studio screen.
+    invalidate: () => [qk.heldReservations(brandId), qk.studio(brandId)],
+    onSuccess: (result, vars) => {
+      setNotice(result.outcome === "RELEASED" ? "Released. The held budget is back in the account." : "Settled at the recorded provider amount.");
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[vars.reservationId];
+        return next;
+      });
+    },
+  });
 
   function draftFor(reservationId: string) {
     return drafts[reservationId] ?? EMPTY_DRAFT;
@@ -33,28 +61,14 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
   async function resolve(reservationId: string, resolution: HeldReservationResolution) {
     const draft = draftFor(reservationId);
     const observed = draft.spend.trim() === "" ? undefined : Number(draft.spend);
-    await action.run(async () => {
-      const result = await resolveHeldBudgetReservation({
-        data: {
-          brandId,
-          reservationId,
-          resolution,
-          note: draft.note,
-          providerReference: draft.reference,
-          observedSpendUsd: observed,
-        },
-      });
-      setNotice(result.outcome === "RELEASED" ? "Released. The held budget is back in the account." : "Settled at the recorded provider amount.");
-      setDrafts((current) => {
-        const next = { ...current };
-        delete next[reservationId];
-        return next;
-      });
-    });
+    await resolveAction
+      .mutateAsync({ reservationId, resolution, note: draft.note, reference: draft.reference, observed })
+      .catch(() => undefined);
   }
 
   if (held.isPending) return null;
-  if (held.error) return <Notice>{errorText(held.error)}</Notice>;
+  if (held.isError && !held.data) return <ErrorState message="Held budget reservations could not be loaded." onRetry={() => void held.refetch()} />;
+  if (!held.data) return null;
   if (held.data.length === 0 && !notice) return null;
 
   return (
@@ -63,12 +77,13 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
       <p className="mt-1 text-sm text-muted">
         The provider outcome is uncertain, so this budget stays reserved until an admin resolves it. Nothing settles on its own.
       </p>
-      {action.error ? <Notice>{action.error}</Notice> : null}
+      {resolveAction.error ? <Notice>{errorText(resolveAction.error)}</Notice> : null}
       {notice ? <p role="status" className="mt-2 text-sm">{notice}</p> : null}
       <ul className="mt-4 space-y-4">
         {held.data.map((row) => {
           const draft = draftFor(row.reservationId);
           const noteValid = draft.note.trim().length >= 10;
+          const busy = resolving.includes(row.reservationId);
           return (
             <li key={row.reservationId} className="space-y-3 rounded-md border border-border p-4">
               <p className="text-sm">
@@ -87,10 +102,10 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
                 </Field>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="secondary" disabled={action.pending || !noteValid} onClick={() => void resolve(row.reservationId, "not_accepted")}>
+                <Button type="button" variant="secondary" disabled={busy || !noteValid} onClick={() => void resolve(row.reservationId, "not_accepted")}>
                   Provider confirms not billed: release
                 </Button>
-                <Button type="button" disabled={action.pending || !noteValid} onClick={() => void resolve(row.reservationId, "billed_no_artifact")}>
+                <Button type="button" disabled={busy || !noteValid} onClick={() => void resolve(row.reservationId, "billed_no_artifact")}>
                   Billed, no artifact: settle at amount
                 </Button>
               </div>
