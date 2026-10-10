@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createHash } from "node:crypto";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { DEV_USER_ID, authConfigured } from "@/lib/auth/verify.server";
 import { gateIdentityEnabled } from "@/lib/auth/gate-identity.server";
@@ -18,6 +18,62 @@ const assetReadLimit = createRateLimit(120, 60_000);
 
 /** Missing, unavailable and other-workspace assets all get this response, so existence is not revealed. */
 const notFound = () => new Response("Not found", { status: 404 });
+
+type StoredSource = {
+  organizationId: string;
+  brandId: string;
+  mimeType: string;
+  byteSize: number;
+  sha256Hex: string;
+  bytes: Uint8Array<ArrayBuffer>;
+};
+
+/**
+ * Loads the stored bytes for one storage key within one workspace and brand. Studio, Hypit and creative-image writes land
+ * in asset_blobs. Production artifacts land in the artifact store (Google Drive), indexed by storage_objects, so that is
+ * read when no blob exists. Call this only after the caller has been checked against the workspace.
+ */
+async function loadStoredSource(
+  sql: Sql,
+  scope: { storageKey: string; organizationId: string; brandId: string },
+): Promise<StoredSource | null> {
+  const blobs = await sql<Record<string, unknown>>`
+    select organization_id, brand_id, body, mime_type, checksum, byte_size
+    from asset_blobs
+    where storage_key = ${scope.storageKey} and organization_id = ${scope.organizationId}
+      and brand_id = ${scope.brandId} and lifecycle = 'stored'
+    limit 1
+  `;
+  const blob = blobs[0];
+  if (blob) {
+    return {
+      organizationId: String(blob.organization_id),
+      brandId: String(blob.brand_id),
+      mimeType: String(blob.mime_type ?? ""),
+      byteSize: Number(blob.byte_size),
+      sha256Hex: String(blob.checksum ?? ""),
+      bytes: Buffer.from(String(blob.body ?? ""), "base64"),
+    };
+  }
+  const objects = await sql<Record<string, unknown>>`
+    select organization_id, brand_id, provider_file_id, mime_type, size_bytes, sha256
+    from storage_objects
+    where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and name = ${scope.storageKey}
+    limit 1
+  `;
+  const object = objects[0];
+  if (!object) return null;
+  const { defaultArtifactDrive } = await import("@/lib/meridian/storage/artifact-drive");
+  const file = await defaultArtifactDrive().get(String(object.provider_file_id));
+  return {
+    organizationId: String(object.organization_id),
+    brandId: String(object.brand_id),
+    mimeType: String(object.mime_type ?? ""),
+    byteSize: Number(object.size_bytes),
+    sha256Hex: String(object.sha256 ?? ""),
+    bytes: new Uint8Array(file.bytes),
+  };
+}
 
 export const Route = createFileRoute("/api/assets/$assetId")({
   server: {
@@ -60,28 +116,27 @@ export const Route = createFileRoute("/api/assets/$assetId")({
         const assetBrandId = String(asset.brand_id);
         if (!isInActiveWorkspace(assetOrganizationId, active)) return notFound();
 
-        const blobs = await sql<Record<string, unknown>>`
-          select organization_id, brand_id, body, mime_type, checksum, byte_size
-          from asset_blobs
-          where storage_key = ${String(asset.storage_key)} and organization_id = ${assetOrganizationId}
-            and brand_id = ${assetBrandId} and lifecycle = 'stored'
-          limit 1
-        `;
-        const blob = blobs[0];
-        if (!blob) return notFound();
+        let source: StoredSource | null;
+        try {
+          source = await loadStoredSource(sql, { storageKey: String(asset.storage_key), organizationId: assetOrganizationId, brandId: assetBrandId });
+        } catch (error) {
+          console.error("[assets] stored bytes could not be read", error instanceof Error ? error.name : "unknown");
+          return new Response("The stored file could not be read right now. Try again shortly.", { status: 503, headers: { "Retry-After": "30" } });
+        }
+        if (!source) return notFound();
         if (!canAccessStoredAsset({
           assetOrganizationId,
-          blobOrganizationId: String(blob.organization_id),
+          blobOrganizationId: source.organizationId,
           assetBrandId,
-          blobBrandId: String(blob.brand_id),
+          blobBrandId: source.brandId,
           memberOrganizationIds: [active.organizationId],
         })) return notFound();
 
-        const bytes = Buffer.from(String(blob.body ?? ""), "base64");
-        const mime = verifiedMediaMime(bytes, String(blob.mime_type ?? ""));
+        const bytes = source.bytes;
+        const mime = verifiedMediaMime(bytes, source.mimeType);
         if (!mime) return notFound();
         const sha256Hex = createHash("sha256").update(bytes).digest("hex");
-        if (!storedBytesMatch({ byteLength: bytes.byteLength, sha256Hex }, { byteSize: Number(blob.byte_size), sha256Hex: String(blob.checksum ?? "") })) {
+        if (!storedBytesMatch({ byteLength: bytes.byteLength, sha256Hex }, { byteSize: source.byteSize, sha256Hex: source.sha256Hex })) {
           return new Response("Asset unavailable", { status: 404 });
         }
 
