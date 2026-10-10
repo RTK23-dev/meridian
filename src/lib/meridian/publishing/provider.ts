@@ -15,7 +15,7 @@ export function publishingProviderStatus(): PublishResult {
   return {
     status: "NOT_CONNECTED",
     externalId: null,
-    detail: "No publishing provider is connected. The creative was not sent anywhere.",
+    detail: "No live publishing API is implemented in this build, so no channel can be connected. The creative was not sent anywhere.",
   };
 }
 
@@ -27,6 +27,6 @@ export function syncPublishingStatus(): PublishResult {
   return {
     status: "NOT_CONNECTED",
     externalId: null,
-    detail: "No publishing provider is connected. No campaign status was synced.",
+    detail: "No live publishing API is implemented in this build, so no campaign status was synced.",
   };
 }

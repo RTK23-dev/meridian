@@ -3,6 +3,7 @@ import { assertSameTenant } from "../domain.ts";
 import type { Sql } from "../learning/store.ts";
 import { publishThrough } from "../providers/boundaries.ts";
 import type { TestPublishReceipt } from "../providers/test-provider.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 export type HypitPublishReceipt = {
   organizationId: string;
@@ -96,7 +97,7 @@ export async function publishStoredHypitAsset(
   const outcome = dispatch({
     provider: "test",
     creativeId: input.storageKey,
-    allowTestProvider: true,
+    allowTestProvider: isTestingRuntimeNow(),
     artifact: { bytes: input.bytes, mime: input.mime, sha256 },
   });
   if (!outcome.externalId || outcome.status !== "TEST_PUBLISHED" || !outcome.receipt) {

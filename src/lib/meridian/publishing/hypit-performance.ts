@@ -3,6 +3,7 @@ import type { Sql } from "../learning/store.ts";
 import { learningJobKey } from "../jobs/runner.ts";
 import { ingestPerformance } from "../providers/boundaries.ts";
 import type { PerformanceEvent } from "../performance/normalize.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 export const HYPIT_TEST_PERFORMANCE_SOURCE = "test:performance";
 
@@ -89,7 +90,7 @@ export function planHypitTestPerformance(input: HypitPerformanceRequest): HypitP
   };
   const ingested = ingestPerformance({
     provider: "test",
-    allowTestProvider: true,
+    allowTestProvider: isTestingRuntimeNow(),
     existing: input.existing,
     events: [event],
   });

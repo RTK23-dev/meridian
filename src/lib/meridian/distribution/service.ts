@@ -3,6 +3,7 @@ import { assertRole, type Role, isRole } from "../access.ts";
 import { getDistributionChannel } from "./registry.ts";
 import { applyLearnedPatterns } from "../learning/store.ts";
 import { publishThrough } from "../providers/boundaries.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 export async function requireBrandAccess(
   sql: Sql,
@@ -122,8 +123,8 @@ export async function listAvailableChannels(
       type: "paid",
       platform: "test",
       description: "Deterministic sandbox publisher for automated tests and safe preview validation.",
-      connected: true,
-      accountName: "Test Sandbox Ad Account",
+      connected: isTestingRuntimeNow(),
+      accountName: isTestingRuntimeNow() ? "Test Sandbox Ad Account" : "Not available outside the testing runtime",
     },
     {
       id: "meta-ads",
@@ -229,6 +230,9 @@ export async function publishCreativeToChannels(
       `;
       let extId = existing[0]?.external_id;
       if (!extId) {
+        if (!isTestingRuntimeNow()) {
+          throw new Error("The test publisher runs only in the testing runtime. Connect a live channel to publish.");
+        }
         const published = publishThrough({ provider: "test", creativeId: input.creativeId, allowTestProvider: true });
         extId = published.externalId ?? "";
         await sql`

@@ -11,6 +11,9 @@ import { winnerScoreGradingEngine, heuristicGradingEngine } from "../grading/eng
 import { matrixPlannerEngine } from "../planner/engine.ts";
 import { testPublishEngine } from "../publishing/engine.ts";
 
+// Test-provider publishing is restricted to the testing runtime.
+process.env.MERIDIAN_TESTING_RUNTIME = "true";
+
 test("Flow Connectors: n8n-style modular pipeline chains nodes smoothly", async () => {
   const flow = createFlow("factory-campaign-pipeline");
 

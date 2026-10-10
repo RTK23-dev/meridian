@@ -8,6 +8,9 @@ import { learnPatterns } from "../learning/engine.ts";
 import { rankOpportunities } from "../opportunity/engine.ts";
 import { planHypitTestPerformance, persistHypitTestPerformance, type HypitPerformanceReceipt } from "./hypit-performance.ts";
 
+// Test-provider publishing is restricted to the testing runtime.
+process.env.MERIDIAN_TESTING_RUNTIME = "true";
+
 const org = "org-live";
 const brand = "brand-live";
 const PUBLISH_ID = "test:hypit/org-live/brand-live/652c10dba9c86c6bcc86df9b88f7bbf70f567eabec4c18c85457aa36c602d78e.mp4";

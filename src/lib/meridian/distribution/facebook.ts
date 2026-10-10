@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { DistributionChannel, OrganicPublishRequest, OrganicPublishReceipt, OrganicTelemetryMetrics } from "./types.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 export class FacebookPagesChannel implements DistributionChannel {
   public readonly id = "facebook-pages";
@@ -35,7 +36,7 @@ export class FacebookPagesChannel implements DistributionChannel {
     const sha256 = createHash("sha256").update(request.mediaBytes).digest("hex");
     const connection = await this.checkConnection(request.brandId);
 
-    if (!connection.connected && request.allowTestProvider) {
+    if (!connection.connected && request.allowTestProvider && isTestingRuntimeNow()) {
       const mockExternalId = `fb_test_${sha256.slice(0, 12)}`;
       return {
         externalId: mockExternalId,
@@ -56,13 +57,12 @@ export class FacebookPagesChannel implements DistributionChannel {
     }
 
     try {
-      const mockId = `fb_${Date.now()}_${sha256.slice(0, 8)}`;
+      // Live Facebook publishing is not implemented in this build. Nothing is reported as published.
       return {
-        externalId: mockId,
-        postUrl: `https://www.facebook.com/watch/?v=${mockId}`,
+        externalId: "",
         platform: "facebook",
-        status: "published",
-        publishedAt: new Date().toISOString(),
+        status: "failed",
+        error: "Live Facebook publishing is not implemented in this build. Nothing was published.",
       };
     } catch (caught) {
       return {

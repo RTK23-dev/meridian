@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { DistributionChannel, OrganicPublishRequest, OrganicPublishReceipt, OrganicTelemetryMetrics } from "./types.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 export class InstagramReelsChannel implements DistributionChannel {
   public readonly id = "instagram-reels";
@@ -45,7 +46,7 @@ export class InstagramReelsChannel implements DistributionChannel {
     const connection = await this.checkConnection(request.brandId);
 
     // If test provider is explicitly permitted or credentials unset in test environment
-    if (!connection.connected && request.allowTestProvider) {
+    if (!connection.connected && request.allowTestProvider && isTestingRuntimeNow()) {
       const mockExternalId = `ig_test_${sha256.slice(0, 12)}`;
       return {
         externalId: mockExternalId,
@@ -67,15 +68,12 @@ export class InstagramReelsChannel implements DistributionChannel {
 
     // Live Instagram Content Publishing API flow
     try {
-      const isReel = request.aspectRatio === "9:16";
-      const _mediaType = request.mimeType.startsWith("video/") ? (isReel ? "REELS" : "VIDEO") : "IMAGE";
-      const mockId = `ig_${Date.now()}_${sha256.slice(0, 8)}`;
+      // Live Instagram publishing is not implemented in this build. Nothing is reported as published.
       return {
-        externalId: mockId,
-        postUrl: `https://www.instagram.com/${isReel ? "reel" : "p"}/${mockId}/`,
+        externalId: "",
         platform: "instagram",
-        status: "published",
-        publishedAt: new Date().toISOString(),
+        status: "failed",
+        error: "Live Instagram publishing is not implemented in this build. Nothing was published.",
       };
     } catch (caught) {
       return {

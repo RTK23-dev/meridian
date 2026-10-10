@@ -241,14 +241,16 @@ async function defaultVisionLabeller(
       : [];
 
     return {
-      shotType: typeof parsed.shot_type === "string" ? parsed.shot_type : "medium_shot",
-      presenter: typeof parsed.presenter === "string" ? parsed.presenter : "none",
-      productOnScreen: typeof parsed.product_on_screen === "boolean" ? parsed.product_on_screen : false,
-      setting: typeof parsed.setting === "string" ? parsed.setting : "studio",
-      motion: typeof parsed.motion === "string" ? parsed.motion : "static",
-      overlay: typeof parsed.overlay === "string" ? parsed.overlay : "none",
+      // A field the model did not return stays undefined: it is recorded as missing, never as a default value.
+      shotType: typeof parsed.shot_type === "string" ? parsed.shot_type : undefined,
+      presenter: typeof parsed.presenter === "string" ? parsed.presenter : undefined,
+      productOnScreen: typeof parsed.product_on_screen === "boolean" ? parsed.product_on_screen : undefined,
+      setting: typeof parsed.setting === "string" ? parsed.setting : undefined,
+      motion: typeof parsed.motion === "string" ? parsed.motion : undefined,
+      overlay: typeof parsed.overlay === "string" ? parsed.overlay : undefined,
       onScreenText: textList,
-      confidence: 0.8,
+      // The labeller does not report a confidence, so none is assumed. Fields are weighted as unreported.
+      confidence: undefined,
     };
   } catch {
     return null;
@@ -416,7 +418,8 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
     let overlay: DnaField<string> = missingField("");
 
     if (labels) {
-      const conf = labels.confidence ?? 0.8;
+      // Unreported confidence is 0: the value is kept, but it carries no weight in scoring.
+      const conf = labels.confidence ?? 0;
       const src = { kind: "frame" as const, at: second, ref: sceneRef };
       if (labels.shotType) shotType = dnaField(labels.shotType, conf, src);
       if (labels.presenter) presenter = dnaField(labels.presenter, conf, src);
@@ -475,8 +478,9 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
   const allTranscript = input.transcript?.trim() || segments.map((s) => s.text).join(" ").trim();
   if (allTranscript) {
     dna.voice = dnaField("spoken_voiceover", 0.8, { kind: "transcript", at: 0 });
+    // Audio is not analysed here, so music energy and tempo are not observed.
     dna.music = {
-      energy: dnaField("medium", 0.6, { kind: "audio" }),
+      energy: missingField(""),
       tempoBpm: missingField(null),
     };
   } else {

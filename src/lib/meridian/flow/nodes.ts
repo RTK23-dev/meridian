@@ -6,6 +6,7 @@ import type { VideoEngine } from "../video/engine.ts";
 import type { PublishEngine, PublishPausedRequest, PublishEngineResult } from "../publishing/engine.ts";
 import { compareOriginalityAgainstSource } from "../factory/gates.ts";
 import type { HypitJobContract } from "../hypit/contract.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 /** Source Ingestion Connector Node */
 export function createSourceNode(adapter: SourceAdapter, id = "source-node"): FlowNode<{ niche?: string; limit?: number }, SourceAdItem[]> {
@@ -268,7 +269,7 @@ export function createOrganicPublishNode(
           title: input.title,
           tags: input.tags,
           aspectRatio: input.aspectRatio ?? "9:16",
-          allowTestProvider: true,
+          allowTestProvider: isTestingRuntimeNow(),
         },
       });
 

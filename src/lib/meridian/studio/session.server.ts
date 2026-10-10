@@ -49,6 +49,7 @@ import { resolveProductionTarget } from "../production/target.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
 import { accountSnapshots, competitorCopy, factsFor, qcBrandOf, visualFacts, writeJudgment } from "./image-qc.server.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -1846,7 +1847,7 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
         )
       `;
       const isTest = data.publisher === "test";
-      const isTestRuntime = process.env.NODE_ENV !== "production" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
+      const isTestRuntime = isTestingRuntimeNow();
       if (isTest && !isTestRuntime) {
         throw new Error("The test publisher is isolated to TestingRuntime and cannot be used in ProductionRuntime. Connect a live channel to publish.");
       }
@@ -1877,6 +1878,9 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
 }
 
 export async function recordStudioTestPerformance(userId: string, data: { brandId: string }) {
+  if (!isTestingRuntimeNow()) {
+    throw new Error("Simulated performance is recorded only in the testing runtime. It is never used as a real outcome.");
+  }
   const context = { userId };
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");

@@ -31,6 +31,7 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
     select creative_id, organization_id, brand_id, impressions, clicks, conversions, spend_cents, revenue_cents
     from performance_observations
     where brand_id = ${brandId} and organization_id = ${organizationId}
+      and source not like 'test:%'
   `;
   const creatives: ObservedCreative[] = creativeRows.map((row) => ({
     id: asText(row.id),
