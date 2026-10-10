@@ -4,6 +4,7 @@ export const qk = {
   machine: (brandId: string) => ["machine", brandId] as const,
   intelligence: (brandId: string) => ["intelligence", brandId] as const,
   studio: (brandId: string) => ["studio", brandId] as const,
+  briefReview: (brandId: string, briefId: string) => ["brief-review", brandId, briefId] as const,
   opportunities: (brandId: string) => ["opportunities", brandId] as const,
   market: (brandId: string) => ["market", brandId] as const,
   reviews: (brandId: string) => ["reviews", brandId] as const,

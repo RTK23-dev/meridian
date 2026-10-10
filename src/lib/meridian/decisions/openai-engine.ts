@@ -23,7 +23,7 @@
  * documented contract.
  */
 import { createHash } from "node:crypto";
-import { detectArtifactType } from "../production/mime-detector.ts";
+import { ACCEPTED_IMAGE_MIME_TYPES, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES, checkImageBytes } from "../media/image-input.ts";
 import { checkEvidenceSufficiency, minimizeJevState } from "../jev/client.ts";
 import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 import {
@@ -42,10 +42,10 @@ export const OPENAI_DECISIONS_ADAPTER_VERSION = "openai-decisions-adapter.v1";
 export const OPENAI_DECISIONS_DEFAULT_MODEL = "gpt-6-luna";
 export const OPENAI_DECISIONS_MAX_IMAGES = 128;
 /** Meridian's own per-image cap. The API documents no size limit; this keeps request bodies bounded. */
-export const OPENAI_DECISIONS_MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+export const OPENAI_DECISIONS_MAX_IMAGE_BYTES = MAX_IMAGE_BYTES;
 /** Meridian's cap on all image bytes in one request. */
-export const OPENAI_DECISIONS_MAX_TOTAL_IMAGE_BYTES = 48 * 1024 * 1024;
-const ACCEPTED_IMAGE_TYPES: DecisionImageMimeType[] = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+export const OPENAI_DECISIONS_MAX_TOTAL_IMAGE_BYTES = MAX_TOTAL_IMAGE_BYTES;
+const ACCEPTED_IMAGE_TYPES: DecisionImageMimeType[] = [...ACCEPTED_IMAGE_MIME_TYPES];
 const PROVIDER = "openai";
 
 export type OpenAiDecisionsConfig = {
@@ -137,27 +137,13 @@ export function prepareImages(
   let total = 0;
   const prepared: ValidatedImage[] = [];
   for (const [index, image] of list.entries()) {
-    const bytes = image.bytes;
-    if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
-      return { ok: false, reason: `Image ${index + 1} has no bytes.` };
-    }
-    if (bytes.byteLength > OPENAI_DECISIONS_MAX_IMAGE_BYTES) {
-      return { ok: false, reason: `Image ${index + 1} is ${bytes.byteLength} bytes; the limit is ${OPENAI_DECISIONS_MAX_IMAGE_BYTES}.` };
-    }
-    total += bytes.byteLength;
+    const checked = checkImageBytes(image.bytes, `Image ${index + 1}`);
+    if (!checked.ok) return { ok: false, reason: checked.reason };
+    total += image.bytes.byteLength;
     if (total > OPENAI_DECISIONS_MAX_TOTAL_IMAGE_BYTES) {
       return { ok: false, reason: `Images total more than ${OPENAI_DECISIONS_MAX_TOTAL_IMAGE_BYTES} bytes.` };
     }
-    let mimeType: string;
-    try {
-      mimeType = detectArtifactType(bytes).mimeType;
-    } catch (error) {
-      return { ok: false, reason: `Image ${index + 1} is not a readable image: ${error instanceof Error ? error.message : String(error)}` };
-    }
-    if (!(ACCEPTED_IMAGE_TYPES as string[]).includes(mimeType)) {
-      return { ok: false, reason: `Image ${index + 1} is ${mimeType}; accepted types are ${ACCEPTED_IMAGE_TYPES.join(", ")}.` };
-    }
-    prepared.push({ dataUrl: `data:${mimeType};base64,${Buffer.from(bytes).toString("base64")}`, label: image.label });
+    prepared.push({ dataUrl: `data:${checked.mimeType};base64,${Buffer.from(image.bytes).toString("base64")}`, label: image.label });
   }
   return { ok: true, images: prepared };
 }

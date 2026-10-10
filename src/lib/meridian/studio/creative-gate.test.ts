@@ -9,6 +9,8 @@ import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import { PNG, studioTenant } from "../testing/durable-image-fixtures.ts";
 import { generatedImageVisual, videoVisualEvidence, writeJudgment, type VisualEvidence } from "./image-qc.server.ts";
 import { sampleTimestamps } from "../video/sample-frames.ts";
+import { solidFrame } from "../video/inspect.ts";
+import type { MediaObservation, MultimodalPerceptionProvider, PerceptionMedia, PerceptionResult } from "../perception/types.ts";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -134,6 +136,7 @@ async function judge(options: {
   creativeId: string;
   facts?: MediaFacts;
   visual?: VisualEvidence;
+  perception?: MultimodalPerceptionProvider | null;
   engines: DecisionEngineRegistry;
   selectedEngine: DecisionEngineId;
 }) {
@@ -152,6 +155,7 @@ async function judge(options: {
     creativeId: options.creativeId,
     facts: options.facts ?? facts,
     visual: options.visual,
+    perception: options.perception ?? null,
     engines: options.engines,
   });
 }
@@ -273,31 +277,133 @@ test("a provider failure on the engine is human review, never approval, and the 
   assert.equal(jev.requests.length, 0, "no silent switch to JEV");
 });
 
-test("a video is sampled only for an engine that can see images; under JEV nothing is sampled or sent", async () => {
-  const sql = await getSql();
-  const tenant = await studioTenant(sql, "creative-video-jev");
-  const storageKey = `video-${randomUUID()}.mp4`;
+/** A stub perception provider. It records each call, so a test can prove whether production asked for perception. */
+function stubPerception(options: { fail?: boolean } = {}) {
+  const calls: PerceptionMedia[][] = [];
+  const provider: MultimodalPerceptionProvider = {
+    id: "stub_perception",
+    model: "stub-model-1",
+    promptVersion: "stub-prompt.v1",
+    health: async () => ({ id: "stub_perception", state: "HEALTHY", detail: "ready" }),
+    perceive: async (input): Promise<PerceptionResult> => {
+      calls.push(input.media);
+      if (options.fail) {
+        return { status: "failed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", failureKind: "timeout", message: "stub timeout", latencyMs: 1 };
+      }
+      const observations: MediaObservation[] = input.media.map((item) => ({
+        mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "model_description", productPresence: true, ocrText: "Calm dinner, ten minutes",
+      }));
+      return { status: "observed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", observations, latencyMs: 2 };
+    },
+  };
+  return { provider, calls };
+}
+
+/** Two sampled frames of a video, with their real timestamps, as the sampler provides them. */
+function sampledVideo(): VisualEvidence {
+  return {
+    kind: "video_frames",
+    media: [
+      { id: "frame-0", bytes: solidFrame(16, 16, [200, 20, 20]), timestampMs: 0, label: "Frame at 0ms (hook)", source: "ffmpeg_sample" },
+      { id: "frame-1500", bytes: solidFrame(16, 16, [20, 200, 20]), timestampMs: 1500, label: "Frame at 1500ms (cta)", source: "ffmpeg_sample" },
+    ],
+    coverage: { scope: "sampled_frames", offered: 8, analysed: 2, durationMs: 3000, note: "Analysed 2 of 8 sampled frames of a 3000 ms video. The video was not inspected in full." },
+  };
+}
+
+test("frames are sampled only for an engine that takes them, or when perception is ready to read them", async () => {
   let extracted = 0;
-  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, storageKey, 3000, {
-    selection: { engineId: "jev", source: "workspace" },
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-video-sampling-gate");
+  const neither = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, `video-${randomUUID()}.mp4`, 3000, {
+    sample: false,
     extractor: async () => {
       extracted += 1;
       return PNG;
     },
   });
-  assert.deepEqual(visual.images, []);
-  assert.equal(visual.frames?.unavailable, "engine_cannot_see_images");
-  assert.equal(extracted, 0, "no frame is extracted for an engine that cannot use it");
+  assert.deepEqual(neither.media, []);
+  assert.equal(neither.coverage.unavailable, "sampling_not_needed");
+  assert.equal(extracted, 0, "no frame is extracted when nothing will read it");
 });
 
-test("under OpenAI, a video with no stored container sends no frame and says why", async () => {
+test("under JEV with perception ready: perception analyses the frames, JEV reads the grounded text, no image is sent, and the visual questions are unsupported", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-jev-perception");
+  const perception = stubPerception();
+  const jev = stubEngine("jev", { respond: textApproves });
+  const openai = stubEngine("openai-decisions", { respond: textApproves });
+  const creativeId = `creative-${randomUUID()}`;
+  const judged = await judge({
+    tenant, creativeId, facts: { ...facts, kind: "video", transcript: "", durationMs: 3000, sceneCount: 1 },
+    visual: sampledVideo(), perception: perception.provider, engines: registryWith(jev, openai), selectedEngine: "jev",
+  });
+  assert.equal(perception.calls.length, 1, "perception analyses the frames once");
+  assert.equal(perception.calls[0]?.length, 2);
+  assert.equal(openai.requests.length, 0, "no silent OpenAI call for visual judgment");
+  assert.equal(jev.requests[0]!.images?.length ?? 0, 0, "JEV is never handed an image");
+  const state = JSON.stringify(jev.requests[0]!.state);
+  assert.match(state, /Frame at 0ms/, "JEV reads the grounded observation with its real timestamp");
+  assert.match(state, /not inspected in full/, "JEV is told the video was only partly analysed");
+  assert.equal(judged.perceptionRunId !== null, true, "the perception run is recorded");
+  assert.equal(judged.gateAction, "HUMAN_REVIEW", "the visual questions are unsupported under JEV, so the creative is reviewed");
+  const [record] = await sql<{ evidence: unknown }>`select evidence from decision_gate_records where id = ${judged.gateRecordId}`;
+  assert.match(JSON.stringify(record?.evidence), /perception_observations/);
+  assert.match(JSON.stringify(record?.evidence), new RegExp(`perception_run:${judged.perceptionRunId}`));
+});
+
+test("under JEV with perception unavailable: the creative is held for review, OpenAI is not called, and JEV still judges the text", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-jev-no-perception");
+  const jev = stubEngine("jev", { respond: textApproves });
+  const openai = stubEngine("openai-decisions", { respond: textApproves });
+  const creativeId = `creative-${randomUUID()}`;
+  const judged = await judge({ tenant, creativeId, visual: sampledVideo(), perception: null, engines: registryWith(jev, openai), selectedEngine: "jev" });
+  assert.equal(openai.requests.length, 0, "no substitute engine");
+  assert.equal(jev.requests.length, 1, "the text questions are still judged");
+  assert.match(JSON.stringify(jev.requests[0]!.state), /"failureKind":"not_configured"/, "the unavailable perception is stated");
+  assert.match(JSON.stringify(jev.requests[0]!.state), /"analysed":0/, "no frame is claimed as analysed");
+  assert.equal(judged.gateAction, "HUMAN_REVIEW");
+  assert.notEqual(judged.rollup, "AUTO_APPROVE");
+});
+
+test("under JEV with a perception failure: the failure is recorded with its kind, and nothing is made up from it", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-jev-perception-failed");
+  const perception = stubPerception({ fail: true });
+  const jev = stubEngine("jev", { respond: textApproves });
+  const creativeId = `creative-${randomUUID()}`;
+  const judged = await judge({ tenant, creativeId, visual: sampledVideo(), perception: perception.provider, engines: registryWith(jev, stubEngine("openai-decisions")), selectedEngine: "jev" });
+  assert.match(JSON.stringify(jev.requests[0]!.state), /"status":"failed"/);
+  assert.match(JSON.stringify(jev.requests[0]!.state), /"failureKind":"timeout"/);
+  assert.doesNotMatch(JSON.stringify(jev.requests[0]!.state), /Frame at 0ms \(/, "no observation is attached to a failed run");
+  assert.equal(judged.gateAction, "HUMAN_REVIEW");
+});
+
+test("under OpenAI Decisions the frames go to the engine directly, with their timestamps, and perception is never called", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-openai-direct");
+  const perception = stubPerception();
+  const jev = stubEngine("jev");
+  const openai = stubEngine("openai-decisions", { respond: textApproves });
+  const creativeId = `creative-${randomUUID()}`;
+  const visual = sampledVideo();
+  const judged = await judge({ tenant, creativeId, facts: { ...facts, kind: "video", transcript: "", durationMs: 3000, sceneCount: 1 }, visual, perception: perception.provider, engines: registryWith(jev, openai), selectedEngine: "openai-decisions" });
+  assert.equal(perception.calls.length, 0, "perception is not a second analysis of the same frames");
+  assert.equal(jev.requests.length, 0);
+  assert.equal(openai.requests.length, 1, "one call carries the text and the frames");
+  assert.equal(openai.requests[0]!.images?.length, 2);
+  assert.equal(judged.perceptionRunId, null);
+  const [record] = await sql<{ evidence: unknown }>`select evidence from decision_gate_records where id = ${judged.gateRecordId}`;
+  assert.match(JSON.stringify(record?.evidence), /"timestampMs":1500/, "the record names each frame with its real timestamp");
+});
+
+test("a video with no stored container sends no frame under OpenAI, and the reason is recorded", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "creative-video-no-container");
-  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, `missing-${randomUUID()}.mp4`, 3000, {
-    selection: { engineId: "openai-decisions", source: "workspace" },
-  });
-  assert.deepEqual(visual.images, []);
-  assert.equal(visual.frames?.unavailable, "no_stored_container");
+  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, `missing-${randomUUID()}.mp4`, 3000, { sample: true });
+  assert.deepEqual(visual.media, []);
+  assert.equal(visual.coverage.unavailable, "no_stored_container");
 });
 
 test("real ffmpeg, under OpenAI: up to four sampled frames reach the engine with their real timestamps, and the record names them", { skip: ffmpegAvailable ? false : "ffmpeg is not installed here" }, async () => {
@@ -318,16 +424,11 @@ test("real ffmpeg, under OpenAI: up to four sampled frames reach the engine with
     insert into asset_blobs (storage_key, organization_id, brand_id, body, mime_type, checksum, byte_size, lifecycle)
     values (${storageKey}, ${tenant.organizationId}, ${tenant.brandId}, ${clip.toString("base64")}, 'video/mp4', 'sum', ${clip.byteLength}, 'stored')
   `;
-  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, storageKey, 3000, {
-    selection: { engineId: "openai-decisions", source: "workspace" },
-  });
-  assert.equal(visual.frames?.unavailable, undefined);
-  assert.equal(visual.frames?.sampled, sampleTimestamps(3000).length, "every sample was taken from the clip");
-  assert.ok(visual.images.length >= 1 && visual.images.length <= 4, "at most four frames are provided");
-  assert.equal(visual.images.length, visual.evidence.length);
-  for (const item of visual.evidence) {
-    assert.equal(item.kind, "image");
-    assert.equal(typeof item.timestampMs, "number", "each frame carries its real timestamp");
+  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, storageKey, 3000, { sample: true });
+  assert.equal(visual.coverage.unavailable, undefined);
+  assert.equal(visual.coverage.offered, sampleTimestamps(3000).length, "every sample was taken from the clip");
+  assert.ok(visual.media.length >= 1 && visual.media.length <= 4, "at most four frames are provided");
+  for (const item of visual.media) {
     assert.ok(sampleTimestamps(3000).includes(item.timestampMs!), "the timestamp is one that was actually sampled");
   }
 
@@ -342,10 +443,8 @@ test("real ffmpeg, under OpenAI: up to four sampled frames reach the engine with
     selectedEngine: "openai-decisions",
   });
   assert.equal(openai.requests.length, 1);
-  assert.equal(openai.requests[0]!.images?.length, visual.images.length, "the engine receives exactly the frames that were provided");
+  assert.equal(openai.requests[0]!.images?.length, visual.media.length, "the engine receives exactly the frames that were provided");
   assert.equal(judged.gateEngineCalled, true);
-  const [record] = await sql<{ evidence: unknown }>`
-    select evidence from decision_gate_records where id = ${judged.gateRecordId}
-  `;
+  const [record] = await sql<{ evidence: unknown }>`select evidence from decision_gate_records where id = ${judged.gateRecordId}`;
   assert.match(JSON.stringify(record?.evidence), /ffmpeg_sample/, "the record names where each frame came from");
 });

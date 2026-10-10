@@ -123,13 +123,13 @@ function lowestProbability(gate: GateResult): number {
  */
 export async function writeBriefDecision(
   sql: Sql,
-  input: { organizationId: string; brandId: string; briefId: string; decisionId: string; reviewerId: string; result: BriefGateResult },
+  input: { organizationId: string; brandId: string; briefId: string; decisionId: string; result: BriefGateResult },
 ): Promise<void> {
   const { result } = input;
   const digestOf = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
   const probability = lowestProbability(result);
-  // A rejected brief is not approved by anyone. Only a brief the gate did not reject carries the user's approval.
-  const approved = result.action !== "REJECT";
+  // Creating a brief never records a review. A HUMAN_REVIEW brief waits for an explicit review action
+  // (studio/brief-review.server.ts), and an AUTO_APPROVE brief needs none.
   await sql`
     insert into jev_decisions (
       id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,
@@ -148,7 +148,7 @@ export async function writeBriefDecision(
       ${probability}, ${probability}, ${JSON.stringify({ policyVersion: result.policyVersion })},
       ${result.action}, ${JSON.stringify([result.reason])}, ${result.engineId ?? "deterministic"}, ${result.returnedModel ?? "none"},
       ${JSON.stringify(result.answers)}, ${BRIEF_GATE_SCHEMA_VERSION}, ${result.policyVersion}, '',
-      ${approved ? input.reviewerId : null}, ${approved ? "approve" : null}, ${approved ? new Date() : null},
+      null, null, null,
       ${digestOf({ engine: result.engineId, requested: result.requestedModel, returned: result.returnedModel, questionVersions: result.questionVersions, policyVersion: result.policyVersion })},
       ${digestOf({ action: result.action, votes: result.votes, unresolved: result.unresolved })}
     )

@@ -1,3 +1,4 @@
+import { ProviderConfigResolver } from "../config/resolver.ts";
 /**
  * Workspace Provider Configuration Service
  *
@@ -102,31 +103,22 @@ export async function getWorkspaceProviderSettings(
     capabilities: ["choice_decisions", "score_decisions", "noul_probabilities", "evidence_audit_trail"],
   };
 
-  // 2. Perception Category
-  const perceptionVaultEntry = vaultMap.get(vaultTypeForCategory("perception"));
-  let perceptionCreds: VaultCredentialPayload | null = null;
-  if (perceptionVaultEntry) {
-    try {
-      perceptionCreds = await retrieveVaultCredential(sql, organizationId, perceptionVaultEntry.id);
-    } catch {
-      // Ignored
-    }
-  }
-  const deploymentPerceptionKey = process.env.GOOGLE_AI_STUDIO_API_KEY || process.env.OPENROUTER_API_KEY;
-  const perceptionConfigured = Boolean(perceptionCreds?.apiKey || deploymentPerceptionKey);
-  const perceptionSource = perceptionCreds?.apiKey ? "workspace" : (deploymentPerceptionKey ? "deployment" : "default");
+  // 2. Perception Category. The perception provider reads the deployment's canonical Gemini key. A workspace-vault
+  // credential is not read by it, so this summary does not report one as the perception configuration.
+  const deploymentPerceptionKey = ProviderConfigResolver.resolveGoogle({ env: process.env }).apiKey;
+  const perceptionConfigured = Boolean(deploymentPerceptionKey);
+  const perceptionSource = deploymentPerceptionKey ? "deployment" : "default";
 
   const perceptionSummary: ProviderConfigSummary = {
     category: "perception",
     configured: perceptionConfigured,
     source: perceptionSource,
-    keyFingerprint: fingerprint(perceptionCreds?.apiKey || deploymentPerceptionKey),
-    lastTestedStatus: (perceptionCreds?.customFields?.lastTestedStatus as any) || (perceptionConfigured ? "READY" : "NOT_CONFIGURED"),
-    lastTestedAt: perceptionCreds?.customFields?.lastTestedAt as string,
+    keyFingerprint: fingerprint(deploymentPerceptionKey),
+    lastTestedStatus: perceptionConfigured ? "READY" : "NOT_CONFIGURED",
     settings: {
-      provider: perceptionCreds?.customFields?.provider || "gemini",
-      model: perceptionCreds?.customFields?.model || "gemini-2.0-flash-exp",
-      modalities: ["image", "video", "audio", "ocr"],
+      provider: "gemini",
+      model: process.env.PERCEPTION_MODEL || "gemini-2.5-flash",
+      modalities: ["image", "video_frames", "ocr"],
     },
     capabilities: ["video_transcription", "scene_detection", "ocr_extraction", "multimodal_pacing"],
   };

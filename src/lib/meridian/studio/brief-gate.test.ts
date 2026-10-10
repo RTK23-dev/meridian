@@ -171,7 +171,6 @@ async function gateBrief(options: {
     brandId: options.tenant.brandId,
     briefId,
     decisionId,
-    reviewerId: "test-user",
     result,
   });
   const [row] = await sql<StoredDecisionRow>`select * from jev_decisions where id = ${decisionId}`;
@@ -286,11 +285,11 @@ test("the planner admits an approved brief and blocks a rejected one, reading th
   assert.equal(plannerView(rejected.row).status, "abstain_rejected", "a rejected brief blocks planning");
 });
 
-test("a brief the engine could not judge is admitted only by the human who approved it, and the planner says so", async () => {
+test("a brief the engine could not judge is not admitted by creation: the planner waits until a person reviews it", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "brief-planner-unavailable");
   const failed = await gateBrief({ tenant, engines: registryWith(stubEngine("jev"), stubEngine("openai-decisions", { failure: true })), selected: "openai-decisions" });
   assert.equal(failed.row.decision, "HUMAN_REVIEW");
-  assert.equal(failed.row.reviewer_decision, "approve", "the creating user is the reviewer");
-  assert.equal(plannerView(failed.row).status, "admissible");
+  assert.equal(failed.row.reviewer_decision, null, "creation records no approval");
+  assert.equal(plannerView(failed.row).status, "abstain_insufficient_evidence", "the planner does not admit an unreviewed brief");
 });

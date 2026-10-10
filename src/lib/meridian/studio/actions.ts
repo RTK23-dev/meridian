@@ -34,6 +34,38 @@ export const openStudioBrief = createServerFn({ method: "POST" })
 
 import { serverStudioGenerationSchema } from "@/lib/meridian/schemas/studio-generation";
 
+/** The disclosure for a brief the engine could not judge: the failure, the unresolved questions, and the evidence. */
+export const getStudioBriefReview = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = input && typeof input === "object" ? (input as { brandId?: unknown; briefId?: unknown }) : {};
+    const brandId = clip(body.brandId);
+    const briefId = clip(body.briefId);
+    if (!brandId || !briefId) throw new Error("Choose a brief.");
+    return { brandId, briefId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const [{ getSql }, api] = await Promise.all([import("../../db.ts"), import("./brief-review-access.server.ts")]);
+    return api.getBriefReviewForUser(await getSql(), context.userId, data);
+  });
+
+/** The explicit review of a held brief. Approval or rejection is a separate action, with an acknowledgement and a reason. */
+export const reviewStudioBrief = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+    const brandId = clip(body.brandId);
+    const briefId = clip(body.briefId);
+    if (!brandId || !briefId) throw new Error("Choose a brief.");
+    if (body.action !== "approve" && body.action !== "reject") throw new Error("Choose approve or reject.");
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 4000) : "";
+    return { brandId, briefId, action: body.action as "approve" | "reject", reason, acknowledged: body.acknowledged === true };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const [{ getSql }, api] = await Promise.all([import("../../db.ts"), import("./brief-review-access.server.ts")]);
+    return api.reviewBriefForUser(await getSql(), context.userId, data);
+  });
+
 export const generateStudioVariants = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const raw = (input && typeof input === "object" ? { ...input } : {}) as Record<string, unknown>;

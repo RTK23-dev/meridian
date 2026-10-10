@@ -20,6 +20,7 @@ import { generationAllowed } from "../security/budget.ts";
 import { evaluateJevGate } from "../jev/reviewer-decision.ts";
 import { ruleDecisionRecordFields } from "../jev/decision-record.ts";
 import { judgeBriefFit, writeBriefDecision } from "./brief-gate.server.ts";
+import { briefStatusFor } from "./brief-review.server.ts";
 import { STUDIO_PROMPT_VERSION, isTestingRuntime, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
 import { productionRouter, type ImageProviderSelection } from "../production/router.ts";
@@ -49,6 +50,7 @@ import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
 import { accountSnapshots, competitorCopy, factsFor, frameLike, qcBrandOf, videoVisualEvidence, visualFacts, writeJudgment } from "./image-qc.server.ts";
 import { resolveActiveEngine } from "../decisions/selection.ts";
+import { selectPerceptionProvider } from "../perception/run.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 function answerValue(raw: unknown): string {
@@ -427,12 +429,6 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
       order by created_at desc limit 1
     `;
-    if (existing[0]?.decision_id) {
-      await sql`
-        update jev_decisions set reviewer_id = ${context.userId}, reviewer_decision = 'approve', reviewed_at = now()
-        where id = ${existing[0].decision_id} and organization_id = ${access.organizationId}
-      `;
-    }
     if (!existing[0]) {
       const draft: OpportunityDraft = {
         hypothesisId: asText(row.hypothesis_id),
@@ -503,12 +499,13 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
         brandId: data.brandId,
         briefId,
         decisionId,
-        reviewerId: context.userId,
         result: briefGate,
       });
       if (briefGate.action === "REJECT") {
         throw new Error(`The brief gate rejected this: ${briefGate.reason}. A person was not asked to ignore a stored rejection.`);
       }
+      // A brief the engine could not judge waits for an explicit review. Creating it is not that review.
+      const briefStatus = briefStatusFor(briefGate.action);
       await sql`
         insert into briefs (
           id, organization_id, brand_id, opportunity_id, title, audience, angle, hook, message, offer, cta,
@@ -519,7 +516,7 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
           ${brief.audience}, ${brief.angle}, ${brief.hook}, ${brief.message}, ${brief.offer}, ${brief.cta},
           ${brief.format}, ${brief.proofType}, ${brief.constraints}, ${JSON.stringify(brief.context)},
           ${JSON.stringify(brief.workflow)}, ${JSON.stringify(brief.why)}, ${JSON.stringify(brief.learningNotes)},
-          ${JSON.stringify(brief.failureNotes)}, 'ready', ${decisionId}, ${context.userId}
+          ${JSON.stringify(brief.failureNotes)}, ${briefStatus}, ${decisionId}, ${context.userId}
         )
       `;
       await sql`update opportunities set status = 'briefed' where id = ${opportunityId}`;
@@ -1524,6 +1521,10 @@ export async function executeApprovedCreativePlan(
       });
       const visual = await measuredVideoFrames(sql, access.organizationId, brandId, asText(video.storage_key));
       const selection = await resolveActiveEngine(sql, access.organizationId);
+      // Perception is used only when the engine cannot see frames. It is checked here, before any frame is sampled for it.
+      const perceptionCandidate = selectPerceptionProvider().provider;
+      const perceptionForJudgment = selection.engineId !== "openai-decisions" && perceptionCandidate &&
+        (await perceptionCandidate.health()).state === "HEALTHY" ? perceptionCandidate : null;
       const facts = factsFor(loaded, {
         kind: "video",
         productName,
@@ -1554,7 +1555,10 @@ export async function executeApprovedCreativePlan(
         creativeId: asText(video.creative_id),
         facts,
         selection,
-        visual: await videoVisualEvidence(sql, access.organizationId, brandId, asText(video.storage_key), video.duration_ms == null ? null : asNumber(video.duration_ms), { selection }),
+        perception: perceptionForJudgment,
+        visual: await videoVisualEvidence(sql, access.organizationId, brandId, asText(video.storage_key), video.duration_ms == null ? null : asNumber(video.duration_ms), {
+          sample: selection.engineId === "openai-decisions" || perceptionForJudgment !== null,
+        }),
       });
       const status = judged.rollup === "REJECT" ? "rejected" : "in_review";
       await sql`update creative_records set status = ${status}, updated_at = now() where id = ${asText(video.creative_id)}`;

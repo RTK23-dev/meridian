@@ -8,6 +8,7 @@ import { BrandNav } from "@/components/brand-nav";
 import { MediaPlayer } from "@/components/media-player";
 import { Term } from "@/components/term";
 import { HeldReservationsPanel } from "@/components/held-reservations-panel";
+import { BriefReviewPanel } from "@/components/brief-review-panel";
 import { providerLabel, statusLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import {
@@ -258,6 +259,9 @@ function Studio({ brandId }: { brandId: string }) {
       ) : null}
         </TabsContent>
         <TabsContent value="brief" className="space-y-5">
+      {session.briefs.filter((item) => item.status === "awaiting_review").map((item) => (
+        <BriefReviewPanel key={item.id} brandId={brandId} briefId={item.id} title={item.title} role={session.role} />
+      ))}
       {brief ? (
         <Panel>
           <h2 className="font-display text-2xl">Brief</h2>

@@ -19,8 +19,10 @@ import { judgeMedia, rollupDecision, ENGINE_REPLACED_MEDIA_QUESTIONS, type Media
 import type { AccountSnapshot } from "../publishing/readiness.ts";
 import { measureLogo, measurePalette } from "../vision/measure.ts";
 import { runEngineGate, type GateEvidence, type GateQuestion } from "../decisions/gate.ts";
+import { groundedPerceptionText, runPerception, selectPerceptionProvider, type PerceptionInputMedia } from "../perception/run.ts";
+import type { MultimodalPerceptionProvider, PerceptionMediaKind } from "../perception/types.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
-import { selectRepresentativeFrames, FRAME_SELECTION_VERSION } from "../decisions/frames.ts";
+import { selectRepresentativeFrames, sha256Hex } from "../decisions/frames.ts";
 import { sampleVideoFrames, type FrameExtractor } from "../video/sample-frames.ts";
 import { resolveActiveEngine, type EngineSelection } from "../decisions/selection.ts";
 import type { DecisionImageInput } from "../decisions/types.ts";
@@ -103,32 +105,55 @@ export function factsFor(
   };
 }
 
-/** Visual evidence the engine may see: the images, in order, and a record of exactly what each one was. */
-export type VisualEvidence = {
-  images: DecisionImageInput[];
-  evidence: GateEvidence[];
-  /** For video: how frames were sampled, chosen, and omitted. Recorded with the decision so the evidence is traceable. */
-  frames?: {
-    version: string;
-    sampler?: string;
-    sampled: number;
-    provided: number;
-    omitted: Record<string, number>;
-    unavailable?: string;
-  };
+/** A piece of media a judgment may use. Its timestamp is the real one for a video frame, and null for a still. */
+export type VisualMedia = {
+  id: string;
+  bytes: Uint8Array;
+  timestampMs: number | null;
+  label: string;
+  source: string;
 };
 
-export const NO_VISUAL_EVIDENCE: VisualEvidence = { images: [], evidence: [] };
+/**
+ * What visual evidence exists, and how much of the creative it covers. A video is never described as inspected in full:
+ * the coverage says how many of its sampled frames were offered and how many were analysed.
+ */
+export type VisualCoverage = {
+  scope: "still_image" | "sampled_frames";
+  offered: number;
+  analysed: number;
+  durationMs: number | null;
+  note: string;
+  /** Why there is no media, when there is none. */
+  unavailable?: string;
+};
+
+export type VisualEvidence = {
+  kind: PerceptionMediaKind;
+  media: VisualMedia[];
+  coverage: VisualCoverage;
+};
+
+export const NO_VISUAL_EVIDENCE: VisualEvidence = {
+  kind: "image",
+  media: [],
+  coverage: { scope: "still_image", offered: 0, analysed: 0, durationMs: null, note: "No image was available for this creative.", unavailable: "no_media" },
+};
 
 export type CreativeJudgmentInput = {
   organizationId: string;
   brandId: string;
   creativeId: string;
   facts: MediaFacts;
-  /** Visual evidence the engine may see. Absent means no image or frame was provided. */
+  /** Visual evidence. Absent means no image or frame was available. */
   visual?: VisualEvidence;
   /** The engine the caller resolved. When absent, it is resolved here, once. */
   selection?: EngineSelection;
+  /**
+   * The perception provider used when the engine cannot see images. Absent means the configured provider is used; null means
+   * none is available. The caller passes null when it has checked the provider is not ready, so no frame is sampled for it.
+   */
+  perception?: MultimodalPerceptionProvider | null;
   engines?: DecisionEngineRegistry;
 };
 
@@ -140,6 +165,8 @@ export type CreativeJudgment = {
   gateRecordId: string | null;
   gateAction: PolicyOutcome;
   gateEngineCalled: boolean;
+  /** The perception run, when one was made. Absent when the engine received the media itself. */
+  perceptionRunId: string | null;
 };
 
 const SEVERITY: Record<PolicyOutcome, number> = { AUTO_APPROVE: 0, HUMAN_REVIEW: 1, REJECT: 2 };
@@ -194,6 +221,71 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     .filter((decision) => decision.decision === "REJECT")
     .map((decision) => ({ rule: decision.questionId, reason: decision.reasons[0] ?? "A local check rejected this creative." }));
 
+  // Routing. The media reaches the decision in exactly one of two ways, and never both.
+  //  - OpenAI Decisions takes the frames or the image directly. Perception is not run: it would be a second analysis of the same media.
+  //  - JEV cannot see images. Perception turns the media into grounded text for it. If perception is unavailable or fails,
+  //    the visual questions stay unsupported and go to review. Nothing is sent to the other engine to make up the gap.
+  let images: DecisionImageInput[] = [];
+  let visualEvidence: GateEvidence[] = [];
+  let perceptionEvidence: GateEvidence[] = [];
+  let perceptionContext: Record<string, unknown> = { status: "not_needed" };
+  let perceptionRunId: string | null = null;
+  if (selection.engineId === "openai-decisions") {
+    images = visual.media.map((item) => ({
+      bytes: item.bytes,
+      label: item.label,
+      evidenceRef: { field: "scene", location: { startMs: item.timestampMs ?? undefined, frameId: item.id } },
+    }));
+    visualEvidence = visual.media.map((item) => ({
+      kind: "image" as const,
+      name: item.id,
+      sha256: sha256Hex(item.bytes),
+      timestampMs: item.timestampMs ?? undefined,
+      source: item.source,
+    }));
+    perceptionContext = { status: "not_used", reason: "openai-decisions receives the media directly." };
+  } else if (visual.media.length > 0) {
+    const provider = input.perception === undefined ? selectPerceptionProvider().provider : input.perception;
+    const run = await runPerception(sql, {
+      organizationId: input.organizationId,
+      brandId: input.brandId,
+      subjectType: "creative",
+      subjectId: input.creativeId,
+      kind: visual.kind,
+      media: visual.media.map((item): PerceptionInputMedia => ({ id: item.id, bytes: item.bytes, timestampMs: item.timestampMs, label: item.label })),
+      durationMs: visual.coverage.durationMs,
+      provider,
+      providerReason: provider ? undefined : "No perception provider is ready.",
+    });
+    perceptionRunId = run.runId;
+    perceptionContext = {
+      status: run.status,
+      runId: run.runId,
+      reused: run.reused,
+      providerId: run.providerId,
+      model: run.model,
+      promptVersion: run.promptVersion,
+      failureKind: run.failureKind ?? null,
+      message: run.message ?? null,
+      coverage: run.coverage,
+      observations: groundedPerceptionText(run),
+    };
+    if (run.status === "observed") {
+      perceptionEvidence = [
+        { kind: "text", name: "perception_observations", source: `perception_run:${run.runId}` },
+        ...run.media.map((item) => ({
+          kind: "image" as const,
+          name: item.id,
+          sha256: item.sha256,
+          timestampMs: item.timestampMs ?? undefined,
+          source: `perception_run:${run.runId}`,
+        })),
+      ];
+    }
+  } else {
+    perceptionContext = { status: "not_needed", reason: visual.coverage.note };
+  }
+
   const gate = await runEngineGate({
     sql,
     organizationId: input.organizationId,
@@ -203,11 +295,12 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     description: `${input.facts.kind === "video" ? "Video" : "Image"} creative. Judge only the evidence provided.`,
     context: {
       ...creativeGateContext(input.facts),
-      ...(visual.frames ? { frameSelection: visual.frames } : {}),
+      visual: { kind: visual.kind, coverage: visual.coverage, engine: selection.engineId },
+      perception: perceptionContext,
     },
     questions: creativeGateQuestions(),
-    evidence: [...creativeTextEvidence(input.facts), ...visual.evidence],
-    images: visual.images,
+    evidence: [...creativeTextEvidence(input.facts), ...visualEvidence, ...perceptionEvidence],
+    images,
     deterministicRejections,
     selection,
     engines: input.engines,
@@ -244,14 +337,16 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     gateRecordId: gate.gateRecordId,
     gateAction: gate.action,
     gateEngineCalled: gate.engineCalled,
+    perceptionRunId,
   };
 }
 
 /** The image of a generated still. The bytes are the verified stored artifact, already checked by the caller. */
 export function generatedImageVisual(bytes: Uint8Array, sha256: string): VisualEvidence {
   return {
-    images: [{ bytes, label: "Generated image" }],
-    evidence: [{ kind: "image", name: "generated_image", sha256, source: "storage_objects" }],
+    kind: "image",
+    media: [{ id: `generated_image:${sha256}`, bytes, timestampMs: null, label: "Generated image", source: "storage_objects" }],
+    coverage: { scope: "still_image", offered: 1, analysed: 1, durationMs: null, note: "A single still image was judged." },
   };
 }
 
@@ -261,9 +356,9 @@ export function frameLike(storageKey: string): string {
 }
 
 /**
- * The frames of a stored video that the engine may see: up to four, chosen from frames sampled at real timestamps. Sampling
- * runs only when the active engine can see images, so JEV never triggers an ffmpeg run whose output would not be sent. A
- * video with no container, no known duration, or no ffmpeg yields no frame, and the reason is recorded.
+ * The frames of a stored video that a judgment may use: up to four, chosen from frames sampled at real timestamps. Frames are
+ * sampled only when the caller says so. The caller does that for OpenAI Decisions, and for JEV only when a perception provider
+ * is ready to read them. A video with no container, no known duration, or no ffmpeg yields no frame, and the reason is kept.
  */
 export async function videoVisualEvidence(
   sql: Sql,
@@ -271,28 +366,29 @@ export async function videoVisualEvidence(
   brandId: string,
   storageKey: string,
   durationMs: number | null,
-  options: { selection: EngineSelection; extractor?: FrameExtractor },
+  options: { sample: boolean; extractor?: FrameExtractor },
 ): Promise<VisualEvidence> {
-  const none = (unavailable: string): VisualEvidence => ({
-    images: [],
-    evidence: [],
-    frames: { version: FRAME_SELECTION_VERSION, sampled: 0, provided: 0, omitted: {}, unavailable },
+  const none = (unavailable: string, note: string): VisualEvidence => ({
+    kind: "video_frames",
+    media: [],
+    coverage: { scope: "sampled_frames", offered: 0, analysed: 0, durationMs, note, unavailable },
   });
-  if (options.selection.engineId !== "openai-decisions") return none("engine_cannot_see_images");
-  if (!storageKey || storageKey.startsWith("pending/")) return none("no_stored_container");
+  if (!options.sample) return none("sampling_not_needed", "No frame was sampled: the judgment does not take frames from this video.");
+  if (!storageKey || storageKey.startsWith("pending/")) return none("no_stored_container", "The video has no stored container, so no frame was sampled.");
   const rows = await sql<{ body: string }>`
     select body from asset_blobs
     where organization_id = ${organizationId} and brand_id = ${brandId} and storage_key = ${storageKey}
     limit 1
   `;
   const container = rows[0]?.body;
-  if (!container) return none("no_stored_container");
+  if (!container) return none("no_stored_container", "The video has no stored container, so no frame was sampled.");
 
   const sample = await sampleVideoFrames({
     bytes: new Uint8Array(Buffer.from(container, "base64")),
     durationMs,
     extractor: options.extractor,
   });
+  if (sample.unavailable) return none(sample.unavailable, `No frame could be sampled: ${sample.unavailable}.`);
   const selection = selectRepresentativeFrames(
     sample.frames.map((frame) => ({
       id: `${storageKey}@${frame.timestampMs}ms`,
@@ -301,29 +397,20 @@ export async function videoVisualEvidence(
       durationMs,
     })),
   );
-  const omitted: Record<string, number> = {};
-  for (const item of selection.omitted) omitted[item.reason] = (omitted[item.reason] ?? 0) + 1;
-  for (const failure of sample.failures) omitted[`sample_${failure.reason}`] = (omitted[`sample_${failure.reason}`] ?? 0) + 1;
+  const offered = sample.frames.length;
+  const analysed = selection.frames.length;
+  const note = analysed < offered
+    ? `Analysed ${analysed} of ${offered} sampled frames of a ${durationMs ?? "unknown"} ms video. The video was not inspected in full.`
+    : `Analysed ${analysed} sampled frames of a ${durationMs ?? "unknown"} ms video. The video was not inspected in full.`;
   return {
-    images: selection.frames.map((frame) => ({
+    kind: "video_frames",
+    media: selection.frames.map((frame) => ({
+      id: frame.id,
       bytes: frame.bytes,
-      label: `Frame at ${frame.timestampMs}ms (${frame.role})`,
-      evidenceRef: { field: "scene", location: { startMs: frame.timestampMs, frameId: frame.id } },
-    })),
-    evidence: selection.frames.map((frame) => ({
-      kind: "image" as const,
-      name: frame.id,
-      sha256: frame.sha256,
       timestampMs: frame.timestampMs,
+      label: `Frame at ${frame.timestampMs}ms (${frame.role})`,
       source: "ffmpeg_sample",
     })),
-    frames: {
-      version: FRAME_SELECTION_VERSION,
-      sampler: sample.version,
-      sampled: sample.frames.length,
-      provided: selection.frames.length,
-      omitted,
-      unavailable: sample.unavailable,
-    },
+    coverage: { scope: "sampled_frames", offered, analysed, durationMs, note },
   };
 }

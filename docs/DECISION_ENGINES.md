@@ -144,9 +144,47 @@ The lexical checks that were the previous semantic authority (token overlap for 
 
 Generated images reach the engine as their verified stored bytes. Competitor copy and the generation prompt are never sent.
 
+## Briefs the engine could not judge
+
+A brief whose required question the engine could not answer waits in `awaiting_review`. The engine error, the unsupported result, the malformed answer, and the unresolved judgment all count. This is `HUMAN_REVIEW` with no reviewer, and it is not approved.
+
+- **Creation approves nothing.** Creating a brief, saving it, and the original submit button record no review. The decision row is written with no reviewer. Accepting a direction no longer approves an existing brief's decision.
+- **Planning and production refuse it.** `loadGatedJevDecision` requires an explicit approval for a `HUMAN_REVIEW` decision. The planner reads the same row through `studio/jev-context.ts`, and gets no admissible judgment until a review is recorded.
+- **The review is separate and explicit.** `reviewStudioBrief` (`studio/brief-review-access.server.ts`) needs an admin or owner, an acknowledgement that the reviewer has read the failure, the unresolved questions and the evidence, and a reason of at least 20 characters. The reviewer's role is read from the brand membership on the server.
+- **The reviewer is disclosed.** The panel on the Brief tab shows the decision, the engine, the failure kind, the reasons, the unresolved questions with their reasons, the evidence provided with its timestamps and hashes, and any earlier reviews.
+- **The record is append-only.** `decision_reviews` keeps the reviewer, role, whether they were the creator, the action, the reason, and the original engine outcome as the reviewer saw it. Updates and deletes are refused by a trigger. The audit log also names the review (`brief.review`).
+- **A review can release only a `HUMAN_REVIEW`.** A `REJECT` is final, and that includes every deterministic rejection (a missing mandatory field, a literal prohibited claim). No review can turn it into approval. No separate policy override exists in this change. If one is added, it needs its own authorised policy, not this button.
+- **The creator may review.** With no independent reviewer, the creator can review their own brief. The record says so (`reviewer_is_creator`). The override is auditable instead of blocked.
+- **Only one review counts.** The decision is claimed with a condition, so a second review is refused.
+
+## Perception
+
+Perception and judgment are separate layers. A perception provider extracts grounded observations from images and video frames. A DecisionEngine judges the evidence under Meridian's policy. A perception provider is never a decision engine, and no engine is ever used for perception.
+
+- **Provider.** `PERCEPTION_PROVIDER` selects the provider, independently of `DECISION_ENGINE`. Unset selects Gemini (`gemini-2.5-flash` by default, `PERCEPTION_MODEL`). `none` turns it off. Any other value is refused, and the reason is recorded. Gemini uses the canonical key (`MERIDIAN_GEMINI_API_KEY`, or a documented alias). The key goes in a request header, never in the URL.
+- **Interface.** `MultimodalPerceptionProvider.perceive` returns one of three outcomes: observed, failed (with a kind), or never called. Nothing is filled in to hide a gap. Gemini implements still images and video frames through the same path.
+- **Observations.** Each observation is attached to the media at its index, and carries that media's id, hash, and real timestamp (none for a still). Each is marked `basis: model_description`. These are the model's descriptions, not measurements. A missing, repeated or out-of-range observation is a failure, and nothing is attached. There is no invented end time and no invented quality score.
+- **Validation.** Every item is checked by its own bytes before anything is sent: format (PNG, JPEG, WebP or GIF), size (20 MB per item, 48 MB in total), and hash. One invalid item fails the whole run.
+- **Bounded.** At most four items per call. A video is judged on at most four frames, and its coverage says how many were analysed.
+- **Reuse.** An identical earlier observed run (same media hashes and timestamps, same provider, model and prompt version, same kind) is reused. The provider is not called a second time.
+- **Record.** Every run writes `perception_runs`: the media with its hashes, byte lengths and real timestamps; the provider, model and prompt version; the observations; the coverage; the latency and usage; and any failure kind. A run that never reached the provider is recorded too, with its reason.
+- **Private media.** Media is read from Meridian's own storage and sent inline. No URL is made public to send it.
+
+### Routing
+
+| Engine selected | Media | What happens |
+|---|---|---|
+| `openai-decisions` | Images, or up to four sampled frames | Sent directly to OpenAI Decisions with their timestamps. Perception is not called, so the same frames are not analysed twice. |
+| `jev` | Images, or up to four sampled frames | Perception runs once. Its grounded text (with timestamps, hashes, model and prompt version, and the coverage) goes to JEV. No image is sent to JEV. |
+| `jev`, perception unavailable or failed | Any | Nothing is sent to OpenAI. The visual questions go to review. The text questions are still judged by JEV, and the failure is shown in the gate record. |
+
+Under JEV, the two visual creative questions (`visual_quality`, `product_visible`) are `unsupported`. Perception describes what is visible, but it cannot stand in for a judgment of visual quality or of how clearly a product is shown, so those questions go to review. Perception feeds the text questions, for example on-screen claims that the copy alone would not show.
+
+A video is never described as inspected in full. Each judgment records how many sampled frames were offered and how many were analysed.
+
 ## Frames
 
-For a video judgment, frames are sampled from the stored container with ffmpeg (`video/sample-frames.ts`). Eight evenly spaced timestamps run from the opening frame toward the end, with a 250 ms margin before the end, since a seek into the final frames often finds nothing. Each frame is recorded with the time ffmpeg sought to, and that time is the recorded timestamp. A timestamp is never estimated. A frame that fails to extract, or is not a PNG, is a recorded failure and is never replaced.
+For a video judgment, frames are sampled from the stored container with ffmpeg (`video/sample-frames.ts`). They are sampled only when the engine takes frames (OpenAI Decisions), or when perception is ready to read them (JEV). Otherwise nothing is sampled, and the record says so. Eight evenly spaced timestamps run from the opening frame toward the end, with a 250 ms margin before the end, since a seek into the final frames often finds nothing. Each frame is recorded with the time ffmpeg sought to, and that time is the recorded timestamp. A timestamp is never estimated. A frame that fails to extract, or is not a PNG, is a recorded failure and is never replaced.
 
 `decisions/frames.ts` then picks at most four frames: the **hook** (earliest), the **middle** beat, a **proof** frame (the one with the most on-screen text observed by OCR; no text, no proof frame), and the **call to action** (latest).
 
@@ -163,6 +201,8 @@ Implemented and covered by tests that run on PGlite:
 - The creative gate and its image evidence, including a rejection from the engine, a deterministic rejection that stops the engine, and frame omission (`studio/creative-gate.test.ts`).
 - Representative frame selection, including missing timestamps, duplicates, determinism, and the four-frame limit (`decisions/frames.test.ts`).
 - ffmpeg frame sampling: real timestamps, recorded failures, unavailable reasons, cleanup, and one test on a real clip that is skipped with its reason when ffmpeg is not installed (`video/sample-frames.test.ts`).
+- The brief review: an engine failure, an unsupported result, or an unresolved judgment holds the brief; creation approves nothing; planning and production refuse it; the explicit review needs an admin, an acknowledgement and a reason; a rejection is final; the creator's self-review is recorded; the record is append-only (`studio/brief-review.test.ts`, 11 tests). The product-loop e2e performs the review.
+- Perception: the Gemini provider's responses, failures and validation, with stubbed responses (`perception/multimodal.test.ts`, 9 tests); the runner's recording, reuse, bound and refusals against the database (`perception/run.test.ts`, 9 tests); and the creative routing, where OpenAI never triggers perception and JEV reads its grounded text (`studio/creative-gate.test.ts`).
 - The brief gate: both engine selections, deterministic rejections that stop the engine, a provider failure that is never approved or switched, a claim-policy rejection, and the stored decision read by the same gate that loads a brief (`studio/brief-gate.test.ts`).
 - The OpenAI Decisions adapter against fixtures shaped like the documented contract (`openai-engine.test.ts`): request shape, typed questions, data-URL images, refusals, missing and malformed answers, retries, timeouts, unknown models, authentication errors without key leakage, usage, and returned model.
 - The JEV adapter and cross-engine fixtures (`engines.contract.test.ts`): both engines answer the same question kinds with the same semantics, and the same fixture values produce the same policy outcome.
@@ -175,8 +215,9 @@ Implemented but not verified against the live service:
 
 Not implemented, or known to be incomplete:
 
-- **Video visual judgment is only as available as ffmpeg.** The frames are sampled at real timestamps, but only where ffmpeg is installed and only under OpenAI Decisions. Video creatives were already routed to review, so their status is unchanged.
-- **Perception is not wired into JEV.** The perception contract (`perception/types.ts`) and its Gemini implementation exist, but production never calls them. The Gemini implementation handles keyframes only; its still-image method is not implemented. So JEV's visual questions remain `unsupported`, and no perception observation reaches a decision. Wiring it means choosing which provider sees the frames, so it needs a decision rather than a default.
+- **Video visual judgment needs ffmpeg and a frame reader.** Frames are sampled at real timestamps only where ffmpeg is installed, and only for OpenAI Decisions or for JEV with ready perception. Video creatives were already routed to review, so their status is unchanged.
+- **Perception is wired for JEV and for OpenAI routing, but has not been run against Gemini.** The Gemini provider is tested with stubbed responses only. Its real responses, its real limits and its real behaviour on frames are unverified.
+- **Workspace-vault perception credentials are not used.** The perception provider reads only the deployment's canonical Gemini key. The settings panel reports the same.
 - **Plan fit** is not a gate. Only brief fit and creative QA use the engine.
 - **Research outcome.** The research gate's action is computed and recorded, but nothing downstream acts on it yet. The research worker still discards the answers' outcome.
 - **Calibration.** No calibration report exists for either engine. Every value is uncalibrated, and the policy thresholds are configuration, not measured error rates.

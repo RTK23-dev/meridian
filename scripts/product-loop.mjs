@@ -124,6 +124,18 @@ try {
   await page.getByRole("tab", { name: "2. Brief" }).click();
   await page.getByRole("heading", { name: "Brief" }).waitFor();
   const firstConstraints = await page.getByTestId("brief-constraints").innerText();
+  // The decision engine is not configured in the testing runtime, so the brief the engine could not judge is held. Generation
+  // must stay blocked until an explicit review is recorded, and that review is what this step performs.
+  const held = page.getByRole("heading", { name: /Held for review:/ });
+  await held.waitFor({ timeout: 60000 });
+  if (!(await page.getByText("Questions the engine did not answer").isVisible())) throw new Error("The held brief did not disclose its unresolved questions.");
+  await page.getByRole("tab", { name: "3. Generate" }).click();
+  if (!(await page.getByRole("button", { name: "Generate variants" }).isDisabled())) throw new Error("Generation was not blocked for a brief awaiting review.");
+  await page.getByRole("tab", { name: "2. Brief" }).click();
+  await page.getByRole("checkbox", { name: /I have read the failure/ }).check();
+  await page.getByLabel(/Reason \(at least 20 characters\)/).fill("E2E testing runtime: the decision engine is not configured, so the brief is reviewed explicitly here.");
+  await page.getByRole("button", { name: "Approve for production" }).click();
+  await held.waitFor({ state: "hidden" });
   await page.getByRole("tab", { name: "3. Generate" }).click();
   await page.locator("select[name='imageProvider']").selectOption("test:image");
   await page.locator("select[name='videoProvider']").selectOption("none");

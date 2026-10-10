@@ -4,7 +4,7 @@ import { getBrand } from "@/lib/meridian/api";
 import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, listLibrary, listOpportunities, listReviews, getTrace } from "@/lib/meridian/machine";
 import { getCalibration } from "@/lib/meridian/calibration/actions";
 import { getFactoryBoard } from "@/lib/meridian/factory/actions";
-import { getStudioSession } from "@/lib/meridian/studio/actions";
+import { getStudioBriefReview, getStudioSession } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
 import { getJevAccountIntelligenceFn, updateWhitespaceStatusFn, runAccountIntelligenceAnalysisFn } from "@/lib/meridian/jev/actions";
@@ -56,6 +56,13 @@ export const useStudioQuery = (brandId: string, enabled = true) => {
   return useQuery({
     ...scope, queryFn: () => getStudioSession({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId,
     refetchInterval: (query) => query.state.data?.variants.some((variant) => variant.mediaStatus === "queued" || variant.mediaStatus === "running") ? 5_000 : false,
+  });
+};
+export const useBriefReviewQuery = (brandId: string, briefId: string, enabled = true) => {
+  const scope = useUserScopedKey(qk.briefReview(brandId, briefId));
+  return useQuery({
+    ...scope, queryFn: () => getStudioBriefReview({ data: { brandId, briefId } }),
+    enabled: scope.enabled && enabled && !!brandId && !!briefId,
   });
 };
 export const useOpportunitiesQuery = (brandId: string, enabled = true) => {
