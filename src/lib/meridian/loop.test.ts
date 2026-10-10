@@ -9,6 +9,9 @@ import { learnPatterns } from "./learning/engine.ts";
 import { rankOpportunities } from "./opportunity/engine.ts";
 import { assessCopy } from "./production/assess.ts";
 
+/** A calibration step that maps a score to itself. It stands for a calibrated value, the only kind that can approve. */
+const CALIBRATED = { calibration: { version: "identity.loop.v1", apply: (score: number) => score } };
+
 const org = "org-1";
 const brand = "brand-1";
 
@@ -220,7 +223,9 @@ test("guardian evidence drives JEV, including claims the model must not grade al
     hook: "Dirty hands",
     cta: "Buy",
   });
-  assert.equal(clean.decision.decision, "AUTO_APPROVE");
+  // The copy is scored. Uncalibrated, a clean copy can only go to review. Calibrated, the same copy approves.
+  assert.equal(clean.decision.decision, "HUMAN_REVIEW");
+  assert.equal(decide(creativeQa, clean.evidence, CALIBRATED).decision, "AUTO_APPROVE");
 
   const tone = decide(creativeQa, {
     prohibitedHits: [],
@@ -289,14 +294,16 @@ test("the opportunity gate scores evidence and refuses a rank score", () => {
   }));
   assert.equal(copied.decision, "REJECT");
 
-  const supported = decide(opportunityGate, gateInput({
+  const supportedInput = gateInput({
     competitive: { competitorCount: 4, matchingCompetitors: 3, ownCount: 2, matchingOwn: 0 },
     brand: { keywordHits: 4, keywordTotal: 4, formatPreferred: true, brainFilled: 0.8 },
     historical: { lift: 0.8, sampleSize: 4, impressions: 4000, metric: "roas" },
     risk: { claimIntensity: 0.2, aggressiveRejections: 0, negativeLift: 0 },
     reproducibility: { templateCoverage: 0.9, copiesProtectedPhrasing: false },
-  }));
-  assert.equal(supported.decision, "AUTO_APPROVE");
+  });
+  // Uncalibrated, supported evidence can only go to review. Calibrated, the same evidence approves.
+  assert.equal(decide(opportunityGate, supportedInput).decision, "HUMAN_REVIEW");
+  assert.equal(decide(opportunityGate, supportedInput, CALIBRATED).decision, "AUTO_APPROVE");
 });
 
 test("an angle stored on a competitor creative becomes a candidate, and a positive pattern does too", () => {
