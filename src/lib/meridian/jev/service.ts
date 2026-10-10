@@ -13,6 +13,8 @@ import type { Sql } from "../learning/store.ts";
 import type { EvidenceBundle } from "../evidence/types.ts";
 import { compressEvidenceForJev } from "../evidence/bundle.ts";
 import { jevRouter } from "./router.ts";
+import { createDecisionEngines, decideWithActiveEngine } from "../decisions/dispatcher.ts";
+import type { DecisionRequest } from "../decisions/types.ts";
 import { jevRegistry } from "./registry.ts";
 import type {
   JevDecisionRequest,
@@ -60,69 +62,22 @@ export class JevDecisionService {
       recordId?: string;
     }
   ): Promise<SemanticDecisionResult> {
-    const response = await this.router.decide(request, options?.policy);
-
-    let persisted = false;
-    if (options?.sql) {
-      try {
-        const metadata = {
-          latencyMs: response.latencyMs,
-          questionCount: Object.keys(response.answers).length,
-          cached: response.cached,
-          fallbackFrom: response.fallbackFrom,
-          fallbackReason: response.fallbackReason,
-          comparison: response.comparison
-            ? {
-                comparedWith: response.comparison.comparedWith,
-                agreementRate: response.comparison.agreementRate,
-              }
-            : undefined,
-        };
-
-        await options.sql`
-          insert into jev_runs (
-            id, organization_id, brand_id, question_set, model, provider, input_hash, status, metadata
-          ) values (
-            ${response.runId}, ${request.organizationId}, ${request.brandId}, 'semantic_decision',
-            ${response.model}, ${response.provider}, ${response.inputHash}, 'completed',
-            ${JSON.stringify(metadata)}
-          )
-          on conflict (id) do nothing
-        `;
-
-        for (const [key, ans] of Object.entries(response.answers)) {
-          const recordId = options.recordId || (request.state as any)?.bundleId || response.runId;
-          const isAnswered = ans.status === "answered";
-
-          await options.sql`
-            insert into jev_answers (
-              id, organization_id, brand_id, run_id, record_id, question_id, question_version,
-              model, provider, answer, probability, distribution, confidence, status, evidence
-            ) values (
-              ${randomUUID()}, ${request.organizationId}, ${request.brandId}, ${response.runId},
-              ${recordId}, ${ans.questionId || key}, ${ans.questionVersion || "v1"},
-              ${ans.model}, ${ans.provider},
-              ${isAnswered && ans.answer !== undefined ? JSON.stringify(ans.answer) : null},
-              ${isAnswered ? (ans.probability ?? ans.noul ?? null) : null},
-              ${isAnswered && (ans.probabilities || ans.distribution) ? JSON.stringify(ans.probabilities || ans.distribution) : null},
-              ${isAnswered ? (ans.confidence ?? null) : null},
-              ${ans.status},
-              ${JSON.stringify(ans.evidenceRefs || [])}
-            )
-          `;
-        }
-        persisted = true;
-      } catch (err) {
-        // Logging/storage failure is non-fatal to decision delivery
-        console.warn("[JevDecisionService] Failed to persist decision ledger:", err);
-      }
-    }
+    // The active decision engine handles the call. JEV is this service's transport, so the JEV engine wraps this
+    // service's router. Lineage is recorded by the dispatcher, in the same tables.
+    const dispatched = await decideWithActiveEngine({
+      sql: options?.sql,
+      request: { ...request, routingPolicy: options?.policy } as DecisionRequest,
+      engines: createDecisionEngines({ jevRouter: this.router }),
+      recordId: options?.recordId,
+    });
+    const { selection: _selection, persisted, ...response } = dispatched;
+    void _selection;
 
     return {
       ...response,
       engineType: "remoteJev",
       persisted,
-    };
+    } as SemanticDecisionResult;
   }
 
   /**

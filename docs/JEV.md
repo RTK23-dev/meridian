@@ -1,11 +1,13 @@
 # JEV (TypeSafe Decisions API)
 
+> JEV is one of two decision engines. The workspace selects the active engine in the control panel, and only that engine receives decisions. See [DECISION_ENGINES.md](DECISION_ENGINES.md) for the engine boundary, the OpenAI Decisions adapter, image transport, policy, and lineage. This document covers the JEV transports and questions.
+
 JEV is the deterministic epistemic gate around evidence. It executes typed semantic judgments using TypeSafe's native Decisions API served through the dedicated Dual JEV Provider Router (`src/lib/meridian/jev/router.ts`):
 - **Routes Supported**:
   1. **Direct TypeSafe AI**: Official direct decisions endpoint (`TYPESAFE_JEV_BASE_URL/decisions`), requiring `TYPESAFE_JEV_API_KEY`. Returns `NOT_CONFIGURED` if unconfigured.
   2. **OpenRouter Decisions Route**: Uses OpenRouter's native Decisions API at `POST https://openrouter.ai/api/alpha/decisions` with model `typesafe/jev-1.13`.
 - **Routing Modes**:
-  - `AUTO` (default): Prefers configured route, falling back to alternate only on eligible transport/provider failure or when preferred is `NOT_CONFIGURED`.
+  - `AUTO` (default): Prefers the configured route. It moves to the alternate route only when `MERIDIAN_JEV_FALLBACK_ENABLED=true` (off by default) and the preferred route is `NOT_CONFIGURED` or every question failed with a provider error.
   - `TYPESAFE_DIRECT`: Strictly executes against direct TypeSafe API without silent fallback.
   - `OPENROUTER`: Strictly executes against OpenRouter Decisions API.
   - `COMPARE`: Benchmark/development mode comparing outputs without silently merging them.

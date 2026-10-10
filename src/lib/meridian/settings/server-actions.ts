@@ -10,6 +10,10 @@ import {
   type ProviderCategory,
   type ProviderConfigSummary,
 } from "./provider-config.ts";
+import { getDecisionEngineStatus } from "../decisions/status.ts";
+import { createDecisionEngines } from "../decisions/dispatcher.ts";
+import { isDecisionEngineId } from "../decisions/types.ts";
+import { saveWorkspaceEngine } from "../decisions/selection.ts";
 
 export const getProviderSettings = createServerFn({ method: "GET" })
   .validator((input: unknown) => {
@@ -89,4 +93,49 @@ export const testProviderConnection = createServerFn({ method: "POST" })
       organizationId: data.organizationId,
       category: data.category,
     });
+  });
+
+/** Which decision engine is active for this workspace, and whether each engine is configured. No secrets are returned. */
+export const getDecisionEngines = createServerFn({ method: "GET" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    return { organizationId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "viewer");
+    return getDecisionEngineStatus(sql, data.organizationId);
+  });
+
+/** Switches the active decision engine. Refused unless the target engine is configured; the previous choice is kept. */
+export const saveDecisionEngine = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    const engineId = asText(obj.engineId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    if (!engineId) throw new Error("engineId is required.");
+    return { organizationId, engineId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    if (!isDecisionEngineId(data.engineId)) {
+      return { ok: false as const, reason: `'${data.engineId}' is not a decision engine.` };
+    }
+    const target = createDecisionEngines()[data.engineId];
+    const health = await target.health();
+    const result = await saveWorkspaceEngine(sql, {
+      organizationId: data.organizationId,
+      actorId: context.userId,
+      engineId: data.engineId,
+      targetHealth: health,
+    });
+    return result.ok
+      ? { ok: true as const, engineId: result.engineId }
+      : { ok: false as const, reason: result.reason, activeEngineId: result.previous.engineId };
   });

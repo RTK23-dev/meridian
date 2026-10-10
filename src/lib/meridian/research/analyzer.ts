@@ -7,6 +7,7 @@ import type { EvidenceBundle } from "../evidence/types.ts";
 import type { OpenRouterJevClient } from "../jev/client.ts";
 import { jevRegistry } from "../jev/registry.ts";
 import type { JevAnswer } from "../jev/types.ts";
+import type { Sql } from "../learning/store.ts";
 
 export type ResearchTextModel = (input: {
   system: string;
@@ -78,6 +79,7 @@ export async function synthesizeResearchTranscript(input: {
 export const analyzeResearchTranscript = synthesizeResearchTranscript;
 
 import { jevRouter, OpenRouterJevProvider, JevRouter } from "../jev/router.ts";
+import { createDecisionEngines, decideWithActiveEngine } from "../decisions/dispatcher.ts";
 import type { JevProviderRouter, JevRoutingPolicy } from "../jev/types.ts";
 import { compressEvidenceForJev } from "../evidence/bundle.ts";
 
@@ -91,6 +93,8 @@ export async function analyzeEvidenceWithJev(input: {
   client?: OpenRouterJevClient;
   router?: JevProviderRouter;
   policy?: JevRoutingPolicy;
+  /** When given, the organization's active decision engine is applied and the lineage is recorded. */
+  sql?: Sql;
 }): Promise<{
   bundleId: string;
   answers: JevAnswer[];
@@ -122,8 +126,10 @@ export async function analyzeEvidenceWithJev(input: {
   const firstQ = Object.values(questionsRecord)[0];
   const compressed = compressEvidenceForJev(input.bundle, firstQ);
 
-  const res = await router.decide(
-    {
+  const res = await decideWithActiveEngine({
+    sql: input.sql,
+    engines: createDecisionEngines({ jevRouter: router }),
+    request: {
       organizationId: input.bundle.organizationId || "global",
       brandId: input.bundle.brandId || "global",
       state: {
@@ -137,9 +143,9 @@ export async function analyzeEvidenceWithJev(input: {
         sceneSummary: compressed.sceneSummary,
       },
       questions: questionsRecord,
+      routingPolicy: input.policy,
     },
-    input.policy
-  );
+  });
 
   return {
     bundleId: input.bundle.id,

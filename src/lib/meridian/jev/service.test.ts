@@ -197,7 +197,8 @@ test("JevDecisionService: persists decisions and answers to SQL ledger when SQL 
   });
 
   assert.equal(result.persisted, true);
+  // The active engine is looked up first, so the ledger writes are found by their statements, not their position.
   assert.ok(executedQueries.length >= 2, "Must execute insert into jev_runs and jev_answers");
-  assert.ok(executedQueries[0].sql.includes("insert into jev_runs"));
-  assert.ok(executedQueries[1].sql.includes("insert into jev_answers"));
+  assert.ok(executedQueries.some((query) => query.sql.includes("insert into jev_runs")));
+  assert.ok(executedQueries.some((query) => query.sql.includes("insert into jev_answers")));
 });

@@ -7,6 +7,7 @@ import {
   testProviderConnection,
 } from "@/lib/meridian/settings/server-actions";
 import type { ProviderCategory, ProviderConfigSummary } from "@/lib/meridian/settings/provider-config";
+import { DecisionEngineSelector } from "@/components/decision-engine-selector";
 
 interface ProviderSettingsPanelProps {
   organizationId: string;
@@ -241,6 +242,9 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
           {/* Tab Specific Content */}
           {activeTab === "jev" ? (
+            <div className="space-y-6">
+              <DecisionEngineSelector organizationId={organizationId} canAdmin={canAdmin} />
+              <p className="text-xs font-semibold uppercase tracking-widest text-brass">TypeSafe JEV transport</p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="JEV Routing Mode">
                 <SelectInput
@@ -284,6 +288,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                   />
                 </Field>
               </div>
+            </div>
             </div>
           ) : null}
 
