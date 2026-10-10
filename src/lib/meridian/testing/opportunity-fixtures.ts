@@ -86,3 +86,30 @@ export function failingSql(base: Sql, pattern: RegExp, message = "injected write
   };
   return wrap(base);
 }
+
+/**
+ * Brand facts the brief builder and the gate read. Without them a discovered brief has no audience and no message, and the
+ * gate rejects it on its mandatory fields before any engine is asked.
+ */
+export async function seedBrandBrain(sql: Sql, tenant: { brandId: string; userId: string }): Promise<void> {
+  await sql`
+    insert into brand_brains (brand_id, target_customers, positioning, value_proposition, tone, updated_by)
+    values (${tenant.brandId}, 'Busy parents', 'Helps busy parents plan a calm dinner in ten minutes.',
+      'Planned dinners with no planning.', 'warm', ${tenant.userId})
+  `;
+}
+
+/** Adds a signed-in user to the tenant with a role, for tests that need an admin, a member or a viewer. */
+export async function addMember(
+  sql: Sql,
+  tenant: { organizationId: string },
+  role: "viewer" | "member" | "admin" | "owner",
+): Promise<string> {
+  const userId = `user-${role}-${randomUUID()}`;
+  await sql`insert into "user" (id, name, email, "emailVerified") values (${userId}, ${userId}, ${`${userId}@fixture.example`}, true)`;
+  await sql`
+    insert into memberships (id, organization_id, user_id, role)
+    values (${randomUUID()}, ${tenant.organizationId}, ${userId}, ${role})
+  `;
+  return userId;
+}

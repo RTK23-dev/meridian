@@ -1291,6 +1291,7 @@ export async function executeApprovedCreativePlan(
         let outcome: ImageGenerationOutcome;
         try {
           outcome = await selected.provider.generate({
+            organizationId: access.organizationId,
             prompt,
             seed: `${runId}:${deliv.kind}:${index}`,
             promptVersion,

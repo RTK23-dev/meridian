@@ -235,8 +235,8 @@ test("the signed-in paths call this engine instead of a hardcoded decision", () 
   const publishing = readFileSync(new URL("../publishing/actions.ts", import.meta.url), "utf8");
   const rerank = readFileSync(new URL("../opportunity/rerank.ts", import.meta.url), "utf8");
   assert.match(imageQc, /judgeMedia\(/);
-  assert.match(session, /judgeBriefFit\(/);
-  assert.match(session, /writeBriefDecision\(/);
+  assert.match(readFileSync(new URL("../studio/brief-service.server.ts", import.meta.url), "utf8"), /judgeBriefFit\(/);
+  assert.match(readFileSync(new URL("../studio/brief-service.server.ts", import.meta.url), "utf8"), /writeBriefDecision\(/);
   assert.doesNotMatch(session, /judgeBrief\(/, "the brief path is the gate, not the local completeness prior");
   assert.match(session, /decide\(publishingReadiness/);
   assert.doesNotMatch(session, /readiness\.state === "READY" \? 0\.9/);

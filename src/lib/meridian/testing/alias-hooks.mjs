@@ -27,9 +27,11 @@ export async function resolve(specifier, context, nextResolve) {
       if (isFile(candidate)) return { url: pathToFileURL(candidate).href, shortCircuit: true };
     }
   }
-  if ((specifier.startsWith("./") || specifier.startsWith("../")) && context.parentURL && path.extname(specifier) === "") {
+  // A relative import without the ".ts" suffix. The suffix test is by file, not by extension, because names such as
+  // "./brief-service.server" have an extension of their own.
+  if ((specifier.startsWith("./") || specifier.startsWith("../")) && context.parentURL) {
     const base = fileURLToPath(new URL(specifier, context.parentURL));
-    if (isFile(`${base}.ts`)) return { url: pathToFileURL(`${base}.ts`).href, shortCircuit: true };
+    if (!isFile(base) && isFile(`${base}.ts`)) return { url: pathToFileURL(`${base}.ts`).href, shortCircuit: true };
   }
   return nextResolve(specifier, context);
 }
