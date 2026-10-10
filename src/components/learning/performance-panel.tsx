@@ -122,7 +122,7 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
     <section aria-labelledby="telemetry-summary-title" className="space-y-3">
       <div>
         <h3 id="telemetry-summary-title" className="text-base font-semibold">Telemetry summary</h3>
-        <p className="text-sm text-fg-muted">Uses up to the latest {TELEMETRY_SUMMARY_LIMIT} telemetry rows.</p>
+        <p className="text-sm text-fg-muted">Uses up to the latest {TELEMETRY_SUMMARY_LIMIT} telemetry rows. Sync to JEV Brain updates the priors from these rows. Older rows count for less, with a 14-day half-life.</p>
       </div>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Card><Stat label="Tracked views" value={kpiViews} description={telemetryLoaded ? `${summary?.totalRecords ?? 0} telemetry rows` : undefined} /></Card>
