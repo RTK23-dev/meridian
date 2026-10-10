@@ -2,120 +2,77 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Input, Notice, Panel, ScreenSkeleton, SelectInput, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
-import { MediaPlayer } from "@/components/media-player";
+import { ErrorState, Notice, ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, errorText } from "@/components/ui";
 import { Term } from "@/components/term";
-import { HeldReservationsPanel } from "@/components/held-reservations-panel";
-import { BriefReviewPanel } from "@/components/brief-review-panel";
-import { providerLabel, statusLabel } from "@/lib/copy";
+import { useWorkspace } from "@/components/workspace";
+import { providerLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
-import {
-  approveAndExecuteCreativePlan,
-  generateStudioVariants,
-  openStudioBrief,
-  publishStudioVariant,
-  recordStudioTestPerformance,
-  rejectCreativePlan,
-  reviewStudioVariant,
-} from "@/lib/meridian/studio/actions";
-import {
-  publishMultiChannelVariant,
-  recordOrganicTelemetryAction,
-} from "@/lib/meridian/distribution/actions";
-
-import {
-  useStudioQuery,
-  useDistributionChannelsQuery,
-  useOrganicDistributionQuery,
-  usePublishingQueueQuery,
-  useScheduleMultiAccountPublish,
-  useCancelPublishJob,
-  useRetryPublishJob,
-  usePlatformAccountsQuery,
-  usePendingVariables,
-  useScopedMutation,
-} from "@/lib/query/hooks";
-import { qk } from "@/lib/query/keys";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
+import type { getProviderSettings } from "@/lib/meridian/settings/server-actions";
 import { studioGenerationSchema, type StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
-import { Clock, RefreshCw, Send, CheckCircle2, Share2 } from "lucide-react";
-
-/** The shortest reason that can accept a direction. The server enforces the same length. */
-const DIRECTION_REASON_MIN = 20;
-
-/**
- * The required reason for accepting a direction. It is recorded with the decision, who made it and when. It does not mean
- * the brief has passed its gate: the brief is judged separately when it is written.
- */
-function DirectionReasonField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <label className="block text-sm">
-      <span className="text-muted">
-        Why accept this direction (at least {DIRECTION_REASON_MIN} characters). This is recorded with your decision. It does not
-        mean the brief has passed its gate.
-      </span>
-      <TextArea className="mt-1" rows={2} value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  );
-}
+import { ACTIVE_POLL_MS, useDistributionChannelsQuery, useOpportunitiesQuery, useOrganicDistributionQuery, useProviderSettingsQuery, useStudioQuery } from "@/lib/query/hooks";
+import { DirectionStep } from "@/components/studio/direction-step.tsx";
+import { BriefStep } from "@/components/studio/brief-step.tsx";
+import { GenerateStep } from "@/components/studio/generate-step.tsx";
+import { ReviewStep } from "@/components/studio/review-step.tsx";
+import { QueuePanel } from "@/components/studio/queue-panel.tsx";
+import { PlanDialog } from "@/components/studio/plan-dialog.tsx";
+import { useStudioActions } from "@/components/studio/use-studio-actions.ts";
+import { isImageProviderValue, isVideoProviderValue, type ProductionStatus } from "@/components/studio/provider-options.ts";
+import type { PublishTarget } from "@/components/studio/publish-dialog.tsx";
+import type { ReviewPayload } from "@/components/studio/review-rules.ts";
+import type { StudioVariant } from "@/components/studio/types.ts";
 
 export const Route = createFileRoute("/_app/brands/$brandId/studio")({ staticData: { pageTitle: "Studio" }, component: Page });
 
 function Page() {
   const { brandId } = Route.useParams();
-  return (
-    <Studio brandId={brandId} />
-  );
+  return <Studio brandId={brandId} />;
+}
+
+type StepKey = "direction" | "brief" | "generate" | "review" | "queue";
+
+const DEFAULT_GENERATION: StudioGeneration = {
+  imageProvider: "none",
+  videoProvider: "auto",
+  creationScope: "auto_choose",
+  autonomy: "semi_automatic",
+  maxSpendUsd: 10,
+  mode: "auto_choose",
+  source: "new_brief",
+  aspectRatio: "9:16",
+};
+
+/** The production category as the Generate step reads it. A failed read is "unavailable", never a connection. */
+function productionStatusOf(organizationId: string, query: { data?: Awaited<ReturnType<typeof getProviderSettings>>; isError: boolean }): ProductionStatus {
+  if (!organizationId || query.isError) return { status: "unavailable" };
+  const settings = query.data;
+  if (!settings) return { status: "loading" };
+  const production = settings.production;
+  return {
+    status: "ready",
+    credential: production.credentialState ?? (production.configured ? "usable" : "not_configured"),
+    credentialReason: production.credentialReason ?? null,
+    hypitConfigured: Boolean(production.settings?.hypitConfigured),
+  };
 }
 
 function Studio({ brandId }: { brandId: string }) {
   const query = useStudioQuery(brandId);
   const session = query.data ?? null;
-  const [inspectId, setInspectId] = useState<string | null>(null);
-  const [compareA, setCompareA] = useState("");
-  const [compareB, setCompareB] = useState("");
-  const [reviewTarget, setReviewTarget] = useState<{ creativeId: string; mode: "reject" | "revision" } | null>(null);
-  const [reviewReason, setReviewReason] = useState("other");
-  const [reviewNote, setReviewNote] = useState("");
-  const [publishTarget, setPublishTarget] = useState<{ creativeId: string; title: string; defaultCaption: string } | null>(null);
-  const [selectedChannels, setSelectedChannels] = useState<string[]>(["test-publisher", "instagram-reels", "youtube-shorts"]);
-  const [publishCaption, setPublishCaption] = useState("");
-  const [publishResults, setPublishResults] = useState<{ channelId: string; platform: string; type: string; status: string; url?: string; error?: string }[] | null>(null);
-
+  const { data: workspace } = useWorkspace();
+  const organizationId = workspace?.active?.id ?? "";
+  const providerQuery = useProviderSettingsQuery(organizationId);
+  const opportunitiesQuery = useOpportunitiesQuery(brandId);
   const channelsQuery = useDistributionChannelsQuery(brandId);
   const organicQuery = useOrganicDistributionQuery(brandId);
-  const accountsQuery = usePlatformAccountsQuery(brandId);
-  const queueQuery = usePublishingQueueQuery(brandId);
-  const schedulePublishMutation = useScheduleMultiAccountPublish(brandId);
-  const cancelJobMutation = useCancelPublishJob(brandId);
-  const retryJobMutation = useRetryPublishJob(brandId);
-
-  const [queueCreativeId, setQueueCreativeId] = useState("");
-  const [queueAccountIds, setQueueAccountIds] = useState<string[]>([]);
-  const [queueScheduledTime, setQueueScheduledTime] = useState("");
-  const [queueTargetType, setQueueTargetType] = useState<"organic" | "paid_campaign">("organic");
-  const [pendingPlan, setPendingPlan] = useState<{
-    planId: string;
-    plan: any;
-    estimatedCostUsd?: number;
-    note?: string;
-  } | null>(null);
-  const [planRejectReason, setPlanRejectReason] = useState("");
-  const [directionReason, setDirectionReason] = useState("");
-  const [nextBriefReason, setNextBriefReason] = useState("");
+  const actions = useStudioActions(brandId);
+  const [step, setStep] = useState<StepKey>("direction");
+  const [retryNotice, setRetryNotice] = useState<string | null>(null);
 
   const generationForm = useForm<StudioGeneration>({
     resolver: zodResolver(studioGenerationSchema),
-    defaultValues: {
-      imageProvider: "none",
-      videoProvider: "auto",
-      creationScope: "auto_choose",
-      autonomy: "semi_automatic",
-      maxSpendUsd: 10,
-      mode: "auto_choose",
-      source: "new_brief",
-      aspectRatio: "9:16",
-    },
+    defaultValues: DEFAULT_GENERATION,
     mode: "onBlur",
   });
   const generationDirty = generationForm.formState.isDirty;
@@ -125,966 +82,199 @@ function Studio({ brandId }: { brandId: string }) {
     window.addEventListener("beforeunload", warnBeforeLeave);
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [generationDirty]);
-  // One mutation per studio action. Each invalidates only the keys it changes. A running action disables only its own controls.
-  const studioKey = (name: string) => ["mutation", `studio.${name}`, brandId] as const;
-  const openBrief = useScopedMutation({
-    mutationKey: studioKey("brief"),
-    mutationFn: (vars: { forceNew: boolean; reason: string }) => openStudioBrief({ data: { brandId, forceNew: vars.forceNew, reason: vars.reason } }),
-    invalidate: () => [qk.studio(brandId), qk.opportunities(brandId)],
-    success: (vars) => vars.forceNew ? "Next brief written." : "Brief written from the accepted direction.",
-  });
-  const generateVariants = useScopedMutation({
-    mutationKey: studioKey("generate"),
-    mutationFn: async (vars: { briefId: string; values: StudioGeneration }) => {
-      const res = await generateStudioVariants({ data: { brandId, briefId: vars.briefId, ...vars.values } });
-      if (res && typeof res === "object" && "status" in res) {
-        if (res.status === "awaiting_approval") {
-          return { kind: "awaiting" as const, planId: (res as any).planId as string, plan: (res as any).plan, estimatedCostUsd: (res as any).estimatedCostUsd as number | undefined, note: (res as any).note as string | undefined };
-        }
-        if (res.status === "abstained") {
-          throw new Error((res as any).note || "JEV abstained from automated format selection. Please select an explicit format.");
-        }
-        if (res.status === "rejected") {
-          throw new Error((res as any).error || "Creative plan was rejected by Brand Guardian policy.");
-        }
-      }
-      return { kind: "generated" as const, values: vars.values };
-    },
-    invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.machine(brandId)],
-    success: (_vars, result) => result.kind === "awaiting" ? "" : "Variants generated.",
-    onSuccess: (result) => {
-      if (result.kind === "awaiting") {
-        setPendingPlan({ planId: result.planId, plan: result.plan, estimatedCostUsd: result.estimatedCostUsd, note: result.note });
-        return;
-      }
-      generationForm.reset(result.values);
-    },
-  });
-  const approvePlan = useScopedMutation({
-    mutationKey: studioKey("plan-approve"),
-    mutationFn: (planId: string) => approveAndExecuteCreativePlan({ data: { brandId, planId } }),
-    invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.machine(brandId)],
-    success: "Plan approved. Generation is running.",
-    onSuccess: () => setPendingPlan(null),
-  });
-  const rejectPlan = useScopedMutation({
-    mutationKey: studioKey("plan-reject"),
-    mutationFn: (vars: { planId: string; reason?: string }) => rejectCreativePlan({ data: { brandId, planId: vars.planId, reason: vars.reason } }),
-    invalidate: () => [qk.studio(brandId)],
-    success: "Plan rejected. Nothing was generated.",
-    onSuccess: () => {
-      setPendingPlan(null);
-      setPlanRejectReason("");
-    },
-  });
-  const reviewVariant = useScopedMutation({
-    mutationKey: studioKey("variant-review"),
-    mutationFn: (vars: { creativeId: string; action: "approve" | "reject" | "revision"; reasonCode: string; note: string }) => reviewStudioVariant({ data: { brandId, ...vars } }),
-    invalidate: () => [qk.studio(brandId), qk.reviews(brandId), qk.machine(brandId)],
-    success: (vars) => vars.action === "approve" ? "Variant approved." : vars.action === "reject" ? "Variant rejected." : "Revision requested.",
-  });
-  const publishTest = useScopedMutation({
-    mutationKey: studioKey("publish-test"),
-    mutationFn: (creativeId: string) => publishStudioVariant({ data: { brandId, creativeId, publisher: "test" } }),
-    invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.organic(brandId)],
-    success: "Published with the test publisher.",
-  });
-  const publishMulti = useScopedMutation({
-    mutationKey: studioKey("publish-channels"),
-    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string }) => publishMultiChannelVariant({ data: { brandId, ...vars } }),
-    invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.organic(brandId)],
-    success: "Publish finished. The receipts are in the dialog.",
-    onSuccess: (receipts) => setPublishResults(receipts),
-  });
-  const recordTestPerformance = useScopedMutation({
-    mutationKey: studioKey("performance"),
-    mutationFn: () => recordStudioTestPerformance({ data: { brandId } }),
-    invalidate: () => [qk.studio(brandId), qk.learning(brandId), qk.machine(brandId)],
-    success: "Test-provider performance recorded and learned.",
-  });
-  const recordOrganic = useScopedMutation({
-    mutationKey: studioKey("organic-telemetry"),
-    mutationFn: () => recordOrganicTelemetryAction({ data: { brandId } }),
-    invalidate: () => [qk.studio(brandId), qk.organic(brandId), qk.learning(brandId)],
-    success: "Organic telemetry recorded and learned.",
-  });
-  const reviewingVariants = usePendingVariables<{ creativeId: string }>(studioKey("variant-review")).map((vars) => vars.creativeId);
-  const publishingVariants = usePendingVariables<string>(studioKey("publish-test"));
-  const studioActions = [openBrief, generateVariants, approvePlan, rejectPlan, reviewVariant, publishTest, publishMulti, recordTestPerformance, recordOrganic];
-  const actionErrors = studioActions.map((action) => action.error).filter((error): error is Error => Boolean(error));
-  const anyActionPending = studioActions.some((action) => action.isPending);
+
+  // The studio query polls while a variant is queued or running. A variant the provider has submitted is polled here too.
+  const hasSubmitted = !!session?.variants.some((variant) => variant.mediaStatus === "submitted");
+  const refetch = query.refetch;
+  useEffect(() => {
+    if (!hasSubmitted) return;
+    const timer = window.setInterval(() => void refetch(), ACTIVE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [hasSubmitted, refetch]);
 
   if (query.isError && !session) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!session) return <ScreenSkeleton label="Loading studio" shape="cards" />;
+
   const canEdit = hasRole(session.role, "member");
   const brief = session.briefs.find((item) => item.status === "ready") ?? session.brief;
-  const previous = session.briefs[1];
+  const briefIndex = brief ? session.briefs.findIndex((item) => item.id === brief.id) : -1;
+  const previous = briefIndex >= 0 ? session.briefs[briefIndex + 1] ?? null : null;
   const changed = Boolean(brief && previous && brief.constraints !== previous.constraints);
   const recommendation = session.recommendation;
+  const production = productionStatusOf(organizationId, providerQuery);
 
   async function generate(values: StudioGeneration) {
     if (!brief) return;
-    await generateVariants.mutateAsync({ briefId: brief.id, values }).catch(() => undefined);
+    await actions.generateVariants.mutateAsync({ briefId: brief.id, values }).then((result) => {
+      if (result.kind === "generated") {
+        generationForm.reset(result.values);
+        setRetryNotice(null);
+      }
+    }, () => undefined);
   }
 
   async function handleApprovePlan() {
-    if (!pendingPlan) return;
-    await approvePlan.mutateAsync(pendingPlan.planId).catch(() => undefined);
+    if (!actions.pendingPlan) return;
+    await actions.approvePlan.mutateAsync(actions.pendingPlan.planId).catch(() => undefined);
   }
 
-  async function handleRejectPlan() {
-    if (!pendingPlan) return;
-    await rejectPlan.mutateAsync({ planId: pendingPlan.planId, reason: planRejectReason || undefined }).catch(() => undefined);
+  async function handleRejectPlan(reason: string) {
+    if (!actions.pendingPlan) return;
+    await actions.rejectPlan.mutateAsync({ planId: actions.pendingPlan.planId, reason: reason || undefined }).catch(() => undefined);
   }
+
+  /** Retry opens the Generate step with the stored provider selected. A new run starts only when a person submits the form. */
+  function retryVariant(variant: StudioVariant) {
+    const provider = variant.provider;
+    if (variant.kind === "image" && isImageProviderValue(provider)) {
+      generationForm.setValue("imageProvider", provider, { shouldDirty: true });
+      setRetryNotice(`Retry: ${providerLabel(provider)} is selected for this image. Check the settings, then generate.`);
+    } else if (variant.kind === "video" && isVideoProviderValue(provider)) {
+      generationForm.setValue("videoProvider", provider, { shouldDirty: true });
+      setRetryNotice(`Retry: ${providerLabel(provider)} is selected for this video. Check the settings, then generate.`);
+    } else {
+      setRetryNotice("Retry: the stored provider is not one of the engines on this screen. Choose the engine again, then generate.");
+    }
+    setStep("generate");
+  }
+
+  function submitReview(creativeId: string, payload: ReviewPayload) {
+    return actions.reviewVariant.mutateAsync({ creativeId, ...payload });
+  }
+
+  /** The test publisher goes through its own action; any other choice goes through the channel publish, with receipts. */
+  async function confirmPublish(target: PublishTarget, channelIds: string[], caption: string) {
+    if (channelIds.length === 1 && channelIds[0] === "test-publisher") {
+      await actions.publishTest.mutateAsync(target.creativeId).then((stored) => {
+        const publication = stored.publications.find((item) => item.creativeId === target.creativeId);
+        actions.setPublishResults([{
+          channelId: "test-publisher",
+          platform: "test",
+          type: "paid",
+          status: publication ? "published" : "not confirmed",
+          externalId: publication?.externalId,
+          error: publication ? undefined : "The publisher did not return a stored id for this variant.",
+        }]);
+      }, () => undefined);
+      return;
+    }
+    await actions.publishMulti.mutateAsync({ creativeId: target.creativeId, channelIds, caption }).catch(() => undefined);
+  }
+
+  const reviewPending = actions.reviewVariant.isPending;
+  const publishPending = actions.publishTest.isPending || actions.publishMulti.isPending;
+  const organicPosts = organicQuery.data ?? [];
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-brass">Studio</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Studio</p>
           <h1 className="font-display text-3xl">Make the next ads from evidence</h1>
         </div>
-        <p className="max-w-md text-sm text-muted">
+        <p className="max-w-md text-sm text-fg-muted">
           {session.observationCount} competitor observations. <Term id="jev" /> evaluates the evidence; <Term id="hypit" /> renders approved briefs. Media appears only after a provider stores bytes.
         </p>
       </div>
-      <Stepper steps={[
-        { label: "Direction", state: recommendation ? "done" : "current", description: recommendation ? "Evidence-backed opportunity" : "Waiting for evidence" },
-        { label: "Brief", state: brief?.status === "ready" ? "done" : recommendation ? "current" : "upcoming", description: brief?.status === "ready" ? "Approved for production" : "JEV decision to brief" },
-        { label: "Generate", state: session.variants.length ? "done" : brief?.status === "ready" ? "current" : "upcoming", description: `${session.variants.length} stored variants` },
-        { label: "Review", state: session.variants.some((variant) => variant.reviewStatus === "open" || variant.creativeStatus === "in_review") ? "current" : session.variants.length ? "done" : "upcoming", description: `${session.variants.filter((variant) => variant.creativeStatus === "in_review").length} awaiting review` },
-      ]} className="grid grid-cols-2 lg:grid-cols-4" />
-      {actionErrors.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
-      {anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
-      <Tabs defaultValue="direction" className="space-y-5">
+
+      <Stepper
+        steps={[
+          { label: "Direction", state: recommendation ? "done" : "current", description: recommendation ? "Evidence-backed opportunity" : "Waiting for evidence" },
+          { label: "Brief", state: brief?.status === "ready" ? "done" : recommendation ? "current" : "upcoming", description: brief?.status === "ready" ? "Approved for production" : "JEV decision to brief" },
+          { label: "Generate", state: session.variants.length ? "done" : brief?.status === "ready" ? "current" : "upcoming", description: `${session.variants.length} stored variants` },
+          { label: "Review", state: session.variants.some((variant) => variant.reviewStatus === "open" || variant.creativeStatus === "in_review") ? "current" : session.variants.length ? "done" : "upcoming", description: `${session.variants.filter((variant) => variant.creativeStatus === "in_review").length} awaiting review` },
+        ]}
+        className="grid grid-cols-2 lg:grid-cols-4"
+      />
+
+      {actions.actionErrors.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
+      {actions.anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
+
+      <Tabs value={step} onValueChange={(value) => setStep(value as StepKey)} className="space-y-5">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5">
           <TabsTrigger value="direction">1. Direction</TabsTrigger>
           <TabsTrigger value="brief">2. Brief</TabsTrigger>
           <TabsTrigger value="generate">3. Generate</TabsTrigger>
           <TabsTrigger value="review">4. Review</TabsTrigger>
-          <TabsTrigger value="queue">5. Queue & Schedule</TabsTrigger>
+          <TabsTrigger value="queue">5. Queue &amp; schedule</TabsTrigger>
         </TabsList>
-        <TabsContent value="direction" className="space-y-5">
-      {recommendation ? (
-        <Panel>
-          <p className="text-xs font-semibold uppercase tracking-widest text-brass">Discovered · {recommendation.posture === "exploitation" ? "Exploitation" : "Exploration"} · {recommendation.angle}</p>
-          <h2 className="mt-2 font-display text-3xl">{recommendation.label}</h2>
-          <p className="mt-3">{recommendation.reason}</p>
-          <p className="mt-2 text-sm">{recommendation.because}</p>
-          <p className="mt-2 text-sm text-muted">{recommendation.uncertainty}</p>
-          <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-            <div><dt className="text-muted">Market density</dt><dd>{recommendation.marketSignal.toFixed(2)} signal, {recommendation.saturation.toFixed(2)} saturation</dd></div>
-            <div><dt className="text-muted">Brand fit</dt><dd>{recommendation.brandFit.toFixed(2)}</dd></div>
-            <div><dt className="text-muted">Novelty</dt><dd>{recommendation.novelty.toFixed(2)}</dd></div>
-            <div><dt className="text-muted">Historical learning</dt><dd>{recommendation.historicalEvidence.toFixed(2)}</dd></div>
-            <div><dt className="text-muted">Rank</dt><dd>{recommendation.expectedValue.toFixed(2)}</dd></div>
-            <div><dt className="text-muted">JEV</dt><dd>{recommendation.decision || "Not stored yet"} {recommendation.decision ? recommendation.probability.toFixed(2) : ""}</dd></div>
-          </dl>
-          <ul className="mt-4 space-y-2 text-sm">
-            {recommendation.evidence.map((line) => <li key={line}>{line}</li>)}
-          </ul>
-          {canEdit ? (
-            <div className="mt-4 space-y-3">
-              <DirectionReasonField value={directionReason} onChange={setDirectionReason} />
-              <Button
-                type="button"
-                disabled={openBrief.isPending || directionReason.trim().length < DIRECTION_REASON_MIN}
-                onClick={() => {
-                  void openBrief.mutateAsync({ forceNew: false, reason: directionReason.trim() }).then(() => setDirectionReason(""), () => undefined);
-                }}
-              >
-                Accept direction and write the brief
-              </Button>
-            </div>
-          ) : null}
-        </Panel>
-      ) : (
-        <Panel>
-          <h2 className="font-display text-2xl">No discovered opportunity</h2>
-          <p className="mt-2 text-sm text-muted">
-            {session.observationCount === 0
-              ? "Add competitor ads you have seen. An empty library is not whitespace."
-              : "Stored creatives do not yet show a direction outside the exploration seeds. Nothing was invented."}
-          </p>
-        </Panel>
-      )}
-      {session.exploration ? (
-        <p className="text-sm text-muted">Exploration, not a finding: {session.exploration.label}. {session.exploration.reason}</p>
-      ) : null}
-      {session.semantic.clusters.length > 0 ? (
-        <Panel>
-          <h2 className="font-display text-2xl">Semantic clusters</h2>
-          <p className="mt-2 text-sm text-muted">{session.semantic.note}</p>
-          <ul className="mt-3 space-y-2 text-sm">
-            {session.semantic.clusters.map((cluster) => <li key={cluster.label}>{cluster.summary}</li>)}
-          </ul>
-        </Panel>
-      ) : (
-        <p className="text-sm text-muted">{session.semantic.note}</p>
-      )}
-      {session.whitespace.length > 0 ? (
-        <Panel>
-          <h2 className="font-display text-2xl">Whitespace in the stored set</h2>
-          <ul className="mt-3 space-y-2 text-sm">
-            {session.whitespace.map((item) => <li key={item.underused}>{item.whyTest}</li>)}
-          </ul>
-        </Panel>
-      ) : null}
-        </TabsContent>
-        <TabsContent value="brief" className="space-y-5">
-      {session.briefs.filter((item) => item.status === "awaiting_review").map((item) => (
-        <BriefReviewPanel key={item.id} brandId={brandId} briefId={item.id} title={item.title} role={session.role} />
-      ))}
-      {brief ? (
-        <Panel>
-          <h2 className="font-display text-2xl">Brief</h2>
-          <p className="mt-1 text-sm text-muted">{brief.title}</p>
-          {changed ? <p className="mt-2 text-sm font-semibold">These findings changed the next recommendation.</p> : null}
-          <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-            <div><dt className="text-muted">Objective</dt><dd>{brief.why[0]}</dd></div>
-            <div><dt className="text-muted">Audience</dt><dd>{brief.audience || "Not stored."}</dd></div>
-            <div><dt className="text-muted">Angle</dt><dd>{brief.angle}</dd></div>
-            <div><dt className="text-muted">Hook</dt><dd>{brief.hook}</dd></div>
-            <div><dt className="text-muted">Promise</dt><dd>{brief.promise || "Not stored."}</dd></div>
-            <div><dt className="text-muted">Proof</dt><dd>{brief.proofType || "Not stored."}</dd></div>
-            <div><dt className="text-muted">Offer</dt><dd>{brief.offer || "None stored."}</dd></div>
-            <div><dt className="text-muted">Call to action</dt><dd>{brief.cta}</dd></div>
-            <div><dt className="text-muted">Format</dt><dd>{brief.format}</dd></div>
-          </dl>
-          <h3 className="mt-4 font-semibold">Why this, why now</h3>
-          <ul className="mt-2 space-y-1 text-sm">{brief.why.map((line) => <li key={line}>{line}</li>)}</ul>
-          <h3 className="mt-4 font-semibold">Visual direction</h3>
-          <p className="mt-2 text-sm">{brief.format}. Proof: {brief.proofType || "Not stored."}</p>
-          <h3 className="mt-4 font-semibold">What not to do</h3>
-          <p className="mt-2 whitespace-pre-wrap text-sm" data-testid="brief-constraints">{brief.constraints || "No stored constraint."}</p>
-          <h3 className="mt-4 font-semibold">Learned positives</h3>
-          {session.learned.some((pattern) => pattern.direction === "POSITIVE") ? (
-            <ul className="mt-2 text-sm">{session.learned.filter((pattern) => pattern.direction === "POSITIVE").map((pattern) => <li key={`${pattern.attribute}:${pattern.value}:up`}>POSITIVE · {pattern.summary}</li>)}</ul>
-          ) : <p className="mt-2 text-sm text-muted">No positive pattern is stored.</p>}
-          <h3 className="mt-4 font-semibold">Learned negatives</h3>
-          {session.learned.some((pattern) => pattern.direction === "NEGATIVE") ? (
-            <ul className="mt-2 text-sm">{session.learned.filter((pattern) => pattern.direction === "NEGATIVE").map((pattern) => <li key={`${pattern.attribute}:${pattern.value}:down`}>NEGATIVE · {pattern.summary}</li>)}</ul>
-          ) : <p className="mt-2 text-sm text-muted">No negative pattern is stored.</p>}
-          {session.rejections.length > 0 ? (
-            <>
-              <h3 className="mt-4 font-semibold">Rejected directions</h3>
-              <ul className="mt-2 text-sm">{session.rejections.map((line) => <li key={line}>{line}</li>)}</ul>
-            </>
-          ) : null}
-          {brief.learningNotes.length > 0 ? (
-            <ul className="mt-3 text-sm">{brief.learningNotes.map((line) => <li key={line}>Learned: {line}</li>)}</ul>
-          ) : <p className="mt-3 text-sm text-muted">No learned pattern is attached to this brief yet.</p>}
-          {canEdit && brief.status !== "ready" ? (
-            <div className="mt-3 space-y-3">
-              <DirectionReasonField value={nextBriefReason} onChange={setNextBriefReason} />
-              <Button
-                type="button"
-                variant="quiet"
-                disabled={openBrief.isPending || nextBriefReason.trim().length < DIRECTION_REASON_MIN}
-                onClick={() => {
-                  void openBrief.mutateAsync({ forceNew: true, reason: nextBriefReason.trim() }).then(() => setNextBriefReason(""), () => undefined);
-                }}
-              >
-                Write the next brief
-              </Button>
-            </div>
-          ) : null}
-        </Panel>
-      ) : null}
-        </TabsContent>
-        <TabsContent value="generate" className="space-y-5">
-          <Panel>
-            <h2 className="font-display text-2xl">Generate from the approved brief</h2>
-            {brief ? <p className="mt-2 text-sm text-muted">Current brief: {brief.title}. A non-ready brief cannot be used for generation.</p> : <p className="mt-2 text-sm text-muted">Write or accept a brief before generating.</p>}
-            {canEdit && brief ? <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={generationForm.handleSubmit(generate)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); event.currentTarget.requestSubmit(); } }}>
-              <Field label="What to create" hint="Deliverable format strategy for this creative plan.">
-                <SelectInput {...generationForm.register("creationScope")}>
-                  <option value="auto_choose">Auto (JEV evidence recommendation)</option>
-                  <option value="video_only">Video only (Reel / Short / UGC)</option>
-                  <option value="image_only">Static image only</option>
-                  <option value="carousel_only">Multi-slide carousel</option>
-                  <option value="mixed_campaign">Mixed campaign (video + static)</option>
-                  <option value="research_only">Research-only (no deliverables)</option>
-                </SelectInput>
-              </Field>
-              <Field label="Automation level" hint="Governs human approval gates and billable execution.">
-                <SelectInput {...generationForm.register("autonomy")}>
-                  <option value="manual">Manual (Plan & recommend only; require approval)</option>
-                  <option value="semi_automatic">Semi-automatic (Review plan and quote before executing)</option>
-                  <option value="fully_automatic">Fully automatic (Execute within spend cap)</option>
-                </SelectInput>
-              </Field>
-              <Field label="Spend cap (USD)" hint="Authoritative hard budget cap. Generation halts if exceeded.">
-                <Input type="number" step="0.5" min="0" max="500" {...generationForm.register("maxSpendUsd", { valueAsNumber: true })} />
-              </Field>
-              <Field label="Starting material" hint="Source lineage used to anchor the creative.">
-                <SelectInput {...generationForm.register("source")}>
-                  <option value="new_brief">New approved brief</option>
-                  <option value="winning_reference">Winning organic / competitor reference</option>
-                  <option value="existing_meridian_creative">Existing Meridian creative</option>
-                  <option value="brand_assets">Brand asset library</option>
-                  <option value="creator_footage">Creator / UGC footage</option>
-                </SelectInput>
-              </Field>
-              <Field label="Video provider" hint="Remote synthesis provider. Omni runs asynchronously off-device." error={generationForm.formState.errors.videoProvider?.message}>
-                <SelectInput {...generationForm.register("videoProvider")} required>
-                  <option value="auto">Auto (healthy supported provider)</option>
-                  <option value="google_omni">Google Gemini Omni (gemini-omni-1.1-flash)</option>
-                  <option value="hypit">Hypit video</option>
-                  <option value="higgsfield">Higgsfield AI</option>
-                  <option value="manual_cloud">Manual Cloud (Google Drive)</option>
-                  <option value="none">No video in this run</option>
-                </SelectInput>
-              </Field>
-              <Field label="Aspect ratio" hint="Format canvas geometry.">
-                <SelectInput {...generationForm.register("aspectRatio")}>
-                  <option value="9:16">9:16 Vertical (Reels / TikTok / Shorts)</option>
-                  <option value="16:9">16:9 Landscape (YouTube / Desktop)</option>
-                  <option value="1:1">1:1 Square (Feed)</option>
-                  <option value="4:5">4:5 Portrait (Instagram Feed)</option>
-                </SelectInput>
-              </Field>
-              <Field label="Optional image generation" hint="Image generation is optional. Hypit handles video independently." error={generationForm.formState.errors.imageProvider?.message}>
-                <SelectInput {...generationForm.register("imageProvider")} required>
-                  <option value="none">No images</option>
-                  {session.testImageAllowed ? <option value="test:image">Test image</option> : null}
-                  <option value="google:nano-banana">Google AI Studio · Nano Banana</option>
-                </SelectInput>
-              </Field>
-              <div className="md:col-span-2">{generationDirty ? <div role="status" className="mb-3 flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => generationForm.reset()}>Discard</Button></div> : null}<Button type="submit" disabled={generateVariants.isPending || generationForm.formState.isSubmitting || brief.status !== "ready"}>{generationForm.formState.isSubmitting ? "Generating…" : "Generate variants"}</Button><p className="mt-2 text-sm text-muted">Estimated cost appears only when a provider returns one. Daily or concurrency limits can block a run.</p></div>
-            </form> : null}
-          </Panel>
-        </TabsContent>
-        <TabsContent value="review" className="space-y-5">
-          {hasRole(session.role, "admin") ? <HeldReservationsPanel brandId={brandId} /> : null}
-      <section className="space-y-4" aria-label="Variants">
-        <h2 className="font-display text-2xl">Variants</h2>
-        {session.variants.length === 0 ? <p className="text-sm text-muted">No media yet.</p> : null}
-        <ul className="grid gap-4 lg:grid-cols-2">
-          {session.variants.map((variant) => (
-            <li key={variant.assetId} className="rounded-lg border border-line bg-panel p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">{variant.kind} {variant.index + 1} · {variant.provider ? providerLabel(variant.provider) : "No provider"}</p>
-              <h3 className="font-display text-xl">{variant.title}</h3>
-              {variant.kind === "video" ? <MediaPlayer className="mt-3" assetId={variant.assetId} poster={variant.frames[0]} durationMs={variant.durationMs} width={variant.width} height={variant.height} /> : variant.preview ? <img className="mt-3 max-h-72 max-w-full border border-line object-contain" src={variant.preview} alt={`${variant.provider} ${variant.kind} variant ${variant.index + 1}`} /> : null}
-              {variant.frames.length > 0 ? (
-                <div className="mt-3 flex gap-2">
-                  {variant.frames.map((src, index) => (
-                    <img key={`${variant.assetId}-frame-${index}`} className="h-16 w-16 border border-line" src={src} alt={`Sampled frame ${index + 1} from the stored ${variant.kind} bytes`} />
-                  ))}
-                </div>
-              ) : null}
-              {variant.kind === "video" ? (
-                <p className="mt-3 text-sm" role="status">
-                  {variant.provider === "test:video" ? "Fixture, not a camera recording. " : ""}
-                  {variant.mediaStatus || "queued"}. {variant.durationMs ? `${(variant.durationMs / 1000).toFixed(1)}s. ` : "Duration not stored. "}
-                  {variant.width ? `${variant.width}×${variant.height}. ` : "Dimensions not stored. "}
-                  {variant.transcript || "No transcript stored. "}
-                  {variant.scenes[0]?.summary ?? "No scene note stored."}
-                </p>
-              ) : null}
-              <p className="mt-2 text-sm text-muted">
-                {variant.model} · {variant.promptVersion} · {variant.byteSize || 0} bytes
-                {variant.width ? ` · ${variant.width}×${variant.height}` : ""}
-                {variant.checksum ? ` · ${variant.checksum.slice(0, 8)}` : ""}
-              </p>
-              <p className="text-sm">QA {statusLabel(variant.qaDecision || "pending")} · review {statusLabel(variant.reviewStatus)} · {statusLabel(variant.creativeStatus)}</p>
-              {variant.error ? <p className="text-sm text-danger">{variant.error}</p> : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="button" variant="quiet" aria-expanded={inspectId === variant.creativeId} onClick={() => setInspectId(inspectId === variant.creativeId ? null : variant.creativeId)}>
-                  Inspect evidence
-                </Button>
-                {canEdit && variant.creativeStatus === "in_review" ? (
-                  <>
-                    <Button type="button" disabled={reviewingVariants.includes(variant.creativeId)} onClick={() => { void reviewVariant.mutateAsync({ creativeId: variant.creativeId, action: "approve", reasonCode: "", note: "" }).catch(() => undefined); }}>Approve</Button>
-                    <Button type="button" variant="danger" disabled={reviewingVariants.includes(variant.creativeId)} onClick={() => { setReviewReason("other"); setReviewNote(""); setReviewTarget({ creativeId: variant.creativeId, mode: "reject" }); }}>Reject</Button>
-                    <Button type="button" variant="quiet" disabled={reviewingVariants.includes(variant.creativeId)} onClick={() => { setReviewReason("other"); setReviewNote(""); setReviewTarget({ creativeId: variant.creativeId, mode: "revision" }); }}>Request revision</Button>
-                  </>
-                ) : null}
-                {canEdit && (variant.creativeStatus === "approved" || variant.creativeStatus === "testing") ? (
-                  <>
-                    <Button
-                      type="button"
-                      disabled={publishingVariants.includes(variant.creativeId)}
-                      onClick={() => {
-                        void publishTest.mutateAsync(variant.creativeId).catch(() => undefined);
-                      }}
-                    >
-                      Publish with test publisher
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="quiet"
-                      disabled={publishingVariants.includes(variant.creativeId)}
-                      onClick={() => {
-                        setPublishTarget({ creativeId: variant.creativeId, title: variant.title, defaultCaption: variant.transcript || variant.title || "" });
-                        setPublishCaption(variant.transcript || variant.title || "");
-                        setPublishResults(null);
-                      }}
-                    >
-                      Publish to channels…
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-              {inspectId === variant.creativeId ? (
-                <ul className="mt-3 space-y-2 text-sm">
-                  {variant.questions.length === 0 ? <li>No JEV row is stored for this variant.</li> : variant.questions.map((question) => (
-                    <li key={question.id}>
-                      <span className="font-semibold">{question.id}</span> {question.decision} · answer {question.answer || "unrecorded"} · p {question.probability.toFixed(2)} · confidence {question.confidence.toFixed(2)}
-                      <span className="block text-muted">{question.reasons[0]}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        {session.variants.length > 1 ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Compare">
-              <SelectInput aria-label="Compare" value={compareA} onChange={(event) => setCompareA(event.target.value)}>
-                <option value="">First variant</option>
-                {session.variants.map((variant) => <option key={variant.assetId} value={variant.assetId}>{variant.kind} {variant.index + 1}</option>)}
-              </SelectInput>
-            </Field>
-            <Field label="With">
-              <SelectInput aria-label="With" value={compareB} onChange={(event) => setCompareB(event.target.value)}>
-                <option value="">Second variant</option>
-                {session.variants.map((variant) => <option key={variant.assetId} value={variant.assetId}>{variant.kind} {variant.index + 1}</option>)}
-              </SelectInput>
-            </Field>
-            {compareA && compareB ? (
-              <p className="md:col-span-2 text-sm">
-                {session.variants.find((item) => item.assetId === compareA)?.promptVersion} beside {session.variants.find((item) => item.assetId === compareB)?.promptVersion}. They stay separate versions.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-      <Panel>
-        <h2 className="font-display text-2xl">What Meridian learned</h2>
-        {session.learned.length === 0 ? <p className="mt-2 text-sm text-muted">No pattern has met the sample rule.</p> : (
-          <ul className="mt-3 space-y-2 text-sm">
-            {session.learned.map((pattern) => (
-              <li key={`${pattern.attribute}:${pattern.value}`}>
-                {pattern.direction} · {pattern.state} · n={pattern.sampleSize} · {pattern.impressions} impressions · {pattern.summary}
-              </li>
-            ))}
-          </ul>
-        )}
-        {session.publications.length > 0 ? (
-          <ul className="mt-3 text-sm">
-            {session.publications.map((item) => (
-              <li key={item.externalId}>Test publication {item.externalId}</li>
-            ))}
-          </ul>
-        ) : <p className="mt-3 text-sm text-muted">Nothing from this brand has a stored publisher id.</p>}
-        {organicQuery.data && organicQuery.data.length > 0 ? (
-          <div className="mt-4 pt-3 border-t border-line">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-brass">Organic Social Publications</h3>
-            <ul className="mt-2 space-y-2 text-sm">
-              {organicQuery.data.map((post) => (
-                <li key={post.id} className="rounded-md border border-line p-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <span className="font-semibold capitalize">{post.platform}</span> · <span className="text-muted">{post.status}</span>
-                    <p className="text-xs text-muted mt-0.5">{post.caption ? post.caption.slice(0, 70) : "No caption"}</p>
-                  </div>
-                  <div className="text-xs text-right">
-                    <span>{post.views} views · {post.threeSecondViews} (3s hook) · {(post.completionRate * 100).toFixed(1)}% comp · {post.shares} shares</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {canEdit ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              disabled={recordTestPerformance.isPending || session.publications.length === 0}
-              onClick={() => {
-                void recordTestPerformance.mutateAsync().catch(() => undefined);
-              }}
-            >
-              Record test-provider performance and learn
-            </Button>
-            <Button
-              type="button"
-              variant="quiet"
-              disabled={recordOrganic.isPending || !(organicQuery.data && organicQuery.data.length > 0)}
-              onClick={() => {
-                void recordOrganic.mutateAsync().catch(() => undefined);
-              }}
-            >
-              Record organic telemetry & learn
-            </Button>
-          </div>
-        ) : null}
-      </Panel>
-      <Dialog open={!!reviewTarget} onOpenChange={(open) => { if (!open && !reviewVariant.isPending) setReviewTarget(null); }}>
-        <DialogContent aria-describedby="variant-review-description">
-          <DialogTitle>{reviewTarget?.mode === "reject" ? "Reject this variant" : "Request a revision"}</DialogTitle>
-          <DialogDescription id="variant-review-description">Record the reviewer’s reason and note. These details remain attached to the review lineage.</DialogDescription>
-          <div className="mt-4 space-y-4">
-            {reviewTarget?.mode === "reject" ? <Field label="Reason"><SelectInput value={reviewReason} onChange={(event) => setReviewReason(event.currentTarget.value)}>{REVIEW_REASON_CODES.map((code) => <option key={code} value={code}>{code.replaceAll("_", " ")}</option>)}</SelectInput></Field> : null}
-            <Field label="Reviewer note"><TextArea value={reviewNote} onChange={(event) => setReviewNote(event.currentTarget.value)} required maxLength={400} /></Field>
-            <Button disabled={!reviewTarget || !reviewNote.trim() || reviewVariant.isPending} onClick={() => {
-              if (!reviewTarget || !reviewNote.trim()) return;
-              const target = reviewTarget;
-              void reviewVariant.mutateAsync({ creativeId: target.creativeId, action: target.mode, reasonCode: target.mode === "reject" ? reviewReason : "", note: reviewNote.trim() }).then(() => {
-                setReviewTarget(null);
-                setReviewNote("");
-              }, () => undefined);
-            }}>{reviewTarget?.mode === "reject" ? "Confirm rejection" : "Send revision request"}</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!publishTarget} onOpenChange={(open) => { if (!open && !publishMulti.isPending) { setPublishTarget(null); setPublishResults(null); } }}>
-        <DialogContent aria-describedby="multi-channel-publish-description">
-          <DialogTitle>Publish Creative Across Channels</DialogTitle>
-          <DialogDescription id="multi-channel-publish-description">
-            Select where to publish this creative. Choose paid advertising channels and/or organic social posting. No platform is required.
-          </DialogDescription>
-          <div className="mt-4 space-y-4">
-            <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-brass">Paid Advertising Channels</h4>
-              <div className="mt-2 space-y-2">
-                {(channelsQuery.data ?? []).filter((c) => c.type === "paid").map((channel) => (
-                  <label key={channel.id} className="flex items-start gap-2.5 text-sm cursor-pointer p-2 rounded-md border border-line bg-surface/50 hover:bg-surface">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 rounded border-line"
-                      checked={selectedChannels.includes(channel.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelectedChannels([...selectedChannels, channel.id]);
-                        else setSelectedChannels(selectedChannels.filter((id) => id !== channel.id));
-                      }}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold">{channel.name}</span>
-                        <span className="text-xs text-muted">{channel.connected ? "Ready" : "Not connected"}</span>
-                      </div>
-                      <p className="text-xs text-muted">{channel.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
 
-            <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-brass">Organic Social Channels</h4>
-              <div className="mt-2 space-y-2">
-                {(channelsQuery.data ?? []).filter((c) => c.type === "organic").map((channel) => (
-                  <label key={channel.id} className="flex items-start gap-2.5 text-sm cursor-pointer p-2 rounded-md border border-line bg-surface/50 hover:bg-surface">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 rounded border-line"
-                      checked={selectedChannels.includes(channel.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelectedChannels([...selectedChannels, channel.id]);
-                        else setSelectedChannels(selectedChannels.filter((id) => id !== channel.id));
-                      }}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold">{channel.name}</span>
-                        <span className="text-xs text-muted">{channel.accountName ?? "Active"}</span>
-                      </div>
-                      <p className="text-xs text-muted">{channel.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <Field label="Post caption & hashtags">
-              <TextArea
-                value={publishCaption}
-                onChange={(e) => setPublishCaption(e.target.value)}
-                placeholder="Caption with tags (e.g., #skincare #cleanbeauty)"
-                rows={3}
-              />
-            </Field>
-
-            {publishResults ? (
-              <div aria-live="polite" role="status" className="space-y-2 rounded-md border border-line bg-panel p-3 text-sm">
-                <p className="font-semibold">Publish Receipts:</p>
-                {publishResults.map((res) => (
-                  <div key={res.channelId} className="flex items-center justify-between text-xs">
-                    <span>{res.channelId}: <span className={res.status === "published" ? "text-success font-semibold" : res.status === "failed" ? "text-danger" : "text-brass"}>{res.status}</span></span>
-                    {res.url ? <a href={res.url} target="_blank" rel="noopener noreferrer" className="underline text-accent">View post</a> : res.error ? <span className="text-danger">{res.error}</span> : null}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="quiet"
-                disabled={publishMulti.isPending}
-                onClick={() => { setPublishTarget(null); setPublishResults(null); }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                disabled={publishMulti.isPending || selectedChannels.length === 0}
-                onClick={() => {
-                  if (!publishTarget) return;
-                  void publishMulti.mutateAsync({ creativeId: publishTarget.creativeId, channelIds: selectedChannels, caption: publishCaption }).catch(() => undefined);
-                }}
-              >
-                {publishMulti.isPending ? "Publishing…" : `Publish to selected (${selectedChannels.length})`}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        <TabsContent value="direction">
+          <DirectionStep
+            session={session}
+            canEdit={canEdit}
+            pending={actions.openBrief.isPending}
+            opportunities={opportunitiesQuery.data?.opportunities}
+            opportunitiesFailed={opportunitiesQuery.isError}
+            onAccept={(reason) => actions.openBrief.mutateAsync({ forceNew: false, reason })}
+          />
         </TabsContent>
 
-        {/* TAB 5: ORCHESTRATED QUEUE & SCHEDULE */}
-        <TabsContent value="queue" className="space-y-6">
-          <div className="flex flex-col gap-1">
-            <h2 className="font-display text-2xl font-bold">Multi-Account Publishing Queue</h2>
-            <p className="text-sm text-muted">
-              Orchestrate social publishing across connected platform accounts with rate limiting, automated retries, and idempotency guarantees.
-            </p>
-          </div>
+        <TabsContent value="brief">
+          <BriefStep
+            brandId={brandId}
+            session={session}
+            brief={brief}
+            previous={previous}
+            canEdit={canEdit}
+            changed={changed}
+            pending={actions.openBrief.isPending}
+            onWriteNext={(reason) => actions.openBrief.mutateAsync({ forceNew: true, reason })}
+          />
+        </TabsContent>
 
-          {/* Schedule Form */}
-          <Panel className="space-y-4">
-            <h3 className="font-display text-lg font-semibold flex items-center gap-2">
-              <Share2 className="h-4 w-4 text-brass" />
-              Schedule Variant to Destination Accounts
-            </h3>
+        <TabsContent value="generate">
+          <GenerateStep
+            brief={brief}
+            canEdit={canEdit}
+            form={generationForm}
+            testImageAllowed={session.testImageAllowed}
+            production={production}
+            pending={actions.generateVariants.isPending}
+            retryNotice={retryNotice}
+            onDismissRetry={() => setRetryNotice(null)}
+            onGenerate={generate}
+          />
+        </TabsContent>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Choose Creative Variant">
-                <SelectInput
-                  value={queueCreativeId}
-                  onChange={(e) => setQueueCreativeId(e.target.value)}
-                >
-                  <option value="">Select a variant…</option>
-                  {session.variants.map((v) => (
-                    <option key={v.creativeId} value={v.creativeId}>
-                      {v.creativeId} ({v.creativeStatus})
-                    </option>
-                  ))}
-                </SelectInput>
-              </Field>
+        <TabsContent value="review">
+          <ReviewStep
+            brandId={brandId}
+            session={session}
+            canEdit={canEdit}
+            showHeldReservations={hasRole(session.role, "admin")}
+            reviewBusyIds={actions.reviewBusyIds}
+            publishBusyIds={actions.publishBusyIds}
+            reviewPending={reviewPending}
+            publishPending={publishPending}
+            publishResults={actions.publishResults}
+            channels={channelsQuery.data ?? []}
+            organicPosts={organicPosts}
+            allowedReasonCodes={REVIEW_REASON_CODES}
+            recordingTest={actions.recordTestPerformance.isPending}
+            recordingOrganic={actions.recordOrganic.isPending}
+            onReviewSubmit={submitReview}
+            onPublishConfirm={confirmPublish}
+            onPublishClose={() => actions.setPublishResults(null)}
+            onRetry={retryVariant}
+            onRecordTest={() => { void actions.recordTestPerformance.mutateAsync().catch(() => undefined); }}
+            onRecordOrganic={() => { void actions.recordOrganic.mutateAsync().catch(() => undefined); }}
+          />
+        </TabsContent>
 
-              <Field label="Target Type">
-                <SelectInput
-                  value={queueTargetType}
-                  onChange={(e) => setQueueTargetType(e.target.value as "organic" | "paid_campaign")}
-                >
-                  <option value="organic">Organic Social Post</option>
-                  <option value="paid_campaign">Paid Ad Campaign</option>
-                </SelectInput>
-              </Field>
-            </div>
-
-            {/* Target Accounts Selection */}
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted block mb-2">
-                Target Platform Accounts ({queueAccountIds.length} selected)
-              </label>
-              {(accountsQuery.data ?? []).length === 0 ? (
-                <p className="text-xs text-muted">
-                  No social accounts connected yet. Go to <a href={`/brands/${brandId}/accounts`} className="underline text-accent">Accounts</a> to connect Instagram, TikTok, or YouTube.
-                </p>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                  {(accountsQuery.data ?? []).map((acct) => (
-                    <label
-                      key={acct.id}
-                      className="flex items-center gap-2.5 p-2 rounded-md border border-line bg-surface/40 hover:bg-surface cursor-pointer text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={queueAccountIds.includes(acct.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) setQueueAccountIds([...queueAccountIds, acct.id]);
-                          else setQueueAccountIds(queueAccountIds.filter((id) => id !== acct.id));
-                        }}
-                        className="rounded border-line"
-                      />
-                      <div className="truncate">
-                        <span className="font-semibold block truncate">{acct.name}</span>
-                        <span className="text-xs text-muted block truncate capitalize">
-                          {acct.platform} {acct.handle ? `· ${acct.handle}` : ""}
-                        </span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Timing */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Schedule Time (optional, leave blank for immediate)">
-                <input
-                  type="datetime-local"
-                  value={queueScheduledTime}
-                  onChange={(e) => setQueueScheduledTime(e.target.value)}
-                  className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-foreground"
-                />
-              </Field>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <Button
-                variant="primary"
-                disabled={
-                  !canEdit ||
-                  !queueCreativeId ||
-                  queueAccountIds.length === 0 ||
-                  schedulePublishMutation.isPending
-                }
-                onClick={() => {
-                  schedulePublishMutation.mutate(
-                    {
-                      creativeId: queueCreativeId,
-                      targetAccountIds: queueAccountIds,
-                      scheduledTime: queueScheduledTime ? new Date(queueScheduledTime).toISOString() : undefined,
-                      targetType: queueTargetType,
-                    },
-                    {
-                      onSuccess: () => {
-                        setQueueAccountIds([]);
-                        setQueueScheduledTime("");
-                      },
-                    },
-                  );
-                }}
-              >
-                <Send className="mr-1.5 h-4 w-4" />
-                {schedulePublishMutation.isPending
-                  ? "Enqueueing…"
-                  : `Enqueue to ${queueAccountIds.length} Account(s)`}
-              </Button>
-            </div>
-          </Panel>
-
-          {/* Live Queue Table */}
-          {(() => {
-            const queueItems = ((queueQuery.data as any)?.queue as Array<{
-              id: string;
-              platform: string;
-              creativeId: string;
-              targetType: string;
-              scheduledTime: string;
-              status: string;
-              attempts: number;
-              maxAttempts: number;
-            }>) ?? [];
-            const queueReceipts = ((queueQuery.data as any)?.receipts as Array<{
-              id: string;
-              platform: string;
-              externalPostId: string;
-              publishedAt: string;
-              externalUrl?: string;
-            }>) ?? [];
-
-            return (
-              <>
-                <Panel className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-display text-lg font-semibold flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-brass" />
-                      Live Publishing Queue ({queueItems.length})
-                    </h3>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => void queueQuery.refetch()}
-                      disabled={queueQuery.isFetching}
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${queueQuery.isFetching ? "animate-spin" : ""}`} />
-                    </Button>
-                  </div>
-
-                  {queueItems.length === 0 ? (
-                    <p className="text-sm text-muted py-4 text-center">
-                      Publishing queue is currently empty.
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="border-b border-line text-muted uppercase tracking-wider">
-                          <tr>
-                            <th className="py-2 pr-3">Target Platform</th>
-                            <th className="py-2 pr-3">Creative ID</th>
-                            <th className="py-2 pr-3">Type</th>
-                            <th className="py-2 pr-3">Scheduled</th>
-                            <th className="py-2 pr-3">Status</th>
-                            <th className="py-2 pr-3">Attempts</th>
-                            <th className="py-2 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-line">
-                          {queueItems.map((item) => {
-                            const badgeVariant =
-                              item.status === "published"
-                                ? "success"
-                                : item.status === "processing"
-                                ? "info"
-                                : item.status === "failed"
-                                ? "danger"
-                                : item.status === "cancelled"
-                                ? "neutral"
-                                : "warning";
-
-                            return (
-                              <tr key={item.id} className="hover:bg-surface/30">
-                                <td className="py-3 pr-3 font-semibold capitalize">{item.platform}</td>
-                                <td className="py-3 pr-3 font-mono text-muted">{item.creativeId}</td>
-                                <td className="py-3 pr-3 capitalize text-muted">{item.targetType.replace(/_/g, " ")}</td>
-                                <td className="py-3 pr-3 text-muted">
-                                  {new Date(item.scheduledTime).toLocaleString()}
-                                </td>
-                                <td className="py-3 pr-3">
-                                  <Badge variant={badgeVariant} className="capitalize">
-                                    {item.status}
-                                  </Badge>
-                                </td>
-                                <td className="py-3 pr-3 text-muted">
-                                  {item.attempts} / {item.maxAttempts}
-                                </td>
-                                <td className="py-3 text-right">
-                                  {canEdit && (item.status === "failed" || item.status === "cancelled") && (
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      className="h-7 text-xs"
-                                      disabled={retryJobMutation.isPending}
-                                      onClick={() => retryJobMutation.mutate({ queueId: item.id })}
-                                    >
-                                      Retry
-                                    </Button>
-                                  )}
-                                  {canEdit && (item.status === "queued" || item.status === "processing") && (
-                                    <Button
-                                      size="sm"
-                                      variant="danger"
-                                      className="h-7 text-xs ml-1"
-                                      disabled={cancelJobMutation.isPending}
-                                      onClick={() => cancelJobMutation.mutate({ queueId: item.id })}
-                                    >
-                                      Cancel
-                                    </Button>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Panel>
-
-                {/* Execution Receipts Stream */}
-                {queueReceipts.length > 0 && (
-                  <Panel className="space-y-3">
-                    <h3 className="font-display text-lg font-semibold flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
-                      Live Execution Receipts
-                    </h3>
-                    <div className="space-y-2">
-                      {queueReceipts.map((rec) => (
-                        <div
-                          key={rec.id}
-                          className="flex items-center justify-between p-3 rounded-md border border-line bg-surface/30 text-xs"
-                        >
-                          <div>
-                            <span className="font-semibold capitalize">{rec.platform} Post</span>
-                            <span className="font-mono text-muted block mt-0.5">ID: {rec.externalPostId}</span>
-                            <span className="text-muted block text-[11px]">
-                              Published: {new Date(rec.publishedAt).toLocaleString()}
-                            </span>
-                          </div>
-                          {rec.externalUrl ? (
-                            <a
-                              href={rec.externalUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="underline text-accent font-semibold"
-                            >
-                              View External Post &rarr;
-                            </a>
-                          ) : (
-                            <Badge variant="success">Confirmed Live</Badge>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </Panel>
-                )}
-              </>
-            );
-          })()}
+        <TabsContent value="queue">
+          <QueuePanel brandId={brandId} variants={session.variants} canEdit={canEdit} />
         </TabsContent>
       </Tabs>
 
-      {pendingPlan ? (
-        <Dialog open onOpenChange={(open) => { if (!open) setPendingPlan(null); }}>
-          <DialogContent>
-            <DialogTitle>Review Creative Plan</DialogTitle>
-            <DialogDescription>
-              {pendingPlan.note || "Please review the planned deliverables and estimated cost before proceeding with billable generation."}
-            </DialogDescription>
-            <div className="mt-4 space-y-4 text-sm">
-              <div className="flex justify-between items-center py-2 border-b border-line">
-                <span className="text-muted">Plan ID</span>
-                <span className="font-mono text-xs">{pendingPlan.planId}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-line">
-                <span className="text-muted">Scope & Autonomy</span>
-                <span className="font-medium">{pendingPlan.plan?.scope || "auto_choose"} · {pendingPlan.plan?.autonomy || "semi_automatic"}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-line">
-                <span className="text-muted">Estimated Cost</span>
-                <span className="font-bold text-accent">${(pendingPlan.estimatedCostUsd ?? pendingPlan.plan?.estimatedCost?.totalEstimatedUsd ?? 0).toFixed(2)} USD</span>
-              </div>
-              <div>
-                <h4 className="font-semibold mb-2">Planned Deliverables ({pendingPlan.plan?.deliverables?.length ?? 0})</h4>
-                <ul className="space-y-2 max-h-48 overflow-y-auto">
-                  {pendingPlan.plan?.deliverables?.map((deliv: any, idx: number) => (
-                    <li key={deliv.id || idx} className="rounded border border-line p-2 text-xs flex justify-between items-center">
-                      <div>
-                        <span className="font-semibold uppercase text-brass mr-2">{deliv.kind}</span>
-                        <span>{deliv.title || `Deliverable ${idx + 1}`}</span>
-                      </div>
-                      <span className="text-muted">{deliv.provider} · {deliv.aspectRatio || "9:16"}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="flex justify-end gap-3 pt-4 border-t border-line">
-                <Button
-                  type="button"
-                  variant="quiet"
-                  disabled={rejectPlan.isPending || approvePlan.isPending}
-                  onClick={() => void handleRejectPlan()}
-                >
-                  Reject Plan
-                </Button>
-                <Button
-                  type="button"
-                  disabled={approvePlan.isPending || rejectPlan.isPending}
-                  onClick={() => void handleApprovePlan()}
-                >
-                  {approvePlan.isPending ? "Executing…" : "Approve & Generate"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      ) : null}
+      <PlanDialog
+        plan={actions.pendingPlan}
+        approving={actions.approvePlan.isPending}
+        rejecting={actions.rejectPlan.isPending}
+        onApprove={() => void handleApprovePlan()}
+        onReject={(reason) => void handleRejectPlan(reason)}
+        onClose={() => actions.setPendingPlan(null)}
+      />
     </div>
   );
 }
