@@ -3,6 +3,8 @@
  * finite number is shown as "unknown", never as zero.
  */
 
+import { decisionOutcome } from "../../lib/copy.ts";
+
 export type EvidenceRow = {
   id: string;
   decision: string;
@@ -15,12 +17,9 @@ export function formatUnitInterval(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "unknown";
 }
 
-/** The decision as a sentence a reviewer can read. The stored code is kept in the table beside it. */
+/** The decision as a sentence a reviewer can read. The stored code is kept under Details beside it. */
 export function decisionPlainLabel(decision: string): string {
-  if (decision === "AUTO_APPROVE") return "Auto-approved";
-  if (decision === "HUMAN_REVIEW") return "Needs a person";
-  if (decision === "REJECT") return "Rejected";
-  return decision ? decision.replaceAll("_", " ").toLowerCase() : "No decision stored";
+  return decisionOutcome(decision);
 }
 
 /**
@@ -28,7 +27,7 @@ export function decisionPlainLabel(decision: string): string {
  * says so, and it does not supply a verdict.
  */
 export function summarizeEvidence(rows: readonly EvidenceRow[]): string {
-  if (rows.length === 0) return "No JEV row is stored for this variant, so there is no evidence to show.";
+  if (rows.length === 0) return "No decision record is stored for this variant, so there is no evidence to show.";
   const auto = rows.filter((row) => row.decision === "AUTO_APPROVE").length;
   const human = rows.filter((row) => row.decision === "HUMAN_REVIEW").length;
   const rejected = rows.filter((row) => row.decision === "REJECT").length;

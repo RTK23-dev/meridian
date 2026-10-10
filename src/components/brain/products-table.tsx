@@ -1,6 +1,10 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { useState } from "react";
-import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, Button, DataTable, Notice, errorText } from "@/components/ui";
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle,
+  Button, DataTable,
+} from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 import { deleteProduct, type ProductRow } from "@/lib/meridian/api";
 import { useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
@@ -58,7 +62,7 @@ export function ProductsTable({ brandId, products, canEdit, onEdit }: {
         <AlertDialogDescription id="delete-product-description" className="mt-2 text-sm text-fg-muted">
           This hides the product from this brand's product list.
         </AlertDialogDescription>
-        {deleteMutation.error ? <div className="mt-4"><Notice>{errorText(deleteMutation.error)}</Notice></div> : null}
+        {deleteMutation.error ? <div className="mt-4"><PlainErrorNotice error={deleteMutation.error} /></div> : null}
         <div className="mt-6 flex flex-wrap justify-end gap-2">
           <AlertDialogCancel asChild><Button type="button" variant="secondary">Cancel</Button></AlertDialogCancel>
           <Button

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger, errorText } from "@/components/ui";
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { plainError } from "@/lib/copy";
 import {
   DEFAULT_GRADING_THRESHOLDS,
   DEFAULT_PROMPTS,
@@ -18,6 +19,7 @@ import { VolumeEnginePanel } from "./volume-engine-panel";
 import { GradingPanel } from "./grading-panel";
 import { PromptsPanel } from "./prompts-panel";
 import { PresetBar } from "./preset-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import {
   PRESET_LABEL,
   PROMPT_MAX_LENGTH,
@@ -116,7 +118,7 @@ export function PipelineEditor({
       setDraft(getPresetConfig(key));
       setFeedback({ tone: "success", message: `${PRESET_LABEL[key]} is saved to this brand. Factory runs do not read it yet.` });
     } catch (error) {
-      setFeedback({ tone: "error", message: errorText(error) });
+      setFeedback({ tone: "error", message: plainError(error).message, detail: plainError(error).raw });
     } finally {
       setBusy(null);
     }
@@ -131,7 +133,7 @@ export function PipelineEditor({
       refreshSaved();
       setFeedback({ tone: "success", message: "Saved to this brand. Factory runs do not read these settings yet." });
     } catch (error) {
-      setFeedback({ tone: "error", message: errorText(error) });
+      setFeedback({ tone: "error", message: plainError(error).message, detail: plainError(error).raw });
     } finally {
       setBusy(null);
     }
@@ -157,6 +159,8 @@ export function PipelineEditor({
 
   return (
     <section aria-labelledby="factory-pipeline-settings" className="space-y-6">
+      {/* The draft is work until Save pipeline stores it, so leaving the screen with edits asks first. */}
+      <UnsavedChangesGuard dirty={dirty} />
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-widest text-brass">Factory line</p>
         <h2 id="factory-pipeline-settings" className="font-display text-2xl text-fg">Pipeline settings</h2>

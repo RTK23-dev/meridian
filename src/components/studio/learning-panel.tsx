@@ -1,5 +1,7 @@
 import { Suspense, lazy } from "react";
-import { Button, Panel } from "@/components/ui";
+import { InfoTip } from "@/components/glossary";
+import { Button, ChartSkeleton, Card } from "@/components/ui";
+import { copy } from "@/lib/copy";
 import { learningRows } from "./learning-rows.ts";
 import type { StudioPattern, StudioPublication } from "./types.ts";
 
@@ -35,14 +37,16 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
   const { charted, unplotted } = learningRows(patterns);
   const ordered = [...charted, ...unplotted];
   return (
-    <Panel>
+    <Card>
       <h2 className="font-display text-2xl">What Meridian learned</h2>
       {patterns.length === 0 ? (
-        <p className="mt-2 text-sm text-fg-muted">No pattern has met the sample rule.</p>
+        <p className="mt-2 text-sm text-fg-muted">
+          {copy.learning.noPattern} <InfoTip label="What counts as a pattern" text={copy.learning.patternRule} />
+        </p>
       ) : (
         <div className="mt-3 space-y-4">
           {charted.length > 0 ? (
-            <Suspense fallback={<p className="text-sm text-fg-muted">Loading the chart…</p>}>
+            <Suspense fallback={<ChartSkeleton className="h-40" />}>
               <LearningBars rows={charted} />
             </Suspense>
           ) : null}
@@ -51,7 +55,7 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
             <ul className="mt-2 space-y-2 text-sm">
               {ordered.map((row) => (
                 <li key={row.key}>
-                  {row.label}: lift {Number.isFinite(row.lift) ? row.lift.toFixed(2) : "not stored"} · {row.direction} · {row.state} · n={row.sampleSize} · {row.impressions} impressions · {row.summary}
+                  {row.label}: lift {Number.isFinite(row.lift) ? row.lift.toFixed(2) : "not stored"} · {row.direction} · {row.state} · sample size {row.sampleSize} · {row.impressions} impressions · {row.summary}
                 </li>
               ))}
             </ul>
@@ -61,10 +65,10 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
       {publications.length > 0 ? (
         <ul className="mt-3 text-sm">
           {publications.map((item) => (
-            <li key={item.externalId}>Test publication · stored publisher id {item.externalId}</li>
+            <li key={item.externalId}>{copy.learning.testPublication(item.externalId)}</li>
           ))}
         </ul>
-      ) : <p className="mt-3 text-sm text-fg-muted">Nothing from this brand has a stored publisher id.</p>}
+      ) : <p className="mt-3 text-sm text-fg-muted">{copy.learning.noTestPublication}</p>}
       {organicPosts.length > 0 ? (
         <div className="mt-4 border-t border-border pt-3">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-accent">Organic social publications</h3>
@@ -93,6 +97,6 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
           </Button>
         </div>
       ) : null}
-    </Panel>
+    </Card>
   );
 }

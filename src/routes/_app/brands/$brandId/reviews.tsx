@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Group, Panel as ResizablePanel, Separator } from "react-resizable-panels";
 import { Inbox } from "lucide-react";
-import { EmptyState, ErrorState, Notice, ScreenSkeleton, errorText } from "@/components/ui";
+import { EmptyState, ScreenSkeleton } from "@/components/ui";
+import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { ReviewDetail } from "@/components/reviews/review-detail";
 import { ReviewInbox } from "@/components/reviews/review-inbox";
 import {
@@ -15,7 +16,7 @@ import {
   type ReviewDraft,
   type ReviewRow,
 } from "@/components/reviews/review-model";
-import { useMediaQuery } from "@/components/reviews/use-media-query";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { hasRole } from "@/lib/meridian/access";
 import { useResolveReview, usePendingVariables, useReviewsQuery } from "@/lib/query/hooks";
 
@@ -88,7 +89,7 @@ function Reviews({ brandId }: { brandId: string }) {
     if (selectedId) document.getElementById(`review-option-${selectedId}`)?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
 
-  if (query.isError && !data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!data) return <ScreenSkeleton label="Loading reviews" shape="rows" />;
 
   const now = new Date();
@@ -117,7 +118,7 @@ function Reviews({ brandId }: { brandId: string }) {
         <h1 className="font-display text-4xl">Holds a person has to clear</h1>
         <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject. A reject needs a reason.</p>
       </div>
-      {resolve.error ? <Notice>{errorText(resolve.error)}</Notice> : null}
+      {resolve.error ? <PlainErrorNotice error={resolve.error} /> : null}
       {open.length === 0 ? (
         confirmedEmpty ? (
           <EmptyState
@@ -146,7 +147,7 @@ function Reviews({ brandId }: { brandId: string }) {
                   <ReviewInbox items={open} selectedIndex={index} now={now} onSelect={setSelectedIndex} />
                 </div>
               </ResizablePanel>
-              <Separator aria-label="Resize the review list" className="w-2 shrink-0 rounded-full bg-border hover:bg-border-strong focus-visible:outline-2 focus-visible:outline-accent" />
+              <Separator aria-label="Resize the review list" className="relative w-2 shrink-0 rounded-full bg-border hover:bg-border-strong focus-visible:outline-2 focus-visible:outline-accent before:absolute before:inset-y-0 before:-inset-x-2 before:content-[''] pointer-coarse:before:-inset-x-[18px]" />
               <ResizablePanel defaultSize="64%" minSize="40%" className="min-w-0">
                 <div className="max-h-[75vh] overflow-y-auto pl-1">{detail}</div>
               </ResizablePanel>

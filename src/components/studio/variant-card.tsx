@@ -1,7 +1,8 @@
 import { useId } from "react";
-import { MediaPlayer } from "@/components/media-player";
+import { LazyMediaPlayer } from "@/components/lazy-media-player";
+import { PlainErrorMessage, TechnicalDetails } from "@/components/plain-error";
 import { Button } from "@/components/ui";
-import { providerLabel, statusLabel } from "@/lib/copy";
+import { copy, providerLabel, serverCodeMessage, statusLabel } from "@/lib/copy";
 import { cn } from "@/lib/cn";
 import { frameShape, frameWidthClass, type FrameShape } from "./aspect.ts";
 import { CopyButton } from "./copy-button.tsx";
@@ -69,12 +70,12 @@ export function VariantCard({ variant, position, selected, canEdit, reviewBusy, 
         <VariantStatusBadges qa={variant.qaDecision} review={reviewStatus} creative={variant.creativeStatus} />
       </div>
 
-      {variant.error && phase !== "failed" ? <p className="mt-2 text-sm text-danger">{variant.error}</p> : null}
+      {variant.error && phase !== "failed" ? <PlainErrorMessage message={serverCodeMessage(variant.error) ?? copy.studio.variantProblem} raw={variant.error} /> : null}
 
       {publisherId ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-          <span>Stored publisher id <code className="break-all font-mono text-xs">{publisherId}</code></span>
-          <CopyButton value={publisherId} label="stored publisher id" />
+          <span>{copy.studio.publisherId} <code className="break-all font-mono text-xs">{publisherId}</code></span>
+          <CopyButton value={publisherId} label={copy.studio.copyPublisherId} />
         </div>
       ) : null}
 
@@ -126,7 +127,8 @@ function VariantMedia({ variant, phase, frame, title, onOpenImage }: { variant: 
     return (
       <div className="rounded-md border border-danger/50 p-4 text-sm">
         <p className="font-semibold text-danger">Generation failed</p>
-        <p className="mt-1">{variant.error || "The provider did not return a reason."}</p>
+        <p className="mt-1">{variant.error ? (serverCodeMessage(variant.error) ?? copy.studio.generationFailed) : copy.studio.noProviderReason}</p>
+        {variant.error ? <TechnicalDetails>{variant.error}</TechnicalDetails> : null}
       </div>
     );
   }
@@ -136,13 +138,13 @@ function VariantMedia({ variant, phase, frame, title, onOpenImage }: { variant: 
   if (variant.kind === "video") {
     return (
       <div className={frameClass}>
-        <MediaPlayer assetId={variant.assetId} durationMs={variant.durationMs} width={variant.width} height={variant.height} />
+        <LazyMediaPlayer assetId={variant.assetId} durationMs={variant.durationMs} width={variant.width} height={variant.height} />
       </div>
     );
   }
   return (
     <div className={frameClass}>
-      <MediaPlayer
+      <LazyMediaPlayer
         kind="image"
         assetId={variant.assetId}
         alt={`${title}: ${variant.title || kindLabel(variant.kind)}`}

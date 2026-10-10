@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Search } from "lucide-react";
-import { Badge, Button, EmptyState, SelectInput, Skeleton, TextInput } from "@/components/ui";
+import { Badge, Button, EmptyState, SelectInput, Skeleton, Input } from "@/components/ui";
 import type { BrandSummary } from "@/lib/meridian/workspace/actions";
 import type { MachineSnapshot } from "@/lib/meridian/machine";
 import { doneCount, pipelineStages, type PipelineStage } from "@/components/brand-overview/pipeline";
@@ -31,7 +31,7 @@ export function BrandGrid({ brands, lookup, canCreate, newBrandLink }: {
           <label className="relative block">
             <span className="sr-only">Search brands</span>
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-muted" />
-            <TextInput type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search brands" className="min-h-11 pl-9" />
+            <Input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search brands" className="min-h-11 pl-9" />
           </label>
           <label className="text-xs font-medium text-fg-muted">
             Sort by

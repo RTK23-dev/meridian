@@ -1,23 +1,7 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  ErrorState,
-  KpiCard,
-  Panel,
-  ScreenSkeleton,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-  errorText,
-} from "@/components/ui";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ChartSkeleton, ErrorState, KpiCard, ScreenSkeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { plainError } from "@/lib/copy";
 import {
   useAccountIntelligenceQuery,
   useIntelligenceQuery,
@@ -26,7 +10,7 @@ import {
 } from "@/lib/query/hooks";
 import { hasRole } from "@/lib/meridian/access";
 import { ClusterCards } from "@/components/market/intelligence-clusters";
-import { TraitBarChart, traitRows } from "@/components/market/intelligence-patterns";
+import { traitRows, type TraitRow } from "@/components/market/trait-rows";
 import { WhitespaceRanking } from "@/components/market/intelligence-whitespace";
 import {
   Activity,
@@ -39,6 +23,13 @@ import {
   Volume2,
   Zap,
 } from "lucide-react";
+
+// recharts loads only when a trait chart is shown. The skeleton keeps the card's height until then.
+const TraitBarChart = lazy(() => import("@/components/market/intelligence-patterns").then((module) => ({ default: module.TraitBarChart })));
+
+function TraitChart(props: { title: string; description: string; rows: TraitRow[]; tone: "success" | "danger" }) {
+  return <Suspense fallback={<ChartSkeleton className="h-40" />}><TraitBarChart {...props} /></Suspense>;
+}
 
 export const Route = createFileRoute("/_app/brands/$brandId/intelligence")({ staticData: { pageTitle: "Intelligence" }, component: Page });
 
@@ -58,15 +49,16 @@ function Intelligence({ brandId }: { brandId: string }) {
   const accountData = accountQuery.data ?? null;
   // A failed refetch is shown only when there is nothing stored to keep showing.
   const error = baseQuery.error && !baseData
-    ? errorText(baseQuery.error)
+    ? plainError(baseQuery.error)
     : accountQuery.error && !accountData
-    ? errorText(accountQuery.error)
+    ? plainError(accountQuery.error)
     : null;
 
   if (error) {
     return (
       <ErrorState
-        message={error}
+        message={error.message}
+        detail={error.raw}
         onRetry={() => {
           void baseQuery.refetch();
           void accountQuery.refetch();
@@ -201,13 +193,13 @@ function Intelligence({ brandId }: { brandId: string }) {
                       <p className="text-sm text-muted">More post volume needed for decile statistical separation.</p>
                     ) : (
                       <>
-                        <TraitBarChart
+                        <TraitChart
                           title="Winning patterns (top decile)"
                           description="Counts of posts in the top decile that carry each trait."
                           rows={traitRows(profile.topDecileTraits)}
                           tone="success"
                         />
-                        <TraitBarChart
+                        <TraitChart
                           title="Underperforming patterns (bottom decile)"
                           description="Counts of posts in the bottom decile that carry each trait."
                           rows={traitRows(profile.bottomDecileTraits)}
@@ -278,11 +270,11 @@ function Intelligence({ brandId }: { brandId: string }) {
                 </div>
 
                 {analyses.length === 0 ? (
-                  <Panel>
+                  <Card>
                     <p className="text-sm text-muted">
                       No individual post analyses stored yet. Connect an account in the Accounts tab to ingest content.
                     </p>
-                  </Panel>
+                  </Card>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {analyses.map((item) => (
@@ -339,7 +331,7 @@ function Intelligence({ brandId }: { brandId: string }) {
               </div>
             </>
           ) : (
-            <Panel className="space-y-3 py-8 text-center">
+            <Card className="space-y-3 py-8 text-center">
               <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
               <h3 className="font-display text-lg font-semibold">No profile for {platform}</h3>
               <p className="mx-auto max-w-md text-sm text-muted">
@@ -352,7 +344,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                   </Link>
                 </Button>
               </div>
-            </Panel>
+            </Card>
           )}
         </TabsContent>
 
@@ -368,13 +360,13 @@ function Intelligence({ brandId }: { brandId: string }) {
           </div>
 
           {whitespace.length === 0 ? (
-            <Panel className="py-8 text-center">
+            <Card className="py-8 text-center">
               <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
               <h3 className="mt-3 font-display text-lg font-semibold">No whitespace opportunities detected</h3>
               <p className="mt-1 text-sm text-muted">
                 As market evidence and competitor campaigns are collected, JEV automatically flags high-probability gaps.
               </p>
-            </Panel>
+            </Card>
           ) : (
             <WhitespaceRanking
               items={whitespace}
@@ -396,27 +388,27 @@ function Intelligence({ brandId }: { brandId: string }) {
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <Panel>
+            <Card>
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">Competitor rows</p>
               <p className="mt-2 font-display text-3xl">{baseData.competitorCount}</p>
-            </Panel>
-            <Panel>
+            </Card>
+            <Card>
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">This brand</p>
               <p className="mt-2 font-display text-3xl">{baseData.ownCount}</p>
-            </Panel>
-            <Panel>
+            </Card>
+            <Card>
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">Angle Gaps</p>
               <p className="mt-2 text-sm">
                 {baseData.whitespace.length === 0
                   ? "No competitor angle is missing from this brand."
                   : baseData.whitespace.join(", ")}
               </p>
-            </Panel>
+            </Card>
           </div>
 
           <ClusterCards angleClusters={baseData.angleClusters} semanticClusters={baseData.semanticClusters} />
 
-          <Panel>
+          <Card>
             <h3 className="font-display text-lg font-semibold">System Notices</h3>
             {baseData.notifications.length === 0 ? (
               <p className="mt-2 text-muted text-sm">No notices yet.</p>
@@ -430,7 +422,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

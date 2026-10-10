@@ -92,7 +92,7 @@ export function pipelineStages(input: PipelineInput): PipelineStage[] {
     { key: "opportunity", label: "Opportunity", to: OPPORTUNITIES, count: counts.openOpportunities, unit: "open", done: counts.openOpportunities > 0, after: "research", waiting: false, started: false },
     { key: "decision", label: "Decision", to: OPPORTUNITIES, count: null, unit: "", done: counts.creatives > 0 || operating.generationRuns > 0, after: "opportunity", waiting: false, started: counts.openOpportunities > 0 },
     { key: "brief", label: "Brief", to: STUDIO, count: null, unit: "", done: counts.creatives > 0, after: "decision", waiting: false, started: false },
-    { key: "studio", label: "Studio", to: STUDIO, count: operating.generationRuns, unit: "runs", done: operating.generationRuns > 0, after: "brief", waiting: false, started: false },
+    { key: "studio", label: "Studio", to: STUDIO, count: operating.generationRuns, unit: "generations", done: operating.generationRuns > 0, after: "brief", waiting: false, started: false },
     { key: "review", label: "Review", to: REVIEWS, count: counts.reviews, unit: "open", done: decided > 0, after: "studio", waiting: counts.reviews > 0, started: false },
     { key: "publish", label: "Publish", to: STUDIO, count: operating.publishedTests, unit: "ads", done: operating.publishedTests > 0, after: "review", waiting: false, started: false },
     { key: "performance", label: "Performance", to: LEARNING, count: counts.performanceRows, unit: "rows", done: counts.performanceRows > 0, after: "publish", waiting: false, started: false },

@@ -2,14 +2,15 @@ import { createContext, useCallback, useContext, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { bootstrap, type Bootstrap } from "@/lib/meridian/api";
-import { errorText } from "@/components/ui";
+import { plainError, type PlainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
 import { isForbiddenError } from "@/lib/navigation/model";
 
 type WorkspaceState = {
   data: Bootstrap | null;
   loading: boolean;
-  error: string | null;
+  /** A plain sentence for a failed bootstrap, with the raw text for Details. */
+  error: PlainError | null;
   /** True when the bootstrap was refused for permission reasons. The layout shows the forbidden page instead of a retry. */
   forbidden: boolean;
   reload: () => Promise<void>;
@@ -34,7 +35,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       // Query state retains the normalized error for the existing context API.
     }
   }, [isPending, queryClient, userId]);
-  const error = query.error ? errorText(query.error) : null;
+  const error = query.error ? plainError(query.error) : null;
   const forbidden = query.error ? isForbiddenError(query.error) : false;
 
   return (

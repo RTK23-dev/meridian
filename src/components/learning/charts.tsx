@@ -1,10 +1,15 @@
-import type { ReactNode } from "react";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { lazy, Suspense, type ReactNode } from "react";
+import { ChartSkeleton } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { NOT_ENOUGH_RESULTS } from "./metrics";
+import type { ChartPlotProps } from "./chart-plots";
 
-const tooltipStyle = { background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, color: "var(--color-fg)", fontSize: 12 };
+export type { ChartDatum } from "./chart-plots";
+
 const plotClass = "h-56 w-full text-accent [&_.recharts-cartesian-axis-tick-value]:fill-fg-muted [&_line]:stroke-border";
+
+// recharts is in chart-plots.tsx and loads with the first plot. The skeleton fills the plot's box until then.
+const ValueBarPlot = lazy(() => import("./chart-plots").then((module) => ({ default: module.ValueBarPlot })));
+const ValueLinePlot = lazy(() => import("./chart-plots").then((module) => ({ default: module.ValueLinePlot })));
 
 /**
  * A chart with a text alternative. The plot is labelled with a summary sentence, and the table beside it
@@ -45,30 +50,12 @@ export function ValueTable({ caption, headers, rows }: { caption: string; header
   </table>;
 }
 
-export type ChartDatum = { label: string; value: number | null };
-
-/** Bars with a null value are left out of the plot, not drawn at zero. */
-export function ValueBarChart({ data, name, format }: { data: ChartDatum[]; name: string; format: (value: number) => string }) {
-  return <ResponsiveContainer width="100%" height="100%">
-    <BarChart data={data} margin={{ left: 0, right: 8, top: 8, bottom: 40 }}>
-      <CartesianGrid strokeDasharray="3 3" />
-      <XAxis dataKey="label" interval={0} angle={-24} textAnchor="end" height={64} tick={{ fontSize: 11 }} />
-      <YAxis tickFormatter={(value: number) => format(value)} width={64} />
-      <Tooltip contentStyle={tooltipStyle} formatter={(value) => (typeof value === "number" ? format(value) : NOT_ENOUGH_RESULTS)} />
-      <Bar dataKey="value" name={name} fill="currentColor" radius={[4, 4, 0, 0]} />
-    </BarChart>
-  </ResponsiveContainer>;
+/** Bars for one chart. A null value is left out of the plot, not drawn at zero. */
+export function ValueBarChart(props: ChartPlotProps) {
+  return <Suspense fallback={<ChartSkeleton />}><ValueBarPlot {...props} /></Suspense>;
 }
 
-/** The line breaks at a null value, so a day with no impressions reads as a gap. */
-export function ValueLineChart({ data, name, format }: { data: ChartDatum[]; name: string; format: (value: number) => string }) {
-  return <ResponsiveContainer width="100%" height="100%">
-    <LineChart data={data} margin={{ left: 0, right: 8, top: 8, bottom: 8 }}>
-      <CartesianGrid strokeDasharray="3 3" />
-      <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={24} />
-      <YAxis tickFormatter={(value: number) => format(value)} width={64} />
-      <Tooltip contentStyle={tooltipStyle} formatter={(value) => (typeof value === "number" ? format(value) : NOT_ENOUGH_RESULTS)} />
-      <Line dataKey="value" name={name} stroke="currentColor" strokeWidth={2} dot connectNulls={false} isAnimationActive={false} />
-    </LineChart>
-  </ResponsiveContainer>;
+/** A line for one chart. A null value breaks the line. */
+export function ValueLineChart(props: ChartPlotProps) {
+  return <Suspense fallback={<ChartSkeleton />}><ValueLinePlot {...props} /></Suspense>;
 }

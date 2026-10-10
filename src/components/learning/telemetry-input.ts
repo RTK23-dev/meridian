@@ -1,22 +1,9 @@
 /**
- * Turns the manual telemetry form's text fields into the payload recordTelemetryAction expects.
- * A blank optional field is left out (the server stores it as unknown), never sent as 0.
- * Required fields and the platform must be present. Validation is the same as before, except that
- * blank optional numbers are no longer coerced to 0.
+ * The manual telemetry form's rules and its payload. Numbers are read the way recordTelemetryAction reads them: a blank
+ * optional field is left out (the server stores it as unknown, never as 0), and any other value must be a finite number
+ * under Number(). Required fields and the platform must be present.
  */
-
-export type TelemetryFormFields = {
-  platform: string;
-  sourceType: "organic" | "paid" | "hybrid";
-  creativeId: string;
-  views: string;
-  hookRetention3s: string;
-  completionRate: string;
-  engagements: string;
-  shares: string;
-  hookType: string;
-  angle: string;
-};
+import { z } from "zod";
 
 export type TelemetryPayload = {
   platform: string;
@@ -31,49 +18,46 @@ export type TelemetryPayload = {
   angle?: string;
 };
 
-export type TelemetryParse = { ok: true; payload: TelemetryPayload } | { ok: false; message: string };
+/** A required number. Blank is "required"; anything else must be a finite number under Number(). */
+const requiredNumber = (label: string) => z.string().trim()
+  .min(1, `${label} is required.`)
+  .refine((value) => Number.isFinite(Number(value)), `${label} must be a number.`);
 
-function optionalNumber(text: string, label: string): { ok: true; value: number | undefined } | { ok: false; message: string } {
+/** An optional number. Blank is allowed and is left out of the payload. */
+const optionalNumber = (label: string) => z.string().trim()
+  .refine((value) => value === "" || Number.isFinite(Number(value)), `${label} must be a number.`);
+
+export const telemetryFormSchema = z.object({
+  platform: z.string().trim().min(1, "Choose a platform."),
+  sourceType: z.enum(["organic", "paid", "hybrid"]),
+  creativeId: z.string().trim(),
+  views: requiredNumber("Views"),
+  hookRetention3s: requiredNumber("3s hook retention"),
+  completionRate: optionalNumber("Completion rate"),
+  engagements: optionalNumber("Engagements"),
+  shares: optionalNumber("Shares"),
+  hookType: z.string().trim(),
+  angle: z.string().trim(),
+});
+
+export type TelemetryFormFields = z.input<typeof telemetryFormSchema>;
+
+function numberOrUndefined(text: string): number | undefined {
   const trimmed = text.trim();
-  if (trimmed === "") return { ok: true, value: undefined };
-  const value = Number(trimmed);
-  if (!Number.isFinite(value)) return { ok: false, message: `${label} must be a number.` };
-  return { ok: true, value };
+  return trimmed === "" ? undefined : Number(trimmed);
 }
 
-function requiredNumber(text: string, label: string): { ok: true; value: number } | { ok: false; message: string } {
-  const trimmed = text.trim();
-  if (trimmed === "") return { ok: false, message: `${label} is required.` };
-  const value = Number(trimmed);
-  if (!Number.isFinite(value)) return { ok: false, message: `${label} must be a number.` };
-  return { ok: true, value };
-}
-
-export function parseTelemetryForm(fields: TelemetryFormFields): TelemetryParse {
-  if (!fields.platform.trim()) return { ok: false, message: "Choose a platform." };
-  const views = requiredNumber(fields.views, "Views");
-  if (!views.ok) return views;
-  const hookRetention = requiredNumber(fields.hookRetention3s, "3s hook retention");
-  if (!hookRetention.ok) return hookRetention;
-  const completion = optionalNumber(fields.completionRate, "Completion rate");
-  if (!completion.ok) return completion;
-  const engagements = optionalNumber(fields.engagements, "Engagements");
-  if (!engagements.ok) return engagements;
-  const shares = optionalNumber(fields.shares, "Shares");
-  if (!shares.ok) return shares;
+export function telemetryPayload(values: TelemetryFormFields): TelemetryPayload {
   return {
-    ok: true,
-    payload: {
-      platform: fields.platform.trim(),
-      sourceType: fields.sourceType,
-      creativeId: fields.creativeId.trim() || undefined,
-      views: views.value,
-      hookRetention3s: hookRetention.value,
-      completionRate: completion.value,
-      engagements: engagements.value,
-      shares: shares.value,
-      hookType: fields.hookType.trim() || undefined,
-      angle: fields.angle.trim() || undefined,
-    },
+    platform: values.platform.trim(),
+    sourceType: values.sourceType,
+    creativeId: values.creativeId.trim() || undefined,
+    views: Number(values.views.trim()),
+    hookRetention3s: Number(values.hookRetention3s.trim()),
+    completionRate: numberOrUndefined(values.completionRate),
+    engagements: numberOrUndefined(values.engagements),
+    shares: numberOrUndefined(values.shares),
+    hookType: values.hookType.trim() || undefined,
+    angle: values.angle.trim() || undefined,
   };
 }

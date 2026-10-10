@@ -1,7 +1,9 @@
 /**
- * Pure rules for the opportunities screen. This module imports nothing, so the same rules can run under
- * `node --experimental-strip-types`. A missing value stays `null`: it is never shown as zero and never sorts as zero.
+ * Pure rules for the opportunities screen. It imports only the copy module, which imports nothing, so the same rules can run
+ * under `node --experimental-strip-types`. A missing value stays `null`: it is never shown as zero and never sorts as zero.
  */
+
+import { decisionOutcome, percentOrUnknown } from "../../lib/copy.ts";
 
 export type OpportunityCategory = "discovered" | "supported" | "hypothesis";
 export type OpportunitySortKey = "rank" | "confidence" | "status" | "risk" | "probability";
@@ -38,9 +40,9 @@ export type OpportunityRow = {
 };
 
 export const CATEGORY_LEGEND: ReadonlyArray<{ key: OpportunityCategory; label: string; description: string }> = [
-  { key: "discovered", label: "Discovered", description: "Found in stored competitor rows. It did not come from the prior list." },
-  { key: "supported", label: "Supported", description: "A prior that stored competitor observations or learned performance patterns back." },
-  { key: "hypothesis", label: "Prior", description: "A starting hypothesis with no stored observation or performance pattern behind it. Test it. Do not treat it as a finding." },
+  { key: "discovered", label: "Discovered", description: "Found in stored competitor rows. It did not come from the list of starting ideas." },
+  { key: "supported", label: "Supported", description: "A starting idea that stored competitor observations or learned performance patterns back." },
+  { key: "hypothesis", label: "Idea to test", description: "A starting idea with no stored observation or performance pattern behind it. Test it. Do not treat it as a finding." },
 ];
 
 export function categoryLabel(category: string): string {
@@ -57,19 +59,9 @@ export function jevProbability(item: Pick<OpportunityRow, "decision" | "probabil
   return item.decision ? finiteOrNull(item.probability) : null;
 }
 
+/** The decision in words. The stored code stays on the row and is shown under Details by the screen. */
 export function jevDecisionLabel(decision: string): string {
-  switch (decision) {
-    case "AUTO_APPROVE":
-      return "Auto-approved";
-    case "HUMAN_REVIEW":
-      return "Needs human review";
-    case "REJECT":
-      return "Rejected by JEV";
-    case "":
-      return "No JEV decision stored";
-    default:
-      return decision;
-  }
+  return decisionOutcome(decision);
 }
 
 /** The server reports a hold as a human-review decision on an open opportunity. */
@@ -168,7 +160,7 @@ export function scoreDimensions(item: Pick<OpportunityRow, ScoreKey>): ScoreDime
 /** A plain sentence that gives the same numbers the radar draws, for screen readers and for the chart's label. */
 export function scoreSummary(dimensions: readonly ScoreDimension[]): string {
   const parts = dimensions.map((dimension) => `${dimension.label} ${dimension.value === null ? "unknown" : dimension.value.toFixed(2)}`);
-  return `Score parts: ${parts.join(", ")}. Parts that add raise the rank, parts that subtract lower it. Weights are not shown here.`;
+  return `Rank parts: ${parts.join(", ")}. Parts that add raise the rank, parts that subtract lower it. Weights are not shown here.`;
 }
 
 /**
@@ -179,14 +171,14 @@ export function whyNotFacts(item: OpportunityRow): string[] {
   const facts: string[] = [];
   const probability = jevProbability(item);
   if (isHeld(item)) {
-    const decided = probability === null ? "no probability is stored" : `probability ${probability.toFixed(2)}`;
-    facts.push(`On hold: JEV returned human review, ${decided}. A person must clear it under Reviews before a brief can be built.`);
+    const decided = probability === null ? "Its probability is unknown." : `Its probability is ${percentOrUnknown(probability)}.`;
+    facts.push(`On hold: the decision engine asked for a person to review it. ${decided} A person must clear it under Reviews before a brief can be built.`);
   }
-  if (item.status === "rejected") facts.push("JEV rejected this candidate when it was scored.");
+  if (item.status === "rejected") facts.push("The decision engine rejected this candidate when it was ranked.");
   if (item.status === "dismissed") facts.push("A person dismissed this opportunity.");
-  if (!item.decision) facts.push("No JEV decision is stored for this candidate, so its probability is unknown.");
+  if (!item.decision) facts.push("No decision yet for this candidate, so its probability is unknown.");
   if (item.evidenceBasis === "none" || item.evidenceBasis === "brand_only") {
-    facts.push("Prior only: no stored competitor observation or performance pattern backs this angle.");
+    facts.push("Idea to test only: no stored competitor observation or performance pattern backs this angle.");
   }
   const saturation = finiteOrNull(item.saturation);
   if (saturation !== null && saturation > 0) facts.push(`Saturation ${saturation.toFixed(2)} lowers the rank.`);

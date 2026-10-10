@@ -1,6 +1,8 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Card, ScreenSkeleton, SelectInput } from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
+import { copy, plainError } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import { refreshOpportunities } from "@/lib/meridian/machine";
 import { useDismissOpportunities, useOpportunitiesQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
@@ -67,15 +69,18 @@ function Opportunities({ brandId }: { brandId: string }) {
     mutationFn: () => refreshOpportunities({ data: { brandId } }),
     // Scoring replaces the open cards, which also moves the brand overview counts and the studio recommendation.
     invalidate: () => [qk.opportunities(brandId), qk.machine(brandId), qk.studio(brandId)],
-    onSuccess: (result) => setNote(`${result.count} candidates scored. Priors stay labeled as priors. An angle is added only when stored observations or a learned pattern contain it.`),
+    onSuccess: (result) => setNote(copy.opportunities.rankedNote(result.count)),
   });
   const dismiss = useDismissOpportunities(brandId);
   const dismissingIds = usePendingVariables<string[]>(["mutation", "opportunity.dismiss", brandId]).flat();
   const canEdit = hasRole(role, "member");
   // The palette runs the same scoring mutation as the button, and only for roles that see the button.
-  usePageCommands(canEdit ? [{ id: "score-opportunities", label: "Score from evidence", run: () => { void refresh.mutateAsync().catch(() => undefined); } }] : []);
+  usePageCommands(canEdit ? [{ id: "score-opportunities", label: copy.opportunities.rankAction, run: () => { void refresh.mutateAsync().catch(() => undefined); } }] : []);
 
-  if (query.isError && !rows) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !rows) {
+    const failure = plainError(query.error);
+    return <ErrorState message={failure.message} detail={failure.raw} onRetry={() => void query.refetch()} />;
+  }
   if (!rows) return <ScreenSkeleton label="Loading opportunities" shape="cards" />;
 
   const positions = rankPositions(rows);
@@ -129,7 +134,7 @@ function Opportunities({ brandId }: { brandId: string }) {
           <p className="text-sm font-semibold uppercase tracking-widest text-brass">Opportunities</p>
           <h1 className="font-display text-4xl">What to make next</h1>
           <p className="text-muted">
-            Each card is ranked from stored evidence. A hypothesis is not a market finding. Refresh replaces open cards. Accepted work is kept.
+            {copy.opportunities.intro}
             Make image and video variants in <Link className="font-semibold" to="/brands/$brandId/studio" params={{ brandId }}>Studio</Link>, not from a script form.
           </p>
         </div>
@@ -140,16 +145,16 @@ function Opportunities({ brandId }: { brandId: string }) {
               void refresh.mutateAsync().catch(() => undefined);
             }}
           >
-            {refresh.isPending ? "Scoring…" : "Score from evidence"}
+            {refresh.isPending ? copy.opportunities.rankingAction : copy.opportunities.rankAction}
           </Button>
         ) : null}
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
-      {refresh.error ? <Notice>{errorText(refresh.error)}</Notice> : null}
-      {dismiss.error ? <Notice>{errorText(dismiss.error)}</Notice> : null}
+      {refresh.error ? <PlainErrorNotice error={refresh.error} /> : null}
+      {dismiss.error ? <PlainErrorNotice error={dismiss.error} /> : null}
       {hasHold ? <HoldBanner brandId={brandId} /> : null}
       {rows.length === 0 ? (
-        <Panel>Nothing has been scored. Scoring uses the brand brain, stored observations, and learned patterns. It does not invent competitors.</Panel>
+        <Card>{copy.opportunities.empty}</Card>
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -167,10 +172,10 @@ function Opportunities({ brandId }: { brandId: string }) {
             <p className="text-sm text-muted" aria-live="polite">{visibleRows.length} of {rows.length} opportunities</p>
           </div>
           {visibleRows.length === 0 ? (
-            <Panel className="flex flex-wrap items-center justify-between gap-3">
+            <Card className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-muted">No opportunities match these filters.</p>
               <Button type="button" variant="secondary" onClick={() => { setCategory("all"); setStatusFilter("all"); }}>Clear filters</Button>
-            </Panel>
+            </Card>
           ) : (
             <OpportunityTable
               rows={visibleRows}

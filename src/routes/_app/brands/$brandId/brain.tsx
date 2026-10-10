@@ -1,15 +1,25 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { FieldErrors, UseFormRegister } from "react-hook-form";
 import { useForm } from "react-hook-form";
-import { Button, Card, ErrorState, Field, Notice, ScreenSkeleton, SelectInput, TextArea, errorText } from "@/components/ui";
+import { useQueryClient } from "@tanstack/react-query";
+import { Button, Card, Field, ScreenSkeleton, SelectInput, Textarea } from "@/components/ui";
+import { PlainErrorMessage, PlainErrorState } from "@/components/plain-error";
+import { plainError } from "@/lib/copy";
 import { useWorkspace } from "@/components/workspace";
 import { BrainMiniNav, type MiniNavItem } from "@/components/brain/brain-mini-nav";
 import { BRAIN_SECTIONS, sectionAnchor, sectionProgress, type BrainSectionId } from "@/components/brain/brain-sections";
 import { CompletenessRing } from "@/components/brain/completeness-ring";
 import { LogoUploader } from "@/components/brain/logo-uploader";
 import { SourceMaterial } from "@/components/brain/source-material";
+import { AutosaveIndicator } from "@/components/brain/autosave-status";
+import { brainChanged } from "@/components/brain/brain-autosave";
+import { useBrainAutosave } from "@/components/brain/use-brain-autosave";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { hasRole } from "@/lib/meridian/access";
 import { saveBrain } from "@/lib/meridian/api";
 import {
@@ -24,7 +34,7 @@ import {
 } from "@/lib/meridian/brain";
 import { brainValuesSchema, type BrainFieldsInput } from "@/lib/meridian/schemas/brain";
 import { useBrandQuery, useScopedMutation } from "@/lib/query/hooks";
-import { qk } from "@/lib/query/keys";
+import { qk, userScopedQueryKey } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/_app/brands/$brandId/brain")({ staticData: { pageTitle: "Brand brain" }, component: BrainPage });
 
@@ -46,14 +56,41 @@ type FormShared = {
 function BrainEditor({ brandId }: { brandId: string }) {
   const query = useBrandQuery(brandId);
   const detail = query.data ?? null;
+  const canEdit = detail ? hasRole(detail.identity.role, "member") : false;
+  const queryClient = useQueryClient();
+  const { user } = useCurrentUserState();
   const [discardRequested, setDiscardRequested] = useState(false);
-  const { register, handleSubmit, reset, watch, formState: { errors, isDirty, isSubmitting } } = useForm<BrainFieldsInput>({
+  const [formReady, setFormReady] = useState(false);
+  const { register, handleSubmit, reset, trigger, getValues, watch, formState: { errors, isSubmitting } } = useForm<BrainFieldsInput>({
     resolver: zodResolver(brainValuesSchema),
     defaultValues: emptyBrain(),
     mode: "onBlur",
   });
   const brain = watch();
   const { reload } = useWorkspace();
+  const serverSaved = detail?.brain ?? null;
+  const autosave = useBrainAutosave({
+    canEdit,
+    serverSaved,
+    watchKey: JSON.stringify(brain),
+    readForm: () => getValues(),
+    // Autosave writes through the same call as the Save button. Only the refresh differs: it does not show a toast.
+    persist: async (values) => {
+      await saveBrain({ data: { brandId, ...values } });
+      await queryClient.invalidateQueries({ queryKey: userScopedQueryKey(user?.id ?? null, qk.brand(brandId)) });
+      void reload();
+    },
+    onRejected: () => { void trigger(); },
+  });
+  const saved = autosave.saved;
+  const [pasteDirty, setPasteDirty] = useState(false);
+  // Compared the way Save reads the fields, so a stray space is not a change. Before the saved brain loads, nothing is dirty.
+  const dirty = formReady && saved !== null && brainChanged(brain, saved);
+  // The brain's own fields and the pasted text share one guard, so a person is asked once.
+  const dirtyRef = useRef(dirty);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  });
   const saveBrainMutation = useScopedMutation({
     mutationKey: ["mutation", "brain.save", brandId],
     mutationFn: (values: BrainValues) => saveBrain({ data: { brandId, ...values } }),
@@ -63,47 +100,48 @@ function BrainEditor({ brandId }: { brandId: string }) {
     onSuccess: () => reload(),
   });
   const pending = saveBrainMutation.isPending;
-  const saveError = saveBrainMutation.error ? errorText(saveBrainMutation.error) : null;
+  const saveError = saveBrainMutation.error ? plainError(saveBrainMutation.error) : null;
 
+  // A fresh server copy replaces the form, unless the person has edits in progress. Those are kept.
   useEffect(() => {
-    if (detail && !isDirty) reset(detail.brain);
-  }, [detail, isDirty, reset]);
+    if (!detail || dirtyRef.current) return;
+    reset(detail.brain);
+    setFormReady(true);
+  }, [detail, reset]);
 
-  useEffect(() => {
-    if (!isDirty) return;
-    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", warnBeforeLeave);
-    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
-  }, [isDirty]);
-
-  if (query.isError && !detail) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !detail) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!detail) return <ScreenSkeleton label="Loading brand brain" shape="form" />;
-  const canEdit = hasRole(detail.identity.role, "member");
   const completeness = brainCompleteness(brain);
+  // Ctrl or Cmd + Enter saves only from a brain text field, not from the paste box. Leaving a brain field saves it at once.
   const shared: FormShared = { register, errors, values: brain, provenance: detail.provenance, canEdit };
   const navItems: MiniNavItem[] = BRAIN_SECTIONS.map((section) => ({ id: section.id, label: section.label, ...sectionProgress(section.keys, brain) }));
   const sectionFor = (id: BrainSectionId) => BRAIN_SECTIONS.find((section) => section.id === id);
   const progressFor = (id: BrainSectionId) => navItems.find((item) => item.id === id);
 
   async function submit(values: BrainValues) {
-    const saved = await saveBrainMutation.mutateAsync(values).then(() => true, () => false);
-    if (saved) {
-      reset(values);
+    // The manual save waits behind any autosave in progress, so the two never overlap.
+    const ok = await autosave.saveManual(values, async () => { await saveBrainMutation.mutateAsync(values); }).then(() => true, () => false);
+    if (ok) {
+      // Text typed while the save was running stays in the form. Only the saved baseline moves.
+      reset(values, { keepValues: true });
       setDiscardRequested(false);
     }
   }
 
+  function discardChanges() {
+    if (saved) reset(saved);
+    setDiscardRequested(false);
+  }
+
   return (
     <div className="space-y-8">
+      <UnsavedChangesGuard dirty={dirty || pasteDirty} />
       <form
         onSubmit={handleSubmit(submit)}
         className="space-y-8"
-        onKeyDown={(event) => {
-          // Ctrl or Cmd + Enter saves only from a brain text field, not from the paste box.
-          if (!(event.metaKey || event.ctrlKey) || event.key !== "Enter") return;
-          if (!(event.target as HTMLElement).closest("[data-brain-field]")) return;
-          event.preventDefault();
-          event.currentTarget.requestSubmit();
+        onKeyDown={(event) => submitOnShortcut(event, "[data-brain-field]")}
+        onBlur={(event) => {
+          if ((event.target as HTMLElement).closest("[data-brain-field]")) autosave.flush();
         }}
       >
         <div className="space-y-2">
@@ -184,32 +222,25 @@ function BrainEditor({ brandId }: { brandId: string }) {
             <SectionFrame id="assets" label="Assets" progress={progressFor("assets")}>
               <FieldList keys={sectionFor("assets")?.keys ?? []} shared={shared} />
               <LogoUploader brandId={brandId} canEdit={canEdit} />
-              <SourceMaterial brandId={brandId} canEdit={canEdit} saved={detail.brain} formDirty={isDirty} />
+              <SourceMaterial brandId={brandId} canEdit={canEdit} saved={detail.brain} formDirty={dirty} onPasteDirtyChange={setPasteDirty} />
             </SectionFrame>
           </div>
         </div>
 
         <div className="sticky bottom-0 z-10 space-y-3 rounded-lg border border-border bg-surface p-4 shadow-md">
-          {saveError ? <Notice>{saveError}</Notice> : null}
+          {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
+          <UnsavedChangesBar
+            dirty={dirty}
+            subject="brain"
+            confirming={discardRequested}
+            onConfirmingChange={setDiscardRequested}
+            onDiscard={discardChanges}
+          />
           <div className="flex flex-wrap items-center justify-between gap-3">
-            {isDirty ? (
-              <p role="status" className="text-sm font-semibold">{discardRequested ? "Discard your unsaved brain changes?" : "Unsaved changes"}</p>
-            ) : (
-              <p className="text-sm text-fg-muted">No unsaved changes.</p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {isDirty ? (discardRequested ? (
-                <>
-                  <Button type="button" variant="secondary" onClick={() => setDiscardRequested(false)}>Continue editing</Button>
-                  <Button type="button" variant="danger" onClick={() => { reset(detail.brain); setDiscardRequested(false); }}>Discard changes</Button>
-                </>
-              ) : (
-                <Button type="button" variant="secondary" onClick={() => setDiscardRequested(true)}>Discard changes</Button>
-              )) : null}
-              {canEdit ? (
-                <Button type="submit" disabled={pending || isSubmitting}>{pending || isSubmitting ? "Saving…" : "Save brain"}</Button>
-              ) : null}
-            </div>
+            <AutosaveIndicator status={autosave.status} canEdit={canEdit} />
+            {canEdit ? (
+              <Button type="submit" disabled={pending || isSubmitting || autosave.status.kind === "saving"}>{pending || isSubmitting ? "Saving…" : "Save brain"}</Button>
+            ) : null}
           </div>
           {!canEdit ? <p className="text-sm text-fg-muted">You can read this brain. Changing it needs a member role.</p> : null}
         </div>
@@ -259,6 +290,6 @@ function BrainTextField({ fieldKey, shared }: { fieldKey: BrainKey; shared: Form
     hint={value.trim() && source ? provenanceLabel(source) : "Empty. Not inferred."}
     error={shared.errors[fieldKey]?.message}
   >
-    <TextArea {...shared.register(fieldKey)} data-brain-field="" disabled={!shared.canEdit} maxLength={4000} />
+    <Textarea {...shared.register(fieldKey)} data-brain-field="" disabled={!shared.canEdit} maxLength={4000} />
   </Field>;
 }

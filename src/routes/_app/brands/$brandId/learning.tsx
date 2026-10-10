@@ -1,6 +1,9 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button, ErrorState, PageHeader, ScreenSkeleton, Tabs, TabsContent, TabsList, TabsTrigger, errorText } from "@/components/ui";
+import {
+  Button, PageHeader, ScreenSkeleton, Tabs, TabsContent, TabsList, TabsTrigger,
+} from "@/components/ui";
+import { PlainErrorState } from "@/components/plain-error";
 import { PatternsPanel } from "@/components/learning/patterns-panel";
 import { PerformancePanel } from "@/components/learning/performance-panel";
 import { SchedulePanel } from "@/components/learning/schedule-panel";
@@ -30,7 +33,7 @@ function Learning({ brandId }: { brandId: string }) {
   const data = learningQuery.data ?? null;
   const [tab, setTab] = useState<LearningTab>("patterns");
 
-  if (learningQuery.isError && !data) return <ErrorState message={errorText(learningQuery.error)} onRetry={() => void learningQuery.refetch()} />;
+  if (learningQuery.isError && !data) return <PlainErrorState error={learningQuery.error} onRetry={() => void learningQuery.refetch()} />;
   if (!data) return <ScreenSkeleton label="Loading learning" shape="cards" />;
   const canEdit = hasRole(data.role, "member");
   const canAdmin = hasRole(data.role, "admin");

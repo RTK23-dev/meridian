@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, AlertDialogTrigger,
-  Button, Field, TextInput, errorText,
-} from "@/components/ui";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, AlertDialogTrigger, Button, Field, Input, errorText } from "@/components/ui";
 import { FormError } from "@/components/settings/form-error";
 import { plainServerError } from "@/components/settings/form-model";
 import { useWorkspace } from "@/components/workspace";
@@ -15,7 +15,12 @@ export function DangerZone({ brandId, brandName }: { brandId: string; brandName:
   const navigate = useNavigate();
   const { reload } = useWorkspace();
   const [open, setOpen] = useState(false);
-  const [typed, setTyped] = useState("");
+  // The typed name is checked by the same rule every time it changes, so the Delete button follows the field.
+  const confirmSchema = useMemo(() => z.object({
+    confirmName: z.string().refine((value) => value === brandName, "Type the name exactly as shown above."),
+  }), [brandName]);
+  const confirmForm = useForm<{ confirmName: string }>({ resolver: zodResolver(confirmSchema), defaultValues: { confirmName: "" }, mode: "onChange" });
+  const typed = confirmForm.watch("confirmName");
   const removeBrand = useScopedMutation({
     mutationKey: ["mutation", "brand.delete", brandId],
     mutationFn: () => deleteBrand({ data: { brandId } }),
@@ -37,7 +42,7 @@ export function DangerZone({ brandId, brandName }: { brandId: string; brandName:
         onOpenChange={(next) => {
           setOpen(next);
           if (!next) {
-            setTyped("");
+            confirmForm.reset({ confirmName: "" });
             removeBrand.reset();
           }
         }}
@@ -49,8 +54,8 @@ export function DangerZone({ brandId, brandName }: { brandId: string; brandName:
           <AlertDialogTitle>Delete {brandName}?</AlertDialogTitle>
           <AlertDialogDescription>This cannot be undone from Meridian. Type the brand name exactly to confirm.</AlertDialogDescription>
           <div className="mt-4 space-y-4">
-            <Field label={`Type “${brandName}” to confirm`} hint={matches ? "The name matches." : "Type the name exactly as shown above."}>
-              <TextInput value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete="off" />
+            <Field label={`Type “${brandName}” to confirm`} hint={matches ? "The name matches." : "Capitals and spaces count."} error={typed && !matches ? "Type the name exactly as shown above." : undefined}>
+              <Input {...confirmForm.register("confirmName")} autoComplete="off" />
             </Field>
             {rawError ? <FormError message={plainServerError(rawError, "brand")} raw={rawError} /> : null}
             <div className="flex flex-wrap justify-end gap-2">

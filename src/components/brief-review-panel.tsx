@@ -1,11 +1,26 @@
-import { useState } from "react";
-import { Button, ErrorState, Notice, Panel, Skeleton, TextArea, errorText } from "@/components/ui";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Button, ErrorState, Field, ErrorNotice, Card, Skeleton, Textarea } from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
+import { FormDiscardBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { hasRole, type Role } from "@/lib/meridian/access";
 import { reviewStudioBrief } from "@/lib/meridian/studio/actions";
 import { useBriefReviewQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 
 const MIN_REASON = 20;
+
+/** reviewStudioBrief: the reason is trimmed and cut at 4000 characters, and the acknowledgement is recorded as given. */
+const briefReviewSchema = z.object({
+  acknowledged: z.boolean().refine((value) => value, "Confirm that you have read the failure, the questions and the evidence."),
+  reason: z.string().trim()
+    .min(MIN_REASON, `Write at least ${MIN_REASON} characters.`)
+    .max(4000, "Use 4000 characters or fewer."),
+});
+
+type BriefReviewInput = z.input<typeof briefReviewSchema>;
 
 /**
  * The review of a brief the decision engine could not judge. It shows the failure, the unresolved questions, and the evidence
@@ -14,26 +29,31 @@ const MIN_REASON = 20;
  */
 export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: string; briefId: string; title: string; role: Role }) {
   const review = useBriefReviewQuery(brandId, briefId);
-  const [acknowledged, setAcknowledged] = useState(false);
-  const [reason, setReason] = useState("");
+  const blankReview: BriefReviewInput = { acknowledged: false, reason: "" };
+  const form = useForm<BriefReviewInput>({ resolver: zodResolver(briefReviewSchema), defaultValues: blankReview, mode: "onChange" });
+  const { register, formState: { errors, isDirty } } = form;
+  const acknowledged = form.watch("acknowledged");
+  const reason = form.watch("reason") ?? "";
   const decision = useScopedMutation({
     mutationKey: ["mutation", "brief-review.decide", brandId, briefId],
-    mutationFn: (action: "approve" | "reject") => reviewStudioBrief({ data: { brandId, briefId, action, reason: reason.trim(), acknowledged } }),
+    mutationFn: (vars: { action: "approve" | "reject"; reason: string; acknowledged: boolean }) => reviewStudioBrief({ data: { brandId, briefId, ...vars } }),
     invalidate: () => [qk.studio(brandId), qk.briefReview(brandId, briefId)],
-    onSuccess: () => {
-      setAcknowledged(false);
-      setReason("");
-    },
+    onSuccess: () => form.reset(blankReview),
   });
   const canReview = hasRole(role, "admin");
   const data = review.data;
+  const canDecide = !decision.isPending && acknowledged && reason.trim().length >= MIN_REASON;
 
-  function decide(action: "approve" | "reject") {
-    void decision.mutateAsync(action).catch(() => undefined);
+  async function decide(action: "approve" | "reject") {
+    // Both decisions read the same checked fields, so a decision cannot be sent with a missing tick or a short reason.
+    const valid = await form.trigger();
+    if (!valid) return;
+    const values = form.getValues();
+    await decision.mutateAsync({ action, reason: values.reason.trim(), acknowledged: values.acknowledged === true }).catch(() => undefined);
   }
 
   return (
-    <Panel className="space-y-4" aria-labelledby={`brief-review-${briefId}`}>
+    <Card className="space-y-4" aria-labelledby={`brief-review-${briefId}`}>
       <div>
         <h2 id={`brief-review-${briefId}`} className="font-display text-xl">Held for review: {title}</h2>
         <p className="mt-1 text-sm text-muted">
@@ -90,29 +110,33 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
           ) : null}
           {data.reviewable && canReview ? (
             <div className="space-y-3 border-t border-border pt-4">
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" className="mt-1" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
-                <span>I have read the failure, the unresolved questions, and the evidence above.</span>
-              </label>
-              <label className="block text-sm">
-                <span className="text-muted">Reason (at least {MIN_REASON} characters). This is recorded with your review.</span>
-                <TextArea className="mt-1" rows={3} value={reason} onChange={(event) => setReason(event.target.value)} />
-              </label>
-              {decision.error ? <Notice>{errorText(decision.error)}</Notice> : null}
+              <UnsavedChangesGuard dirty={isDirty} />
+              <div className="space-y-2">
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1" {...register("acknowledged")} />
+                  <span>I have read the failure, the unresolved questions, and the evidence above.</span>
+                </label>
+                {errors.acknowledged?.message ? <p role="alert" className="text-sm text-danger">{errors.acknowledged.message}</p> : null}
+              </div>
+              <Field label="Reason" hint={`At least ${MIN_REASON} characters. This is recorded with your review.`} error={errors.reason?.message}>
+                <Textarea rows={3} {...register("reason")} />
+              </Field>
+              <FormDiscardBar dirty={isDirty} subject="brief review" onDiscard={() => form.reset(blankReview)} />
+              {decision.error ? <PlainErrorNotice error={decision.error} /> : null}
               <div className="flex flex-wrap gap-2">
-                <Button type="button" disabled={decision.isPending || !acknowledged || reason.trim().length < MIN_REASON} onClick={() => decide("approve")}>
-                  Approve for production
+                <Button type="button" disabled={!canDecide} onClick={() => void decide("approve")}>
+                  {decision.isPending ? "Sending…" : "Approve for production"}
                 </Button>
-                <Button type="button" variant="quiet" disabled={decision.isPending || !acknowledged || reason.trim().length < MIN_REASON} onClick={() => decide("reject")}>
+                <Button type="button" variant="quiet" disabled={!canDecide} onClick={() => void decide("reject")}>
                   Reject brief
                 </Button>
               </div>
             </div>
           ) : data.reviewable ? (
-            <Notice>An admin or owner must review this brief before it can be used.</Notice>
+            <ErrorNotice>An admin or owner must review this brief before it can be used.</ErrorNotice>
           ) : null}
         </>
       ) : null}
-    </Panel>
+    </Card>
   );
 }

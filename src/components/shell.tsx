@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, BarChart3, Bell, Brain, ChevronDown, ClipboardCheck, FileClock, FlaskConical, GraduationCap, House, Layers3, Library, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, Bell, BellRing, Brain, ChevronDown, ClipboardCheck, Download, FileClock, FlaskConical, GraduationCap, House, Layers3, Library, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { hasRole } from "@/lib/meridian/access";
@@ -39,7 +39,9 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   integrations: Plug,
   settings: Settings,
   audit: FileClock,
+  exports: Download,
   webhooks: Webhook,
+  notifications: BellRing,
 };
 
 /** The shell owns the page-command registry, so screens inside it can register actions. */
@@ -210,19 +212,19 @@ function ShellChrome({ children }: { children: ReactNode }) {
         {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. */}
         <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2 sm:px-5">
           <button type="button" className="grid size-11 shrink-0 place-items-center rounded-md text-fg-muted hover:bg-surface-2 lg:hidden" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
-          <nav aria-label="Breadcrumb" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
+          <nav aria-label="Location" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
             <Link to="/" className="shrink-0 text-fg-muted hover:text-fg">Workspace</Link>
             {brand ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span className="min-w-0 max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}
             {pageTitle ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="min-w-0 truncate font-semibold text-fg">{pageTitle}</span></> : null}
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {active ? <span className="hidden text-xs uppercase tracking-wide text-fg-muted xl:inline">{active.role}</span> : null}
-            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong px-3 text-sm text-fg-muted hover:bg-surface-2" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">⌘K</kbd></button>
-            <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2">
+            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong px-3 text-sm text-fg-muted hover:bg-surface-2 pointer-coarse:h-11" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">⌘K</kbd></button>
+            <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2 pointer-coarse:size-11">
               <Bell aria-hidden="true" className="size-4" />
               {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] font-bold leading-4 text-accent-fg">{bellLabel}</span> : null}
             </Link>
-            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
+            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2 pointer-coarse:size-11">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
             <UserButton />
           </div>
         </div>

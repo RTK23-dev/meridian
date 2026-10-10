@@ -1,7 +1,9 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { CircleHelp, Minus, TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
 import { useState } from "react";
-import { Badge, Button, Card, DataTable, EmptyState, Notice, errorText } from "@/components/ui";
+import { Badge, Button, Card, DataTable, EmptyState } from "@/components/ui";
+import { PlainErrorNotice, TechnicalDetails } from "@/components/plain-error";
+import { copy, decisionOutcome, percentOrUnknown } from "@/lib/copy";
 import type { getLearning } from "@/lib/meridian/machine";
 import { refreshLearning } from "@/lib/meridian/machine";
 import { useScopedMutation } from "@/lib/query/hooks";
@@ -53,9 +55,7 @@ export function PatternsPanel({ brandId, data, canEdit }: { brandId: string; dat
     mutationFn: () => refreshLearning({ data: { brandId } }),
     // Recomputing rewrites the stored patterns, which studio and the brand overview read.
     invalidate: () => [qk.learning(brandId), qk.studio(brandId), qk.machine(brandId)],
-    onSuccess: (result) => setNote(result.patterns === 0
-      ? "No pattern met the sample rule. Queued learning jobs for this brand were still closed. Nothing was invented."
-      : `${result.patterns} pattern${result.patterns === 1 ? "" : "s"} stored. Queued learning jobs were drained. Score opportunities again to use them.`),
+    onSuccess: (result) => setNote(result.patterns === 0 ? copy.learning.noPatternStored : copy.learning.patternsStored(result.patterns)),
   });
 
   const rows: PatternRow[] = data.patterns.map((pattern) => ({
@@ -97,7 +97,7 @@ export function PatternsPanel({ brandId, data, canEdit }: { brandId: string; dat
       {canEdit ? <Button type="button" disabled={recompute.isPending} onClick={() => void recompute.mutateAsync().catch(() => undefined)}>Recompute patterns</Button> : null}
     </div>
     {note ? <p role="status" className="text-sm text-fg-muted">{note}</p> : null}
-    {recompute.error ? <Notice>{errorText(recompute.error)}</Notice> : null}
+    {recompute.error ? <PlainErrorNotice error={recompute.error} /> : null}
 
     {data.patterns.length === 0 ? (
       <EmptyState
@@ -138,8 +138,9 @@ export function PatternsPanel({ brandId, data, canEdit }: { brandId: string; dat
           <ul className="mt-3 space-y-3 text-sm">
             {data.decisions.map((item) => (
               <li key={item.id}>
-                <span className="font-semibold">{item.decision}</span> · {item.question} · {item.subject} · p {item.probability.toFixed(2)}
+                <span className="font-semibold">{decisionOutcome(item.decision)}</span> · {item.question} · {item.subject} · probability {percentOrUnknown(item.probability)}
                 <span className="block text-fg-muted">{item.reasons[0]}</span>
+                <TechnicalDetails>Decision code {item.decision}</TechnicalDetails>
               </li>
             ))}
           </ul>

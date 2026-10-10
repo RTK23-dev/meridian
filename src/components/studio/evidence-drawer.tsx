@@ -1,4 +1,5 @@
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui";
+import { TechnicalDetails } from "@/components/plain-error";
 import { describeQuestion } from "./jev-question-text.ts";
 import { decisionPlainLabel, formatUnitInterval, summarizeEvidence } from "./evidence.ts";
 import type { StudioVariant } from "./types.ts";
@@ -13,9 +14,9 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
           <>
             <SheetTitle className="font-display text-2xl">Evidence for {variant.title || variant.kind}</SheetTitle>
             <SheetDescription className="mt-2 text-sm">{summarizeEvidence(questions)}</SheetDescription>
-            <div className="mt-4 overflow-x-auto rounded-md border border-border">
+            <div className="mt-4 hidden overflow-x-auto rounded-md border border-border md:block">
               <table className="w-full min-w-[44rem] text-left text-sm">
-                <caption className="sr-only">JEV questions stored for this variant</caption>
+                <caption className="sr-only">Decision questions stored for this variant</caption>
                 <thead className="bg-surface-2 text-xs uppercase tracking-wider text-fg-muted">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-semibold">ID</th>
@@ -30,7 +31,7 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
                 <tbody className="divide-y divide-border">
                   {questions.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-4 text-fg-muted">No JEV row is stored for this variant.</td>
+                      <td colSpan={7} className="px-3 py-4 text-fg-muted">No decision record is stored for this variant.</td>
                     </tr>
                   ) : questions.map((question) => (
                     <tr key={question.id} className="align-top">
@@ -39,7 +40,7 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
                       <td className="px-3 py-2">{question.answer || "Unrecorded"}</td>
                       <td className="px-3 py-2 font-semibold">
                         {decisionPlainLabel(question.decision)}
-                        <span className="block font-mono text-xs font-normal text-fg-muted">{question.decision || "none"}</span>
+                        <TechnicalDetails>Decision code: {question.decision || "none"}</TechnicalDetails>
                       </td>
                       <td className="px-3 py-2 tabular-nums">{formatUnitInterval(question.probability)}</td>
                       <td className="px-3 py-2 tabular-nums">{formatUnitInterval(question.confidence)}</td>
@@ -49,6 +50,23 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
                 </tbody>
               </table>
             </div>
+            <ul className="mt-4 grid gap-3 md:hidden">
+              {questions.length === 0 ? (
+                <li className="rounded-md border border-border p-3 text-sm text-fg-muted">No decision record is stored for this variant.</li>
+              ) : questions.map((question) => (
+                <li key={question.id} className="space-y-2 rounded-md border border-border p-3 text-sm">
+                  <p className="font-mono text-xs text-fg-muted">{question.id}</p>
+                  <p>{describeQuestion(question.id)}</p>
+                  <dl className="grid gap-2">
+                    <div><dt className="text-xs font-semibold text-fg-muted">Answer</dt><dd>{question.answer || "Unrecorded"}</dd></div>
+                    <div><dt className="text-xs font-semibold text-fg-muted">Decision</dt><dd className="font-semibold">{decisionPlainLabel(question.decision)}<TechnicalDetails>Decision code: {question.decision || "none"}</TechnicalDetails></dd></div>
+                    <div><dt className="text-xs font-semibold text-fg-muted">Probability</dt><dd className="tabular-nums">{formatUnitInterval(question.probability)}</dd></div>
+                    <div><dt className="text-xs font-semibold text-fg-muted">Confidence</dt><dd className="tabular-nums">{formatUnitInterval(question.confidence)}</dd></div>
+                    <div><dt className="text-xs font-semibold text-fg-muted">Reason</dt><dd>{question.reasons.length > 0 ? question.reasons.join(" ") : "No reason stored."}</dd></div>
+                  </dl>
+                </li>
+              ))}
+            </ul>
           </>
         ) : null}
       </SheetContent>

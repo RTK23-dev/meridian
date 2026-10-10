@@ -1,8 +1,12 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { FormDiscardBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { BriefReviewPanel } from "@/components/brief-review-panel";
-import { Button, Panel } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
 import { briefChanges, BRIEF_FIELD_LABELS, type BriefChange } from "./brief-diff.ts";
-import { DIRECTION_REASON_MIN, DirectionReasonField } from "./direction-step.tsx";
+import { DIRECTION_REASON_MIN, DirectionReasonField, directionReasonSchema, type DirectionReasonInput } from "./direction-step.tsx";
 import type { StudioBrief, StudioData } from "./types.ts";
 
 type BriefStepProps = {
@@ -43,7 +47,9 @@ function ChangeList({ changes, hasPrevious }: { changes: BriefChange[]; hasPrevi
 
 /** Step 2. The stored brief in sections, what changed since the previous brief, and writing the next brief. */
 export function BriefStep({ brandId, session, brief, previous, canEdit, changed, pending, onWriteNext }: BriefStepProps) {
-  const [reason, setReason] = useState("");
+  const reasonForm = useForm<DirectionReasonInput>({ resolver: zodResolver(directionReasonSchema), defaultValues: { reason: "" }, mode: "onChange" });
+  const reason = reasonForm.watch("reason");
+  const reasonDirty = reasonForm.formState.isDirty;
   const changes = brief && previous ? briefChanges(brief, previous) : [];
 
   return (
@@ -54,7 +60,7 @@ export function BriefStep({ brandId, session, brief, previous, canEdit, changed,
 
       {brief ? (
         <>
-          <Panel>
+          <Card>
             <h2 className="font-display text-2xl">Brief</h2>
             <p className="mt-1 text-sm text-fg-muted">{brief.title}</p>
             {changed ? <p className="mt-2 text-sm font-semibold">These findings changed the next recommendation.</p> : null}
@@ -103,27 +109,31 @@ export function BriefStep({ brandId, session, brief, previous, canEdit, changed,
 
             {canEdit && brief.status !== "ready" ? (
               <div className="mt-5 space-y-3">
-                <DirectionReasonField id="next-brief-reason" value={reason} onChange={setReason} />
+                <UnsavedChangesGuard dirty={reasonDirty} />
+                <DirectionReasonField id="next-brief-reason" registration={reasonForm.register("reason")} error={reasonForm.formState.errors.reason?.message} />
+                <FormDiscardBar dirty={reasonDirty} subject="next brief reason" onDiscard={() => reasonForm.reset({ reason: "" })} />
                 <Button
                   type="button"
                   variant="quiet"
-                  disabled={pending || reason.trim().length < DIRECTION_REASON_MIN}
+                  disabled={pending || (reason ?? "").trim().length < DIRECTION_REASON_MIN}
                   onClick={() => {
-                    void onWriteNext(reason.trim()).then(() => setReason(""), () => undefined);
+                    void reasonForm.handleSubmit(async (values) => {
+                      await onWriteNext(values.reason).then(() => reasonForm.reset({ reason: "" }), () => undefined);
+                    })();
                   }}
                 >
                   Write the next brief
                 </Button>
               </div>
             ) : null}
-          </Panel>
+          </Card>
 
-          <Panel>
+          <Card>
             <h2 className="font-display text-2xl">What changed since the last brief</h2>
             <p className="mt-1 text-sm text-fg-muted">Compared field by field with the brief written before this one. Only stored text is compared.</p>
             <ChangeList changes={changes} hasPrevious={!!previous} />
             <p className="mt-3 text-xs text-fg-muted">Fields compared: {Object.values(BRIEF_FIELD_LABELS).join(", ")}.</p>
-          </Panel>
+          </Card>
         </>
       ) : null}
     </div>

@@ -1,5 +1,7 @@
 import { CheckCircle2, Clock, Info, PlugZap, RotateCcw, XCircle, type LucideIcon } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
+import { TechnicalDetails } from "@/components/plain-error";
+import { plainError } from "@/lib/copy";
 import {
   RESEARCH_AD_CAP,
   RESEARCH_MEDIA_CAP_MB,
@@ -112,7 +114,7 @@ export function ResearchRunPanel({ runs, ads, canEdit, retryLimit, retryingRunId
       {adErrors.length ? <details>
         <summary className="cursor-pointer text-sm font-semibold">{adErrors.length} {adErrors.length === 1 ? "ad has" : "ads have"} a stored error</summary>
         <ul className="mt-2 space-y-1 text-sm">
-          {adErrors.slice(0, 5).map((ad) => <li key={ad.id}><span className="font-semibold">{ad.advertiser || "Unnamed advertiser"}:</span> {ad.error}</li>)}
+          {adErrors.slice(0, 5).map((ad) => <li key={ad.id}><span className="font-semibold">{ad.advertiser || "Unnamed advertiser"}:</span> {plainError(ad.error).message}<TechnicalDetails>{ad.error}</TechnicalDetails></li>)}
           {adErrors.length > 5 ? <li className="text-fg-muted">and {adErrors.length - 5} more in the list above.</li> : null}
         </ul>
       </details> : null}

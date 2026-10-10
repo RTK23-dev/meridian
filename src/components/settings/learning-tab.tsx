@@ -1,5 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { Button, Card, Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger, ErrorState, Skeleton, Switch, errorText } from "@/components/ui";
+import {
+  Button, Card, Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger,
+  ErrorState, Skeleton, Switch, errorText,
+} from "@/components/ui";
 import { FormError } from "./form-error";
 import { plainServerError } from "./form-model";
 import { hasRole } from "@/lib/meridian/access";

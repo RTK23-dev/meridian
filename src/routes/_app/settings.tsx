@@ -1,6 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { AlertsPanel } from "@/components/alerts-panel";
 import { PageHeader, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { GeneralTab } from "@/components/settings/general-tab";
@@ -58,7 +57,9 @@ function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="alerts">
-          {canAdmin ? <AlertsPanel organizationId={active.id} /> : <p className="text-sm text-fg-muted">Only an admin can change alert delivery.</p>}
+          {canAdmin
+            ? <p className="text-sm text-fg-muted">Alerts, acknowledgement and the webhook target are managed in the <Link to="/alerts" className="font-semibold text-accent underline-offset-4 hover:underline">Alerts center</Link>.</p>
+            : <p className="text-sm text-fg-muted">Only an admin can change alert delivery.</p>}
         </TabsContent>
 
         <TabsContent value="learning">

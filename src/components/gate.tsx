@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useWorkspace } from "@/components/workspace";
+import { documentTitle } from "@/lib/navigation/model";
 import { ErrorState, ScreenSkeleton } from "@/components/ui";
 import { ForbiddenPage } from "@/components/status-pages";
 import { MeridianMark, ProviderSignIn } from "@/components/settings/auth-shell";
@@ -12,12 +13,16 @@ export function WorkspaceReady({ children }: { children: ReactNode }) {
     return <div className="mx-auto max-w-3xl p-6"><ScreenSkeleton label="Loading workspace" shape="cards" /></div>;
   }
   if (error && !data && forbidden) return <ForbiddenPage />;
-  if (error && !data) return <ErrorState message={error} onRetry={() => void reload()} />;
+  if (error && !data) return <ErrorState message={error.message} detail={error.raw} onRetry={() => void reload()} />;
   return <>{children}</>;
 }
 
 /** The signed-out front door. The copy says what the product does and does not do, and the sign-in forms sit beside it. */
 export function Welcome() {
+  // The signed-out front door is outside the shell, so it sets its own document title.
+  useEffect(() => {
+    document.title = documentTitle({ page: "Welcome" });
+  }, []);
   return (
     <main id="main" tabIndex={-1} className="mx-auto grid min-h-screen w-full max-w-4xl content-center gap-10 px-4 py-12 sm:px-6">
       <div className="flex items-center gap-3">

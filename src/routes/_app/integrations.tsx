@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useWorkspace } from "@/components/workspace";
-import { ErrorState, ScreenSkeleton, StatusBadge, errorText } from "@/components/ui";
+import { ScreenSkeleton, StatusBadge, errorText } from "@/components/ui";
+import { PlainErrorState } from "@/components/plain-error";
 import { FormError } from "@/components/settings/form-error";
 import { plainServerError } from "@/components/settings/form-model";
 import { ProviderCard, type CardAction } from "@/components/settings/provider-card";
@@ -95,7 +96,7 @@ function Integrations() {
     .map((action) => action.error)
     .filter((error): error is Error => Boolean(error));
 
-  if (query.isError && !query.data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !query.data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!query.data) return <ScreenSkeleton label="Loading integration status" shape="rows" />;
 
   const status: SystemStatus = query.data;

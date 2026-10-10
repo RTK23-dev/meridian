@@ -1,15 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { ErrorState, Notice, ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, errorText } from "@/components/ui";
-import { Term } from "@/components/term";
+import { ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
+import { Term } from "@/components/glossary";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { useWorkspace } from "@/components/workspace";
 import { providerLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
 import { studioGenerationSchema, type StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
-import { ACTIVE_POLL_MS, useDistributionChannelsQuery, useOpportunitiesQuery, useOrganicDistributionQuery, useProviderSettingsQuery, useStudioQuery } from "@/lib/query/hooks";
+import { useDistributionChannelsQuery, useOpportunitiesQuery, useOrganicDistributionQuery, useProviderSettingsQuery, useStudioQuery } from "@/lib/query/hooks";
 import { DirectionStep } from "@/components/studio/direction-step.tsx";
 import { BriefStep } from "@/components/studio/brief-step.tsx";
 import { GenerateStep } from "@/components/studio/generate-step.tsx";
@@ -61,23 +63,8 @@ function Studio({ brandId }: { brandId: string }) {
     mode: "onBlur",
   });
   const generationDirty = generationForm.formState.isDirty;
-  useEffect(() => {
-    if (!generationDirty) return;
-    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", warnBeforeLeave);
-    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
-  }, [generationDirty]);
 
-  // The studio query polls while a variant is queued or running. A variant the provider has submitted is polled here too.
-  const hasSubmitted = !!session?.variants.some((variant) => variant.mediaStatus === "submitted");
-  const refetch = query.refetch;
-  useEffect(() => {
-    if (!hasSubmitted) return;
-    const timer = window.setInterval(() => void refetch(), ACTIVE_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [hasSubmitted, refetch]);
-
-  if (query.isError && !session) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !session) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!session) return <ScreenSkeleton label="Loading studio" shape="cards" />;
 
   const canEdit = hasRole(session.role, "member");
@@ -85,14 +72,14 @@ function Studio({ brandId }: { brandId: string }) {
   const briefIndex = brief ? session.briefs.findIndex((item) => item.id === brief.id) : -1;
   const previous = briefIndex >= 0 ? session.briefs[briefIndex + 1] ?? null : null;
   const changed = Boolean(brief && previous && brief.constraints !== previous.constraints);
-  const recommendation = session.recommendation;
   const production = productionStatusFrom({ organizationId, data: providerQuery.data, isError: providerQuery.isError });
 
   async function generate(values: StudioGeneration) {
     if (!brief) return;
     await actions.generateVariants.mutateAsync({ briefId: brief.id, values }).then((result) => {
       if (result.kind === "generated") {
-        generationForm.reset(result.values);
+        // Text typed while generation ran stays in the form. Only the values that were generated become the baseline.
+        generationForm.reset(result.values, { keepValues: true });
         setRetryNotice(null);
       }
     }, () => undefined);
@@ -133,6 +120,7 @@ function Studio({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-6">
+      <UnsavedChangesGuard dirty={generationDirty} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">Studio</p>
@@ -145,7 +133,7 @@ function Studio({ brandId }: { brandId: string }) {
 
       <Stepper steps={studioStepperSteps(session, brief)} className="grid grid-cols-2 lg:grid-cols-4" />
 
-      {actions.actionErrors.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
+      {actions.actionErrors.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
       {actions.anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
 
       <Tabs value={step} onValueChange={(value) => setStep(value as StepKey)} className="space-y-5">

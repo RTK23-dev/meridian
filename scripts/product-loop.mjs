@@ -91,8 +91,8 @@ try {
   }
 
   await page.goto(`${brandUrl}/opportunities`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Score from evidence" }).click();
-  await page.getByText(/candidates scored/).waitFor();
+  await page.getByRole("button", { name: "Rank opportunities" }).click();
+  await page.getByText(/candidates? ranked/).waitFor();
 
   await page.goto(`${brandUrl}/library`, { waitUntil: "networkidle" });
   for (let index = 1; index <= 3; index += 1) {
@@ -119,7 +119,7 @@ try {
   await page.getByText("Discovered").first().waitFor({ timeout: 60000 });
   const discovered = await page.locator("body").innerText();
   if (!discovered.toLowerCase().includes("lather")) throw new Error(`Studio did not show the lather evidence. ${discovered.slice(0, 500)}`);
-  await page.locator("dd").filter({ hasText: /Auto-approved|Needs a person|Rejected/ }).first().waitFor();
+  await page.locator("dd").filter({ hasText: /Auto-approved|Approved|Needs a person|Rejected/ }).first().waitFor();
   // Accepting a direction needs a reason of at least 20 characters. It is recorded with the decision.
   await page.getByLabel(/Why accept this direction/).fill("E2E testing run: the stored lather evidence supports this direction.");
   await page.getByRole("button", { name: "Accept direction and write the brief" }).click();
@@ -136,7 +136,7 @@ try {
   if (!(await page.getByRole("button", { name: "Generate variants" }).isDisabled())) throw new Error("Generation was not blocked for a brief awaiting review.");
   await page.getByRole("tab", { name: "2. Brief" }).click();
   await page.getByRole("checkbox", { name: /I have read the failure/ }).check();
-  await page.getByLabel(/Reason \(at least 20 characters\)/).fill("E2E testing runtime: the decision engine is not configured, so the brief is reviewed explicitly here.");
+  await page.getByLabel("Reason", { exact: true }).fill("E2E testing runtime: the decision engine is not configured, so the brief is reviewed explicitly here.");
   await page.getByRole("button", { name: "Approve for production" }).click();
   await held.waitFor({ state: "hidden" });
   await page.getByRole("tab", { name: "3. Generate" }).click();
@@ -207,8 +207,7 @@ try {
 
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
   await page.getByRole("tab", { name: "Scoring weights" }).click();
-  // This phase's weights panel is not a form element, so the panel holding the save button is the scope.
-  const weightForm = page.getByRole("tabpanel").filter({ has: page.getByRole("button", { name: "Save diagnostic weights" }) });
+  const weightForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Save diagnostic weights" }) });
   // Save stays disabled until a weight changes, so the run edits the first one before validating and saving.
   const firstWeight = weightForm.getByLabel(/typed value/).first();
   await firstWeight.fill((await firstWeight.inputValue()) === "1.25" ? "1.5" : "1.25");

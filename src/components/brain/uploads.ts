@@ -35,7 +35,8 @@ export type StoreOutcome = { status: "stored" | "failed"; detail: string; droppe
 export type SuggestOutcome =
   | { status: "stored"; saved: number; message: string }
   | { status: "unavailable" | "failed"; message: string };
-export type UploadSummary = { tone: "success" | "neutral" | "danger"; message: string };
+/** `detail` is the raw failure text, shown under Details. `message` is always plain words. */
+export type UploadSummary = { tone: "success" | "neutral" | "danger"; message: string; detail?: string };
 
 /**
  * One message for an upload. Store failures and suggestion failures are shown as failures. "No model

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
-import { Button, Field, TextInput, errorText } from "@/components/ui";
+import { Button, Field, Input, errorText } from "@/components/ui";
 import { authClient } from "@/lib/auth/client";
+import { submitOnShortcut } from "@/components/forms/shortcut";
 import { FormError } from "./form-error";
 import { plainAuthError, plainServerError, signInSchema, signUpSchema, type SignInValues, type SignUpValues } from "./form-model";
 
@@ -43,7 +44,7 @@ function SignInForm() {
     }
   }
   return (
-    <form onSubmit={form.handleSubmit(submit)} className="space-y-4" noValidate>
+    <form onSubmit={form.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} className="space-y-4" noValidate>
       <EmailField registration={form.register("email")} error={form.formState.errors.email?.message} autoComplete="email" />
       <PasswordField
         label="Password"
@@ -77,9 +78,9 @@ function SignUpForm() {
     }
   }
   return (
-    <form onSubmit={form.handleSubmit(submit)} className="space-y-4" noValidate>
+    <form onSubmit={form.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} className="space-y-4" noValidate>
       <Field label="Your name" error={form.formState.errors.name?.message} required>
-        <TextInput {...form.register("name")} autoComplete="name" maxLength={80} />
+        <Input {...form.register("name")} autoComplete="name" maxLength={80} />
       </Field>
       <EmailField registration={form.register("email")} error={form.formState.errors.email?.message} autoComplete="email" />
       <PasswordField
@@ -100,7 +101,7 @@ function SignUpForm() {
 function EmailField({ registration, error, autoComplete }: { registration: UseFormRegisterReturn; error?: string; autoComplete: string }) {
   return (
     <Field label="Email" error={error} required>
-      <TextInput {...registration} type="email" inputMode="email" autoComplete={autoComplete} maxLength={200} />
+      <Input {...registration} type="email" inputMode="email" autoComplete={autoComplete} maxLength={200} />
     </Field>
   );
 }
@@ -117,7 +118,7 @@ export function PasswordField({ label, hint, error, registration, autoComplete }
   return (
     <Field label={label} hint={hint} error={error} required>
       <div className="relative">
-        <TextInput {...registration} type={visible ? "text" : "password"} autoComplete={autoComplete} maxLength={128} className="pr-24" />
+        <Input {...registration} type={visible ? "text" : "password"} autoComplete={autoComplete} maxLength={128} className="pr-24" />
         <PasswordToggle visible={visible} onToggle={() => setVisible((current) => !current)} />
       </div>
     </Field>

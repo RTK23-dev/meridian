@@ -3,6 +3,7 @@
  * the fixed order opportunity, decision, brief, generation, QA, review, publish, performance. A stage with no record says
  * so. It is never filled with a guess.
  */
+import { decisionEngineLine } from "../../lib/copy.ts";
 import type { LibraryMediaVariant, MediaLoad } from "./library-model";
 
 export const TRACE_STAGES = ["opportunity", "decision", "brief", "generation", "qa", "review", "publish", "performance"] as const;
@@ -56,7 +57,7 @@ export type TraceStage = {
 
 const MISSING_NOTES: Record<TraceStageId, string> = {
   opportunity: "No opportunity is linked. This creative was recorded directly.",
-  decision: "No JEV decision is linked to this creative.",
+  decision: "No decision is linked to this creative.",
   brief: "No brief is linked to this creative.",
   generation: "No generated media is linked to this creative.",
   qa: "No QA verdict is recorded on its media.",
@@ -95,8 +96,8 @@ export function buildTraceTimeline(input: TraceInput): TraceStage[] {
 
   const decisions = input.decisions.map((item) => ({
     key: `decision-${item.id}`,
-    title: `${item.decision} · ${item.question}`,
-    detail: `p ${item.probability.toFixed(2)}${item.reasons[0] ? ` · ${item.reasons[0]}` : ""}`,
+    title: decisionEngineLine({ decision: item.decision, probability: item.probability }),
+    detail: `${item.question}${item.reasons[0] ? ` · ${item.reasons[0]}` : ""}`,
     at: item.createdAt,
   }));
 

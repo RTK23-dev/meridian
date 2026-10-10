@@ -70,7 +70,7 @@ export function ReviewStep(props: ReviewStepProps) {
   }
 
   function openImage(variant: StudioVariant) {
-    setLightboxTarget({ assetId: variant.assetId, title: variant.title || variant.kind, alt: `${variant.kind} variant: ${variant.title || variant.kind}` });
+    setLightboxTarget({ assetId: variant.assetId, title: variant.title || variant.kind, alt: `${variant.kind} variant: ${variant.title || variant.kind}`, width: variant.width, height: variant.height });
     setLightboxKey((key) => key + 1);
   }
 

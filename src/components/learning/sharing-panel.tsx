@@ -1,6 +1,9 @@
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 import { useId, useState } from "react";
-import { Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, EmptyState, Notice, errorText } from "@/components/ui";
+import {
+  Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, EmptyState,
+} from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 import { setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
 import { usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
@@ -22,7 +25,7 @@ function OptInSwitch({ checked, disabled, labelledBy, describedBy, onCheckedChan
     aria-labelledby={labelledBy}
     aria-describedby={describedBy}
     onCheckedChange={onCheckedChange}
-    className="group inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+    className="group inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
   >
     <span aria-hidden="true" className="relative block h-6 w-11 rounded-full bg-border-strong transition-colors group-data-[state=checked]:bg-accent">
       <SwitchPrimitive.Thumb className="absolute left-0.5 top-0.5 block size-5 rounded-full bg-surface shadow transition-transform data-[state=checked]:translate-x-5" />
@@ -122,8 +125,8 @@ export function SharingPanel({ brandId, data, canEdit, canAdmin }: { brandId: st
     </Dialog>
 
     {note ? <p role="status" className="text-sm text-fg-muted">{note}</p> : null}
-    {toggleSharedPatterns.error ? <Notice>{errorText(toggleSharedPatterns.error)}</Notice> : null}
-    {sharePattern.error ? <Notice>{errorText(sharePattern.error)}</Notice> : null}
+    {toggleSharedPatterns.error ? <PlainErrorNotice error={toggleSharedPatterns.error} /> : null}
+    {sharePattern.error ? <PlainErrorNotice error={sharePattern.error} /> : null}
 
     {canAdmin ? (
       <section aria-labelledby="share-patterns-title" className="space-y-3">
