@@ -124,7 +124,10 @@ for (const { name, sql } of backends) {
       const res = await provider.decide(jevRequest(tenant.organizationId));
       assert.equal(rec.calls(), 0, "no request is sent");
       assert.equal(res.answers["acceptance.hook"].status, "not_configured");
-      assert.equal((await provider.healthFor(tenant.organizationId)).status, "NOT_CONFIGURED");
+      // An unusable saved entry is reported as UNAVAILABLE, not NOT_CONFIGURED. NOT_CONFIGURED means the workspace has no
+      // entry at all, which is the only case where another transport may be tried. The entry is the workspace's own, so it
+      // is unavailable, and nothing is sent for it, which the assertion above still checks.
+      assert.equal((await provider.healthFor(tenant.organizationId)).status, "UNAVAILABLE");
     });
   });
 
