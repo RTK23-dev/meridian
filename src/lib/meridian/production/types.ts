@@ -12,6 +12,7 @@ export type ProductionJobState =
   | "PENDING_PREFLIGHT"
   | "PREFLIGHT_FAILED"
   | "SUBMITTING"
+  | "AWAITING_CHILDREN"
   | "SUBMISSION_UNKNOWN"
   | "QUEUED"
   | "RUNNING"

@@ -164,7 +164,7 @@ test("slides are ordered by their position even when they materialize in the rev
   const pending = await slidesOf(sql, parentId);
   assert.equal(pending.length, SLIDES);
   assert.ok(pending.every((slide) => slide.status === "COMPLETED" && slide.materialized_at == null), "slides wait for materialization");
-  assert.equal((await parentOf(sql, parentId))?.status, "SUBMITTING", "the carousel waits for its slides");
+  assert.equal((await parentOf(sql, parentId))?.status, "AWAITING_CHILDREN", "the carousel waits for its slides");
   // Completed-but-unmaterialized slides are not the carousel's slides yet: settling now is pending, and makes nothing.
   assert.equal(
     await settleCarouselParent(sql, { organizationId: tenant.organizationId, brandId: tenant.brandId, productionJobId: parentId }),
@@ -252,7 +252,7 @@ test("an ambiguous slide keeps the carousel pending: it is neither completed nor
       /reservation is held for reconciliation/,
     );
     const parent = await parentOf(sql, parentId);
-    assert.equal(parent?.status, "SUBMITTING", "an unresolved slide keeps the carousel pending");
+    assert.equal(parent?.status, "AWAITING_CHILDREN", "an unresolved slide keeps the carousel pending");
     assert.equal(await carouselCreative(sql, parentId), null);
 
     const slides = await slidesOf(sql, parentId);
@@ -262,11 +262,11 @@ test("an ambiguous slide keeps the carousel pending: it is neither completed nor
 
     // The poller claims the pending carousel but must not decide it while a slide is still unresolved.
     await pollProductionJobs(sql, { limit: 50 });
-    assert.equal((await parentOf(sql, parentId))?.status, "SUBMITTING", "the poller does not settle an unresolved carousel");
+    assert.equal((await parentOf(sql, parentId))?.status, "AWAITING_CHILDREN", "the poller does not settle an unresolved carousel");
     assert.equal(await carouselCreative(sql, parentId), null);
   } finally {
     stub.restore();
-    await sql`update production_jobs set status = 'CANCELLED', error_code = 'released by test' where creative_plan_id = ${plan.id} and status in ('SUBMITTING', 'SUBMISSION_UNKNOWN')`;
+    await sql`update production_jobs set status = 'CANCELLED', error_code = 'released by test' where creative_plan_id = ${plan.id} and status in ('SUBMITTING', 'AWAITING_CHILDREN', 'SUBMISSION_UNKNOWN')`;
   }
 });
 

@@ -1189,7 +1189,7 @@ export async function executeApprovedCreativePlan(
           modality, sequence_index, parent_job_id, cost_status
         ) values (
           ${carouselJobId}, ${access.organizationId}, ${brandId}, 'carousel', null, null, null, null,
-          'SUBMITTING', 'BALANCED', null, ${JSON.stringify({ kind: "carousel", slideCount, runId, briefId, planDeliverableIds: creativePlan.deliverables.filter((d) => d.kind === "carousel_slide").map((d) => d.id) })},
+          'AWAITING_CHILDREN', 'BALANCED', null, ${JSON.stringify({ kind: "carousel", slideCount, runId, briefId, planDeliverableIds: creativePlan.deliverables.filter((d) => d.kind === "carousel_slide").map((d) => d.id) })},
           now(), null, now(), ${creativePlan.id}, 'carousel', null, null, null
         )
         on conflict (id) do nothing

@@ -16,6 +16,11 @@ import { completeProductionJob, settleCarouselParent, settleCreativePlanIfComple
 const POLLER_ACTOR_ID = "production-poller";
 
 /** Records a materialization failure durably. The job stays COMPLETED and unmaterialized, so it is claimed again. */
+function toIsoOrNull(value: unknown): string | null {
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
 /** Attempts before a job whose render cannot be stored durably is failed. */
 export const MAX_STORAGE_PERSISTENCE_ATTEMPTS = 5;
 
@@ -101,12 +106,13 @@ export async function pollProductionJobs(
     creative_plan_id: string | null;
     materialized_at: unknown;
     modality: string;
+    created_at: unknown;
   }>`
     with candidates as (
       select id
       from production_jobs
       where (
-          status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
+          status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'AWAITING_CHILDREN', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
           or (status = 'COMPLETED' and materialized_at is null and artifact_id is not null)
         )
         and (next_poll_at is null or next_poll_at <= now())
@@ -121,7 +127,7 @@ export async function pollProductionJobs(
     where jobs.id = candidates.id
     returning jobs.id, jobs.organization_id, jobs.brand_id, jobs.provider, jobs.provider_job_id,
               jobs.request_id, jobs.status_url, jobs.cancel_url, jobs.status, jobs.attempt_count, jobs.input,
-              jobs.artifact_id, jobs.creative_plan_id, jobs.materialized_at, jobs.modality
+              jobs.artifact_id, jobs.creative_plan_id, jobs.materialized_at, jobs.modality, jobs.created_at
   `;
 
   const result: PollResult = {
@@ -235,6 +241,8 @@ export async function pollProductionJobs(
       providerJobId: row.provider_job_id,
       creativeSpec: parsedInput.creativeSpec,
       dropFolderUrl: parsedInput.dropFolderUrl,
+      // When the job was submitted. A manual handoff expires from this time.
+      createdAt: toIsoOrNull(row.created_at),
     };
 
     const externalJobId = row.provider_job_id || row.id;
