@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore, type ReactNode } from "react";
-import { Navigate } from "@tanstack/react-router";
+import { Link, Navigate } from "@tanstack/react-router";
 import { GROK_PROVIDERS, authEnabled, signIn, signOut } from "./client";
 import { hasGateSessionMarker } from "./gate-session-marker";
 import { resolveSignInGateState } from "./sign-in-gate";
@@ -82,11 +82,10 @@ export function SignInButtons() {
 }
 
 /**
- * Minimal signed-in identity chip + sign-out. Restyle freely (see the
- * `design-ui` skill). Sign-out is only shown when auth is enabled (the
- * disabled-auth dev user has nothing to sign out of) and the session is not
- * gate-materialized — behind the gate the next request signs the viewer
- * straight back in, so a sign-out control there is a broken loop.
+ * Signed-in account menu for the top bar: identity, appearance, notification preferences and sign-out. Sign-out is only
+ * shown when auth is enabled (the disabled-auth dev user has nothing to sign out of) and the session is not
+ * gate-materialized: behind the gate the next request signs the viewer straight back in, so a sign-out control there
+ * is a broken loop.
  */
 export function UserButton() {
   const user = useCurrentUser();
@@ -102,28 +101,31 @@ export function UserButton() {
   if (!user) return null;
   const label = user.displayName ?? user.primaryEmail ?? "Account";
   return (
-    <div className="flex items-center gap-2">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" aria-label="Account and appearance settings" className="min-h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-fg">Appearance</button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" aria-label="Appearance">
-          {(["system", "light", "dark"] as const).map((choice) => <DropdownMenuItem key={choice} role="menuitemradio" aria-checked={theme === choice} onSelect={() => setTheme(choice)}>{choice[0].toUpperCase() + choice.slice(1)}{theme === choice ? " (current)" : ""}</DropdownMenuItem>)}
-          {authEnabled && !gateSession ? <DropdownMenuItem disabled={signingOut} onSelect={() => { setSigningOut(true); void signOut().catch(() => setSigningOut(false)); }}>{signingOut ? "Signing out…" : "Sign out"}</DropdownMenuItem> : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {user.profileImageUrl ? (
-        <img
-          src={user.profileImageUrl}
-          alt=""
-          className="h-8 w-8 rounded-full object-cover"
-        />
-      ) : (
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-black/10 text-sm font-medium dark:bg-white/20">
-          {label.charAt(0).toUpperCase()}
-        </span>
-      )}
-      <span className="hidden max-w-32 truncate text-sm font-medium md:inline" title={label}>{label}</span>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label="Account and appearance settings" title={label} className="flex min-h-10 min-w-10 items-center gap-2 rounded-md px-1 text-sm text-fg hover:bg-surface-2">
+          {user.profileImageUrl ? (
+            <img src={user.profileImageUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+          ) : (
+            <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-fg">
+              {label.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <span className="hidden max-w-32 truncate font-medium xl:inline">{label}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" aria-label="Account">
+        <div className="px-2 py-1.5">
+          <p className="truncate text-sm font-semibold text-fg">{label}</p>
+          {user.primaryEmail && user.primaryEmail !== label ? <p className="truncate text-xs text-fg-muted">{user.primaryEmail}</p> : null}
+        </div>
+        <DropdownMenuItem asChild>
+          <Link to="/notifications">Notification preferences</Link>
+        </DropdownMenuItem>
+        <p className="px-2 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-fg-muted">Appearance</p>
+        {(["system", "light", "dark"] as const).map((choice) => <DropdownMenuItem key={choice} role="menuitemradio" aria-checked={theme === choice} onSelect={() => setTheme(choice)}>{choice[0].toUpperCase() + choice.slice(1)}{theme === choice ? " (current)" : ""}</DropdownMenuItem>)}
+        {authEnabled && !gateSession ? <DropdownMenuItem disabled={signingOut} onSelect={() => { setSigningOut(true); void signOut().catch(() => setSigningOut(false)); }}>{signingOut ? "Signing out…" : "Sign out"}</DropdownMenuItem> : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
