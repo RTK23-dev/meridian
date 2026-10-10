@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
-import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useScopedMutation } from "@/lib/query/hooks";
+import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { qk } from "@/lib/query/keys";
@@ -25,6 +25,8 @@ function FactoryPage({ brandId }: { brandId: string }) {
   const channelsQuery = useDistributionChannelsQuery(brandId);
   const organicQuery = useOrganicDistributionQuery(brandId);
   const pipelineQuery = usePipelineConfigQuery(brandId);
+  // Workspace provider summary: the Gemini production key and the Google Drive setting, for the engine states.
+  const settingsQuery = useProviderSettingsQuery(board?.organizationId ?? "", Boolean(board));
   const [niche, setNiche] = useState("");
   const [daily, setDaily] = useState("");
   const [total, setTotal] = useState("");
@@ -94,6 +96,16 @@ function FactoryPage({ brandId }: { brandId: string }) {
             brandId={brandId}
             initialConfig={pipelineQuery.data}
             canEdit={canEdit}
+            savedState={pipelineQuery.isPending ? "loading" : pipelineQuery.isError ? "error" : "ready"}
+            currentLevel={board.level}
+            engineSources={{
+              hypit: board.video,
+              settings: {
+                state: settingsQuery.data ? "ready" : settingsQuery.isError ? "error" : "loading",
+                production: settingsQuery.data?.production,
+                storage: settingsQuery.data?.storage,
+              },
+            }}
           />
         </TabsContent>
 
