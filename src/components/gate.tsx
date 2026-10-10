@@ -34,7 +34,7 @@ export function Welcome() {
       </div>
       <div className="grid gap-6 md:grid-cols-2 md:gap-8">
         <section aria-labelledby="welcome-email-title" className="space-y-5 rounded-lg border border-border bg-surface p-6 shadow-sm">
-          <h2 id="welcome-email-title" className="text-section font-semibold text-fg">Sign in with email</h2>
+          <h2 id="welcome-email-title" className="text-section font-semibold text-fg">Sign in or create an account</h2>
           <EmailAuthForm />
         </section>
         <section aria-labelledby="welcome-provider-title" className="space-y-5 rounded-lg border border-border bg-surface p-6 shadow-sm">
