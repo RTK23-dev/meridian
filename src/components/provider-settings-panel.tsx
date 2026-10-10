@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldPath } from "react-hook-form";
 import {
   Button, ErrorState, Field, Panel, SelectInput, TextInput,
 } from "@/components/ui";
@@ -60,20 +60,33 @@ function sourceLabelOf(summary: ProviderConfigSummary): string {
 /** The stored value of each panel field, with the defaults the panel has always shown when nothing is stored. */
 function storedFieldsOf(summaries: Record<ProviderCategory, ProviderConfigSummary> | null): ProviderFieldsInput {
   return {
-    apiKey: "",
+    jevKey: "",
+    productionKey: "",
+    perceptionKey: "",
     costPreference: String(summaries?.production?.settings.costPreference || "BALANCED") as ProviderFieldsInput["costPreference"],
     gatewayUrl: String(summaries?.cyclone?.settings.gatewayUrl || "http://127.0.0.1:4000"),
     maxPages: String(summaries?.sources?.settings.maxPagesPerRun || "50"),
   };
 }
 
-/** The fields each category's Save checks and sends. The API key box is shared, as it always was. */
-const FIELDS_SAVED_BY: Record<ProviderCategory, Array<keyof ProviderFieldsInput>> = {
-  jev: ["apiKey"],
-  production: ["apiKey", "costPreference"],
+/** The categories that take an API key in this panel. Each one has its own key field. */
+type KeyCategory = "jev" | "production" | "perception";
+const KEY_FIELD: Record<KeyCategory, "jevKey" | "productionKey" | "perceptionKey"> = {
+  jev: "jevKey",
+  production: "productionKey",
+  perception: "perceptionKey",
+};
+function isKeyCategory(category: ProviderCategory): category is KeyCategory {
+  return category === "jev" || category === "production" || category === "perception";
+}
+
+/** The fields each category's Save checks and sends. A key field belongs to its own category only. */
+const FIELDS_SAVED_BY: Record<ProviderCategory, Array<FieldPath<ProviderFieldsInput>>> = {
+  jev: ["jevKey"],
+  production: ["productionKey", "costPreference"],
   cyclone: ["gatewayUrl"],
   sources: ["maxPages"],
-  perception: ["apiKey"],
+  perception: ["perceptionKey"],
   storage: [],
 };
 
@@ -85,16 +98,19 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   const [testResult, setTestResult] = useState<{ status: string; message: string; latencyMs?: number } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  // One form for the panel's fields. Each field shows the stored value until it is edited, and an edit is kept when the
-  // person switches category, as it always was. Only a saved field takes the new stored value.
+  // One form for the panel's fields. Each key has its own field, so a key typed for one category is never shown in, or
+  // saved with, another. Each field shows the stored value until it is edited, and an edit is kept when the person
+  // switches category. Only a saved field takes the new stored value.
   const providerForm = useForm<ProviderFieldsInput>({
     resolver: zodResolver(providerFieldsSchema),
     defaultValues: storedFieldsOf(summaries),
     mode: "onBlur",
   });
-  const apiKeyDraft = providerForm.watch("apiKey");
+  const perceptionKeyDraft = providerForm.watch("perceptionKey");
   const providerDirty = providerForm.formState.isDirty;
   const fieldErrors = providerForm.formState.errors;
+  // The discard bar looks at the active category's fields only, so another category's unsaved key is not counted here.
+  const activeDirty = FIELDS_SAVED_BY[activeTab].some((name) => Boolean(providerForm.formState.dirtyFields[name]));
   const [discardRequested, setDiscardRequested] = useState(false);
   useEffect(() => {
     const stored = storedFieldsOf(summaries);
@@ -111,8 +127,9 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
     invalidate: () => [qk.providerSettings(organizationId), qk.decisionEngines(organizationId), qk.integrations(organizationId)],
     onSuccess: (_data, input) => {
       setMessage(`${input.category.toUpperCase()} configuration saved.`);
-      // The saved values become the stored values. The key box is cleared, as a key is never shown again.
-      providerForm.resetField("apiKey", { defaultValue: "" });
+      // The saved values become the stored values. Only the saved category's key box is cleared, as a key is never shown
+      // again. Another category's draft is left as it is.
+      if (isKeyCategory(input.category)) providerForm.resetField(KEY_FIELD[input.category], { defaultValue: "" });
       if (input.settings?.costPreference !== undefined) providerForm.resetField("costPreference", { defaultValue: String(input.settings.costPreference) as ProviderFieldsInput["costPreference"] });
       if (input.settings?.gatewayUrl !== undefined) providerForm.resetField("gatewayUrl", { defaultValue: String(input.settings.gatewayUrl) });
       if (input.settings?.maxPages !== undefined) providerForm.resetField("maxPages", { defaultValue: String(input.settings.maxPages) });
@@ -155,9 +172,12 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
     const valid = await providerForm.trigger(FIELDS_SAVED_BY[category]);
     if (!valid) return;
     const values = providerForm.getValues();
+    // Only this category's own key field is sent, and only a category that takes a key sends one. A key typed for another
+    // category is never sent with this save.
     const credentials: Record<string, string> = {};
-    if (values.apiKey.trim()) {
-      credentials.apiKey = values.apiKey.trim();
+    const ownKey = isKeyCategory(category) ? values[KEY_FIELD[category]].trim() : "";
+    if (ownKey) {
+      credentials.apiKey = ownKey;
     }
 
     const settingsToSave: Record<string, unknown> = {};
@@ -177,6 +197,13 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   async function handleRemove(category: ProviderCategory) {
     setMessage(null);
     await removeConfig.mutateAsync(category).catch(() => undefined);
+  }
+
+  // Discard clears only the active category's unsaved edits, so it cannot clear another category's draft.
+  function discardActiveCategory() {
+    const stored = storedFieldsOf(summaries);
+    for (const name of FIELDS_SAVED_BY[activeTab]) providerForm.resetField(name, { defaultValue: stored[name] });
+    setDiscardRequested(false);
   }
 
   if (settings.isError && !summaries) {
@@ -211,6 +238,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                   setActiveTab(tab);
                   setTestResult(null);
                   setMessage(null);
+                  setDiscardRequested(false);
                 }}
                 className={`rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
                   activeTab === tab
@@ -332,11 +360,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 Routing is set on the deployment (MERIDIAN_JEV_PROVIDER_MODE, MERIDIAN_JEV_PREFERRED_PROVIDER). A routing choice saved in this workspace is not used, so it is not offered.
               </p>
               <div className="sm:col-span-2">
-                <Field label="TypeSafe JEV API key (saved per workspace)" error={fieldErrors.apiKey?.message}>
+                <Field label="TypeSafe JEV API key (saved per workspace)" error={fieldErrors.jevKey?.message}>
                   <TextInput
                     type="password"
                     placeholder="Enter a TypeSafe JEV key to save or replace it..."
-                    {...providerForm.register("apiKey")}
+                    {...providerForm.register("jevKey")}
                     disabled={!canAdmin}
                   />
                 </Field>
@@ -360,11 +388,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               </Field>
 
               <div className="sm:col-span-2">
-                <Field label="Gemini production API key (Omni video, Veo, image)" error={fieldErrors.apiKey?.message}>
+                <Field label="Gemini production API key (Omni video, Veo, image)" error={fieldErrors.productionKey?.message}>
                   <TextInput
                     type="password"
                     placeholder="Enter a Gemini API key to save or replace it..."
-                    {...providerForm.register("apiKey")}
+                    {...providerForm.register("productionKey")}
                     disabled={!canAdmin}
                   />
                 </Field>
@@ -412,11 +440,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           {activeTab === "perception" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <Field label="Gemini API Key (perception)" error={fieldErrors.apiKey?.message}>
+                <Field label="Gemini API Key (perception)" error={fieldErrors.perceptionKey?.message}>
                   <TextInput
                     type="password"
                     placeholder="Enter a Gemini API key..."
-                    {...providerForm.register("apiKey")}
+                    {...providerForm.register("perceptionKey")}
                     disabled={!canAdmin}
                   />
                 </Field>
@@ -428,17 +456,17 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           ) : null}
 
           <UnsavedChangesBar
-            dirty={providerDirty}
+            dirty={activeDirty}
             subject="provider settings"
             confirming={discardRequested}
             onConfirmingChange={setDiscardRequested}
-            onDiscard={() => { providerForm.reset(storedFieldsOf(summaries)); setDiscardRequested(false); }}
+            onDiscard={discardActiveCategory}
           />
           {canAdmin && activeTab !== "storage" ? (
             <div className="flex justify-end pt-2">
               <Button
                 type="button"
-                disabled={saving || (activeTab === "perception" && !apiKeyDraft.trim())}
+                disabled={saving || (activeTab === "perception" && !perceptionKeyDraft.trim())}
                 onClick={() => handleSave(activeTab)}
               >
                 {saving ? "Saving..." : `Save ${activeTab.toUpperCase()} Configuration`}

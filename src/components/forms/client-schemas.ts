@@ -60,13 +60,16 @@ export type ConnectAccountInput = z.input<typeof connectAccountSchema>;
 export const CLIENT_COST_MODES = ["ZERO_SPEND", "LOWEST_COST", "BALANCED", "QUALITY_FIRST"] as const;
 
 /**
- * The provider panel's fields. saveProviderConfig stores each category's settings as they are sent, with one exception:
- * the production cost mode must be a known mode. The page limit is read with Number(), so a blank or non-numeric page
- * limit is refused here instead of being stored as 0 or NaN. The API key is trimmed; a missing key is answered by the
- * server, which knows whether one is already stored.
+ * The provider panel's fields. Each category that takes a key has its own key field, so a key typed for one category is
+ * never the value another category saves. saveProviderConfig stores each category's settings as they are sent, with one
+ * exception: the production cost mode must be a known mode. The page limit is read with Number(), so a blank or
+ * non-numeric page limit is refused here instead of being stored as 0 or NaN. Each key is trimmed; a missing key is
+ * answered by the server, which knows whether one is already stored.
  */
 export const providerFieldsSchema = z.object({
-  apiKey: z.string().trim(),
+  jevKey: z.string().trim(),
+  productionKey: z.string().trim(),
+  perceptionKey: z.string().trim(),
   costPreference: z.enum(CLIENT_COST_MODES, { error: "Choose a cost mode: ZERO_SPEND, LOWEST_COST, BALANCED or QUALITY_FIRST." }),
   gatewayUrl: z.string().trim(),
   maxPages: z.string().trim().refine(
