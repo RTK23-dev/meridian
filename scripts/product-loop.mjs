@@ -36,7 +36,7 @@ try {
   await page.goto(`${base}/login`, { waitUntil: "networkidle" });
   await page.getByLabel("Your name").fill("Loop Fixture");
   await page.getByLabel("Email").fill(`loop-${stamp}@example.com`);
-  await page.getByLabel("Password").fill("fixture-pass-1");
+  await page.getByLabel(/^Password/).fill("fixture-pass-1");
   await page.getByRole("button", { name: "Create account" }).click();
   await page.waitForURL((url) => !url.pathname.endsWith("/login"), { timeout: 20000 });
   await page.getByRole("heading", { name: "Name the workspace" }).waitFor({ timeout: 20000 });
@@ -195,7 +195,7 @@ try {
   await page.getByText("These findings changed the next recommendation.").waitFor();
 
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
-  await page.getByText("Advanced — ranking diagnostics").click();
+  await page.getByRole("tab", { name: "Scoring weights" }).click();
   const weightForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Save diagnostic weights" }) });
   const entries = await weightForm.locator("input").evaluateAll((nodes) => nodes.map((node) => ({ name: node.name, value: node.value, message: node.validationMessage })));
   const bad = entries.filter((entry) => entry.message);
