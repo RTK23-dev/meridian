@@ -28,7 +28,7 @@ export function DataTable<TData>({ data, columns, getRowId, loading = false, err
   };
   const table = useReactTable({ data, columns: selectable ? [selectionColumn, ...columns] : columns, state: { sorting, columnVisibility, rowSelection }, onSortingChange: setSorting, onColumnVisibilityChange: setColumnVisibility, onRowSelectionChange: (updater) => { setRowSelection(updater); onRowSelectionChange?.(updater); }, enableRowSelection: selectable, getRowId, getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel() });
   if (error) return <ErrorState message={error} onRetry={onRetry} />;
-  if (loading) return <div aria-label="Loading records" className="space-y-2">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} variant="table-row" />)}</div>;
+  if (loading) return <div role="status" aria-label="Loading records" className="space-y-2">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} variant="table-row" />)}</div>;
   if (!data.length) return <EmptyState title={emptyTitle} reason={emptyReason} />;
 
   return <div className={cn("space-y-3", className)}>

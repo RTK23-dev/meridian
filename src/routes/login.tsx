@@ -3,7 +3,10 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { AuthShell, ProviderSignIn } from "@/components/settings/auth-shell";
 import { EmailAuthForm } from "@/components/settings/email-auth-form";
 
-export const Route = createFileRoute("/login")({ component: Login });
+export const Route = createFileRoute("/login")({
+  head: () => ({ meta: [{ title: "Sign in · Meridian" }] }),
+  component: Login,
+});
 
 function Login() {
   const { user, isPending } = useCurrentUserState();
