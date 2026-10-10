@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { BrandNav } from "@/components/brand-nav";
-import { useBusy } from "@/components/gate";
-import { Button, ErrorState, Field, Panel, SelectInput, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
-import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery } from "@/lib/query/hooks";
+import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useScopedMutation } from "@/lib/query/hooks";
 import { startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { qk } from "@/lib/query/keys";
@@ -27,16 +26,42 @@ function FactoryPage({ brandId }: { brandId: string }) {
   const channelsQuery = useDistributionChannelsQuery(brandId);
   const organicQuery = useOrganicDistributionQuery(brandId);
   const pipelineQuery = usePipelineConfigQuery(brandId);
-  const busy = useBusy([qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.organic(brandId), qk.pipelineConfig(brandId)]);
   const [niche, setNiche] = useState("");
   const [daily, setDaily] = useState("");
   const [total, setTotal] = useState("");
   const [level, setLevel] = useState("0");
   const [ceiling, setCeiling] = useState("1");
   const [note, setNote] = useState<string | null>(null);
+  const factoryKey = (name: string) => ["mutation", `factory.${name}`, brandId] as const;
+  const startRun = useScopedMutation({
+    mutationKey: factoryKey("run"),
+    mutationFn: (vars: { niche: string; level: FactoryLevel }) => startFactoryRun({ data: { brandId, niche: vars.niche, level: vars.level } }),
+    // A run queues jobs and may produce research and creatives, so the jobs, market and studio screens change with it.
+    invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.studio(brandId)],
+    success: (_vars, result) => `Queued ${result.jobs} factory jobs.`,
+    onSuccess: (result) => {
+      setNote(`Queued ${result.jobs} factory jobs as run ${result.runId}.`);
+      setNiche("");
+    },
+  });
+  const saveControls = useScopedMutation({
+    mutationKey: factoryKey("controls"),
+    mutationFn: (controls: { level: number; ceiling: number; dailyCents: number; totalCents: number }) => setFactoryControls({ data: { brandId, ...controls } }),
+    invalidate: () => [qk.factory(brandId), qk.pipelineConfig(brandId)],
+    success: "Factory controls saved.",
+    onSuccess: () => setNote("Factory controls saved."),
+  });
+  const killSwitch = useScopedMutation({
+    mutationKey: factoryKey("kill-switch"),
+    mutationFn: (engage: boolean) => setKillSwitch({ data: { organizationId: board?.organizationId ?? "", brandId, engage } }),
+    invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
+    success: (engage) => engage ? "Brand kill switch engaged." : "Brand kill switch cleared.",
+    onSuccess: (result) => setNote(result.engaged ? "Brand kill switch engaged. Live ads must pause." : "Brand kill switch cleared."),
+  });
+  const failures = [startRun, saveControls, killSwitch].map((action) => action.error).filter((error): error is Error => Boolean(error));
 
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
-  if (!board) return <div role="status" aria-label="Loading factory" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+  if (query.isError && !board) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!board) return <ScreenSkeleton label="Loading factory" shape="cards" />;
 
   const canEdit = hasRole(board.role, "member");
   const canAdmin = hasRole(board.role, "admin");
@@ -56,6 +81,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
       </header>
       {board.note ? <p className="text-sm text-muted">{board.note}</p> : null}
       {note ? <p className="text-sm text-muted" role="status">{note}</p> : null}
+      {failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
 
       <Tabs defaultValue="pipeline">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">
@@ -98,17 +124,13 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 className="flex flex-wrap items-end gap-3"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void busy.run(async () => {
-                    const result = await startFactoryRun({ data: { brandId, niche, level: board.level } });
-                    setNote(`Queued ${result.jobs} factory jobs as run ${result.runId}.`);
-                    setNiche("");
-                  });
+                  void startRun.mutateAsync({ niche, level: board.level }).catch(() => undefined);
                 }}
               >
                 <Field label="Niche" required>
                   <TextInput value={niche} onChange={(event) => setNiche(event.currentTarget.value)} maxLength={80} required placeholder="skincare" />
                 </Field>
-                <Button type="submit" disabled={busy.pending || !niche.trim()}>{busy.pending ? "Queueing…" : "Queue factory run"}</Button>
+                <Button type="submit" disabled={startRun.isPending || !niche.trim()}>{startRun.isPending ? "Queueing…" : "Queue factory run"}</Button>
               </form>
             ) : <p className="text-sm text-muted">Viewers cannot queue runs.</p>}
             {board.runs.length === 0 ? <p className="text-sm text-muted">No factory runs are stored.</p> : (
@@ -229,18 +251,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 className="grid gap-3 md:grid-cols-2"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void busy.run(async () => {
-                    await setFactoryControls({
-                      data: {
-                        brandId,
-                        level: Number(level),
-                        ceiling: Number(ceiling),
-                        dailyCents: Math.round(Number(daily || board.cap.dailyCents / 100) * 100),
-                        totalCents: Math.round(Number(total || board.cap.totalCents / 100) * 100),
-                      },
-                    });
-                    setNote("Factory controls saved.");
-                  });
+                  void saveControls.mutateAsync({
+                    level: Number(level),
+                    ceiling: Number(ceiling),
+                    dailyCents: Math.round(Number(daily || board.cap.dailyCents / 100) * 100),
+                    totalCents: Math.round(Number(total || board.cap.totalCents / 100) * 100),
+                  }).catch(() => undefined);
                 }}
               >
                 <Field label="Running level">
@@ -255,18 +271,15 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 </Field>
                 <Field label="Daily spend cap (USD)"><TextInput type="number" min="0" step="0.01" value={daily} onChange={(event) => setDaily(event.currentTarget.value)} placeholder={String(board.cap.dailyCents / 100)} /></Field>
                 <Field label="Total spend cap (USD)"><TextInput type="number" min="0" step="0.01" value={total} onChange={(event) => setTotal(event.currentTarget.value)} placeholder={String(board.cap.totalCents / 100)} /></Field>
-                <Button type="submit" disabled={busy.pending}>Save caps and level</Button>
+                <Button type="submit" disabled={saveControls.isPending}>Save caps and level</Button>
               </form>
             ) : <p className="text-sm text-muted">Only workspace owners set factory levels and spend caps.</p>}
             {canAdmin ? (
               <Button
                 type="button"
                 variant="quiet"
-                disabled={busy.pending}
-                onClick={() => void busy.run(async () => {
-                  const result = await setKillSwitch({ data: { organizationId: board.organizationId, brandId, engage: !board.killSwitch.brand } });
-                  setNote(result.engaged ? "Brand kill switch engaged. Live ads must pause." : "Brand kill switch cleared.");
-                })}
+                disabled={killSwitch.isPending}
+                onClick={() => void killSwitch.mutateAsync(!board.killSwitch.brand).catch(() => undefined)}
               >
                 {board.killSwitch.brand ? "Clear brand kill switch" : "Engage brand kill switch"}
               </Button>

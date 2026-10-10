@@ -4,17 +4,16 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { ArrowRight } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useBusy } from "@/components/gate";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogTitle, Badge, Button, Card, ErrorState, errorText, Field, Notice, PageHeader, Skeleton, TextArea, TextInput,
+  AlertDialogTitle, Badge, Button, Card, ErrorState, errorText, Field, Notice, PageHeader, ScreenSkeleton, Skeleton, TextArea, TextInput,
 } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 import { deleteBrand, updateBrand } from "@/lib/meridian/api";
 import { brainCompleteness } from "@/lib/meridian/brain";
 import type { MachineSnapshot } from "@/lib/meridian/machine";
-import { useBrandQuery, useMachineQuery, useOpportunitiesQuery, useReviewsQuery } from "@/lib/query/hooks";
+import { useBrandQuery, useMachineQuery, useOpportunitiesQuery, useReviewsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { brandIdentitySchema, type BrandIdentity, type BrandIdentityInput } from "@/lib/meridian/schemas/brand";
 
@@ -41,7 +40,23 @@ function BrandHome({ brandId }: { brandId: string }) {
     defaultValues: { name: "", description: "", category: "", industry: "", website: "", country: "", sells: "", targetCustomers: "" },
     mode: "onBlur",
   });
-  const { pending, error: saveError, run } = useBusy([qk.brand(brandId), qk.machine(brandId)]);
+  const saveBrand = useScopedMutation({
+    mutationKey: ["mutation", "brand.update", brandId],
+    mutationFn: (values: BrandIdentity) => updateBrand({ data: { brandId, ...values } }),
+    invalidate: () => [qk.brand(brandId), qk.machine(brandId)],
+    success: "Brand details saved.",
+    onSuccess: () => reload(),
+  });
+  const removeBrand = useScopedMutation({
+    mutationKey: ["mutation", "brand.delete", brandId],
+    mutationFn: () => deleteBrand({ data: { brandId } }),
+    success: "Brand deleted.",
+    onSuccess: async () => {
+      await reload();
+      await navigate({ to: "/" });
+    },
+  });
+  const saveError = saveBrand.error ? errorText(saveBrand.error) : removeBrand.error ? errorText(removeBrand.error) : null;
 
   useEffect(() => {
     if (!detail || isDirty) return;
@@ -55,22 +70,14 @@ function BrandHome({ brandId }: { brandId: string }) {
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [isDirty]);
 
-  if (detailQuery.error) return <ErrorState message={errorText(detailQuery.error)} onRetry={() => void detailQuery.refetch()} />;
-  if (!detail) return <div role="status" aria-label="Loading brand" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+  if (detailQuery.isError && !detail) return <ErrorState message={errorText(detailQuery.error)} onRetry={() => void detailQuery.refetch()} />;
+  if (!detail) return <ScreenSkeleton label="Loading brand" shape="cards" />;
   const known = brainCompleteness(detail.brain);
   const canEdit = hasRole(detail.identity.role, "member");
   const canDelete = hasRole(detail.identity.role, "admin");
 
   async function submit(values: BrandIdentity) {
-    const saved = await run(async () => {
-      await updateBrand({
-        data: {
-          brandId,
-          ...values,
-        },
-      });
-      await reload();
-    });
+    const saved = await saveBrand.mutateAsync(values).then(() => true, () => false);
     if (saved) reset(values);
   }
 
@@ -105,7 +112,7 @@ function BrandHome({ brandId }: { brandId: string }) {
           <div className="md:col-span-2"><Field label="Description" error={errors.description?.message}><TextArea {...register("description")} maxLength={2000} disabled={!canEdit} /></Field></div>
           {saveError ? <div className="md:col-span-2"><Notice>{saveError}</Notice></div> : null}
           {isDirty ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning bg-warning-soft p-3 text-sm md:col-span-2" role="status"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => reset({ ...detail.identity, targetCustomers: detail.brain.targetCustomers })}>Discard changes</Button></div> : null}
-          {canEdit ? <Button type="submit" disabled={pending || isSubmitting}>{pending || isSubmitting ? "Saving…" : "Save brand details"}</Button> : null}
+          {canEdit ? <Button type="submit" disabled={saveBrand.isPending || isSubmitting}>{saveBrand.isPending || isSubmitting ? "Saving…" : "Save brand details"}</Button> : null}
         </form>
       </details>
 
@@ -123,13 +130,9 @@ function BrandHome({ brandId }: { brandId: string }) {
                 <div className="flex justify-end gap-2">
                   <AlertDialogCancel asChild><Button variant="secondary">Cancel</Button></AlertDialogCancel>
                   <AlertDialogAction asChild>
-                    <Button variant="danger" disabled={deleteText !== detail.identity.name || pending} onClick={(event) => {
+                    <Button variant="danger" disabled={deleteText !== detail.identity.name || removeBrand.isPending} onClick={(event) => {
                       event.preventDefault();
-                      void run(async () => {
-                        await deleteBrand({ data: { brandId } });
-                        await reload();
-                        await navigate({ to: "/" });
-                      });
+                      void removeBrand.mutateAsync().catch(() => undefined);
                     }}>Delete brand</Button>
                   </AlertDialogAction>
                 </div>

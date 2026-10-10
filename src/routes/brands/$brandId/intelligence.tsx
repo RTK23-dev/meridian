@@ -12,7 +12,7 @@ import {
   ErrorState,
   KpiCard,
   Panel,
-  Skeleton,
+  ScreenSkeleton,
   Tabs,
   TabsContent,
   TabsList,
@@ -55,9 +55,10 @@ function Intelligence({ brandId }: { brandId: string }) {
 
   const baseData = baseQuery.data ?? null;
   const accountData = accountQuery.data ?? null;
-  const error = baseQuery.error
+  // A failed refetch is shown only when there is nothing stored to keep showing.
+  const error = baseQuery.error && !baseData
     ? errorText(baseQuery.error)
-    : accountQuery.error
+    : accountQuery.error && !accountData
     ? errorText(accountQuery.error)
     : null;
 
@@ -74,13 +75,7 @@ function Intelligence({ brandId }: { brandId: string }) {
   }
 
   if (!baseData || !accountData) {
-    return (
-      <div role="status" aria-label="Loading creative intelligence" className="space-y-4">
-        <Skeleton variant="line" />
-        <Skeleton variant="card" />
-        <Skeleton variant="card" />
-      </div>
-    );
+    return <ScreenSkeleton label="Loading creative intelligence" shape="cards" />;
   }
 
   const role = accountData.role;

@@ -3,14 +3,13 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { BrandNav } from "@/components/brand-nav";
-import { useBusy } from "@/components/gate";
 import { StatusText } from "@/components/status";
-import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { attachCreativeImage, recordObservation, recordPerformance } from "@/lib/meridian/machine";
 import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
-import { useLibraryQuery, useTraceQuery } from "@/lib/query/hooks";
+import { useLibraryQuery, useScopedMutation, useTraceQuery } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
 import { manualPerformanceSchema, type ManualPerformance, type ManualPerformanceFields } from "@/lib/meridian/schemas/performance";
@@ -67,34 +66,61 @@ function Library({ brandId }: { brandId: string }) {
   }, [data?.creatives, publishForm]);
   const [note, setNote] = useState<string | null>(null);
   const [stages, setStages] = useState<{ objectType: string; status: string; externalId: string | null; detail: string }[]>([]);
-  const busy = useBusy([qk.library(brandId), qk.trace(brandId), qk.learning(brandId)]);
+  const libraryKey = (name: string) => ["mutation", `library.${name}`, brandId] as const;
+  const recordPerf = useScopedMutation({
+    mutationKey: libraryKey("performance"),
+    mutationFn: (values: ManualPerformance) => recordPerformance({ data: { brandId, creativeId: traceId ?? "", ...values } }),
+    // A performance row changes the creative's trace, the learning patterns, and the overview counts.
+    invalidate: () => [qk.trace(brandId), qk.learning(brandId), qk.machine(brandId)],
+    success: "Performance recorded.",
+    onSuccess: () => {
+      setNote("Performance stored and a learning job was queued. Scoring opportunities drains that job. No ad account is connected.");
+      performanceForm.reset({ observedOn: "", platform: "", reach: "0", impressions: "0", clicks: "0", conversions: "0", spendCents: "0", revenueCents: "0" });
+    },
+  });
+  const ownCreative = useScopedMutation({
+    mutationKey: libraryKey("own-creative"),
+    mutationFn: (values: ObservationFieldsOutput) => recordObservation({ data: { brandId, ...values } }),
+    invalidate: () => [qk.library(brandId), qk.machine(brandId)],
+    success: "Creative recorded.",
+    onSuccess: () => {
+      setNote("Creative recorded.");
+      observationForm.reset();
+    },
+  });
+  const pausedObjects = useScopedMutation({
+    mutationKey: libraryKey("paused-publish"),
+    mutationFn: (values: PausedPublishing) => publishPausedObjects({ data: { brandId, ...values } }),
+    invalidate: () => [qk.library(brandId), qk.machine(brandId)],
+    success: (_values, result) => result.detail,
+    onSuccess: (result) => {
+      setStages(result.stages);
+      setNote(`${result.detail} Correlation ${result.correlationId}.`);
+      publishForm.reset({ ...publishForm.getValues(), name: "" });
+    },
+  });
+  const attachImage = useScopedMutation({
+    mutationKey: libraryKey("attach-image"),
+    mutationFn: (creativeId: string) => attachCreativeImage({ data: { brandId, creativeId } }),
+    invalidate: () => [qk.library(brandId), qk.trace(brandId)],
+    success: (_creativeId, image) => image.message,
+    onSuccess: (image) => setNote(image.message),
+  });
+  const failures = [recordPerf, ownCreative, pausedObjects, attachImage].map((action) => action.error).filter((error): error is Error => Boolean(error));
 
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
-  if (!data) return <div role="status" aria-label="Loading library" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+  if (query.isError && !data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!data) return <ScreenSkeleton label="Loading library" shape="rows" />;
   const canEdit = hasRole(data.role, "member");
 
   async function savePerformance(values: ManualPerformance) {
-    const saved = await busy.run(async () => {
-      await recordPerformance({ data: { brandId, creativeId: traceId ?? "", ...values } });
-      setNote("Performance stored and a learning job was queued. Scoring opportunities drains that job. No ad account is connected.");
-    });
-    if (saved) performanceForm.reset({ observedOn: "", platform: "", reach: "0", impressions: "0", clicks: "0", conversions: "0", spendCents: "0", revenueCents: "0" });
+    await recordPerf.mutateAsync(values).catch(() => undefined);
   }
 
   async function saveOwnCreative(values: ObservationFieldsOutput) {
-    const saved = await busy.run(async () => {
-      await recordObservation({ data: { brandId, ...values } });
-      setNote("Creative recorded.");
-    });
-    if (saved) observationForm.reset();
+    await ownCreative.mutateAsync(values).catch(() => undefined);
   }
   async function savePausedObjects(values: PausedPublishing) {
-    const saved = await busy.run(async () => {
-      const result = await publishPausedObjects({ data: { brandId, ...values } });
-      setStages(result.stages);
-      setNote(`${result.detail} Correlation ${result.correlationId}.`);
-    });
-    if (saved) publishForm.reset({ ...publishForm.getValues(), name: "" });
+    await pausedObjects.mutateAsync(values).catch(() => undefined);
   }
   const visibleCreatives = data.creatives.filter((item) => {
     const queryText = `${item.title} ${item.hook} ${item.angle}`.toLowerCase();
@@ -116,7 +142,7 @@ function Library({ brandId }: { brandId: string }) {
         <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing stays paused and runs only when you submit the form below.</p>
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
-      {busy.error ? <Notice>{busy.error}</Notice> : null}
+      {failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
       <Button type="button" variant="quiet" disabled={!visibleCreatives.length} onClick={() => downloadCsv("meridian-library.csv", [
         { key: "id", label: "Creative ID" }, { key: "title", label: "Title" }, { key: "hook", label: "Hook" },
         { key: "angle", label: "Angle" }, { key: "status", label: "Status" }, { key: "origin", label: "Origin" }, { key: "createdAt", label: "Created at" },
@@ -188,7 +214,7 @@ function Library({ brandId }: { brandId: string }) {
               <TextInput {...publishForm.register("cpcBidCents")} type="text" inputMode="decimal" />
             </Field>
             {publishForm.formState.isDirty ? <div role="status" className="flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => publishForm.reset()}>Discard</Button></div> : null}
-            <Button type="submit" disabled={busy.pending || publishForm.formState.isSubmitting || data.creatives.length === 0}>{publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
+            <Button type="submit" disabled={pausedObjects.isPending || publishForm.formState.isSubmitting || data.creatives.length === 0}>{publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
           </form>
         ) : (
           <p className="mt-2 text-sm text-muted">An admin can send a paused publish.</p>
@@ -297,16 +323,13 @@ function Library({ brandId }: { brandId: string }) {
               <Field label="Revenue (cents)" error={performanceForm.formState.errors.revenueCents?.message}><TextInput {...performanceForm.register("revenueCents")} type="text" inputMode="numeric" required /></Field>
               {performanceForm.formState.isDirty ? <div className="md:col-span-2 flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm" role="status"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => performanceForm.reset()}>Discard</Button></div> : null}
               <div className="md:col-span-2 flex flex-wrap gap-2">
-                <Button type="submit" disabled={busy.pending || performanceForm.formState.isSubmitting}>Record performance</Button>
+                <Button type="submit" disabled={recordPerf.isPending || performanceForm.formState.isSubmitting}>Record performance</Button>
                 <Button
                   type="button"
                   variant="quiet"
-                  disabled={busy.pending}
+                  disabled={attachImage.isPending}
                   onClick={() => {
-                    void busy.run(async () => {
-                      const image = await attachCreativeImage({ data: { brandId, creativeId: traceId } });
-                      setNote(image.status === "stored" ? image.message : image.message);
-                    });
+                    void attachImage.mutateAsync(traceId).catch(() => undefined);
                   }}
                 >
                   Generate image
@@ -343,7 +366,7 @@ function Library({ brandId }: { brandId: string }) {
             <Field label="Call to action" error={observationForm.formState.errors.cta?.message}><TextInput {...observationForm.register("cta")} maxLength={240} /></Field>
             <Field label="Product" error={observationForm.formState.errors.productName?.message}><TextInput {...observationForm.register("productName")} maxLength={160} /></Field>
             {observationForm.formState.isDirty ? <div className="flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm" role="status"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => observationForm.reset()}>Discard</Button></div> : null}
-            <Button type="submit" disabled={busy.pending || observationForm.formState.isSubmitting}>Save to library</Button>
+            <Button type="submit" disabled={ownCreative.isPending || observationForm.formState.isSubmitting}>Save to library</Button>
           </form>
         </Panel>
       ) : null}

@@ -3,11 +3,10 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { BrandNav } from "@/components/brand-nav";
-import { useBusy } from "@/components/gate";
-import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, ScreenSkeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { deleteProduct, saveProduct, type ProductRow } from "@/lib/meridian/api";
-import { useBrandQuery } from "@/lib/query/hooks";
+import { useBrandQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { productFieldsSchema, type ProductFields, type ProductFieldsInput } from "@/lib/meridian/schemas/product";
 
@@ -42,7 +41,20 @@ function Products({ brandId }: { brandId: string }) {
     defaultValues: blank,
     mode: "onBlur",
   });
-  const { pending, error: saveError, run } = useBusy([qk.brand(brandId)]);
+  const saveProductMutation = useScopedMutation({
+    mutationKey: ["mutation", "product.save", brandId],
+    mutationFn: (values: ProductFields) => saveProduct({ data: { brandId, productId: editing ?? "", ...values } }),
+    invalidate: () => [qk.brand(brandId)],
+    success: "Product saved.",
+  });
+  const deleteProductMutation = useScopedMutation({
+    mutationKey: ["mutation", "product.delete", brandId],
+    mutationFn: (productId: string) => deleteProduct({ data: { brandId, productId } }),
+    invalidate: () => [qk.brand(brandId)],
+    success: "Product deleted.",
+  });
+  const pending = saveProductMutation.isPending;
+  const saveError = saveProductMutation.error ? errorText(saveProductMutation.error) : deleteProductMutation.error ? errorText(deleteProductMutation.error) : null;
 
   useEffect(() => {
     if (!isDirty) return;
@@ -54,14 +66,12 @@ function Products({ brandId }: { brandId: string }) {
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [isDirty]);
 
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
-  if (!detail) return <div role="status" aria-label="Loading products" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+  if (query.isError && !detail) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!detail) return <ScreenSkeleton label="Loading products" shape="rows" />;
   const canEdit = hasRole(detail.identity.role, "member");
 
   async function submit(values: ProductFields) {
-    const saved = await run(async () => {
-      await saveProduct({ data: { brandId, productId: editing ?? "", ...values } });
-    });
+    const saved = await saveProductMutation.mutateAsync(values).then(() => true, () => false);
     if (saved) {
       reset(blank);
       setEditing(null);
@@ -125,10 +135,9 @@ function Products({ brandId }: { brandId: string }) {
                     <Button
                       type="button"
                       variant="danger"
+                      disabled={deleteProductMutation.isPending}
                       onClick={() => {
-                        void run(async () => {
-                          await deleteProduct({ data: { brandId, productId: product.id } });
-                        });
+                        void deleteProductMutation.mutateAsync(product.id).catch(() => undefined);
                       }}
                     >
                       Delete

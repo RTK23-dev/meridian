@@ -2,12 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { BrandNav } from "@/components/brand-nav";
-import { useBusy } from "@/components/gate";
-import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
-import { REVIEW_REASON_CODES, listReviews, resolveReview } from "@/lib/meridian/machine";
-import { useReviewsQuery } from "@/lib/query/hooks";
-import { qk } from "@/lib/query/keys";
+import { REVIEW_REASON_CODES, listReviews } from "@/lib/meridian/machine";
+import { useResolveReview, usePendingVariables, useReviewsQuery } from "@/lib/query/hooks";
 import { Term } from "@/components/term";
 
 export const Route = createFileRoute("/brands/$brandId/reviews")({ component: Page });
@@ -22,7 +20,10 @@ function Page() {
 function Reviews({ brandId }: { brandId: string }) {
   const query = useReviewsQuery(brandId);
   const data = query.data ?? null;
-  const busy = useBusy([qk.reviews(brandId), qk.opportunities(brandId), qk.studio(brandId)]);
+  // Approve and reject are optimistic: the row leaves the open list at once and returns if the server refuses.
+  const resolve = useResolveReview(brandId);
+  const resolving = usePendingVariables<{ reviewId: string }>(["mutation", "review.resolve", brandId]).map((vars) => vars.reviewId);
+  const { mutateAsync: resolveReviewAsync } = resolve;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const canEdit = data ? hasRole(data.role, "member") : false;
   const open = useMemo(() => data?.reviews.filter((item) => item.status === "open") ?? [], [data?.reviews]);
@@ -35,15 +36,15 @@ function Reviews({ brandId }: { brandId: string }) {
       if (event.key === "k") { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)); }
       const item = open[selectedIndex];
       if (!item || !canEdit) return;
-      if (event.key.toLowerCase() === "a") void busy.run(async () => { await resolveReview({ data: { brandId, reviewId: item.id, action: "approve", reasonCode: "other", note: "" } }); });
-      if (event.key.toLowerCase() === "r") void busy.run(async () => { await resolveReview({ data: { brandId, reviewId: item.id, action: "reject", reasonCode: REVIEW_REASON_CODES[0] ?? "other", note: "" } }); });
+      if (event.key.toLowerCase() === "a") void resolveReviewAsync({ reviewId: item.id, action: "approve", reasonCode: "other", note: "" }).catch(() => undefined);
+      if (event.key.toLowerCase() === "r") void resolveReviewAsync({ reviewId: item.id, action: "reject", reasonCode: REVIEW_REASON_CODES[0] ?? "other", note: "" }).catch(() => undefined);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, selectedIndex, canEdit, busy, brandId]);
+  }, [open, selectedIndex, canEdit, resolveReviewAsync]);
 
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
-  if (!data) return <div role="status" aria-label="Loading reviews" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+  if (query.isError && !data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!data) return <ScreenSkeleton label="Loading reviews" shape="rows" />;
 
   return (
     <div className="space-y-8">
@@ -53,7 +54,7 @@ function Reviews({ brandId }: { brandId: string }) {
         <h1 className="font-display text-4xl">Holds a person has to clear</h1>
         <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject.</p>
       </div>
-      {busy.error ? <Notice>{busy.error}</Notice> : null}
+      {resolve.error ? <Notice>{errorText(resolve.error)}</Notice> : null}
       {open.length === 0 ? <Panel>No open reviews.</Panel> : (
         <div className="grid gap-4 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.6fr)]">
           <nav aria-label="Review inbox" className="space-y-2">
@@ -63,7 +64,7 @@ function Reviews({ brandId }: { brandId: string }) {
               <span className="mt-2 inline-flex rounded-full border border-line px-2 py-0.5 text-xs">{item.confidence >= 0.8 ? "High confidence" : item.confidence >= 0.5 ? "Review" : "Low confidence"}</span>
             </button>)}
           </nav>
-          {open[selectedIndex] ? <ReviewCard item={open[selectedIndex]} canEdit={canEdit} pending={busy.pending} onResolve={(action, reasonCode, note) => { void busy.run(async () => { await resolveReview({ data: { brandId, reviewId: open[selectedIndex].id, action, reasonCode, note } }); }); }} /> : null}
+          {open[selectedIndex] ? <ReviewCard item={open[selectedIndex]} canEdit={canEdit} pending={resolving.includes(open[selectedIndex].id)} onResolve={(action, reasonCode, note) => { void resolveReviewAsync({ reviewId: open[selectedIndex].id, action, reasonCode, note }).catch(() => undefined); }} /> : null}
         </div>
       )}
     </div>

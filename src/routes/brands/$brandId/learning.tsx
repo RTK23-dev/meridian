@@ -4,12 +4,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BrandNav } from "@/components/brand-nav";
-import { useBusy } from "@/components/gate";
-import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { getPerformanceRowsForExport, setPerformanceSchedule } from "@/lib/meridian/performance/actions";
 import { refreshLearning, setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
-import { useLearningQuery, useTelemetryQuery, useRecordTelemetry, useSyncTelemetry } from "@/lib/query/hooks";
+import { useLearningQuery, useScopedMutation, useTelemetryQuery, useRecordTelemetry, useSyncTelemetry, usePendingVariables } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
 import { performanceScheduleSchema, type PerformanceSchedule, type PerformanceScheduleFields } from "@/lib/meridian/schemas/performance-schedule";
@@ -27,7 +26,60 @@ function Learning({ brandId }: { brandId: string }) {
   const learningQuery = useLearningQuery(brandId);
   const data = learningQuery.data ?? null;
   const [note, setNote] = useState<string | null>(null);
-  const busy = useBusy([qk.learning(brandId), qk.studio(brandId), qk.opportunities(brandId)]);
+  const learningKey = (name: string) => ["mutation", `learning.${name}`, brandId] as const;
+  const exportRows = useScopedMutation({
+    mutationKey: learningKey("export"),
+    mutationFn: () => getPerformanceRowsForExport({ data: { brandId } }),
+    onSuccess: (rows) => {
+      if (!rows.length) {
+        setNote("No performance rows are stored for this brand.");
+        return;
+      }
+      downloadCsv("meridian-performance.csv", [
+        { key: "id", label: "Observation ID" }, { key: "creativeId", label: "Creative ID" }, { key: "experimentId", label: "Experiment ID" },
+        { key: "platform", label: "Platform" }, { key: "impressions", label: "Impressions" }, { key: "reach", label: "Reach" },
+        { key: "clicks", label: "Clicks" }, { key: "conversions", label: "Conversions" }, { key: "spendCents", label: "Spend cents" },
+        { key: "revenueCents", label: "Revenue cents" }, { key: "observedOn", label: "Observed on" }, { key: "source", label: "Source" },
+        { key: "createdAt", label: "Recorded at" },
+      ], rows);
+      setNote(`Exported ${rows.length} stored performance rows.`);
+    },
+  });
+  const saveScheduleMutation = useScopedMutation({
+    mutationKey: learningKey("schedule"),
+    mutationFn: (values: PerformanceSchedule) => setPerformanceSchedule({ data: { organizationId: data?.organizationId ?? "", brandId, ...values } }),
+    success: (_values, result) => `Schedule ${result.id} saved.`,
+    onSuccess: (result) => {
+      setNote(`${result.reason} Schedule ${result.id}.`);
+      scheduleForm.reset();
+    },
+  });
+  const recompute = useScopedMutation({
+    mutationKey: learningKey("recompute"),
+    mutationFn: () => refreshLearning({ data: { brandId } }),
+    // Recomputing rewrites the stored patterns, which studio and the brand overview read.
+    invalidate: () => [qk.learning(brandId), qk.studio(brandId), qk.machine(brandId)],
+    success: (_vars, result) => result.patterns === 0 ? "No patterns met the sample rule." : `${result.patterns} pattern${result.patterns === 1 ? "" : "s"} stored.`,
+    onSuccess: (result) => setNote(result.patterns === 0
+      ? "No pattern met the sample rule. Queued learning jobs for this brand were still closed. Nothing was invented."
+      : `${result.patterns} pattern${result.patterns === 1 ? "" : "s"} stored. Queued learning jobs were drained. Score opportunities again to use them.`),
+  });
+  const toggleSharedPatterns = useScopedMutation({
+    mutationKey: learningKey("organization-toggle"),
+    mutationFn: (enabled: boolean) => setOrganizationLearning({ data: { brandId, enabled } }),
+    invalidate: () => [qk.learning(brandId), qk.studio(brandId)],
+    success: (enabled) => enabled ? "Shared workspace patterns are on." : "Shared workspace patterns are off.",
+  });
+  const sharePattern = useScopedMutation({
+    mutationKey: learningKey("share"),
+    mutationFn: (patternId: string) => sharePatternWithOrganization({ data: { brandId, patternId } }),
+    invalidate: () => [qk.learning(brandId)],
+    success: (_patternId, result) => result.status === "shared" ? "Shared with this workspace." : "That pattern was already shared.",
+    onSuccess: (result) => setNote(result.status === "shared" ? "Shared with this workspace. Other brands still ignore it until they opt in." : "That pattern was already shared."),
+  });
+  const sharingPatterns = usePendingVariables<string>(learningKey("share"));
+  const learningActions = [exportRows, saveScheduleMutation, recompute, toggleSharedPatterns, sharePattern];
+  const failures = learningActions.map((action) => action.error).filter((error): error is Error => Boolean(error));
   const scheduleForm = useForm<PerformanceScheduleFields, unknown, PerformanceSchedule>({
     resolver: zodResolver(performanceScheduleSchema),
     defaultValues: { provider: "meta", creativeId: "", externalAdId: "", currency: "USD", timezone: "UTC", startDate: "", endDate: "", everySeconds: "3600" },
@@ -43,15 +95,11 @@ function Learning({ brandId }: { brandId: string }) {
 
   async function saveSchedule(values: PerformanceSchedule) {
     if (!data?.organizationId) return;
-    const saved = await busy.run(async () => {
-      const result = await setPerformanceSchedule({ data: { organizationId: data.organizationId!, brandId, ...values } });
-      setNote(`${result.reason} Schedule ${result.id}.`);
-    });
-    if (saved) scheduleForm.reset();
+    await saveScheduleMutation.mutateAsync(values).catch(() => undefined);
   }
 
-  if (learningQuery.error) return <ErrorState message={errorText(learningQuery.error)} onRetry={() => void learningQuery.refetch()} />;
-  if (!data) return <div role="status" aria-label="Loading learning" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+  if (learningQuery.isError && !data) return <ErrorState message={errorText(learningQuery.error)} onRetry={() => void learningQuery.refetch()} />;
+  if (!data) return <ScreenSkeleton label="Loading learning" shape="cards" />;
   const canEdit = hasRole(data.role, "member");
   const canAdmin = hasRole(data.role, "admin");
 
@@ -66,27 +114,11 @@ function Learning({ brandId }: { brandId: string }) {
         </div>
         {canEdit ? (
           <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="quiet" disabled={busy.pending} onClick={() => void busy.run(async () => {
-            const rows = await getPerformanceRowsForExport({ data: { brandId } });
-            if (!rows.length) { setNote("No performance rows are stored for this brand."); return; }
-            downloadCsv("meridian-performance.csv", [
-              { key: "id", label: "Observation ID" }, { key: "creativeId", label: "Creative ID" }, { key: "experimentId", label: "Experiment ID" },
-              { key: "platform", label: "Platform" }, { key: "impressions", label: "Impressions" }, { key: "reach", label: "Reach" },
-              { key: "clicks", label: "Clicks" }, { key: "conversions", label: "Conversions" }, { key: "spendCents", label: "Spend cents" },
-              { key: "revenueCents", label: "Revenue cents" }, { key: "observedOn", label: "Observed on" }, { key: "source", label: "Source" },
-              { key: "createdAt", label: "Recorded at" },
-            ], rows);
-            setNote(`Exported ${rows.length} stored performance rows.`);
-          })}>Export performance rows</Button>
+          <Button type="button" variant="quiet" disabled={exportRows.isPending} onClick={() => void exportRows.mutateAsync().catch(() => undefined)}>Export performance rows</Button>
           <Button
-            disabled={busy.pending}
+            disabled={recompute.isPending}
             onClick={() => {
-              void busy.run(async () => {
-                const result = await refreshLearning({ data: { brandId } });
-                setNote(result.patterns === 0
-                  ? "No pattern met the sample rule. Queued learning jobs for this brand were still closed. Nothing was invented."
-                  : `${result.patterns} pattern${result.patterns === 1 ? "" : "s"} stored. Queued learning jobs were drained. Score opportunities again to use them.`);
-              });
+              void recompute.mutateAsync().catch(() => undefined);
             }}
           >
             Recompute patterns
@@ -95,7 +127,7 @@ function Learning({ brandId }: { brandId: string }) {
         ) : null}
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
-      {busy.error ? <Notice>{busy.error}</Notice> : null}
+      {failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
       <Panel>
         <h2 className="font-display text-2xl">Whose results count</h2>
         <p className="mt-2 text-sm text-muted">
@@ -106,11 +138,9 @@ function Learning({ brandId }: { brandId: string }) {
             <input
               type="checkbox"
               checked={data.useOrganizationLearning}
+              disabled={toggleSharedPatterns.isPending}
               onChange={(event) => {
-                const enabled = event.target.checked;
-                void busy.run(async () => {
-                  await setOrganizationLearning({ data: { brandId, enabled } });
-                });
+                void toggleSharedPatterns.mutateAsync(event.target.checked).catch(() => undefined);
               }}
             />
             Use shared workspace patterns
@@ -148,12 +178,9 @@ function Learning({ brandId }: { brandId: string }) {
                 <Button
                   className="mt-3"
                   variant="quiet"
-                  disabled={busy.pending}
+                  disabled={sharingPatterns.includes(pattern.id)}
                   onClick={() => {
-                    void busy.run(async () => {
-                      const result = await sharePatternWithOrganization({ data: { brandId, patternId: pattern.id } });
-                      setNote(result.status === "shared" ? "Shared with this workspace. Other brands still ignore it until they opt in." : "That pattern was already shared.");
-                    });
+                    void sharePattern.mutateAsync(pattern.id).catch(() => undefined);
                   }}
                 >
                   Share with workspace
@@ -189,7 +216,7 @@ function Learning({ brandId }: { brandId: string }) {
             <Field label="End date" error={scheduleForm.formState.errors.endDate?.message}><TextInput {...scheduleForm.register("endDate")} type="date" required /></Field>
             {scheduleDirty ? <div role="status" className="md:col-span-2 flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => scheduleForm.reset()}>Discard</Button></div> : null}
             <div className="md:col-span-2">
-              <Button type="submit" disabled={busy.pending || scheduleForm.formState.isSubmitting}>{scheduleForm.formState.isSubmitting ? "Saving…" : "Save performance schedule"}</Button>
+              <Button type="submit" disabled={saveScheduleMutation.isPending || scheduleForm.formState.isSubmitting}>{scheduleForm.formState.isSubmitting ? "Saving…" : "Save performance schedule"}</Button>
             </div>
           </form>
         </Panel>
@@ -240,6 +267,8 @@ function TelemetryFlywheelPanel({ brandId, canEdit }: { brandId: string; canEdit
 
   const summary = (telemetryQuery.data as any)?.summary;
   const records = (telemetryQuery.data as any)?.records ?? [];
+  // Until telemetry loads, the figures are unknown, not zero. A failed load is shown as a failure.
+  const telemetryLoaded = telemetryQuery.isSuccess;
 
   async function handleRecord(e: React.FormEvent) {
     e.preventDefault();
@@ -310,14 +339,15 @@ function TelemetryFlywheelPanel({ brandId, canEdit }: { brandId: string; canEdit
         </div>
       )}
 
+      {telemetryQuery.isError && !telemetryLoaded ? <ErrorState message="Telemetry could not be loaded." onRetry={() => void telemetryQuery.refetch()} /> : null}
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-line bg-surface p-3">
           <p className="text-xs uppercase tracking-wider text-muted">Tracked Views</p>
           <p className="mt-1 font-display text-2xl font-semibold">
-            {summary?.totalViews ? summary.totalViews.toLocaleString() : "0"}
+            {!telemetryLoaded ? "—" : summary?.totalViews ? summary.totalViews.toLocaleString() : "0"}
           </p>
-          <p className="text-xs text-muted">{summary?.totalRecords ?? 0} observation rows</p>
+          <p className="text-xs text-muted">{telemetryLoaded ? `${summary?.totalRecords ?? 0} observation rows` : telemetryQuery.isError ? "Not loaded" : "Loading"}</p>
         </div>
         <div className="rounded-lg border border-line bg-surface p-3">
           <p className="text-xs uppercase tracking-wider text-muted">Avg 3s Hook Retention</p>
@@ -336,7 +366,9 @@ function TelemetryFlywheelPanel({ brandId, canEdit }: { brandId: string; canEdit
         <div className="rounded-lg border border-line bg-surface p-3">
           <p className="text-xs uppercase tracking-wider text-muted">Active Platforms</p>
           <div className="mt-1 flex flex-wrap gap-1">
-            {summary?.byPlatform && Object.keys(summary.byPlatform).length > 0 ? (
+            {!telemetryLoaded ? (
+              <span className="text-sm text-muted">—</span>
+            ) : summary?.byPlatform && Object.keys(summary.byPlatform).length > 0 ? (
               Object.keys(summary.byPlatform).map((plat) => (
                 <span key={plat} className="rounded bg-line/40 px-1.5 py-0.5 text-xs font-mono capitalize">
                   {plat}

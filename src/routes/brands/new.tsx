@@ -2,8 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useBusy } from "@/components/gate";
-import { Button, Field, Notice, TextArea, TextInput } from "@/components/ui";
+import { Button, Field, Notice, TextArea, TextInput, errorText } from "@/components/ui";
+import { useScopedMutation } from "@/lib/query/hooks";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 import { createBrand } from "@/lib/meridian/api";
@@ -20,7 +20,17 @@ function NewBrandPage() {
 function NewBrand() {
   const { data, reload } = useWorkspace();
   const navigate = useNavigate();
-  const { pending, error, run } = useBusy();
+  const createBrandMutation = useScopedMutation({
+    mutationKey: ["mutation", "brand.create"],
+    mutationFn: (vars: { organizationId: string; form: NewBrandFields }) => createBrand({ data: { organizationId: vars.organizationId, ...vars.form } }),
+    success: "Brand created.",
+    onSuccess: async (created) => {
+      await reload();
+      await navigate({ to: "/brands/$brandId", params: { brandId: created.id } });
+    },
+  });
+  const pending = createBrandMutation.isPending;
+  const error = createBrandMutation.error ? errorText(createBrandMutation.error) : null;
   const { register, handleSubmit, reset, formState: { errors, isDirty, isSubmitting } } = useForm<NewBrandFieldsInput, unknown, NewBrandFields>({
     resolver: zodResolver(newBrandSchema),
     defaultValues: { name: "", website: "", sells: "", industry: "", targetCustomers: "", country: "", description: "", category: "" },
@@ -38,13 +48,7 @@ function NewBrand() {
   async function submit(form: NewBrandFields) {
     const organizationId = data?.active?.id;
     if (!organizationId) return;
-    await run(async () => {
-      const created = await createBrand({
-        data: { organizationId, ...form },
-      });
-      await reload();
-      await navigate({ to: "/brands/$brandId", params: { brandId: created.id } });
-    });
+    await createBrandMutation.mutateAsync({ organizationId, form }).catch(() => undefined);
   }
   return (
     <form onSubmit={handleSubmit(submit)} className="mx-auto max-w-2xl space-y-6" onKeyDown={(event) => {

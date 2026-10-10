@@ -5,10 +5,9 @@ import { useForm } from "react-hook-form";
 import { formatDistanceToNow } from "date-fns";
 import { Activity, AlertCircle, ArrowRight, BarChart3, CircleCheck, Clock3, Plus, Search, ServerCrash, Sparkles } from "lucide-react";
 import { AuditList } from "@/components/audit";
-import { useBusy } from "@/components/gate";
-import { Badge, Button, Card, EmptyState, ErrorState, Field, KpiCard, PageHeader, SelectInput, Skeleton, TextInput } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, Field, KpiCard, PageHeader, SelectInput, Skeleton, TextInput, errorText } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { useIntegrationsQuery, useMachinesQuery } from "@/lib/query/hooks";
+import { useIntegrationsQuery, useMachinesQuery, useScopedMutation } from "@/lib/query/hooks";
 import { hasRole } from "@/lib/meridian/access";
 import { createOrganization } from "@/lib/meridian/api";
 import { getOnboardingSteps } from "@/lib/onboarding";
@@ -180,7 +179,17 @@ function relativeTime(value: string) {
 
 function CreateWorkspace({ onCreated }: { onCreated: () => Promise<void> }) {
   const navigate = useNavigate();
-  const { pending, error, run } = useBusy();
+  const createWorkspace = useScopedMutation({
+    mutationKey: ["mutation", "organization.create"],
+    mutationFn: (values: WorkspaceNameInput) => createOrganization({ data: values }),
+    success: "Workspace created.",
+    onSuccess: async () => {
+      await onCreated();
+      await navigate({ to: "/" });
+    },
+  });
+  const pending = createWorkspace.isPending;
+  const error = createWorkspace.error ? errorText(createWorkspace.error) : null;
   const { register, handleSubmit, reset, formState: { errors, isDirty, isSubmitting } } = useForm<WorkspaceNameInput>({ resolver: zodResolver(workspaceNameSchema), defaultValues: { name: "" }, mode: "onBlur" });
   useEffect(() => {
     if (!isDirty) return;
@@ -189,11 +198,7 @@ function CreateWorkspace({ onCreated }: { onCreated: () => Promise<void> }) {
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [isDirty]);
   async function submit(values: WorkspaceNameInput) {
-    const created = await run(async () => {
-      await createOrganization({ data: values });
-      await onCreated();
-      await navigate({ to: "/" });
-    });
+    const created = await createWorkspace.mutateAsync(values).then(() => true, () => false);
     if (created) reset();
   }
   return <div className="mx-auto max-w-lg space-y-6">

@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { BrandNav } from "@/components/brand-nav";
-import { useBusy } from "@/components/gate";
-import { Button, ErrorState, Field, Notice, Panel, SelectInput, Sheet, SheetContent, SheetDescription, SheetTitle, Skeleton, TextArea, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, Sheet, SheetContent, SheetDescription, SheetTitle, TextArea, TextInput, errorText } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 import {
   addCompetitor,
@@ -17,7 +17,7 @@ import {
   startResearchCollection,
 } from "@/lib/meridian/machine";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
-import { useMarketQuery } from "@/lib/query/hooks";
+import { useMarketQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { competitorFieldsSchema, publicPageSchema, researchCollectionSchema, type CompetitorFields, type CompetitorFieldsOutput, type PublicPageFields, type ResearchCollection, type ResearchCollectionFields } from "@/lib/meridian/schemas/market";
 import { observationFieldsSchema, type ObservationFields, type ObservationFieldsOutput } from "@/lib/meridian/schemas/observation";
@@ -73,7 +73,7 @@ function MarketPage({ brandId }: { brandId: string }) {
   const [researchState, setResearchState] = useState("all");
   const [advertiserFilter, setAdvertiserFilter] = useState("");
   const [selectedAdId, setSelectedAdId] = useState<string | null>(null);
-  const busy = useBusy([qk.market(brandId), qk.intelligence(brandId), qk.opportunities(brandId), qk.studio(brandId)]);
+  const { reload } = useWorkspace();
   const researchForm = useForm<ResearchCollectionFields, unknown, ResearchCollection>({ resolver: zodResolver(researchCollectionSchema), defaultValues: { searchTerms: "", country: "US", limit: 50 }, mode: "onBlur" });
   const competitorForm = useForm<CompetitorFields, unknown, CompetitorFieldsOutput>({ resolver: zodResolver(competitorFieldsSchema), defaultValues: { name: "", website: "", notes: "", kind: "direct" }, mode: "onBlur" });
   const pageForm = useForm<PublicPageFields, unknown, { url: string }>({ resolver: zodResolver(publicPageSchema), defaultValues: { url: "" }, mode: "onBlur" });
@@ -82,6 +82,82 @@ function MarketPage({ brandId }: { brandId: string }) {
     defaultValues: { origin: "competitor", competitorId: "", angle: "demonstration", observedAngle: "", hookType: "", format: "", proofType: "", title: "", hook: "", message: "", offer: "", cta: "", claim: "", platform: "", productName: "", sourceUrl: "" },
     mode: "onBlur",
   });
+  // One mutation per action. Each invalidates only the keys it changes, and its pending state covers only its own control.
+  const marketKey = (name: string) => ["mutation", `market.${name}`, brandId] as const;
+  const startResearch = useScopedMutation({
+    mutationKey: marketKey("research"),
+    mutationFn: (values: ResearchCollection) => startResearchCollection({ data: { brandId, ...values } }),
+    invalidate: () => [qk.market(brandId)],
+    success: (_values, result) => result.status === "NOT_CONNECTED" ? "" : "Research collection queued.",
+    onSuccess: (result, values) => {
+      setNote(result.status === "NOT_CONNECTED" ? result.error : `Research collection ${result.reused ? "already queued" : "queued"}. This page updates while the run is queued or running.`);
+      if (result.status !== "NOT_CONNECTED") researchForm.reset(values);
+    },
+  });
+  const addCompetitorMutation = useScopedMutation({
+    mutationKey: marketKey("competitor-add"),
+    mutationFn: (values: CompetitorFieldsOutput) => addCompetitor({ data: { brandId, ...values } }),
+    invalidate: () => [qk.market(brandId), qk.machine(brandId)],
+    success: "Competitor added.",
+    onSuccess: () => competitorForm.reset({ name: "", website: "", notes: "", kind: "direct" }),
+  });
+  const reviewCompetitorMutation = useScopedMutation({
+    mutationKey: marketKey("competitor-review"),
+    mutationFn: (vars: { competitorId: string; action: "confirm" | "reject" }) => reviewCompetitor({ data: { brandId, ...vars } }),
+    invalidate: () => [qk.market(brandId), qk.machine(brandId)],
+    success: (vars) => vars.action === "confirm" ? "Competitor confirmed." : "Candidate rejected.",
+  });
+  const proposeCandidates = useScopedMutation({
+    mutationKey: marketKey("propose"),
+    mutationFn: () => proposeCompetitors({ data: { brandId } }),
+    invalidate: () => [qk.market(brandId), qk.machine(brandId)],
+    success: (_vars, result) => result.created === 0 ? "No new candidates." : `${result.created} candidate(s) stored.`,
+    onSuccess: (result) => setNote(result.created === 0 ? "No new competitor candidates from stored evidence." : `${result.created} candidate(s) stored. They stay unconfirmed until you accept them.`),
+  });
+  const fetchPageMutation = useScopedMutation({
+    mutationKey: marketKey("page-fetch"),
+    mutationFn: (values: { url: string }) => fetchSourcePage({ data: { brandId, url: values.url } }),
+    invalidate: () => [qk.market(brandId), qk.machine(brandId)],
+    success: (_values, result) => result.status === "stored" ? "Page text stored." : "",
+    onSuccess: (result) => {
+      setNote(result.status === "stored" ? "Page text stored. It is not part of the brand brain." : result.error);
+      pageForm.reset({ url: "" });
+    },
+  });
+  const storeObservationMutation = useScopedMutation({
+    mutationKey: marketKey("observation"),
+    mutationFn: (values: ObservationFieldsOutput) => recordObservation({ data: { brandId, ...values } }),
+    invalidate: () => [qk.market(brandId), qk.machine(brandId), qk.intelligence(brandId), qk.studio(brandId)],
+    success: (_values, result) => result.duplicate ? "That observation was already stored." : "Observation stored.",
+    onSuccess: (result) => {
+      setNote(result.duplicate ? "That observation was already stored." : "Observation stored.");
+      observationForm.reset();
+    },
+  });
+  const suggestBrainEdits = useScopedMutation({
+    mutationKey: marketKey("suggest"),
+    mutationFn: (documentId: string) => suggestFromDocument({ data: { brandId, documentId } }),
+    // Suggestions wait in the market screen. They change the brain only when accepted.
+    invalidate: () => [qk.market(brandId)],
+    success: (_documentId, result) => result.message,
+    onSuccess: (result) => setNote(result.message),
+  });
+  const resolveSuggestionMutation = useScopedMutation({
+    mutationKey: marketKey("suggestion"),
+    mutationFn: (vars: { suggestionId: string; action: "accept" | "dismiss" }) => resolveSuggestion({ data: { brandId, ...vars } }),
+    invalidate: (vars) => vars.action === "accept" ? [qk.market(brandId), qk.brand(brandId)] : [qk.market(brandId)],
+    success: (vars) => vars.action === "accept" ? "Suggestion accepted into the brain." : "Suggestion dismissed.",
+    // An accepted suggestion changes the brain, which the workspace list shows as completeness.
+    onSuccess: (_data, vars) => {
+      if (vars.action === "accept") void reload();
+    },
+  });
+  const reviewingCompetitors = usePendingVariables<{ competitorId: string }>(marketKey("competitor-review")).map((vars) => vars.competitorId);
+  const suggestingDocuments = usePendingVariables<string>(marketKey("suggest"));
+  const resolvingSuggestions = usePendingVariables<{ suggestionId: string }>(marketKey("suggestion")).map((vars) => vars.suggestionId);
+  const marketActions = [startResearch, addCompetitorMutation, reviewCompetitorMutation, proposeCandidates, fetchPageMutation, storeObservationMutation, suggestBrainEdits, resolveSuggestionMutation];
+  const failures = marketActions.map((action) => action.error).filter((error): error is Error => Boolean(error));
+
   const hasUnsavedChanges = researchForm.formState.isDirty || competitorForm.formState.isDirty || pageForm.formState.isDirty || observationForm.formState.isDirty;
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -90,8 +166,8 @@ function MarketPage({ brandId }: { brandId: string }) {
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [hasUnsavedChanges]);
 
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
-  if (!market) return <div role="status" aria-label="Loading market" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+  if (query.isError && !market) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!market) return <ScreenSkeleton label="Loading market" shape="cards" />;
   const canEdit = hasRole(market.role, "member");
   const visibleResearch = market.researchAds.filter((ad) => {
     const analysis = parseAnalysis(ad.analysis);
@@ -122,34 +198,19 @@ function MarketPage({ brandId }: { brandId: string }) {
   const selectedAnalysis = selectedAd ? parseAnalysis(selectedAd.analysis) : null;
 
   async function collectResearch(values: ResearchCollection) {
-    let queued = false;
-    const saved = await busy.run(async () => {
-      const result = await startResearchCollection({ data: { brandId, ...values } });
-      setNote(result.status === "NOT_CONNECTED" ? result.error : `Research collection ${result.reused ? "already queued" : "queued"}. Refresh this page to see worker progress.`);
-      queued = result.status !== "NOT_CONNECTED";
-    });
-    if (saved && queued) researchForm.reset(values);
+    await startResearch.mutateAsync(values).catch(() => undefined);
   }
 
   async function saveCompetitor(values: CompetitorFieldsOutput) {
-    const saved = await busy.run(async () => { await addCompetitor({ data: { brandId, ...values } }); });
-    if (saved) competitorForm.reset({ name: "", website: "", notes: "", kind: "direct" });
+    await addCompetitorMutation.mutateAsync(values).catch(() => undefined);
   }
 
   async function fetchPage(values: { url: string }) {
-    const saved = await busy.run(async () => {
-      const result = await fetchSourcePage({ data: { brandId, url: values.url } });
-      setNote(result.status === "stored" ? "Page text stored. It is not part of the brand brain." : result.error);
-    });
-    if (saved) pageForm.reset({ url: "" });
+    await fetchPageMutation.mutateAsync(values).catch(() => undefined);
   }
 
   async function storeObservation(values: ObservationFieldsOutput) {
-    const saved = await busy.run(async () => {
-      const result = await recordObservation({ data: { brandId, ...values } });
-      setNote(result.duplicate ? "That observation was already stored." : "Observation stored.");
-    });
-    if (saved) observationForm.reset();
+    await storeObservationMutation.mutateAsync(values).catch(() => undefined);
   }
 
   return (
@@ -173,7 +234,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         ))}
       </ul>
       {note ? <Notice>{note}</Notice> : null}
-      {busy.error ? <Notice>{busy.error}</Notice> : null}
+      {failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
       <Panel>
         <div className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">JEV Research</p>
@@ -185,7 +246,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             <Field label="Search ads" error={researchForm.formState.errors.searchTerms?.message} required><TextInput {...researchForm.register("searchTerms")} required maxLength={100} placeholder="Brand, product, or category" /></Field>
             <Field label="Country" error={researchForm.formState.errors.country?.message} required><TextInput {...researchForm.register("country")} required maxLength={2} /></Field>
             <Field label="Maximum ads" error={researchForm.formState.errors.limit?.message} required><SelectInput {...researchForm.register("limit", { valueAsNumber: true })}><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></SelectInput></Field>
-            <div className="flex items-end gap-2">{researchForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => researchForm.reset()}>Clear</Button> : null}<Button type="submit" disabled={busy.pending || researchForm.formState.isSubmitting}>Start collection</Button></div>
+            <div className="flex items-end gap-2">{researchForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => researchForm.reset()}>Clear</Button> : null}<Button type="submit" disabled={startResearch.isPending || researchForm.formState.isSubmitting}>Start collection</Button></div>
           </form>
         ) : null}
         <div className="mt-5">
@@ -263,8 +324,8 @@ function MarketPage({ brandId }: { brandId: string }) {
                 <span className="font-semibold">{item.name}</span>
                 {canEdit ? (
                   <>
-                    <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { await reviewCompetitor({ data: { brandId, competitorId: item.id, action: "confirm" } }); }); }}>Confirm</Button>
-                    <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { await reviewCompetitor({ data: { brandId, competitorId: item.id, action: "reject" } }); }); }}>Reject</Button>
+                    <Button type="button" disabled={reviewingCompetitors.includes(item.id)} onClick={() => { void reviewCompetitorMutation.mutateAsync({ competitorId: item.id, action: "confirm" }).catch(() => undefined); }}>Confirm</Button>
+                    <Button type="button" disabled={reviewingCompetitors.includes(item.id)} onClick={() => { void reviewCompetitorMutation.mutateAsync({ competitorId: item.id, action: "reject" }).catch(() => undefined); }}>Reject</Button>
                   </>
                 ) : null}
               </li>
@@ -275,7 +336,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         )}
         {canEdit ? (
           <div className="mt-3">
-            <Button type="button" disabled={busy.pending} onClick={() => { void busy.run(async () => { const result = await proposeCompetitors({ data: { brandId } }); setNote(result.created === 0 ? "No new competitor candidates from stored evidence." : `${result.created} candidate(s) stored. They stay unconfirmed until you accept them.`); }); }}>Find candidates</Button>
+            <Button type="button" disabled={proposeCandidates.isPending} onClick={() => { void proposeCandidates.mutateAsync().catch(() => undefined); }}>Find candidates</Button>
           </div>
         ) : null}
         {canEdit ? (
@@ -297,7 +358,7 @@ function MarketPage({ brandId }: { brandId: string }) {
               </SelectInput>
             </Field>
             <div className="md:col-span-2">
-              <Button type="submit" disabled={busy.pending || competitorForm.formState.isSubmitting}>Add competitor</Button>
+              <Button type="submit" disabled={addCompetitorMutation.isPending || competitorForm.formState.isSubmitting}>Add competitor</Button>
               {competitorForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => competitorForm.reset()}>Clear</Button> : null}
             </div>
           </form>
@@ -359,7 +420,7 @@ function MarketPage({ brandId }: { brandId: string }) {
               <Field label="Platform" error={observationForm.formState.errors.platform?.message}><TextInput {...observationForm.register("platform")} maxLength={80} /></Field>
               <Field label="Source URL" error={observationForm.formState.errors.sourceUrl?.message}><TextInput {...observationForm.register("sourceUrl")} maxLength={500} /></Field>
             </div>
-            <div className="flex flex-wrap gap-2"><Button type="submit" disabled={busy.pending || observationForm.formState.isSubmitting}>Store observation</Button>{observationForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => observationForm.reset()}>Discard changes</Button> : null}</div>
+            <div className="flex flex-wrap gap-2"><Button type="submit" disabled={storeObservationMutation.isPending || observationForm.formState.isSubmitting}>Store observation</Button>{observationForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => observationForm.reset()}>Discard changes</Button> : null}</div>
           </form>
         ) : null}
       </Panel>
@@ -374,7 +435,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             <Field label="Public page URL" error={pageForm.formState.errors.url?.message} required className="min-w-64 flex-1">
               <TextInput {...pageForm.register("url")} placeholder="https://" className="max-w-md" required maxLength={500} />
             </Field>
-            <div className="flex items-end gap-2">{pageForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => pageForm.reset()}>Clear</Button> : null}<Button type="submit" disabled={busy.pending || pageForm.formState.isSubmitting}>Fetch page</Button></div>
+            <div className="flex items-end gap-2">{pageForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => pageForm.reset()}>Clear</Button> : null}<Button type="submit" disabled={fetchPageMutation.isPending || pageForm.formState.isSubmitting}>Fetch page</Button></div>
           </form>
         ) : null}
         <ul className="mt-4 space-y-3">
@@ -387,12 +448,9 @@ function MarketPage({ brandId }: { brandId: string }) {
                 <Button
                   className="mt-2"
                   variant="quiet"
-                  disabled={busy.pending}
+                  disabled={suggestingDocuments.includes(doc.id)}
                   onClick={() => {
-                    void busy.run(async () => {
-                      const result = await suggestFromDocument({ data: { brandId, documentId: doc.id } });
-                      setNote(result.message);
-                    });
+                    void suggestBrainEdits.mutateAsync(doc.id).catch(() => undefined);
                   }}
                 >
                   Suggest brain edits
@@ -411,19 +469,15 @@ function MarketPage({ brandId }: { brandId: string }) {
                 {canEdit ? (
                   <div className="mt-3 flex gap-2">
                     <Button
-                      disabled={busy.pending}
-                      onClick={() => void busy.run(async () => {
-                        await resolveSuggestion({ data: { brandId, suggestionId: item.id, action: "accept" } });
-                      })}
+                      disabled={resolvingSuggestions.includes(item.id)}
+                      onClick={() => void resolveSuggestionMutation.mutateAsync({ suggestionId: item.id, action: "accept" }).catch(() => undefined)}
                     >
                       Accept
                     </Button>
                     <Button
                       variant="quiet"
-                      disabled={busy.pending}
-                      onClick={() => void busy.run(async () => {
-                        await resolveSuggestion({ data: { brandId, suggestionId: item.id, action: "dismiss" } });
-                      })}
+                      disabled={resolvingSuggestions.includes(item.id)}
+                      onClick={() => void resolveSuggestionMutation.mutateAsync({ suggestionId: item.id, action: "dismiss" }).catch(() => undefined)}
                     >
                       Dismiss
                     </Button>

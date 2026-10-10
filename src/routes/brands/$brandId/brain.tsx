@@ -3,9 +3,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { BrandNav } from "@/components/brand-nav";
-import { useBusy } from "@/components/gate";
-import { Button, ErrorState, Field, Notice, Panel, SelectInput, Skeleton, TextArea } from "@/components/ui";
+import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea } from "@/components/ui";
 import { errorText } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 import { saveBrain } from "@/lib/meridian/api";
 import { storeMaterial, uploadLogo } from "@/lib/meridian/machine";
@@ -16,7 +16,7 @@ import {
   provenanceLabel,
   type BrainValues,
 } from "@/lib/meridian/brain";
-import { useAssetsQuery, useBrandQuery } from "@/lib/query/hooks";
+import { useAssetsQuery, useBrandQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { brainValuesSchema, type BrainFieldsInput } from "@/lib/meridian/schemas/brain";
 
@@ -39,7 +39,17 @@ function BrainEditor({ brandId }: { brandId: string }) {
     mode: "onBlur",
   });
   const brain = watch();
-  const { pending, error: saveError, run } = useBusy([qk.brand(brandId)]);
+  const { reload } = useWorkspace();
+  const saveBrainMutation = useScopedMutation({
+    mutationKey: ["mutation", "brain.save", brandId],
+    mutationFn: (values: BrainValues) => saveBrain({ data: { brandId, ...values } }),
+    invalidate: () => [qk.brand(brandId)],
+    success: "Brain saved.",
+    // Brain completeness is part of the workspace list and the brand switcher, so the workspace reloads.
+    onSuccess: () => reload(),
+  });
+  const pending = saveBrainMutation.isPending;
+  const saveError = saveBrainMutation.error ? errorText(saveBrainMutation.error) : null;
 
   useEffect(() => {
     if (detail && !isDirty) reset(detail.brain);
@@ -52,17 +62,15 @@ function BrainEditor({ brandId }: { brandId: string }) {
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [isDirty]);
 
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
-  if (!detail) return <div role="status" aria-label="Loading brand brain" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+  if (query.isError && !detail) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!detail) return <ScreenSkeleton label="Loading brand brain" shape="form" />;
   const canEdit = hasRole(detail.identity.role, "member");
   const groups = [...new Set(BRAIN_FIELDS.map((field) => field.group))];
   const filledFields = BRAIN_FIELDS.filter((field) => brain[field.key].trim()).length;
   const completeness = Math.round((filledFields / BRAIN_FIELDS.length) * 100);
 
   async function submit(values: BrainValues) {
-    const saved = await run(async () => {
-      await saveBrain({ data: { brandId, ...values } });
-    });
+    const saved = await saveBrainMutation.mutateAsync(values).then(() => true, () => false);
     if (saved) {
       reset(values);
       setDiscardRequested(false);
@@ -159,7 +167,24 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
   const [note, setNote] = useState<string | null>(null);
   const assetsQuery = useAssetsQuery(brandId);
   const logos = assetsQuery.data?.logos ?? [];
-  const { pending, error, run } = useBusy([qk.assets(brandId)]);
+  const uploadLogoMutation = useScopedMutation({
+    mutationKey: ["mutation", "brand.logo", brandId],
+    mutationFn: (base64: string) => uploadLogo({ data: { brandId, base64 } }),
+    invalidate: () => [qk.assets(brandId)],
+    success: (_base64, saved) => saved.status === "stored" ? "Logo stored." : saved.detail,
+    onSuccess: (saved) => setNote(saved.status === "stored" ? "Logo stored." : saved.detail),
+  });
+  const materialMutation = useScopedMutation({
+    mutationKey: ["mutation", "brand.material", brandId],
+    mutationFn: (vars: { filename: string; mime: string; text: string; base64: string }) => storeMaterial({ data: { brandId, ...vars } }),
+    // Stored material adds source documents, which the brand overview counts.
+    invalidate: () => [qk.assets(brandId), qk.machine(brandId)],
+    success: (_vars, saved) => saved.detail,
+    onSuccess: (saved) => setNote(saved.detail),
+  });
+  const pending = uploadLogoMutation.isPending || materialMutation.isPending;
+  const failure = uploadLogoMutation.error ?? materialMutation.error;
+  const error = failure ? errorText(failure) : null;
 
   return (
     <div className="space-y-4">
@@ -182,10 +207,7 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
                 reader.onload = () => {
                   const raw = String(reader.result ?? "");
                   const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
-                  void run(async () => {
-                    const saved = await uploadLogo({ data: { brandId, base64 } });
-                    setNote(saved.status === "stored" ? "Logo stored." : saved.detail);
-                  });
+                  void uploadLogoMutation.mutateAsync(base64).catch(() => undefined);
                 };
                 reader.readAsDataURL(file);
               }}
@@ -203,11 +225,7 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
               event.preventDefault();
               const form = event.currentTarget;
               const text = String(new FormData(form).get("material") ?? "");
-              void run(async () => {
-                const saved = await storeMaterial({ data: { brandId, filename: "pasted.txt", mime: "text/plain", text, base64: "" } });
-                setNote(saved.detail);
-                form.reset();
-              });
+              void materialMutation.mutateAsync({ filename: "pasted.txt", mime: "text/plain", text, base64: "" }).then(() => form.reset(), () => undefined);
             }}
           >
             <label className="block space-y-2 text-sm font-semibold">
@@ -224,10 +242,7 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
                   reader.onload = () => {
                     const raw = String(reader.result ?? "");
                     const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
-                    void run(async () => {
-                      const saved = await storeMaterial({ data: { brandId, filename: file.name, mime: file.type || "application/octet-stream", text: "", base64 } });
-                      setNote(saved.detail);
-                    });
+                    void materialMutation.mutateAsync({ filename: file.name, mime: file.type || "application/octet-stream", text: "", base64 }).catch(() => undefined);
                   };
                   reader.readAsDataURL(file);
                 }}

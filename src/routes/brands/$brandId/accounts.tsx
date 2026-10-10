@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useBusy } from "@/components/gate";
 import {
   Badge,
   Button,
@@ -13,11 +12,11 @@ import {
   Notice,
   Panel,
   SelectInput,
-  Skeleton,
+  ScreenSkeleton,
   TextInput,
   errorText,
 } from "@/components/ui";
-import { usePlatformAccountsQuery } from "@/lib/query/hooks";
+import { usePendingVariables, usePlatformAccountsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import {
   connectPlatformAccountAction,
@@ -61,7 +60,29 @@ function BrandAccounts({ brandId }: { brandId: string }) {
   const [token, setToken] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const busy = useBusy([qk.accounts(brandId)]);
+  const connectAccount = useScopedMutation({
+    mutationKey: ["mutation", "accounts.connect", brandId],
+    mutationFn: (vars: { platform: string; name: string; handle: string; externalAccountId: string; accountType: string; token: string }) =>
+      connectPlatformAccountAction({ data: { brandId, ...vars } }),
+    // A connected account is listed by the accounts screen and offered as a channel on studio.
+    invalidate: () => [qk.accounts(brandId), qk.channels(brandId)],
+    success: "Account connected.",
+    onSuccess: () => {
+      setAddModalOpen(false);
+      setName("");
+      setHandle("");
+      setExternalAccountId("");
+      setToken("");
+    },
+  });
+  const disconnectKey = ["mutation", "accounts.disconnect", brandId] as const;
+  const disconnectAccount = useScopedMutation({
+    mutationKey: disconnectKey,
+    mutationFn: (accountId: string) => disconnectPlatformAccountAction({ data: { brandId, accountId } }),
+    invalidate: () => [qk.accounts(brandId), qk.channels(brandId)],
+    success: "Account disconnected.",
+  });
+  const disconnecting = usePendingVariables<string>(disconnectKey);
 
   const selectedPlatformMeta = PLATFORMS.find((p) => p.id === platform) || PLATFORMS[0];
 
@@ -72,24 +93,16 @@ function BrandAccounts({ brandId }: { brandId: string }) {
     }
 
     setErrorMessage(null);
-    const ok = await busy.run(async () => {
-      await connectPlatformAccountAction({
-        data: {
-          brandId,
-          platform,
-          name: name.trim(),
-          handle: handle.trim(),
-          externalAccountId: externalAccountId.trim(),
-          accountType: selectedPlatformMeta.type,
-          token: token.trim(),
-        },
-      });
-      setAddModalOpen(false);
-      setName("");
-      setHandle("");
-      setExternalAccountId("");
-      setToken("");
-    });
+    const ok = await connectAccount
+      .mutateAsync({
+        platform,
+        name: name.trim(),
+        handle: handle.trim(),
+        externalAccountId: externalAccountId.trim(),
+        accountType: selectedPlatformMeta.type,
+        token: token.trim(),
+      })
+      .then(() => true, () => false);
 
     if (!ok) {
       setErrorMessage("Failed to connect account.");
@@ -97,17 +110,10 @@ function BrandAccounts({ brandId }: { brandId: string }) {
   };
 
   const handleDisconnect = async (accountId: string) => {
-    await busy.run(async () => {
-      await disconnectPlatformAccountAction({
-        data: {
-          brandId,
-          accountId,
-        },
-      });
-    });
+    await disconnectAccount.mutateAsync(accountId).catch(() => undefined);
   };
 
-  if (query.error) {
+  if (query.isError && !query.data) {
     return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   }
 
@@ -130,10 +136,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       </div>
 
       {query.isPending && !query.data ? (
-        <div role="status" aria-label="Loading accounts" className="space-y-3">
-          <Skeleton variant="line" />
-          <Skeleton variant="card" />
-        </div>
+        <ScreenSkeleton label="Loading accounts" shape="rows" />
       ) : accounts.length === 0 ? (
         <Panel className="p-8 text-center">
           <p className="text-lg font-semibold">No accounts connected yet</p>
@@ -183,7 +186,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
                     <Button
                       type="button"
                       variant="quiet"
-                      disabled={busy.pending}
+                      disabled={disconnecting.includes(account.id)}
                       onClick={() => handleDisconnect(account.id)}
                     >
                       Disconnect
@@ -259,16 +262,16 @@ function BrandAccounts({ brandId }: { brandId: string }) {
                 type="button"
                 variant="quiet"
                 onClick={() => setAddModalOpen(false)}
-                disabled={busy.pending}
+                disabled={connectAccount.isPending}
               >
                 Cancel
               </Button>
               <Button
                 type="button"
                 onClick={handleConnect}
-                disabled={busy.pending}
+                disabled={connectAccount.isPending}
               >
-                {busy.pending ? "Connecting…" : "Save & Connect"}
+                {connectAccount.isPending ? "Connecting…" : "Save & Connect"}
               </Button>
             </div>
           </div>
