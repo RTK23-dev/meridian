@@ -48,7 +48,6 @@ function Learning({ brandId }: { brandId: string }) {
   const saveScheduleMutation = useScopedMutation({
     mutationKey: learningKey("schedule"),
     mutationFn: (values: PerformanceSchedule) => setPerformanceSchedule({ data: { organizationId: data?.organizationId ?? "", brandId, ...values } }),
-    success: (_values, result) => `Schedule ${result.id} saved.`,
     onSuccess: (result) => {
       setNote(`${result.reason} Schedule ${result.id}.`);
       scheduleForm.reset();
@@ -59,7 +58,6 @@ function Learning({ brandId }: { brandId: string }) {
     mutationFn: () => refreshLearning({ data: { brandId } }),
     // Recomputing rewrites the stored patterns, which studio and the brand overview read.
     invalidate: () => [qk.learning(brandId), qk.studio(brandId), qk.machine(brandId)],
-    success: (_vars, result) => result.patterns === 0 ? "No patterns met the sample rule." : `${result.patterns} pattern${result.patterns === 1 ? "" : "s"} stored.`,
     onSuccess: (result) => setNote(result.patterns === 0
       ? "No pattern met the sample rule. Queued learning jobs for this brand were still closed. Nothing was invented."
       : `${result.patterns} pattern${result.patterns === 1 ? "" : "s"} stored. Queued learning jobs were drained. Score opportunities again to use them.`),
@@ -74,7 +72,6 @@ function Learning({ brandId }: { brandId: string }) {
     mutationKey: learningKey("share"),
     mutationFn: (patternId: string) => sharePatternWithOrganization({ data: { brandId, patternId } }),
     invalidate: () => [qk.learning(brandId)],
-    success: (_patternId, result) => result.status === "shared" ? "Shared with this workspace." : "That pattern was already shared.",
     onSuccess: (result) => setNote(result.status === "shared" ? "Shared with this workspace. Other brands still ignore it until they opt in." : "That pattern was already shared."),
   });
   const sharingPatterns = usePendingVariables<string>(learningKey("share"));

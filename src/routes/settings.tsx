@@ -40,7 +40,6 @@ function Settings() {
   const renameWorkspace = useScopedMutation({
     mutationKey: ["mutation", "workspace.rename", organizationId],
     mutationFn: (values: WorkspaceNameInput) => renameOrganization({ data: { organizationId, ...values } }),
-    success: "Workspace renamed.",
     onSuccess: async () => {
       setMessage("Workspace renamed.");
       await reload();
@@ -49,7 +48,6 @@ function Settings() {
   const inviteMember = useScopedMutation({
     mutationKey: ["mutation", "workspace.invite", organizationId],
     mutationFn: (values: MemberInviteInput) => addMember({ data: { organizationId, ...values } }),
-    success: (_values, result) => result.message,
     onSuccess: async (result) => {
       setMessage(result.message);
       await reload();
@@ -58,7 +56,6 @@ function Settings() {
   const weightsMutation = useScopedMutation({
     mutationKey: ["mutation", "workspace.weights", organizationId],
     mutationFn: (weights: ScoreWeights) => updateWeights({ data: { organizationId, weights } }),
-    success: "Diagnostic weights saved.",
     onSuccess: async () => {
       setMessage("Diagnostic weights saved. They do not create opportunities.");
       await reload();
@@ -67,7 +64,6 @@ function Settings() {
   const createWorkspaceAction = useScopedMutation({
     mutationKey: ["mutation", "organization.create"],
     mutationFn: (values: WorkspaceNameInput) => createOrganization({ data: values }),
-    success: "Workspace created.",
     onSuccess: async () => {
       setMessage("Workspace created and selected.");
       await reload();

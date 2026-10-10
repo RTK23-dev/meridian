@@ -32,7 +32,6 @@ function Opportunities({ brandId }: { brandId: string }) {
     mutationFn: () => refreshOpportunities({ data: { brandId } }),
     // Scoring replaces the open cards, which also moves the brand overview counts and the studio recommendation.
     invalidate: () => [qk.opportunities(brandId), qk.machine(brandId), qk.studio(brandId)],
-    success: (_vars, result) => `${result.count} candidates scored.`,
     onSuccess: (result) => setNote(`${result.count} candidates scored. Priors stay labeled as priors. An angle is added only when stored observations or a learned pattern contain it.`),
   });
   const dismiss = useDismissOpportunities(brandId);

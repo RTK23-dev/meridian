@@ -50,7 +50,6 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
       return result;
     },
     invalidate: () => [qk.decisionEngines(organizationId)],
-    success: (_engineId, result) => `Decision engine set to ${result.engineId}.`,
     onSuccess: (result) => {
       setMessage(`Decision engine set to ${result.engineId}. Only this engine now receives decisions for this workspace.`);
       setChoice(null);

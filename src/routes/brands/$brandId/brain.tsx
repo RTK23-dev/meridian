@@ -171,7 +171,6 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
     mutationKey: ["mutation", "brand.logo", brandId],
     mutationFn: (base64: string) => uploadLogo({ data: { brandId, base64 } }),
     invalidate: () => [qk.assets(brandId)],
-    success: (_base64, saved) => saved.status === "stored" ? "Logo stored." : saved.detail,
     onSuccess: (saved) => setNote(saved.status === "stored" ? "Logo stored." : saved.detail),
   });
   const materialMutation = useScopedMutation({
@@ -179,7 +178,6 @@ function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) 
     mutationFn: (vars: { filename: string; mime: string; text: string; base64: string }) => storeMaterial({ data: { brandId, ...vars } }),
     // Stored material adds source documents, which the brand overview counts.
     invalidate: () => [qk.assets(brandId), qk.machine(brandId)],
-    success: (_vars, saved) => saved.detail,
     onSuccess: (saved) => setNote(saved.detail),
   });
   const pending = uploadLogoMutation.isPending || materialMutation.isPending;

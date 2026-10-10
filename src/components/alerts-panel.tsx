@@ -18,7 +18,6 @@ export function AlertsPanel({ organizationId }: { organizationId: string }) {
     mutationFn: () => refreshAlerts({ data: { organizationId } }),
     // A check can write alert rows and queue a delivery job, so both keys refresh.
     invalidate: () => [qk.alerts(organizationId), qk.jobs(organizationId)],
-    success: (_vars, result) => result.raised === 0 ? "No alert condition is currently true." : `${result.raised} alert condition${result.raised === 1 ? "" : "s"} recorded.`,
     onSuccess: (result) => {
       setNote(result.raised === 0
         ? "No alert condition is currently true."
@@ -29,7 +28,6 @@ export function AlertsPanel({ organizationId }: { organizationId: string }) {
     mutationKey: ["mutation", "alerts.target", organizationId],
     mutationFn: (url: string) => saveDeliveryTarget({ data: { organizationId, url } }),
     invalidate: () => [qk.alerts(organizationId)],
-    success: (_vars, result) => result.status === "saved" ? "Webhook target saved." : "Delivery target cleared.",
     onSuccess: (result) => {
       setNote(result.status === "saved" ? "Webhook target saved. It has not been called yet." : "Delivery target cleared.");
     },

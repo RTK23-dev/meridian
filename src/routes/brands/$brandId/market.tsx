@@ -88,7 +88,6 @@ function MarketPage({ brandId }: { brandId: string }) {
     mutationKey: marketKey("research"),
     mutationFn: (values: ResearchCollection) => startResearchCollection({ data: { brandId, ...values } }),
     invalidate: () => [qk.market(brandId)],
-    success: (_values, result) => result.status === "NOT_CONNECTED" ? "" : "Research collection queued.",
     onSuccess: (result, values) => {
       setNote(result.status === "NOT_CONNECTED" ? result.error : `Research collection ${result.reused ? "already queued" : "queued"}. This page updates while the run is queued or running.`);
       if (result.status !== "NOT_CONNECTED") researchForm.reset(values);
@@ -111,14 +110,12 @@ function MarketPage({ brandId }: { brandId: string }) {
     mutationKey: marketKey("propose"),
     mutationFn: () => proposeCompetitors({ data: { brandId } }),
     invalidate: () => [qk.market(brandId), qk.machine(brandId)],
-    success: (_vars, result) => result.created === 0 ? "No new candidates." : `${result.created} candidate(s) stored.`,
     onSuccess: (result) => setNote(result.created === 0 ? "No new competitor candidates from stored evidence." : `${result.created} candidate(s) stored. They stay unconfirmed until you accept them.`),
   });
   const fetchPageMutation = useScopedMutation({
     mutationKey: marketKey("page-fetch"),
     mutationFn: (values: { url: string }) => fetchSourcePage({ data: { brandId, url: values.url } }),
     invalidate: () => [qk.market(brandId), qk.machine(brandId)],
-    success: (_values, result) => result.status === "stored" ? "Page text stored." : "",
     onSuccess: (result) => {
       setNote(result.status === "stored" ? "Page text stored. It is not part of the brand brain." : result.error);
       pageForm.reset({ url: "" });
@@ -128,7 +125,6 @@ function MarketPage({ brandId }: { brandId: string }) {
     mutationKey: marketKey("observation"),
     mutationFn: (values: ObservationFieldsOutput) => recordObservation({ data: { brandId, ...values } }),
     invalidate: () => [qk.market(brandId), qk.machine(brandId), qk.intelligence(brandId), qk.studio(brandId)],
-    success: (_values, result) => result.duplicate ? "That observation was already stored." : "Observation stored.",
     onSuccess: (result) => {
       setNote(result.duplicate ? "That observation was already stored." : "Observation stored.");
       observationForm.reset();
@@ -139,7 +135,6 @@ function MarketPage({ brandId }: { brandId: string }) {
     mutationFn: (documentId: string) => suggestFromDocument({ data: { brandId, documentId } }),
     // Suggestions wait in the market screen. They change the brain only when accepted.
     invalidate: () => [qk.market(brandId)],
-    success: (_documentId, result) => result.message,
     onSuccess: (result) => setNote(result.message),
   });
   const resolveSuggestionMutation = useScopedMutation({

@@ -28,7 +28,6 @@ function CalibrationPage() {
     mutationKey: [...calibrationKey, "decide"],
     mutationFn: (vars: { proposalId: string; decision: "approved" | "rejected" }) => decideCalibration({ data: { brandId, proposalId: vars.proposalId, decision: vars.decision } }),
     invalidate: () => [qk.calibration(brandId)],
-    success: (vars) => vars.decision === "approved" ? "Thresholds approved." : "Proposal rejected.",
     onSuccess: (result, vars) => {
       if (vars.decision === "approved") {
         setNote(result.status === "approved" ? `Approved threshold version ${result.version}.` : "Proposal was not approved.");
