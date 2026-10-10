@@ -38,3 +38,41 @@ export const webhookFilterSchema = z.object({
 });
 
 export type WebhookFilterInput = z.input<typeof webhookFilterSchema>;
+
+/**
+ * connectPlatformAccountAction: the display name and the account ID are required. Each text field is trimmed and cut at 120
+ * characters. The token is trimmed and sent only when present.
+ */
+export const connectAccountSchema = z.object({
+  platform: z.string().min(1, "Choose a platform."),
+  name: z.string().trim().min(1, "Enter the account display name.").max(120, "Use 120 characters or fewer."),
+  handle: z.string().trim().max(120, "Use 120 characters or fewer."),
+  externalAccountId: z.string().trim().min(1, "Enter the account ID.").max(120, "Use 120 characters or fewer."),
+  token: z.string().trim(),
+});
+
+export type ConnectAccountInput = z.input<typeof connectAccountSchema>;
+
+/**
+ * Cost modes. The server reads them from production/cost-mode.ts, which also imports the vault and database code, so that
+ * module cannot be bundled for the browser. The list is repeated here and must match COST_MODES there.
+ */
+export const CLIENT_COST_MODES = ["ZERO_SPEND", "LOWEST_COST", "BALANCED", "QUALITY_FIRST"] as const;
+
+/**
+ * The provider panel's fields. saveProviderConfig stores each category's settings as they are sent, with one exception:
+ * the production cost mode must be a known mode. The page limit is read with Number(), so a blank or non-numeric page
+ * limit is refused here instead of being stored as 0 or NaN. The API key is trimmed; a missing key is answered by the
+ * server, which knows whether one is already stored.
+ */
+export const providerFieldsSchema = z.object({
+  apiKey: z.string().trim(),
+  costPreference: z.enum(CLIENT_COST_MODES, { error: "Choose a cost mode: ZERO_SPEND, LOWEST_COST, BALANCED or QUALITY_FIRST." }),
+  gatewayUrl: z.string().trim(),
+  maxPages: z.string().trim().refine(
+    (value) => value !== "" && Number.isFinite(Number(value)),
+    "Enter the number of pages, as a number.",
+  ),
+});
+
+export type ProviderFieldsInput = z.input<typeof providerFieldsSchema>;

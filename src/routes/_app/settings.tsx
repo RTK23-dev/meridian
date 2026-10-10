@@ -57,7 +57,8 @@ function SettingsPage() {
           <WeightsTab organizationId={active.id} saved={active.weights} canAdmin={canAdmin} />
         </TabsContent>
 
-        <TabsContent value="alerts">
+        {/* The alert target form keeps its draft when the person switches tabs, so it stays mounted (hidden). */}
+        <TabsContent value="alerts" forceMount className="data-[state=inactive]:hidden">
           {canAdmin ? <AlertsPanel organizationId={active.id} /> : <p className="text-sm text-fg-muted">Only an admin can change alert delivery.</p>}
         </TabsContent>
 
