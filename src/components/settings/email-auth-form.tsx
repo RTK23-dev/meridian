@@ -3,6 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { Button, Field, TextInput, errorText } from "@/components/ui";
 import { authClient } from "@/lib/auth/client";
+import { submitOnShortcut } from "@/components/forms/shortcut";
 import { FormError } from "./form-error";
 import { plainAuthError, plainServerError, signInSchema, signUpSchema, type SignInValues, type SignUpValues } from "./form-model";
 
@@ -43,7 +44,7 @@ function SignInForm() {
     }
   }
   return (
-    <form onSubmit={form.handleSubmit(submit)} className="space-y-4" noValidate>
+    <form onSubmit={form.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} className="space-y-4" noValidate>
       <EmailField registration={form.register("email")} error={form.formState.errors.email?.message} autoComplete="email" />
       <PasswordField
         label="Password"
@@ -77,7 +78,7 @@ function SignUpForm() {
     }
   }
   return (
-    <form onSubmit={form.handleSubmit(submit)} className="space-y-4" noValidate>
+    <form onSubmit={form.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} className="space-y-4" noValidate>
       <Field label="Your name" error={form.formState.errors.name?.message} required>
         <TextInput {...form.register("name")} autoComplete="name" maxLength={80} />
       </Field>

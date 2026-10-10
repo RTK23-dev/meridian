@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { Term } from "@/components/glossary";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { useWorkspace } from "@/components/workspace";
 import { providerLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
@@ -62,12 +63,6 @@ function Studio({ brandId }: { brandId: string }) {
     mode: "onBlur",
   });
   const generationDirty = generationForm.formState.isDirty;
-  useEffect(() => {
-    if (!generationDirty) return;
-    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", warnBeforeLeave);
-    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
-  }, [generationDirty]);
 
   // The studio query polls while a variant is queued or running. A variant the provider has submitted is polled here too.
   const hasSubmitted = !!session?.variants.some((variant) => variant.mediaStatus === "submitted");
@@ -93,7 +88,8 @@ function Studio({ brandId }: { brandId: string }) {
     if (!brief) return;
     await actions.generateVariants.mutateAsync({ briefId: brief.id, values }).then((result) => {
       if (result.kind === "generated") {
-        generationForm.reset(result.values);
+        // Text typed while generation ran stays in the form. Only the values that were generated become the baseline.
+        generationForm.reset(result.values, { keepValues: true });
         setRetryNotice(null);
       }
     }, () => undefined);
@@ -134,6 +130,7 @@ function Studio({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-6">
+      <UnsavedChangesGuard dirty={generationDirty} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">Studio</p>

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -31,4 +32,27 @@ export function UnsavedChangesBar({ dirty, subject, confirming, onConfirmingChan
       )}
     </div>
   );
+}
+
+/**
+ * The bar for a form that has no dialog around it. It keeps its own confirm step, and drops it once the form is clean again.
+ */
+export function FormDiscardBar({ dirty, subject, onDiscard, className }: {
+  dirty: boolean;
+  subject: string;
+  onDiscard: () => void;
+  className?: string;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    if (!dirty) setConfirming(false);
+  }, [dirty]);
+  return <UnsavedChangesBar
+    dirty={dirty}
+    subject={subject}
+    confirming={confirming}
+    onConfirmingChange={setConfirming}
+    onDiscard={() => { setConfirming(false); onDiscard(); }}
+    className={className}
+  />;
 }

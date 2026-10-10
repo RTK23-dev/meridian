@@ -6,6 +6,9 @@ import {
   Button, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea, TextInput,
 } from "@/components/ui";
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
+import { FormDiscardBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 import {
@@ -57,6 +60,7 @@ function MarketPage({ brandId }: { brandId: string }) {
     defaultValues: { origin: "competitor", competitorId: "", angle: "demonstration", observedAngle: "", hookType: "", format: "", proofType: "", title: "", hook: "", message: "", offer: "", cta: "", claim: "", platform: "", productName: "", sourceUrl: "" },
     mode: "onBlur",
   });
+  const marketFormsDirty = researchForm.formState.isDirty || competitorForm.formState.isDirty || pageForm.formState.isDirty || observationForm.formState.isDirty;
   const researchFilters = useResearchFilters(market?.researchAds ?? NO_ADS);
   // One mutation per action. Each invalidates only the keys it changes, and its pending state covers only its own control.
   const marketKey = (name: string) => ["mutation", `market.${name}`, brandId] as const;
@@ -66,7 +70,7 @@ function MarketPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.market(brandId)],
     onSuccess: (result, values) => {
       setNote(result.status === "NOT_CONNECTED" ? result.error : `Research collection ${result.reused ? "already queued" : "queued"}. This page updates while the run is queued or running.`);
-      if (result.status !== "NOT_CONNECTED") researchForm.reset(values);
+      if (result.status !== "NOT_CONNECTED") researchForm.reset(values, { keepValues: true });
     },
   });
   // A retry sends the same collection call with the failed run's search and country. The form is left as the user set it.
@@ -173,6 +177,7 @@ function MarketPage({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
+      <UnsavedChangesGuard dirty={marketFormsDirty} />
       <div className="max-w-2xl space-y-3">
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Market</p>
         <h1 className="font-display text-4xl">What has actually been seen</h1>
@@ -199,11 +204,12 @@ function MarketPage({ brandId }: { brandId: string }) {
           <p className="mt-2 text-sm text-muted">Meta Ad Library collection is capped at 100 ads and 100 MB of stored source video per run. Each video is capped at 24 MB. Media, transcript and analysis each retain their own status. Ads without a public downloadable video are not analyzed.</p>
         </div>
         {canEdit ? (
-          <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={researchForm.handleSubmit(collectResearch)}>
+          <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={researchForm.handleSubmit(collectResearch)} onKeyDown={(event) => submitOnShortcut(event)}>
             <Field label="Search ads" error={researchForm.formState.errors.searchTerms?.message} required><TextInput {...researchForm.register("searchTerms")} required maxLength={100} placeholder="Brand, product, or category" /></Field>
             <Field label="Country" error={researchForm.formState.errors.country?.message} required><TextInput {...researchForm.register("country")} required maxLength={2} /></Field>
             <Field label="Maximum ads" error={researchForm.formState.errors.limit?.message} required><SelectInput {...researchForm.register("limit", { valueAsNumber: true })}><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></SelectInput></Field>
-            <div className="flex items-end gap-2">{researchForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => researchForm.reset()}>Clear</Button> : null}<Button type="submit" disabled={startResearch.isPending || researchForm.formState.isSubmitting}>Start collection</Button></div>
+            <div className="flex items-end gap-2"><Button type="submit" disabled={startResearch.isPending || researchForm.formState.isSubmitting}>{startResearch.isPending || researchForm.formState.isSubmitting ? "Starting…" : "Start collection"}</Button></div>
+            <FormDiscardBar dirty={researchForm.formState.isDirty} subject="research search" onDiscard={() => researchForm.reset()} className="md:col-span-4" />
           </form>
         ) : null}
         <div className="mt-6">
@@ -274,6 +280,7 @@ function MarketPage({ brandId }: { brandId: string }) {
           <form
             className="mt-4 grid gap-3 md:grid-cols-2"
             onSubmit={competitorForm.handleSubmit(saveCompetitor)}
+            onKeyDown={(event) => submitOnShortcut(event)}
           >
             <Field label="Name" error={competitorForm.formState.errors.name?.message} required>
               <TextInput {...competitorForm.register("name")} required maxLength={120} />
@@ -288,9 +295,9 @@ function MarketPage({ brandId }: { brandId: string }) {
                 <option value="inspirational">Inspirational</option>
               </SelectInput>
             </Field>
+            <FormDiscardBar dirty={competitorForm.formState.isDirty} subject="competitor" onDiscard={() => competitorForm.reset()} className="md:col-span-2" />
             <div className="md:col-span-2">
-              <Button type="submit" disabled={addCompetitorMutation.isPending || competitorForm.formState.isSubmitting}>Add competitor</Button>
-              {competitorForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => competitorForm.reset()}>Clear</Button> : null}
+              <Button type="submit" disabled={addCompetitorMutation.isPending || competitorForm.formState.isSubmitting}>{addCompetitorMutation.isPending || competitorForm.formState.isSubmitting ? "Adding…" : "Add competitor"}</Button>
             </div>
           </form>
         ) : null}
@@ -313,6 +320,7 @@ function MarketPage({ brandId }: { brandId: string }) {
           <form
             className="mt-4 grid gap-3"
             onSubmit={observationForm.handleSubmit(storeObservation)}
+            onKeyDown={(event) => submitOnShortcut(event)}
           >
             <Field label="Competitor" error={observationForm.formState.errors.competitorId?.message} required>
               <SelectInput {...observationForm.register("competitorId")} required>
@@ -330,7 +338,7 @@ function MarketPage({ brandId }: { brandId: string }) {
                 ))}
               </SelectInput>
             </Field>
-            <Field label="Observed angle, if it is not in the list">
+            <Field label="Observed angle, if it is not in the list" error={observationForm.formState.errors.observedAngle?.message}>
               <TextInput {...observationForm.register("observedAngle")} placeholder="unboxing" maxLength={48} />
             </Field>
             <div className="grid gap-3 md:grid-cols-3">
@@ -351,7 +359,8 @@ function MarketPage({ brandId }: { brandId: string }) {
               <Field label="Platform" error={observationForm.formState.errors.platform?.message}><TextInput {...observationForm.register("platform")} maxLength={80} /></Field>
               <Field label="Source URL" error={observationForm.formState.errors.sourceUrl?.message}><TextInput {...observationForm.register("sourceUrl")} maxLength={500} /></Field>
             </div>
-            <div className="flex flex-wrap gap-2"><Button type="submit" disabled={storeObservationMutation.isPending || observationForm.formState.isSubmitting}>Store observation</Button>{observationForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => observationForm.reset()}>Discard changes</Button> : null}</div>
+            <FormDiscardBar dirty={observationForm.formState.isDirty} subject="observation" onDiscard={() => observationForm.reset()} />
+            <div className="flex flex-wrap gap-2"><Button type="submit" disabled={storeObservationMutation.isPending || observationForm.formState.isSubmitting}>{storeObservationMutation.isPending || observationForm.formState.isSubmitting ? "Storing…" : "Store observation"}</Button></div>
           </form>
         ) : null}
       </Panel>
@@ -362,11 +371,13 @@ function MarketPage({ brandId }: { brandId: string }) {
           <form
             className="mt-4 flex flex-wrap gap-3"
             onSubmit={pageForm.handleSubmit(fetchPage)}
+            onKeyDown={(event) => submitOnShortcut(event)}
           >
             <Field label="Public page URL" error={pageForm.formState.errors.url?.message} required className="min-w-64 flex-1">
               <TextInput {...pageForm.register("url")} placeholder="https://" className="max-w-md" required maxLength={500} />
             </Field>
-            <div className="flex items-end gap-2">{pageForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => pageForm.reset()}>Clear</Button> : null}<Button type="submit" disabled={fetchPageMutation.isPending || pageForm.formState.isSubmitting}>Fetch page</Button></div>
+            <div className="flex items-end gap-2"><Button type="submit" disabled={fetchPageMutation.isPending || pageForm.formState.isSubmitting}>{fetchPageMutation.isPending || pageForm.formState.isSubmitting ? "Fetching…" : "Fetch page"}</Button></div>
+            <FormDiscardBar dirty={pageForm.formState.isDirty} subject="page" onDiscard={() => pageForm.reset()} className="basis-full" />
           </form>
         ) : null}
         <ul className="mt-4 space-y-3">

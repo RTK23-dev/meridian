@@ -21,6 +21,9 @@ import {
   type MediaLoad,
 } from "@/components/library/library-model";
 import { TraceDrawer } from "@/components/library/trace-drawer";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { submitOnShortcut } from "@/components/forms/shortcut";
 import { buildTraceTimeline } from "@/components/library/trace-model";
 import { REVIEW_LIST_LIMIT } from "@/components/reviews/review-model";
 import { hasRole } from "@/lib/meridian/access";
@@ -74,12 +77,8 @@ function Library({ brandId }: { brandId: string }) {
     mode: "onBlur",
   });
   const formsDirty = performanceForm.formState.isDirty || observationForm.formState.isDirty || publishForm.formState.isDirty;
-  useEffect(() => {
-    if (!formsDirty) return;
-    const warnBeforeLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", warnBeforeLeave);
-    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
-  }, [formsDirty]);
+  const [publishDiscard, setPublishDiscard] = useState(false);
+  const [observationDiscard, setObservationDiscard] = useState(false);
   useEffect(() => {
     const firstCreative = data?.creatives[0]?.id;
     if (firstCreative && !publishForm.getValues("creativeId")) {
@@ -176,6 +175,7 @@ function Library({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
+      <UnsavedChangesGuard dirty={formsDirty} />
       <div className="max-w-2xl space-y-3">
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Library</p>
         <h1 className="font-display text-4xl">Creatives this brand owns</h1>
@@ -196,7 +196,7 @@ function Library({ brandId }: { brandId: string }) {
           <form
             className="mt-4 grid gap-3"
             onSubmit={publishForm.handleSubmit(savePausedObjects)}
-            onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); event.currentTarget.requestSubmit(); } }}
+            onKeyDown={(event) => submitOnShortcut(event)}
           >
             <Field label="Provider" error={publishForm.formState.errors.provider?.message}>
               <SelectInput {...publishForm.register("provider")}>
@@ -220,41 +220,47 @@ function Library({ brandId }: { brandId: string }) {
             <Field label="Daily budget (cents)" error={publishForm.formState.errors.dailyBudgetCents?.message}>
               <TextInput {...publishForm.register("dailyBudgetCents")} type="text" inputMode="decimal" required />
             </Field>
-            <Field label="Link">
+            <Field label="Link" error={publishForm.formState.errors.link?.message}>
               <TextInput {...publishForm.register("link")} type="url" placeholder="https://" />
             </Field>
-            <Field label="Message">
+            <Field label="Message" error={publishForm.formState.errors.message?.message}>
               <TextArea {...publishForm.register("message")} />
             </Field>
-            <Field label="Meta countries" hint="Comma-separated, such as US. Used only for Meta.">
+            <Field label="Meta countries" hint="Comma-separated, such as US. Used only for Meta." error={publishForm.formState.errors.countries?.message}>
               <TextInput {...publishForm.register("countries")} />
             </Field>
-            <Field label="Meta page id">
+            <Field label="Meta page id" error={publishForm.formState.errors.pageId?.message}>
               <TextInput {...publishForm.register("pageId")} />
             </Field>
-            <Field label="TikTok location ids" hint="Numeric location ids, not country codes. An ad also needs an uploaded image or video id.">
+            <Field label="TikTok location ids" hint="Numeric location ids, not country codes. An ad also needs an uploaded image or video id." error={publishForm.formState.errors.locationIds?.message}>
               <TextInput {...publishForm.register("locationIds")} />
             </Field>
-            <Field label="TikTok schedule start">
+            <Field label="TikTok schedule start" error={publishForm.formState.errors.scheduleStart?.message}>
               <TextInput {...publishForm.register("scheduleStart")} placeholder="2026-01-02 00:00:00" />
             </Field>
-            <Field label="TikTok image ids">
+            <Field label="TikTok image ids" error={publishForm.formState.errors.imageIds?.message}>
               <TextInput {...publishForm.register("imageIds")} />
             </Field>
-            <Field label="TikTok video id">
+            <Field label="TikTok video id" error={publishForm.formState.errors.videoId?.message}>
               <TextInput {...publishForm.register("videoId")} />
             </Field>
-            <Field label="Google headlines" hint="Each headline is 30 characters or fewer.">
+            <Field label="Google headlines" hint="Each headline is 30 characters or fewer." error={publishForm.formState.errors.headlines?.message}>
               <TextInput {...publishForm.register("headlines")} />
             </Field>
-            <Field label="Google descriptions" hint="Each description is 90 characters or fewer.">
+            <Field label="Google descriptions" hint="Each description is 90 characters or fewer." error={publishForm.formState.errors.descriptions?.message}>
               <TextInput {...publishForm.register("descriptions")} />
             </Field>
-            <Field label="Google CPC bid (cents)">
+            <Field label="Google CPC bid (cents)" error={publishForm.formState.errors.cpcBidCents?.message}>
               <TextInput {...publishForm.register("cpcBidCents")} type="text" inputMode="decimal" />
             </Field>
-            {publishForm.formState.isDirty ? <div role="status" className="flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => publishForm.reset()}>Discard</Button></div> : null}
-            <Button type="submit" disabled={pausedObjects.isPending || publishForm.formState.isSubmitting || data.creatives.length === 0}>{publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
+            <UnsavedChangesBar
+              dirty={publishForm.formState.isDirty}
+              subject="paused publish"
+              confirming={publishDiscard}
+              onConfirmingChange={setPublishDiscard}
+              onDiscard={() => { publishForm.reset(); setPublishDiscard(false); }}
+            />
+            <Button type="submit" disabled={pausedObjects.isPending || publishForm.formState.isSubmitting || data.creatives.length === 0}>{pausedObjects.isPending || publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
           </form>
         ) : (
           <p className="mt-2 text-sm text-muted">An admin can send a paused publish.</p>
@@ -329,14 +335,15 @@ function Library({ brandId }: { brandId: string }) {
           <form
             className="mt-4 grid gap-3"
             onSubmit={observationForm.handleSubmit(saveOwnCreative)}
+            onKeyDown={(event) => submitOnShortcut(event)}
           >
-            <Field label="Angle preset" error={observationForm.formState.errors.observedAngle?.message}>
+            <Field label="Angle preset" error={observationForm.formState.errors.angle?.message}>
               <SelectInput {...observationForm.register("angle")}>
                 <option value="">Not in the list</option>
                 {HYPOTHESES.map((item) => <option key={item.id} value={item.angle}>{item.label}</option>)}
               </SelectInput>
             </Field>
-            <Field label="Observed angle, if it is not in the list">
+            <Field label="Observed angle, if it is not in the list" error={observationForm.formState.errors.observedAngle?.message}>
               <TextInput {...observationForm.register("observedAngle")} placeholder="unboxing" maxLength={48} />
             </Field>
             <div className="grid gap-3 md:grid-cols-2">
@@ -347,8 +354,14 @@ function Library({ brandId }: { brandId: string }) {
             <Field label="Script" error={observationForm.formState.errors.message?.message} required><TextArea {...observationForm.register("message")} required maxLength={4000} /></Field>
             <Field label="Call to action" error={observationForm.formState.errors.cta?.message}><TextInput {...observationForm.register("cta")} maxLength={240} /></Field>
             <Field label="Product" error={observationForm.formState.errors.productName?.message}><TextInput {...observationForm.register("productName")} maxLength={160} /></Field>
-            {observationForm.formState.isDirty ? <div className="flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm" role="status"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => observationForm.reset()}>Discard</Button></div> : null}
-            <Button type="submit" disabled={ownCreative.isPending || observationForm.formState.isSubmitting}>Save to library</Button>
+            <UnsavedChangesBar
+              dirty={observationForm.formState.isDirty}
+              subject="creative"
+              confirming={observationDiscard}
+              onConfirmingChange={setObservationDiscard}
+              onDiscard={() => { observationForm.reset(); setObservationDiscard(false); }}
+            />
+            <Button type="submit" disabled={ownCreative.isPending || observationForm.formState.isSubmitting}>{ownCreative.isPending || observationForm.formState.isSubmitting ? "Saving…" : "Save to library"}</Button>
           </form>
         </Panel>
       ) : null}
