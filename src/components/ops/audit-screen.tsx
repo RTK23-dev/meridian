@@ -10,10 +10,9 @@ import { hasRole } from "@/lib/meridian/access";
 import { exportAuditCsv, listAuditPage } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "@/lib/query/keys";
 import { AdminOnlyNotice, RefusalNotice } from "./ops-shared";
-import { pageSpan, timestampLabel } from "./format";
+import { exportFilename, pageSpan, timestampLabel } from "./format";
 import {
-  actionLabel, auditDetailsText, AUDIT_PAGE_SIZE, auditExportNote, dateRangeProblem, EMPTY_AUDIT_FILTERS, exportFilename,
-  type AuditFilters,
+  actionLabel, auditDetailsText, AUDIT_PAGE_SIZE, auditExportNote, dateRangeProblem, EMPTY_AUDIT_FILTERS, type AuditFilters,
 } from "./audit-model";
 
 type AuditEntry = Awaited<ReturnType<typeof listAuditPage>>["entries"][number];

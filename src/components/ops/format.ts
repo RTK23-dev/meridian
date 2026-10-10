@@ -6,6 +6,11 @@ export function timestampLabel(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString();
 }
 
+/** A file name with the date it was made, such as meridian-audit-2026-10-10.csv. */
+export function exportFilename(prefix: string, now: Date): string {
+  return `${prefix}-${now.toISOString().slice(0, 10)}.csv`;
+}
+
 /** The visible range and page count for one page of results. A total of zero shows no rows and one page. */
 export function pageSpan(page: number, pageSize: number, total: number): { first: number; last: number; pageCount: number } {
   const size = pageSize > 0 ? pageSize : 1;

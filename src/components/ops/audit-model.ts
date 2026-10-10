@@ -27,11 +27,6 @@ export function auditDetailsText(metadata: Record<string, string>): string {
   return redactSecrets(entries.map(([key, value]) => `${key}: ${value}`).join(" · ")).slice(0, 240);
 }
 
-/** A file name with the date it was made: `<prefix>-YYYY-MM-DD.csv`. */
-export function exportFilename(prefix: string, now: Date): string {
-  return `${prefix}-${now.toISOString().slice(0, 10)}.csv`;
-}
-
 /** The sentence under the export button once a file has been generated. It states what the file holds. */
 export function auditExportNote(result: { rowCount: number; total: number; truncated: boolean; limit: number }): string {
   if (result.total === 0) return "No entries matched these filters, so the file has only its header row.";

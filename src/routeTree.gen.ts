@@ -16,6 +16,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAlertsRouteImport } from './routes/_app/alerts'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
+import { Route as AppExportsRouteImport } from './routes/_app/exports'
 import { Route as AppIntegrationsRouteImport } from './routes/_app/integrations'
 import { Route as AppInviteRouteImport } from './routes/_app/invite'
 import { Route as AppJobsRouteImport } from './routes/_app/jobs'
@@ -75,6 +76,11 @@ const AppAlertsRoute = AppAlertsRouteImport.update({
 const AppAuditRoute = AppAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppExportsRoute = AppExportsRouteImport.update({
+  id: '/exports',
+  path: '/exports',
   getParentRoute: () => AppRoute,
 } as any)
 const AppIntegrationsRoute = AppIntegrationsRouteImport.update({
@@ -221,6 +227,7 @@ export interface FileRoutesByFullPath {
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
+  '/exports': typeof AppExportsRoute
   '/integrations': typeof AppIntegrationsRoute
   '/invite': typeof AppInviteRoute
   '/jobs': typeof AppJobsRoute
@@ -254,6 +261,7 @@ export interface FileRoutesByTo {
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
+  '/exports': typeof AppExportsRoute
   '/integrations': typeof AppIntegrationsRoute
   '/invite': typeof AppInviteRoute
   '/jobs': typeof AppJobsRoute
@@ -290,6 +298,7 @@ export interface FileRoutesById {
   '/_app/$': typeof AppSplatRoute
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/audit': typeof AppAuditRoute
+  '/_app/exports': typeof AppExportsRoute
   '/_app/integrations': typeof AppIntegrationsRoute
   '/_app/invite': typeof AppInviteRoute
   '/_app/jobs': typeof AppJobsRoute
@@ -327,6 +336,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/alerts'
     | '/audit'
+    | '/exports'
     | '/integrations'
     | '/invite'
     | '/jobs'
@@ -360,6 +370,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/alerts'
     | '/audit'
+    | '/exports'
     | '/integrations'
     | '/invite'
     | '/jobs'
@@ -395,6 +406,7 @@ export interface FileRouteTypes {
     | '/_app/$'
     | '/_app/alerts'
     | '/_app/audit'
+    | '/_app/exports'
     | '/_app/integrations'
     | '/_app/invite'
     | '/_app/jobs'
@@ -484,6 +496,13 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/audit'
       preLoaderRoute: typeof AppAuditRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/exports': {
+      id: '/_app/exports'
+      path: '/exports'
+      fullPath: '/exports'
+      preLoaderRoute: typeof AppExportsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/integrations': {
@@ -675,6 +694,7 @@ interface AppRouteChildren {
   AppSplatRoute: typeof AppSplatRoute
   AppAlertsRoute: typeof AppAlertsRoute
   AppAuditRoute: typeof AppAuditRoute
+  AppExportsRoute: typeof AppExportsRoute
   AppIntegrationsRoute: typeof AppIntegrationsRoute
   AppInviteRoute: typeof AppInviteRoute
   AppJobsRoute: typeof AppJobsRoute
@@ -703,6 +723,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSplatRoute: AppSplatRoute,
   AppAlertsRoute: AppAlertsRoute,
   AppAuditRoute: AppAuditRoute,
+  AppExportsRoute: AppExportsRoute,
   AppIntegrationsRoute: AppIntegrationsRoute,
   AppInviteRoute: AppInviteRoute,
   AppJobsRoute: AppJobsRoute,
