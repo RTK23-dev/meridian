@@ -360,6 +360,28 @@ test("openStudioBrief records the direction with who and why, and never writes t
   assert.equal(approved?.count, 0, "accepting a direction writes no reviewer_decision on any opportunity decision");
 });
 
+test("the next brief (forceNew) is written when it is given a reason, and is refused without one", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "svc-next-brief");
+  await seedBrandBrain(sql, tenant);
+  await seedCompetitorCreative(sql, tenant, DISCOVERED_ANGLE);
+  const gate = gateFor("AUTO_APPROVE");
+  await openStudioBrief(tenant.userId, { brandId: tenant.brandId, forceNew: false, reason: REASON }, gate);
+  const [first] = await sql<{ count: number }>`select count(*)::int as count from briefs where brand_id = ${tenant.brandId} and opportunity_id is not null`;
+  assert.equal(first?.count, 1, "the first brief is written");
+
+  await assert.rejects(
+    openStudioBrief(tenant.userId, { brandId: tenant.brandId, forceNew: true, reason: "" }, gate),
+    /at least 20 characters/,
+    "the next brief needs a reason, as the accept does",
+  );
+  await openStudioBrief(tenant.userId, { brandId: tenant.brandId, forceNew: true, reason: "Write the next brief from what the test learned." }, gate);
+  const [second] = await sql<{ count: number }>`select count(*)::int as count from briefs where brand_id = ${tenant.brandId} and opportunity_id is not null`;
+  assert.equal(second?.count, 2, "the next brief is written");
+  const [directions] = await sql<{ count: number }>`select count(*)::int as count from opportunity_direction_decisions where brand_id = ${tenant.brandId}`;
+  assert.equal(directions?.count, 2, "each brief has its own recorded direction");
+});
+
 test("openStudioBrief refuses a reason shorter than 20 characters before ranking or writing anything", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "svc-short-reason");
