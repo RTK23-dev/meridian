@@ -21,6 +21,8 @@
   --color-accent: #8f6232;
   --color-accent-fg: #ffffff;
   --color-accent-soft: #f1e6d4;
+  /* Text and border colour for the legacy brass name. Darker than the accent so small text passes 4.5:1 on the panels. */
+  --color-brass-text: #7a5529;
   --color-success: #2f6b3f;
   --color-success-soft: #e3f0e6;
   --color-warning: #8a5a00;
@@ -56,7 +58,7 @@
   --color-panel: var(--color-surface);
   --color-line: var(--color-border);
   --color-muted: var(--color-fg-muted);
-  --color-brass: var(--color-accent);
+  --color-brass: var(--color-brass-text);
 }
 
 .dark {
@@ -70,6 +72,7 @@
   --color-accent: #d6a064;
   --color-accent-fg: #1a1208;
   --color-accent-soft: #2e2415;
+  --color-brass-text: #d6a064;
   --color-success: #6fbf86;
   --color-success-soft: #14261a;
   --color-warning: #e0b04d;
