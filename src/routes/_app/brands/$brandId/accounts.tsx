@@ -7,10 +7,7 @@ import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { connectAccountSchema, type ConnectAccountInput } from "@/components/forms/client-schemas";
-import {
-  Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Notice, Panel,
-  SelectInput, ScreenSkeleton, TextInput,
-} from "@/components/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, ErrorNotice, Card, SelectInput, ScreenSkeleton, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { usePendingVariables, usePlatformAccountsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
@@ -130,7 +127,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       {query.isPending && !query.data ? (
         <ScreenSkeleton label="Loading accounts" shape="rows" />
       ) : accounts.length === 0 ? (
-        <Panel className="p-8 text-center">
+        <Card className="p-8 text-center">
           <p className="text-lg font-semibold">No accounts connected yet</p>
           <p className="mt-1 text-sm text-muted">
             Connect an Instagram page, YouTube channel, TikTok account, or ad account to enable multi-channel publishing and automated performance telemetry.
@@ -142,13 +139,13 @@ function BrandAccounts({ brandId }: { brandId: string }) {
               </Button>
             </div>
           ) : null}
-        </Panel>
+        </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {accounts.map((account) => {
             const isConnected = account.status === "connected";
             return (
-              <Panel key={account.id} className="flex flex-col justify-between p-5 space-y-4">
+              <Card key={account.id} className="flex flex-col justify-between p-5 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-widest text-brass">
@@ -185,7 +182,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
                     </Button>
                   ) : null}
                 </div>
-              </Panel>
+              </Card>
             );
           })}
         </div>
@@ -200,7 +197,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
           </DialogDescription>
 
           <form className="mt-4 space-y-4" noValidate onSubmit={handleConnect} onKeyDown={(event) => submitOnShortcut(event)}>
-            {errorMessage ? <Notice>{errorMessage}</Notice> : null}
+            {errorMessage ? <ErrorNotice>{errorMessage}</ErrorNotice> : null}
 
             <Field label="Platform" error={form.formState.errors.platform?.message}>
               <SelectInput {...form.register("platform")}>
@@ -213,7 +210,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
             </Field>
 
             <Field label="Account Display Name" error={form.formState.errors.name?.message} required>
-              <TextInput
+              <Input
                 {...form.register("name")}
                 maxLength={120}
                 placeholder="e.g. Acme Official Store"
@@ -222,7 +219,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
             </Field>
 
             <Field label="Account Handle / Username" error={form.formState.errors.handle?.message}>
-              <TextInput
+              <Input
                 {...form.register("handle")}
                 maxLength={120}
                 placeholder={selectedPlatformMeta.placeholder}
@@ -230,7 +227,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
             </Field>
 
             <Field label="External Account ID / Page ID" error={form.formState.errors.externalAccountId?.message} required>
-              <TextInput
+              <Input
                 {...form.register("externalAccountId")}
                 maxLength={120}
                 placeholder="e.g. 1029384756 or act_12345"
@@ -239,7 +236,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
             </Field>
 
             <Field label="Access Token / API Key (Optional, Encrypted in Vault)" error={form.formState.errors.token?.message}>
-              <TextInput
+              <Input
                 {...form.register("token")}
                 type="password"
                 placeholder="Paste token or leave blank to rely on environment default"

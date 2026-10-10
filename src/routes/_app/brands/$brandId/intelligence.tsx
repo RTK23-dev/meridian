@@ -1,9 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ChartSkeleton, ErrorState, KpiCard,
-  Panel, ScreenSkeleton, Tabs, TabsContent, TabsList, TabsTrigger,
-} from "@/components/ui";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ChartSkeleton, ErrorState, KpiCard, ScreenSkeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { plainError } from "@/lib/copy";
 import {
   useAccountIntelligenceQuery,
@@ -273,11 +270,11 @@ function Intelligence({ brandId }: { brandId: string }) {
                 </div>
 
                 {analyses.length === 0 ? (
-                  <Panel>
+                  <Card>
                     <p className="text-sm text-muted">
                       No individual post analyses stored yet. Connect an account in the Accounts tab to ingest content.
                     </p>
-                  </Panel>
+                  </Card>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {analyses.map((item) => (
@@ -334,7 +331,7 @@ function Intelligence({ brandId }: { brandId: string }) {
               </div>
             </>
           ) : (
-            <Panel className="space-y-3 py-8 text-center">
+            <Card className="space-y-3 py-8 text-center">
               <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
               <h3 className="font-display text-lg font-semibold">No profile for {platform}</h3>
               <p className="mx-auto max-w-md text-sm text-muted">
@@ -347,7 +344,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                   </Link>
                 </Button>
               </div>
-            </Panel>
+            </Card>
           )}
         </TabsContent>
 
@@ -363,13 +360,13 @@ function Intelligence({ brandId }: { brandId: string }) {
           </div>
 
           {whitespace.length === 0 ? (
-            <Panel className="py-8 text-center">
+            <Card className="py-8 text-center">
               <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
               <h3 className="mt-3 font-display text-lg font-semibold">No whitespace opportunities detected</h3>
               <p className="mt-1 text-sm text-muted">
                 As market evidence and competitor campaigns are collected, JEV automatically flags high-probability gaps.
               </p>
-            </Panel>
+            </Card>
           ) : (
             <WhitespaceRanking
               items={whitespace}
@@ -391,27 +388,27 @@ function Intelligence({ brandId }: { brandId: string }) {
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <Panel>
+            <Card>
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">Competitor rows</p>
               <p className="mt-2 font-display text-3xl">{baseData.competitorCount}</p>
-            </Panel>
-            <Panel>
+            </Card>
+            <Card>
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">This brand</p>
               <p className="mt-2 font-display text-3xl">{baseData.ownCount}</p>
-            </Panel>
-            <Panel>
+            </Card>
+            <Card>
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">Angle Gaps</p>
               <p className="mt-2 text-sm">
                 {baseData.whitespace.length === 0
                   ? "No competitor angle is missing from this brand."
                   : baseData.whitespace.join(", ")}
               </p>
-            </Panel>
+            </Card>
           </div>
 
           <ClusterCards angleClusters={baseData.angleClusters} semanticClusters={baseData.semanticClusters} />
 
-          <Panel>
+          <Card>
             <h3 className="font-display text-lg font-semibold">System Notices</h3>
             {baseData.notifications.length === 0 ? (
               <p className="mt-2 text-muted text-sm">No notices yet.</p>
@@ -425,7 +422,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

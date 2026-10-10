@@ -3,10 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogTitle, AlertDialogTrigger, Button, Field, TextInput, errorText,
-} from "@/components/ui";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, AlertDialogTrigger, Button, Field, Input, errorText } from "@/components/ui";
 import { FormError } from "@/components/settings/form-error";
 import { plainServerError } from "@/components/settings/form-model";
 import { useWorkspace } from "@/components/workspace";
@@ -58,7 +55,7 @@ export function DangerZone({ brandId, brandName }: { brandId: string; brandName:
           <AlertDialogDescription>This cannot be undone from Meridian. Type the brand name exactly to confirm.</AlertDialogDescription>
           <div className="mt-4 space-y-4">
             <Field label={`Type “${brandName}” to confirm`} hint={matches ? "The name matches." : "Capitals and spaces count."} error={typed && !matches ? "Type the name exactly as shown above." : undefined}>
-              <TextInput {...confirmForm.register("confirmName")} autoComplete="off" />
+              <Input {...confirmForm.register("confirmName")} autoComplete="off" />
             </Field>
             {rawError ? <FormError message={plainServerError(rawError, "brand")} raw={rawError} /> : null}
             <div className="flex flex-wrap justify-end gap-2">

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { CheckCircle2, CircleAlert, Clock3, AlertTriangle } from "lucide-react";
-import { Button, Card, DataTable, Field, PageHeader, SelectInput, Skeleton, StatusBadge, TextInput } from "@/components/ui";
+import { Button, Card, DataTable, Field, PageHeader, SelectInput, Skeleton, StatusBadge, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
@@ -157,7 +157,7 @@ export function JobsScreen() {
             </SelectInput>
           </Field>
           <Field label="Job type" hint="Matches the type name exactly, such as publish.">
-            <TextInput value={draft.type} maxLength={80} onChange={(event) => setDraft({ ...draft, type: event.target.value })} />
+            <Input value={draft.type} maxLength={80} onChange={(event) => setDraft({ ...draft, type: event.target.value })} />
           </Field>
           <Field label="Brand">
             <SelectInput value={draft.brandId} onChange={(event) => setDraft({ ...draft, brandId: event.target.value })}>

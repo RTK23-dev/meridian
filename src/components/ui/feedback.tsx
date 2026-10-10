@@ -54,6 +54,13 @@ export function ErrorNotice({ children }: { children: ReactNode }) {
   return <p className="flex items-center gap-2 text-sm text-danger" role="alert"><AlertTriangle aria-hidden="true" className="size-4" />{children}</p>;
 }
 
+/** Plain words for any thrown value. Used wherever a failed request is shown to a person. */
+export function errorText(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error) return error;
+  return "Something went wrong.";
+}
+
 export function NotConnected({ service = "This service" }: { service?: string }) {
   return <p className="flex items-center gap-2 text-sm text-fg-muted"><PlugZap aria-hidden="true" className="size-4" />{service} is not connected.</p>;
 }

@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Badge, Button, Field, Panel, SelectInput } from "@/components/ui";
+import { Badge, Button, Field, Card, SelectInput } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { queueScheduleSchema, type QueueScheduleInput } from "@/components/forms/client-schemas";
@@ -84,7 +84,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
         </p>
       </div>
 
-      <Panel className="space-y-4">
+      <Card className="space-y-4">
         <h3 className="font-display text-lg font-semibold flex items-center gap-2">
           <Share2 className="h-4 w-4 text-accent" aria-hidden="true" />
           Schedule Variant to Destination Accounts
@@ -162,9 +162,9 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
             {schedulePublishMutation.isPending ? "Enqueueing…" : `Enqueue to ${queueAccountIds.length} Account(s)`}
           </Button>
         </div>
-      </Panel>
+      </Card>
 
-      <Panel className="space-y-3">
+      <Card className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-display text-lg font-semibold flex items-center gap-2">
             <Clock className="h-4 w-4 text-accent" aria-hidden="true" />
@@ -235,10 +235,10 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
           </ul>
           </>
         )}
-      </Panel>
+      </Card>
 
       {queueReceipts.length > 0 ? (
-        <Panel className="space-y-3">
+        <Card className="space-y-3">
           <h3 className="font-display text-lg font-semibold flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
             Live Execution Receipts
@@ -261,7 +261,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
               </div>
             ))}
           </div>
-        </Panel>
+        </Card>
       ) : null}
     </div>
   );

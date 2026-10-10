@@ -7,7 +7,7 @@ This repository is original software under the MIT License. It is not a fork of 
 ## What this version does
 
 - Sign-in with email and password, or with Google or X.
-- Workspaces with roles. Checks run on the server.
+- Workspaces with roles. Checks run on the server. One sidebar holds the workspace picker and, on brand pages, the brand picker. Mobile navigation has both.
 - Brands, Brand Brain, provenance, versions, and products.
 - Manual competitor observations, candidate discovery from stored names, and a guarded public-page fetch.
 - JEV Research can collect bounded Meta Ad Library video records, store verified public source MP4s and timestamped transcripts, and save confidence-rated transcript analysis with provenance. Missing media remains unavailable; transcript-only analysis does not make visual claims.
@@ -25,6 +25,8 @@ This repository is original software under the MIT License. It is not a fork of 
 - A worker process and a scheduler process when `DATABASE_URL` is set on a long-lived host.
 - Provider clients that can probe and create paused campaigns when credentials exist and a request succeeds. Meta video upload retries reconcile the prior upload; no success is recorded before Meta confirms an id.
 - Tenant-scoped Meta performance sync that validates creative/ad ownership and the selected ad account before storing observations for learning.
+- Operations screens for jobs, usage, audit, alerts, calibration, exports, and webhook events.
+- Generated images and videos play and download from an authenticated route that checks tenancy and supports byte ranges.
 
 ## What this version does not do
 

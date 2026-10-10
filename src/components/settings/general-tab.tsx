@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Field, TextInput, errorText } from "@/components/ui";
+import { Button, Field, Input, errorText } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
@@ -61,7 +61,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         {!canAdmin ? <p className="text-sm text-fg-muted">Only an admin can rename this workspace.</p> : null}
         <form className="flex flex-wrap items-end gap-3" onSubmit={renameForm.handleSubmit(rename)} onKeyDown={(event) => submitOnShortcut(event)}>
           <Field label="Name" error={renameForm.formState.errors.name?.message} required>
-            <TextInput {...renameForm.register("name")} maxLength={80} disabled={!canAdmin} required />
+            <Input {...renameForm.register("name")} maxLength={80} disabled={!canAdmin} required />
           </Field>
           {canAdmin ? <Button type="submit" disabled={renameWorkspace.isPending || renameForm.formState.isSubmitting}>{renameWorkspace.isPending || renameForm.formState.isSubmitting ? "Renaming…" : "Rename"}</Button> : null}
         </form>
@@ -82,7 +82,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         </div>
         <form className="flex flex-wrap items-end gap-3" onSubmit={createForm.handleSubmit(createWorkspace)} onKeyDown={(event) => submitOnShortcut(event)}>
           <Field label="Name" error={createForm.formState.errors.name?.message} required>
-            <TextInput {...createForm.register("name")} maxLength={80} required />
+            <Input {...createForm.register("name")} maxLength={80} required />
           </Field>
           <Button type="submit" variant="secondary" disabled={createWorkspaceAction.isPending || createForm.formState.isSubmitting}>{createWorkspaceAction.isPending || createForm.formState.isSubmitting ? "Creating…" : "Create workspace"}</Button>
         </form>

@@ -2,10 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { StatusText } from "@/components/status";
-import {
-  Button, Field, Panel, ScreenSkeleton, SelectInput, TextArea, TextInput,
-} from "@/components/ui";
+import { Button, Field, Card, ScreenSkeleton, SelectInput, StatusBadge, Textarea, Input } from "@/components/ui";
 import { PlainErrorMessage, PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { CreativeCard } from "@/components/library/creative-card";
@@ -187,7 +184,7 @@ function Library({ brandId }: { brandId: string }) {
         { key: "id", label: "Creative ID" }, { key: "title", label: "Title" }, { key: "hook", label: "Hook" },
         { key: "angle", label: "Angle" }, { key: "status", label: "Status" }, { key: "origin", label: "Origin" }, { key: "createdAt", label: "Created at" },
       ], visibleCreatives)}>Export visible library</Button>
-      <Panel>
+      <Card>
         <h2 className="font-display text-2xl">Paused publishing</h2>
         <p className="mt-2 text-sm text-muted">
           This creates paused objects and stores an id only when the provider returns one. Auto-publish stays off. A missing token, page, location, or uploaded asset stops the chain. Nothing is marked published from this form’s click alone.
@@ -215,43 +212,43 @@ function Library({ brandId }: { brandId: string }) {
               </SelectInput>
             </Field>
             <Field label="Name" error={publishForm.formState.errors.name?.message}>
-              <TextInput {...publishForm.register("name")} required maxLength={120} />
+              <Input {...publishForm.register("name")} required maxLength={120} />
             </Field>
             <Field label="Daily budget (cents)" error={publishForm.formState.errors.dailyBudgetCents?.message}>
-              <TextInput {...publishForm.register("dailyBudgetCents")} type="text" inputMode="decimal" required />
+              <Input {...publishForm.register("dailyBudgetCents")} type="text" inputMode="decimal" required />
             </Field>
             <Field label="Link" error={publishForm.formState.errors.link?.message}>
-              <TextInput {...publishForm.register("link")} type="url" placeholder="https://" />
+              <Input {...publishForm.register("link")} type="url" placeholder="https://" />
             </Field>
             <Field label="Message" error={publishForm.formState.errors.message?.message}>
-              <TextArea {...publishForm.register("message")} />
+              <Textarea {...publishForm.register("message")} />
             </Field>
             <Field label="Meta countries" hint="Comma-separated, such as US. Used only for Meta." error={publishForm.formState.errors.countries?.message}>
-              <TextInput {...publishForm.register("countries")} />
+              <Input {...publishForm.register("countries")} />
             </Field>
             <Field label="Meta page id" error={publishForm.formState.errors.pageId?.message}>
-              <TextInput {...publishForm.register("pageId")} />
+              <Input {...publishForm.register("pageId")} />
             </Field>
             <Field label="TikTok location ids" hint="Numeric location ids, not country codes. An ad also needs an uploaded image or video id." error={publishForm.formState.errors.locationIds?.message}>
-              <TextInput {...publishForm.register("locationIds")} />
+              <Input {...publishForm.register("locationIds")} />
             </Field>
             <Field label="TikTok schedule start" error={publishForm.formState.errors.scheduleStart?.message}>
-              <TextInput {...publishForm.register("scheduleStart")} placeholder="2026-01-02 00:00:00" />
+              <Input {...publishForm.register("scheduleStart")} placeholder="2026-01-02 00:00:00" />
             </Field>
             <Field label="TikTok image ids" error={publishForm.formState.errors.imageIds?.message}>
-              <TextInput {...publishForm.register("imageIds")} />
+              <Input {...publishForm.register("imageIds")} />
             </Field>
             <Field label="TikTok video id" error={publishForm.formState.errors.videoId?.message}>
-              <TextInput {...publishForm.register("videoId")} />
+              <Input {...publishForm.register("videoId")} />
             </Field>
             <Field label="Google headlines" hint="Each headline is 30 characters or fewer." error={publishForm.formState.errors.headlines?.message}>
-              <TextInput {...publishForm.register("headlines")} />
+              <Input {...publishForm.register("headlines")} />
             </Field>
             <Field label="Google descriptions" hint="Each description is 90 characters or fewer." error={publishForm.formState.errors.descriptions?.message}>
-              <TextInput {...publishForm.register("descriptions")} />
+              <Input {...publishForm.register("descriptions")} />
             </Field>
             <Field label="Google CPC bid (cents)" error={publishForm.formState.errors.cpcBidCents?.message}>
-              <TextInput {...publishForm.register("cpcBidCents")} type="text" inputMode="decimal" />
+              <Input {...publishForm.register("cpcBidCents")} type="text" inputMode="decimal" />
             </Field>
             <UnsavedChangesBar
               dirty={publishForm.formState.isDirty}
@@ -268,14 +265,18 @@ function Library({ brandId }: { brandId: string }) {
         {stages.length > 0 ? (
           <ul className="mt-4 space-y-2">
             {stages.map((stage) => (
-              <li key={stage.objectType}>
-                <StatusText status={stage.status} label={stage.objectType} description={stage.externalId ? `Confirmed id ${stage.externalId}.` : stage.detail || "No id was stored."} />
+              <li key={stage.objectType} className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-fg">{stage.objectType}</span>
+                  <StatusBadge status={stage.status} />
+                </div>
+                <p className="text-sm text-muted">{stage.externalId ? `Confirmed id ${stage.externalId}.` : stage.detail || "No id was stored."}</p>
               </li>
             ))}
           </ul>
         ) : null}
-      </Panel>
-      {data.creatives.length === 0 ? <Panel>No brand creatives yet. Rank an opportunity, brief it, and save a script. Or record one you already ran.</Panel> : (
+      </Card>
+      {data.creatives.length === 0 ? <Card>No brand creatives yet. Rank an opportunity, brief it, and save a script. Or record one you already ran.</Card> : (
         <section aria-labelledby="library-creatives-title" className="space-y-4">
           <div><h2 id="library-creatives-title" className="font-display text-2xl">Creative library</h2><p className="text-sm text-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
           {studio.isError ? <PlainErrorMessage message="Media previews could not be loaded. Open Details for the exact message." raw={plainError(studio.error).raw} /> : null}
@@ -300,10 +301,10 @@ function Library({ brandId }: { brandId: string }) {
               ))}
             </ul>
           ) : (
-            <Panel className="flex flex-wrap items-center justify-between gap-3">
+            <Card className="flex flex-wrap items-center justify-between gap-3">
               <span>No creatives match these filters.</span>
               <Button type="button" variant="quiet" onClick={() => setFilters(NO_LIBRARY_FILTERS)}>Clear filters</Button>
-            </Panel>
+            </Card>
           )}
         </section>
       )}
@@ -329,7 +330,7 @@ function Library({ brandId }: { brandId: string }) {
         imagePending={attachImage.isPending}
       />
       {canEdit ? (
-        <Panel>
+        <Card>
           <h2 className="font-display text-2xl">Record a creative we already ran</h2>
           <p className="mt-2 text-sm text-muted">Use this for history the system did not generate. It can receive performance and feed learning.</p>
           <form
@@ -344,16 +345,16 @@ function Library({ brandId }: { brandId: string }) {
               </SelectInput>
             </Field>
             <Field label="Observed angle, if it is not in the list" error={observationForm.formState.errors.observedAngle?.message}>
-              <TextInput {...observationForm.register("observedAngle")} placeholder="unboxing" maxLength={48} />
+              <Input {...observationForm.register("observedAngle")} placeholder="unboxing" maxLength={48} />
             </Field>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Hook type" error={observationForm.formState.errors.hookType?.message}><TextInput {...observationForm.register("hookType")} maxLength={48} /></Field>
-              <Field label="Format" error={observationForm.formState.errors.format?.message}><TextInput {...observationForm.register("format")} maxLength={48} /></Field>
+              <Field label="Hook type" error={observationForm.formState.errors.hookType?.message}><Input {...observationForm.register("hookType")} maxLength={48} /></Field>
+              <Field label="Format" error={observationForm.formState.errors.format?.message}><Input {...observationForm.register("format")} maxLength={48} /></Field>
             </div>
-            <Field label="Hook" error={observationForm.formState.errors.hook?.message} required><TextInput {...observationForm.register("hook")} required maxLength={400} /></Field>
-            <Field label="Script" error={observationForm.formState.errors.message?.message} required><TextArea {...observationForm.register("message")} required maxLength={4000} /></Field>
-            <Field label="Call to action" error={observationForm.formState.errors.cta?.message}><TextInput {...observationForm.register("cta")} maxLength={240} /></Field>
-            <Field label="Product" error={observationForm.formState.errors.productName?.message}><TextInput {...observationForm.register("productName")} maxLength={160} /></Field>
+            <Field label="Hook" error={observationForm.formState.errors.hook?.message} required><Input {...observationForm.register("hook")} required maxLength={400} /></Field>
+            <Field label="Script" error={observationForm.formState.errors.message?.message} required><Textarea {...observationForm.register("message")} required maxLength={4000} /></Field>
+            <Field label="Call to action" error={observationForm.formState.errors.cta?.message}><Input {...observationForm.register("cta")} maxLength={240} /></Field>
+            <Field label="Product" error={observationForm.formState.errors.productName?.message}><Input {...observationForm.register("productName")} maxLength={160} /></Field>
             <UnsavedChangesBar
               dirty={observationForm.formState.isDirty}
               subject="creative"
@@ -363,7 +364,7 @@ function Library({ brandId }: { brandId: string }) {
             />
             <Button type="submit" disabled={ownCreative.isPending || observationForm.formState.isSubmitting}>{ownCreative.isPending || observationForm.formState.isSubmitting ? "Saving…" : "Save to library"}</Button>
           </form>
-        </Panel>
+        </Card>
       ) : null}
     </div>
   );

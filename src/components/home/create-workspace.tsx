@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Field, TextInput, errorText } from "@/components/ui";
+import { Button, Field, Input, errorText } from "@/components/ui";
 import { FormError } from "@/components/settings/form-error";
 import { plainServerError } from "@/components/settings/form-model";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
@@ -49,7 +49,7 @@ export function CreateWorkspace({ onCreated }: { onCreated: () => Promise<void> 
       </div>
       <form onSubmit={handleSubmit(submit)} className="space-y-4" onKeyDown={(event) => submitOnShortcut(event)}>
         <Field label="Workspace name" hint="Your company, studio, or agency." error={errors.name?.message} required>
-          <TextInput {...register("name")} required maxLength={80} />
+          <Input {...register("name")} required maxLength={80} />
         </Field>
         <UnsavedChangesBar
           dirty={isDirty}
