@@ -17,7 +17,7 @@ const sampleSpec: CreativeSpec = {
   organizationId: "org-test",
   brandId: "brand-test",
   title: "Test Creative",
-  format: "reel",
+  modality: "video", format: "reel",
   aspectRatio: "9:16",
   durationTargetSeconds: 5,
   hookLine: "Stop scrolling!",

@@ -1373,6 +1373,11 @@ export async function executeApprovedCreativePlan(
         );
         creativeSpec.providerId = provider.id;
         creativeSpec.modelId = selection.chosen?.modelId ?? creativeSpec.modelId;
+        // The job's estimate is stored in cents with a default of zero, so an unknown cost cannot be recorded without
+        // inventing a zero. Refuse it before any job row or provider call exists.
+        if (!selection.chosen?.costKnown || selection.chosen.estimateUsd === null) {
+          throw new Error(`Video cost is not known for provider '${provider.id}'. No job was created.`);
+        }
         const prodJobId = productionJobIds.get(deliv.id) ?? crypto.randomUUID();
         creativeSpec.idempotencyKey = prodJobId;
         const durableInput = JSON.stringify({
@@ -1385,7 +1390,7 @@ export async function executeApprovedCreativePlan(
             status, cost_mode, estimated_cost_cents, input, created_at, submitted_at, updated_at, creative_plan_id
           ) values (
             ${prodJobId}, ${access.organizationId}, ${brandId}, ${provider.id}, null, null, null, null,
-            'SUBMITTING', 'BALANCED', ${Math.round(creativeSpec.durationTargetSeconds * provider.capabilities.costPerSecondEstimateUsd * 100)},
+            'SUBMITTING', 'BALANCED', ${Math.round(selection.chosen.estimateUsd * 100)},
             ${durableInput}, now(), null, now(), ${creativePlan.id}
           )
           on conflict (id) do nothing

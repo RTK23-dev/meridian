@@ -24,9 +24,16 @@ export interface InjectedProvider {
 
 /**
  * Replaces one registered production provider with a stub. Submission and polling are scripted;
- * health reports configured. Everything else (capabilities, identity) comes from the real adapter.
+ * health reports configured. Everything else (capabilities, identity) comes from the real adapter,
+ * except the capabilities named in `capabilityOverrides`, which a test uses to model a provider
+ * with an undeclared cost.
  */
-export function injectProvider(providerId: string, submit: SubmitOutcome, poll?: PollOutcome): InjectedProvider {
+export function injectProvider(
+  providerId: string,
+  submit: SubmitOutcome,
+  poll?: PollOutcome,
+  capabilityOverrides?: Partial<ProductionProvider["capabilities"]>,
+): InjectedProvider {
   const original = productionRouter.get(providerId);
   if (!original) throw new Error(`fixture: provider '${providerId}' is not registered`);
   const submitted: CreativeSpec[] = [];
@@ -35,6 +42,7 @@ export function injectProvider(providerId: string, submit: SubmitOutcome, poll?:
     throw new Error("fixture: no poll outcome scripted");
   });
   const stub = Object.create(original, {
+    ...(capabilityOverrides ? { capabilities: { value: { ...original.capabilities, ...capabilityOverrides } } } : {}),
     health: {
       value: async () => ({
         id: providerId,

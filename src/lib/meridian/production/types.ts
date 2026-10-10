@@ -43,11 +43,18 @@ export type ProductionCapabilities = {
   costPerSecondEstimateUsd: number;
 };
 
+/**
+ * What a production produces. Each modality is a deliverable kind, and the matrix routes only the ones it has a task for.
+ * Carousel and mixed media are sets of other modalities, so they are routed per part.
+ */
+export type ProductionModality = "video" | "image" | "carousel" | "audio" | "mixed_media";
+
 export type CreativeSpec = {
   id: string;
   organizationId: string;
   brandId: string;
   title: string;
+  modality: ProductionModality;
   format: string;
   aspectRatio: "9:16" | "16:9" | "1:1" | "4:5";
   durationTargetSeconds: number;
