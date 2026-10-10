@@ -62,7 +62,8 @@ test("dark theme overrides every semantic color, so no token silently keeps its 
 });
 
 test("legacy aliases resolve inline so each theme gets its own value", () => {
-  assert.match(css, /@theme inline \{[\s\S]*?--color-brass: var\(--color-accent\);[\s\S]*?\}/);
+  // `brass` is used for small text, so it points at the darker text token rather than the accent.
+  assert.match(css, /@theme inline \{[\s\S]*?--color-brass: var\(--color-brass-text\);[\s\S]*?\}/);
   assert.match(css, /@theme inline \{[\s\S]*?--color-muted: var\(--color-fg-muted\);/);
 });
 
