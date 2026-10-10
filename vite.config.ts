@@ -1,7 +1,7 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import type { Plugin } from "vite";
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -19,6 +19,27 @@ function hasGlobbedMigrations(root: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Directories the dev server may serve files from. Vite's default is the
+ * workspace root only, so this keeps that and adds the real `node_modules`.
+ *
+ * `node_modules` can be a symlink to a directory outside the project (git
+ * worktrees and shared installs do this). Vite resolves packages such as
+ * `@fontsource-variable/inter` to that real path and rewrites their `url()`
+ * assets to `/@fs/<real path>`. Anything outside `server.fs.allow` gets a 403,
+ * so the fonts never load. In a normal install the real path is already under
+ * the root, so the extra entry changes nothing.
+ */
+function devServeAllowList(root: string): string[] {
+  const allow = [searchForWorkspaceRoot(root)];
+  try {
+    allow.push(realpathSync(join(root, "node_modules")));
+  } catch {
+    // No node_modules yet (before `npm ci`): nothing extra to allow.
+  }
+  return allow;
 }
 
 /**
@@ -150,6 +171,9 @@ export default defineConfig(({ command, isPreview }) => ({
     host: "0.0.0.0",
     port: 8080,
     strictPort: true,
+    fs: {
+      allow: devServeAllowList(process.cwd()),
+    },
   },
   preview: {
     host: "127.0.0.1",
