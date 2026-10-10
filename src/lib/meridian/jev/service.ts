@@ -14,9 +14,43 @@ import type { EvidenceBundle } from "../evidence/types.ts";
 import { compressEvidenceForJev } from "../evidence/bundle.ts";
 import { jevRouter } from "./router.ts";
 import { createDecisionEngines, decideWithActiveEngine } from "../decisions/dispatcher.ts";
-import { runEngineGate } from "../decisions/gate.ts";
+import { runEngineGate, type GateEvidenceInput } from "../decisions/gate.ts";
 import type { DecisionRequest } from "../decisions/types.ts";
 import { jevRegistry } from "./registry.ts";
+import { ORGANIC_EVIDENCE_SCOPES } from "./questions/organic.ts";
+import { SAFETY_EVIDENCE_SCOPES } from "./questions/safety.ts";
+
+/** The evidence each research question may receive, declared with the question (jev/questions/organic.ts, safety.ts). */
+const RESEARCH_EVIDENCE_SCOPES: Record<string, readonly string[]> = { ...ORGANIC_EVIDENCE_SCOPES, ...SAFETY_EVIDENCE_SCOPES };
+
+/**
+ * The research evidence the gate may place in a question's scope, each with the content it carries. A name is listed only when
+ * the bundle supplies its structure. A name with no content is not evidence, so a question that requires it abstains. The
+ * research bundle does not supply script or brand-allowed claims, so claim questions have no evidence and go to review.
+ */
+function researchEvidence(
+  bundle: EvidenceBundle,
+  compressed: ReturnType<typeof compressEvidenceForJev>,
+  availableEvidence: string[],
+): GateEvidenceInput[] {
+  const content: Record<string, unknown> = {
+    transcript: { transcriptSummary: compressed.transcriptSummary },
+    scene_cuts: { scenes: compressed.scenes },
+    scene_frames: { scenes: compressed.scenes },
+    ocr: { ocr: compressed.ocr },
+    comments: { comments: compressed.comments },
+    creator_baseline: { creatorBaseline: compressed.creatorBaseline },
+    performance_snapshot: { performance: bundle.performance, metrics: compressed.metrics },
+    comparison_context: { comparisonContext: compressed.comparisonContext },
+  };
+  return availableEvidence.flatMap((name): GateEvidenceInput[] => {
+    const value = content[name];
+    if (value === undefined) return [];
+    const fields = Object.values(value as Record<string, unknown>);
+    if (fields.every((field) => field === undefined)) return [];
+    return [{ kind: "text", name, source: "evidence_bundle", content: value }];
+  });
+}
 import type {
   JevDecisionRequest,
   JevDecisionResponse,
@@ -114,11 +148,11 @@ export class JevDecisionService {
       "safety.claim_compliance.v1",
     ];
 
-    const questions: Array<{ key: string; spec: JevQuestionSpec; needsImage: false; gating: boolean }> = [];
+    const questions: Array<{ key: string; spec: JevQuestionSpec; needsImage: false; gating: boolean; evidenceScope?: readonly string[] }> = [];
     for (const qid of questionIds) {
       const q = resolveQuestionSpec(qid);
       // Claim and rights questions gate the evidence. The organic questions are analysis: answered and recorded only.
-      if (q) questions.push({ key: q.id, spec: q, needsImage: false, gating: q.id.startsWith("safety.") });
+      if (q) questions.push({ key: q.id, spec: q, needsImage: false, gating: q.id.startsWith("safety."), evidenceScope: RESEARCH_EVIDENCE_SCOPES[q.id] });
     }
 
     if (questions.length === 0) {
@@ -136,8 +170,8 @@ export class JevDecisionService {
     const compressed = compressEvidenceForJev(input.bundle, questions.map((entry) => entry.spec));
     const availableEvidence = input.bundle.availableEvidence || compressed.availableEvidence;
 
-    // One gate, one active engine, one call. The gate computes the outcome of the gating questions under their policies,
-    // and records it. Nothing downstream approves or rejects research on the answers alone.
+    // One active engine. The gate sends one call per evidence scope and computes the outcome of the gating questions under
+    // their policies. Nothing downstream approves or rejects research on the answers alone.
     const gate = await runEngineGate({
       sql: input.sql,
       organizationId: input.organizationId,
@@ -145,22 +179,8 @@ export class JevDecisionService {
       gate: "research_evidence",
       subject: { type: "evidence_bundle", id: input.bundle.id },
       description: compressed.description,
-      context: {
-        bundleId: input.bundle.id,
-        evidenceRefs: compressed.evidenceRefs,
-        source: input.bundle.source || compressed.source,
-        platform: input.bundle.source?.platform,
-        contentType: input.bundle.content?.type,
-        metrics: compressed.metrics,
-        transcriptSummary: compressed.transcriptSummary,
-        sceneSummary: compressed.sceneSummary,
-        scenes: compressed.scenes,
-        ocr: compressed.ocr,
-        comments: compressed.comments,
-        performance: input.bundle.performance,
-      },
       questions,
-      evidence: availableEvidence.map((name) => ({ kind: "text" as const, name })),
+      evidence: researchEvidence(input.bundle, compressed, availableEvidence),
       routingPolicy: input.policy,
       engines: createDecisionEngines({ jevRouter: this.router }),
     });

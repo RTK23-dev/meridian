@@ -82,3 +82,20 @@ export const CREATIVE_QUESTIONS: Record<string, JevQuestionSpec> = {
     policyMapping: { predicateDirection: "pass_if_true", approveMinProbability: 0.85, reviewMinProbability: 0.6 },
   },
 };
+
+/**
+ * The evidence each creative question may receive (GateQuestion.evidenceScope). Scope names:
+ * - creative_copy: the creative's own copy. transcript: its spoken words, for a video. Both reach the three text questions.
+ * - brand_positioning, brand_prohibited_claims, opportunity_angle, product_name: the brand and opportunity facts a question
+ *   judges against. Each text question receives only the one it judges against.
+ * - image: every image item the gate was given. visual_coverage: how much of the creative was analysed.
+ * The text questions never receive an image or a perception observation. A visual question under OpenAI Decisions receives
+ * the image; under JEV, which cannot see images, the image scope is replaced by perception_observations (image-qc.server.ts).
+ */
+export const CREATIVE_EVIDENCE_SCOPES: Record<string, readonly string[]> = {
+  "creative.brand_fit.v1": ["creative_copy", "transcript", "brand_positioning"],
+  "creative.opportunity_fit.v1": ["creative_copy", "transcript", "opportunity_angle"],
+  "creative.claim_compliance.v1": ["creative_copy", "transcript", "brand_prohibited_claims"],
+  "creative.visual_quality.v1": ["image", "visual_coverage"],
+  "creative.product_visible.v1": ["image", "visual_coverage", "product_name"],
+};

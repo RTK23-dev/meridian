@@ -14,19 +14,18 @@ import type { Sql } from "../learning/store.ts";
 import type { loadBrandContext } from "../context/load.ts";
 import { decisionRecordFields } from "../jev/decision-record.ts";
 import { loadAppliedPolicies } from "../jev/policy.ts";
-import { CREATIVE_QUESTIONS } from "../jev/questions/creative.ts";
+import { CREATIVE_EVIDENCE_SCOPES, CREATIVE_QUESTIONS } from "../jev/questions/creative.ts";
 import { judgeMedia, rollupDecision, ENGINE_REPLACED_MEDIA_QUESTIONS, type MediaFacts } from "./features.ts";
 import type { AccountSnapshot } from "../publishing/readiness.ts";
 import { measureLogo, measurePalette } from "../vision/measure.ts";
-import { runEngineGate, type GateEvidence, type GateQuestion } from "../decisions/gate.ts";
-import { groundedPerceptionText, runPerception, selectPerceptionProvider, type PerceptionInputMedia, type PerceptionRunOutcome } from "../perception/run.ts";
+import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateImage, type GateQuestion } from "../decisions/gate.ts";
+import { runPerception, selectPerceptionProvider, type PerceptionInputMedia, type PerceptionRunOutcome } from "../perception/run.ts";
 import type { MediaObservation, MultimodalPerceptionProvider, PerceptionMediaKind } from "../perception/types.ts";
-import { EVIDENCE_CONTRACTS, checkEvidenceContract, contractEvidenceLines, type EvidenceContract } from "../perception/contracts.ts";
+import { EVIDENCE_CONTRACTS, PERCEPTION_EVIDENCE_NAME, checkQuestionContract, satisfiedContractLines } from "../perception/contracts.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import { selectRepresentativeFrames, sha256Hex } from "../decisions/frames.ts";
 import { sampleVideoFrames, type FrameExtractor } from "../video/sample-frames.ts";
 import { resolveActiveEngine, type EngineSelection } from "../decisions/selection.ts";
-import type { DecisionImageInput } from "../decisions/types.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
 
 export type QcBrandContext = {
@@ -172,40 +171,49 @@ export type CreativeJudgment = {
 
 const SEVERITY: Record<PolicyOutcome, number> = { AUTO_APPROVE: 0, HUMAN_REVIEW: 1, REJECT: 2 };
 
-/** The contract lines for every contract, from one perception run. Unknown facts appear as `unknown`. */
-function contractLinesFor(run: PerceptionRunOutcome): Record<string, string[]> {
-  if (run.status !== "observed") return {};
+/** The evidence name of how much of the creative was analysed. Every visual question's scope holds it. */
+const VISUAL_COVERAGE_NAME = "visual_coverage";
+
+/**
+ * The content of the perception evidence item for one run: the contract lines of the contracts its observations satisfy in full.
+ * A contract the observations do not satisfy contributes nothing, so no unknown fact is written out for any question.
+ */
+function perceptionContentFor(run: PerceptionRunOutcome): { satisfiedContracts: string[]; contracts: Record<string, string[]> } {
   const provenance = `${run.providerId} ${run.model} (prompt ${run.promptVersion})`;
   const label = (observation: MediaObservation) => {
     const media = run.media.find((item) => item.id === observation.mediaId);
     const when = observation.timestampMs !== null ? `at ${observation.timestampMs}ms` : "(still image)";
     return `${media?.label ?? observation.mediaId} ${when}, sha256 ${observation.sha256.slice(0, 12)}…`;
   };
-  return Object.fromEntries(
-    Object.values(EVIDENCE_CONTRACTS).map((contract: EvidenceContract) => [contract.id, contractEvidenceLines(contract, run.observations, label, provenance)]),
-  );
+  const { satisfied, lines } = satisfiedContractLines(run.observations, label, provenance);
+  return { satisfiedContracts: satisfied, contracts: lines };
 }
 
 /**
- * The semantic questions for a creative, for the engine that will judge them. OpenAI Decisions receives the visual questions
- * with their images. JEV receives a visual question as text only when the perception evidence satisfies that question's
- * contract for every analysed item. Otherwise the question is refused with the specific reason, and goes to review.
+ * The semantic questions for a creative, each with its evidence scope. OpenAI Decisions receives the visual questions with
+ * their images, scoped to the image. JEV receives a visual question as text only when the perception observations satisfy that
+ * question's own contract in full, and then only the question's scope holds them. Otherwise the question is refused with the
+ * specific reason and goes to review. The text questions never receive an image or an observation.
  */
 export function creativeGateQuestionsFor(input: { engineSeesImages: boolean; perception?: PerceptionRunOutcome; hasMedia: boolean }): GateQuestion[] {
-  const text = ["creative.brand_fit.v1", "creative.opportunity_fit.v1", "creative.claim_compliance.v1"].map((id) => ({
+  const text = ["creative.brand_fit.v1", "creative.opportunity_fit.v1", "creative.claim_compliance.v1"].map((id): GateQuestion => ({
     key: id,
     spec: CREATIVE_QUESTIONS[id]!,
     needsImage: false,
+    evidenceScope: CREATIVE_EVIDENCE_SCOPES[id],
   }));
   const visual = ["creative.visual_quality.v1", "creative.product_visible.v1"].map((id): GateQuestion => {
     const spec = CREATIVE_QUESTIONS[id]!;
-    if (input.engineSeesImages) return { key: id, spec, needsImage: true };
-    const contract = spec.perceptionEvidence ? EVIDENCE_CONTRACTS[spec.perceptionEvidence.contract] : undefined;
-    if (!contract) {
+    const declared = CREATIVE_EVIDENCE_SCOPES[id] ?? [];
+    if (input.engineSeesImages) return { key: id, spec, needsImage: true, evidenceScope: declared };
+    // JEV cannot see images. The image scope becomes the perception observations, and nothing else is added.
+    const scope = declared.map((name) => (name === IMAGE_SCOPE ? PERCEPTION_EVIDENCE_NAME : name));
+    const contractId = spec.perceptionEvidence?.contract;
+    if (!contractId || !EVIDENCE_CONTRACTS[contractId]) {
       return { key: id, spec, needsImage: true, localRefusal: { status: "unsupported", reason: "JEV has no perception evidence contract for this question, so it cannot judge it from text. Routed to human review." } };
     }
     // The requirement names the evidence that is actually supplied: the perception observations, not the image bytes.
-    const judgedFromText = { ...spec, evidenceRequirements: spec.evidenceRequirements.map((item) => (item === "image" ? "perception_observations" : item)) };
+    const judgedFromText = { ...spec, evidenceRequirements: spec.evidenceRequirements.map((item) => (item === "image" ? PERCEPTION_EVIDENCE_NAME : item)) };
     const perception = input.perception;
     if (!input.hasMedia) {
       return { key: id, spec, needsImage: true, localRefusal: { status: "abstain_insufficient_evidence", reason: "No image or frame was available to perceive. Routed to human review." } };
@@ -214,7 +222,8 @@ export function creativeGateQuestionsFor(input: { engineSeesImages: boolean; per
       const why = perception ? `${perception.failureKind ?? "failed"}: ${perception.message ?? "no detail"}` : "perception was not run";
       return { key: id, spec, needsImage: true, localRefusal: { status: "abstain_insufficient_evidence", reason: `Perception produced no evidence (${why}). Routed to human review.` } };
     }
-    const check = checkEvidenceContract(contract, perception.observations);
+    // This question's own contract, checked on its own. Another contract's result never satisfies it.
+    const check = checkQuestionContract(contractId, perception.observations);
     if (!check.satisfied) {
       const unknown = check.missing.slice(0, 5).map((item) => `${item.field} (${item.mediaId})`).join(", ");
       return {
@@ -224,37 +233,27 @@ export function creativeGateQuestionsFor(input: { engineSeesImages: boolean; per
         localRefusal: { status: "abstain_insufficient_evidence", reason: `${check.reason}${unknown ? ` Unknown: ${unknown}.` : ""} Routed to human review.` },
       };
     }
-    return { key: id, spec: judgedFromText, needsImage: false };
+    return { key: id, spec: judgedFromText, needsImage: false, evidenceScope: scope };
   });
   return [...text, ...visual];
 }
 
-/** The minimized context sent to the engine. Competitor text and the generation prompt are not sent. */
-export function creativeGateContext(facts: MediaFacts): Record<string, unknown> {
-  return {
-    creative: {
-      kind: facts.kind,
-      copy: facts.copy,
-      transcript: facts.transcript || undefined,
-      productName: facts.productName,
-      angle: facts.angle,
-    },
-    brand: {
-      positioning: facts.positioning,
-      tone: facts.tone,
-      prohibitedClaims: facts.prohibited,
-    },
-  };
-}
-
-function creativeTextEvidence(facts: MediaFacts): GateEvidence[] {
-  const items: GateEvidence[] = [];
-  if (facts.copy.trim()) items.push({ kind: "text", name: "creative_copy", source: "creative_records" });
-  if (facts.transcript.trim()) items.push({ kind: "text", name: "transcript", source: "assets" });
-  if (facts.positioning.trim()) items.push({ kind: "text", name: "brand_positioning", source: "brand_brain" });
-  if (facts.prohibited.trim()) items.push({ kind: "text", name: "brand_prohibited_claims", source: "brand_brain" });
-  if (facts.angle.trim()) items.push({ kind: "text", name: "opportunity_angle", source: "opportunity" });
-  if (facts.productName.trim()) items.push({ kind: "text", name: "product_name", source: "products" });
+/**
+ * The creative's own text, each item with the content a text question may receive. Competitor text and the generation prompt
+ * are never placed here. A blank item is not evidence, so a question that needs it abstains.
+ */
+function creativeTextEvidence(facts: MediaFacts): GateEvidenceInput[] {
+  const items: GateEvidenceInput[] = [];
+  if (facts.copy.trim()) items.push({ kind: "text", name: "creative_copy", source: "creative_records", content: { kind: facts.kind, copy: facts.copy } });
+  if (facts.transcript.trim()) items.push({ kind: "text", name: "transcript", source: "assets", content: { transcript: facts.transcript } });
+  if (facts.positioning.trim()) {
+    items.push({ kind: "text", name: "brand_positioning", source: "brand_brain", content: { positioning: facts.positioning, tone: facts.tone } });
+  }
+  if (facts.prohibited.trim()) {
+    items.push({ kind: "text", name: "brand_prohibited_claims", source: "brand_brain", content: { prohibitedClaims: facts.prohibited } });
+  }
+  if (facts.angle.trim()) items.push({ kind: "text", name: "opportunity_angle", source: "opportunity", content: { angle: facts.angle } });
+  if (facts.productName.trim()) items.push({ kind: "text", name: "product_name", source: "products", content: { productName: facts.productName } });
   return items;
 }
 
@@ -273,17 +272,18 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
   //  - OpenAI Decisions takes the frames or the image directly. Perception is not run: it would be a second analysis of the same media.
   //  - JEV cannot see images. Perception turns the media into grounded text for it. If perception is unavailable or fails,
   //    the visual questions stay unsupported and go to review. Nothing is sent to the other engine to make up the gap.
-  let images: DecisionImageInput[] = [];
-  let visualEvidence: GateEvidence[] = [];
-  let perceptionEvidence: GateEvidence[] = [];
-  let perceptionContext: Record<string, unknown> = { status: "not_needed" };
+  let images: GateImage[] = [];
+  let visualEvidence: GateEvidenceInput[] = [];
+  let perceptionEvidence: GateEvidenceInput[] = [];
   let perceptionRunId: string | null = null;
   let perceptionOutcome: PerceptionRunOutcome | undefined;
   if (selection.engineId === "openai-decisions") {
+    // Each image is tied to its evidence item by name, so it reaches only the questions whose scope holds that item.
     images = visual.media.map((item) => ({
       bytes: item.bytes,
       label: item.label,
       evidenceRef: { field: "scene", location: { startMs: item.timestampMs ?? undefined, frameId: item.id } },
+      evidenceName: item.id,
     }));
     visualEvidence = visual.media.map((item) => ({
       kind: "image" as const,
@@ -292,7 +292,6 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
       timestampMs: item.timestampMs ?? undefined,
       source: item.source,
     }));
-    perceptionContext = { status: "not_used", reason: "openai-decisions receives the media directly." };
   } else if (visual.media.length > 0) {
     const provider = input.perception === undefined ? selectPerceptionProvider().provider : input.perception;
     const run = await runPerception(sql, {
@@ -308,24 +307,16 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     });
     perceptionRunId = run.runId;
     perceptionOutcome = run;
-    perceptionContext = {
-      status: run.status,
-      runId: run.runId,
-      reused: run.reused,
-      providerId: run.providerId,
-      model: run.model,
-      promptVersion: run.promptVersion,
-      failureKind: run.failureKind ?? null,
-      message: run.message ?? null,
-      coverage: run.coverage,
-      observations: groundedPerceptionText(run),
-      contracts: contractLinesFor(run),
-    };
     if (run.status === "observed") {
       perceptionEvidence = [
-        { kind: "text", name: "perception_observations", source: `perception_run:${run.runId}` },
-        ...run.media.map((item) => ({
-          kind: "image" as const,
+        {
+          kind: "text",
+          name: PERCEPTION_EVIDENCE_NAME,
+          source: `perception_run:${run.runId}`,
+          content: { ...perceptionContentFor(run), inferredBy: `${run.providerId} ${run.model}` },
+        },
+        ...run.media.map((item): GateEvidenceInput => ({
+          kind: "image",
           name: item.id,
           sha256: item.sha256,
           timestampMs: item.timestampMs ?? undefined,
@@ -333,8 +324,6 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
         })),
       ];
     }
-  } else {
-    perceptionContext = { status: "not_needed", reason: visual.coverage.note };
   }
 
   const gate = await runEngineGate({
@@ -344,13 +333,14 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     gate: "creative_qa",
     subject: { type: "creative", id: input.creativeId },
     description: `${input.facts.kind === "video" ? "Video" : "Image"} creative. Judge only the evidence provided.`,
-    context: {
-      ...creativeGateContext(input.facts),
-      visual: { kind: visual.kind, coverage: visual.coverage, engine: selection.engineId },
-      perception: perceptionContext,
-    },
     questions: creativeGateQuestionsFor({ engineSeesImages: selection.engineId === "openai-decisions", perception: perceptionOutcome, hasMedia: visual.media.length > 0 }),
-    evidence: [...creativeTextEvidence(input.facts), ...visualEvidence, ...perceptionEvidence],
+    // How much of the creative was analysed is evidence for the visual questions only, under either engine.
+    evidence: [
+      ...creativeTextEvidence(input.facts),
+      { kind: "text", name: VISUAL_COVERAGE_NAME, source: "visual_evidence", content: visual.coverage },
+      ...visualEvidence,
+      ...perceptionEvidence,
+    ],
     images,
     deterministicRejections,
     selection,

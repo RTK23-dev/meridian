@@ -62,7 +62,8 @@ const plannerView = (row: StoredDecisionRow) =>
     model: row.model,
   });
 
-function answered(spec: JevQuestionSpec, probability: number): JevAnswer {
+/** A probability answer. `calibrated` models a calibrated value; engines report "uncalibrated" today. */
+function answered(spec: JevQuestionSpec, probability: number, calibrated = false): JevAnswer {
   return {
     questionId: spec.id,
     questionVersion: spec.version,
@@ -74,7 +75,7 @@ function answered(spec: JevQuestionSpec, probability: number): JevAnswer {
     probability,
     noul: probability,
     semantics: "probability",
-    calibrationStatus: "uncalibrated",
+    calibrationStatus: calibrated ? "calibrated" : "uncalibrated",
     evidenceRefs: [],
     evaluatedAt: new Date().toISOString(),
   } as JevAnswer;
@@ -141,9 +142,10 @@ const BRAND = BRIEF_QUESTIONS["brief.brand_fit.v1"]!.id;
 const OPPORTUNITY = BRIEF_QUESTIONS["brief.opportunity_fit.v1"]!.id;
 const CLAIMS = BRIEF_QUESTIONS["brief.claim_compliance.v1"]!.id;
 
+/** Calibrated approvals. Only a calibrated probability can approve (contract section 6). */
 const approves: Responder = (spec) => {
-  if (spec.id === BRAND || spec.id === OPPORTUNITY) return answered(spec, 0.95);
-  if (spec.id === CLAIMS) return answered(spec, 0.99);
+  if (spec.id === BRAND || spec.id === OPPORTUNITY) return answered(spec, 0.95, true);
+  if (spec.id === CLAIMS) return answered(spec, 0.99, true);
   return undefined;
 };
 
@@ -185,10 +187,29 @@ test("the engine judges brand fit, opportunity fit and claim compliance, and the
   const { result, row } = await gateBrief({ tenant, engines: registryWith(jev, openai), selected: "jev" });
   assert.equal(result.action, "AUTO_APPROVE");
   assert.equal(row.decision, "AUTO_APPROVE");
-  assert.equal(jev.requests.length, 1, "one call to the active engine");
+  // Each question has its own scope (its brief fields and one brand fact), so each is its own call to the active engine.
+  assert.equal(jev.requests.length, 3, "one call per evidence scope, all to the active engine");
   assert.equal(openai.requests.length, 0, "the other engine is not called");
-  assert.deepEqual(Object.values(jev.requests[0]!.questions).map((spec) => spec.id).sort(), [BRAND, CLAIMS, OPPORTUNITY].sort());
+  assert.deepEqual(jev.requests.flatMap((request) => Object.values(request.questions).map((spec) => spec.id)).sort(), [BRAND, CLAIMS, OPPORTUNITY].sort());
+  assert.ok(jev.requests.every((request) => (request.images?.length ?? 0) === 0 && !/perception/.test(JSON.stringify(request.state))), "no image or observation reaches a brief question");
   assert.equal(evaluateJevGate({ decision: row.decision, reviewerDecision: "approve" }).status, "ALLOW", "production may proceed");
+});
+
+test("an uncalibrated brief approval is not an approval: the brief goes to review and production does not proceed", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "brief-uncalibrated");
+  // The same values as the approving judgment, reported as uncalibrated, which is what the engines report today.
+  const uncalibrated: Responder = (spec) => {
+    if (spec.id === BRAND || spec.id === OPPORTUNITY) return answered(spec, 0.95);
+    if (spec.id === CLAIMS) return answered(spec, 0.99);
+    return undefined;
+  };
+  const jev = stubEngine("jev", { respond: uncalibrated });
+  const { result, row } = await gateBrief({ tenant, engines: registryWith(jev, stubEngine("openai-decisions")), selected: "jev" });
+  assert.equal(result.action, "HUMAN_REVIEW");
+  assert.equal(row.decision, "HUMAN_REVIEW");
+  assert.equal(row.reviewer_decision, null, "creation records no approval");
+  assert.equal(evaluateJevGate({ decision: row.decision, reviewerDecision: null }).status, "REQUIRE_HUMAN", "production waits for a person; it does not proceed");
 });
 
 test("a missing mandatory field is a deterministic rejection: the engine is not asked and the brief is blocked", async () => {
@@ -227,12 +248,23 @@ test("claim compliance below its policy rejects the brief, even though brand fit
   const sql = await getSql();
   const tenant = await studioTenant(sql, "brief-claim-policy");
   const jev = stubEngine("jev", {
-    respond: (spec) => (spec.id === CLAIMS ? answered(spec, 0.2) : approves(spec)),
+    respond: (spec) => (spec.id === CLAIMS ? answered(spec, 0.2, true) : approves(spec)),
   });
   const { result, row } = await gateBrief({ tenant, engines: registryWith(jev, stubEngine("openai-decisions")), selected: "jev" });
   assert.equal(result.action, "REJECT");
   assert.equal(row.decision, "REJECT");
   assert.equal(row.reviewer_decision, null);
+});
+
+test("an uncalibrated claim-compliance rejection is review, not rejection: only a calibrated probability rejects", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "brief-claim-uncalibrated");
+  const jev = stubEngine("jev", {
+    respond: (spec) => (spec.id === CLAIMS ? answered(spec, 0.2) : approves(spec)),
+  });
+  const { result, row } = await gateBrief({ tenant, engines: registryWith(jev, stubEngine("openai-decisions")), selected: "jev" });
+  assert.equal(result.action, "HUMAN_REVIEW");
+  assert.equal(row.decision, "HUMAN_REVIEW");
 });
 
 test("a provider failure on the active engine leaves the brief in human review, never approved, and never switches engines", async () => {
@@ -255,7 +287,7 @@ test("under JEV the brief is judged by JEV alone, with no images, and a clean ju
   const { result } = await gateBrief({ tenant, engines: registryWith(jev, openai), selected: "jev" });
   assert.equal(result.action, "AUTO_APPROVE");
   assert.equal(openai.requests.length, 0);
-  assert.equal(jev.requests[0]!.images?.length ?? 0, 0);
+  assert.ok(jev.requests.every((request) => (request.images?.length ?? 0) === 0));
 });
 
 test("the brief's decision links to its gate record, with the engine and the policy version", async () => {

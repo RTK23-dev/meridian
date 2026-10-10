@@ -55,7 +55,8 @@ const facts: MediaFacts = {
 // Answers from a stub engine, keyed by the registry question id. Each stub records every request it receives.
 type Responder = (spec: JevQuestionSpec) => JevAnswer | undefined;
 
-function answered(spec: JevQuestionSpec, probability: number): JevAnswer {
+/** A probability answer. `calibrated` models a calibrated value; engines report "uncalibrated" today. */
+function answered(spec: JevQuestionSpec, probability: number, calibrated = false): JevAnswer {
   return {
     questionId: spec.id,
     questionVersion: spec.version,
@@ -67,7 +68,7 @@ function answered(spec: JevQuestionSpec, probability: number): JevAnswer {
     probability,
     noul: probability,
     semantics: "probability",
-    calibrationStatus: "uncalibrated",
+    calibrationStatus: calibrated ? "calibrated" : "uncalibrated",
     evidenceRefs: [],
     evaluatedAt: new Date().toISOString(),
   } as JevAnswer;
@@ -131,9 +132,9 @@ const registryWith = (jev: ReturnType<typeof stubEngine>, openai: ReturnType<typ
 });
 
 const textApproves: Responder = (spec) => {
-  if (spec.id === CREATIVE_QUESTIONS["creative.brand_fit.v1"]!.id) return answered(spec, 0.97);
-  if (spec.id === CREATIVE_QUESTIONS["creative.opportunity_fit.v1"]!.id) return answered(spec, 0.97);
-  if (spec.id === CREATIVE_QUESTIONS["creative.claim_compliance.v1"]!.id) return answered(spec, 0.99);
+  if (spec.id === CREATIVE_QUESTIONS["creative.brand_fit.v1"]!.id) return answered(spec, 0.97, true);
+  if (spec.id === CREATIVE_QUESTIONS["creative.opportunity_fit.v1"]!.id) return answered(spec, 0.97, true);
+  if (spec.id === CREATIVE_QUESTIONS["creative.claim_compliance.v1"]!.id) return answered(spec, 0.99, true);
   return undefined;
 };
 
@@ -166,6 +167,9 @@ async function judge(options: {
   });
 }
 
+const BRAND_FIT = CREATIVE_QUESTIONS["creative.brand_fit.v1"]!.id;
+const OPPORTUNITY_FIT = CREATIVE_QUESTIONS["creative.opportunity_fit.v1"]!.id;
+
 test("the engine judges brand fit and opportunity fit; the lexical local checks are no longer written as authority", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "creative-brand-engine");
@@ -174,9 +178,14 @@ test("the engine judges brand fit and opportunity fit; the lexical local checks 
   const creativeId = `creative-${randomUUID()}`;
   await judge({ tenant, creativeId, engines: registryWith(jev, openai), selectedEngine: "jev" });
 
-  const asked = Object.values(jev.requests[0]!.questions).map((spec) => spec.id).sort();
-  assert.ok(asked.includes(CREATIVE_QUESTIONS["creative.brand_fit.v1"]!.id), "brand fit is asked of the engine");
-  assert.ok(asked.includes(CREATIVE_QUESTIONS["creative.opportunity_fit.v1"]!.id), "opportunity fit is asked of the engine");
+  const asked = jev.requests.flatMap((request) => Object.values(request.questions).map((spec) => spec.id));
+  assert.ok(asked.includes(BRAND_FIT), "brand fit is asked of the engine");
+  assert.ok(asked.includes(OPPORTUNITY_FIT), "opportunity fit is asked of the engine");
+  // Brand fit is asked with the creative's text and the brand positioning, and nothing else. No image, no observation.
+  const brandCall = jev.requests.find((request) => Object.values(request.questions).some((spec) => spec.id === BRAND_FIT))!;
+  assert.deepEqual([...(brandCall.state.availableEvidence as string[])].sort(), ["brand_positioning", "creative_copy"]);
+  assert.equal(brandCall.images?.length ?? 0, 0, "brand fit never receives an image");
+  assert.doesNotMatch(JSON.stringify(brandCall.state), /perception_observations|productPresence|Frame at/, "brand fit never receives an observation");
   const rows = await sql<{ question_id: string }>`
     select question_id from jev_decisions where subject_id = ${creativeId}
   `;
@@ -219,8 +228,10 @@ test("under JEV, the visual checks are unsupported: the creative goes to review,
   assert.equal(judged.gateAction, "HUMAN_REVIEW");
   assert.notEqual(judged.rollup, "AUTO_APPROVE");
   assert.equal(openai.requests.length, 0, "no silent OpenAI call for visual judgment");
-  assert.equal(jev.requests.length, 1);
-  assert.equal(jev.requests[0]!.images?.length ?? 0, 0, "JEV is never handed the image");
+  assert.equal(jev.requests.length, 3, "the three text scopes are judged, one call each");
+  assert.ok(jev.requests.every((request) => (request.images?.length ?? 0) === 0), "JEV is never handed the image");
+  const asked = jev.requests.flatMap((request) => Object.keys(request.questions));
+  assert.ok(!asked.includes(CREATIVE_QUESTIONS["creative.visual_quality.v1"]!.id), "no visual question is sent to JEV");
   const [record] = await sql<{ unresolved: unknown; imagesOmitted?: number }>`
     select unresolved from decision_gate_records where id = ${judged.gateRecordId}
   `;
@@ -228,11 +239,11 @@ test("under JEV, the visual checks are unsupported: the creative goes to review,
   assert.match(JSON.stringify(record?.unresolved), /abstain_insufficient_evidence/, "the missing perception evidence is stated as missing, not as a judgment");
 });
 
-test("under OpenAI, the image reaches the engine once with the text questions, and a visual defect rejects the creative", async () => {
+test("under OpenAI, each scope is one call, the image reaches only the visual calls, and a calibrated visual defect rejects the creative", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "creative-openai-visual");
   const defective: Responder = (spec) => {
-    if (spec.id === CREATIVE_QUESTIONS["creative.visual_quality.v1"]!.id) return answered(spec, 0.1);
+    if (spec.id === CREATIVE_QUESTIONS["creative.visual_quality.v1"]!.id) return answered(spec, 0.1, true);
     return textApproves(spec);
   };
   const jev = stubEngine("jev");
@@ -245,11 +256,32 @@ test("under OpenAI, the image reaches the engine once with the text questions, a
     engines: registryWith(jev, openai),
     selectedEngine: "openai-decisions",
   });
-  assert.equal(openai.requests.length, 1, "one call carries the text and the image questions");
-  assert.equal(openai.requests[0]!.images?.length, 1);
+  // Three text scopes and two visual scopes: five calls, all to OpenAI. Only the two visual calls carry the image.
+  assert.equal(openai.requests.length, 5, "one call per evidence scope");
+  const imageCalls = openai.requests.filter((request) => (request.images?.length ?? 0) > 0);
+  assert.equal(imageCalls.length, 2, "two visual calls carry the image");
+  assert.ok(imageCalls.every((request) => request.images?.length === 1));
   assert.equal(jev.requests.length, 0);
-  assert.equal(judged.gateAction, "REJECT", "a clear visual defect is a rejection from the engine");
+  assert.equal(judged.gateAction, "REJECT", "a calibrated visual defect is a rejection from the engine");
   assert.equal(judged.rollup, "REJECT");
+});
+
+test("an uncalibrated visual defect cannot reject the creative: it goes to review", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-openai-uncalibrated-defect");
+  const defective: Responder = (spec) => {
+    if (spec.id === CREATIVE_QUESTIONS["creative.visual_quality.v1"]!.id) return answered(spec, 0.1);
+    return textApproves(spec);
+  };
+  const judged = await judge({
+    tenant,
+    creativeId: `creative-${randomUUID()}`,
+    visual: generatedImageVisual(PNG, "e".repeat(64)),
+    engines: registryWith(stubEngine("jev"), stubEngine("openai-decisions", { respond: defective })),
+    selectedEngine: "openai-decisions",
+  });
+  assert.equal(judged.gateAction, "HUMAN_REVIEW", "an uncalibrated probability routes to review, it does not reject");
+  assert.notEqual(judged.rollup, "REJECT");
 });
 
 test("under OpenAI with no image supplied, the visual checks abstain and the creative is not approved", async () => {
@@ -259,13 +291,13 @@ test("under OpenAI with no image supplied, the visual checks abstain and the cre
   const openai = stubEngine("openai-decisions", { respond: textApproves });
   const creativeId = `creative-${randomUUID()}`;
   const judged = await judge({ tenant, creativeId, engines: registryWith(jev, openai), selectedEngine: "openai-decisions" });
-  assert.equal(openai.requests.length, 1, "the text questions still go to the engine once");
-  assert.equal(openai.requests[0]!.images?.length ?? 0, 0);
+  assert.equal(openai.requests.length, 3, "the three text scopes still go to the engine, one call each");
+  assert.ok(openai.requests.every((request) => (request.images?.length ?? 0) === 0));
   assert.equal(judged.gateAction, "HUMAN_REVIEW");
   assert.notEqual(judged.rollup, "AUTO_APPROVE");
 });
 
-test("a provider failure on the engine is human review, never approval, and the other engine is not called", async () => {
+test("a provider failure on the engine is human review, never approval; the later scopes are not sent and JEV is not called", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "creative-provider-failure");
   const jev = stubEngine("jev", { respond: textApproves });
@@ -280,11 +312,12 @@ test("a provider failure on the engine is human review, never approval, and the 
   });
   assert.equal(judged.gateAction, "HUMAN_REVIEW");
   assert.notEqual(judged.rollup, "AUTO_APPROVE");
+  assert.equal(openai.requests.length, 1, "the first scope fails, and the later scopes are not sent to the same engine");
   assert.equal(jev.requests.length, 0, "no silent switch to JEV");
 });
 
 /** A stub perception provider. It records each call, so a test can prove whether production asked for perception. */
-function stubPerception(options: { fail?: boolean } = {}) {
+function stubPerception(options: { fail?: boolean; complete?: boolean } = {}) {
   const calls: PerceptionMedia[][] = [];
   const provider: MultimodalPerceptionProvider = {
     id: "stub_perception",
@@ -296,9 +329,15 @@ function stubPerception(options: { fail?: boolean } = {}) {
       if (options.fail) {
         return { status: "failed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", failureKind: "timeout", message: "stub timeout", latencyMs: 1 };
       }
-      const observations: MediaObservation[] = input.media.map((item) => ({
-        mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "inferred", productPresence: true, ocrText: "Calm dinner, ten minutes",
-      }));
+      const observations: MediaObservation[] = input.media.map((item) => (options.complete
+        ? {
+          mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "inferred",
+          productPresence: true, productProminence: "prominent", productObstructed: false,
+          sharpness: "sharp", lighting: "good", composition: "balanced", legibility: "no_text", artifactsVisible: false,
+        }
+        : {
+          mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "inferred", productPresence: true, ocrText: "Calm dinner, ten minutes",
+        }));
       return { status: "observed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", observations, latencyMs: 2 };
     },
   };
@@ -333,10 +372,10 @@ test("frames are sampled only for an engine that takes them, or when perception 
   assert.equal(extracted, 0, "no frame is extracted when nothing will read it");
 });
 
-test("under JEV with perception ready: perception analyses the frames, JEV reads the grounded text, no image is sent, and the visual questions are unsupported", async () => {
+test("under JEV with perception ready: the visual question reads the grounded contract lines only, JEV is never handed an image, and text questions read no observation", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "creative-jev-perception");
-  const perception = stubPerception();
+  const perception = stubPerception({ complete: true });
   const jev = stubEngine("jev", { respond: textApproves });
   const openai = stubEngine("openai-decisions", { respond: textApproves });
   const creativeId = `creative-${randomUUID()}`;
@@ -347,12 +386,19 @@ test("under JEV with perception ready: perception analyses the frames, JEV reads
   assert.equal(perception.calls.length, 1, "perception analyses the frames once");
   assert.equal(perception.calls[0]?.length, 2);
   assert.equal(openai.requests.length, 0, "no silent OpenAI call for visual judgment");
-  assert.equal(jev.requests[0]!.images?.length ?? 0, 0, "JEV is never handed an image");
-  const state = JSON.stringify(jev.requests[0]!.state);
-  assert.match(state, /Frame at 0ms/, "JEV reads the grounded observation with its real timestamp");
-  assert.match(state, /not inspected in full/, "JEV is told the video was only partly analysed");
+  assert.ok(jev.requests.every((request) => (request.images?.length ?? 0) === 0), "JEV is never handed an image");
+  const visualCall = jev.requests.find((request) => (request.state.availableEvidence as string[]).includes("perception_observations"));
+  assert.ok(visualCall, "one call carries the perception observations");
+  const visualState = JSON.stringify(visualCall.state);
+  assert.match(visualState, /Frame at 0ms/, "JEV reads the grounded observation with its real timestamp");
+  assert.match(visualState, /not inspected in full/, "JEV is told the video was only partly analysed");
+  // A text question is a call whose scope does not hold the observations. Every visual call holds them.
+  const textCalls = jev.requests.filter((request) => !(request.state.availableEvidence as string[]).includes("perception_observations"));
+  assert.equal(textCalls.length, 3, "the three text scopes are the calls without observations");
+  const textState = textCalls.map((request) => JSON.stringify(request.state)).join("\n");
+  assert.doesNotMatch(textState, /Frame at|perception_observations|not inspected/, "the text questions never receive an observation or the coverage");
   assert.equal(judged.perceptionRunId !== null, true, "the perception run is recorded");
-  assert.equal(judged.gateAction, "HUMAN_REVIEW", "the visual questions are unsupported under JEV, so the creative is reviewed");
+  assert.equal(judged.gateAction, "HUMAN_REVIEW", "the visual questions have no answer under this stub, so the creative is reviewed");
   const [record] = await sql<{ evidence: unknown }>`select evidence from decision_gate_records where id = ${judged.gateRecordId}`;
   assert.match(JSON.stringify(record?.evidence), /perception_observations/);
   assert.match(JSON.stringify(record?.evidence), new RegExp(`perception_run:${judged.perceptionRunId}`));
@@ -366,11 +412,12 @@ test("under JEV with perception unavailable: the creative is held for review, Op
   const creativeId = `creative-${randomUUID()}`;
   const judged = await judge({ tenant, creativeId, visual: sampledVideo(), perception: null, engines: registryWith(jev, openai), selectedEngine: "jev" });
   assert.equal(openai.requests.length, 0, "no substitute engine");
-  assert.equal(jev.requests.length, 1, "the text questions are still judged");
-  assert.match(JSON.stringify(jev.requests[0]!.state), /"failureKind":"not_configured"/, "the unavailable perception is stated");
-  assert.match(JSON.stringify(jev.requests[0]!.state), /"analysed":0/, "no frame is claimed as analysed");
+  assert.equal(jev.requests.length, 3, "the three text scopes are still judged, one call each");
+  assert.doesNotMatch(JSON.stringify(jev.requests.map((request) => request.state)), /perception|analysed|Frame at/, "no perception and no coverage reaches a text question");
   assert.equal(judged.gateAction, "HUMAN_REVIEW");
   assert.notEqual(judged.rollup, "AUTO_APPROVE");
+  const [record] = await sql<{ unresolved: unknown }>`select unresolved from decision_gate_records where id = ${judged.gateRecordId}`;
+  assert.match(JSON.stringify(record?.unresolved), /not_configured|No perception provider is ready/, "the unavailable perception is stated for the visual questions");
 });
 
 test("under JEV with a perception failure: the failure is recorded with its kind, and nothing is made up from it", async () => {
@@ -380,9 +427,10 @@ test("under JEV with a perception failure: the failure is recorded with its kind
   const jev = stubEngine("jev", { respond: textApproves });
   const creativeId = `creative-${randomUUID()}`;
   const judged = await judge({ tenant, creativeId, visual: sampledVideo(), perception: perception.provider, engines: registryWith(jev, stubEngine("openai-decisions")), selectedEngine: "jev" });
-  assert.match(JSON.stringify(jev.requests[0]!.state), /"status":"failed"/);
-  assert.match(JSON.stringify(jev.requests[0]!.state), /"failureKind":"timeout"/);
-  assert.doesNotMatch(JSON.stringify(jev.requests[0]!.state), /Frame at 0ms \(/, "no observation is attached to a failed run");
+  assert.doesNotMatch(JSON.stringify(jev.requests.map((request) => request.state)), /Frame at 0ms \(|perception_observations/, "no observation is attached to a failed run");
+  assert.equal(jev.requests.length, 3, "the text scopes are judged, one call each");
+  const [record] = await sql<{ unresolved: unknown }>`select unresolved from decision_gate_records where id = ${judged.gateRecordId}`;
+  assert.match(JSON.stringify(record?.unresolved), /timeout/, "the failure kind is stated for the visual questions");
   assert.equal(judged.gateAction, "HUMAN_REVIEW");
 });
 
@@ -397,8 +445,11 @@ test("under OpenAI Decisions the frames go to the engine directly, with their ti
   const judged = await judge({ tenant, creativeId, facts: { ...facts, kind: "video", transcript: "", durationMs: 3000, sceneCount: 1 }, visual, perception: perception.provider, engines: registryWith(jev, openai), selectedEngine: "openai-decisions" });
   assert.equal(perception.calls.length, 0, "perception is not a second analysis of the same frames");
   assert.equal(jev.requests.length, 0);
-  assert.equal(openai.requests.length, 1, "one call carries the text and the frames");
-  assert.equal(openai.requests[0]!.images?.length, 2);
+  // Three text scopes and two visual scopes. Only the visual calls carry the frames.
+  assert.equal(openai.requests.length, 5, "one call per evidence scope");
+  const frameCalls = openai.requests.filter((request) => (request.images?.length ?? 0) > 0);
+  assert.equal(frameCalls.length, 2, "the two visual calls carry the frames");
+  assert.ok(frameCalls.every((request) => request.images?.length === 2));
   assert.equal(judged.perceptionRunId, null);
   const [record] = await sql<{ evidence: unknown }>`select evidence from decision_gate_records where id = ${judged.gateRecordId}`;
   assert.match(JSON.stringify(record?.evidence), /"timestampMs":1500/, "the record names each frame with its real timestamp");
@@ -448,8 +499,10 @@ test("real ffmpeg, under OpenAI: up to four sampled frames reach the engine with
     engines: registryWith(stubEngine("jev"), openai),
     selectedEngine: "openai-decisions",
   });
-  assert.equal(openai.requests.length, 1);
-  assert.equal(openai.requests[0]!.images?.length, visual.media.length, "the engine receives exactly the frames that were provided");
+  assert.equal(openai.requests.length, 5, "three text scopes and two visual scopes");
+  const frameCalls = openai.requests.filter((request) => (request.images?.length ?? 0) > 0);
+  assert.equal(frameCalls.length, 2, "the two visual scopes each receive the frames");
+  assert.ok(frameCalls.every((request) => request.images?.length === visual.media.length), "each visual call receives exactly the frames that were provided");
   assert.equal(judged.gateEngineCalled, true);
   const [record] = await sql<{ evidence: unknown }>`select evidence from decision_gate_records where id = ${judged.gateRecordId}`;
   assert.match(JSON.stringify(record?.evidence), /ffmpeg_sample/, "the record names where each frame came from");
