@@ -190,7 +190,7 @@ function Integrations() {
         return (
           <section key={group.id} aria-labelledby={`group-${group.id}`} className="space-y-3">
             <div>
-              <h2 id={`group-${group.id}`} className="font-display text-2xl">{group.label}</h2>
+              <h2 id={`group-${group.id}`} className="text-section font-semibold text-fg">{group.label}</h2>
               <p className="text-sm text-fg-muted">{group.hint}</p>
             </div>
             <ul className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">

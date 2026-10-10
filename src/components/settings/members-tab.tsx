@@ -174,7 +174,7 @@ function InviteDialog({ open, onOpenChange, organizationId, onInvited }: {
   return (
     <Dialog open={open} onOpenChange={(next) => { onOpenChange(next); if (!next) { form.reset({ email: "", role: "member" }); invite.reset(); } }}>
       <DialogContent>
-        <DialogTitle className="font-display text-2xl">Invite a member</DialogTitle>
+        <DialogTitle className="text-section font-semibold text-fg">Invite a member</DialogTitle>
         <DialogDescription className="mt-2 text-sm text-fg-muted">
           If the person already has an account, they are added now. Otherwise an invitation is recorded for them.
         </DialogDescription>

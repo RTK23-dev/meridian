@@ -37,7 +37,7 @@ function ExplainDialog() {
         <Button type="button" variant="secondary" size="md">What does this change?</Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogTitle className="font-display text-2xl">What turning this on changes</DialogTitle>
+        <DialogTitle className="text-section font-semibold text-fg">What turning this on changes</DialogTitle>
         <DialogDescription className="mt-3 space-y-2 text-sm text-fg-muted">
           <span className="block">Only the brand you switch on reads patterns that other brands in this workspace shared with it.</span>
           <span className="block">It does not copy anything into the brand brain, and it does not change scoring. Turning it off stops the brand from reading shared patterns on its next decision.</span>
