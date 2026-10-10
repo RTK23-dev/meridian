@@ -1,5 +1,9 @@
 export function downloadCsv<T>(filename: string, columns: { key: keyof T; label: string }[], rows: readonly T[]) {
-  const content = serializeCsv(columns, rows);
+  downloadCsvText(filename, serializeCsv(columns, rows));
+}
+
+/** Saves CSV text that was already built as a file on this device. Nothing is uploaded or sent. */
+export function downloadCsvText(filename: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;

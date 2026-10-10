@@ -1,5 +1,12 @@
-import { useState } from "react";
-import { Button, ErrorState, Field, Notice, Panel, SelectInput, TextInput, errorText } from "@/components/ui";
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, type FieldPath } from "react-hook-form";
+import { Button, ErrorState, Field, Card, SelectInput, Input } from "@/components/ui";
+import { PlainErrorMessage } from "@/components/plain-error";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { providerFieldsSchema, type ProviderFieldsInput } from "@/components/forms/client-schemas";
+import { plainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
 import { useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import {
@@ -47,6 +54,39 @@ function sourceLabelOf(summary: ProviderConfigSummary): string {
   return labels[summary.source];
 }
 
+/** The stored value of each panel field, with the defaults the panel has always shown when nothing is stored. */
+function storedFieldsOf(summaries: Record<ProviderCategory, ProviderConfigSummary> | null): ProviderFieldsInput {
+  return {
+    jevKey: "",
+    productionKey: "",
+    perceptionKey: "",
+    costPreference: String(summaries?.production?.settings.costPreference || "BALANCED") as ProviderFieldsInput["costPreference"],
+    gatewayUrl: String(summaries?.cyclone?.settings.gatewayUrl || "http://127.0.0.1:4000"),
+    maxPages: String(summaries?.sources?.settings.maxPagesPerRun || "50"),
+  };
+}
+
+/** The categories that take an API key in this panel. Each one has its own key field. */
+type KeyCategory = "jev" | "production" | "perception";
+const KEY_FIELD: Record<KeyCategory, "jevKey" | "productionKey" | "perceptionKey"> = {
+  jev: "jevKey",
+  production: "productionKey",
+  perception: "perceptionKey",
+};
+function isKeyCategory(category: ProviderCategory): category is KeyCategory {
+  return category === "jev" || category === "production" || category === "perception";
+}
+
+/** The fields each category's Save checks and sends. A key field belongs to its own category only. */
+const FIELDS_SAVED_BY: Record<ProviderCategory, Array<FieldPath<ProviderFieldsInput>>> = {
+  jev: ["jevKey"],
+  production: ["productionKey", "costPreference"],
+  cyclone: ["gatewayUrl"],
+  sources: ["maxPages"],
+  perception: ["perceptionKey"],
+  storage: [],
+};
+
 export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSettingsPanelProps) {
   const settings = useProviderSettingsQuery(organizationId);
   const summaries = settings.data ? (settings.data as Record<ProviderCategory, ProviderConfigSummary>) : null;
@@ -55,14 +95,26 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   const [testResult, setTestResult] = useState<{ status: string; message: string; latencyMs?: number } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Form states for active category. A draft stays unset until the user edits it, so each field shows the stored value.
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [costPreferenceDraft, setCostPreferenceInput] = useState<string | null>(null);
-  const [gatewayUrlDraft, setGatewayUrlInput] = useState<string | null>(null);
-  const [maxPagesDraft, setMaxPagesInput] = useState<string | null>(null);
-  const costPreferenceInput = costPreferenceDraft ?? String(summaries?.production?.settings.costPreference || "BALANCED");
-  const gatewayUrlInput = gatewayUrlDraft ?? String(summaries?.cyclone?.settings.gatewayUrl || "http://127.0.0.1:4000");
-  const maxPagesInput = maxPagesDraft ?? String(summaries?.sources?.settings.maxPagesPerRun || "50");
+  // One form for the panel's fields. Each key has its own field, so a key typed for one category is never shown in, or
+  // saved with, another. Each field shows the stored value until it is edited, and an edit is kept when the person
+  // switches category. Only a saved field takes the new stored value.
+  const providerForm = useForm<ProviderFieldsInput>({
+    resolver: zodResolver(providerFieldsSchema),
+    defaultValues: storedFieldsOf(summaries),
+    mode: "onBlur",
+  });
+  const perceptionKeyDraft = providerForm.watch("perceptionKey");
+  const providerDirty = providerForm.formState.isDirty;
+  const fieldErrors = providerForm.formState.errors;
+  // The discard bar looks at the active category's fields only, so another category's unsaved key is not counted here.
+  const activeDirty = FIELDS_SAVED_BY[activeTab].some((name) => Boolean(providerForm.formState.dirtyFields[name]));
+  const [discardRequested, setDiscardRequested] = useState(false);
+  useEffect(() => {
+    const stored = storedFieldsOf(summaries);
+    for (const key of ["costPreference", "gatewayUrl", "maxPages"] as const) {
+      if (!providerForm.getFieldState(key).isDirty) providerForm.resetField(key, { defaultValue: stored[key] });
+    }
+  }, [summaries, providerForm]);
 
   // Saving or removing a credential changes the decision-engine card and the integration status, so those refresh too.
   const saveConfig = useScopedMutation({
@@ -72,10 +124,12 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
     invalidate: () => [qk.providerSettings(organizationId), qk.decisionEngines(organizationId), qk.integrations(organizationId)],
     onSuccess: (_data, input) => {
       setMessage(`${input.category.toUpperCase()} configuration saved.`);
-      setApiKeyInput("");
-      setCostPreferenceInput(null);
-      setGatewayUrlInput(null);
-      setMaxPagesInput(null);
+      // The saved values become the stored values. Only the saved category's key box is cleared, as a key is never shown
+      // again. Another category's draft is left as it is.
+      if (isKeyCategory(input.category)) providerForm.resetField(KEY_FIELD[input.category], { defaultValue: "" });
+      if (input.settings?.costPreference !== undefined) providerForm.resetField("costPreference", { defaultValue: String(input.settings.costPreference) as ProviderFieldsInput["costPreference"] });
+      if (input.settings?.gatewayUrl !== undefined) providerForm.resetField("gatewayUrl", { defaultValue: String(input.settings.gatewayUrl) });
+      if (input.settings?.maxPages !== undefined) providerForm.resetField("maxPages", { defaultValue: String(input.settings.maxPages) });
     },
   });
   const removeConfig = useScopedMutation({
@@ -94,7 +148,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   const testing = testConnection.isPending;
   const saving = saveConfig.isPending || removeConfig.isPending;
   const failure = [saveConfig.error, removeConfig.error].find(Boolean);
-  const error = failure ? errorText(failure) : null;
+  const error = failure ? plainError(failure) : null;
 
   async function handleTest(category: ProviderCategory) {
     setTestResult(null);
@@ -111,18 +165,25 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
   async function handleSave(category: ProviderCategory) {
     setMessage(null);
+    // Only the fields this category saves are checked, so a bad draft for another category does not block this save.
+    const valid = await providerForm.trigger(FIELDS_SAVED_BY[category]);
+    if (!valid) return;
+    const values = providerForm.getValues();
+    // Only this category's own key field is sent, and only a category that takes a key sends one. A key typed for another
+    // category is never sent with this save.
     const credentials: Record<string, string> = {};
-    if (apiKeyInput.trim()) {
-      credentials.apiKey = apiKeyInput.trim();
+    const ownKey = isKeyCategory(category) ? values[KEY_FIELD[category]].trim() : "";
+    if (ownKey) {
+      credentials.apiKey = ownKey;
     }
 
     const settingsToSave: Record<string, unknown> = {};
     if (category === "production") {
-      settingsToSave.costPreference = costPreferenceInput;
+      settingsToSave.costPreference = values.costPreference;
     } else if (category === "cyclone") {
-      settingsToSave.gatewayUrl = gatewayUrlInput;
+      settingsToSave.gatewayUrl = values.gatewayUrl;
     } else if (category === "sources") {
-      settingsToSave.maxPages = Number(maxPagesInput);
+      settingsToSave.maxPages = Number(values.maxPages);
     }
 
     await saveConfig
@@ -135,6 +196,13 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
     await removeConfig.mutateAsync(category).catch(() => undefined);
   }
 
+  // Discard clears only the active category's unsaved edits, so it cannot clear another category's draft.
+  function discardActiveCategory() {
+    const stored = storedFieldsOf(summaries);
+    for (const name of FIELDS_SAVED_BY[activeTab]) providerForm.resetField(name, { defaultValue: stored[name] });
+    setDiscardRequested(false);
+  }
+
   if (settings.isError && !summaries) {
     return <ErrorState message="Provider settings could not be loaded." onRetry={() => void settings.refetch()} />;
   }
@@ -145,7 +213,8 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   const activeSummary = summaries ? summaries[activeTab] : null;
 
   return (
-    <Panel className="space-y-6">
+    <Card className="space-y-6">
+      <UnsavedChangesGuard dirty={providerDirty} />
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
         <div>
           <p className="text-sm font-semibold uppercase tracking-widest text-brass">Architecture & Intelligence</p>
@@ -166,6 +235,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                   setActiveTab(tab);
                   setTestResult(null);
                   setMessage(null);
+                  setDiscardRequested(false);
                 }}
                 className={`rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
                   activeTab === tab
@@ -180,7 +250,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
         </div>
       </div>
 
-      {error ? <Notice>{error}</Notice> : null}
+      {error ? <PlainErrorMessage message={error.message} raw={error.raw} /> : null}
       {message ? <p className="text-sm text-success" role="status">{message}</p> : null}
 
       {activeSummary ? (
@@ -255,11 +325,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">TypeSafe JEV transport</p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="JEV Routing Mode">
-                <TextInput value={String(activeSummary.settings.mode)} readOnly />
+                <Input value={String(activeSummary.settings.mode)} readOnly />
               </Field>
 
               <Field label="Preferred Provider">
-                <TextInput value={String(activeSummary.settings.preferredProvider)} readOnly />
+                <Input value={String(activeSummary.settings.preferredProvider)} readOnly />
               </Field>
 
               <p className="sm:col-span-2 text-xs text-muted">
@@ -287,12 +357,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 Routing is set on the deployment (MERIDIAN_JEV_PROVIDER_MODE, MERIDIAN_JEV_PREFERRED_PROVIDER). A routing choice saved in this workspace is not used, so it is not offered.
               </p>
               <div className="sm:col-span-2">
-                <Field label="TypeSafe JEV API key (saved per workspace)">
-                  <TextInput
+                <Field label="TypeSafe JEV API key (saved per workspace)" error={fieldErrors.jevKey?.message}>
+                  <Input
                     type="password"
                     placeholder="Enter a TypeSafe JEV key to save or replace it..."
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    {...providerForm.register("jevKey")}
                     disabled={!canAdmin}
                   />
                 </Field>
@@ -303,10 +372,9 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
           {activeTab === "production" ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Cost Preference Strategy">
+              <Field label="Cost Preference Strategy" error={fieldErrors.costPreference?.message}>
                 <SelectInput
-                  value={costPreferenceInput}
-                  onChange={(e) => setCostPreferenceInput(e.target.value)}
+                  {...providerForm.register("costPreference")}
                   disabled={!canAdmin}
                 >
                   <option value="BALANCED">Balanced (Standard quality and cost curve)</option>
@@ -317,12 +385,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               </Field>
 
               <div className="sm:col-span-2">
-                <Field label="Gemini production API key (Omni video, Veo, image)">
-                  <TextInput
+                <Field label="Gemini production API key (Omni video, Veo, image)" error={fieldErrors.productionKey?.message}>
+                  <Input
                     type="password"
                     placeholder="Enter a Gemini API key to save or replace it..."
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    {...providerForm.register("productionKey")}
                     disabled={!canAdmin}
                   />
                 </Field>
@@ -340,10 +407,9 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
           {activeTab === "cyclone" ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Cyclone Gateway URL">
-                <TextInput
-                  value={gatewayUrlInput}
-                  onChange={(e) => setGatewayUrlInput(e.target.value)}
+              <Field label="Cyclone Gateway URL" error={fieldErrors.gatewayUrl?.message}>
+                <Input
+                  {...providerForm.register("gatewayUrl")}
                   placeholder="http://127.0.0.1:4000"
                   disabled={!canAdmin}
                 />
@@ -358,11 +424,10 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
           {activeTab === "sources" ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Max Crawl Pages Per Run">
-                <TextInput
+              <Field label="Max Crawl Pages Per Run" error={fieldErrors.maxPages?.message}>
+                <Input
+                  {...providerForm.register("maxPages")}
                   type="number"
-                  value={maxPagesInput}
-                  onChange={(e) => setMaxPagesInput(e.target.value)}
                   disabled={!canAdmin}
                 />
               </Field>
@@ -372,12 +437,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           {activeTab === "perception" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <Field label="Gemini API Key (perception)">
-                  <TextInput
+                <Field label="Gemini API Key (perception)" error={fieldErrors.perceptionKey?.message}>
+                  <Input
                     type="password"
                     placeholder="Enter a Gemini API key..."
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    {...providerForm.register("perceptionKey")}
                     disabled={!canAdmin}
                   />
                 </Field>
@@ -388,11 +452,18 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
             </div>
           ) : null}
 
+          <UnsavedChangesBar
+            dirty={activeDirty}
+            subject="provider settings"
+            confirming={discardRequested}
+            onConfirmingChange={setDiscardRequested}
+            onDiscard={discardActiveCategory}
+          />
           {canAdmin && activeTab !== "storage" ? (
             <div className="flex justify-end pt-2">
               <Button
                 type="button"
-                disabled={saving || (activeTab === "perception" && !apiKeyInput.trim())}
+                disabled={saving || (activeTab === "perception" && !perceptionKeyDraft.trim())}
                 onClick={() => handleSave(activeTab)}
               >
                 {saving ? "Saving..." : `Save ${activeTab.toUpperCase()} Configuration`}
@@ -401,6 +472,6 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           ) : null}
         </div>
       ) : null}
-    </Panel>
+    </Card>
   );
 }

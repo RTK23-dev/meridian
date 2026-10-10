@@ -44,7 +44,8 @@ export function PopoverContent({ className, ...props }: ComponentProps<typeof Po
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
-export const DropdownMenuItem = DropdownMenuPrimitive.Item;
+/** Menu rows are at least 36px on desktop and 44px on touch. The focused row keeps the global focus outline. */
+export function DropdownMenuItem({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Item>) { return <DropdownMenuPrimitive.Item {...props} className={cn("relative flex min-h-9 cursor-default select-none items-center gap-2 rounded-sm px-3 py-1.5 text-sm text-fg data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-surface-2 pointer-coarse:min-h-11", className)} />; }
 export function DropdownMenuContent({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Content>) { return <DropdownMenuPrimitive.Portal><DropdownMenuPrimitive.Content {...props} className={cn("z-50 min-w-36 rounded-md border border-border bg-surface p-1 text-fg shadow-md", className)} /></DropdownMenuPrimitive.Portal>; }
 
 export const TooltipProvider = TooltipPrimitive.Provider;
@@ -54,7 +55,7 @@ export function TooltipContent({ className, ...props }: ComponentProps<typeof To
 
 export const Tabs = TabsPrimitive.Root;
 export function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.List>) { return <TabsPrimitive.List {...props} className={cn("inline-flex max-w-full flex-wrap gap-1 border-b border-border", className)} />; }
-export function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsPrimitive.Trigger>) { return <TabsPrimitive.Trigger {...props} className={cn("min-h-10 px-3 text-sm text-fg-muted outline-none focus-visible:ring-2 focus-visible:ring-accent data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:font-semibold data-[state=active]:text-fg", className)} />; }
+export function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsPrimitive.Trigger>) { return <TabsPrimitive.Trigger {...props} className={cn("min-h-10 px-3 text-sm text-fg-muted pointer-coarse:min-h-11 data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:font-semibold data-[state=active]:text-fg", className)} />; }
 export const TabsContent = TabsPrimitive.Content;
 
 export const Accordion = AccordionPrimitive.Root;
