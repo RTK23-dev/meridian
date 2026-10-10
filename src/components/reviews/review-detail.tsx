@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Term } from "@/components/glossary";
 import { TechnicalDetails } from "@/components/plain-error";
 import { describeQuestion } from "@/components/studio/jev-question-text";
-import { Badge, Button, Field, Kbd, Panel, SelectInput, TextInput } from "@/components/ui";
+import { Badge, Button, Field, Kbd, Card, SelectInput, Input } from "@/components/ui";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { decisionOutcome, percentOrUnknown } from "@/lib/copy";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
@@ -63,7 +63,7 @@ export function ReviewDetail({
   const reasonId = reviewReasonFieldId(item.id);
   const noteId = reviewNoteFieldId(item.id);
   return (
-    <Panel aria-labelledby="review-detail-title" className="space-y-4">
+    <Card aria-labelledby="review-detail-title" className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={age.tone}>{age.label}</Badge>
         <Badge variant={priority.high ? "warning" : "neutral"}>{priority.label}</Badge>
@@ -93,7 +93,7 @@ export function ReviewDetail({
             </SelectInput>
           </Field>
           <Field id={noteId} label="Note" hint="Optional. Stored with the decision." error={errors.note?.message}>
-            <TextInput {...register("note")} id={noteId} maxLength={500} />
+            <Input {...register("note")} id={noteId} maxLength={500} />
           </Field>
           <div className="flex flex-wrap items-center gap-2">
             <Button disabled={pending} onClick={onApprove}>Approve</Button>
@@ -106,6 +106,6 @@ export function ReviewDetail({
       ) : (
         <p className="text-sm text-muted">Viewers can read reviews. A member can approve or reject.</p>
       )}
-    </Panel>
+    </Card>
   );
 }

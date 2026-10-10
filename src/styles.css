@@ -53,7 +53,6 @@
 /* Legacy names kept while older screens migrate. Inline, so each element
    resolves them against its own theme (the nested dark preview depends on it). */
 @theme inline {
-  --color-ink: var(--color-fg);
   --color-paper: var(--color-bg);
   --color-panel: var(--color-surface);
   --color-line: var(--color-border);

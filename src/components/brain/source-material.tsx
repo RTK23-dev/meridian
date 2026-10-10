@@ -2,7 +2,7 @@ import { useEffect, useState, type DragEvent } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, Field, TextArea } from "@/components/ui";
+import { Button, Field, Textarea } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
@@ -166,7 +166,7 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty, onPasteDirt
     {canEdit ? (
       <div className="space-y-3">
         <Field label="Or paste text" hint="Pasted text is stored the same way as a file." error={pasteForm.formState.errors.pasted?.message}>
-          <TextArea
+          <Textarea
             {...pasteForm.register("pasted")}
             maxLength={PASTE_MAX}
             placeholder="Paste brand or product text"

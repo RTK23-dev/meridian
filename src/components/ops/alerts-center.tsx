@@ -2,7 +2,7 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { AlertCircle, CheckCheck, Clock3, Info, TriangleAlert } from "lucide-react";
-import { Badge, Button, Card, Field, PageHeader, ScreenSkeleton, SelectInput, StatusBadge, TextInput } from "@/components/ui";
+import { Badge, Button, Card, Field, PageHeader, ScreenSkeleton, SelectInput, StatusBadge, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -141,7 +141,7 @@ export function AlertsCenter() {
           <form className="flex flex-wrap items-end gap-3" noValidate onSubmit={submitTarget} onKeyDown={(event) => submitOnShortcut(event)}>
             <div className="min-w-64 flex-1">
               <Field label="Webhook URL" hint="Must start with https. Plain http is allowed only for localhost. The URL is not shown again after you save it." error={targetForm.formState.errors.url?.message}>
-                <TextInput {...targetForm.register("url")} type="url" maxLength={500} placeholder="https://example.com/alerts" />
+                <Input {...targetForm.register("url")} type="url" maxLength={500} placeholder="https://example.com/alerts" />
               </Field>
             </div>
             <Button type="submit" variant="secondary" size="md" loading={saveTarget.isPending} disabled={busy || urlValue.trim() === ""}>Save target</Button>

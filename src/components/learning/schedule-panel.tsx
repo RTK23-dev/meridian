@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Button, Card, Field, SelectInput, TextInput } from "@/components/ui";
+import { Button, Card, Field, SelectInput, Input } from "@/components/ui";
 import { PlainErrorNotice } from "@/components/plain-error";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -68,29 +68,29 @@ export function SchedulePanel({ brandId, organizationId, canAdmin }: { brandId: 
           </SelectInput>
         </Field>
         <Field label="Creative ID" error={errors.creativeId?.message} required>
-          <TextInput {...form.register("creativeId")} required />
+          <Input {...form.register("creativeId")} required />
         </Field>
         <Field label="Provider ad ID" error={errors.externalAdId?.message} required>
-          <TextInput {...form.register("externalAdId")} required />
+          <Input {...form.register("externalAdId")} required />
         </Field>
       </fieldset>
 
       <fieldset className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <legend className="mb-2 text-sm font-semibold text-fg">Dates and cadence</legend>
         <Field label="Start date" error={errors.startDate?.message} required>
-          <TextInput {...form.register("startDate")} type="date" required />
+          <Input {...form.register("startDate")} type="date" required />
         </Field>
         <Field label="End date" error={errors.endDate?.message} required>
-          <TextInput {...form.register("endDate")} type="date" required />
+          <Input {...form.register("endDate")} type="date" required />
         </Field>
         <Field label="Cadence in seconds" hint="60 to 2,592,000 seconds" error={errors.everySeconds?.message}>
-          <TextInput {...form.register("everySeconds")} type="text" inputMode="numeric" required />
+          <Input {...form.register("everySeconds")} type="text" inputMode="numeric" required />
         </Field>
         <Field label="Timezone" error={errors.timezone?.message} required>
-          <TextInput {...form.register("timezone")} required />
+          <Input {...form.register("timezone")} required />
         </Field>
         <Field label="Currency" hint="Three-letter code" error={errors.currency?.message} required>
-          <TextInput {...form.register("currency")} required maxLength={3} />
+          <Input {...form.register("currency")} required maxLength={3} />
         </Field>
       </fieldset>
 

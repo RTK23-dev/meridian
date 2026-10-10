@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import {
-  Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Field, TextArea, TextInput,
-  errorText,
-} from "@/components/ui";
+import { Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Field, Textarea, Input, errorText } from "@/components/ui";
 import { FormError } from "@/components/settings/form-error";
 import { plainServerError } from "@/components/settings/form-model";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
@@ -71,13 +68,13 @@ export function BrandDetailsCard({ brandId, detail, canEdit }: { brandId: string
         </div>
         <CollapsibleContent forceMount>
           <form onSubmit={handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} className="grid gap-4 border-t border-border p-5 md:grid-cols-2">
-            <Field label="Name" error={errors.name?.message} required><TextInput {...register("name")} maxLength={120} required disabled={!canEdit} /></Field>
-            <Field label="Website" error={errors.website?.message}><TextInput {...register("website")} maxLength={500} disabled={!canEdit} /></Field>
-            <Field label="Industry" error={errors.industry?.message}><TextInput {...register("industry")} maxLength={120} disabled={!canEdit} /></Field>
-            <Field label="Category" error={errors.category?.message}><TextInput {...register("category")} maxLength={120} disabled={!canEdit} /></Field>
-            <Field label="Country or market" error={errors.country?.message}><TextInput {...register("country")} maxLength={80} disabled={!canEdit} /></Field>
-            <div className="md:col-span-2"><Field label="What you sell" error={errors.sells?.message}><TextArea {...register("sells")} maxLength={500} disabled={!canEdit} /></Field></div>
-            <div className="md:col-span-2"><Field label="Description" error={errors.description?.message}><TextArea {...register("description")} maxLength={2000} disabled={!canEdit} /></Field></div>
+            <Field label="Name" error={errors.name?.message} required><Input {...register("name")} maxLength={120} required disabled={!canEdit} /></Field>
+            <Field label="Website" error={errors.website?.message}><Input {...register("website")} maxLength={500} disabled={!canEdit} /></Field>
+            <Field label="Industry" error={errors.industry?.message}><Input {...register("industry")} maxLength={120} disabled={!canEdit} /></Field>
+            <Field label="Category" error={errors.category?.message}><Input {...register("category")} maxLength={120} disabled={!canEdit} /></Field>
+            <Field label="Country or market" error={errors.country?.message}><Input {...register("country")} maxLength={80} disabled={!canEdit} /></Field>
+            <div className="md:col-span-2"><Field label="What you sell" error={errors.sells?.message}><Textarea {...register("sells")} maxLength={500} disabled={!canEdit} /></Field></div>
+            <div className="md:col-span-2"><Field label="Description" error={errors.description?.message}><Textarea {...register("description")} maxLength={2000} disabled={!canEdit} /></Field></div>
             {rawSaveError ? <div className="md:col-span-2"><FormError message={plainServerError(rawSaveError, "brand")} raw={rawSaveError} /></div> : null}
             <div className="md:col-span-2">
               <UnsavedChangesBar

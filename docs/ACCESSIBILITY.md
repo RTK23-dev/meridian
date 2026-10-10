@@ -21,7 +21,7 @@ Announcements
 - Field errors use `role="alert"`. Loading states (`ScreenSkeleton`, `ChartSkeleton`, the data-table loading state) use `role="status"` with a label.
 
 Text alternatives for state and charts
-- Status badges (`StatusBadge`, `StatusText`) write the status in text with an icon. All 43 `Badge` call sites render text.
+- Status badges (`StatusBadge`) write the status in text with an icon. All 43 `Badge` call sites render text.
 - Every recharts chart has a text alternative: the learning value charts sit in a labelled section with a visible table of every value (`ChartFigure` and `ValueTable`); the brand overview charts list their counts; the studio learning bars sit above a text list; the intelligence trait bars carry a visually hidden table; the opportunity rank radar has a summary sentence (`scoreSummary`); the KPI sparkline has a summary sentence (`sparklineSummary`), although no screen passes it data yet.
 - Completeness rings and the research run progress bar expose their percentage in `aria-label` or `aria-valuetext`.
 

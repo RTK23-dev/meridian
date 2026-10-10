@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Slider, TextInput, errorText } from "@/components/ui";
+import { Button, Slider, Input, errorText } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
@@ -107,7 +107,7 @@ export function WeightsTab({ organizationId, saved, canAdmin }: { organizationId
                   onValueChange={([value]) => { if (value !== undefined) setWeight(key, value); }}
                 />
                 <div className="flex flex-wrap items-center gap-3">
-                  <TextInput
+                  <Input
                     aria-label={`${label}, typed value`}
                     inputMode="decimal"
                     autoComplete="off"

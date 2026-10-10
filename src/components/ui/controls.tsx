@@ -4,7 +4,7 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
-import { forwardRef, type ComponentPropsWithoutRef, type InputHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { forwardRef, type ComponentPropsWithoutRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 import { FieldMessages, useFieldIds } from "./field";
 
@@ -31,6 +31,12 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     <FieldMessages hint={hint} error={error} hintId={ids.hintId} errorId={ids.errorId} />
   </div>;
 });
+
+/** A native select, for forms that need the browser's own list. Use `Select` for the styled, Radix list. */
+export function SelectInput({ className, id, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  const ids = useFieldIds(id, undefined, undefined);
+  return <select {...props} id={ids.controlId} aria-describedby={ids.describedBy} aria-invalid={ids.invalid || undefined} className={cn("w-full rounded-md border border-border-strong bg-surface px-3 py-3 text-base text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-55", className)} />;
+}
 
 export function Select({ label, hint, error, id, children, ...props }: DescribedControl & ComponentPropsWithoutRef<typeof SelectPrimitive.Root>) {
   const ids = useFieldIds(id, hint, error);

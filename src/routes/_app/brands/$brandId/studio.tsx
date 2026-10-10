@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
@@ -11,7 +11,7 @@ import { providerLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
 import { studioGenerationSchema, type StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
-import { ACTIVE_POLL_MS, useDistributionChannelsQuery, useOpportunitiesQuery, useOrganicDistributionQuery, useProviderSettingsQuery, useStudioQuery } from "@/lib/query/hooks";
+import { useDistributionChannelsQuery, useOpportunitiesQuery, useOrganicDistributionQuery, useProviderSettingsQuery, useStudioQuery } from "@/lib/query/hooks";
 import { DirectionStep } from "@/components/studio/direction-step.tsx";
 import { BriefStep } from "@/components/studio/brief-step.tsx";
 import { GenerateStep } from "@/components/studio/generate-step.tsx";
@@ -64,15 +64,6 @@ function Studio({ brandId }: { brandId: string }) {
   });
   const generationDirty = generationForm.formState.isDirty;
 
-  // The studio query polls while a variant is queued or running. A variant the provider has submitted is polled here too.
-  const hasSubmitted = !!session?.variants.some((variant) => variant.mediaStatus === "submitted");
-  const refetch = query.refetch;
-  useEffect(() => {
-    if (!hasSubmitted) return;
-    const timer = window.setInterval(() => void refetch(), ACTIVE_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [hasSubmitted, refetch]);
-
   if (query.isError && !session) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!session) return <ScreenSkeleton label="Loading studio" shape="cards" />;
 
@@ -81,7 +72,6 @@ function Studio({ brandId }: { brandId: string }) {
   const briefIndex = brief ? session.briefs.findIndex((item) => item.id === brief.id) : -1;
   const previous = briefIndex >= 0 ? session.briefs[briefIndex + 1] ?? null : null;
   const changed = Boolean(brief && previous && brief.constraints !== previous.constraints);
-  const recommendation = session.recommendation;
   const production = productionStatusFrom({ organizationId, data: providerQuery.data, isError: providerQuery.isError });
 
   async function generate(values: StudioGeneration) {

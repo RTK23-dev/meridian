@@ -1,9 +1,7 @@
 import { Check, Minus } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
 import { LazyMediaPlayer } from "@/components/lazy-media-player";
-import {
-  Badge, Button, ErrorState, Field, Sheet, SheetContent, SheetDescription, SheetTitle, TextInput,
-} from "@/components/ui";
+import { Badge, Button, ErrorState, Field, Sheet, SheetContent, SheetDescription, SheetTitle, Input } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
@@ -145,14 +143,14 @@ export function TraceDrawer(props: TraceDrawerProps) {
               <section aria-labelledby="trace-record-title" className="space-y-4 border-t border-border pt-6">
                 <h3 id="trace-record-title" className="font-semibold">Add performance for this creative</h3>
                 <form className="grid gap-3 sm:grid-cols-2" onSubmit={performanceForm.handleSubmit(onRecordPerformance)} onKeyDown={(event) => submitOnShortcut(event)}>
-                  <Field label="Date" error={formState.errors.observedOn?.message}><TextInput {...register("observedOn")} type="date" required /></Field>
-                  <Field label="Platform" error={formState.errors.platform?.message}><TextInput {...register("platform")} maxLength={80} /></Field>
-                  <Field label="Reach" error={formState.errors.reach?.message}><TextInput {...register("reach")} type="text" inputMode="numeric" /></Field>
-                  <Field label="Impressions" error={formState.errors.impressions?.message}><TextInput {...register("impressions")} type="text" inputMode="numeric" required /></Field>
-                  <Field label="Clicks" error={formState.errors.clicks?.message}><TextInput {...register("clicks")} type="text" inputMode="numeric" required /></Field>
-                  <Field label="Conversions" error={formState.errors.conversions?.message}><TextInput {...register("conversions")} type="text" inputMode="numeric" required /></Field>
-                  <Field label="Spend (cents)" error={formState.errors.spendCents?.message}><TextInput {...register("spendCents")} type="text" inputMode="numeric" required /></Field>
-                  <Field label="Revenue (cents)" error={formState.errors.revenueCents?.message}><TextInput {...register("revenueCents")} type="text" inputMode="numeric" required /></Field>
+                  <Field label="Date" error={formState.errors.observedOn?.message}><Input {...register("observedOn")} type="date" required /></Field>
+                  <Field label="Platform" error={formState.errors.platform?.message}><Input {...register("platform")} maxLength={80} /></Field>
+                  <Field label="Reach" error={formState.errors.reach?.message}><Input {...register("reach")} type="text" inputMode="numeric" /></Field>
+                  <Field label="Impressions" error={formState.errors.impressions?.message}><Input {...register("impressions")} type="text" inputMode="numeric" required /></Field>
+                  <Field label="Clicks" error={formState.errors.clicks?.message}><Input {...register("clicks")} type="text" inputMode="numeric" required /></Field>
+                  <Field label="Conversions" error={formState.errors.conversions?.message}><Input {...register("conversions")} type="text" inputMode="numeric" required /></Field>
+                  <Field label="Spend (cents)" error={formState.errors.spendCents?.message}><Input {...register("spendCents")} type="text" inputMode="numeric" required /></Field>
+                  <Field label="Revenue (cents)" error={formState.errors.revenueCents?.message}><Input {...register("revenueCents")} type="text" inputMode="numeric" required /></Field>
                   <UnsavedChangesBar
                     dirty={formState.isDirty}
                     subject="performance"
