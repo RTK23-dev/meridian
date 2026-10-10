@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Badge, Button, Sheet, SheetContent, SheetDescription, SheetTitle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
+import { Badge, Button, ChartSkeleton, Sheet, SheetContent, SheetDescription, SheetTitle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
 import { copy, percentOrUnknown, statusLabel } from "@/lib/copy";
 import { Term } from "@/components/glossary";
 import { TechnicalDetails } from "@/components/plain-error";
-import { ScoreRadar } from "./score-radar";
 import { CategoryChip, HoldBadge, OpportunityActions, OpportunityStatusBadge, ScoreValue, UnknownValue } from "./opportunity-parts";
 import { canDismiss, categoryLabel, finiteOrNull, isHeld, jevDecisionLabel, jevProbability, scoreDimensions, whyNotFacts, type OpportunityRow } from "./opportunity-model";
+
+// The radar pulls in recharts, so it loads only when the sheet shows the rank parts.
+const ScoreRadar = lazy(() => import("./score-radar").then((module) => ({ default: module.ScoreRadar })));
 
 type SheetProps = {
   item: OpportunityRow | null;
@@ -48,7 +50,9 @@ function OpportunityDetail({ item, position, brandId, canEdit, dismissing, onDis
       <section aria-labelledby="opportunity-score" className="space-y-3">
         <h3 id="opportunity-score" className="font-semibold">How the rank is built</h3>
         <p className="text-sm text-muted">Parts that add raise the rank. Parts that subtract lower it. Focus or hover a part name for what its number means.</p>
-        <ScoreRadar dimensions={dimensions} label={`Rank score parts for ${item.label}`} />
+        <Suspense fallback={<ChartSkeleton className="h-64" />}>
+          <ScoreRadar dimensions={dimensions} label={`Rank score parts for ${item.label}`} />
+        </Suspense>
         <TooltipProvider>
           <ul className="grid gap-2 sm:grid-cols-2">
             {dimensions.map((dimension) => <li key={dimension.key} className="rounded-md border border-border p-3">

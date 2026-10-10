@@ -16,7 +16,7 @@ import {
   type ReviewDraft,
   type ReviewRow,
 } from "@/components/reviews/review-model";
-import { useMediaQuery } from "@/components/reviews/use-media-query";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { hasRole } from "@/lib/meridian/access";
 import { useResolveReview, usePendingVariables, useReviewsQuery } from "@/lib/query/hooks";
 

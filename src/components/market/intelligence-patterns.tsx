@@ -1,19 +1,11 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/cn";
-
-export type TraitRow = { trait: string; count: number };
-
-/** Turns stored trait counts into chart rows. Non-finite counts are dropped rather than drawn as zero. */
-export function traitRows(traits: Record<string, number>): TraitRow[] {
-  return Object.entries(traits)
-    .filter(([, count]) => Number.isFinite(count))
-    .map(([trait, count]) => ({ trait: trait.replace(/_/g, " "), count }))
-    .sort((left, right) => right.count - left.count || left.trait.localeCompare(right.trait));
-}
+import type { TraitRow } from "./trait-rows";
 
 /**
  * A small horizontal bar chart of stored trait counts. The chart has a text alternative: its aria-label lists the values,
  * and a visually hidden table repeats them for screen readers that read tables.
+ * recharts is loaded through React.lazy by the screen that shows this chart, so the rows helper stays in trait-rows.ts.
  */
 export function TraitBarChart({ title, description, rows, tone }: {
   title: string;

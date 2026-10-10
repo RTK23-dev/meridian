@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ErrorState, KpiCard,
+  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ChartSkeleton, ErrorState, KpiCard,
   Panel, ScreenSkeleton, Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui";
 import { plainError } from "@/lib/copy";
@@ -13,7 +13,7 @@ import {
 } from "@/lib/query/hooks";
 import { hasRole } from "@/lib/meridian/access";
 import { ClusterCards } from "@/components/market/intelligence-clusters";
-import { TraitBarChart, traitRows } from "@/components/market/intelligence-patterns";
+import { traitRows, type TraitRow } from "@/components/market/trait-rows";
 import { WhitespaceRanking } from "@/components/market/intelligence-whitespace";
 import {
   Activity,
@@ -26,6 +26,13 @@ import {
   Volume2,
   Zap,
 } from "lucide-react";
+
+// recharts loads only when a trait chart is shown. The skeleton keeps the card's height until then.
+const TraitBarChart = lazy(() => import("@/components/market/intelligence-patterns").then((module) => ({ default: module.TraitBarChart })));
+
+function TraitChart(props: { title: string; description: string; rows: TraitRow[]; tone: "success" | "danger" }) {
+  return <Suspense fallback={<ChartSkeleton className="h-40" />}><TraitBarChart {...props} /></Suspense>;
+}
 
 export const Route = createFileRoute("/_app/brands/$brandId/intelligence")({ staticData: { pageTitle: "Intelligence" }, component: Page });
 
@@ -189,13 +196,13 @@ function Intelligence({ brandId }: { brandId: string }) {
                       <p className="text-sm text-muted">More post volume needed for decile statistical separation.</p>
                     ) : (
                       <>
-                        <TraitBarChart
+                        <TraitChart
                           title="Winning patterns (top decile)"
                           description="Counts of posts in the top decile that carry each trait."
                           rows={traitRows(profile.topDecileTraits)}
                           tone="success"
                         />
-                        <TraitBarChart
+                        <TraitChart
                           title="Underperforming patterns (bottom decile)"
                           description="Counts of posts in the bottom decile that carry each trait."
                           rows={traitRows(profile.bottomDecileTraits)}

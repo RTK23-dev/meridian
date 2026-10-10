@@ -1,6 +1,6 @@
 import { Check, Minus } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
-import { MediaPlayer } from "@/components/media-player";
+import { LazyMediaPlayer } from "@/components/lazy-media-player";
 import {
   Badge, Button, ErrorState, Field, Sheet, SheetContent, SheetDescription, SheetTitle, TextInput,
 } from "@/components/ui";
@@ -119,10 +119,10 @@ export function TraceDrawer(props: TraceDrawerProps) {
               <section aria-labelledby="trace-media-title" className="space-y-2">
                 <h3 id="trace-media-title" className="font-semibold">Stored {preview.kind === "video" ? "video" : "image"}</h3>
                 {preview.kind === "video" ? (
-                  <MediaPlayer assetId={preview.assetId} durationMs={preview.durationMs} width={preview.width} height={preview.height} />
+                  <LazyMediaPlayer assetId={preview.assetId} durationMs={preview.durationMs} width={preview.width} height={preview.height} />
                 ) : (
                   <div className="space-y-2">
-                    <MediaPlayer kind="image" assetId={preview.assetId} alt={`Stored image of ${title}`} width={box.width} height={box.height} />
+                    <LazyMediaPlayer kind="image" assetId={preview.assetId} alt={`Stored image of ${title}`} width={box.width} height={box.height} />
                     <a className="inline-flex min-h-11 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-accent" href={downloadHref(preview.assetId)} aria-label={`Download image for ${title}`}>Download image</a>
                   </div>
                 )}

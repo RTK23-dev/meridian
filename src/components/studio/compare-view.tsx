@@ -1,5 +1,5 @@
 import { useRef, type RefObject } from "react";
-import { MediaPlayer } from "@/components/media-player";
+import { LazyMediaPlayer } from "@/components/lazy-media-player";
 import { Field, SelectInput } from "@/components/ui";
 import { variantMetadataDiff } from "./compare-diff.ts";
 import { frameWidthClass, frameShape } from "./aspect.ts";
@@ -104,9 +104,9 @@ function ComparePane({ label, variant, position, paneRef }: { label: string; var
       <div ref={paneRef} className={frameWidthClass(frame.orientation)}>
         {showsMedia(phase) ? (
           variant.kind === "video" ? (
-            <MediaPlayer assetId={variant.assetId} durationMs={variant.durationMs} width={variant.width} height={variant.height} />
+            <LazyMediaPlayer assetId={variant.assetId} durationMs={variant.durationMs} width={variant.width} height={variant.height} />
           ) : (
-            <MediaPlayer kind="image" assetId={variant.assetId} alt={`${label}: ${title}`} width={variant.width ?? 16} height={variant.height ?? 9} />
+            <LazyMediaPlayer kind="image" assetId={variant.assetId} alt={`${label}: ${title}`} width={variant.width ?? 16} height={variant.height ?? 9} />
           )
         ) : (
           <p role="status" className="rounded-md border border-dashed border-border p-4 text-sm text-fg-muted">

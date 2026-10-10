@@ -1,6 +1,6 @@
 import { Suspense, lazy } from "react";
 import { InfoTip } from "@/components/glossary";
-import { Button, Panel } from "@/components/ui";
+import { Button, ChartSkeleton, Panel } from "@/components/ui";
 import { copy } from "@/lib/copy";
 import { learningRows } from "./learning-rows.ts";
 import type { StudioPattern, StudioPublication } from "./types.ts";
@@ -46,7 +46,7 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
       ) : (
         <div className="mt-3 space-y-4">
           {charted.length > 0 ? (
-            <Suspense fallback={<p className="text-sm text-fg-muted">Loading the chart…</p>}>
+            <Suspense fallback={<ChartSkeleton className="h-40" />}>
               <LearningBars rows={charted} />
             </Suspense>
           ) : null}
