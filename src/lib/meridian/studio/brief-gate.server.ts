@@ -12,6 +12,7 @@ import { runEngineGate, type GateEvidence, type GateQuestion, type GateResult } 
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { EngineSelection } from "../decisions/selection.ts";
 import { BRIEF_QUESTIONS } from "../jev/questions/brief.ts";
+import { BRIEF_GATE_QUESTION_ID, BRIEF_GATE_SCHEMA_VERSION } from "../decisions/brief-contract.ts";
 
 export type BriefForGate = {
   audience: string;
@@ -32,7 +33,6 @@ export type BriefBrain = {
 };
 
 const MANDATORY_FIELDS = ["audience", "hook", "message", "angle"] as const;
-export const BRIEF_SCHEMA_VERSION = "brief-gate.v1";
 
 /** Checks that need no judgment. Any one of them rejects the brief before the engine is called. */
 export function briefDeterministicRejections(brief: BriefForGate, brain: BriefBrain): Array<{ rule: string; reason: string }> {
@@ -137,13 +137,17 @@ export async function writeBriefDecision(
       answer, schema_version, policy_version, calibration_version, reviewer_id, reviewer_decision, reviewed_at,
       decision_fingerprint, outcome_digest
     ) values (
-      ${input.decisionId}, ${input.organizationId}, ${input.brandId}, ${input.briefId}, 'brief.gate', ${result.questionVersions.join(",") || "none"},
+      ${input.decisionId}, ${input.organizationId}, ${input.brandId}, ${input.briefId}, ${BRIEF_GATE_QUESTION_ID}, ${result.questionVersions.join(",") || "none"},
       'brief', ${input.briefId},
       ${JSON.stringify({ questionVersions: result.questionVersions, deterministicRejections: result.deterministicRejections })},
-      ${JSON.stringify({ gateRecordId: result.gateRecordId, evidence: result.evidence })},
+      ${JSON.stringify({
+        gateRecordId: result.gateRecordId,
+        evidenceIds: [...(result.gateRecordId ? [`gate_record:${result.gateRecordId}`] : []), ...result.evidence.map((item) => item.name)],
+        evidence: result.evidence,
+      })},
       ${probability}, ${probability}, ${JSON.stringify({ policyVersion: result.policyVersion })},
       ${result.action}, ${JSON.stringify([result.reason])}, ${result.engineId ?? "deterministic"}, ${result.returnedModel ?? "none"},
-      ${JSON.stringify(result.answers)}, ${BRIEF_SCHEMA_VERSION}, ${result.policyVersion}, '',
+      ${JSON.stringify(result.answers)}, ${BRIEF_GATE_SCHEMA_VERSION}, ${result.policyVersion}, '',
       ${approved ? input.reviewerId : null}, ${approved ? "approve" : null}, ${approved ? new Date() : null},
       ${digestOf({ engine: result.engineId, requested: result.requestedModel, returned: result.returnedModel, questionVersions: result.questionVersions, policyVersion: result.policyVersion })},
       ${digestOf({ action: result.action, votes: result.votes, unresolved: result.unresolved })}

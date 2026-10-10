@@ -3,6 +3,7 @@ import { ANSWER_SCHEMA_VERSION } from "../jev/engine.ts";
 import { normalizeReviewerDecision } from "../jev/reviewer-decision.ts";
 import { creativeJudgmentResponseSchemaV1 } from "../jev/schemas/creative-judgment.v1.ts";
 import type { CreativeJudgmentBundle } from "../creative/plan.ts";
+import { BRIEF_GATE_QUESTION_ID, BRIEF_GATE_SCHEMA_VERSION } from "../decisions/brief-contract.ts";
 
 const persistedBriefAnswerSchema = z.object({
   schemaVersion: z.literal(ANSWER_SCHEMA_VERSION),
@@ -52,6 +53,27 @@ export function creativeJudgmentsFromStoredDecision(input: {
   model: string;
 }): CreativeJudgmentBundle {
   const evidenceRefs = evidenceIds(input.evidence);
+  if (input.questionId === BRIEF_GATE_QUESTION_ID && input.schemaVersion === BRIEF_GATE_SCHEMA_VERSION) {
+    // The brief gate's outcome is the judgment. A rejection blocks. An approval, or a human approval of a review, admits.
+    // Anything else is not an admissible judgment, so it does not admit production.
+    const decision = input.decision.toUpperCase();
+    const humanApproved = normalizeReviewerDecision(input.reviewerDecision) === "approved";
+    const status = decision === "REJECT"
+      ? "abstain_rejected"
+      : decision === "AUTO_APPROVE" || (decision === "HUMAN_REVIEW" && humanApproved)
+        ? "admissible"
+        : "abstain_insufficient_evidence";
+    return {
+      recommendedFormats: [],
+      formatSuitability: {},
+      status,
+      evidenceRefs,
+      decisionId: input.id,
+      questionSetVersion: input.questionVersion || "v1",
+      provider: input.provider,
+      model: input.model,
+    };
+  }
   const storedAnswer = input.subjectType === "brief" && input.questionId === "brief_completeness" &&
     input.schemaVersion === ANSWER_SCHEMA_VERSION
     ? persistedBriefAnswerSchema.safeParse(parseStoredJson(input.answer))

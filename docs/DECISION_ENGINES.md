@@ -139,6 +139,7 @@ The lexical checks that were the previous semantic authority (token overlap for 
 **Behaviour changes to know about.**
 
 - Under the default engine, JEV, the two visual questions are `unsupported`, so every generated image routes to human review. Before this change, the local model could approve an image without looking at it. Selecting `openai-decisions` in the JEV tab lets the visual questions run, with the image sent. A workspace that stays on JEV sees its generated images in review until a visual check is available to it.
+- The planner reads the stored brief decision through `studio/jev-context.ts`. The brief gate's row (`question_id` `brief.gate`, schema `brief-gate.v1`) maps as follows: `REJECT` blocks, `AUTO_APPROVE` admits, and `HUMAN_REVIEW` admits only when a person approved it. Any other row is not an admissible judgment. The contract is tested at this boundary (`studio/brief-gate.test.ts`), so a change to either side fails there.
 - The brief's completeness check was a logistic prior, and it never rejected an empty brief. It is replaced by mechanical rules: the mandatory fields must be present, and a stored prohibited claim in the brief text rejects. Brand fit, opportunity fit, and claim compliance are the engine's. A brief the engine cannot judge goes to human review, and creating the brief is the user's explicit approval.
 
 Generated images reach the engine as their verified stored bytes. Competitor copy and the generation prompt are never sent.

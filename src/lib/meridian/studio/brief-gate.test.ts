@@ -9,6 +9,7 @@ import { abstainAll, type DecisionEngine, type DecisionEngineId, type DecisionRe
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
 import { BRIEF_QUESTIONS } from "../jev/questions/brief.ts";
 import { briefDeterministicRejections, judgeBriefFit, writeBriefDecision, type BriefBrain, type BriefForGate } from "./brief-gate.server.ts";
+import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
 
 const brief: BriefForGate = {
   audience: "Busy parents",
@@ -27,6 +28,39 @@ const brain: BriefBrain = {
 };
 
 type Responder = (spec: JevQuestionSpec) => JevAnswer | undefined;
+
+type StoredDecisionRow = {
+  id: string;
+  decision: string;
+  reviewer_decision: string | null;
+  probability: number;
+  question_id: string;
+  question_version: string;
+  subject_type: string;
+  schema_version: string;
+  answer: unknown;
+  model_response: unknown;
+  evidence: unknown;
+  provider: string;
+  model: string;
+};
+
+// The planner reads the stored brief decision through this same mapping, so the boundary is tested here.
+const plannerView = (row: StoredDecisionRow) =>
+  creativeJudgmentsFromStoredDecision({
+    id: row.id,
+    subjectType: row.subject_type,
+    questionId: row.question_id,
+    questionVersion: row.question_version,
+    schemaVersion: row.schema_version,
+    decision: row.decision,
+    reviewerDecision: row.reviewer_decision,
+    answer: row.answer,
+    modelResponse: row.model_response,
+    evidence: row.evidence,
+    provider: row.provider,
+    model: row.model,
+  });
 
 function answered(spec: JevQuestionSpec, probability: number): JevAnswer {
   return {
@@ -140,9 +174,7 @@ async function gateBrief(options: {
     reviewerId: "test-user",
     result,
   });
-  const [row] = await sql<{ decision: string; reviewer_decision: string | null; probability: number; question_id: string }>`
-    select decision, reviewer_decision, probability, question_id from jev_decisions where id = ${decisionId}
-  `;
+  const [row] = await sql<StoredDecisionRow>`select * from jev_decisions where id = ${decisionId}`;
   return { result, row: row!, decisionId, sql };
 }
 
@@ -240,4 +272,25 @@ test("the brief's decision links to its gate record, with the engine and the pol
   assert.equal(record?.engine_id, "jev");
   assert.equal(record?.action, row.decision);
   assert.equal(row.probability >= 0 && row.probability <= 1, true);
+});
+
+test("the planner admits an approved brief and blocks a rejected one, reading the stored decision the way production does", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "brief-planner-contract");
+  const approved = await gateBrief({ tenant, engines: registryWith(stubEngine("jev", { respond: approves }), stubEngine("openai-decisions")), selected: "jev" });
+  const admitted = plannerView(approved.row);
+  assert.equal(admitted.status, "admissible", "an approved brief is admissible for planning");
+  assert.ok(admitted.evidenceRefs.includes(`gate_record:${approved.result.gateRecordId}`), "the planner can trace the gate record");
+
+  const rejected = await gateBrief({ tenant, brief: { ...brief, hook: "" }, engines: registryWith(stubEngine("jev"), stubEngine("openai-decisions")), selected: "jev" });
+  assert.equal(plannerView(rejected.row).status, "abstain_rejected", "a rejected brief blocks planning");
+});
+
+test("a brief the engine could not judge is admitted only by the human who approved it, and the planner says so", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "brief-planner-unavailable");
+  const failed = await gateBrief({ tenant, engines: registryWith(stubEngine("jev"), stubEngine("openai-decisions", { failure: true })), selected: "openai-decisions" });
+  assert.equal(failed.row.decision, "HUMAN_REVIEW");
+  assert.equal(failed.row.reviewer_decision, "approve", "the creating user is the reviewer");
+  assert.equal(plannerView(failed.row).status, "admissible");
 });

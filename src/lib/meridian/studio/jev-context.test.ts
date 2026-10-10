@@ -79,3 +79,25 @@ test("schema-valid strategic model response preserves its explicit recommendatio
   assert.equal(bundle.recommendedFormats[0]?.format, "image");
   assert.equal(bundle.creativeMechanism, "Show lather as proof");
 });
+
+test("the brief gate row maps to a planner judgment: an approval admits, a rejection blocks, and an unreviewed review waits", () => {
+  const base = {
+    id: "decision-brief-gate",
+    subjectType: "brief",
+    questionId: "brief.gate",
+    questionVersion: "brief.brand_fit.v1@1.0.0",
+    schemaVersion: "brief-gate.v1",
+    answer: "{}",
+    modelResponse: "",
+    evidence: JSON.stringify({ gateRecordId: "gate-1", evidenceIds: ["gate_record:gate-1", "brief_fields"], evidence: [] }),
+    provider: "jev",
+    model: "stub-model",
+  };
+  const map = (decision: string, reviewerDecision: string | null) =>
+    creativeJudgmentsFromStoredDecision({ ...base, decision, reviewerDecision });
+  assert.equal(map("AUTO_APPROVE", null).status, "admissible");
+  assert.equal(map("REJECT", null).status, "abstain_rejected");
+  assert.equal(map("HUMAN_REVIEW", "approve").status, "admissible", "a human approval of a review admits");
+  assert.equal(map("HUMAN_REVIEW", null).status, "abstain_insufficient_evidence", "an unreviewed review does not admit");
+  assert.deepEqual(map("AUTO_APPROVE", null).evidenceRefs, ["gate_record:gate-1", "brief_fields"]);
+});
