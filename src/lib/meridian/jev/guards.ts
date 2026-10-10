@@ -11,11 +11,13 @@ export const duplicateRisk: DecisionQuestion<DuplicateRiskInput> = {
   thresholds: { autoApprove: 0.9, humanReview: 0.45, minConfidenceForAuto: 0.8 },
   evaluate(input) {
     if (input.relation === "too_close_to_competitor" || input.relation === "duplicate") {
+      // A measured near duplicate is a literal rejection, so it is a violation and not a score. A score cannot reject uncalibrated.
       return {
         probability: 0.05,
         confidence: 0.9,
         reasons: ["Stored similarity is too close to publish as new."],
         evidence: [{ id: input.relation, source: "similarity", summary: input.relation }],
+        evidenceState: "violation",
       };
     }
     if (input.relation === "derivative" || input.relation === "similar") {
@@ -74,11 +76,13 @@ export const publishingReadiness: DecisionQuestion<PublishingReadinessInput> = {
   thresholds: { autoApprove: 1.1, humanReview: 0.5, minConfidenceForAuto: 0.99 },
   evaluate(input) {
     if (!input.providerConnected) {
+      // A connection that is not there is a literal fact, so it is a violation. It does not wait on calibration.
       return {
         probability: 0.05,
         confidence: 0.99,
         reasons: ["No publishing provider is connected."],
         evidence: [{ id: "publishing", source: "provider", summary: "NOT_CONNECTED" }],
+        evidenceState: "violation",
       };
     }
     if (!input.creativeApproved || !input.policyAllowsAutoPublish) {
