@@ -16,7 +16,7 @@ function Login() {
       title="Sign in"
       description="Sign in with your email, or continue with a provider you already use."
     >
-      <EmailAuthForm initialMode="in" />
+      <EmailAuthForm />
       <ProviderSignIn />
     </AuthShell>
   );

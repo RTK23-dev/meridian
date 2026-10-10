@@ -9,7 +9,7 @@ import { plainAuthError, plainServerError, signInSchema, signUpSchema, type Sign
 type Failure = { message: string; raw: string };
 
 /** Email and password, with sign-in and create-account as two forms. Each has its own schema, so inline checks match the mode. */
-export function EmailAuthForm({ initialMode = "in" }: { initialMode?: "in" | "up" }) {
+export function EmailAuthForm({ initialMode = "up" }: { initialMode?: "in" | "up" }) {
   const [mode, setMode] = useState<"in" | "up">(initialMode);
   return (
     <div className="space-y-5">
