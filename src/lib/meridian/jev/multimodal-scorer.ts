@@ -139,7 +139,7 @@ const OBJECTION_PATTERNS: Array<{ regex: RegExp; category: string; label: string
 
 /**
  * Predicts 3-second hook retention probability from initial visual and audio stimuli.
- * Uses a logistic sigmoid function over calibrated empirical weights.
+ * Uses a logistic sigmoid function over empirical seed weights (not calibrated against outcomes).
  */
 export function predictHookRetention(
   visual: SceneVisualFeatures,

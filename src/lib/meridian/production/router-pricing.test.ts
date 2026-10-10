@@ -107,3 +107,12 @@ test("the test image double is refused outside the testing runtime, and priced a
     else process.env.MERIDIAN_TESTING_RUNTIME = prior;
   }
 });
+
+test("LOWEST_COST ranks on priced quotes: known amounts cheapest first, and an unknown price is never treated as zero", () => {
+  const router = new ProductionRouter({
+    runtime: "production",
+    providers: [fakeProvider("expensive", 0.3), fakeProvider("cheap", 0.05), fakeProvider("unpriced", Number.NaN)],
+  });
+  const ranked = router.rankProviders({ modality: "video" } as unknown as CreativeSpec, "LOWEST_COST");
+  assert.deepEqual(ranked.map((p) => p.id), ["cheap", "expensive", "unpriced"]);
+});

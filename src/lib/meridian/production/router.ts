@@ -165,9 +165,21 @@ export class ProductionRouter {
       return available.filter((p) => p.capabilities.zeroSpend);
     }
     if (mode === "LOWEST_COST") {
-      return [...available].sort(
-        (a, b) => a.capabilities.costPerSecondEstimateUsd - b.capabilities.costPerSecondEstimateUsd,
-      );
+      // Ranks on the price quote, not the raw declaration. A known amount sorts first, cheapest first. An unknown price
+      // sorts last, and is never treated as zero.
+      const modality: SelectionModality = (spec as { modality?: string }).modality === "image" ? "image" : "video";
+      const amountOf = (provider: ProductionProvider): number | null => {
+        const quote = priceFor(provider, modality);
+        return quote.status !== "unknown" && typeof quote.amountUsd === "number" ? quote.amountUsd : null;
+      };
+      return [...available].sort((a, b) => {
+        const left = amountOf(a);
+        const right = amountOf(b);
+        if (left === null && right === null) return 0;
+        if (left === null) return 1;
+        if (right === null) return -1;
+        return left - right;
+      });
     }
     if (mode === "QUALITY_FIRST") {
       // Veo preview is excluded from automatic priority; Omni is primary Google video
