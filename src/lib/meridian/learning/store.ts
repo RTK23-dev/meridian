@@ -1,5 +1,6 @@
 import type { ObservedCreative, PerformanceRow, OrganicObservationRow } from "../domain.ts";
 import { learnPatterns } from "./engine.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 /** Tagged-template SQL. Structural so the worker does not import the web database module. */
 export interface Sql {
@@ -27,11 +28,14 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
     from creative_records
     where brand_id = ${brandId} and organization_id = ${organizationId} and origin <> 'competitor'
   `;
+  // Test-source rows (simulated performance) never train production learning. In the testing runtime, where the whole
+  // loop is simulated end to end, they are the learning input, so they are kept there.
+  const includeTestSources = isTestingRuntimeNow();
   const observationRows = await sql<Record<string, unknown>>`
     select creative_id, organization_id, brand_id, impressions, clicks, conversions, spend_cents, revenue_cents
     from performance_observations
     where brand_id = ${brandId} and organization_id = ${organizationId}
-      and source not like 'test:%'
+      and (${includeTestSources}::boolean or source not like 'test:%')
   `;
   const creatives: ObservedCreative[] = creativeRows.map((row) => ({
     id: asText(row.id),
