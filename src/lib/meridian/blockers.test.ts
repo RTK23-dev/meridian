@@ -20,7 +20,8 @@ import { creativeLineage } from "./knowledge/graph.ts";
 import { learnPatterns } from "./learning/engine.ts";
 import type { Sql } from "./learning/store.ts";
 import { OPPORTUNITY_THRESHOLDS } from "./jev/questions.ts";
-import { resetWorkerStop, requestWorkerStop, tickSqlJobs } from "./jobs/sql-worker.ts";
+import { claimAndRun, resetWorkerStop, requestWorkerStop, tickSqlJobs } from "./jobs/sql-worker.ts";
+import { createPoolSql, toSql, transactionSql } from "./learning/pool-sql.ts";
 import { rankOpportunities } from "./opportunity/engine.ts";
 import { ingestPerformance, publishThrough } from "./providers/boundaries.ts";
 import { createFilesystemObjectStore, migrateBlob } from "./storage/filesystem.ts";
@@ -355,15 +356,55 @@ async function migratedSql(): Promise<Sql> {
     const text = await readFile(join(dir, name), "utf8");
     await db.exec(text);
   }
-  const sql = (async <T = Record<string, unknown>>(strings: TemplateStringsArray, ...values: unknown[]) => {
-    let text = strings[0] ?? "";
-    for (let index = 0; index < values.length; index += 1) text += `$${index + 1}${strings[index + 1] ?? ""}`;
-    const result = await db.query<T>(text, values);
-    return result.rows;
-  }) as Sql;
-  sql.query = async <T = Record<string, unknown>>(text: string, params: unknown[] = []) => (await db.query<T>(text, params)).rows;
-  return sql;
+  // The same Sql builder the web server and the worker use, with a PGlite transaction as its begin.
+  const run = async <T>(text: string, params: unknown[]) => (await db.query<T>(text, params)).rows;
+  const begin = <T>(fn: (tx: Sql) => Promise<T>) =>
+    db.transaction((tx) => fn(transactionSql(async <U>(text: string, params: unknown[]) => (await tx.query<U>(text, params)).rows as U[])));
+  return toSql(run, begin);
 }
+
+/**
+ * The worker's client refuses nothing. The worker builds its Sql with createPoolSql, which provides transactions, and a
+ * ranking job writes its opportunities in one transaction. This runs that job through the client the worker uses, on PGlite
+ * and on PostgreSQL, and it must succeed on both.
+ */
+async function refreshThroughWorkerClient(sql: Sql) {
+  resetWorkerStop();
+  const suffix = Math.random().toString(36).slice(2, 10);
+  const tenantOrg = `org-refresh-${suffix}`;
+  const tenantBrand = `brand-refresh-${suffix}`;
+  const jobId = `refresh-${suffix}`;
+  await sql`insert into organizations (id, name, slug, created_by) values (${tenantOrg}, 'Org', ${tenantOrg}, 'user')`;
+  await sql`insert into brands (id, organization_id, name, created_by) values (${tenantBrand}, ${tenantOrg}, 'North', 'user')`;
+  await sql`
+    insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload, max_attempts)
+    values (${jobId}, ${tenantOrg}, ${tenantBrand}, 'opportunity.refresh', ${jobId}, 'queued', ${JSON.stringify({})}, 3)
+  `;
+  await claimAndRun(sql, jobId);
+  const [job] = await sql<{ status: string; last_error: string }>`select status, last_error from jobs where id = ${jobId}`;
+  assert.equal(job?.status, "succeeded", `the refresh job succeeds through the worker's client (last error: ${job?.last_error ?? ""})`);
+  const [count] = await sql<{ count: number }>`select count(*)::int as count from opportunities where brand_id = ${tenantBrand}`;
+  assert.ok((count?.count ?? 0) > 0, "the ranking wrote its opportunities");
+}
+
+test("the worker's client refuses nothing: an opportunity refresh runs its transaction and succeeds, on PGlite and on PostgreSQL", async (t) => {
+  await refreshThroughWorkerClient(await migratedSql());
+  const url = process.env.MERIDIAN_PG_TEST_URL?.trim();
+  if (!url) {
+    t.diagnostic("MERIDIAN_PG_TEST_URL is not set, so the PostgreSQL run of the worker client was not run");
+    return;
+  }
+  const { Pool } = await import("pg");
+  // Built exactly as the worker builds its client.
+  const pool = new Pool({ connectionString: url, max: 2 });
+  try {
+    const client = createPoolSql(pool);
+    assert.equal(typeof client.begin, "function", "the worker's client provides transactions");
+    await refreshThroughWorkerClient(client);
+  } finally {
+    await pool.end();
+  }
+});
 
 test("the sql worker learns, recovers a lease, dead-letters, and stays tenant scoped", async () => {
   resetWorkerStop();
