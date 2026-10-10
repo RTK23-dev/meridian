@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, XCircle } from "lucide-react";
 import { Badge, Button, Card, PageHeader, ScreenSkeleton } from "@/components/ui";
-import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
+import { PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
 import { qk } from "@/lib/query/keys";
@@ -12,8 +12,6 @@ import {
   baselineCopy, baselineMatchText, changeText, decisionControls, DECISION_RULES, evidenceText, FIELD_LABELS, proposalStatusText, thresholdText,
 } from "./calibration-model";
 import type { CalibrationProposalView } from "@/lib/meridian/calibration/versions";
-
-const CALIBRATION_PAGE_SIZE = 20;
 
 export function CalibrationScreen({ brandId }: { brandId: string }) {
   const learning = useLearningQuery(brandId);
