@@ -19,6 +19,7 @@ import { VolumeEnginePanel } from "./volume-engine-panel";
 import { GradingPanel } from "./grading-panel";
 import { PromptsPanel } from "./prompts-panel";
 import { PresetBar } from "./preset-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import {
   PRESET_LABEL,
   PROMPT_MAX_LENGTH,
@@ -158,6 +159,8 @@ export function PipelineEditor({
 
   return (
     <section aria-labelledby="factory-pipeline-settings" className="space-y-6">
+      {/* The draft is work until Save pipeline stores it, so leaving the screen with edits asks first. */}
+      <UnsavedChangesGuard dirty={dirty} />
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-widest text-brass">Factory line</p>
         <h2 id="factory-pipeline-settings" className="font-display text-2xl text-fg">Pipeline settings</h2>

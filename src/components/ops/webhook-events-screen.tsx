@@ -1,8 +1,12 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button, DataTable, Field, PageHeader, ScreenSkeleton, TextInput } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { webhookFilterSchema, type WebhookFilterInput } from "@/components/forms/client-schemas";
 import { useWorkspace } from "@/components/workspace";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { providerLabel } from "@/lib/copy";
@@ -23,9 +27,9 @@ export function WebhookEventsScreen() {
   const organizationId = workspace?.active?.id ?? "";
   const role = workspace?.active?.role ?? "viewer";
   const canAdmin = hasRole(role, "admin");
-  const [providerDraft, setProviderDraft] = useState("");
   const [provider, setProvider] = useState("");
   const [page, setPage] = useState(0);
+  const filterForm = useForm<WebhookFilterInput>({ resolver: zodResolver(webhookFilterSchema), defaultValues: { provider: "" }, mode: "onChange" });
   const query = useQuery({
     queryKey: userScopedQueryKey(user?.id, [...qk.webhooks(organizationId), provider, page]),
     queryFn: () => listWebhookEvents({ data: { organizationId, provider, page } }),
@@ -42,11 +46,11 @@ export function WebhookEventsScreen() {
     );
   }
 
-  function applyFilter(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  // The provider is trimmed by the schema before it is sent, as it always was.
+  const applyFilter = filterForm.handleSubmit((values) => {
     setPage(0);
-    setProvider(providerDraft.trim());
-  }
+    setProvider(values.provider);
+  });
 
   const columns: ColumnDef<WebhookEvent, unknown>[] = [
     { id: "received", header: "Received", enableSorting: false, cell: ({ row }) => <span className="whitespace-nowrap">{timestampLabel(row.original.receivedAt)}</span> },
@@ -64,9 +68,9 @@ export function WebhookEventsScreen() {
         description="Each row is a webhook that arrived, with its provider event ID and the time it was received. The index does not record whether an event was processed, and it does not store payloads."
       />
 
-      <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-[1fr_auto] sm:items-end" onSubmit={applyFilter}>
-        <Field label="Provider" hint="The provider key as stored, such as meta or tiktok. Leave empty for all providers.">
-          <TextInput value={providerDraft} maxLength={80} placeholder="meta" onChange={(event) => setProviderDraft(event.target.value)} />
+      <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-[1fr_auto] sm:items-end" onSubmit={applyFilter} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
+        <Field label="Provider" hint="The provider key as stored, such as meta or tiktok. Leave empty for all providers." error={filterForm.formState.errors.provider?.message}>
+          <TextInput {...filterForm.register("provider")} maxLength={80} placeholder="meta" />
         </Field>
         <Button type="submit">Apply filter</Button>
       </form>

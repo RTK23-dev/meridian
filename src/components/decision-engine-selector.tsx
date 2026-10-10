@@ -1,4 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+
+const engineSchema = z.object({ engineId: z.string().min(1, "Choose a decision engine.") });
 import { Button, ErrorState, Field, SelectInput } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
@@ -37,9 +42,17 @@ interface DecisionEngineSelectorProps {
 export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEngineSelectorProps) {
   const engines = useDecisionEnginesQuery(organizationId);
   const status = (engines.data as Status | undefined) ?? null;
-  // The selection follows the stored engine until the user picks another one.
-  const [choiceDraft, setChoice] = useState<string | null>(null);
-  const choice = choiceDraft ?? status?.active.engineId ?? "";
+  // The selection follows the stored engine until the person picks another one.
+  const form = useForm<{ engineId: string }>({
+    resolver: zodResolver(engineSchema),
+    defaultValues: { engineId: status?.active.engineId ?? "" },
+    mode: "onChange",
+  });
+  const choice = form.watch("engineId");
+  const storedEngineId = status?.active.engineId ?? "";
+  useEffect(() => {
+    if (!form.formState.isDirty) form.reset({ engineId: storedEngineId });
+  }, [storedEngineId, form]);
   const [message, setMessage] = useState<string | null>(null);
   const save = useScopedMutation({
     mutationKey: ["mutation", "decision-engine.save", organizationId],
@@ -54,7 +67,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
     invalidate: () => [qk.decisionEngines(organizationId)],
     onSuccess: (result) => {
       setMessage(`Decision engine set to ${result.engineId}. Only this engine now receives decisions for this workspace.`);
-      setChoice(null);
+      form.reset({ engineId: result.engineId });
     },
   });
   const saving = save.isPending;
@@ -69,7 +82,9 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
 
   async function handleSave() {
     setMessage(null);
-    await save.mutateAsync(choice).catch(() => undefined);
+    const valid = await form.trigger();
+    if (!valid) return;
+    await save.mutateAsync(form.getValues("engineId")).catch(() => undefined);
   }
 
   const activeLabel = status.engines.find((engine) => engine.isActive)?.label ?? status.active.engineId;
@@ -128,8 +143,8 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
       {canAdmin ? (
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[16rem]">
-            <Field label="Engine for this workspace">
-              <SelectInput value={choice} onChange={(e) => setChoice(e.target.value)} disabled={saving}>
+            <Field label="Engine for this workspace" error={form.formState.errors.engineId?.message}>
+              <SelectInput {...form.register("engineId")} disabled={saving}>
                 {status.engines.map((engine) => (
                   <option key={engine.id} value={engine.id} disabled={engine.health.status !== "READY" && engine.id !== status.active.engineId}>
                     {engine.label}

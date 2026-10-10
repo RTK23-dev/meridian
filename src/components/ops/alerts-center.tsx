@@ -1,7 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { AlertCircle, CheckCheck, Clock3, Info, TriangleAlert } from "lucide-react";
 import { Badge, Button, Card, Field, PageHeader, ScreenSkeleton, SelectInput, StatusBadge, TextInput } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
+import { FormDiscardBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { deliveryTargetSchema, type DeliveryTargetInput } from "@/components/forms/client-schemas";
 import { useWorkspace } from "@/components/workspace";
 import { ALERT_LIST_LIMIT } from "@/lib/navigation/model";
 import { hasRole } from "@/lib/meridian/access";
@@ -25,7 +31,9 @@ export function AlertsCenter() {
   const acknowledging = usePendingVariables<string>(ACKNOWLEDGE_KEY(organizationId));
   const [filter, setFilter] = useState<AlertFilter>("open");
   const [note, setNote] = useState<string | null>(null);
-  const [urlDraft, setUrlDraft] = useState("");
+  // The webhook URL is checked with the server's own delivery rule, so a refused URL shows next to the field.
+  const targetForm = useForm<DeliveryTargetInput>({ resolver: zodResolver(deliveryTargetSchema), defaultValues: { url: "" }, mode: "onChange" });
+  const urlValue = targetForm.watch("url");
 
   const check = useScopedMutation({
     mutationKey: ["mutation", "alerts.check", organizationId],
@@ -43,7 +51,8 @@ export function AlertsCenter() {
     mutationFn: (url: string) => saveDeliveryTarget({ data: { organizationId, url } }),
     invalidate: () => [qk.alerts(organizationId)],
     onSuccess: (result) => {
-      setUrlDraft("");
+      // The URL is cleared once saved. It is not shown again, as the copy below says.
+      targetForm.reset({ url: "" });
       setNote(result.status === "saved" ? "Webhook target saved. It has not been called yet." : "Webhook target removed. Alerts are not sent anywhere.");
     },
   });
@@ -75,14 +84,14 @@ export function AlertsCenter() {
   const target = targetCopy(data.target);
   const visible = filterAlerts(data.alerts, filter);
 
-  function submitTarget(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const submitTarget = targetForm.handleSubmit((values) => {
     setNote(null);
-    void saveTarget.mutateAsync(urlDraft.trim()).catch(() => undefined);
-  }
+    void saveTarget.mutateAsync(values.url).catch(() => undefined);
+  });
 
   return (
     <div className="space-y-8">
+      <UnsavedChangesGuard dirty={targetForm.formState.isDirty} />
       <PageHeader
         title="Alerts center"
         description="Alerts Meridian raised for this workspace. Acknowledging one records that a person has seen it. It changes no threshold and no provider setting."
@@ -128,16 +137,18 @@ export function AlertsCenter() {
         <Card className="space-y-4">
           <StatusBadge status={target.connected ? "connected" : "not_connected"} label="Webhook target" />
           <p className="text-sm text-fg-muted">{target.text}</p>
-          <form className="flex flex-wrap items-end gap-3" onSubmit={submitTarget}>
+          {/* noValidate: a refused URL is explained next to the field, not by the browser's own popup. */}
+          <form className="flex flex-wrap items-end gap-3" noValidate onSubmit={submitTarget} onKeyDown={(event) => submitOnShortcut(event)}>
             <div className="min-w-64 flex-1">
-              <Field label="Webhook URL" hint="Must start with https. Plain http is allowed only for localhost. The URL is not shown again after you save it.">
-                <TextInput type="url" value={urlDraft} maxLength={500} placeholder="https://example.com/alerts" onChange={(event) => setUrlDraft(event.target.value)} />
+              <Field label="Webhook URL" hint="Must start with https. Plain http is allowed only for localhost. The URL is not shown again after you save it." error={targetForm.formState.errors.url?.message}>
+                <TextInput {...targetForm.register("url")} type="url" maxLength={500} placeholder="https://example.com/alerts" />
               </Field>
             </div>
-            <Button type="submit" variant="secondary" size="md" loading={saveTarget.isPending} disabled={busy || urlDraft.trim() === ""}>Save target</Button>
+            <Button type="submit" variant="secondary" size="md" loading={saveTarget.isPending} disabled={busy || urlValue.trim() === ""}>Save target</Button>
             {target.connected ? (
               <Button type="button" variant="quiet" size="md" disabled={busy} onClick={() => void saveTarget.mutateAsync("").catch(() => undefined)}>Remove target</Button>
             ) : null}
+            <FormDiscardBar dirty={targetForm.formState.isDirty} subject="webhook target" onDiscard={() => targetForm.reset({ url: "" })} className="basis-full" />
           </form>
         </Card>
       </section>

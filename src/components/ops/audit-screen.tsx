@@ -1,8 +1,12 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button, DataTable, Field, PageHeader, ScreenSkeleton, SelectInput, TextInput } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { auditFilterSchema, type AuditFilterInput } from "@/components/forms/client-schemas";
 import { useWorkspace } from "@/components/workspace";
 import { downloadCsvText } from "@/lib/csv";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -17,16 +21,23 @@ import {
 
 type AuditEntry = Awaited<ReturnType<typeof listAuditPage>>["entries"][number];
 
+/** The audit filter rules, plus the date order. A start after the end is shown under the end date, where it can be fixed. */
+const auditFilterScreenSchema = auditFilterSchema.superRefine((value, context) => {
+  const problem = dateRangeProblem(value.from, value.to);
+  if (problem) context.addIssue({ code: "custom", path: ["to"], message: problem });
+});
+
 export function AuditScreen() {
   const { user } = useCurrentUserState();
   const { data: workspace } = useWorkspace();
   const organizationId = workspace?.active?.id ?? "";
   const role = workspace?.active?.role ?? "viewer";
   const canAdmin = hasRole(role, "admin");
-  const [draft, setDraft] = useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
   const [filters, setFilters] = useState<AuditFilters>(EMPTY_AUDIT_FILTERS);
   const [page, setPage] = useState(0);
-  const [formError, setFormError] = useState<string | null>(null);
+  const filterForm = useForm<AuditFilterInput>({ resolver: zodResolver(auditFilterScreenSchema), defaultValues: EMPTY_AUDIT_FILTERS, mode: "onChange" });
+  const { errors } = filterForm.formState;
+  const draft = filterForm.watch();
   const enabled = canAdmin && !!organizationId && !!user;
 
   const query = useQuery({
@@ -50,20 +61,16 @@ export function AuditScreen() {
     );
   }
 
-  function applyFilters(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const problem = dateRangeProblem(draft.from, draft.to);
-    setFormError(problem);
-    if (problem) return;
+  // The schema has already trimmed the text and checked the dates, so the values are ready to search with.
+  const applyFilters = filterForm.handleSubmit((values) => {
     exporter.reset();
     setPage(0);
-    setFilters({ actor: draft.actor.trim(), action: draft.action.trim(), brandId: draft.brandId, from: draft.from, to: draft.to });
-  }
+    setFilters({ actor: values.actor, action: values.action, brandId: values.brandId, from: values.from, to: values.to });
+  });
 
   function clearFilters() {
-    setDraft(EMPTY_AUDIT_FILTERS);
+    filterForm.reset(EMPTY_AUDIT_FILTERS);
     setFilters(EMPTY_AUDIT_FILTERS);
-    setFormError(null);
     setPage(0);
     exporter.reset();
   }
@@ -106,31 +113,30 @@ export function AuditScreen() {
         description="Administrative history for this workspace, newest first. Entries are limited to this workspace."
       />
 
-      <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-2 xl:grid-cols-5" onSubmit={applyFilters} noValidate>
-        <Field label="Actor name or ID">
-          <TextInput value={draft.actor} maxLength={100} onChange={(event) => setDraft({ ...draft, actor: event.target.value })} />
+      <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-2 xl:grid-cols-5" onSubmit={applyFilters} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
+        <Field label="Actor name or ID" error={errors.actor?.message}>
+          <TextInput {...filterForm.register("actor")} maxLength={100} />
         </Field>
-        <Field label="Action" hint="Part of the action code, such as calibration or job.">
-          <TextInput value={draft.action} maxLength={100} placeholder="calibration.approved" onChange={(event) => setDraft({ ...draft, action: event.target.value })} />
+        <Field label="Action" hint="Part of the action code, such as calibration or job." error={errors.action?.message}>
+          <TextInput {...filterForm.register("action")} maxLength={100} placeholder="calibration.approved" />
         </Field>
-        <Field label="Brand">
-          <SelectInput value={draft.brandId} onChange={(event) => setDraft({ ...draft, brandId: event.target.value })}>
+        <Field label="Brand" error={errors.brandId?.message}>
+          <SelectInput {...filterForm.register("brandId")}>
             <option value="">All brands and the workspace</option>
             {workspace.brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
           </SelectInput>
         </Field>
-        <Field label="From date">
-          <TextInput type="date" value={draft.from} onChange={(event) => setDraft({ ...draft, from: event.target.value })} />
+        <Field label="From date" error={errors.from?.message}>
+          <TextInput {...filterForm.register("from")} type="date" />
         </Field>
-        <Field label="To date">
-          <TextInput type="date" value={draft.to} onChange={(event) => setDraft({ ...draft, to: event.target.value })} />
+        <Field label="To date" error={errors.to?.message}>
+          <TextInput {...filterForm.register("to")} type="date" />
         </Field>
         <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-5">
           <Button type="submit">Apply filters</Button>
           <Button type="button" variant="quiet" disabled={!filtered && !hasDraft} onClick={clearFilters}>Clear</Button>
         </div>
       </form>
-      {formError ? <p role="alert" className="text-sm text-danger">{formError}</p> : null}
 
       <section aria-labelledby="export-heading" className="space-y-3 rounded-lg border border-border bg-surface p-4">
         <h2 id="export-heading" className="text-section font-semibold">Export CSV</h2>

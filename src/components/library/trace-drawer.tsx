@@ -4,6 +4,9 @@ import { MediaPlayer } from "@/components/media-player";
 import {
   Badge, Button, ErrorState, Field, Sheet, SheetContent, SheetDescription, SheetTitle, TextInput,
 } from "@/components/ui";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import type { PlainError } from "@/lib/copy";
 import type { ManualPerformance, ManualPerformanceFields } from "@/lib/meridian/schemas/performance";
 import { downloadHref, previewBox, type LibraryMediaVariant } from "./library-model";
@@ -64,9 +67,11 @@ export function TraceDrawer(props: TraceDrawerProps) {
   } = props;
   const { formState, register, reset } = performanceForm;
   const box = preview ? previewBox(preview) : { width: 1, height: 1 };
+  // Closing with a performance row half typed asks first, so the row is not lost by a stray Escape.
+  const dismiss = useDirtyDismiss({ dirty: formState.isDirty, onOpenChange, onDiscard: () => reset() });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={dismiss.requestOpenChange}>
       {/* One explicit scroll region holds the whole body, so the performance form and its button are always reachable. */}
       <SheetContent className="flex max-h-[90vh] w-full flex-col overflow-hidden p-0 sm:mx-auto sm:max-w-xl">
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
@@ -139,7 +144,7 @@ export function TraceDrawer(props: TraceDrawerProps) {
             {canEdit ? (
               <section aria-labelledby="trace-record-title" className="space-y-4 border-t border-border pt-6">
                 <h3 id="trace-record-title" className="font-semibold">Add performance for this creative</h3>
-                <form className="grid gap-3 sm:grid-cols-2" onSubmit={performanceForm.handleSubmit(onRecordPerformance)}>
+                <form className="grid gap-3 sm:grid-cols-2" onSubmit={performanceForm.handleSubmit(onRecordPerformance)} onKeyDown={(event) => submitOnShortcut(event)}>
                   <Field label="Date" error={formState.errors.observedOn?.message}><TextInput {...register("observedOn")} type="date" required /></Field>
                   <Field label="Platform" error={formState.errors.platform?.message}><TextInput {...register("platform")} maxLength={80} /></Field>
                   <Field label="Reach" error={formState.errors.reach?.message}><TextInput {...register("reach")} type="text" inputMode="numeric" /></Field>
@@ -148,14 +153,16 @@ export function TraceDrawer(props: TraceDrawerProps) {
                   <Field label="Conversions" error={formState.errors.conversions?.message}><TextInput {...register("conversions")} type="text" inputMode="numeric" required /></Field>
                   <Field label="Spend (cents)" error={formState.errors.spendCents?.message}><TextInput {...register("spendCents")} type="text" inputMode="numeric" required /></Field>
                   <Field label="Revenue (cents)" error={formState.errors.revenueCents?.message}><TextInput {...register("revenueCents")} type="text" inputMode="numeric" required /></Field>
-                  {formState.isDirty ? (
-                    <div className="flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm sm:col-span-2" role="status">
-                      <span>Unsaved changes</span>
-                      <Button type="button" variant="quiet" onClick={() => reset()}>Discard</Button>
-                    </div>
-                  ) : null}
+                  <UnsavedChangesBar
+                    dirty={formState.isDirty}
+                    subject="performance"
+                    confirming={dismiss.confirming}
+                    onConfirmingChange={dismiss.setConfirming}
+                    onDiscard={dismiss.discard}
+                    className="sm:col-span-2"
+                  />
                   <div className="flex flex-wrap gap-2 sm:col-span-2">
-                    <Button type="submit" disabled={recordPending || formState.isSubmitting}>Record performance</Button>
+                    <Button type="submit" disabled={recordPending || formState.isSubmitting}>{recordPending || formState.isSubmitting ? "Recording…" : "Record performance"}</Button>
                     <Button type="button" variant="quiet" disabled={imagePending} onClick={onGenerateImage}>Generate image</Button>
                   </div>
                 </form>
