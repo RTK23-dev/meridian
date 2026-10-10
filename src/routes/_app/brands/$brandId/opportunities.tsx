@@ -7,6 +7,7 @@ import { refreshOpportunities } from "@/lib/meridian/machine";
 import { useDismissOpportunities, useOpportunitiesQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
+import { usePageCommands } from "@/components/page-commands";
 
 export const Route = createFileRoute("/_app/brands/$brandId/opportunities")({ staticData: { pageTitle: "Opportunities" }, component: Page });
 
@@ -36,10 +37,12 @@ function Opportunities({ brandId }: { brandId: string }) {
   });
   const dismiss = useDismissOpportunities(brandId);
   const dismissingIds = usePendingVariables<string[]>(["mutation", "opportunity.dismiss", brandId]).flat();
+  const canEdit = hasRole(role, "member");
+  // The palette runs the same scoring mutation as the button, and only for roles that see the button.
+  usePageCommands(canEdit ? [{ id: "score-opportunities", label: "Score from evidence", run: () => { void refresh.mutateAsync().catch(() => undefined); } }] : []);
 
   if (query.isError && !rows) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!rows) return <ScreenSkeleton label="Loading opportunities" shape="cards" />;
-  const canEdit = hasRole(role, "member");
   const visibleRows = rows
     .filter((item) => category === "all" || item.category === category)
     .sort((left, right) => sortBy === "confidence" ? right.confidence - left.confidence
