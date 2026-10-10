@@ -150,7 +150,7 @@ export const listWebhookEvents = createServerFn({ method: "POST" })
         where organization_id = ${data.organizationId} and (${data.provider} = '' or provider = ${data.provider})`,
     ]);
     return { total: Number(totals[0]?.count ?? 0), page: data.page, events: events.map((event) => ({
-      id: event.id, provider: event.provider, eventId: event.event_id, receivedAt: String(event.received_at),
+      id: event.id, provider: event.provider, eventId: event.event_id, receivedAt: isoTimestamp(event.received_at),
     })) };
   });
 
