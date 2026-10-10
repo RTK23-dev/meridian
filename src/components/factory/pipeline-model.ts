@@ -19,14 +19,15 @@ import {
   type PipelineGenerationParams,
   type PipelinePrompts,
   type StageCategory,
-} from "@/lib/meridian/factory/pipeline-config";
+} from "../../lib/meridian/factory/pipeline-config.ts";
+// Relative imports with .ts extensions, so `npm test` (Node type stripping) can load this module without the @/ alias.
 import {
   FACTORY_GRAPH,
   factoryStageAllowed,
   minimumLevel,
   type FactoryStage,
   type FactoryStageSpec,
-} from "@/lib/meridian/factory/pipeline";
+} from "../../lib/meridian/factory/pipeline.ts";
 
 export type EditorTab = "flow" | "volume" | "grading" | "prompts";
 export const TAB_LABEL: Record<EditorTab, string> = {
@@ -181,7 +182,6 @@ export const STAGE_NOTE: Partial<Record<FactoryComponentId, string>> = {
 // ---------------------------------------------------------------------------------------------------------------------
 
 export type EngineId = PipelineGenerationParams["provider"];
-export const ENGINE_IDS: readonly EngineId[] = ["manual_cloud", "hypit", "veo", "higgsfield"];
 
 export const ENGINE_LABEL: Record<EngineId, string> = {
   manual_cloud: "Manual Cloud",
