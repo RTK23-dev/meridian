@@ -2,7 +2,8 @@
  * Pure model for the diagnostic weights. A share is a weight divided by the total of all weights. It is shown only as a
  * preview of the saved arithmetic. It does not claim that a weight changes which opportunity wins.
  */
-import { DEFAULT_WEIGHTS, WEIGHT_KEYS, type ScoreWeights } from "@/lib/meridian/scoring";
+// Relative, not "@/": the node test runner does not resolve the alias, and this module is loaded by tests.
+import { DEFAULT_WEIGHTS, WEIGHT_KEYS, type ScoreWeights } from "../../lib/meridian/scoring.ts";
 
 export type WeightKey = keyof ScoreWeights;
 
