@@ -129,13 +129,17 @@ export interface ProductionStep {
   action: "generate_image" | "generate_video" | "compose_carousel" | "reuse_asset";
   providerId: string;
   modelId: string;
-  estimatedCostUsd: number;
+  /** Null when no price is known. An unknown price is never recorded as zero or estimated from another price. */
+  estimatedCostUsd: number | null;
   requiresPriorStepId?: string;
 }
 
 export interface CostEstimate {
+  /** Sum of the known step estimates only. Unpriced deliverables are listed separately, never folded in. */
   totalEstimatedUsd: number;
   perDeliverableUsd: Record<string, number>;
+  /** Deliverables with no known price. Absent or empty means every deliverable is priced. */
+  unpricedDeliverableIds?: string[];
   isHardCapped: boolean;
   maxSpendUsd?: number;
   currency: "USD";

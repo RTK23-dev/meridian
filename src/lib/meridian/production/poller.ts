@@ -8,14 +8,10 @@
 
 import type { Sql } from "../learning/store.ts";
 import { productionRouter, type ProductionRouter } from "./router.ts";
-import { googleDriveClient, type GoogleDriveClient } from "../storage/drive.ts";
+import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
 import type { ProductionJob } from "./types.ts";
 import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
-import {
-  completeVideoJob,
-  openVideoReview,
-  settleCreativePlanIfComplete,
-} from "./materialization.ts";
+import { completeProductionJob, settleCreativePlanIfComplete } from "./materialization.ts";
 
 const POLLER_ACTOR_ID = "production-poller";
 
@@ -53,7 +49,7 @@ async function settlePlanOf(
 export type PollOptions = {
   limit?: number;
   fetchImpl?: typeof fetch;
-  driveClient?: GoogleDriveClient;
+  driveClient?: ArtifactDrive;
   router?: ProductionRouter;
 };
 
@@ -70,7 +66,7 @@ export async function pollProductionJobs(
 ): Promise<PollResult> {
   const limit = Math.max(1, Math.min(options.limit ?? 10, 50));
   const fetchImpl = options.fetchImpl || globalThis.fetch;
-  const drive = options.driveClient || googleDriveClient;
+  const drive = options.driveClient || defaultArtifactDrive();
   const router = options.router || productionRouter;
 
   // Claim pending jobs atomically. A plain SELECT ... FOR UPDATE outside an explicit
@@ -92,6 +88,7 @@ export async function pollProductionJobs(
     artifact_id: string | null;
     creative_plan_id: string | null;
     materialized_at: unknown;
+    modality: string;
   }>`
     with candidates as (
       select id
@@ -111,7 +108,7 @@ export async function pollProductionJobs(
     where jobs.id = candidates.id
     returning jobs.id, jobs.organization_id, jobs.brand_id, jobs.provider, jobs.provider_job_id,
               jobs.request_id, jobs.status_url, jobs.cancel_url, jobs.status, jobs.attempt_count, jobs.input,
-              jobs.artifact_id, jobs.creative_plan_id, jobs.materialized_at
+              jobs.artifact_id, jobs.creative_plan_id, jobs.materialized_at, jobs.modality
   `;
 
   const result: PollResult = {
@@ -136,23 +133,45 @@ export async function pollProductionJobs(
     if (row.status === "COMPLETED") {
       // Finalized on an earlier pass but not yet materialized. Finish it without contacting the provider.
       try {
-        const materialized = await completeVideoJob(sql, {
-          organizationId: row.organization_id,
-          brandId: row.brand_id,
-          productionJobId: row.id,
-        });
-        await openVideoReview(sql, {
-          organizationId: row.organization_id,
-          brandId: row.brand_id,
-          creativeId: materialized.creativeId,
-          decisionId: materialized.decisionId,
-        });
+        await completeProductionJob(
+          sql,
+          { organizationId: row.organization_id, brandId: row.brand_id, productionJobId: row.id },
+          { driveClient: drive },
+        );
         await settlePlanOf(sql, row);
         result.rendered++;
       } catch (error) {
         await recordMaterializationRetry(sql, row, error);
         result.polled++;
       }
+      continue;
+    }
+
+    if (row.modality !== "video") {
+      // An image is generated in one call and its bytes are not retained, so there is nothing to poll. A job still
+      // SUBMITTING here was interrupted around its provider call, so the call may have happened. It is marked ambiguous and
+      // its reservation stays held for reconciliation. It is never resubmitted, because that could spend twice.
+      if (row.status === "SUBMITTING") {
+        await sql`
+          update production_jobs
+          set status = 'SUBMISSION_UNKNOWN',
+              error_code = 'INTERRUPTED_IMAGE_SUBMISSION',
+              error_message = 'The worker stopped around an image provider call. The call may have been made; the reservation is held for reconciliation.',
+              updated_at = now()
+          where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id}
+        `;
+      } else {
+        await sql`
+          update production_jobs
+          set status = 'FAILED',
+              error_code = 'IMAGE_NOT_RESUMABLE',
+              error_message = 'An image job cannot be resumed from the poller. Its bytes were not retained.',
+              updated_at = now()
+          where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id}
+        `;
+        await settlePlanOf(sql, row);
+      }
+      result.failed++;
       continue;
     }
 
@@ -232,16 +251,10 @@ export async function pollProductionJobs(
 
       if (finalized.success) {
         try {
-          const materialized = await completeVideoJob(sql, {
+          await completeProductionJob(sql, {
             organizationId: row.organization_id,
             brandId: row.brand_id,
             productionJobId: row.id,
-          });
-          await openVideoReview(sql, {
-            organizationId: row.organization_id,
-            brandId: row.brand_id,
-            creativeId: materialized.creativeId,
-            decisionId: materialized.decisionId,
           });
           await settlePlanOf(sql, row);
           result.rendered++;

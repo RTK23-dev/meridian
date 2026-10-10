@@ -246,7 +246,7 @@ export class CreativeDecisionEngine {
           action: "generate_image",
           providerId: imgProvider,
           modelId: imgModel,
-          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
+          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : null,
         });
       }
     } else if (effectiveFormat === "video") {
@@ -303,7 +303,7 @@ export class CreativeDecisionEngine {
           action: "generate_image",
           providerId: imgProvider,
           modelId: imgModel,
-          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
+          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : null,
         });
       }
     } else if (effectiveFormat === "mixed") {
@@ -349,7 +349,7 @@ export class CreativeDecisionEngine {
           action: "generate_image",
           providerId: imgProvider,
           modelId: imgModel,
-          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
+          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : null,
         });
       }
 
@@ -372,17 +372,23 @@ export class CreativeDecisionEngine {
           action: "generate_image",
           providerId: imgProvider,
           modelId: imgModel,
-          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : 0.05,
+          estimatedCostUsd: imgProvider.startsWith("test:") ? 0 : null,
         });
       }
     } else {
       // research_only: zero deliverables, zero production steps
     }
 
-    // Cost calculation
+    // Cost calculation. A step with no declared price is unknown: it adds nothing to the total, gets no per-deliverable
+    // amount, and is listed as unpriced so execution can refuse it or reserve it against an explicit spend cap.
     const perDeliverableUsd: Record<string, number> = {};
+    const unpricedDeliverableIds = new Set<string>();
     let totalEstimatedUsd = 0;
     for (const step of productionPlan) {
+      if (step.estimatedCostUsd === null) {
+        unpricedDeliverableIds.add(step.deliverableId);
+        continue;
+      }
       perDeliverableUsd[step.deliverableId] = (perDeliverableUsd[step.deliverableId] || 0) + step.estimatedCostUsd;
       totalEstimatedUsd += step.estimatedCostUsd;
     }
@@ -391,6 +397,7 @@ export class CreativeDecisionEngine {
     const estimatedCost: CostEstimate = {
       totalEstimatedUsd,
       perDeliverableUsd,
+      unpricedDeliverableIds: [...unpricedDeliverableIds],
       isHardCapped: Boolean(input.constraints?.maxSpendUsd !== undefined),
       maxSpendUsd: input.constraints?.maxSpendUsd,
       currency: "USD",

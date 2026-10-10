@@ -20,29 +20,34 @@ import { publishingReadiness } from "../jev/guards.ts";
 import { loadAppliedPolicies } from "../jev/policy.ts";
 import { generationAllowed } from "../security/budget.ts";
 import { evaluateJevGate } from "../jev/reviewer-decision.ts";
-import { judgeBrief, judgeMedia, rollupDecision, type MediaFacts } from "./features.ts";
-import { STUDIO_PROMPT_VERSION, isTestingRuntime, storeBlob, variantPrompt } from "./media-work.ts";
+import { judgeBrief } from "./features.ts";
+import { STUDIO_PROMPT_VERSION, isTestingRuntime, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
-import { productionRouter } from "../production/router.ts";
+import { productionRouter, type ImageProviderSelection } from "../production/router.ts";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store.ts";
-import { assessPublishing, type AccountSnapshot } from "../publishing/readiness.ts";
-import { combineLogoFrames, combinePaletteFrames, measureLogo, measurePalette } from "../vision/measure.ts";
+import { assessPublishing } from "../publishing/readiness.ts";
+import { combineLogoFrames, combinePaletteFrames } from "../vision/measure.ts";
 import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreationScope, AutonomyMode, CreativePlan } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
+import { defaultArtifactDrive } from "../storage/artifact-drive.ts";
 import { BudgetLedgerService, InvalidBudgetCapError, toMicros } from "../security/budget-ledger.ts";
 import { modelCapabilityRegistry } from "../production/registry.ts";
 import {
-  completeVideoJob,
+  completeProductionJob,
   ESTIMATOR_VERSION,
-  openVideoReview,
+  openProductionReview,
   settleCreativePlanIfComplete,
+  settleProductionReservation,
 } from "../production/materialization.ts";
+import type { ImageGenerationOutcome } from "../production/image-providers.ts";
+import type { CreativeSpec } from "../production/types.ts";
 import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
 import { resolveProductionTarget } from "../production/target.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
+import { accountSnapshots, competitorCopy, factsFor, qcBrandOf, visualFacts, writeJudgment } from "./image-qc.server.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -198,7 +203,28 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
     select storage_key, body, mime_type from asset_blobs
     where brand_id = ${brandId} and organization_id = ${organizationId} and mime_type like 'image/%'
   `;
-  const blobByKey = new Map(blobs.map((row) => [row.storage_key, row]));
+  // Image previews come from the artifact store, where production writes image bytes. An artifact that cannot be read
+  // has no preview, so nothing is shown in its place.
+  const previewByKey = new Map<string, string>();
+  const artifactDrive = defaultArtifactDrive();
+  for (const asset of assets) {
+    const key = asText(asset.storage_key);
+    if (asText(asset.kind) !== "image" || !key || previewByKey.has(key)) continue;
+    const objects = await sql<{ provider_file_id: string }>`
+      select provider_file_id from storage_objects
+      where organization_id = ${organizationId} and brand_id = ${brandId} and name = ${key}
+      limit 1
+    `;
+    if (!objects[0]) continue;
+    try {
+      const stored = await artifactDrive.get(objects[0].provider_file_id);
+      if (stored.bytes.byteLength < 120_000) {
+        previewByKey.set(key, `data:${stored.mimeType};base64,${Buffer.from(stored.bytes).toString("base64")}`);
+      }
+    } catch {
+      // Unreadable artifact: no preview.
+    }
+  }
   const publications = await sql<{ external_id: string; idempotency_key: string; provider: string }>`
     select external_id, idempotency_key, provider from provider_objects
     where brand_id = ${brandId} and organization_id = ${organizationId} and object_type = 'ad'
@@ -257,10 +283,7 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
     brief: briefs[0] ? briefOf(briefs[0]) : null,
     variants: assets.map((row) => {
       const creativeId = asText(row.creative_id);
-      const blob = blobByKey.get(asText(row.storage_key));
-      const preview = blob && asText(row.kind) === "image" && blob.body.length < 120_000
-        ? `data:${blob.mime_type};base64,${blob.body}`
-        : "";
+      const preview = previewByKey.get(asText(row.storage_key)) ?? "";
       const questions = decisions
         .filter((item) => asText(item.subject_id) === creativeId)
         .map((item) => ({
@@ -544,95 +567,7 @@ async function measuredVideoFrames(sql: Sql, organizationId: string, brandId: st
   return { measuredLogo: combineLogoFrames(logos), measuredPalette: combinePaletteFrames(palettes) };
 }
 
-async function visualFacts(sql: Sql, organizationId: string, brandId: string, bytes: Uint8Array) {
-  const logos = await sql<{ body: string }>`
-    select body from assets
-    where brand_id = ${brandId} and organization_id = ${organizationId} and label = 'logo' and status = 'stored'
-    order by created_at desc
-    limit 1
-  `;
-  const colors = await sql<{ colors: string }>`
-    select colors from brand_brains where brand_id = ${brandId} limit 1
-  `;
-  const logo = logos[0]?.body ? Buffer.from(logos[0].body, "base64") : null;
-  const measuredLogo = measureLogo(logo, bytes);
-  const measuredPalette = measurePalette(colors[0]?.colors ?? "", bytes);
-  return { measuredLogo, measuredPalette };
-}
-
-async function accountSnapshots(sql: Sql, organizationId: string): Promise<AccountSnapshot[]> {
-  const rows = await sql<{ provider: string; status: string; account_id: string; permissions: string }>`
-    select provider, status, account_id, permissions from provider_connections
-    where organization_id = ${organizationId}
-  `;
-  return rows.map((row) => {
-    let permissions: string[] = [];
-    try {
-      const parsed = JSON.parse(row.permissions) as unknown;
-      permissions = Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-    } catch {
-      permissions = [];
-    }
-    return {
-      provider: row.provider,
-      status: row.status,
-      accountId: row.account_id,
-      permissions,
-      pageId: "",
-      destinationUrl: "",
-    };
-  });
-}
-
-function competitorCopy(loaded: Awaited<ReturnType<typeof loadBrandContext>>): string[] {
-  return loaded.creatives.filter((item) => item.origin === "competitor").map((item) => item.text);
-}
-
-function factsFor(
-  loaded: Awaited<ReturnType<typeof loadBrandContext>>,
-  input: Omit<MediaFacts, "positioning" | "tone" | "prohibited" | "wordsToAvoid" | "competitorTexts" | "ownTexts">,
-): MediaFacts {
-  return {
-    ...input,
-    positioning: `${loaded.brain.positioning}\n${loaded.brain.valueProposition}`,
-    tone: loaded.brain.tone,
-    prohibited: loaded.brain.prohibitedClaims,
-    wordsToAvoid: loaded.brain.wordsToAvoid,
-    competitorTexts: loaded.creatives.filter((item) => item.origin === "competitor").map((item) => item.text),
-    ownTexts: loaded.creatives.filter((item) => item.origin !== "competitor").map((item) => item.text),
-  };
-}
-
-export async function writeJudgment(
-  sql: Sql,
-  input: { organizationId: string; brandId: string; creativeId: string; facts: MediaFacts },
-): Promise<{ rollup: string; decisionId: string }> {
-  const policies = await loadAppliedPolicies(sql, input.organizationId);
-  const decisions = judgeMedia(input.facts, policies);
-  const rollup = rollupDecision(decisions);
-  let pointed = "";
-  for (const decision of decisions) {
-    const id = crypto.randomUUID();
-    if (!pointed && decision.decision === rollup) pointed = id;
-    const record = decisionRecordFields(decision);
-    await sql`
-      insert into jev_decisions (
-        id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,
-        input, evidence, probability, confidence, thresholds, decision, reasons, provider, model,
-        answer, schema_version, policy_version, calibration_version, decision_fingerprint, outcome_digest
-      ) values (
-        ${id}, ${input.organizationId}, ${input.brandId}, ${input.creativeId}, ${decision.questionId},
-        ${decision.questionVersion}, 'creative', ${input.creativeId}, ${JSON.stringify(decision.features)},
-        ${JSON.stringify(decision.evidence)}, ${decision.probability}, ${decision.confidence},
-        ${JSON.stringify(decision.policy)}, ${decision.decision}, ${JSON.stringify(decision.reasons)},
-        ${decision.provider}, ${decision.modelVersion},
-        ${JSON.stringify(decision.answer)}, ${decision.schemaVersion}, ${decision.policyVersion}, ${decision.calibrationVersion ?? ""},
-        ${record.decisionFingerprint}, ${record.outcomeDigest}
-      )
-    `;
-  }
-  return { rollup, decisionId: pointed };
-}
+export { writeJudgment } from "./image-qc.server.ts";
 
 /**
  * Inserts a new CreativePlan row. An existing row with the same id is never rewritten: lifecycle
@@ -892,14 +827,17 @@ export async function generateStudioVariants(
 
 /**
  * Budget reservation shares for an approved plan, keyed by deliverable id. Fails closed.
- * A missing, non-finite, negative, or zero plan estimate reserves nothing only when every
- * deliverable's provider/model pair is registered as free of charge. Otherwise it is refused
- * before any provider call. Billable deliverables need their own finite estimate, and the
- * shares must add up to the plan estimate (to within one cent of rounding).
+ *
+ * Priced deliverables reserve their known estimate, and those estimates must add up to the plan's known total (to within
+ * one cent of rounding). An unpriced deliverable (no declared price, such as an image) has no estimate to reserve, so it
+ * reserves an equal share of the plan's explicit spend cap, the most it can cost, and is settled at that ceiling because
+ * its actual provider cost is not known. A plan with an unpriced deliverable and no cap is refused. A plan with no
+ * priced and no unpriced cost reserves nothing only when every deliverable's model is registered as free of charge.
  */
 function planReservationShares(plan: CreativePlan): Map<string, bigint> | null {
   const isFree = (d: CreativePlan["deliverables"][number]) => modelCapabilityRegistry.isEstablishedFree(d.provider, d.model);
   const allFree = plan.deliverables.every(isFree);
+  const unpriced = new Set(plan.estimatedCost?.unpricedDeliverableIds ?? []);
   const total = plan.estimatedCost?.totalEstimatedUsd;
   if (typeof total !== "number" || !Number.isFinite(total) || total < 0) {
     if (allFree) return null;
@@ -907,17 +845,17 @@ function planReservationShares(plan: CreativePlan): Map<string, bigint> | null {
       `Cost estimate is missing or invalid (${String(total)}) for a billable plan. Budget reservation refused; no provider was called.`
     );
   }
-  if (total === 0) {
+  if (total === 0 && unpriced.size === 0) {
     if (allFree) return null;
     throw new InvalidBudgetCapError(
       "Zero cost estimate for a billable provider. Budget reservation refused; no provider was called."
     );
   }
-  const totalMicros = toMicros(total);
   const perDeliverable = plan.estimatedCost?.perDeliverableUsd ?? {};
   const shares = new Map<string, bigint>();
-  let sum = 0n;
+  let knownSum = 0n;
   for (const deliverable of plan.deliverables) {
+    if (unpriced.has(deliverable.id)) continue;
     const raw = perDeliverable[deliverable.id];
     if (raw === undefined && isFree(deliverable)) continue;
     if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) {
@@ -926,16 +864,77 @@ function planReservationShares(plan: CreativePlan): Map<string, bigint> | null {
       );
     }
     const micros = toMicros(raw);
-    sum += micros;
+    knownSum += micros;
     if (micros > 0n) shares.set(deliverable.id, micros);
   }
-  const drift = sum > totalMicros ? sum - totalMicros : totalMicros - sum;
+  const knownTotalMicros = toMicros(total);
+  const drift = knownSum > knownTotalMicros ? knownSum - knownTotalMicros : knownTotalMicros - knownSum;
   if (drift > 10_000n) {
     throw new InvalidBudgetCapError(
       "Per-deliverable estimates do not add up to the plan estimate. Budget reservation refused; no provider was called."
     );
   }
+  if (unpriced.size > 0) {
+    const cap = plan.estimatedCost?.maxSpendUsd;
+    if (typeof cap !== "number" || !Number.isFinite(cap) || cap <= 0) {
+      throw new InvalidBudgetCapError(
+        `Deliverables with no known price (${[...unpriced].join(", ")}) need an explicit plan spend cap. Budget reservation refused; no provider was called.`
+      );
+    }
+    const remaining = toMicros(cap) - knownTotalMicros;
+    const each = remaining / BigInt(unpriced.size);
+    if (each <= 0n) {
+      throw new InvalidBudgetCapError(
+        "The plan spend cap leaves nothing for deliverables with no known price. Budget reservation refused; no provider was called."
+      );
+    }
+    for (const deliverable of plan.deliverables) {
+      if (unpriced.has(deliverable.id)) shares.set(deliverable.id, each);
+    }
+  }
   return shares;
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Marks an image job whose provider outcome is unknown. Its reservation stays held for reconciliation, and it is never resubmitted. */
+async function markImageJobUnknown(sql: Sql, jobId: string, organizationId: string, brandId: string, code: string, message: string) {
+  await sql`
+    update production_jobs set status = 'SUBMISSION_UNKNOWN', error_code = ${code}, error_message = ${message}, updated_at = now()
+    where id = ${jobId} and organization_id = ${organizationId} and brand_id = ${brandId}
+  `;
+}
+
+/** Inserts the durable row for one image job. The first snapshot for an id stands: a conflicting insert is ignored. */
+async function insertImageJobRow(sql: Sql, row: {
+  id: string;
+  organizationId: string;
+  brandId: string;
+  providerId: string;
+  status: "SUBMITTING" | "FAILED";
+  creativePlanId: string;
+  sequenceIndex: number;
+  costStatus: string | null;
+  /** Null when the cost is unknown. A zero here would be an invented price. */
+  estimateCents: number | null;
+  input: string;
+  errorCode?: string;
+  errorMessage?: string;
+}) {
+  await sql`
+    insert into production_jobs (
+      id, organization_id, brand_id, provider, provider_job_id, request_id, status_url, cancel_url,
+      status, cost_mode, estimated_cost_cents, input, created_at, submitted_at, updated_at, creative_plan_id,
+      modality, sequence_index, cost_status, error_code, error_message
+    ) values (
+      ${row.id}, ${row.organizationId}, ${row.brandId}, ${row.providerId}, null, null, null, null,
+      ${row.status}, 'BALANCED', ${row.estimateCents}, ${row.input}, now(), null, now(), ${row.creativePlanId},
+      'image', ${row.sequenceIndex}, ${row.costStatus}, ${row.errorCode ?? null}, ${row.errorMessage ?? null}
+    )
+    on conflict (id) do nothing
+  `;
 }
 
 /** Releases every reservation that no provider submission can be holding. Held ones stay for reconciliation. */
@@ -1128,7 +1127,9 @@ export async function executeApprovedCreativePlan(
   const reservations = new Map<string, { id: string; amountMicros: bigint; held: boolean }>();
   const productionJobIds = new Map<string, string>();
   for (const deliverable of creativePlan.deliverables) {
-    if (deliverable.kind === "video") productionJobIds.set(deliverable.id, crypto.randomUUID());
+    if (deliverable.kind === "video" || deliverable.kind === "image" || deliverable.kind === "carousel_slide") {
+      productionJobIds.set(deliverable.id, crypto.randomUUID());
+    }
   }
   let providerSubmissionUnknown = false;
   try {
@@ -1172,13 +1173,17 @@ export async function executeApprovedCreativePlan(
   `;
 
   try {
-    const { generateImageBytes } = await import("../providers/image-bytes.server.ts");
 
     for (const deliv of creativePlan.deliverables) {
       if (deliv.kind === "image" || deliv.kind === "carousel_slide") {
+        // Every image is a durable production job with the same lifecycle as video. Its job row and its budget reservation
+        // exist before the provider is called, and its bytes are stored and verified before anything is materialized.
         const index = deliv.sequenceIndex ?? 0;
         const delivManifest = deliverableManifests.find((m) => m.deliverableId === deliv.id);
         if (!delivManifest) throw new Error(`CreativePlan deliverable ${deliv.id} has no executable manifest.`);
+        const prodJobId = productionJobIds.get(deliv.id);
+        if (!prodJobId) throw new Error(`CreativePlan deliverable ${deliv.id} has no production job id.`);
+        const promptVersion = `${STUDIO_PROMPT_VERSION}#${deliv.kind}-${index + 1}`;
         const prompt = variantPrompt({
           productName,
           angle: delivManifest.concept?.mechanism || "",
@@ -1188,135 +1193,136 @@ export async function executeApprovedCreativePlan(
           index,
           kind: "image",
         });
-        const creativeId = crypto.randomUUID();
-        const assetId = crypto.randomUUID();
+        const copy = `${productName}. ${prompt}`;
+        const itemLabel = deliv.kind === "carousel_slide" ? `carousel slide ${index + 1}` : `image ${index + 1}`;
         const imageTarget = resolveProductionTarget({
           provider: delivManifest.production!.provider,
           model: delivManifest.production!.model,
           capability: "IMAGE_GENERATION",
           aspectRatio: delivManifest.format.aspectRatio,
         });
-        const imgProvider = imageTarget.provider === "google_nano_banana" ? "google:nano-banana" : imageTarget.provider;
+        const reservation = reservations.get(deliv.id);
+        // An unpriced image is allowed only because its reservation is bounded by the plan's spend cap (planReservationShares).
+        const unpriced = creativePlan.estimatedCost?.unpricedDeliverableIds?.includes(deliv.id) === true;
+        const spec: CreativeSpec = {
+          id: deliv.id,
+          organizationId: access.organizationId,
+          brandId,
+          title: context.title,
+          modality: "image",
+          format: deliv.format,
+          aspectRatio: delivManifest.format.aspectRatio as CreativeSpec["aspectRatio"],
+          // An image has no duration. The matrix reads no duration for an image.
+          durationTargetSeconds: 0,
+          hookLine: delivManifest.hook?.text || "",
+          script: copy,
+          scenes: [],
+          assetIds: [],
+          idempotencyKey: prodJobId,
+        };
 
-        const image = await generateImageBytes({
-          provider: imgProvider,
-          prompt,
-          seed: `${runId}:${deliv.kind}:${index}`,
-          promptVersion: `${STUDIO_PROMPT_VERSION}#${deliv.kind}-${index + 1}`,
-          allowTest: imgProvider === "test:image" && isTestingRuntime(),
-          model: imageTarget.model,
-          aspectRatio: delivManifest.format.aspectRatio,
+        let selected: ImageProviderSelection;
+        try {
+          selected = await productionRouter.selectImageForSpec(spec, { requestedProvider: imageTarget.provider, allowUnknownCost: unpriced });
+        } catch (refusal) {
+          // Refused before any provider call. The refusal is recorded on the job, and its reservation is released.
+          await insertImageJobRow(sql, {
+            id: prodJobId, organizationId: access.organizationId, brandId, providerId: imageTarget.provider, status: "FAILED",
+            creativePlanId: creativePlan.id, sequenceIndex: index, costStatus: null, estimateCents: null,
+            input: JSON.stringify({ kind: "image", creativeSpec: spec, runId, briefId, planDeliverableId: deliv.id }),
+            errorCode: "SELECTION_REFUSED", errorMessage: errorText(refusal),
+          });
+          if (reservation && !reservation.held) {
+            await BudgetLedgerService.release(sql, { reservationId: reservation.id, reason: "Image was refused before any provider call." }).catch(() => {});
+          }
+          // An approved provider that cannot produce this deliverable stops the run, as an approved video provider does.
+          throw refusal;
+        }
+        const chosen = selected.selection.chosen!;
+        spec.providerId = selected.provider.id;
+        spec.modelId = chosen.modelId;
+        // The job's snapshot is written once, before the provider call. Materialization reads only this snapshot.
+        await insertImageJobRow(sql, {
+          id: prodJobId, organizationId: access.organizationId, brandId, providerId: selected.provider.id, status: "SUBMITTING",
+          creativePlanId: creativePlan.id, sequenceIndex: index, costStatus: chosen.costStatus,
+          estimateCents: chosen.estimateUsd === null ? null : Math.round(chosen.estimateUsd * 100),
+          input: JSON.stringify({
+            kind: "image", creativeSpec: spec, runId, briefId, manifest: delivManifest, planDeliverableId: deliv.id,
+            deliverableKind: deliv.kind, sequenceIndex: index, itemLabel, format: deliv.format, prompt, copy, productName,
+            promptVersion, providerSelection: selected.selection, qcBrand: qcBrandOf(loaded),
+          }),
         });
 
-        if (image.status !== "ready") {
+        // The reservation is held before the call. From here a failure is ambiguous, so the reservation is never released.
+        if (reservation) reservation.held = true;
+        let outcome: ImageGenerationOutcome;
+        try {
+          outcome = await selected.provider.generate({
+            prompt,
+            seed: `${runId}:${deliv.kind}:${index}`,
+            promptVersion,
+            model: chosen.modelId,
+            aspectRatio: spec.aspectRatio,
+          });
+        } catch (callError) {
+          providerSubmissionUnknown = true;
+          await markImageJobUnknown(sql, prodJobId, access.organizationId, brandId, "PROVIDER_CALL_AMBIGUOUS", errorText(callError));
+          throw callError;
+        }
+        if (outcome.status === "NOT_CONNECTED") {
+          // No credentials, so the provider was never called: nothing was submitted and the reservation is released.
           await sql`
-            insert into generation_jobs (
-              id, organization_id, brand_id, brief_id, correlation_id, provider, model, prompt_id, prompt_version,
-              status, error, created_by
-            ) values (
-              ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${briefId}, ${runId},
-              ${image.provider}, '', 'studio_media', ${`${STUDIO_PROMPT_VERSION}#${deliv.kind}-${index + 1}`},
-              ${image.status}, ${image.error.slice(0, 500)}, ${userId}
-            )
+            update production_jobs set status = 'FAILED', error_code = 'NOT_CONNECTED', error_message = ${outcome.error}, updated_at = now()
+            where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
           `;
+          if (reservation) {
+            reservation.held = false;
+            await BudgetLedgerService.release(sql, { reservationId: reservation.id, reason: outcome.error }).catch(() => {});
+          }
           continue;
         }
+        if (outcome.status === "failed") {
+          // The call returned a failure after it may have reached the provider, so no charge can be ruled out. The
+          // reservation stays held for reconciliation, and the plan is not completed on this run.
+          providerSubmissionUnknown = true;
+          await markImageJobUnknown(sql, prodJobId, access.organizationId, brandId, "PROVIDER_CALL_FAILED", outcome.error);
+          throw new Error(`Image provider '${outcome.provider}' failed; its reservation is held for reconciliation. ${outcome.error}`);
+        }
 
-        const key = `${access.organizationId}/${brandId}/runs/${runId}/${assetId}.img`;
-        const stored = await storeBlob(sql, {
+        const finalized = await finalizeProductionArtifact(sql, {
+          jobId: prodJobId,
           organizationId: access.organizationId,
           brandId,
-          key,
-          mime: image.mediaType,
-          bytes: image.bytes,
+          provider: outcome.provider,
+          rawArtifact: { bytes: outcome.bytes, mimeType: outcome.mediaType },
         });
-        const copy = `${productName}. ${prompt}`;
-        const visual = await visualFacts(sql, access.organizationId, brandId, image.bytes);
-        const ownSemantic = await semanticNearest(copy, loaded.creatives.filter((item) => item.origin !== "competitor").map((item) => item.text)).catch(() => null);
-        const accounts = await accountSnapshots(sql, access.organizationId);
-        const publishing = assessPublishing({
-          accounts,
-          provider: "test:publisher",
-          kind: "image",
-          mime: image.mediaType,
-          width: image.width,
-          height: image.height,
-          byteSize: stored.byteSize,
-          destinationUrl: "",
-        });
-        const facts = factsFor(loaded, {
-          kind: "image",
-          productName,
-          angle: delivManifest.concept?.mechanism || "",
-          copy,
-          prompt,
-          mime: image.mediaType,
-          byteSize: stored.byteSize,
-          width: image.width,
-          height: image.height,
-          checksum: stored.checksum,
-          durationMs: null,
-          transcript: "",
-          sceneCount: 0,
-          logoSimilarity: visual.measuredLogo.similarity,
-          logoOutcome: visual.measuredLogo.outcome,
-          logoEvidence: visual.measuredLogo.evidence,
-          paletteDistance: visual.measuredPalette.distance,
-          paletteOutcome: visual.measuredPalette.outcome,
-          paletteEvidence: visual.measuredPalette.evidence,
-          semanticSimilarity: await semanticNearest(copy, competitorCopy(loaded)).catch(() => null),
-          ownSemanticSimilarity: ownSemantic,
-          publishing,
-        });
-        const judged = await writeJudgment(sql, {
-          organizationId: access.organizationId,
-          brandId,
-          creativeId,
-          facts,
-        });
-        const status = judged.rollup === "REJECT" ? "rejected" : judged.rollup === "AUTO_APPROVE" ? "approved" : "in_review";
-        const itemLabel = deliv.kind === "carousel_slide" ? `carousel slide ${index + 1}` : `image ${index + 1}`;
-
-        await sql`
-          insert into creative_records (
-            id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
-            message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
-          ) values (
-            ${creativeId}, ${access.organizationId}, ${brandId}, 'generated', ${`${context.title} ${itemLabel}`},
-            ${copy}, ${productName}, ${delivManifest.hook?.text || ""}, ${delivManifest.hook?.type || ""}, ${delivManifest.concept?.mechanism || ""},
-            ${copy}, ${""}, ${deliv.format}, ${""},
-            ${context.opportunityId}, ${briefId}, ${status}, ${userId},
-            ${JSON.stringify({ generationRunId: runId, jevDecisionId: decisionId, provider: image.provider, model: image.model, promptVersion: image.promptVersion, kind: deliv.kind, variant: index + 1, planDeliverableId: deliv.id })}
-          )
-        `;
-        await sql`
-          insert into assets (
-            id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
-            lifecycle, checksum, width, height, byte_size, provider, model, prompt_version, generation_run_id, kind,
-            qa_decision, review_status, media_status, variant_index, provenance
-          ) values (
-            ${assetId}, ${access.organizationId}, ${brandId}, ${creativeId}, 1, ${key}, ${stored.checksum},
-            ${image.mediaType}, ${image.provider}, 'stored', 'qa_required', ${stored.checksum}, ${image.width}, ${image.height},
-            ${stored.byteSize}, ${image.provider}, ${image.model}, ${image.promptVersion}, ${runId}, ${deliv.kind},
-            ${judged.rollup}, ${status}, 'completed', ${index}, 'generated'
-          )
-        `;
-        if (status === "in_review") {
+        if (!finalized.success) {
+          // The image was generated, so the spend happened. The reservation settles at its reserved amount, and the job
+          // records why its artifact was not stored.
           await sql`
-            insert into reviews (id, organization_id, brand_id, decision_id, creative_id, subject_label)
-            values (${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${judged.decisionId}, ${creativeId}, ${deliv.kind === "carousel_slide" ? `Slide ${index + 1}` : `Image ${index + 1}`})
+            update production_jobs set status = 'FAILED', error_code = ${finalized.errorCode ?? "STORAGE_PERSISTENCE_FAILED"},
+              error_message = ${finalized.error ?? "The artifact could not be stored."}, updated_at = now()
+            where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
           `;
+          await settleProductionReservation(sql, { organizationId: access.organizationId, brandId, productionJobId: prodJobId });
+          continue;
         }
         await sql`
-          insert into generation_jobs (
-            id, organization_id, brand_id, brief_id, correlation_id, provider, model, prompt_id, prompt_version,
-            status, output, creative_id, created_by
-          ) values (
-            ${crypto.randomUUID()}, ${access.organizationId}, ${brandId}, ${briefId}, ${runId},
-            ${image.provider}, ${image.model}, 'studio_media', ${image.promptVersion}, 'completed',
-            ${prompt.slice(0, 2000)}, ${creativeId}, ${userId}
-          )
+          update production_jobs set output = ${JSON.stringify({
+            width: outcome.width, height: outcome.height, mediaType: outcome.mediaType,
+            promptVersion: outcome.promptVersion, model: outcome.model, provider: outcome.provider,
+          })}, updated_at = now()
+          where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
         `;
+        try {
+          await completeProductionJob(sql, { organizationId: access.organizationId, brandId, productionJobId: prodJobId }, { openReview: true });
+        } catch (materializeError) {
+          // The artifact is verified and the job is COMPLETED, so nothing is lost. The poller finishes it from this state.
+          await sql`
+            update production_jobs set error_message = ${errorText(materializeError)}, next_poll_at = now() + interval '30 seconds', updated_at = now()
+            where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
+          `;
+        }
       } else if (deliv.kind === "video") {
         const decisionRows = await sql<{
           id: string;
@@ -1470,7 +1476,7 @@ export async function executeApprovedCreativePlan(
           `;
         } else if (finalResult?.success) {
           // Shared with the poller: creates the creative, asset, and settles this job's reservation.
-          await completeVideoJob(sql, { organizationId: access.organizationId, brandId, productionJobId: prodJobId });
+          await completeProductionJob(sql, { organizationId: access.organizationId, brandId, productionJobId: prodJobId }, { openReview: false });
         }
       }
     }
@@ -1534,11 +1540,12 @@ export async function executeApprovedCreativePlan(
         where id = ${asText(video.id)}
       `;
       if (status === "in_review") {
-        await openVideoReview(sql, {
+        await openProductionReview(sql, {
           organizationId: access.organizationId,
           brandId,
           creativeId: asText(video.creative_id),
           decisionId: decisionId,
+          subjectLabel: "Video",
         });
       }
     }

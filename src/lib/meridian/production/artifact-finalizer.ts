@@ -12,7 +12,7 @@
 
 import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
-import { googleDriveClient, type GoogleDriveClient } from "../storage/drive.ts";
+import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
 import { evaluateProductionPostflight } from "./postflight.ts";
 import type { ProductionJob } from "./types.ts";
 import { detectArtifactType } from "./mime-detector.ts";
@@ -40,7 +40,7 @@ export interface ArtifactFinalizeInput {
     byteSize?: number;
   };
   options?: {
-    driveClient?: GoogleDriveClient;
+    driveClient?: ArtifactDrive;
     fetchImpl?: typeof fetch;
     durationMs?: number;
     skipPostflight?: boolean;
@@ -70,7 +70,7 @@ export async function finalizeProductionArtifact(
   input: ArtifactFinalizeInput,
 ): Promise<ArtifactFinalizeResult> {
   const fetchImpl = input.options?.fetchImpl || globalThis.fetch;
-  const drive = input.options?.driveClient || googleDriveClient;
+  const drive = input.options?.driveClient || defaultArtifactDrive();
 
   const ownedJob = await sql<{ id: string }>`
     select id from production_jobs

@@ -80,7 +80,7 @@ test("one brand moves from observations through media, review, publish, and a di
   const videos = result.assets.filter((asset) => asset.kind === "video");
   assert.equal(images.length, 3);
   assert.equal(videos.length, 3);
-  assert.ok(images.every((asset) => asset.image?.provider === "test:image" && asset.image.objectKey.endsWith(".svg") && asset.state === "published"));
+  assert.ok(images.every((asset) => asset.image?.provider === "test:image" && asset.image.objectKey.endsWith(".png") && asset.state === "published"));
   assert.ok(videos.every((asset) => asset.video?.provider === "test:video" && asset.video.status === "completed"));
   const timing = readMp4Timing(videos[0]?.video?.bytes ?? new Uint8Array());
   assert.equal(timing?.durationMs, 2500);

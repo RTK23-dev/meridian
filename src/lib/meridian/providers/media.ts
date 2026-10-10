@@ -45,6 +45,9 @@ export type VideoJob = {
   attempts: number;
 };
 
+/** A 1x1 transparent PNG used by the deterministic test image provider. */
+const TEST_IMAGE_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
 export function testImageProvider(allow: boolean, failuresLeft = 0): ImageProvider & { failuresLeft: number } {
   if (!allow) throw new Error("The test image provider is not enabled.");
   const state = { failuresLeft };
@@ -56,19 +59,19 @@ export function testImageProvider(allow: boolean, failuresLeft = 0): ImageProvid
         state.failuresLeft -= 1;
         return { status: "failed", provider: "test:image", error: "The test image provider was scripted to fail." };
       }
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" data-provider="test:image"><title>${input.seed}</title></svg>`;
-      const bytes = new TextEncoder().encode(svg);
+      // A real 1x1 PNG, so the durable artifact path verifies it by its magic bytes like any provider image.
+      const bytes = new Uint8Array(Buffer.from(TEST_IMAGE_PNG_BASE64, "base64"));
       return {
         status: "ready",
         provider: "test:image",
         model: "test-image-v1",
         prompt: input.prompt,
         promptVersion: input.promptVersion,
-        objectKey: `test/image/${input.seed}.svg`,
+        objectKey: `test/image/${input.seed}.png`,
         bytes,
-        mediaType: "image/svg+xml",
-        width: 64,
-        height: 64,
+        mediaType: "image/png",
+        width: 1,
+        height: 1,
         sha256: createHash("sha256").update(bytes).digest("hex"),
         latencyMs: 1,
         costCents: 0,
