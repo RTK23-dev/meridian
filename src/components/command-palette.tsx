@@ -77,7 +77,7 @@ export function CommandPalette({
   return (
     <>
       <Command.Dialog open={open} onOpenChange={onOpenChange} label="Command palette" className="fixed left-1/2 top-[18vh] z-50 w-[min(38rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
-        <Command.Input autoFocus placeholder="Search brands, screens and actions" className="h-14 w-full border-b border-border bg-transparent px-4 text-fg outline-none placeholder:text-fg-muted" />
+        <Command.Input autoFocus placeholder="Search brands, screens and actions" className="h-14 w-full border-b border-border bg-transparent px-4 text-fg placeholder:text-fg-muted focus-visible:outline-offset-[-2px]" />
         <Command.List className="max-h-[60vh] overflow-auto p-2">
           <Command.Empty className="p-4 text-sm text-fg-muted">No matching command.</Command.Empty>
           {pageCommands.length ? (

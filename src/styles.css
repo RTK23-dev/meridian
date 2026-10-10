@@ -122,8 +122,48 @@
     text-transform: uppercase;
     color: var(--color-fg-muted);
   }
+
+  /* On touch screens a small control (a 24px switch, checkbox or thumb) gets a 44 by 44 px hit area. The pseudo-element
+     is part of the control's box, so a tap on it activates the control. The drawn size does not change. Add to a
+     positioned or positionable control only: it sets position: relative. */
+  .touch-hit-44 { position: relative; }
+  @media (pointer: coarse) {
+    .touch-hit-44::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 2.75rem;
+      height: 2.75rem;
+      transform: translate(-50%, -50%);
+    }
+  }
 }
 
+/* Reduced motion: every CSS transition and animation, including the ones in new components, is cut to 0.01ms. JS-driven
+   chart animation is turned off in the chart components, which read the same media query. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* More contrast: stronger dividers, text, accent and focus colour. The light block is scoped to :root:not(.dark), so the
+   dark block below (later in the file) wins in dark mode. The pairs still meet the targets in styles.contrast.test.ts. */
+@media (prefers-contrast: more) {
+  :root:not(.dark) {
+    --color-border: #7a7364;
+    --color-border-strong: #5e5847;
+    --color-fg: #050604;
+    --color-fg-muted: #47433a;
+    --color-accent: #6b4a22;
+    --color-brass-text: #5e4220;
+  }
+  .dark {
+    --color-border: #6b7462;
+    --color-border-strong: #b3bca8;
+    --color-fg: #fdfcf8;
+    --color-fg-muted: #d8d3c4;
+    --color-accent: #f0bf85;
+    --color-brass-text: #f0bf85;
+    --color-accent-fg: #1a1208;
+  }
 }

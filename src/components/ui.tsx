@@ -30,7 +30,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export function SelectInput({ className, id, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   const ids = useFieldIds(id, undefined, undefined);
-  return <select {...props} id={ids.controlId} aria-describedby={ids.describedBy} aria-invalid={ids.invalid || undefined} className={cn("w-full rounded-md border border-border-strong bg-surface px-3 py-3 text-base text-fg outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-55", className)} />;
+  return <select {...props} id={ids.controlId} aria-describedby={ids.describedBy} aria-invalid={ids.invalid || undefined} className={cn("w-full rounded-md border border-border-strong bg-surface px-3 py-3 text-base text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-55", className)} />;
 }
 
 export function Notice({ children }: { children: ReactNode }) {

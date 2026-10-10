@@ -27,7 +27,7 @@ const TERMS = {
 
 export type TermId = keyof typeof TERMS;
 
-const FOCUS = "rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const FOCUS = "rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 /**
  * A term with a short definition in a popover. The trigger is a button, so it opens with Enter or Space, and Escape closes
