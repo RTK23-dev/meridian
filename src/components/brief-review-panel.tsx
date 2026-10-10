@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, ErrorState, Field, Notice, Panel, Skeleton, TextArea } from "@/components/ui";
+import { Button, ErrorState, Field, ErrorNotice, Card, Skeleton, Textarea } from "@/components/ui";
 import { PlainErrorNotice } from "@/components/plain-error";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -53,7 +53,7 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
   }
 
   return (
-    <Panel className="space-y-4" aria-labelledby={`brief-review-${briefId}`}>
+    <Card className="space-y-4" aria-labelledby={`brief-review-${briefId}`}>
       <div>
         <h2 id={`brief-review-${briefId}`} className="font-display text-xl">Held for review: {title}</h2>
         <p className="mt-1 text-sm text-muted">
@@ -119,7 +119,7 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
                 {errors.acknowledged?.message ? <p role="alert" className="text-sm text-danger">{errors.acknowledged.message}</p> : null}
               </div>
               <Field label="Reason" hint={`At least ${MIN_REASON} characters. This is recorded with your review.`} error={errors.reason?.message}>
-                <TextArea rows={3} {...register("reason")} />
+                <Textarea rows={3} {...register("reason")} />
               </Field>
               <FormDiscardBar dirty={isDirty} subject="brief review" onDiscard={() => form.reset(blankReview)} />
               {decision.error ? <PlainErrorNotice error={decision.error} /> : null}
@@ -133,10 +133,10 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
               </div>
             </div>
           ) : data.reviewable ? (
-            <Notice>An admin or owner must review this brief before it can be used.</Notice>
+            <ErrorNotice>An admin or owner must review this brief before it can be used.</ErrorNotice>
           ) : null}
         </>
       ) : null}
-    </Panel>
+    </Card>
   );
 }

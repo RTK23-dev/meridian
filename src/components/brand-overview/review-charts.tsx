@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui";
+import { useMediaQuery } from "@/lib/use-media-query";
 
 /** Chart colours come from the theme tokens. Fills use currentColor, set on the wrapper, and axis text uses fg-muted. */
 const tooltipStyle = { background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, color: "var(--color-fg)", fontSize: 12 };
@@ -9,6 +10,7 @@ type Bin = { range: string; count: number };
 
 /** Opportunity rank distribution from stored expected values. Renders nothing when no open opportunity has a stored value. */
 export function OpportunityChart({ rows }: { rows: Array<{ expectedValue: number; status: string }> }) {
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const open = rows.filter((row) => row.status === "open");
   if (!open.length) return null;
   const bins: Bin[] = [
@@ -31,7 +33,7 @@ export function OpportunityChart({ rows }: { rows: Array<{ expectedValue: number
           <XAxis dataKey="range" />
           <YAxis allowDecimals={false} />
           <Tooltip cursor={{ fill: "currentColor", fillOpacity: 0.08 }} contentStyle={tooltipStyle} />
-          <Bar dataKey="count" name="Opportunities" fill="currentColor" radius={[4, 4, 0, 0]}>
+          <Bar dataKey="count" name="Opportunities" fill="currentColor" radius={[4, 4, 0, 0]} isAnimationActive={!reduceMotion}>
             {bins.map((entry) => <Cell key={entry.range} />)}
           </Bar>
         </BarChart>
@@ -42,6 +44,7 @@ export function OpportunityChart({ rows }: { rows: Array<{ expectedValue: number
 
 /** Age of open reviews from stored timestamps. Renders nothing when no review is open. */
 export function ReviewAgeChart({ rows }: { rows: Array<{ status: string; createdAt: string }> }) {
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const open = rows.filter((row) => row.status === "open");
   if (!open.length) return null;
   const now = Date.now();
@@ -59,7 +62,7 @@ export function ReviewAgeChart({ rows }: { rows: Array<{ status: string; created
           <XAxis dataKey="range" />
           <YAxis allowDecimals={false} />
           <Tooltip cursor={{ fill: "currentColor", fillOpacity: 0.08 }} contentStyle={tooltipStyle} />
-          <Bar dataKey="count" name="Open reviews" fill="currentColor" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="count" name="Open reviews" fill="currentColor" radius={[4, 4, 0, 0]} isAnimationActive={!reduceMotion} />
         </BarChart>
       </ResponsiveContainer>
     </ChartPanel>

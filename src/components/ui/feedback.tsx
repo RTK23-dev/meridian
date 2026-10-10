@@ -15,6 +15,11 @@ export function Skeleton({ variant = "line", className, ...props }: HTMLAttribut
   return <div {...props} aria-hidden="true" className={cn("animate-pulse rounded bg-surface-2", shapes[variant], className)} />;
 }
 
+/** Fallback while a chart module loads. It fills the plot's box, so the page does not jump when the chart arrives. */
+export function ChartSkeleton({ label = "Loading chart", className }: { label?: string; className?: string }) {
+  return <div role="status" aria-label={label} className={cn("grid h-full w-full place-items-center", className)}><Skeleton className="h-full w-full" /></div>;
+}
+
 /** Loading state shaped like a screen: a header block, then cards, rows or a form. The region is announced once with its label. */
 export function ScreenSkeleton({ label, shape = "cards", className }: { label: string; shape?: "cards" | "rows" | "form"; className?: string }) {
   return <div role="status" aria-label={label} className={cn("space-y-6", className)}>
@@ -47,6 +52,13 @@ export function ErrorState({ message = "We could not load this information.", re
 
 export function ErrorNotice({ children }: { children: ReactNode }) {
   return <p className="flex items-center gap-2 text-sm text-danger" role="alert"><AlertTriangle aria-hidden="true" className="size-4" />{children}</p>;
+}
+
+/** Plain words for any thrown value. Used wherever a failed request is shown to a person. */
+export function errorText(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error) return error;
+  return "Something went wrong.";
 }
 
 export function NotConnected({ service = "This service" }: { service?: string }) {

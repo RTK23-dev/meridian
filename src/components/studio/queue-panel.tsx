@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Badge, Button, Field, Panel, SelectInput } from "@/components/ui";
+import { Badge, Button, Field, Card, SelectInput } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { queueScheduleSchema, type QueueScheduleInput } from "@/components/forms/client-schemas";
@@ -84,7 +84,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
         </p>
       </div>
 
-      <Panel className="space-y-4">
+      <Card className="space-y-4">
         <h3 className="font-display text-lg font-semibold flex items-center gap-2">
           <Share2 className="h-4 w-4 text-accent" aria-hidden="true" />
           Schedule Variant to Destination Accounts
@@ -162,9 +162,9 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
             {schedulePublishMutation.isPending ? "Enqueueing…" : `Enqueue to ${queueAccountIds.length} Account(s)`}
           </Button>
         </div>
-      </Panel>
+      </Card>
 
-      <Panel className="space-y-3">
+      <Card className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-display text-lg font-semibold flex items-center gap-2">
             <Clock className="h-4 w-4 text-accent" aria-hidden="true" />
@@ -178,7 +178,8 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
         {queueItems.length === 0 ? (
           <p className="text-sm text-fg-muted py-4 text-center">Publishing queue is currently empty.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left text-xs">
               <caption className="sr-only">Publishing jobs for this brand</caption>
               <thead className="border-b border-border text-fg-muted uppercase tracking-wider">
@@ -194,12 +195,6 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
               </thead>
               <tbody className="divide-y divide-border">
                 {queueItems.map((item) => {
-                  const badgeVariant =
-                    item.status === "published" ? "success"
-                    : item.status === "processing" ? "info"
-                    : item.status === "failed" ? "danger"
-                    : item.status === "cancelled" ? "neutral"
-                    : "warning";
                   return (
                     <tr key={item.id} className="hover:bg-surface-2">
                       <td className="py-3 pr-3 font-semibold capitalize">{item.platform}</td>
@@ -207,20 +202,11 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
                       <td className="py-3 pr-3 capitalize text-fg-muted">{item.targetType.replace(/_/g, " ")}</td>
                       <td className="py-3 pr-3 text-fg-muted">{new Date(item.scheduledTime).toLocaleString()}</td>
                       <td className="py-3 pr-3">
-                        <Badge variant={badgeVariant} className="capitalize">{item.status}</Badge>
+                        <Badge variant={queueTone(item.status)} className="capitalize">{item.status}</Badge>
                       </td>
                       <td className="py-3 pr-3 text-fg-muted">{item.attempts} / {item.maxAttempts}</td>
                       <td className="py-3 text-right">
-                        {canEdit && (item.status === "failed" || item.status === "cancelled") ? (
-                          <Button size="sm" variant="secondary" className="h-7 text-xs" disabled={retryJobMutation.isPending} onClick={() => retryJobMutation.mutate({ queueId: item.id })}>
-                            Retry
-                          </Button>
-                        ) : null}
-                        {canEdit && (item.status === "queued" || item.status === "processing") ? (
-                          <Button size="sm" variant="danger" className="h-7 text-xs ml-1" disabled={cancelJobMutation.isPending} onClick={() => cancelJobMutation.mutate({ queueId: item.id })}>
-                            Cancel
-                          </Button>
-                        ) : null}
+                        <QueueRowActions status={item.status} canEdit={canEdit} retryPending={retryJobMutation.isPending} cancelPending={cancelJobMutation.isPending} onRetry={() => retryJobMutation.mutate({ queueId: item.id })} onCancel={() => cancelJobMutation.mutate({ queueId: item.id })} />
                       </td>
                     </tr>
                   );
@@ -228,11 +214,31 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
               </tbody>
             </table>
           </div>
+          <ul className="grid gap-3 md:hidden">
+            {queueItems.map((item) => (
+              <li key={item.id} className="space-y-3 rounded-lg border border-border bg-surface p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold capitalize">{item.platform}</span>
+                  <Badge variant={queueTone(item.status)} className="capitalize">{item.status}</Badge>
+                </div>
+                <dl className="grid grid-cols-[minmax(6rem,35%)_1fr] gap-x-3 gap-y-2 text-xs">
+                  <dt className="font-semibold text-fg-muted">Creative ID</dt><dd className="break-all font-mono text-fg-muted">{item.creativeId}</dd>
+                  <dt className="font-semibold text-fg-muted">Type</dt><dd className="capitalize text-fg-muted">{item.targetType.replace(/_/g, " ")}</dd>
+                  <dt className="font-semibold text-fg-muted">Scheduled</dt><dd className="text-fg-muted">{new Date(item.scheduledTime).toLocaleString()}</dd>
+                  <dt className="font-semibold text-fg-muted">Attempts</dt><dd className="text-fg-muted">{item.attempts} / {item.maxAttempts}</dd>
+                </dl>
+                <div className="flex flex-wrap gap-2">
+                  <QueueRowActions status={item.status} canEdit={canEdit} retryPending={retryJobMutation.isPending} cancelPending={cancelJobMutation.isPending} onRetry={() => retryJobMutation.mutate({ queueId: item.id })} onCancel={() => cancelJobMutation.mutate({ queueId: item.id })} />
+                </div>
+              </li>
+            ))}
+          </ul>
+          </>
         )}
-      </Panel>
+      </Card>
 
       {queueReceipts.length > 0 ? (
-        <Panel className="space-y-3">
+        <Card className="space-y-3">
           <h3 className="font-display text-lg font-semibold flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
             Live Execution Receipts
@@ -247,7 +253,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
                 </div>
                 {rec.externalUrl ? (
                   <a href={rec.externalUrl} target="_blank" rel="noopener noreferrer" className="underline text-accent font-semibold">
-                    View External Post &rarr;
+                    View External Post &rarr;<span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 ) : (
                   <Badge variant="success">Confirmed Live</Badge>
@@ -255,8 +261,36 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
               </div>
             ))}
           </div>
-        </Panel>
+        </Card>
       ) : null}
     </div>
   );
+}
+
+/** The table and the phone cards share one tone mapping, so a status reads the same at every width. */
+function queueTone(status: string): "success" | "info" | "danger" | "neutral" | "warning" {
+  if (status === "published") return "success";
+  if (status === "processing") return "info";
+  if (status === "failed") return "danger";
+  if (status === "cancelled") return "neutral";
+  return "warning";
+}
+
+/** Retry and cancel for one queue row. The role check stays here, so both layouts keep it. */
+function QueueRowActions({ status, canEdit, retryPending, cancelPending, onRetry, onCancel }: {
+  status: string;
+  canEdit: boolean;
+  retryPending: boolean;
+  cancelPending: boolean;
+  onRetry: () => void;
+  onCancel: () => void;
+}) {
+  return <>
+    {canEdit && (status === "failed" || status === "cancelled") ? (
+      <Button size="sm" variant="secondary" className="h-7 text-xs" disabled={retryPending} onClick={onRetry}>Retry</Button>
+    ) : null}
+    {canEdit && (status === "queued" || status === "processing") ? (
+      <Button size="sm" variant="danger" className="ml-1 h-7 text-xs" disabled={cancelPending} onClick={onCancel}>Cancel</Button>
+    ) : null}
+  </>;
 }

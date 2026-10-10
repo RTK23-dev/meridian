@@ -1,5 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Button, PageHeader, ScreenSkeleton, Skeleton } from "@/components/ui";
+import { lazy, Suspense } from "react";
+import { Button, ChartSkeleton, PageHeader, ScreenSkeleton, Skeleton } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { brainCompleteness } from "@/lib/meridian/brain";
@@ -8,9 +9,12 @@ import { countDecidedReviews, missingItems, nextBestAction, pipelineStages } fro
 import { PipelineStepper } from "@/components/brand-overview/pipeline-stepper";
 import { NextActionCard } from "@/components/brand-overview/next-action-card";
 import { MissingChecklist } from "@/components/brand-overview/missing-checklist";
-import { OpportunityChart, ReviewAgeChart } from "@/components/brand-overview/review-charts";
 import { BrandDetailsCard } from "@/components/brand-overview/brand-details-card";
 import { DangerZone } from "@/components/brand-overview/danger-zone";
+
+// The two review charts use recharts. They load when the page has open items to chart, not with the rest of the overview.
+const OpportunityChart = lazy(() => import("@/components/brand-overview/review-charts").then((module) => ({ default: module.OpportunityChart })));
+const ReviewAgeChart = lazy(() => import("@/components/brand-overview/review-charts").then((module) => ({ default: module.ReviewAgeChart })));
 
 export const Route = createFileRoute("/_app/brands/$brandId/")({ staticData: { pageTitle: "Overview" }, component: BrandPage });
 
@@ -77,8 +81,8 @@ function BrandHome({ brandId }: { brandId: string }) {
 
       {openOpportunities.length || openReviews.length ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          {openOpportunities.length ? <OpportunityChart rows={openOpportunities} /> : null}
-          {openReviews.length ? <ReviewAgeChart rows={openReviews} /> : null}
+          {openOpportunities.length ? <Suspense fallback={<ChartSkeleton className="h-52" />}><OpportunityChart rows={openOpportunities} /></Suspense> : null}
+          {openReviews.length ? <Suspense fallback={<ChartSkeleton className="h-52" />}><ReviewAgeChart rows={openReviews} /></Suspense> : null}
         </div>
       ) : null}
 

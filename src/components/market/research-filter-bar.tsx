@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { DayPicker, type DateRange } from "react-day-picker";
-import { Button, Field, Popover, PopoverContent, PopoverTrigger, SelectInput, TextInput } from "@/components/ui";
+import { Button, Field, Popover, PopoverContent, PopoverTrigger, SelectInput, Input } from "@/components/ui";
 import { FIELD_FILTERS, META_SOURCE_KEY, META_SOURCE_LABEL, RESEARCH_STATES, parseSeconds, type ResearchFilters } from "./research-model";
 
 type FilterBarProps = {
@@ -18,8 +18,8 @@ type FilterBarProps = {
 export function ResearchFilterBar({ filters, update, reset, topics, activeCount, visibleCount, totalCount }: FilterBarProps) {
   return <div className="space-y-4">
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Field label="Search"><TextInput type="search" value={filters.search} onChange={(event) => update("search", event.currentTarget.value)} placeholder="Advertiser, transcript, hook…" /></Field>
-      <Field label="Advertiser"><TextInput value={filters.advertiser} onChange={(event) => update("advertiser", event.currentTarget.value)} placeholder="Filter advertiser" /></Field>
+      <Field label="Search"><Input type="search" value={filters.search} onChange={(event) => update("search", event.currentTarget.value)} placeholder="Advertiser, transcript, hook…" /></Field>
+      <Field label="Advertiser"><Input value={filters.advertiser} onChange={(event) => update("advertiser", event.currentTarget.value)} placeholder="Filter advertiser" /></Field>
       <Field label="Source"><SelectInput value={filters.source} onChange={(event) => update("source", event.currentTarget.value === META_SOURCE_KEY ? META_SOURCE_KEY : "all")}>
         <option value="all">All sources</option>
         <option value={META_SOURCE_KEY}>{META_SOURCE_LABEL}</option>
@@ -47,8 +47,8 @@ export function ResearchFilterBar({ filters, update, reset, topics, activeCount,
           <option value="0.65">0.65</option>
           <option value="0.8">0.80</option>
         </SelectInput></Field>
-        <Field label="Minimum duration (seconds)"><TextInput type="number" min="0" step="1" value={filters.minimumDurationSeconds ?? ""} onChange={(event) => update("minimumDurationSeconds", parseSeconds(event.currentTarget.value))} /></Field>
-        <Field label="Maximum duration (seconds)"><TextInput type="number" min="0" step="1" value={filters.maximumDurationSeconds ?? ""} onChange={(event) => update("maximumDurationSeconds", parseSeconds(event.currentTarget.value))} /></Field>
+        <Field label="Minimum duration (seconds)"><Input type="number" min="0" step="1" value={filters.minimumDurationSeconds ?? ""} onChange={(event) => update("minimumDurationSeconds", parseSeconds(event.currentTarget.value))} /></Field>
+        <Field label="Maximum duration (seconds)"><Input type="number" min="0" step="1" value={filters.maximumDurationSeconds ?? ""} onChange={(event) => update("maximumDurationSeconds", parseSeconds(event.currentTarget.value))} /></Field>
       </div>
     </details>
 
@@ -98,7 +98,7 @@ function CapturedDateFilter({ from, to, onChange }: { from: Date | null; to: Dat
             month_grid: "w-full border-collapse",
             weekday: "w-11 pb-1 text-xs font-semibold text-fg-muted",
             day: "p-0.5 text-center",
-            day_button: "size-10 rounded-md hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent",
+            day_button: "size-10 rounded-md hover:bg-surface-2 pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-accent",
             range_middle: "bg-accent-soft",
             range_start: "bg-accent-soft",
             range_end: "bg-accent-soft",

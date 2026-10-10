@@ -73,7 +73,7 @@ export function LogoUploader({ brandId, canEdit }: { brandId: string; canEdit: b
       <div className="space-y-2">
         <p className="text-sm font-semibold">Stored</p>
         {stored ? (
-          <img src={`data:${stored.mime};base64,${stored.body}`} alt="Stored logo" className="h-16 w-auto rounded-md border border-border bg-bg object-contain p-2" />
+          <img src={`data:${stored.mime};base64,${stored.body}`} alt="Stored logo" height={64} decoding="async" className="h-16 w-auto rounded-md border border-border bg-bg object-contain p-2" />
         ) : assetsQuery.isError ? null : (
           <p className="text-sm text-fg-muted">No logo stored.</p>
         )}
@@ -81,7 +81,7 @@ export function LogoUploader({ brandId, canEdit }: { brandId: string; canEdit: b
       {selected ? (
         <div className="space-y-2">
           <p className="text-sm font-semibold">Selected</p>
-          <img src={selected.url} alt={`Preview of ${selected.file.name}`} className="h-16 w-auto rounded-md border border-border bg-bg object-contain p-2" />
+          <img src={selected.url} alt={`Preview of ${selected.file.name}`} height={64} decoding="async" className="h-16 w-auto rounded-md border border-border bg-bg object-contain p-2" />
           <p className="break-all text-xs text-fg-muted">{selected.file.name}, {formatFileSize(selected.file.size)}</p>
         </div>
       ) : null}

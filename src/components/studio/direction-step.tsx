@@ -1,9 +1,8 @@
-import { useState } from "react";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, Field, Panel, TextArea } from "@/components/ui";
+import { Button, Field, Card, Textarea } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { IdeaToTestBadge, Term } from "@/components/glossary";
@@ -33,7 +32,7 @@ export function DirectionReasonField({ id, registration, error }: { id: string; 
       hint="This is recorded with your decision. It does not mean the brief has passed its gate."
       error={error}
     >
-      <TextArea rows={2} {...registration} />
+      <Textarea rows={2} {...registration} />
     </Field>
   );
 }
@@ -58,7 +57,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
   return (
     <div className="space-y-5">
       {recommendation ? (
-        <Panel>
+        <Card>
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">
             Discovered · {recommendation.posture === "exploitation" ? "Builds on past results" : "Tests something new"} · {recommendation.angle}
           </p>
@@ -103,16 +102,16 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
               </Button>
             </div>
           ) : null}
-        </Panel>
+        </Card>
       ) : (
-        <Panel>
+        <Card>
           <h2 className="font-display text-2xl">No discovered opportunity</h2>
           <p className="mt-2 text-sm text-fg-muted">
             {session.observationCount === 0
               ? "Add competitor ads you have seen. An empty library is not whitespace."
               : "Stored creatives do not yet show a direction beyond the starting ideas. Nothing was invented."}
           </p>
-        </Panel>
+        </Card>
       )}
 
       {session.exploration ? (
@@ -120,7 +119,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
       ) : null}
 
       {recommendation ? (
-        <Panel>
+        <Card>
           <h2 className="font-display text-2xl">Other directions</h2>
           <p className="mt-2 text-sm text-fg-muted">
             The brief is always written from the recommended direction. These are the other open opportunities, for comparison.
@@ -142,28 +141,28 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
               ))}
             </ul>
           )}
-        </Panel>
+        </Card>
       ) : null}
 
       {session.semantic.clusters.length > 0 ? (
-        <Panel>
+        <Card>
           <h2 className="font-display text-2xl">Semantic clusters</h2>
           <p className="mt-2 text-sm text-fg-muted">{session.semantic.note}</p>
           <ul className="mt-3 space-y-2 text-sm">
             {session.semantic.clusters.map((cluster) => <li key={cluster.label}>{cluster.summary}</li>)}
           </ul>
-        </Panel>
+        </Card>
       ) : (
         <p className="text-sm text-fg-muted">{session.semantic.note}</p>
       )}
 
       {session.whitespace.length > 0 ? (
-        <Panel>
+        <Card>
           <h2 className="font-display text-2xl">Whitespace in the stored set</h2>
           <ul className="mt-3 space-y-2 text-sm">
             {session.whitespace.map((item) => <li key={item.underused}>{item.whyTest}</li>)}
           </ul>
-        </Panel>
+        </Card>
       ) : null}
 
       <p className="text-xs text-fg-muted">

@@ -2,7 +2,7 @@ import { useId } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, TextArea } from "@/components/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Textarea } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { planCostText } from "./plan-cost.ts";
@@ -86,7 +86,7 @@ export function PlanDialog({ plan, approving, rejecting, onApprove, onReject, on
               </ul>
             </div>
             <Field label="Reason for rejecting (optional)" hint="Recorded with the rejection if you give one." error={errors.reason?.message}>
-              <TextArea {...register("reason")} rows={2} maxLength={200} disabled={busy} />
+              <Textarea {...register("reason")} rows={2} maxLength={200} disabled={busy} />
             </Field>
             <UnsavedChangesBar
               dirty={isDirty}

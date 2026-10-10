@@ -4,9 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { FieldErrors, UseFormRegister } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Button, Card, Field, ScreenSkeleton, SelectInput, TextArea,
-} from "@/components/ui";
+import { Button, Card, Field, ScreenSkeleton, SelectInput, Textarea } from "@/components/ui";
 import { PlainErrorMessage, PlainErrorState } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { useWorkspace } from "@/components/workspace";
@@ -292,6 +290,6 @@ function BrainTextField({ fieldKey, shared }: { fieldKey: BrainKey; shared: Form
     hint={value.trim() && source ? provenanceLabel(source) : "Empty. Not inferred."}
     error={shared.errors[fieldKey]?.message}
   >
-    <TextArea {...shared.register(fieldKey)} data-brain-field="" disabled={!shared.canEdit} maxLength={4000} />
+    <Textarea {...shared.register(fieldKey)} data-brain-field="" disabled={!shared.canEdit} maxLength={4000} />
   </Field>;
 }

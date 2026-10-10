@@ -2,7 +2,7 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, ErrorState, Field, Input, Panel, TextArea } from "@/components/ui";
+import { Button, ErrorState, Field, Input, Card, Textarea } from "@/components/ui";
 import { PlainErrorNotice } from "@/components/plain-error";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
@@ -74,7 +74,7 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
   if (held.data.length === 0 && !notice) return null;
 
   return (
-    <Panel>
+    <Card>
       <h3 className="font-display text-xl">Held budget reservations</h3>
       <p className="mt-1 text-sm text-muted">
         The provider outcome is uncertain, so this budget stays reserved until an admin resolves it. Nothing settles on its own.
@@ -94,7 +94,7 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
           />
         ))}
       </ul>
-    </Panel>
+    </Card>
   );
 }
 
@@ -122,7 +122,7 @@ function HeldReservationRow({ row, busy, onResolve }: {
         {row.errorCode ? ` (${row.errorCode})` : ""}. Held since {new Date(row.heldSince).toLocaleString()}.
       </p>
       <Field label="Why this outcome was resolved" hint="Required. At least 10 characters." required error={errors.note?.message}>
-        <TextArea {...register("note")} />
+        <Textarea {...register("note")} />
       </Field>
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Provider invoice or usage reference" hint="Needed only when the provider billed the job." error={errors.reference?.message}>
