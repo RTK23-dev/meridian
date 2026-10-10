@@ -124,9 +124,9 @@ export type NextAction = {
 export type Recommendation = { label: string; reason: string };
 
 /**
- * One next action with one CTA. A thin brain comes first, because every recommendation cites the brain. Then the first
- * stage with work waiting, then the first stage that has not started. The stored recommendation replaces the generic
- * Opportunity copy when one exists.
+ * One next action with one CTA. A thin brain comes first, because every recommendation cites the brain. Then open reviews,
+ * because a person has to decide them, then the first stage in progress, then the first stage that has not started. The
+ * stored recommendation replaces the generic Opportunity copy when one exists.
  */
 export function nextBestAction(input: {
   brainFilled: number;
@@ -143,8 +143,19 @@ export function nextBestAction(input: {
       usesRecommendation: false,
     };
   }
-  const next = input.stages.find((stage) => stage.state === "in_progress")
+  const next = input.stages.find((stage) => stage.key === "review" && stage.state === "in_progress")
+    ?? input.stages.find((stage) => stage.state === "in_progress")
     ?? input.stages.find((stage) => stage.state === "not_started");
+  if (next?.key === "review" && next.state === "in_progress") {
+    const open = next.count ?? 0;
+    return {
+      title: `${open} review${open === 1 ? "" : "s"} waiting`,
+      body: "Each held creative needs an approve or reject decision.",
+      cta: "Open reviews",
+      to: next.to,
+      usesRecommendation: false,
+    };
+  }
   if (!next) {
     return {
       title: "Review current learning",
