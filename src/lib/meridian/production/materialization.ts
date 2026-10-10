@@ -484,7 +484,8 @@ export async function completeProductionJob(
     openReview?: boolean;
   } = {},
 ): Promise<MaterializedArtifact> {
-  const modality = await modalityOf(sql, ref);
+  const shape = await jobShapeOf(sql, ref);
+  const modality = shape.modality;
   const materialized =
     modality === "video"
       ? await materializeVideoArtifact(sql, ref)
@@ -502,17 +503,29 @@ export async function completeProductionJob(
     });
   }
   await settleProductionReservation(sql, ref);
+  if (shape.parentJobId) {
+    await settleCarouselParent(sql, {
+      organizationId: ref.organizationId,
+      brandId: ref.brandId,
+      productionJobId: shape.parentJobId,
+    });
+  }
   return materialized;
 }
 
-async function modalityOf(sql: Sql, ref: ProductionJobRef): Promise<ProductionModality> {
-  const rows = await sql<{ modality: ProductionModality }>`
-    select modality from production_jobs
+interface JobShape {
+  modality: ProductionModality;
+  parentJobId: string | null;
+}
+
+async function jobShapeOf(sql: Sql, ref: ProductionJobRef): Promise<JobShape> {
+  const rows = await sql<{ modality: ProductionModality; parent_job_id: string | null }>`
+    select modality, parent_job_id from production_jobs
     where id = ${ref.productionJobId} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
     limit 1
   `;
   if (!rows[0]) throw new Error("Production job was not found in this tenant.");
-  return rows[0].modality;
+  return { modality: rows[0].modality, parentJobId: rows[0].parent_job_id };
 }
 
 export type PlanSettlement = "pending" | "completed" | "partially_completed" | "failed" | "unchanged";
@@ -561,4 +574,128 @@ export async function settleCreativePlanIfComplete(
     reason: "Plan settled from durable production job outcomes.",
   });
   return target;
+}
+
+export type CarouselSettlement = "pending" | "completed" | "incomplete" | "unchanged";
+
+/**
+ * Settles a carousel parent from its slides (P4b-3). The slides are the carousel: each is an image job with this parent and
+ * its position in `sequence_index`. The parent completes only when every expected slide is materialized, and it becomes
+ * incomplete when a slide fails or the run is interrupted before every slide exists. An incomplete carousel creates no
+ * carousel creative, and the slides that did complete keep their own creatives and assets. Slides are always read in
+ * `sequence_index` order, never in completion or creation order. Idempotent: a settled parent is returned unchanged.
+ */
+export async function settleCarouselParent(
+  sql: Sql,
+  ref: ProductionJobRef,
+  options: { interrupted?: boolean } = {},
+): Promise<CarouselSettlement> {
+  const parents = await sql<{ id: string; status: string; input: unknown; creative_plan_id: string | null; modality: string }>`
+    select id, status, input, creative_plan_id, modality from production_jobs
+    where id = ${ref.productionJobId} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
+    limit 1
+  `;
+  const parent = parents[0];
+  if (!parent) throw new Error("Carousel job was not found in this tenant.");
+  if (parent.modality !== "carousel") throw new Error(`Production job '${parent.id}' is a ${parent.modality} job, not a carousel.`);
+  if (parent.status !== "SUBMITTING") return "unchanged";
+
+  const expected = Number(parseJson(parent.input).slideCount);
+  if (!Number.isInteger(expected) || expected < 1) throw new Error("Carousel job has no slide count; refusing to settle it.");
+
+  const children = await sql<{
+    id: string;
+    status: string;
+    sequence_index: number | null;
+    materialized_at: unknown;
+    materialized_creative_id: string | null;
+  }>`
+    select id, status, sequence_index, materialized_at, materialized_creative_id from production_jobs
+    where parent_job_id = ${parent.id} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
+    order by sequence_index asc, id asc
+  `;
+  const done = (child: (typeof children)[number]) => child.status === SUCCESS_TERMINAL && child.materialized_at != null;
+  const failed = (child: (typeof children)[number]) => FAILURE_TERMINAL.has(child.status);
+
+  // A slide that is still running, ambiguous, or completed but not yet materialized keeps the carousel pending.
+  if (children.some((child) => !done(child) && !failed(child))) return "pending";
+
+  const failedSlides = children.filter(failed).map((child) => child.sequence_index);
+  const missing = children.length < expected;
+  // While the run is still creating slides, a failed slide does not decide the carousel: later slides may yet complete.
+  if (missing && !options.interrupted) return "pending";
+  if (failedSlides.length > 0 || missing) {
+    const reason = failedSlides.length > 0
+      ? `Slides ${failedSlides.map((index) => (index ?? 0) + 1).join(", ")} did not complete.`
+      : "The run stopped before every slide was created.";
+    await sql`
+      update production_jobs
+      set status = 'FAILED', error_code = 'CAROUSEL_INCOMPLETE', error_message = ${reason},
+          output = ${JSON.stringify({ completedSlides: children.filter(done).map((child) => child.sequence_index) })},
+          updated_at = now()
+      where id = ${parent.id} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId} and status = 'SUBMITTING'
+    `;
+    return "incomplete";
+  }
+  // Every slide is materialized. The carousel references them in order and is judged by its slides, not separately.
+  if (!parent.creative_plan_id) throw new Error("Carousel job belongs to no CreativePlan; refusing to materialize it.");
+  const lineage = await loadPlanLineage(sql, ref, parent.creative_plan_id);
+  const slideRows: Array<{ index: number; jobId: string; creativeId: string; assetId: string; status: string; rawText: string }> = [];
+  for (const child of children) {
+    const creativeId = child.materialized_creative_id;
+    if (!creativeId) throw new Error(`Carousel slide '${child.id}' has no creative; refusing to materialize the carousel.`);
+    const rows = await sql<{ status: string; raw_text: string }>`
+      select status, raw_text from creative_records
+      where id = ${creativeId} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
+      limit 1
+    `;
+    if (!rows[0]) throw new Error(`Carousel slide creative '${creativeId}' was not found in this tenant.`);
+    slideRows.push({
+      index: child.sequence_index ?? slideRows.length,
+      jobId: child.id,
+      creativeId,
+      assetId: `image-asset-${child.id}`,
+      status: rows[0].status,
+      rawText: rows[0].raw_text,
+    });
+  }
+
+  const carouselCreativeId = `carousel-creative-${parent.id}`;
+  const status = slideRows.some((slide) => slide.status === "rejected") ? "rejected" : "in_review";
+  const slides = slideRows.map((slide) => ({ index: slide.index, jobId: slide.jobId, creativeId: slide.creativeId, assetId: slide.assetId }));
+  await sql`
+    insert into creative_records (
+      id, organization_id, brand_id, origin, title, raw_text, product_name, hook, hook_type, angle,
+      message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
+    ) values (
+      ${carouselCreativeId}, ${ref.organizationId}, ${ref.brandId}, 'generated',
+      ${lineage.planTitle ? `${lineage.planTitle} carousel` : "Carousel"}, ${slideRows.map((slide) => slide.rawText).join("\n\n")},
+      '', '', '', '', '', '', 'carousel', '', ${lineage.opportunityId}, ${lineage.briefId}, ${status}, ${lineage.approvedBy},
+      ${JSON.stringify({
+        kind: "carousel",
+        productionJobId: parent.id,
+        jevDecisionId: lineage.decisionId,
+        planId: parent.creative_plan_id,
+        slides,
+      })}
+    )
+    on conflict (id) do nothing
+  `;
+  if (status === "in_review") {
+    await openProductionReview(sql, {
+      organizationId: ref.organizationId,
+      brandId: ref.brandId,
+      creativeId: carouselCreativeId,
+      decisionId: lineage.decisionId,
+      subjectLabel: "Carousel",
+    });
+  }
+  await sql`
+    update production_jobs
+    set status = 'COMPLETED', materialized_creative_id = ${carouselCreativeId},
+        materialized_at = coalesce(materialized_at, now()), output = ${JSON.stringify({ slides })},
+        error_code = null, error_message = null, updated_at = now()
+    where id = ${parent.id} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId} and status = 'SUBMITTING'
+  `;
+  return "completed";
 }

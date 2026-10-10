@@ -593,6 +593,7 @@ test("E2E Path 5: Durable Production Jobs Poller Worker Loop", async () => {
   };
 
   const pollResult = await pollProductionJobs(sql, {
+    organizationId: tenant.organizationId,
     fetchImpl: fakeFetch,
     driveClient: mockDrive,
     router: testRouter,

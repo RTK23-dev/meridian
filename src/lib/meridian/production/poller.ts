@@ -11,7 +11,7 @@ import { productionRouter, type ProductionRouter } from "./router.ts";
 import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
 import type { ProductionJob } from "./types.ts";
 import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
-import { completeProductionJob, settleCreativePlanIfComplete } from "./materialization.ts";
+import { completeProductionJob, settleCarouselParent, settleCreativePlanIfComplete } from "./materialization.ts";
 
 const POLLER_ACTOR_ID = "production-poller";
 
@@ -48,6 +48,8 @@ async function settlePlanOf(
 
 export type PollOptions = {
   limit?: number;
+  /** Claim only this organization's jobs. Omitted, the worker claims across every tenant, as it does in production. */
+  organizationId?: string;
   fetchImpl?: typeof fetch;
   driveClient?: ArtifactDrive;
   router?: ProductionRouter;
@@ -68,6 +70,7 @@ export async function pollProductionJobs(
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   const drive = options.driveClient || defaultArtifactDrive();
   const router = options.router || productionRouter;
+  const scope = options.organizationId ?? null;
 
   // Claim pending jobs atomically. A plain SELECT ... FOR UPDATE outside an explicit
   // transaction releases its row locks as soon as the statement ends, allowing two
@@ -98,6 +101,7 @@ export async function pollProductionJobs(
           or (status = 'COMPLETED' and materialized_at is null and artifact_id is not null)
         )
         and (next_poll_at is null or next_poll_at <= now())
+        and (${scope}::text is null or organization_id = ${scope})
       order by created_at asc
       limit ${limit}
       for update skip locked
@@ -140,6 +144,25 @@ export async function pollProductionJobs(
         );
         await settlePlanOf(sql, row);
         result.rendered++;
+      } catch (error) {
+        await recordMaterializationRetry(sql, row, error);
+        result.polled++;
+      }
+      continue;
+    }
+
+    if (row.modality === "carousel") {
+      // A carousel has no provider call of its own. It settles from its slides, which the executor or the poller completes.
+      try {
+        const outcome = await settleCarouselParent(sql, {
+          organizationId: row.organization_id,
+          brandId: row.brand_id,
+          productionJobId: row.id,
+        });
+        if (outcome === "completed") result.rendered++;
+        else if (outcome === "incomplete") result.failed++;
+        else result.polled++;
+        if (outcome === "completed" || outcome === "incomplete") await settlePlanOf(sql, row);
       } catch (error) {
         await recordMaterializationRetry(sql, row, error);
         result.polled++;

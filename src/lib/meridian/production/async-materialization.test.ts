@@ -129,7 +129,7 @@ test("queued to completed: the poller materializes the artifact and completes th
     assert.equal(reservation!.status, "RESERVED", "reservation is held while the render is in flight");
     assert.deepEqual(await artifactCounts(sql, tenant), { creatives: 0, assets: 0, reviews: 0 });
 
-    const poll = await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    const poll = await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
     assert.equal(poll.rendered, 1);
 
     const [row] = await productionJobs(sql, tenant);
@@ -174,7 +174,7 @@ test("poller materializes a job finalized before a crash, without contacting the
     assert.deepEqual(await artifactCounts(sql, tenant), { creatives: 0, assets: 0, reviews: 0 }, "nothing materialized yet");
 
     const pollsBefore = injected.polled.length;
-    const poll = await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    const poll = await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
     assert.equal(poll.rendered, 1);
     assert.equal(injected.polled.length, pollsBefore, "no provider call for an already-finalized artifact");
     assert.deepEqual(await artifactCounts(sql, tenant), { creatives: 1, assets: 1, reviews: 1 });
@@ -192,12 +192,12 @@ test("duplicate polls never duplicate creative, asset, review, or ledger rows", 
   const injected = injectProvider("google_omni", async (_spec, index) => queued(index), async (id) => completedWithBytes(id));
   try {
     await execute(sql, tenant, tenant.plan);
-    await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
     const [reservation] = await reservationsFor(sql, tenant.plan.id);
 
     for (let i = 0; i < 3; i += 1) {
       await resetPollSchedule(sql, tenant);
-      const again = await pollProductionJobs(sql, { driveClient: googleDriveClient });
+      const again = await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
       assert.equal(again.rendered, 0, "a materialized job is not claimed again");
     }
 
@@ -235,7 +235,7 @@ test("crash mid-materialization: a partial write is completed exactly once on re
       values (${`video-creative-${row!.id}`}, ${tenant.organizationId}, ${tenant.brandId}, 'generated', 'partial', '', '', '', '', '', '', '', '', '', ${tenant.briefId}, 'in_review', 'test-user', ${JSON.stringify({ kind: "video" })})
     `;
 
-    await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
 
     assert.deepEqual(await artifactCounts(sql, tenant), { creatives: 1, assets: 1, reviews: 1 }, "the partial creative is completed, not duplicated");
     const [after] = await productionJobs(sql, tenant);
@@ -261,13 +261,13 @@ test("multiple jobs in one plan: the plan completes only after every job is mate
     assert.equal(reservations.length, 2, "one reservation per video job");
     assert.ok(reservations.every((r) => r.production_job_id), "each reservation is linked to its job");
 
-    await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
     assert.equal(await planStatus(sql, tenant.plan.id), "executing", "one job still in flight keeps the plan open");
     assert.deepEqual(await artifactCounts(sql, tenant), { creatives: 1, assets: 1, reviews: 1 });
 
     injected.setPoll(async (id) => completedWithBytes(id));
     await resetPollSchedule(sql, tenant);
-    await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
 
     assert.deepEqual(await artifactCounts(sql, tenant), { creatives: 2, assets: 2, reviews: 2 });
     assert.equal(await planStatus(sql, tenant.plan.id), "completed");
@@ -343,7 +343,7 @@ test("a brief edited while production is in flight does not change the creative 
     });
     await sql`update briefs set title = 'EDITED TITLE' where id = ${tenant.briefId}`;
 
-    await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
     const [creative] = await sql<{ title: string; workflow: string }>`select title, workflow from creative_records where brief_id = ${tenant.briefId}`;
     assert.ok(creative, "a creative is materialized");
     assert.equal(creative.title, "Kitchen sponge video", "the title is the plan's, not the edited brief's");
@@ -374,7 +374,7 @@ test("artifact integrity: a corrupt stored record is never materialized, and a r
     const [stored] = await sql<{ sha256: string }>`select sha256 from storage_objects where id = ${finalizedRow!.artifact_id}`;
     await sql`update storage_objects set sha256 = 'not-a-sha256' where id = ${finalizedRow!.artifact_id}`;
 
-    await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
     const [failed] = await productionJobs(sql, tenant);
     assert.equal(failed!.materialized_at, null, "a corrupt artifact is not materialized");
     assert.match(failed!.error_message ?? "", /SHA-256/, "the refusal is recorded durably");
@@ -383,7 +383,7 @@ test("artifact integrity: a corrupt stored record is never materialized, and a r
     // Repair the record; the job is retried from the durable state and materialized exactly once.
     await sql`update storage_objects set sha256 = ${stored!.sha256} where id = ${finalizedRow!.artifact_id}`;
     await resetPollSchedule(sql, tenant);
-    await pollProductionJobs(sql, { driveClient: googleDriveClient });
+    await pollProductionJobs(sql, { driveClient: googleDriveClient, organizationId: tenant.organizationId });
     assert.deepEqual(await artifactCounts(sql, tenant), { creatives: 1, assets: 1, reviews: 1 });
     assert.equal(await planStatus(sql, tenant.plan.id), "completed");
   } finally {
