@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { hasRole, isRole } from "@/lib/meridian/access";
+import { withTransaction } from "@/lib/meridian/learning/store";
 import { summarizeUsage } from "@/lib/meridian/observability/usage";
 import {
   countsByStatus,
@@ -108,38 +109,65 @@ export const getWorkerHealth = createServerFn({ method: "POST" })
     return workerHealthView({ beats: health.beats, counts: health.counts, now: Date.now() });
   });
 
+async function currentJobStatus(sql: Sql, organizationId: string, jobId: string): Promise<{ status: string; cancelRequested: boolean } | null> {
+  const rows = await sql<{ status: string; cancel_requested: boolean }>`
+    select status, cancel_requested from jobs where id = ${jobId} and organization_id = ${organizationId} limit 1
+  `;
+  const row = rows[0];
+  return row ? { status: row.status, cancelRequested: row.cancel_requested === true } : null;
+}
+
+/** Re-queues one dead job. Only dead jobs qualify. The job update and its audit entry are one transaction. */
 export const retryJob = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ({ organizationId: inputText((input as { organizationId?: unknown })?.organizationId, "Workspace"), jobId: inputText((input as { jobId?: unknown })?.jobId, "Job") }))
+  .validator((input: unknown) => jobRefInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await requireAdmin(context.userId, data.organizationId);
-    const rows = await sql<{ id: string; brand_id: string | null }>`
-      update jobs set status = 'queued', attempts = 0, last_error = '', cancel_requested = false,
-        run_after = now(), updated_at = now()
-      where id = ${data.jobId} and organization_id = ${data.organizationId} and status = 'dead'
-      returning id, brand_id
-    `;
-    const job = rows[0];
-    if (!job) throw new Error("That dead-letter job is no longer available.");
-    await sql`insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
-      values (${crypto.randomUUID()}, ${data.organizationId}, ${job.brand_id}, ${context.userId}, 'job.retried', 'job', ${job.id}, '{}')`;
-    return { status: "queued" as const };
+    return withTransaction(sql, async (tx) => {
+      const rows = await tx<{ id: string; brand_id: string | null }>`
+        update jobs set status = 'queued', attempts = 0, last_error = '', cancel_requested = false,
+          lease_until = null, run_after = now(), updated_at = now()
+        where id = ${data.jobId} and organization_id = ${data.organizationId} and status = 'dead'
+        returning id, brand_id
+      `;
+      const job = rows[0];
+      if (!job) {
+        const current = await currentJobStatus(tx, data.organizationId, data.jobId);
+        if (!current) throw new Error("That job is not available in this workspace.");
+        throw new Error(`Only dead jobs can be retried. This job is ${current.status}.`);
+      }
+      await tx`insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
+        values (${crypto.randomUUID()}, ${data.organizationId}, ${job.brand_id}, ${context.userId}, 'job.retried', 'job', ${job.id}, '{}')`;
+      return { status: "queued" as const, jobId: job.id };
+    });
   });
 
+/**
+ * Asks for a queued job to be cancelled, using cancel_requested. The worker never claims a job with cancel_requested set,
+ * and moves it to "cancelled" on its next pass. A running job is not cancelled here.
+ */
 export const cancelJob = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ({ organizationId: inputText((input as { organizationId?: unknown })?.organizationId, "Workspace"), jobId: inputText((input as { jobId?: unknown })?.jobId, "Job") }))
+  .validator((input: unknown) => jobRefInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await requireAdmin(context.userId, data.organizationId);
-    const rows = await sql<{ id: string }>`
-      update jobs set cancel_requested = true, updated_at = now()
-      where id = ${data.jobId} and organization_id = ${data.organizationId} and status in ('queued', 'retry')
-      returning id
-    `;
-    if (!rows[0]) throw new Error("Only queued or retrying jobs can be cancelled.");
-    await sql`insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
-      values (${crypto.randomUUID()}, ${data.organizationId}, null, ${context.userId}, 'job.cancel_requested', 'job', ${rows[0].id}, '{}')`;
-    return { status: "cancel_requested" as const };
+    return withTransaction(sql, async (tx) => {
+      const rows = await tx<{ id: string; brand_id: string | null }>`
+        update jobs set cancel_requested = true, updated_at = now()
+        where id = ${data.jobId} and organization_id = ${data.organizationId} and status = 'queued' and cancel_requested = false
+        returning id, brand_id
+      `;
+      const job = rows[0];
+      if (!job) {
+        const current = await currentJobStatus(tx, data.organizationId, data.jobId);
+        if (!current) throw new Error("That job is not available in this workspace.");
+        if (current.status === "queued" && current.cancelRequested) return { status: "cancel_requested" as const, jobId: data.jobId };
+        throw new Error(`Only queued jobs can be cancelled. This job is ${current.status}.`);
+      }
+      await tx`insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
+        values (${crypto.randomUUID()}, ${data.organizationId}, ${job.brand_id}, ${context.userId}, 'job.cancel_requested', 'job', ${job.id}, '{}')`;
+      return { status: "cancel_requested" as const, jobId: job.id };
+    });
   });
 
 export const listUsage = createServerFn({ method: "POST" })
