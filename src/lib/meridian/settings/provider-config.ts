@@ -22,6 +22,7 @@ import { withTransaction } from "../learning/store.ts";
 import { storeVaultCredential, retrieveVaultCredential, deleteVaultCredential, type VaultCredentialPayload } from "../vault/service.ts";
 import { resolveJevConfig } from "../jev/config.ts";
 import { resolveCredential, sharedDefaultOptedIn } from "../credentials/resolve.ts";
+import { isCostMode, resolveCostMode } from "../production/cost-mode.ts";
 import { credentialStateOf, type CredentialCategory, type CredentialState } from "../credentials/contract.ts";
 import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
@@ -87,9 +88,9 @@ function sourceOf(state: CredentialState): ProviderConfigSummary["source"] {
   return state.source === "workspace" ? "workspace" : "deployment";
 }
 
-function lastTestedStatusOf(state: CredentialState): NonNullable<ProviderConfigSummary["lastTestedStatus"]> {
-  if (state.state === "usable") return "READY";
-  return state.state === "unusable" ? "ERROR" : "NOT_CONFIGURED";
+/** Only a failure is recorded. READY is never inferred from a usable key, because nothing has been tested yet. */
+function lastTestedStatusOf(state: CredentialState): "ERROR" | undefined {
+  return state.state === "unusable" ? "ERROR" : undefined;
 }
 
 /** A credential category's summary fields, all taken from the resolver's state. */
@@ -134,7 +135,6 @@ export async function getWorkspaceProviderSettings(
 
   // 1. JEV: the TypeSafe key is the workspace's own, through the resolver. OpenRouter is deployment-only.
   const jevState = await credentialStateFor(sql, organizationId, "jev");
-  const jevSettings = await savedSettings(sql, organizationId, vaultMap.get(vaultTypeForCategory("jev"))?.id);
   // OpenRouter's deployment key is used only when JEV_SHARED_DEFAULT=deployment, the same flag that opts in TypeSafe's.
   const openrouterKey = resolveJevConfig().openrouter.apiKey;
   const openrouterOptedIn = sharedDefaultOptedIn("jev");
@@ -142,12 +142,12 @@ export async function getWorkspaceProviderSettings(
     category: "jev",
     ...credentialFields(jevState),
     settings: {
-      mode: jevSettings.mode || resolveJevConfig().mode,
-      preferredProvider: jevSettings.preferredProvider || resolveJevConfig().preferredProvider,
-      fallbackEnabled: jevSettings.fallbackEnabled ?? resolveJevConfig().fallbackEnabled,
-      timeoutMs: jevSettings.timeoutMs || resolveJevConfig().timeoutMs,
-      typesafeModel: jevSettings.typesafeModel || resolveJevConfig().typesafe.model,
-      openrouterModel: jevSettings.openrouterModel || resolveJevConfig().openrouter.model,
+      mode: resolveJevConfig().mode,
+      preferredProvider: resolveJevConfig().preferredProvider,
+      fallbackEnabled: resolveJevConfig().fallbackEnabled,
+      timeoutMs: resolveJevConfig().timeoutMs,
+      typesafeModel: resolveJevConfig().typesafe.model,
+      openrouterModel: resolveJevConfig().openrouter.model,
       // OpenRouter is deployment-only: the key is OPENROUTER_API_KEY on this deployment, and no workspace key is used.
       openrouterDeploymentOnly: true,
       openrouterConfigured: Boolean(openrouterKey),
@@ -197,8 +197,8 @@ export async function getWorkspaceProviderSettings(
     category: "production",
     ...credentialFields(productionState),
     settings: {
-      costPreference: productionSettings.costPreference || process.env.PRODUCTION_COST_PREFERENCE || "BALANCED",
-      preferredEngine: productionSettings.preferredEngine || "gemini_omni",
+      // The same resolution the studio routes a run with (production/cost-mode.ts).
+      costPreference: resolveCostMode(productionSettings.costPreference),
       hypitConfigured: Boolean(process.env.HYPIT_BASE_URL),
     },
     capabilities: ["gemini_omni_video", "image_to_video", "manual_cloud_handoff", "durable_job_polling"],
@@ -210,7 +210,6 @@ export async function getWorkspaceProviderSettings(
     category: "storage",
     configured: driveStatus.configured,
     source: driveStatus.configured ? "deployment" : "default",
-    lastTestedStatus: driveStatus.configured ? "READY" : "NOT_CONFIGURED",
     settings: {
       primaryProvider: "google_drive",
       fallbackProvider: "filesystem",
@@ -319,11 +318,15 @@ export async function saveWorkspaceProviderConfig(
       throw new Error(`Enter a ${input.category === "perception" ? "Gemini" : input.category === "jev" ? "TypeSafe JEV" : "Gemini production"} API key to save this configuration.`);
     }
 
+    if (input.category === "production" && input.settings && "costPreference" in input.settings && !isCostMode(input.settings.costPreference)) {
+      throw new Error("Choose a cost mode: ZERO_SPEND, LOWEST_COST, BALANCED or QUALITY_FIRST.");
+    }
+
     const payload: VaultCredentialPayload = {
       accessToken: input.credentials?.accessToken || kept?.accessToken || "",
       apiKey: newKey || keptKey,
       refreshToken: input.credentials?.refreshToken || kept?.refreshToken || "",
-      customFields: input.settings ?? kept?.customFields ?? {},
+      customFields: input.category === "jev" ? {} : input.settings ?? kept?.customFields ?? {},
     };
     // A new key starts a new entry with no expiry. Keeping the stored key keeps its expiry too.
     const keptExpiry = !newKey && prior?.expires_at ? toDate(prior.expires_at) : undefined;
