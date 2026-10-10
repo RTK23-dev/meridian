@@ -28,7 +28,7 @@ import { OpenRouterJevClient, openRouterJevClient, checkEvidenceSufficiency } fr
 import { resolveJevConfig } from "./config.ts";
 import type { Sql } from "../learning/store.ts";
 import { loadDefaultSql, resolveCredential, sharedDefaultOptedIn, type CredentialEnv } from "../credentials/resolve.ts";
-import { credentialStateOf, type CredentialResolution } from "../credentials/contract.ts";
+import type { CredentialResolution } from "../credentials/contract.ts";
 
 /**
  * Looks up the TypeSafe key for one workspace. The default reads the workspace's saved key, through the shared resolver.
@@ -113,19 +113,28 @@ export class TypeSafeDirectJevProvider implements JevProvider {
     };
   }
 
-  /** Readiness for one workspace, by the same resolution a decision uses. No live request is made. */
+  /**
+   * Readiness for one workspace, by the same resolution a decision uses. No live request is made.
+   *
+   * UNAVAILABLE means the workspace's own TypeSafe entry cannot be used, or could not be read. The router treats it as a failure
+   * of this workspace's transport, so it never moves the decision to another transport. NOT_CONFIGURED means the workspace has no
+   * saved entry and no shared default, which is the only case where another transport may be tried.
+   */
   async healthFor(organizationId: string): Promise<JevProviderHealth> {
-    let state: ReturnType<typeof credentialStateOf>;
+    let resolution: CredentialResolution;
     try {
-      state = credentialStateOf(await this.credentialFor(organizationId));
+      resolution = await this.credentialFor(organizationId);
     } catch {
       return { status: "UNAVAILABLE", message: "The workspace's TypeSafe JEV credential could not be checked. No live request was made." };
     }
-    if (state.state === "usable") {
-      const source = state.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
+    if (resolution.status === "ready") {
+      const source = resolution.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
       return { status: "READY", message: `TypeSafe JEV uses ${source}. No live request was made.` };
     }
-    return { status: "NOT_CONFIGURED", message: state.reason ?? "The TypeSafe JEV key is not configured." };
+    if (resolution.status === "unusable") {
+      return { status: "UNAVAILABLE", message: `${resolution.reason} No other JEV transport is used in its place.` };
+    }
+    return { status: "NOT_CONFIGURED", message: resolution.reason };
   }
 
   async decide(request: JevDecisionRequest): Promise<JevDecisionResponse> {
@@ -534,8 +543,10 @@ export class JevRouter implements JevProviderRouter {
       };
     }
 
-    // Preferred provider is not ready, fall back if enabled
-    if (fallbackEnabled) {
+    // Preferred provider is not ready, fall back if enabled. An unusable saved workspace entry is UNAVAILABLE, and it never falls
+    // back: the other transport is not used in place of a workspace's own entry that cannot be used
+    // (docs/ARCHITECTURE_CONTRACTS.md, section 1.2). The preferred transport then answers not_configured without a request.
+    if (fallbackEnabled && prefHealth.status !== "UNAVAILABLE") {
       const fallbackId: JevProviderId =
         preferredProviderId === "typesafe_direct" ? "openrouter" : "typesafe_direct";
       const fallback = this.getProvider(fallbackId);

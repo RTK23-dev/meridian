@@ -405,11 +405,10 @@ test("13. Regression: Higgsfield uses Authorization: Key and status_url contract
     );
   };
 
-  const originalKey = process.env.HIGGSFIELD_API_KEY;
-  process.env.HIGGSFIELD_API_KEY = "hf-secret-key";
-
-  try {
-    const hf = new HiggsfieldProvider({ fetchImpl: fakeFetch });
+  // The key is the workspace's for this test, supplied by the lookup, not read from the environment.
+  const { fixedLookup } = await import("../credentials/fixtures.ts");
+  {
+    const hf = new HiggsfieldProvider({ fetchImpl: fakeFetch, lookup: fixedLookup("hf-secret-key") });
     const job = await hf.submitJob({
       id: "spec-hf",
       organizationId: "org-1",
@@ -430,9 +429,6 @@ test("13. Regression: Higgsfield uses Authorization: Key and status_url contract
     const status = await hf.checkJobStatus(job.jobId, job.metadata);
     assert.equal(status.status, "RENDERED");
     assert.equal(status.outputArtifactId, "https://cdn.higgsfield.ai/video_999.mp4");
-  } finally {
-    if (originalKey) process.env.HIGGSFIELD_API_KEY = originalKey;
-    else delete process.env.HIGGSFIELD_API_KEY;
   }
 });
 

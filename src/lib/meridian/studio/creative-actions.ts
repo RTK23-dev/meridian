@@ -592,9 +592,15 @@ export const attachCreativeImage = createServerFn({ method: "POST" })
     return { brandId: clip(body.brandId, 80, "Brand", true), creativeId: clip(body.creativeId, 80, "Creative", true) };
   })
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }) => attachCreativeImageFor(context.userId, data));
+
+/**
+ * Generates and stores an image for a creative, for a signed-in user. The role and the tenant are checked here. The image is
+ * generated with the creative's own workspace production key, resolved through the shared credential resolver.
+ */
+export async function attachCreativeImageFor(userId: string, data: { brandId: string; creativeId: string }) {
     const sql = await getSql();
-    const access = await requireBrand(sql, context.userId, data.brandId, "member");
+    const access = await requireBrand(sql, userId, data.brandId, "member");
     const creatives = await sql<{ title: string; raw_text: string; hook: string; status: string; brief_id: string | null }>`
       select title, raw_text, hook, status, brief_id from creative_records
       where id = ${data.creativeId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
@@ -612,7 +618,14 @@ export const attachCreativeImage = createServerFn({ method: "POST" })
     const jevDecisionId = briefRows[0]?.decision_id ?? "";
     const { generateNanoBananaImage } = await import("@/lib/meridian/providers/nano-banana.server");
     const prompt = `Advertising still for ${creative.title}. ${creative.hook}. ${creative.raw_text}`.slice(0, 1800);
-    const image = await generateNanoBananaImage({ prompt, promptVersion: "creative-image-v1" });
+    // The image is generated with the creative's workspace key. An unusable or absent key means no request is made.
+    const { resolveCredential } = await import("@/lib/meridian/credentials/resolve");
+    const workspaceKey = await resolveCredential(sql, access.organizationId, "production");
+    const image = await generateNanoBananaImage({
+      prompt,
+      promptVersion: "creative-image-v1",
+      apiKey: workspaceKey.status === "ready" ? workspaceKey.secret : undefined,
+    });
     if (image.status !== "ready") return { status: image.status, message: image.error };
     const assetId = id();
     const storageKey = `${access.organizationId}/${data.brandId}/creative/${data.creativeId}/${assetId}.png`;
@@ -723,7 +736,7 @@ export const attachCreativeImage = createServerFn({ method: "POST" })
     }
     const message = reading.ok ? (visual.reasons[0] ?? "Vision evidence was scored.") : reading.error;
     return { status: "stored" as const, decision: visual.decision, message };
-  });
+}
 
 export const getIntelligence = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ brandId: clip(objectInput(input).brandId, 80, "Brand", true) }))

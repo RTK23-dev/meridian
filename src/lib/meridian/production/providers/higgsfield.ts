@@ -15,6 +15,12 @@ import type {
   ProductionProvider,
   ProviderHealth,
 } from "../types.ts";
+import type { Sql } from "../../learning/store.ts";
+import { loadDefaultSql, resolveHiggsfieldCredential, type CredentialEnv } from "../../credentials/resolve.ts";
+import type { CredentialResolution } from "../../credentials/contract.ts";
+
+/** A workspace's usable key, or the reason there is none. The provider is never called without a usable key. */
+type KeyAccess = { ok: true; apiKey: string } | { ok: false; reason: string };
 
 export type HiggsfieldModelDefinition = {
   path: string;
@@ -79,13 +85,45 @@ export class HiggsfieldProvider implements ProductionProvider {
   };
 
   private fetchImpl: typeof fetch;
+  private readonly sql?: Sql;
+  private readonly env?: CredentialEnv;
+  private readonly lookup?: (organizationId: string) => Promise<CredentialResolution>;
 
-  constructor(options?: { fetchImpl?: typeof fetch }) {
+  /**
+   * No key is held here. The deployment key is used for a workspace only when PRODUCTION_SHARED_DEFAULT=deployment is set, and
+   * never in place of that workspace's unusable saved production entry.
+   */
+  constructor(options?: {
+    fetchImpl?: typeof fetch;
+    sql?: Sql;
+    env?: CredentialEnv;
+    lookup?: (organizationId: string) => Promise<CredentialResolution>;
+  }) {
     this.fetchImpl = options?.fetchImpl || globalThis.fetch;
+    this.sql = options?.sql;
+    this.env = options?.env;
+    this.lookup = options?.lookup;
   }
 
-  private getApiKey(): string | undefined {
-    return process.env.HIGGSFIELD_API_KEY?.trim();
+  /** The key for this workspace, by the shared resolver. Nothing is cached between calls. */
+  private async credentialFor(organizationId: string): Promise<CredentialResolution> {
+    if (this.lookup) return this.lookup(organizationId);
+    const sql = this.sql ?? (await loadDefaultSql());
+    return resolveHiggsfieldCredential(sql, organizationId, this.env ?? process.env);
+  }
+
+  /** The usable key for this workspace, or the reason there is none. A failed read is "no call", never a fallback. */
+  private async keyFor(organizationId: string | undefined): Promise<KeyAccess> {
+    if (!organizationId) {
+      return { ok: false, reason: "Higgsfield needs a workspace production credential, and no workspace was given. No request was sent." };
+    }
+    try {
+      const resolution = await this.credentialFor(organizationId);
+      if (resolution.status === "ready") return { ok: true, apiKey: resolution.secret };
+      return { ok: false, reason: resolution.reason };
+    } catch {
+      return { ok: false, reason: "The workspace's production credential for Higgsfield could not be read. No request was sent." };
+    }
   }
 
   getModel(): HiggsfieldModel {
@@ -96,32 +134,38 @@ export class HiggsfieldProvider implements ProductionProvider {
     return "higgsfield-video-v1";
   }
 
+  /** Without a workspace there is no check to make, so this never reports CONFIGURED. */
   async health(): Promise<ProviderHealth> {
-    const key = this.getApiKey();
-    if (!key) {
-      return {
-        id: this.id,
-        state: "NOT_CONFIGURED",
-        capabilities: [],
-        detail: "Higgsfield requires HIGGSFIELD_API_KEY environment variable.",
-        checkedAt: new Date().toISOString(),
-      };
-    }
-
     return {
       id: this.id,
-      state: "CONFIGURED",
-      capabilities: ["textToVideo", "imageToVideo"],
-      detail: `Higgsfield configured with model ${this.getModel()}.`,
+      state: "NOT_CONFIGURED",
+      capabilities: [],
+      detail: "Higgsfield's key is the deployment's, used only when PRODUCTION_SHARED_DEFAULT=deployment is set. Readiness is checked for a workspace, and none was given.",
       checkedAt: new Date().toISOString(),
     };
   }
 
+  /** Readiness for one workspace. An unusable saved production entry is never reported as ready for Higgsfield. */
+  async healthFor(organizationId: string): Promise<ProviderHealth> {
+    const checkedAt = new Date().toISOString();
+    const access = await this.keyFor(organizationId);
+    if (!access.ok) {
+      return { id: this.id, state: "NOT_CONFIGURED", capabilities: [], detail: access.reason, checkedAt };
+    }
+    return {
+      id: this.id,
+      state: "CONFIGURED",
+      capabilities: ["textToVideo", "imageToVideo"],
+      detail: `Higgsfield configured with model ${this.getModel()}, using the deployment shared default key.`,
+      checkedAt,
+    };
+  }
+
   async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
-    const apiKey = this.getApiKey();
+    const access = await this.keyFor(spec.organizationId);
     const costEstimate = spec.durationTargetSeconds * this.capabilities.costPerSecondEstimateUsd;
 
-    if (!apiKey) {
+    if (!access.ok) {
       return {
         jobId: "",
         organizationId: spec.organizationId,
@@ -130,7 +174,7 @@ export class HiggsfieldProvider implements ProductionProvider {
         providerId: this.id,
         status: "NOT_CONFIGURED",
         costEstimateUsd: costEstimate,
-        error: "Higgsfield API credentials are not configured.",
+        error: access.reason,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -160,7 +204,7 @@ export class HiggsfieldProvider implements ProductionProvider {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Key ${apiKey}`,
+          Authorization: `Key ${access.apiKey}`,
         },
         body: JSON.stringify(payload),
       });
@@ -247,6 +291,8 @@ export class HiggsfieldProvider implements ProductionProvider {
         costEstimateUsd: costEstimate,
         submittedAt: new Date().toISOString(),
         metadata: {
+          // The workspace that owns the job. A later poll or cancel resolves that workspace's key, and no other.
+          organizationId: spec.organizationId,
           requestId,
           statusUrl,
           cancelUrl,
@@ -271,10 +317,15 @@ export class HiggsfieldProvider implements ProductionProvider {
     }
   }
 
+  /**
+   * The poll uses the key of the workspace that owns the job, which the job's metadata names. Without a usable key it throws,
+   * so the poller retries and no request is sent.
+   */
   async checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
-      throw new Error("Cannot check Higgsfield job status: API key not configured.");
+    const owner = typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined;
+    const access = await this.keyFor(owner);
+    if (!access.ok) {
+      throw new Error(`Cannot check Higgsfield job status: ${access.reason}`);
     }
 
     const pollUrl =
@@ -286,7 +337,7 @@ export class HiggsfieldProvider implements ProductionProvider {
 
     const res = await this.fetchImpl(pollUrl, {
       headers: {
-        Authorization: `Key ${apiKey}`,
+        Authorization: `Key ${access.apiKey}`,
       },
     });
 
@@ -351,8 +402,9 @@ export class HiggsfieldProvider implements ProductionProvider {
   }
 
   async cancelJob(jobId: string, metadata?: Record<string, unknown>): Promise<void> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) return;
+    const owner = typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined;
+    const access = await this.keyFor(owner);
+    if (!access.ok) return;
 
     const cancelUrl =
       typeof metadata?.cancelUrl === "string"
@@ -363,7 +415,7 @@ export class HiggsfieldProvider implements ProductionProvider {
       await this.fetchImpl(cancelUrl, {
         method: "POST",
         headers: {
-          Authorization: `Key ${apiKey}`,
+          Authorization: `Key ${access.apiKey}`,
         },
       });
     } catch {

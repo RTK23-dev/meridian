@@ -143,3 +143,32 @@ export async function resolveCredential(
   if (row) return resolveSavedEntry(sql, scope, category, row);
   return resolveSharedDefault(category, env);
 }
+
+/**
+ * Higgsfield's key is the deployment's own. It is a production key, so it is used only when PRODUCTION_SHARED_DEFAULT=deployment
+ * is set. It is never used in place of an unusable saved production entry for the workspace, and it is never used for a
+ * workspace that has no opt-in. Every other production check follows the same rules through resolveCredential.
+ */
+export async function resolveHiggsfieldCredential(
+  sql: Sql,
+  organizationId: string,
+  env: CredentialEnv = process.env,
+): Promise<CredentialResolution> {
+  const saved = await resolveCredential(sql, organizationId, "production", env);
+  if (saved.status === "unusable") {
+    return {
+      status: "unusable",
+      source: "workspace",
+      reason: `${saved.reason} Higgsfield does not use the deployment key in its place.`,
+    };
+  }
+  if (!sharedDefaultOptedIn("production", env)) {
+    return {
+      status: "not_configured",
+      reason: "Higgsfield uses the deployment's HIGGSFIELD_API_KEY only when PRODUCTION_SHARED_DEFAULT=deployment is set.",
+    };
+  }
+  const key = (env.HIGGSFIELD_API_KEY ?? "").trim();
+  if (!key) return { status: "not_configured", reason: "PRODUCTION_SHARED_DEFAULT=deployment, but HIGGSFIELD_API_KEY is not set on the deployment." };
+  return { status: "ready", source: "deployment_shared_default", secret: key, fingerprint: credentialFingerprint(key) ?? "" };
+}

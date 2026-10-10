@@ -157,7 +157,8 @@ test("HiggsfieldProvider returns NOT_CONFIGURED and no job id without API key", 
 
     assert.equal(job.status, "NOT_CONFIGURED");
     assert.equal(job.jobId, "");
-    assert.ok(job.error?.includes("not configured"));
+    // Higgsfield's key is the deployment's, so the reason names the flag that would share it.
+    assert.match(job.error ?? "", /PRODUCTION_SHARED_DEFAULT=deployment/);
   } finally {
     if (originalKey) process.env.HIGGSFIELD_API_KEY = originalKey;
   }

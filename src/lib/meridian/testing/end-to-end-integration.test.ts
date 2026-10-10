@@ -277,8 +277,8 @@ test("E2E Path 2: CreativeSpec -> ProductionRouter -> Veo/Higgsfield/Hypit -> Po
   assert.equal(polledVeo.status, "RENDERED");
   assert.equal(polledVeo.outputArtifactId, "https://storage.googleapis.com/veo-sample.mp4");
 
-  // Higgsfield contract test with exact model endpoint, request_id, status_url, and cancel_url
-  process.env.HIGGSFIELD_API_KEY = "mock-hf-key";
+  // Higgsfield contract test with exact model endpoint, request_id, status_url, and cancel_url. Its key comes from the
+  // workspace lookup for this test, not from the environment.
   process.env.HIGGSFIELD_MODEL = "dop-v1";
 
   const fakeHfFetch: typeof fetch = async (url, init) => {
@@ -309,7 +309,7 @@ test("E2E Path 2: CreativeSpec -> ProductionRouter -> Veo/Higgsfield/Hypit -> Po
     return new Response("Not found", { status: 404 });
   };
 
-  const hfProvider = new HiggsfieldProvider({ fetchImpl: fakeHfFetch });
+  const hfProvider = new HiggsfieldProvider({ fetchImpl: fakeHfFetch, lookup: fixedLookup("mock-hf-key") });
   const hfJob = await hfProvider.submitJob(spec);
   assert.equal(hfJob.status, "QUEUED");
   assert.equal(hfJob.requestId, "hf-req-999");

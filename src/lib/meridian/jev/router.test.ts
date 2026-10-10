@@ -11,7 +11,7 @@ import type {
   JevCapabilities,
   JevProviderHealth,
 } from "./types.ts";
-import { fixedLookup, notConfiguredLookup } from "../credentials/fixtures.ts";
+import { fixedLookup, notConfiguredLookup, unusableLookup } from "../credentials/fixtures.ts";
 
 const sampleRequest: JevDecisionRequest = {
   organizationId: "org-test",
@@ -158,7 +158,10 @@ test("TypeSafeDirectJevProvider marks unreturned questions as abstain_uncertain"
   assert.equal(res.answers["test.choice"].status, "abstain_uncertain");
 });
 
-test("JevRouter routes to openrouter when typesafe_direct is unconfigured in AUTO mode", async () => {
+// The AUTO fallback is pinned for one case only: the workspace has no saved TypeSafe entry and no shared default, so TypeSafe is
+// NOT_CONFIGURED and transport fallback is enabled. A saved entry that cannot be used never falls back (see the next test),
+// because docs/ARCHITECTURE_CONTRACTS.md section 1.2 forbids moving a workspace's failed entry to the deployment's other key.
+test("JevRouter falls back to openrouter in AUTO mode only when the workspace has no saved TypeSafe entry (NOT_CONFIGURED)", async () => {
   const mockOpenRouter: JevProvider = {
     id: "openrouter",
     capabilities(): JevCapabilities {
@@ -209,6 +212,50 @@ test("JevRouter routes to openrouter when typesafe_direct is unconfigured in AUT
   assert.equal(res.answers["test.hook"].status, "answered");
   assert.equal(res.answers["test.hook"].probability, 0.88);
   assert.equal(res.fallbackFrom, "typesafe_direct");
+});
+
+test("JevRouter does not fall back in AUTO mode when the workspace's saved TypeSafe entry is unusable", async () => {
+  let openrouterCalls = 0;
+  const countingOpenRouter: JevProvider = {
+    id: "openrouter",
+    capabilities(): JevCapabilities {
+      return { primitives: ["noul", "choice", "score"], batchDecisions: true, explanation: false };
+    },
+    async health(): Promise<JevProviderHealth> {
+      return { status: "READY" };
+    },
+    async decide(_req: JevDecisionRequest): Promise<JevDecisionResponse> {
+      openrouterCalls++;
+      return {
+        runId: "openrouter-must-not-run",
+        model: "typesafe/jev-1.13",
+        provider: "openrouter",
+        inputHash: "hash-x",
+        cached: false,
+        latencyMs: 1,
+        answers: {},
+      };
+    },
+  };
+
+  const router = new JevRouter({
+    typesafeProvider: new TypeSafeDirectJevProvider({ lookup: unusableLookup() }),
+    openrouterProvider: countingOpenRouter,
+  });
+
+  const res = await router.decide(sampleRequest, {
+    mode: "auto",
+    preferredProvider: "typesafe_direct",
+    fallbackEnabled: true,
+  });
+
+  // An expired saved entry is the workspace's own failure. OpenRouter's deployment key is not used in its place, and no
+  // request is sent to any transport.
+  assert.equal(openrouterCalls, 0, "OpenRouter is never called for a workspace whose saved TypeSafe entry is unusable");
+  assert.equal(res.provider, "typesafe_direct");
+  assert.equal(res.fallbackUsed, undefined);
+  assert.equal(res.answers["test.hook"].status, "not_configured");
+  assert.match(res.answers["test.hook"].abstainReason ?? "", /expired/);
 });
 
 test("JevRouter enforces explicit mode selection without silent fallback", async () => {

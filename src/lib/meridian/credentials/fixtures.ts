@@ -14,6 +14,11 @@ export function fixedLookup(secret: string): (organizationId: string) => Promise
   });
 }
 
+/** Every workspace's saved entry is unusable, so no request is made and no other transport is used in its place. */
+export function unusableLookup(reason = "The workspace's saved test credential has expired."): (organizationId: string) => Promise<CredentialResolution> {
+  return async () => ({ status: "unusable", source: "workspace", reason });
+}
+
 /** Every workspace is not configured, so no request is made. */
 export function notConfiguredLookup(reason = "No test key is configured."): (organizationId: string) => Promise<CredentialResolution> {
   return async () => ({ status: "not_configured", reason });
