@@ -26,7 +26,6 @@ function JobsPage() {
     mutationKey: ["mutation", "jobs.cancel", organizationId],
     mutationFn: (jobId: string) => cancelJob({ data: { organizationId, jobId } }),
     invalidate: () => [qk.jobs(organizationId)],
-    success: "Cancellation requested.",
   });
   if (query.isError && !data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!data) return <ScreenSkeleton label="Loading jobs and health" shape="rows" />;

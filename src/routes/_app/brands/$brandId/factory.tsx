@@ -37,7 +37,6 @@ function FactoryPage({ brandId }: { brandId: string }) {
     mutationFn: (vars: { niche: string; level: FactoryLevel }) => startFactoryRun({ data: { brandId, niche: vars.niche, level: vars.level } }),
     // A run queues jobs and may produce research and creatives, so the jobs, market and studio screens change with it.
     invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.studio(brandId)],
-    success: (_vars, result) => `Queued ${result.jobs} factory jobs.`,
     onSuccess: (result) => {
       setNote(`Queued ${result.jobs} factory jobs as run ${result.runId}.`);
       setNiche("");
@@ -47,14 +46,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
     mutationKey: factoryKey("controls"),
     mutationFn: (controls: { level: number; ceiling: number; dailyCents: number; totalCents: number }) => setFactoryControls({ data: { brandId, ...controls } }),
     invalidate: () => [qk.factory(brandId), qk.pipelineConfig(brandId)],
-    success: "Factory controls saved.",
     onSuccess: () => setNote("Factory controls saved."),
   });
   const killSwitch = useScopedMutation({
     mutationKey: factoryKey("kill-switch"),
     mutationFn: (engage: boolean) => setKillSwitch({ data: { organizationId: board?.organizationId ?? "", brandId, engage } }),
     invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
-    success: (engage) => engage ? "Brand kill switch engaged." : "Brand kill switch cleared.",
     onSuccess: (result) => setNote(result.engaged ? "Brand kill switch engaged. Live ads must pause." : "Brand kill switch cleared."),
   });
   const failures = [startRun, saveControls, killSwitch].map((action) => action.error).filter((error): error is Error => Boolean(error));

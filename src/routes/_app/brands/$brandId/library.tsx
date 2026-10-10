@@ -71,7 +71,6 @@ function Library({ brandId }: { brandId: string }) {
     mutationFn: (values: ManualPerformance) => recordPerformance({ data: { brandId, creativeId: traceId ?? "", ...values } }),
     // A performance row changes the creative's trace, the learning patterns, and the overview counts.
     invalidate: () => [qk.trace(brandId), qk.learning(brandId), qk.machine(brandId)],
-    success: "Performance recorded.",
     onSuccess: () => {
       setNote("Performance stored and a learning job was queued. Scoring opportunities drains that job. No ad account is connected.");
       performanceForm.reset({ observedOn: "", platform: "", reach: "0", impressions: "0", clicks: "0", conversions: "0", spendCents: "0", revenueCents: "0" });
@@ -81,7 +80,6 @@ function Library({ brandId }: { brandId: string }) {
     mutationKey: libraryKey("own-creative"),
     mutationFn: (values: ObservationFieldsOutput) => recordObservation({ data: { brandId, ...values } }),
     invalidate: () => [qk.library(brandId), qk.machine(brandId)],
-    success: "Creative recorded.",
     onSuccess: () => {
       setNote("Creative recorded.");
       observationForm.reset();
@@ -91,7 +89,6 @@ function Library({ brandId }: { brandId: string }) {
     mutationKey: libraryKey("paused-publish"),
     mutationFn: (values: PausedPublishing) => publishPausedObjects({ data: { brandId, ...values } }),
     invalidate: () => [qk.library(brandId), qk.machine(brandId)],
-    success: (_values, result) => result.detail,
     onSuccess: (result) => {
       setStages(result.stages);
       setNote(`${result.detail} Correlation ${result.correlationId}.`);
@@ -102,7 +99,6 @@ function Library({ brandId }: { brandId: string }) {
     mutationKey: libraryKey("attach-image"),
     mutationFn: (creativeId: string) => attachCreativeImage({ data: { brandId, creativeId } }),
     invalidate: () => [qk.library(brandId), qk.trace(brandId)],
-    success: (_creativeId, image) => image.message,
     onSuccess: (image) => setNote(image.message),
   });
   const failures = [recordPerf, ownCreative, pausedObjects, attachImage].map((action) => action.error).filter((error): error is Error => Boolean(error));

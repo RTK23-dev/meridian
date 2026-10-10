@@ -70,7 +70,6 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
     mutationFn: (input: { category: ProviderCategory; credentials?: Record<string, string>; settings: Record<string, unknown> }) =>
       saveProviderConfig({ data: { organizationId, category: input.category, credentials: input.credentials, settings: input.settings } }),
     invalidate: () => [qk.providerSettings(organizationId), qk.decisionEngines(organizationId), qk.integrations(organizationId)],
-    success: (input) => `${input.category.toUpperCase()} configuration saved.`,
     onSuccess: (_data, input) => {
       setMessage(`${input.category.toUpperCase()} configuration saved.`);
       setApiKeyInput("");
@@ -83,7 +82,6 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
     mutationKey: ["mutation", "provider.remove", organizationId],
     mutationFn: (category: ProviderCategory) => removeProviderConfig({ data: { organizationId, category } }),
     invalidate: () => [qk.providerSettings(organizationId), qk.decisionEngines(organizationId), qk.integrations(organizationId)],
-    success: (category) => `Workspace ${category} credentials removed.`,
     onSuccess: (_data, category) => {
       setMessage(`Workspace ${category} credentials removed.`);
     },

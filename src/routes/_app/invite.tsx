@@ -19,7 +19,6 @@ function Accept() {
   const accept = useScopedMutation({
     mutationKey: ["mutation", "invite.accept"],
     mutationFn: (token: string) => acceptInvite({ data: { token } }),
-    success: (_token, result) => result.message,
     // An accepted invitation adds a workspace to the list, so the workspace reloads.
     onSuccess: async (result) => {
       setDone(result.message);

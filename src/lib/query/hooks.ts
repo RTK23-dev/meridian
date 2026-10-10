@@ -561,7 +561,6 @@ export const useRecordTelemetry = (brandId: string) => useScopedMutation({
     completionRate?: number;
   }) => recordTelemetryAction({ data: { brandId, ...vars } }),
   invalidate: () => [qk.telemetry(brandId), qk.learning(brandId)],
-  success: "Telemetry row recorded.",
 });
 
 export const useSyncTelemetry = (brandId: string) => useScopedMutation({
