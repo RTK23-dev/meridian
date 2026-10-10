@@ -15,6 +15,20 @@ export function Skeleton({ variant = "line", className, ...props }: HTMLAttribut
   return <div {...props} aria-hidden="true" className={cn("animate-pulse rounded bg-surface-2", shapes[variant], className)} />;
 }
 
+/** Loading state shaped like a screen: a header block, then cards, rows or a form. The region is announced once with its label. */
+export function ScreenSkeleton({ label, shape = "cards", className }: { label: string; shape?: "cards" | "rows" | "form"; className?: string }) {
+  return <div role="status" aria-label={label} className={cn("space-y-6", className)}>
+    <div className="space-y-3">
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-9 w-72 max-w-full" />
+      <Skeleton className="h-4 w-full max-w-xl" />
+    </div>
+    {shape === "cards" ? <div className="grid gap-3 md:grid-cols-2">{[0, 1, 2, 3].map((index) => <Skeleton key={index} variant="card" />)}</div> : null}
+    {shape === "rows" ? <div className="space-y-3">{[0, 1, 2, 3, 4].map((index) => <Skeleton key={index} variant="table-row" />)}</div> : null}
+    {shape === "form" ? <Skeleton variant="card" className="h-72" /> : null}
+  </div>;
+}
+
 export function EmptyState({ icon, title, reason, action, className }: { icon?: ReactNode; title: string; reason: string; action?: ReactNode; className?: string }) {
   return <Card className={cn("flex flex-col items-center gap-3 py-10 text-center", className)}>
     <div className="grid size-11 place-items-center rounded-full bg-surface-2 text-fg-muted">{icon ?? <FileQuestion aria-hidden="true" className="size-5" />}</div>

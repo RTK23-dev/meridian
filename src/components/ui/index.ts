@@ -3,7 +3,7 @@ export { Field } from "./field";
 export { Input, Textarea, Select, SelectItem, SelectValue, Checkbox, Switch, RadioGroup, RadioGroupItem, Slider } from "./controls";
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "./card";
 export { Badge, StatusBadge, badgeVariants } from "./badge";
-export { Toaster, toast, Skeleton, EmptyState, ErrorState, ErrorNotice, NotConnected } from "./feedback";
+export { Toaster, toast, Skeleton, ScreenSkeleton, EmptyState, ErrorState, ErrorNotice, NotConnected } from "./feedback";
 export { PageHeader, Stat, KpiCard, Stepper, Kbd, type BreadcrumbItem, type StepState } from "./layout";
 export { DataTable } from "./data-table";
 export { Avatar, Logo } from "./avatar";
