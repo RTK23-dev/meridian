@@ -296,15 +296,15 @@ export function createOrganicTelemetryNode(
   id = "organic-telemetry-node",
 ): FlowNode<
   { channelId: string; externalId: string }[],
-  { channelId: string; externalId: string; metrics: Record<string, unknown> }[]
+  { channelId: string; externalId: string; metrics: Record<string, unknown> | null }[]
 > {
   return {
     id,
     name: "Organic Telemetry Ingestor",
     type: "telemetry",
-    async execute(targets): Promise<NodeExecutionResult<{ channelId: string; externalId: string; metrics: Record<string, unknown> }[]>> {
+    async execute(targets): Promise<NodeExecutionResult<{ channelId: string; externalId: string; metrics: Record<string, unknown> | null }[]>> {
       const { getDistributionChannel } = await import("../distribution/registry.ts");
-      const results: { channelId: string; externalId: string; metrics: Record<string, unknown> }[] = [];
+      const results: { channelId: string; externalId: string; metrics: Record<string, unknown> | null }[] = [];
 
       for (const target of targets) {
         const channel = getDistributionChannel(target.channelId);
@@ -320,7 +320,11 @@ export function createOrganicTelemetryNode(
       return {
         ok: true,
         data: results,
-        logs: results.map((r) => `[${r.channelId}] Ingested telemetry for ${r.externalId}`),
+        logs: results.map((r) =>
+          r.metrics === null
+            ? `[${r.channelId}] Telemetry not observed for ${r.externalId}`
+            : `[${r.channelId}] Ingested telemetry for ${r.externalId}`,
+        ),
       };
     },
   };

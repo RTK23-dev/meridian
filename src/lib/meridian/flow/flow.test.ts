@@ -189,7 +189,9 @@ test("Flow Connectors: channel branch node selectively routes to user-chosen org
 
   assert.equal(telemetryReport.ok, true);
   assert.equal(telemetryReport.data.length, 2);
-  assert.ok((telemetryReport.data[0]?.metrics as any).views > 0);
-  assert.ok((telemetryReport.data[1]?.metrics as any).threeSecondViews > 0);
+  // Live metrics are not implemented, so nothing is observed. The node reports that, and invents no engagement numbers.
+  assert.equal(telemetryReport.data[0]?.metrics, null, "no metrics are invented for an unobserved post");
+  assert.equal(telemetryReport.data[1]?.metrics, null, "no metrics are invented for an unobserved post");
+  assert.match((telemetryReport.logs ?? []).join("\n"), /Telemetry not observed/);
 });
 

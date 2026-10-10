@@ -74,19 +74,10 @@ export class FacebookPagesChannel implements DistributionChannel {
     }
   }
 
-  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics> {
-    if (!externalId.trim()) {
-      return { views: 0, reach: 0, likes: 0, comments: 0, shares: 0 };
-    }
-    return {
-      views: 920,
-      reach: 810,
-      threeSecondViews: 650,
-      averageWatchTimeSeconds: 5.2,
-      completionRate: 0.32,
-      likes: 41,
-      comments: 5,
-      shares: 9,
-    };
+  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {
+    // Live metrics are not implemented in this build. Nothing is observed, so nothing is returned: no fixed
+    // numbers stand in for engagement.
+    void externalId;
+    return null;
   }
 }

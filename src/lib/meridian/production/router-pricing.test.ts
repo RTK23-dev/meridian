@@ -31,7 +31,7 @@ test("an image spec is refused until its own durable path exists, rather than se
 
 test("a video price is the owner's per-second declaration, and an image price is unknown rather than zero", () => {
   const declared = priceFor(fakeProvider("hypit", 0.05), "video");
-  assert.deepEqual(declared, { status: "configured", unit: "per_second", amountUsd: 0.05, source: "provider declaration (hypit)", verifiedAt: null });
+  assert.deepEqual(declared, { status: "configured", unit: "per_second", amountUsd: 0.05, source: "code-declared estimate in the hypit adapter; not checked against the provider price page", verifiedAt: null });
   const image = priceFor(fakeProvider("hypit", 0.05), "image");
   assert.equal(image.status, "unknown");
   assert.equal(image.amountUsd, null);

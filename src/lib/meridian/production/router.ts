@@ -76,13 +76,13 @@ export function priceFor(provider: PricedProvider, modality: SelectionModality):
     if (typeof declared !== "number" || !Number.isFinite(declared)) {
       return unknownQuote("per_second", `provider ${provider.id} declares no per-second price`);
     }
-    return configuredQuote("per_second", declared, `provider declaration (${provider.id})`);
+    return configuredQuote("per_second", declared, `code-declared estimate in the ${provider.id} adapter; not checked against the provider price page`);
   }
   const declared = provider.capabilities.costPerImageEstimateUsd;
   if (typeof declared !== "number" || !Number.isFinite(declared)) {
     return unknownQuote("per_image", `no image price is declared for ${provider.id}`);
   }
-  return configuredQuote("per_image", declared, `provider declaration (${provider.id})`);
+  return configuredQuote("per_image", declared, `code-declared estimate in the ${provider.id} adapter; not checked against the provider price page`);
 }
 
 /**

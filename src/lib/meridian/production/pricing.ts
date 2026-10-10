@@ -2,7 +2,8 @@
  * Price model (P4b). A price is one of four states, and only two of them can produce an estimate:
  *
  * - verified: confirmed against an official price source on `verifiedAt`.
- * - configured: declared by the owner in provider configuration. It is not checked against a price page.
+ * - configured: a declared estimate, not checked against a price page. Adapter constants are declared this way today;
+ *   owner-supplied prices from provider configuration are not read yet.
  * - unknown: no price is known. Nothing is invented, so there is no estimate and the cost is not known.
  * - stale: a price was once known but is no longer current. Its amount is kept for display only, never estimated from.
  *
@@ -37,7 +38,7 @@ export function unknownQuote(unit: PriceUnit, source: string): PriceQuote {
   return { status: "unknown", unit, amountUsd: null, source, verifiedAt: null };
 }
 
-/** A price the owner declared in provider configuration. Configured, not verified against a price page. */
+/** A declared estimate, not verified against a price page. */
 export function configuredQuote(unit: PriceUnit, amountUsd: number, source: string): PriceQuote {
   return { status: "configured", unit, amountUsd, source, verifiedAt: null };
 }

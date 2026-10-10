@@ -83,19 +83,10 @@ export class YouTubeShortsChannel implements DistributionChannel {
     }
   }
 
-  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics> {
-    if (!externalId.trim()) {
-      return { views: 0, reach: 0, likes: 0, comments: 0, shares: 0 };
-    }
-    return {
-      views: 3400,
-      reach: 2900,
-      threeSecondViews: 2850,
-      averageWatchTimeSeconds: 14.1,
-      completionRate: 0.52,
-      likes: 180,
-      comments: 24,
-      shares: 45,
-    };
+  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {
+    // Live metrics are not implemented in this build. Nothing is observed, so nothing is returned: no fixed
+    // numbers stand in for engagement.
+    void externalId;
+    return null;
   }
 }

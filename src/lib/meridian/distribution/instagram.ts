@@ -85,21 +85,10 @@ export class InstagramReelsChannel implements DistributionChannel {
     }
   }
 
-  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics> {
-    if (!externalId.trim()) {
-      return { views: 0, reach: 0, likes: 0, comments: 0, shares: 0 };
-    }
-    // Returns realistic baseline metrics or test telemetry
-    return {
-      views: 1250,
-      reach: 980,
-      threeSecondViews: 840,
-      averageWatchTimeSeconds: 4.8,
-      completionRate: 0.38,
-      likes: 64,
-      comments: 7,
-      shares: 18,
-      saves: 12,
-    };
+  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {
+    // Live metrics are not implemented in this build. Nothing is observed, so nothing is returned: no fixed
+    // numbers stand in for engagement.
+    void externalId;
+    return null;
   }
 }
