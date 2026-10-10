@@ -2,10 +2,21 @@ import type { ObservedCreative, PerformanceRow, OrganicObservationRow } from "..
 import { learnPatterns } from "./engine.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
-/** Tagged-template SQL. Structural so the worker does not import the web database module. */
+/**
+ * Tagged-template SQL. Structural so the worker does not import the web database module.
+ * `begin` is optional here because the worker's client may not provide transactions; code that needs one calls
+ * `withTransaction`, which refuses to run without a real transaction instead of compensating for a missing one.
+ */
 export interface Sql {
   <T = Record<string, unknown>>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T[]>;
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
+  begin?<T>(fn: (tx: Sql) => Promise<T>): Promise<T>;
+}
+
+/** Runs `fn` in one real transaction, or throws when the connection cannot provide one. Never simulated. */
+export async function withTransaction<T>(sql: Sql, fn: (tx: Sql) => Promise<T>): Promise<T> {
+  if (!sql.begin) throw new Error("This database connection cannot run a transaction, so the operation was not started.");
+  return sql.begin(fn);
 }
 
 function asText(value: unknown): string {

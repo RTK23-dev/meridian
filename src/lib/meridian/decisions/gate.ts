@@ -39,6 +39,12 @@ export type GateQuestion = {
    * A gate with no gating question cannot approve anything, so its action is review.
    */
   gating?: boolean;
+  /**
+   * The names of the evidence items this question may receive (GateEvidence.name). Frozen contract: a question sees only
+   * the evidence in its own scope. Questions with the same scope share one engine call. A question with no scope receives
+   * no evidence, so it can only be answered when it needs none, and otherwise abstains. See docs/ARCHITECTURE_CONTRACTS.md.
+   */
+  evidenceScope?: readonly string[];
 };
 
 /** One piece of evidence the caller actually provided. Recorded so a reviewer can see exactly what was judged. */

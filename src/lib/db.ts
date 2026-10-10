@@ -39,6 +39,12 @@ export interface Sql {
     text: string,
     params?: unknown[],
   ): Promise<T[]>;
+  /**
+   * Runs `fn` in one real database transaction on one connection: COMMIT when it resolves, ROLLBACK when it throws.
+   * A `begin` inside a transaction runs in that same transaction (no savepoint, no separate commit). Callers that need
+   * atomicity use `withTransaction` (learning/store.ts), which refuses to run when `begin` is absent.
+   */
+  begin?<T>(fn: (tx: Sql) => Promise<T>): Promise<T>;
 }
 
 /**
@@ -72,9 +78,10 @@ const OID_INTERVAL = 1186;
 const identity = (v: string) => v;
 
 type Run = <T>(text: string, params: unknown[]) => Promise<T[]>;
+type Begin = <T>(fn: (tx: Sql) => Promise<T>) => Promise<T>;
 
 /** Wrap a query runner in the tagged-template + `.query()` `Sql` surface. */
-function toSql(run: Run): Sql {
+function toSql(run: Run, begin: Begin): Sql {
   const sql = (async <T = Record<string, unknown>>(
     strings: TemplateStringsArray,
     ...values: unknown[]
@@ -86,7 +93,43 @@ function toSql(run: Run): Sql {
   }) as unknown as Sql;
   sql.query = <T = Record<string, unknown>>(text: string, params: unknown[] = []) =>
     run<T>(text, params);
+  sql.begin = begin;
   return sql;
+}
+
+/** A transaction handle. Nested `begin` calls run inside this same transaction. */
+function transactionSql(run: Run): Sql {
+  const tx: Sql = toSql(run, (fn) => fn(tx));
+  return tx;
+}
+
+/**
+ * A `Sql` over a node-postgres pool. `begin` pins one client for the whole block: BEGIN, the block, then COMMIT, or
+ * ROLLBACK when the block throws. If the ROLLBACK itself fails, that connection is discarded instead of being reused.
+ */
+export function createPoolSql(pool: import("pg").Pool): Sql {
+  const begin: Begin = async (fn) => {
+    const client = await pool.connect();
+    let discard: Error | undefined;
+    try {
+      await client.query("BEGIN");
+      const result = await fn(
+        transactionSql(async <T>(text: string, params: unknown[]) => (await client.query(text, params)).rows as T[]),
+      );
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        discard = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+      }
+      throw error;
+    } finally {
+      client.release(discard);
+    }
+  };
+  return toSql(async <T>(text: string, params: unknown[]) => (await pool.query(text, params)).rows as T[], begin);
 }
 
 function createNeonSql(): Promise<Sql> {
@@ -101,10 +144,7 @@ function createNeonSql(): Promise<Sql> {
       connectionString: databaseUrl,
       ssl: databaseUrl?.includes("sslmode=disable") ? false : undefined,
     });
-    return toSql(async <T>(text: string, params: unknown[]) => {
-      const res = await pool.query(text, params);
-      return res.rows as T[];
-    });
+    return createPoolSql(pool);
   })().catch((err) => {
     globalRef.__pgSqlPromise__ = undefined;
     throw err;
@@ -190,10 +230,13 @@ async function createPgliteSql(): Promise<Sql> {
   globalRef.__pgliteMigrateChain__ = pass;
   await pass;
 
-  const sql = toSql(async <T>(text: string, params: unknown[]) => {
-    const result = await pg.query<T>(text, params);
-    return result.rows;
-  });
+  const sql = toSql(
+    async <T>(text: string, params: unknown[]) => {
+      const result = await pg.query<T>(text, params);
+      return result.rows;
+    },
+    (fn) => pg.transaction((tx) => fn(transactionSql(async <T>(text: string, params: unknown[]) => (await tx.query<T>(text, params)).rows as T[]))),
+  );
   return sql;
 }
 
