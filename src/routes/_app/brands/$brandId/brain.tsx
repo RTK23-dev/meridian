@@ -1,23 +1,30 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { FieldErrors, UseFormRegister } from "react-hook-form";
 import { useForm } from "react-hook-form";
-import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea } from "@/components/ui";
-import { errorText } from "@/components/ui";
+import { Button, Card, ErrorState, Field, Notice, ScreenSkeleton, SelectInput, TextArea, errorText } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import { BrainMiniNav, type MiniNavItem } from "@/components/brain/brain-mini-nav";
+import { BRAIN_SECTIONS, sectionAnchor, sectionProgress, type BrainSectionId } from "@/components/brain/brain-sections";
+import { CompletenessRing } from "@/components/brain/completeness-ring";
+import { LogoUploader } from "@/components/brain/logo-uploader";
+import { SourceMaterial } from "@/components/brain/source-material";
 import { hasRole } from "@/lib/meridian/access";
 import { saveBrain } from "@/lib/meridian/api";
-import { storeMaterial, uploadLogo } from "@/lib/meridian/machine";
 import {
   AUTOMATION_LEVELS,
   BRAIN_FIELDS,
+  brainCompleteness,
   emptyBrain,
   provenanceLabel,
+  type BrainKey,
   type BrainValues,
+  type ProvenanceMap,
 } from "@/lib/meridian/brain";
-import { useAssetsQuery, useBrandQuery, useScopedMutation } from "@/lib/query/hooks";
-import { qk } from "@/lib/query/keys";
 import { brainValuesSchema, type BrainFieldsInput } from "@/lib/meridian/schemas/brain";
+import { useBrandQuery, useScopedMutation } from "@/lib/query/hooks";
+import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/_app/brands/$brandId/brain")({ staticData: { pageTitle: "Brand brain" }, component: BrainPage });
 
@@ -27,6 +34,14 @@ function BrainPage() {
     <BrainEditor brandId={brandId} />
   );
 }
+
+type FormShared = {
+  register: UseFormRegister<BrainFieldsInput>;
+  errors: FieldErrors<BrainFieldsInput>;
+  values: BrainFieldsInput;
+  provenance: ProvenanceMap;
+  canEdit: boolean;
+};
 
 function BrainEditor({ brandId }: { brandId: string }) {
   const query = useBrandQuery(brandId);
@@ -64,9 +79,11 @@ function BrainEditor({ brandId }: { brandId: string }) {
   if (query.isError && !detail) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
   if (!detail) return <ScreenSkeleton label="Loading brand brain" shape="form" />;
   const canEdit = hasRole(detail.identity.role, "member");
-  const groups = [...new Set(BRAIN_FIELDS.map((field) => field.group))];
-  const filledFields = BRAIN_FIELDS.filter((field) => brain[field.key].trim()).length;
-  const completeness = Math.round((filledFields / BRAIN_FIELDS.length) * 100);
+  const completeness = brainCompleteness(brain);
+  const shared: FormShared = { register, errors, values: brain, provenance: detail.provenance, canEdit };
+  const navItems: MiniNavItem[] = BRAIN_SECTIONS.map((section) => ({ id: section.id, label: section.label, ...sectionProgress(section.keys, brain) }));
+  const sectionFor = (id: BrainSectionId) => BRAIN_SECTIONS.find((section) => section.id === id);
+  const progressFor = (id: BrainSectionId) => navItems.find((item) => item.id === id);
 
   async function submit(values: BrainValues) {
     const saved = await saveBrainMutation.mutateAsync(values).then(() => true, () => false);
@@ -78,180 +95,170 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
-      <form onSubmit={handleSubmit(submit)} className="space-y-8" onKeyDown={(event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      <form
+        onSubmit={handleSubmit(submit)}
+        className="space-y-8"
+        onKeyDown={(event) => {
+          // Ctrl or Cmd + Enter saves only from a brain text field, not from the paste box.
+          if (!(event.metaKey || event.ctrlKey) || event.key !== "Enter") return;
+          if (!(event.target as HTMLElement).closest("[data-brain-field]")) return;
           event.preventDefault();
           event.currentTarget.requestSubmit();
-        }
-      }}>
-      <div className="space-y-2">
-        <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-muted">
-          {detail.identity.name}
-        </Link>
-        <h1 className="font-display text-4xl">Brand brain</h1>
-        <p className="max-w-2xl text-muted">
-          This is the record later decisions must use. Saving never silently replaces a field you did not change.
-          Page suggestions, when a model is configured, stay pending until you accept them.
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-5 rounded-lg border border-line bg-panel p-4">
-        <div role="img" aria-label={`Brand brain ${completeness}% complete`} className="grid size-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(var(--color-accent) ${completeness}%, var(--color-line) 0)` }}>
-          <span className="grid size-12 place-items-center rounded-full bg-panel text-sm font-semibold">{completeness}%</span>
-        </div>
-        <div className="min-w-40 flex-1"><p className="font-semibold">Brand profile completeness</p><p className="text-sm text-muted">{filledFields} of {BRAIN_FIELDS.length} fields currently have content. Save to store changes; empty fields are not inferred.</p></div>
-        <nav aria-label="Brand brain sections" className="flex flex-wrap gap-2">{groups.map((group) => <a key={group} href={`#brain-${group.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`} className="rounded-full border border-line px-3 py-1 text-sm hover:bg-surface-2">{group}</a>)}</nav>
-      </div>
-      {groups.map((group) => (
-        <section id={`brain-${group.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`} key={group} className="scroll-mt-6 space-y-4">
-          <h2 className="font-display text-2xl">{group}</h2>
-          <div className="grid gap-4">
-            {BRAIN_FIELDS.filter((field) => field.group === group).map((field) => {
-              const source = detail.provenance[field.key];
-              return (
-                <Field
-                  key={field.key}
-                  label={field.label}
-                  hint={brain[field.key].trim() && source ? provenanceLabel(source) : "Empty. Not inferred."}
-                  error={errors[field.key]?.message}
-                >
-                  <TextArea
-                    {...register(field.key)}
-                    disabled={!canEdit}
-                    maxLength={4000}
-                  />
-                </Field>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-      <Field
-        label="Automation preference"
-        hint="Stored only. Nothing is published or approved because this preference is set."
+        }}
       >
-        <SelectInput
-          {...register("automationLevel")}
-          disabled={!canEdit}
-        >
-          {AUTOMATION_LEVELS.map((level) => (
-            <option key={level} value={level}>
-              {level}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
-      {errors.automationLevel?.message ? <p role="alert" className="text-sm text-danger">{errors.automationLevel.message}</p> : null}
-      {saveError ? <Notice>{saveError}</Notice> : null}
-      {isDirty ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning bg-warning-soft p-3 text-sm" role="status"><span>{discardRequested ? "Discard your unsaved brain changes?" : "Unsaved changes"}</span>{discardRequested ? <div className="flex gap-2"><Button type="button" variant="quiet" onClick={() => setDiscardRequested(false)}>Continue editing</Button><Button type="button" variant="danger" onClick={() => { reset(detail.brain); setDiscardRequested(false); }}>Discard changes</Button></div> : <Button type="button" variant="quiet" onClick={() => setDiscardRequested(true)}>Discard changes</Button>}</div> : null}
-      {canEdit ? <Button type="submit" disabled={pending || isSubmitting}>{pending || isSubmitting ? "Saving…" : "Save brain"}</Button> : null}
-      <Panel>
+        <div className="space-y-2">
+          <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-fg-muted underline-offset-4 hover:underline">
+            {detail.identity.name}
+          </Link>
+          <h1 className="font-display text-4xl">Brand brain</h1>
+          <p className="max-w-2xl text-fg-muted">
+            This is the record later decisions must use. Saving never silently replaces a field you did not change.
+            Page suggestions, when a model is configured, stay pending until you accept them.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-5 rounded-lg border border-border bg-surface p-5">
+          <CompletenessRing filled={completeness.filled} total={completeness.total} />
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="font-semibold">Brand profile completeness</p>
+            <p className="text-sm text-fg-muted">
+              {completeness.filled} of {completeness.total} fields currently have content. Save to store changes; empty fields are not inferred.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
+          <BrainMiniNav items={navItems} />
+
+          <div className="min-w-0 space-y-10">
+            <SectionFrame id="identity" label="Identity" progress={progressFor("identity")}>
+              <dl className="grid gap-3 rounded-lg border border-border bg-surface p-4 text-sm sm:grid-cols-2">
+                {[
+                  ["Brand name", detail.identity.name],
+                  ["Category", detail.identity.category],
+                  ["Industry", detail.identity.industry],
+                  ["Website", detail.identity.website],
+                  ["Country or market", detail.identity.country],
+                  ["Sells", detail.identity.sells],
+                ].map(([term, value]) => (
+                  <div key={term} className="min-w-0">
+                    <dt className="text-fg-muted">{term}</dt>
+                    <dd className="break-words font-semibold">{value || "Not set"}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-sm text-fg-muted">
+                These facts are edited on the <Link to="/brands/$brandId" params={{ brandId }} className="underline underline-offset-4">brand overview</Link>.
+              </p>
+              <FieldList keys={sectionFor("identity")?.keys ?? []} shared={shared} />
+            </SectionFrame>
+
+            <SectionFrame id="positioning" label="Positioning" progress={progressFor("positioning")}>
+              <FieldList keys={sectionFor("positioning")?.keys ?? []} shared={shared} />
+            </SectionFrame>
+
+            <SectionFrame id="audience" label="Audience" progress={progressFor("audience")}>
+              <FieldList keys={sectionFor("audience")?.keys ?? []} shared={shared} />
+            </SectionFrame>
+
+            <SectionFrame id="voice" label="Voice" progress={progressFor("voice")}>
+              <FieldList keys={sectionFor("voice")?.keys ?? []} shared={shared} />
+            </SectionFrame>
+
+            <SectionFrame id="rules" label="Rules" progress={progressFor("rules")}>
+              <p className="text-sm text-fg-muted">Prohibited claims are needed by the claim check, so keep them current.</p>
+              <FieldList keys={sectionFor("rules")?.keys ?? []} shared={shared} />
+              <Field
+                label="Automation preference"
+                hint="Stored only. Nothing is published or approved because this preference is set."
+              >
+                <SelectInput {...register("automationLevel")} disabled={!canEdit}>
+                  {AUTOMATION_LEVELS.map((level) => (
+                    <option key={level} value={level}>{level}</option>
+                  ))}
+                </SelectInput>
+              </Field>
+              {errors.automationLevel?.message ? <p role="alert" className="text-sm text-danger">{errors.automationLevel.message}</p> : null}
+            </SectionFrame>
+
+            <SectionFrame id="assets" label="Assets" progress={progressFor("assets")}>
+              <FieldList keys={sectionFor("assets")?.keys ?? []} shared={shared} />
+              <LogoUploader brandId={brandId} canEdit={canEdit} />
+              <SourceMaterial brandId={brandId} canEdit={canEdit} saved={detail.brain} formDirty={isDirty} />
+            </SectionFrame>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 z-10 space-y-3 rounded-lg border border-border bg-surface p-4 shadow-md">
+          {saveError ? <Notice>{saveError}</Notice> : null}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {isDirty ? (
+              <p role="status" className="text-sm font-semibold">{discardRequested ? "Discard your unsaved brain changes?" : "Unsaved changes"}</p>
+            ) : (
+              <p className="text-sm text-fg-muted">No unsaved changes.</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {isDirty ? (discardRequested ? (
+                <>
+                  <Button type="button" variant="secondary" onClick={() => setDiscardRequested(false)}>Continue editing</Button>
+                  <Button type="button" variant="danger" onClick={() => { reset(detail.brain); setDiscardRequested(false); }}>Discard changes</Button>
+                </>
+              ) : (
+                <Button type="button" variant="secondary" onClick={() => setDiscardRequested(true)}>Discard changes</Button>
+              )) : null}
+              {canEdit ? (
+                <Button type="submit" disabled={pending || isSubmitting}>{pending || isSubmitting ? "Saving…" : "Save brain"}</Button>
+              ) : null}
+            </div>
+          </div>
+          {!canEdit ? <p className="text-sm text-fg-muted">You can read this brain. Changing it needs a member role.</p> : null}
+        </div>
+      </form>
+
+      <Card>
         <h2 className="font-display text-xl">Versions</h2>
-        <ul className="mt-3 space-y-2 text-sm">
-          {detail.versions.map((version) => (
-            <li key={version.version} className="flex justify-between gap-3">
-              <span>Version {version.version} · {version.note}</span>
-              <span className="text-muted">{version.createdAt.slice(0, 16).replace("T", " ")}</span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
-    </form>
-      <Materials brandId={brandId} canEdit={canEdit} />
+        {detail.versions.length === 0 ? <p className="mt-3 text-sm text-fg-muted">No versions stored yet.</p> : (
+          <ul className="mt-3 space-y-2 text-sm">
+            {detail.versions.map((version) => (
+              <li key={version.version} className="flex flex-wrap justify-between gap-3">
+                <span>Version {version.version} · {version.note}</span>
+                <span className="text-fg-muted">{version.createdAt.slice(0, 16).replace("T", " ")}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }
 
-function Materials({ brandId, canEdit }: { brandId: string; canEdit: boolean }) {
-  const [note, setNote] = useState<string | null>(null);
-  const assetsQuery = useAssetsQuery(brandId);
-  const logos = assetsQuery.data?.logos ?? [];
-  const uploadLogoMutation = useScopedMutation({
-    mutationKey: ["mutation", "brand.logo", brandId],
-    mutationFn: (base64: string) => uploadLogo({ data: { brandId, base64 } }),
-    invalidate: () => [qk.assets(brandId)],
-    onSuccess: (saved) => setNote(saved.status === "stored" ? "Logo stored." : saved.detail),
-  });
-  const materialMutation = useScopedMutation({
-    mutationKey: ["mutation", "brand.material", brandId],
-    mutationFn: (vars: { filename: string; mime: string; text: string; base64: string }) => storeMaterial({ data: { brandId, ...vars } }),
-    // Stored material adds source documents, which the brand overview counts.
-    invalidate: () => [qk.assets(brandId), qk.machine(brandId)],
-    onSuccess: (saved) => setNote(saved.detail),
-  });
-  const pending = uploadLogoMutation.isPending || materialMutation.isPending;
-  const failure = uploadLogoMutation.error ?? materialMutation.error;
-  const error = failure ? errorText(failure) : null;
-
-  return (
-    <div className="space-y-4">
-      <Panel>
-        <h2 className="font-display text-2xl">Logo</h2>
-        <p className="mt-2 text-sm text-muted">PNG, JPEG, or WEBP, checked from the file bytes and stored with this brand. There is no separate object store.</p>
-        {assetsQuery.error ? <ErrorState message={errorText(assetsQuery.error)} onRetry={() => void assetsQuery.refetch()} /> : null}
-        {logos[0] ? <img src={`data:${logos[0].mime};base64,${logos[0].body}`} alt="Stored logo" className="mt-3 h-16 w-auto" /> : assetsQuery.error ? null : <p className="mt-3 text-muted">No logo stored.</p>}
-        {canEdit ? (
-          <label className="mt-3 block space-y-2 text-sm font-semibold">
-            Upload brand logo
-            <input
-              className="block w-full min-w-0 text-sm font-normal"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                  const raw = String(reader.result ?? "");
-                  const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
-                  void uploadLogoMutation.mutateAsync(base64).catch(() => undefined);
-                };
-                reader.readAsDataURL(file);
-              }}
-            />
-          </label>
-        ) : null}
-      </Panel>
-      <Panel>
-        <h2 className="font-display text-2xl">Source material</h2>
-        <p className="mt-2 text-sm text-muted">Plain text, DOCX, and PDF text can be stored. Instruction-like lines are dropped. An image-only PDF fails. Nothing here overwrites the brain.</p>
-        {canEdit ? (
-          <form
-            className="mt-3 space-y-3"
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-              const form = event.currentTarget;
-              const text = String(new FormData(form).get("material") ?? "");
-              void materialMutation.mutateAsync({ filename: "pasted.txt", mime: "text/plain", text, base64: "" }).then(() => form.reset(), () => undefined);
-            }}
-          >
-            <label className="block space-y-2 text-sm font-semibold">
-              Upload text, DOCX, or PDF
-              <input
-                className="block w-full text-sm font-normal"
-                type="file"
-                accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                aria-describedby="material-file-hint"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    const raw = String(reader.result ?? "");
-                    const base64 = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
-                    void materialMutation.mutateAsync({ filename: file.name, mime: file.type || "application/octet-stream", text: "", base64 }).catch(() => undefined);
-                  };
-                  reader.readAsDataURL(file);
-                }}
-              />
-              <span id="material-file-hint" className="block font-normal text-muted">The file is stored as untrusted text. It does not change the brain.</span>
-            </label>
-            <TextArea name="material" aria-label="Pasted source text" placeholder="Or paste brand or product text" />
-            <Button type="submit" disabled={pending}>Store pasted text</Button>
-          </form>
-        ) : null}
-      </Panel>
-      {error ? <Notice>{error}</Notice> : null}
-      {note ? <p className="text-sm text-muted">{note}</p> : null}
+function SectionFrame({ id, label, progress, children }: { id: BrainSectionId; label: string; progress: MiniNavItem | undefined; children: ReactNode }) {
+  const anchor = sectionAnchor(id);
+  return <section id={anchor} aria-labelledby={`${anchor}-title`} className="scroll-mt-6 space-y-4">
+    <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <h2 id={`${anchor}-title`} className="font-display text-2xl">{label}</h2>
+      {progress ? <p className="text-sm tabular-nums text-fg-muted">{progress.filled} of {progress.total} filled</p> : null}
     </div>
-  );
+    {children}
+  </section>;
+}
+
+function FieldList({ keys, shared }: { keys: readonly BrainKey[]; shared: FormShared }) {
+  if (keys.length === 0) return null;
+  return <div className="grid gap-4">
+    {keys.map((key) => <BrainTextField key={key} fieldKey={key} shared={shared} />)}
+  </div>;
+}
+
+function BrainTextField({ fieldKey, shared }: { fieldKey: BrainKey; shared: FormShared }) {
+  const meta = BRAIN_FIELDS.find((field) => field.key === fieldKey);
+  const value = shared.values[fieldKey] ?? "";
+  const source = shared.provenance[fieldKey];
+  return <Field
+    label={meta?.label ?? fieldKey}
+    hint={value.trim() && source ? provenanceLabel(source) : "Empty. Not inferred."}
+    error={shared.errors[fieldKey]?.message}
+  >
+    <TextArea {...shared.register(fieldKey)} data-brain-field="" disabled={!shared.canEdit} maxLength={4000} />
+  </Field>;
 }
