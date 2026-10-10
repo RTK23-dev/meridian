@@ -121,7 +121,8 @@ export interface CreativeManifest {
   assets: CreativeManifestAsset[];
   layers: CreativeManifestLayer[];
   cost: {
-    estimateUsd: number;
+    /** Null when the deliverable has no known price. Never a share of a total it is not part of. */
+    estimateUsd: number | null;
     actualUsd?: number;
   };
   qc: CreativeManifestQC;
@@ -275,7 +276,7 @@ export function buildCreativeManifest(params: {
     assets: params.assets ?? [],
     layers: [],
     cost: {
-      estimateUsd: params.costEstimateUsd ?? 0.0,
+      estimateUsd: params.costEstimateUsd ?? null,
     },
     qc: {
       status: "PENDING",
@@ -387,8 +388,8 @@ export function manifestFromCreativePlan(
   }));
 
   // 5. Cost
-  const costEstimateUsd = plan.estimatedCost?.perDeliverableUsd?.[deliverable.id] ??
-    (plan.estimatedCost?.totalEstimatedUsd ? plan.estimatedCost.totalEstimatedUsd / (plan.deliverables.length || 1) : 0);
+  // An unpriced deliverable has no estimate. The known total is never split across deliverables to fill the gap.
+  const costEstimateUsd = plan.estimatedCost?.perDeliverableUsd?.[deliverable.id] ?? null;
 
   const now = new Date().toISOString();
 

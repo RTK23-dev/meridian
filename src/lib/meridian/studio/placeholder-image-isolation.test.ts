@@ -155,10 +155,10 @@ test("executeApprovedCreativePlan still generates placeholder images in TestingR
   });
   await sql`
     insert into creative_plans (
-      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd, decision_id
+      id, organization_id, brand_id, brief_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd, decision_id, approved_by
     ) values (
       ${plan.id}, ${tenant.organizationId}, ${tenant.brandId}, ${tenant.briefId}, ${plan.version}, 'executing', ${plan.scope},
-      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, null, ${plan.lineage.decisionId}
+      ${plan.autonomy}, ${plan.objective}, ${JSON.stringify(plan)}, 0, null, ${plan.lineage.decisionId}, ${tenant.userId}
     )
   `;
 

@@ -1,3 +1,4 @@
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { advanceTestVideo, startTestVideo, type VideoJob } from "../providers/media.ts";
@@ -123,7 +124,7 @@ async function enqueue(
 }
 
 export function isTestingRuntime(): boolean {
-  return process.env.NODE_ENV === "test" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
+  return isTestingRuntimeNow();
 }
 
 export async function runVideoJob(sql: Sql, job: ExecutableJob, payload: Record<string, unknown>): Promise<string> {

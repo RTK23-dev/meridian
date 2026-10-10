@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { priceFor, ProductionRouter, requirementFor } from "./router.ts";
+import type { ImageGenerationInput, ProductionImageProvider } from "./image-providers.ts";
 import type { CreativeSpec, ProductionProvider } from "./types.ts";
 
 function fakeProvider(id: string, costPerSecondEstimateUsd: number, zeroSpend = false): ProductionProvider {
@@ -48,5 +49,61 @@ test("a provider that declares no finite per-second price has an unknown cost, n
     const price = priceFor({ id: "undeclared", capabilities: { costPerSecondEstimateUsd: declared } } as unknown as ProductionProvider, "video");
     assert.equal(price.status, "unknown");
     assert.equal(price.amountUsd, null);
+  }
+});
+
+function imageStub(onGenerate: () => void): ProductionImageProvider {
+  return {
+    id: "google_nano_banana",
+    capabilities: { zeroSpend: false },
+    async health() {
+      return { id: "google_nano_banana", state: "CONFIGURED", capabilities: ["text-to-image"], detail: "stub", checkedAt: new Date().toISOString() };
+    },
+    async generate(_input: ImageGenerationInput) {
+      onGenerate();
+      throw new Error("the stub must not be called by selection");
+    },
+  };
+}
+
+function imageSpec(aspectRatio: CreativeSpec["aspectRatio"]): CreativeSpec {
+  return { ...spec(), modality: "image", aspectRatio, durationTargetSeconds: 0 };
+}
+
+test("an explicit image provider that cannot make the aspect is refused before any provider call", async () => {
+  let calls = 0;
+  const router = new ProductionRouter({ runtime: "testing", providers: [], imageProviders: [imageStub(() => calls++)] });
+  await assert.rejects(
+    router.selectImageForSpec(imageSpec("4:5"), { requestedProvider: "google_nano_banana", allowUnknownCost: true }),
+    /does not offer 4:5/,
+  );
+  assert.equal(calls, 0);
+});
+
+test("automatic image selection refuses an unpriced provider unless the caller allows unknown costs, and never calls it", async () => {
+  let calls = 0;
+  const router = new ProductionRouter({ runtime: "testing", providers: [], imageProviders: [imageStub(() => calls++)] });
+  await assert.rejects(router.selectImageForSpec(imageSpec("9:16"), { allowUnknownCost: false }), /allowUnknownCost/);
+  assert.equal(calls, 0);
+});
+
+test("the test image double is refused outside the testing runtime, and priced at zero inside it", async () => {
+  const prior = process.env.MERIDIAN_TESTING_RUNTIME;
+  try {
+    delete process.env.MERIDIAN_TESTING_RUNTIME;
+    process.env.NODE_ENV = "development";
+    const production = new ProductionRouter({ runtime: "production", providers: [] });
+    await assert.rejects(
+      production.selectImageForSpec(imageSpec("9:16"), { requestedProvider: "test:image", allowUnknownCost: true }),
+      /test image provider is not enabled/,
+    );
+    process.env.MERIDIAN_TESTING_RUNTIME = "true";
+    const testing = new ProductionRouter({ runtime: "testing", providers: [] });
+    const { selection } = await testing.selectImageForSpec(imageSpec("9:16"), { requestedProvider: "test:image", allowUnknownCost: true });
+    assert.equal(selection.chosen?.costKnown, true);
+    assert.equal(selection.chosen?.estimateUsd, 0);
+  } finally {
+    if (prior === undefined) delete process.env.MERIDIAN_TESTING_RUNTIME;
+    else process.env.MERIDIAN_TESTING_RUNTIME = prior;
   }
 });

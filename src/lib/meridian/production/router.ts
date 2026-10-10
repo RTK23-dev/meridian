@@ -18,6 +18,8 @@ import { HiggsfieldProvider } from "./providers/higgsfield.ts";
 import { modelCapabilityRegistry } from "./registry.ts";
 import { selectOffer, type SelectionCandidate, type SelectionModality, type SelectionRecord, type SelectionRequirement } from "./capability-matrix.ts";
 import { configuredQuote, estimateCost, unknownQuote, type PriceQuote } from "./pricing.ts";
+import { GoogleNanoBananaImageProvider, TestImageProvider, type ProductionImageProvider } from "./image-providers.ts";
+import { isTestingRuntimeNow as testingRuntimeNow } from "../runtime-mode.ts";
 
 /** Automatic preference order by cost mode. The matrix decides eligibility first; this only orders eligible providers. */
 const PREFERENCE_BY_MODE: Record<"BALANCED" | "QUALITY_FIRST", string[]> = {
@@ -29,6 +31,17 @@ export interface ProviderSelection {
   provider: ProductionProvider;
   selection: SelectionRecord;
 }
+
+export interface ImageProviderSelection {
+  provider: ProductionImageProvider;
+  selection: SelectionRecord;
+}
+
+/** Automatic image preference. The matrix decides eligibility first; this only orders eligible providers. */
+const IMAGE_PREFERENCE = ["google_nano_banana", "test:image"];
+
+/** Any provider the matrix can price: a video provider or an image provider. */
+type CandidateProvider = PricedProvider & { capabilities: PricedProvider["capabilities"] & { zeroSpend: boolean } };
 
 /**
  * The requirement a spec places on a provider. Only video is routed so far: an image or carousel needs its own
@@ -51,7 +64,13 @@ export function requirementFor(spec: CreativeSpec): SelectionRequirement {
  * The price Meridian holds for a provider. A video price is the owner's per-second declaration in provider configuration.
  * No image price is declared for any provider, so an image price is unknown, not zero.
  */
-export function priceFor(provider: ProductionProvider, modality: SelectionModality): PriceQuote {
+/** The provider fields a price is read from. A video provider declares per-second, an image provider per-image. */
+export interface PricedProvider {
+  id: string;
+  capabilities: { costPerSecondEstimateUsd?: number; costPerImageEstimateUsd?: number };
+}
+
+export function priceFor(provider: PricedProvider, modality: SelectionModality): PriceQuote {
   if (modality === "video") {
     const declared = provider.capabilities.costPerSecondEstimateUsd;
     if (typeof declared !== "number" || !Number.isFinite(declared)) {
@@ -59,14 +78,29 @@ export function priceFor(provider: ProductionProvider, modality: SelectionModali
     }
     return configuredQuote("per_second", declared, `provider declaration (${provider.id})`);
   }
-  return unknownQuote("per_image", `no image price is declared for ${provider.id}`);
+  const declared = provider.capabilities.costPerImageEstimateUsd;
+  if (typeof declared !== "number" || !Number.isFinite(declared)) {
+    return unknownQuote("per_image", `no image price is declared for ${provider.id}`);
+  }
+  return configuredQuote("per_image", declared, `provider declaration (${provider.id})`);
+}
+
+/**
+ * The requirement an image places on a provider. An image has no duration and bills one image. Image-to-image is not
+ * routed yet, so a spec with source media is refused rather than generated from text alone.
+ */
+export function requirementForImage(spec: CreativeSpec): SelectionRequirement {
+  if (spec.modality !== "image") throw new Error(`requirementForImage needs an image spec, got '${spec.modality}'`);
+  if (spec.sourceMediaUrl) throw new Error("image-to-image is not routed yet; an image spec with source media is refused");
+  return { modality: "image", task: "text-to-image", durationSeconds: null, aspectRatio: spec.aspectRatio, units: 1 };
 }
 
 export class ProductionRouter {
   private providers = new Map<string, ProductionProvider>();
+  private imageProviders = new Map<string, ProductionImageProvider>();
   readonly runtime: "production" | "testing";
 
-  constructor(options?: { runtime?: "production" | "testing"; providers?: ProductionProvider[] }) {
+  constructor(options?: { runtime?: "production" | "testing"; providers?: ProductionProvider[]; imageProviders?: ProductionImageProvider[] }) {
     this.runtime =
       options?.runtime ||
       (process.env.NODE_ENV === "test" || process.env.MERIDIAN_TESTING_RUNTIME === "true"
@@ -84,6 +118,27 @@ export class ProductionRouter {
       this.register(new VeoProvider());
       this.register(new HiggsfieldProvider());
     }
+
+    if (options?.imageProviders) {
+      for (const p of options.imageProviders) this.registerImage(p);
+    } else {
+      this.registerImage(new GoogleNanoBananaImageProvider());
+      // The test double is always listed, but it is resolved and selected only while the testing runtime is active.
+      const testImage = new TestImageProvider();
+      this.imageProviders.set(testImage.id, testImage);
+    }
+  }
+
+  registerImage(provider: ProductionImageProvider): void {
+    if (this.runtime === "production" && provider.id === "test:image") {
+      throw new Error(`Cannot register test provider '${provider.id}' in ProductionRuntime.`);
+    }
+    this.imageProviders.set(provider.id, provider);
+  }
+
+  getImage(id: string): ProductionImageProvider | undefined {
+    if (id === "test:image" && !testingRuntimeNow()) return undefined;
+    return this.imageProviders.get(id);
   }
 
   register(provider: ProductionProvider): void {
@@ -224,6 +279,62 @@ export class ProductionRouter {
     return { provider, selection };
   }
 
+  /**
+   * Chooses the image provider and model for an image spec with the same matrix as video. Automatic selection refuses an
+   * unknown price unless the caller allows it. The executor allows it only for a deliverable reserved against an explicit
+   * spend cap (see planReservationShares), so the spend stays bounded. An explicit provider is a deliberate choice.
+   */
+  async selectImageForSpec(
+    spec: CreativeSpec,
+    options: { requestedProvider?: string; allowUnknownCost: boolean },
+  ): Promise<ImageProviderSelection> {
+    const requirement = requirementForImage(spec);
+    const requested = options.requestedProvider && options.requestedProvider !== "auto" ? options.requestedProvider : null;
+    if (requested) {
+      const provider = this.getImage(requested);
+      if (!provider) {
+        if (requested === "test:image") throw new Error("The test image provider is not enabled outside the testing runtime.");
+        throw new Error(`Image provider '${requested}' is not registered or cannot be resolved in ${this.runtime} runtime.`);
+      }
+      const health = await provider.health();
+      if (health.state === "NOT_CONFIGURED") throw new Error(`Provider '${requested}' is NOT_CONFIGURED: ${health.detail || "Credentials missing."}`);
+      if (health.state === "UNAVAILABLE" || health.state === "AUTH_FAILED") throw new Error(`Provider '${requested}' is ${health.state}: ${health.detail || "Provider offline."}`);
+      const selection = selectOffer({
+        candidates: this.candidatesFor([provider], "image"),
+        requirement,
+        registry: modelCapabilityRegistry,
+        mode: "PREFERENCE",
+        preference: [requested],
+        allowDeprecated: true,
+        allowZeroSpend: true,
+        allowUnknownCost: true,
+      });
+      if (!selection.chosen) throw new Error(`Provider '${requested}' cannot produce this deliverable: ${summarize(selection)}`);
+      return { provider, selection };
+    }
+
+    const healthy = await this.healthyImageProviders();
+    if (healthy.length === 0) throw new Error("No configured image provider is available.");
+    const selection = selectOffer({
+      candidates: this.candidatesFor(healthy, "image"),
+      requirement,
+      registry: modelCapabilityRegistry,
+      mode: "PREFERENCE",
+      preference: IMAGE_PREFERENCE,
+      allowUnknownCost: options.allowUnknownCost,
+    });
+    if (!selection.chosen) throw new Error(`No eligible image provider: ${summarize(selection)}`);
+    const provider = healthy.find((p) => p.id === selection.chosen!.providerId);
+    if (!provider) throw new Error(`Chosen image provider '${selection.chosen.providerId}' is no longer healthy.`);
+    return { provider, selection };
+  }
+
+  private async healthyImageProviders(): Promise<ProductionImageProvider[]> {
+    const usable = Array.from(this.imageProviders.values()).filter((p) => p.id !== "test:image" || testingRuntimeNow());
+    const checks = await Promise.all(usable.map(async (p) => ({ provider: p, health: await p.health() })));
+    return checks.filter((c) => c.health.state === "HEALTHY" || c.health.state === "CONFIGURED").map((c) => c.provider);
+  }
+
   private async healthyProviders(): Promise<ProductionProvider[]> {
     const checks = await Promise.all(
       Array.from(this.providers.values()).map(async (p) => ({ provider: p, health: await p.health() })),
@@ -232,7 +343,7 @@ export class ProductionRouter {
   }
 
   /** Every registered model of these providers, as selection candidates, priced for this modality. */
-  private candidatesFor(providers: ProductionProvider[], modality: SelectionModality): SelectionCandidate[] {
+  private candidatesFor(providers: CandidateProvider[], modality: SelectionModality): SelectionCandidate[] {
     return providers.flatMap((provider) =>
       modelCapabilityRegistry.listModels(provider.id).map((record) => ({
         provider: {
