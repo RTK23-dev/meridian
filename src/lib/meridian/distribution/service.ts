@@ -105,11 +105,12 @@ export async function listAvailableChannels(
     connectionsByPlatform.set(asText(row.platform), asText(row.account_name));
   }
 
-  // Also check paid ad provider accounts
+  // Also check paid ad provider connections. The table is provider_connections, and its healthy status is stored as CONNECTED.
+  // Querying a table that does not exist failed the whole channel list, so the publish dialog showed no destinations.
   const adAccounts = await sql<Record<string, unknown>>`
     select provider, account_name, status
-    from provider_accounts
-    where organization_id = ${organizationId} and status = 'connected'
+    from provider_connections
+    where organization_id = ${organizationId} and status = 'CONNECTED'
   `;
   for (const row of adAccounts) {
     connectionsByPlatform.set(asText(row.provider), asText(row.account_name));
