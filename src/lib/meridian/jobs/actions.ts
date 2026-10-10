@@ -3,7 +3,8 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { hasRole, isRole } from "@/lib/meridian/access";
 import { withTransaction } from "@/lib/meridian/learning/store";
-import { summarizeUsage } from "@/lib/meridian/observability/usage";
+import { utcDay } from "@/lib/meridian/observability/timestamps";
+import { groupUsage, summarizeUsage, type UsageRun } from "@/lib/meridian/observability/usage";
 import {
   countsByStatus,
   heartbeatState,
@@ -15,11 +16,6 @@ import {
   workerHealthView,
   workspaceInput,
 } from "./ops.ts";
-
-function inputText(value: unknown, name: string): string {
-  if (typeof value !== "string" || !value.trim() || value.trim().length > 100) throw new Error(`${name} is required.`);
-  return value.trim();
-}
 
 async function requireAdmin(userId: string, organizationId: string) {
   const sql = await getSql();
@@ -170,46 +166,47 @@ export const cancelJob = createServerFn({ method: "POST" })
     });
   });
 
+const USAGE_ROW_LIMIT = 20_000;
+const USAGE_DAY_LIMIT = 90;
+
+type UsageRunRow = UsageRun & { day: string };
+
+function usageRunFromRow(row: Record<string, unknown>): UsageRunRow {
+  return {
+    operation: String(row.operation ?? "unknown"),
+    tokens: row.tokens == null ? null : Number(row.tokens),
+    costCents: row.cost_cents == null ? null : Number(row.cost_cents),
+    day: utcDay(row.created_at),
+  };
+}
+
+/**
+ * Model usage for one workspace, built on summarizeUsage. A cost total is null when any run in its group has no cost.
+ * Totals cover the newest 20,000 runs. `truncated` is true when older runs were left out.
+ */
 export const listUsage = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ({ organizationId: inputText((input as { organizationId?: unknown })?.organizationId, "Workspace") }))
+  .validator((input: unknown) => workspaceInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await requireAdmin(context.userId, data.organizationId);
     const rows = await sql<Record<string, unknown>>`
       select operation, tokens, cost_cents, created_at from model_runs
       where organization_id = ${data.organizationId}
-      order by created_at desc limit 20_000
+      order by created_at desc, id desc limit ${USAGE_ROW_LIMIT + 1}
     `;
-    const runs = rows.map((row) => ({
-      operation: String(row.operation ?? "unknown"),
-      tokens: row.tokens == null ? null : Number(row.tokens),
-      costCents: row.cost_cents == null ? null : Number(row.cost_cents),
-      createdAt: String(row.created_at),
-    }));
-    const byDay = new Map<string, { tokens: number; knownCost: number; missingCost: number }>();
-    const byOperation = new Map<string, { tokens: number; knownCost: number; missingCost: number }>();
-    for (const run of runs) {
-      const day = run.createdAt.slice(0, 10);
-      const total = byDay.get(day) ?? { tokens: 0, knownCost: 0, missingCost: 0 };
-      total.tokens += run.tokens ?? 0;
-      if (run.costCents == null) total.missingCost += 1;
-      else total.knownCost += run.costCents;
-      byDay.set(day, total);
-
-      const operation = byOperation.get(run.operation) ?? { tokens: 0, knownCost: 0, missingCost: 0 };
-      operation.tokens += run.tokens ?? 0;
-      if (run.costCents == null) operation.missingCost += 1;
-      else operation.knownCost += run.costCents;
-      byOperation.set(run.operation, operation);
-    }
+    const truncated = rows.length > USAGE_ROW_LIMIT;
+    const runs = rows.slice(0, USAGE_ROW_LIMIT).map(usageRunFromRow);
     return {
-      usage: summarizeUsage(runs),
+      usage: { ...summarizeUsage(runs), missingTokens: runs.filter((run) => run.tokens == null).length },
       runs: runs.length,
-      byOperation: [...byOperation.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([operation, value]) => ({
-        operation, tokens: value.tokens, costCents: value.missingCost === 0 ? value.knownCost : null,
-      })),
-      daily: [...byDay.entries()].sort(([left], [right]) => right.localeCompare(left)).slice(0, 90).map(([day, value]) => ({
-        day, tokens: value.tokens, costCents: value.missingCost === 0 ? value.knownCost : null,
-      })),
+      truncated,
+      rowLimit: USAGE_ROW_LIMIT,
+      byOperation: groupUsage(runs, (run) => run.operation)
+        .sort((left, right) => left.key.localeCompare(right.key))
+        .map(({ key, ...group }) => ({ operation: key, ...group })),
+      daily: groupUsage(runs, (run) => run.day)
+        .sort((left, right) => right.key.localeCompare(left.key))
+        .slice(0, USAGE_DAY_LIMIT)
+        .map(({ key, ...group }) => ({ day: key, ...group })),
     };
   });
