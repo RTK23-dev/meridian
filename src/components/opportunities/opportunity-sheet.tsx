@@ -77,7 +77,7 @@ function OpportunityDetail({ item, position, brandId, canEdit, dismissing, onDis
 
       <section aria-labelledby="opportunity-evidence" className="space-y-2">
         <h3 id="opportunity-evidence" className="font-semibold">Evidence</h3>
-        {item.evidence.length ? <ul className="list-disc space-y-1 pl-5 text-sm text-muted">{item.evidence.map((entry) => <li key={`${entry.id}:${entry.source}`}>{entry.summary}</li>)}</ul> : <p className="text-sm text-muted">No evidence items are attached to this opportunity.</p>}
+        {item.evidence.length ? <ul className="list-disc space-y-1 pl-5 text-sm text-muted">{item.evidence.map((entry, index) => <li key={`${index}:${entry.id}`}>{entry.summary}</li>)}</ul> : <p className="text-sm text-muted">No evidence items are attached to this opportunity.</p>}
         {item.supportingCreativeIds.length ? <div className="space-y-2 text-sm">
           <p className="text-muted">{item.supportingCreativeIds.length} source {item.supportingCreativeIds.length === 1 ? "creative is" : "creatives are"} linked to this opportunity. <Link to="/brands/$brandId/library" params={{ brandId }} className="font-semibold underline underline-offset-4">Open the creative library</Link> to review them.</p>
           <IdList label="source creative ids" ids={item.supportingCreativeIds} />
