@@ -131,4 +131,6 @@ Not implemented in this change:
 - Engine-specific question sets beyond the existing registry. The registry's questions are used as they are.
 - A calibration report for either engine. Every value is uncalibrated.
 - Shadow evaluation. The flag exists, but it only gates JEV's existing compare mode, and no shadow runner exists.
-- The existing gates in `jev/policy.ts` are not yet expressed through the new policy module. The new policy is available and tested, but the older gates still decide production outcomes.
+- **No production approval gate consumes engine decisions yet.** Engine answers are produced for research evidence analysis only (`research/worker.ts` and `study/deep-study-service.ts` persist answers; no outcome is computed from them). The production gates are local, deterministic models: the creative and image gate (`jev/judgment.ts` `judgeFeatures`, used by `studio/features.ts` and `studio/image-qc.server.ts`), and the opportunity rule gate (`jev/engine.ts` `decideForTenant`). `jev/policy.ts` `evaluatePolicy` has no production caller. Making any gate depend on a remote engine changes approval behaviour and cost, so it needs an explicit decision.
+- **Image and frame evidence does not reach any decision.** An evidence bundle carries a keyframe reference, not frame bytes, and no loader turns that reference into an image. OpenAI Decisions can take images, but no production path supplies them.
+- The new policy module is tested, and no production path uses it yet.
