@@ -207,7 +207,8 @@ try {
 
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
   await page.getByRole("tab", { name: "Scoring weights" }).click();
-  const weightForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Save diagnostic weights" }) });
+  // This phase's weights panel is not a form element, so the panel holding the save button is the scope.
+  const weightForm = page.getByRole("tabpanel").filter({ has: page.getByRole("button", { name: "Save diagnostic weights" }) });
   // Save stays disabled until a weight changes, so the run edits the first one before validating and saving.
   const firstWeight = weightForm.getByLabel(/typed value/).first();
   await firstWeight.fill((await firstWeight.inputValue()) === "1.25" ? "1.5" : "1.25");
