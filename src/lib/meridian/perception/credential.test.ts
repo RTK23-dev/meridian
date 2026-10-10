@@ -105,5 +105,7 @@ test("the settings panel reads perception through the same resolver, and never f
 test("fingerprintOf never returns the key itself", () => {
   assert.equal(fingerprintOf("abcdefgh"), "...efgh");
   assert.equal(fingerprintOf("ab"), "...");
+  assert.equal(fingerprintOf("abcd"), "...", "a four-character key is shown whole by the last four, so it is hidden entirely");
+  assert.equal(fingerprintOf("abcdefg"), "...", "fewer than eight characters: nothing is shown");
   assert.ok(!fingerprintOf("supersecretvalue").includes("supersecret"));
 });

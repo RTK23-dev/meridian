@@ -1,4 +1,5 @@
-import { resolvePerceptionCredential } from "../perception/credential.ts";
+import { resolvePerceptionCredential, type PerceptionCredential } from "../perception/credential.ts";
+import { selectPerceptionProvider } from "../perception/run.ts";
 /**
  * Workspace Provider Configuration Service
  *
@@ -48,9 +49,20 @@ export type ProviderConfigSummary = {
 };
 
 function fingerprint(secret?: string): string | undefined {
-  if (!secret || secret.trim().length < 4) return undefined;
+  if (!secret || secret.trim().length < 8) return undefined;
   const clean = secret.trim();
   return `...${clean.slice(-4)}`;
+}
+
+/**
+ * The perception credential as production sees it: the provider selection first (PERCEPTION_PROVIDER=none turns
+ * perception off), then the credential resolver. Settings and Test Connection both read this, so they cannot disagree
+ * with a perception run.
+ */
+async function perceptionCredentialFor(sql: Sql, organizationId: string): Promise<PerceptionCredential> {
+  const selection = selectPerceptionProvider();
+  if (!selection.provider) return { status: "not_configured", reason: selection.reason };
+  return resolvePerceptionCredential(sql, organizationId);
 }
 
 /**
@@ -118,7 +130,7 @@ export async function getWorkspaceProviderSettings(
   // 2. Perception Category. This summary reads the same credential resolver production perception calls use
   // (perception/credential.ts), so it never reports a credential the provider cannot use. A saved workspace key that
   // cannot be used is "unusable", and the deployment key is not offered in its place.
-  const perceptionCredential = await resolvePerceptionCredential(sql, organizationId);
+  const perceptionCredential = await perceptionCredentialFor(sql, organizationId);
   const perceptionConfigured = perceptionCredential.status === "ready";
   const perceptionState: PerceptionCredentialState =
     perceptionCredential.status === "ready" ? "usable" : perceptionCredential.status === "unusable" ? "unusable" : "not_configured";
@@ -396,7 +408,7 @@ export async function testWorkspaceProviderConnection(
     if (input.category === "perception") {
       // Checks the credential the production resolver would use. It does not call Gemini, so READY means "a usable
       // credential is in place", not "the live API answered".
-      const credential = await resolvePerceptionCredential(sql, input.organizationId);
+      const credential = await perceptionCredentialFor(sql, input.organizationId);
       const latencyMs = Date.now() - started;
       if (credential.status === "ready") {
         const source = credential.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";

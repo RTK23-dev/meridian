@@ -14,7 +14,7 @@ import type { MediaObservation, MultimodalPerceptionProvider, PerceptionHealth, 
 import { PERCEPTION_MAX_MEDIA, groundedPerceptionText, runPerception, selectPerceptionProvider, type PerceptionInputMedia } from "./run.ts";
 
 // A stub perception provider. It records every call, so tests can prove when production calls it and when it does not.
-function stubProvider(options: { health?: PerceptionHealth; fail?: "provider" | "throw"; id?: string } = {}) {
+function stubProvider(options: { health?: PerceptionHealth; fail?: "provider" | "throw"; id?: string; productPresence?: boolean | null } = {}) {
   const calls: Array<{ kind: PerceptionMediaKind; media: PerceptionMedia[] }> = [];
   const provider: MultimodalPerceptionProvider = {
     id: options.id ?? "stub_perception",
@@ -28,7 +28,7 @@ function stubProvider(options: { health?: PerceptionHealth; fail?: "provider" | 
         return { status: "failed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", failureKind: "rate_limited", message: "stub limit", latencyMs: 1 };
       }
       const observations: MediaObservation[] = input.media.map((item) => ({
-        mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "inferred", productPresence: true, ocrText: "Lather bar",
+        mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "inferred", productPresence: options.productPresence === undefined ? true : options.productPresence, ocrText: "Lather bar",
       }));
       return { status: "observed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", observations, latencyMs: 2 };
     },
@@ -79,6 +79,17 @@ test("an observed run records the media with its hashes and real timestamps, the
   assert.equal(row?.prompt_version, "stub-prompt.v1");
   assert.match(JSON.stringify(row?.media), /"timestampMs":1500/);
   assert.match(JSON.stringify(row?.observations), /"basis":"inferred"/);
+});
+
+test("an unknown fact is stated as unknown in the grounded text, never as absent", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "perception-unknown");
+  const { provider } = stubProvider({ productPresence: null });
+  const outcome = await runPerception(sql, { ...subject(tenant), kind: "image", durationMs: null, provider, media: [frame([10, 20, 30], 0)] });
+  assert.equal(outcome.status, "observed");
+  const text = groundedPerceptionText(outcome).join("\n");
+  assert.match(text, /product unknown/, "the model's null is shown as unknown");
+  assert.doesNotMatch(text, /product absent/, "null must not be read as a negative");
 });
 
 test("the grounded text says the observations are descriptions and that a video was only partly analysed", async () => {

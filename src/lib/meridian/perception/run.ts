@@ -248,8 +248,9 @@ export function groundedPerceptionText(outcome: PerceptionRunOutcome): string[] 
     const where = observation.timestampMs !== null ? `Frame at ${observation.timestampMs}ms` : "Image";
     const facts = [
       observation.shotType ? `shot ${observation.shotType}` : null,
-      observation.productPresence === undefined ? null : `product ${observation.productPresence ? "present" : "absent"}`,
-      observation.facePresence === undefined ? null : `face ${observation.facePresence ? "present" : "absent"}`,
+      // An unknown fact is stated as unknown. Null is the model's "cannot tell", never "absent".
+      typeof observation.productPresence === "boolean" ? `product ${observation.productPresence ? "present" : "absent"}` : "product unknown",
+      typeof observation.facePresence === "boolean" ? `face ${observation.facePresence ? "present" : "absent"}` : "face unknown",
       observation.setting ? `setting ${observation.setting}` : null,
       observation.ocrText ? `on-screen text "${observation.ocrText}"` : null,
     ].filter((item): item is string => item !== null);

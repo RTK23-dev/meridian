@@ -29,6 +29,7 @@ import {
   notify,
 } from "../machine-shared";
 import { assertOpportunityClear, opportunityView } from "../opportunity/actions";
+import { briefStatusFor, productionRefusalFor } from "@/lib/meridian/studio/brief-review.server";
 
 function briefDraftFromRow(row: Record<string, unknown>): BriefDraft {
   return {
@@ -85,7 +86,8 @@ async function produceCreative(
   `;
   const briefRow = briefs[0];
   if (!briefRow) throw new Error("Brief not found.");
-  if (asText(briefRow.status) === "rejected") throw new Error("This brief did not pass the gate.");
+  const productionRefusal = productionRefusalFor(asText(briefRow.status));
+  if (productionRefusal) throw new Error(productionRefusal);
   const opportunityId = asText(briefRow.opportunity_id);
   if (opportunityId) await assertOpportunityClear(sql, opportunityId);
   const loaded = await loadContext(sql, input.organizationId, input.brandId);
@@ -208,7 +210,7 @@ async function produceCreative(
       )
     `;
   }
-  await sql`update briefs set status = 'used' where id = ${input.briefId}`;
+  await sql`update briefs set status = 'used' where id = ${input.briefId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}`;
   await sql`
     insert into assets (
       id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status
@@ -335,7 +337,7 @@ export const createBriefFromOpportunity = createServerFn({ method: "POST" })
         ${brief.audience}, ${brief.angle}, ${brief.hook}, ${brief.message}, ${brief.offer}, ${brief.cta},
         ${brief.format}, ${brief.proofType}, ${brief.constraints}, ${JSON.stringify(brief.context)},
         ${JSON.stringify(brief.workflow)}, ${JSON.stringify(brief.why)}, ${JSON.stringify(brief.learningNotes)},
-        ${JSON.stringify(brief.failureNotes)}, ${gate.decision === "REJECT" ? "rejected" : "ready"},
+        ${JSON.stringify(brief.failureNotes)}, ${briefStatusFor(gate.decision)},
         ${decisionId}, ${context.userId}
       )
     `;

@@ -25,8 +25,9 @@ export type PerceptionCredential =
   | { status: "not_configured"; reason: string }
   | { status: "unusable"; source: "workspace"; reason: string };
 
+/** Shows the last four characters only when at least half of the key stays hidden. */
 export function fingerprintOf(apiKey: string): string {
-  return apiKey.length >= 4 ? `...${apiKey.slice(-4)}` : "...";
+  return apiKey.length >= 8 ? `...${apiKey.slice(-4)}` : "...";
 }
 
 export async function resolvePerceptionCredential(

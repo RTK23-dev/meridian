@@ -195,6 +195,28 @@ test("ProviderConfigService: Test Connection for perception reports READY only f
   });
 });
 
+test("ProviderConfigService: PERCEPTION_PROVIDER=none turns perception off in the settings summary and in Test Connection, even with a saved key", async () => {
+  await withEnv({ PERCEPTION_PROVIDER: "none", PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_KEY }, async () => {
+    const { sql } = fakeVaultSql();
+    await saveWorkspaceProviderConfig(sql, {
+      organizationId: "org-off",
+      actorId: "admin-1",
+      category: "perception",
+      credentials: { apiKey: WORKSPACE_KEY },
+    });
+    const perception = (await getWorkspaceProviderSettings(sql, "org-off")).perception;
+    assert.equal(perception.configured, false, "the panel must not show perception as configured while it is turned off");
+    assert.equal(perception.credentialState, "not_configured");
+    assert.equal(perception.source, "not_configured");
+    assert.equal(perception.keyFingerprint, undefined);
+    assert.match(perception.credentialReason ?? "", /PERCEPTION_PROVIDER=none/);
+
+    const connection = await testWorkspaceProviderConnection(sql, { organizationId: "org-off", category: "perception" });
+    assert.equal(connection.status, "ERROR");
+    assert.match(connection.message, /PERCEPTION_PROVIDER=none/);
+  });
+});
+
 test("ProviderConfigService: saving perception without a key is refused and leaves the stored key alone", async () => {
   await withEnv({ PERCEPTION_SHARED_DEFAULT: undefined }, async () => {
     const { sql, rows, executed } = fakeVaultSql();

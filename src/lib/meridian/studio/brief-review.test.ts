@@ -3,7 +3,7 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
 import { BRAND_QUESTION, BRIEF, approvesBrief, createBrief, registryWith, stubEngine } from "../testing/brief-fixtures.ts";
-import { BRIEF_REVIEW_MINIMUM_ROLE, loadBriefReviewDisclosure, reviewBrief, briefStatusFor } from "./brief-review.server.ts";
+import { BRIEF_REVIEW_MINIMUM_ROLE, loadBriefReviewDisclosure, reviewBrief, briefStatusFor, productionRefusalFor } from "./brief-review.server.ts";
 import { loadGatedJevDecision } from "./session.server.ts";
 
 const REASON = "Reviewed the disclosed failure. The brand fit is clear from the positioning and the copy.";
@@ -168,6 +168,40 @@ test("the review record is append-only", async () => {
   const reviewed = await reviewBrief(sql, { organizationId: tenant.organizationId, brandId: tenant.brandId, briefId: made.briefId, reviewerId: "reviewer-5", reviewerRole: "admin", action: "approve", reason: REASON, acknowledged: true });
   await assert.rejects(sql`update decision_reviews set reason = 'changed' where id = ${reviewed.reviewId}`, /append-only/);
   await assert.rejects(sql`delete from decision_reviews where id = ${reviewed.reviewId}`, /append-only/);
+});
+
+test("production refuses every brief that is not ready or used, whichever path created it", () => {
+  assert.equal(productionRefusalFor("ready"), null);
+  assert.equal(productionRefusalFor("used"), null);
+  assert.match(productionRefusalFor("awaiting_review") ?? "", /awaiting review/);
+  assert.match(productionRefusalFor("rejected") ?? "", /did not pass the gate/);
+  assert.match(productionRefusalFor("draft") ?? "", /not ready for production/, "an unknown status is refused, not allowed");
+});
+
+test("a held brief whose engine record is missing cannot be reviewed, so an empty disclosure is never acknowledged", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "review-missing-record");
+  const openai = stubEngine("openai-decisions", { failure: true });
+  const made = await createBrief(sql, tenant, { engines: registryWith(stubEngine("jev"), openai), selected: { engineId: "openai-decisions", source: "workspace" } });
+  // The record link is lost, as it would be if the gate record insert had failed.
+  await sql`update jev_decisions set evidence = '{}'::jsonb where id = ${made.decisionId}`;
+  const disclosure = await loadBriefReviewDisclosure(sql, { organizationId: tenant.organizationId, brandId: tenant.brandId, briefId: made.briefId });
+  assert.equal(disclosure.reviewable, false);
+  await assert.rejects(
+    reviewBrief(sql, {
+      organizationId: tenant.organizationId,
+      brandId: tenant.brandId,
+      briefId: made.briefId,
+      reviewerId: "reviewer-1",
+      reviewerRole: "admin",
+      action: "approve",
+      acknowledged: true,
+      reason: REASON,
+    }),
+    /engine's record for this brief is missing/,
+  );
+  const [brief] = await sql<{ status: string }>`select status from briefs where id = ${made.briefId}`;
+  assert.equal(brief?.status, "awaiting_review", "the brief stays held");
 });
 
 test("the status a gate outcome gives a brief: only an automatic approval is ready without a person", () => {

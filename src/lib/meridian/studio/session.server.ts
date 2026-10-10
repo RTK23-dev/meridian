@@ -1075,7 +1075,7 @@ export async function executeApprovedCreativePlan(
         ${JSON.stringify({ manifestId: manifest.creativeId, mode: manifest.mode, beats: manifest.beats.length, planId: creativePlan.id })}
       )
     `;
-    await sql`update briefs set status = 'used' where id = ${briefId}`;
+    await sql`update briefs set status = 'used' where id = ${briefId} and organization_id = ${access.organizationId} and brand_id = ${brandId}`;
     await transitionCreativePlan(sql, {
       organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
       target: "executing", reason: "Approved research manifest is being finalized.",
@@ -1586,7 +1586,7 @@ export async function executeApprovedCreativePlan(
       });
     }
 
-    await sql`update briefs set status = 'used' where id = ${briefId}`;
+    await sql`update briefs set status = 'used' where id = ${briefId} and organization_id = ${access.organizationId}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
     await settleCreativePlanIfComplete(sql, {
       organizationId: access.organizationId,

@@ -29,6 +29,19 @@ export function briefStatusFor(action: PolicyOutcome): BriefStatus {
   return "rejected";
 }
 
+/**
+ * Why a brief cannot be made into a creative, or null when it can. A brief awaiting review or rejected never reaches
+ * production, whichever path created it. Only a ready or used brief is allowed.
+ */
+export function productionRefusalFor(status: string): string | null {
+  if (status === "ready" || status === "used") return null;
+  if (status === "awaiting_review") {
+    return "This brief is awaiting review. An admin or owner must review it before a creative is made from it.";
+  }
+  if (status === "rejected") return "This brief did not pass the gate.";
+  return "This brief is not ready for production.";
+}
+
 export type BriefReviewDisclosure = {
   briefId: string;
   briefStatus: string;
@@ -126,7 +139,9 @@ export async function loadBriefReviewDisclosure(
     evidence: jsonOf<Array<{ kind: string; name: string; timestampMs?: number; sha256?: string }>>(record?.evidence, []),
     policyVersion: record?.policy_version ?? null,
     questionVersions: jsonOf<string[]>(record?.question_versions, []),
-    reviewable: brief.status === "awaiting_review" && decision === "HUMAN_REVIEW" && unreviewed,
+    // A review needs the engine's recorded outcome. Without the record, the reviewer would acknowledge an empty disclosure,
+    // so the brief stays held and cannot be released.
+    reviewable: brief.status === "awaiting_review" && decision === "HUMAN_REVIEW" && unreviewed && record !== undefined,
     reviews: reviews.map((item) => ({
       action: item.action,
       reviewerRole: item.reviewer_role,
@@ -168,6 +183,9 @@ export async function reviewBrief(sql: Sql, input: ReviewBriefInput): Promise<{ 
   }
 
   const disclosure = await loadBriefReviewDisclosure(sql, input);
+  if (disclosure.briefStatus === "awaiting_review" && disclosure.gateRecordId === null) {
+    throw new Error("The engine's record for this brief is missing, so it cannot be reviewed. Create the brief again.");
+  }
   if (!disclosure.reviewable) {
     throw new Error(`This brief is not awaiting review (status: ${disclosure.briefStatus}, decision: ${disclosure.decision}).`);
   }
