@@ -105,7 +105,7 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
       {canEdit ? (
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" disabled={exportRows.isPending} onClick={() => void exportRows.mutateAsync().catch(() => undefined)}>Export performance rows</Button>
-          <Button type="button" variant="secondary" aria-expanded={showForm} aria-controls="telemetry-form" onClick={() => setShowForm((open) => !open)}>
+          <Button type="button" variant="secondary" aria-expanded={showForm} aria-controls={showForm ? "telemetry-form" : undefined} onClick={() => setShowForm((open) => !open)}>
             {showForm ? "Close telemetry form" : "Add telemetry row"}
           </Button>
           <Button type="button" disabled={syncTelemetry.isPending || records.length === 0} onClick={() => void handleSync()}>
@@ -190,7 +190,7 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
         </div>
       )}
 
-      {!telemetryLoaded ? <Skeleton variant="card" className="h-72" /> : posteriors.length === 0 ? (
+      {telemetryQuery.isError ? null : !telemetryLoaded ? <Skeleton variant="card" className="h-72" /> : posteriors.length === 0 ? (
         <EmptyState title="No hook-type results yet" reason="Record telemetry rows with a hook type and a 3-second retention value to compare hook types." />
       ) : (
         <ChartFigure

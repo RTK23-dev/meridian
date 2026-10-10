@@ -39,6 +39,7 @@ type PatternRow = {
   id: string;
   title: string;
   metric: string;
+  scope: string;
   display: PatternDisplay;
   sampleSize: number;
   impressions: number;
@@ -61,6 +62,7 @@ export function PatternsPanel({ brandId, data, canEdit }: { brandId: string; dat
     id: pattern.id,
     title: `${pattern.attribute}: ${pattern.value}`,
     metric: pattern.metric,
+    scope: pattern.scope,
     display: patternDisplay({ lift: pattern.lift, sampleSize: pattern.sampleSize, impressions: pattern.impressions, state: pattern.state }),
     sampleSize: pattern.sampleSize,
     impressions: pattern.impressions,
@@ -68,7 +70,7 @@ export function PatternsPanel({ brandId, data, canEdit }: { brandId: string; dat
   }));
 
   const columns: ColumnDef<PatternRow, unknown>[] = [
-    { id: "pattern", header: "Pattern", enableSorting: false, cell: ({ row }) => <span><span className="block font-semibold">{row.original.title}</span><span className="text-xs text-fg-muted">{row.original.metric}</span></span> },
+    { id: "pattern", header: "Pattern", enableSorting: false, cell: ({ row }) => <span><span className="block font-semibold">{row.original.title}</span><span className="block text-xs text-fg-muted">{row.original.metric} · {row.original.scope === "organization" ? "Shared with this workspace" : "This brand"}</span></span> },
     { id: "direction", header: "Direction", enableSorting: false, cell: ({ row }) => <DirectionBadge display={row.original.display} /> },
     { id: "state", header: "State", enableSorting: false, cell: ({ row }) => row.original.display.stateText },
     { accessorKey: "sampleSize", header: "Creatives", cell: ({ row }) => hasSample(row.original.sampleSize) ? row.original.sampleSize.toLocaleString() : NOT_ENOUGH_RESULTS },
