@@ -5,7 +5,7 @@ import { setNotificationPreference } from "@/lib/meridian/observability/actions"
 import { qk } from "@/lib/query/keys";
 import { useNotificationPreferencesQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 
-export const Route = createFileRoute("/_app/notifications")({ component: NotificationsPage });
+export const Route = createFileRoute("/_app/notifications")({ staticData: { pageTitle: "Notification preferences" }, component: NotificationsPage });
 
 const TITLES: Record<string, string> = {
   "learning.update": "Learning updates",

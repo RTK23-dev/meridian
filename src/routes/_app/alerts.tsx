@@ -3,7 +3,7 @@ import { AlertsPanel } from "@/components/alerts-panel";
 import { useWorkspace } from "@/components/workspace";
 import { Panel, Skeleton } from "@/components/ui";
 
-export const Route = createFileRoute("/_app/alerts")({ component: AlertsPage });
+export const Route = createFileRoute("/_app/alerts")({ staticData: { pageTitle: "Alerts center" }, component: AlertsPage });
 
 function AlertsPage() {
   const { data } = useWorkspace();

@@ -15,7 +15,7 @@ import { manualPerformanceSchema, type ManualPerformance, type ManualPerformance
 import { observationFieldsSchema, type ObservationFields, type ObservationFieldsOutput } from "@/lib/meridian/schemas/observation";
 import { pausedPublishingSchema, type PausedPublishing, type PausedPublishingFields } from "@/lib/meridian/schemas/paused-publishing";
 
-export const Route = createFileRoute("/_app/brands/$brandId/library")({ component: Page });
+export const Route = createFileRoute("/_app/brands/$brandId/library")({ staticData: { pageTitle: "Library" }, component: Page });
 
 function Page() {
   const { brandId } = Route.useParams();

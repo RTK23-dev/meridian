@@ -12,7 +12,7 @@ import { useIntegrationsQuery, usePendingVariables, useScopedMutation } from "@/
 import { qk } from "@/lib/query/keys";
 import { providerLabel } from "@/lib/copy";
 
-export const Route = createFileRoute("/_app/integrations")({ component: Page });
+export const Route = createFileRoute("/_app/integrations")({ staticData: { pageTitle: "Integrations" }, component: Page });
 
 type IntegrationProvider = Awaited<ReturnType<typeof getSystemStatus>>["connections"][number]["provider"];
 type OAuthProvider = Extract<IntegrationProvider, "meta" | "tiktok" | "google">;

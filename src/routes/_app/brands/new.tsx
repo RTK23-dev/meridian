@@ -9,7 +9,7 @@ import { hasRole } from "@/lib/meridian/access";
 import { createBrand } from "@/lib/meridian/api";
 import { newBrandSchema, type NewBrandFields, type NewBrandFieldsInput } from "@/lib/meridian/schemas/brand";
 
-export const Route = createFileRoute("/_app/brands/new")({ component: NewBrandPage });
+export const Route = createFileRoute("/_app/brands/new")({ staticData: { pageTitle: "New brand" }, component: NewBrandPage });
 
 function NewBrandPage() {
   return (

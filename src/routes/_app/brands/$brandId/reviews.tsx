@@ -7,7 +7,7 @@ import { REVIEW_REASON_CODES, listReviews } from "@/lib/meridian/machine";
 import { useResolveReview, usePendingVariables, useReviewsQuery } from "@/lib/query/hooks";
 import { Term } from "@/components/term";
 
-export const Route = createFileRoute("/_app/brands/$brandId/reviews")({ component: Page });
+export const Route = createFileRoute("/_app/brands/$brandId/reviews")({ staticData: { pageTitle: "Reviews" }, component: Page });
 
 function Page() {
   const { brandId } = Route.useParams();

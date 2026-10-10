@@ -21,7 +21,7 @@ import { qk } from "@/lib/query/keys";
 import { competitorFieldsSchema, publicPageSchema, researchCollectionSchema, type CompetitorFields, type CompetitorFieldsOutput, type PublicPageFields, type ResearchCollection, type ResearchCollectionFields } from "@/lib/meridian/schemas/market";
 import { observationFieldsSchema, type ObservationFields, type ObservationFieldsOutput } from "@/lib/meridian/schemas/observation";
 
-export const Route = createFileRoute("/_app/brands/$brandId/market")({ component: Page });
+export const Route = createFileRoute("/_app/brands/$brandId/market")({ staticData: { pageTitle: "Market" }, component: Page });
 
 type AnalysisFieldView = { value?: string; confidence?: number; evidence?: string[] };
 type AnalysisView = {

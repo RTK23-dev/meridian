@@ -13,7 +13,7 @@ import { createOrganization } from "@/lib/meridian/api";
 import { getOnboardingSteps } from "@/lib/onboarding";
 import { workspaceNameSchema, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
 
-export const Route = createFileRoute("/_app/")({ component: Home });
+export const Route = createFileRoute("/_app/")({ staticData: { pageTitle: "Overview" }, component: Home });
 
 type SortMode = "activity" | "name" | "completeness";
 

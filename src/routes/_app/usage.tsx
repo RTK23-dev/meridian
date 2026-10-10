@@ -6,7 +6,7 @@ import { listUsage } from "@/lib/meridian/jobs/actions";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { qk, userScopedQueryKey } from "@/lib/query/keys";
 
-export const Route = createFileRoute("/_app/usage")({ component: UsagePage });
+export const Route = createFileRoute("/_app/usage")({ staticData: { pageTitle: "Usage & cost" }, component: UsagePage });
 
 function UsagePage() {
   const { user } = useCurrentUserState();

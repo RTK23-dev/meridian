@@ -59,7 +59,7 @@ function DirectionReasonField({ value, onChange }: { value: string; onChange: (v
   );
 }
 
-export const Route = createFileRoute("/_app/brands/$brandId/studio")({ component: Page });
+export const Route = createFileRoute("/_app/brands/$brandId/studio")({ staticData: { pageTitle: "Studio" }, component: Page });
 
 function Page() {
   const { brandId } = Route.useParams();

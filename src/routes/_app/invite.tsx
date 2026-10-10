@@ -5,7 +5,7 @@ import { Button, Notice, errorText } from "@/components/ui";
 import { acceptInvite } from "@/lib/meridian/api";
 import { useScopedMutation } from "@/lib/query/hooks";
 
-export const Route = createFileRoute("/_app/invite")({ component: Page });
+export const Route = createFileRoute("/_app/invite")({ staticData: { pageTitle: "Accept invitation" }, component: Page });
 
 function Page() {
   return (
