@@ -52,7 +52,7 @@ export type ProviderCard<Value extends string> = {
   disabledReason: string | null;
 };
 
-const CONNECTED_TEXT = "Connected through the workspace production key.";
+const CONNECTED_TEXT = "Saved workspace key is usable. It is checked again when a run starts.";
 const NO_KEY_REASON = "No usable Google key is saved for this workspace. Save one in Settings, then return here.";
 
 function credentialGate(production: ProductionStatus): Pick<ProviderCard<string>, "connection" | "disabled" | "disabledReason"> {
