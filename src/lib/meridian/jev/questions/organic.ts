@@ -129,3 +129,19 @@ export const ORGANIC_QUESTIONS: Record<string, JevQuestionSpec> = {
     },
   },
 };
+
+/**
+ * The evidence each research organic question may receive (GateQuestion.evidenceScope). Scope names are the research bundle's
+ * evidence names (evidence/bundle.ts): transcript, scene_cuts, scene_frames, ocr, comments, creator_baseline,
+ * performance_snapshot, comparison_context. Each scope is exactly the question's requirements, so a question receives only the
+ * structure it judges from. Organic questions are analysis: they are answered and recorded, and they do not decide the action.
+ */
+export const ORGANIC_EVIDENCE_SCOPES: Record<string, readonly string[]> = {
+  "organic.hook_mechanism.v1": ["scene_frames", "transcript"],
+  "organic.format_structure.v1": ["transcript", "scene_cuts"],
+  "organic.retention_architecture.v1": ["scene_cuts", "transcript"],
+  "organic.visual_craft.v1": ["scene_frames"],
+  "organic.share_trigger.v1": ["transcript", "comments"],
+  "organic.transferability.v1": ["transcript", "scene_cuts"],
+  "organic.authenticity.v1": ["scene_frames", "transcript"],
+};

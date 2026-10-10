@@ -5,18 +5,23 @@
  * produced them. A policy is versioned and is supplied per question by the caller, so thresholds can change without
  * touching a provider.
  *
- * Fail-closed rules:
- * - A refusal, an unsupported question, a malformed response, a provider error, or a missing required answer is never
- *   an approval. Each is resolved by the policy's `unresolvedOutcome`: HUMAN_REVIEW by default, REJECT for
- *   safety-critical gates.
- * - A predicate probability is compared with thresholds only as a number. Every answer carries its calibration status
- *   into the evaluation, so an uncalibrated probability is visible, not presented as a calibrated risk.
+ * Fail-closed rules (docs/ARCHITECTURE_CONTRACTS.md, section 6):
+ * - A question with no policy mapping produces HUMAN_REVIEW, whatever its answer.
+ * - A refused, unsupported, malformed, unavailable, or missing answer takes the policy's unresolved outcome.
+ * - A probability can approve only when the policy names an approveMinProbability. A score can approve only when the policy
+ *   names an approveMinScore. A choice can approve only when the policy names approveValues. Without them, the answer goes
+ *   to review.
+ * - A probability or a score is a number the engine reported, not a calibrated risk. Unless its answer is calibrated, it can
+ *   route to review and nothing else: it never produces AUTO_APPROVE or REJECT. Confidence is never read as a probability.
+ * - A categorical answer is an answer, not a probability. Its explicit approveValues and rejectionValues decide it.
  */
-import type { JevAnswer } from "../jev/types.ts";
+import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 
-export const DECISION_POLICY_VERSION = "decision-policy.v1";
+export const DECISION_POLICY_VERSION = "decision-policy.v2";
 
 export type PolicyOutcome = "AUTO_APPROVE" | "HUMAN_REVIEW" | "REJECT";
+
+export type CalibrationStatus = "uncalibrated" | "calibrated" | "not_applicable";
 
 export type DecisionPolicy = {
   /** Policy version recorded with every evaluation. Changing thresholds means a new version. */
@@ -26,13 +31,14 @@ export type DecisionPolicy = {
    * visible"). "reject_if_true": the condition is a defect (e.g. "contains a prohibited claim").
    */
   predicateDirection: "pass_if_true" | "reject_if_true";
-  approveMinProbability: number;
+  /** Required before a probability can approve. Absent, a probability goes to review and never approves. */
+  approveMinProbability?: number;
   reviewMinProbability: number;
-  /** Choice values that approve. A choice in neither list goes to review. */
+  /** Choice values that approve. Absent, a choice cannot approve. A choice in neither list goes to review. */
   approveChoices?: string[];
   /** Choice values that reject. */
   rejectChoices?: string[];
-  /** Minimum score index that approves. Without it, a score always goes to review. */
+  /** Required before a score can approve. Absent, a score goes to review. */
   approveMinScore?: number;
   /** Outcome when a required answer is refused, unsupported, malformed, unavailable, or missing. */
   unresolvedOutcome: "HUMAN_REVIEW" | "REJECT";
@@ -44,25 +50,54 @@ export type PolicyVote = {
   questionId: string;
   outcome: PolicyOutcome;
   reason: string;
-  calibrationStatus: "uncalibrated" | "calibrated" | "not_applicable";
+  calibrationStatus: CalibrationStatus;
+};
+
+export type PolicyUnresolved = {
+  questionId: string;
+  status: JevAnswer["status"] | "missing" | "no_policy";
+  reason: string;
 };
 
 export type PolicyEvaluation = {
   outcome: PolicyOutcome;
   policyVersion: string;
   votes: PolicyVote[];
-  unresolved: Array<{ questionId: string; status: JevAnswer["status"] | "missing"; reason: string }>;
+  unresolved: PolicyUnresolved[];
+  /** Probability and score votes that are not calibrated. Categorical votes are not counted. */
   uncalibratedAnswers: number;
+};
+
+/** One question as the evaluator sees it. A null policy means the question has no policy mapping. */
+export type PolicyQuestion = {
+  questionId: string;
+  policy: DecisionPolicy | null;
+  /** False when the question's evidence scope held no evidence, so its answer cannot approve. Absent means present. */
+  scopePresent?: boolean;
 };
 
 const RANK: Record<PolicyOutcome, number> = { AUTO_APPROVE: 0, HUMAN_REVIEW: 1, REJECT: 2 };
 
+type AnswerKind = "predicate" | "categorical" | "score" | "none";
+
+function answerKindOf(answer: JevAnswer): AnswerKind {
+  if (answer.semantics === "probability" || typeof answer.probability === "number") return "predicate";
+  if (answer.semantics === "categorical" || typeof answer.choice === "string") return "categorical";
+  if (typeof answer.score === "number") return "score";
+  return "none";
+}
+
+/** Whether an answer's value is calibrated. Categorical answers are not probabilities, so calibration does not apply to them. */
+export function calibrationStatusOf(answer: JevAnswer): CalibrationStatus {
+  const kind = answerKindOf(answer);
+  if (kind === "categorical" || kind === "none") return "not_applicable";
+  return answer.calibrationStatus === "calibrated" ? "calibrated" : "uncalibrated";
+}
+
 function voteFor(answer: JevAnswer, policy: DecisionPolicy): PolicyVote | null {
   if (answer.status !== "answered") return null;
-  const calibrationStatus = answer.calibrationStatus ?? "uncalibrated";
-  const lowConfidence =
-    policy.minConfidence !== undefined && typeof answer.confidence === "number" && answer.confidence < policy.minConfidence;
-  if (lowConfidence) {
+  const calibrationStatus = calibrationStatusOf(answer);
+  if (policy.minConfidence !== undefined && typeof answer.confidence === "number" && answer.confidence < policy.minConfidence) {
     return {
       questionId: answer.questionId,
       outcome: "HUMAN_REVIEW",
@@ -70,59 +105,74 @@ function voteFor(answer: JevAnswer, policy: DecisionPolicy): PolicyVote | null {
       calibrationStatus,
     };
   }
-
-  if (answer.semantics === "probability" || typeof answer.probability === "number") {
-    const probability = answer.probability ?? answer.noul;
-    if (typeof probability !== "number") return null;
-    const conditionTrue = probability;
-    const approveAt = policy.predicateDirection === "pass_if_true" ? policy.approveMinProbability : 1 - policy.approveMinProbability;
-    const reviewAt = policy.predicateDirection === "pass_if_true" ? policy.reviewMinProbability : 1 - policy.reviewMinProbability;
-    const passes = policy.predicateDirection === "pass_if_true" ? conditionTrue >= approveAt : conditionTrue <= approveAt;
-    const reviewable = policy.predicateDirection === "pass_if_true" ? conditionTrue >= reviewAt : conditionTrue <= reviewAt;
-    const outcome: PolicyOutcome = passes ? "AUTO_APPROVE" : reviewable ? "HUMAN_REVIEW" : "REJECT";
-    return {
-      questionId: answer.questionId,
-      outcome,
-      reason: `Probability ${probability.toFixed(3)} against ${policy.predicateDirection} thresholds ${approveAt.toFixed(2)}/${reviewAt.toFixed(2)}.`,
-      calibrationStatus,
-    };
-  }
-
-  if (answer.semantics === "categorical" || typeof answer.choice === "string") {
-    const choice = answer.choice ?? String(answer.answer);
-    if (policy.rejectChoices?.includes(choice)) {
-      return { questionId: answer.questionId, outcome: "REJECT", reason: `Choice '${choice}' is a rejection value.`, calibrationStatus };
-    }
-    if (policy.approveChoices?.includes(choice)) {
-      return { questionId: answer.questionId, outcome: "AUTO_APPROVE", reason: `Choice '${choice}' is an approval value.`, calibrationStatus };
-    }
-    return { questionId: answer.questionId, outcome: "HUMAN_REVIEW", reason: `Choice '${choice}' has no approval rule.`, calibrationStatus };
-  }
-
-  if (typeof answer.score === "number") {
-    if (policy.approveMinScore === undefined) {
-      return { questionId: answer.questionId, outcome: "HUMAN_REVIEW", reason: "Score has no approval threshold.", calibrationStatus };
-    }
-    const passes = answer.score >= policy.approveMinScore;
-    return {
-      questionId: answer.questionId,
-      outcome: passes ? "AUTO_APPROVE" : "HUMAN_REVIEW",
-      reason: `Score ${answer.score.toFixed(2)} against minimum ${policy.approveMinScore}.`,
-      calibrationStatus,
-    };
-  }
-
+  const kind = answerKindOf(answer);
+  if (kind === "predicate") return predicateVote(answer, policy, calibrationStatus);
+  if (kind === "categorical") return choiceVote(answer, policy);
+  if (kind === "score" && typeof answer.score === "number") return scoreVote(answer.questionId, answer.score, policy, calibrationStatus);
   return null;
 }
 
-/** Evaluates every expected question. `expectedQuestionIds` lets a missing answer count as unresolved. */
+function predicateVote(answer: JevAnswer, policy: DecisionPolicy, calibrationStatus: CalibrationStatus): PolicyVote | null {
+  const probability = answer.probability ?? answer.noul;
+  if (typeof probability !== "number") return null;
+  const questionId = answer.questionId;
+  if (policy.approveMinProbability === undefined) {
+    return {
+      questionId,
+      outcome: "HUMAN_REVIEW",
+      reason: `Probability ${probability.toFixed(3)} has no approveMinProbability in ${policy.version}, so it cannot approve.`,
+      calibrationStatus,
+    };
+  }
+  const passFirst = policy.predicateDirection === "pass_if_true";
+  const approveAt = passFirst ? policy.approveMinProbability : 1 - policy.approveMinProbability;
+  const reviewAt = passFirst ? policy.reviewMinProbability : 1 - policy.reviewMinProbability;
+  const passes = passFirst ? probability >= approveAt : probability <= approveAt;
+  const reviewable = passFirst ? probability >= reviewAt : probability <= reviewAt;
+  const raw: PolicyOutcome = passes ? "AUTO_APPROVE" : reviewable ? "HUMAN_REVIEW" : "REJECT";
+  const reading = `Probability ${probability.toFixed(3)} against ${policy.predicateDirection} thresholds ${approveAt.toFixed(2)}/${reviewAt.toFixed(2)}.`;
+  if (raw !== "HUMAN_REVIEW" && calibrationStatus !== "calibrated") {
+    return { questionId, outcome: "HUMAN_REVIEW", reason: `${reading} It is uncalibrated, so it can only go to review.`, calibrationStatus };
+  }
+  return { questionId, outcome: raw, reason: reading, calibrationStatus };
+}
+
+function choiceVote(answer: JevAnswer, policy: DecisionPolicy): PolicyVote {
+  const choice = answer.choice ?? String(answer.answer);
+  const questionId = answer.questionId;
+  const calibrationStatus: CalibrationStatus = "not_applicable";
+  if (policy.rejectChoices?.includes(choice)) {
+    return { questionId, outcome: "REJECT", reason: `Choice '${choice}' is a rejection value.`, calibrationStatus };
+  }
+  if (policy.approveChoices?.includes(choice)) {
+    return { questionId, outcome: "AUTO_APPROVE", reason: `Choice '${choice}' is an approval value.`, calibrationStatus };
+  }
+  const reason = policy.approveChoices === undefined
+    ? `Choice '${choice}' cannot approve: the policy names no approve values.`
+    : `Choice '${choice}' has no approval rule.`;
+  return { questionId, outcome: "HUMAN_REVIEW", reason, calibrationStatus };
+}
+
+function scoreVote(questionId: string, score: number, policy: DecisionPolicy, calibrationStatus: CalibrationStatus): PolicyVote {
+  if (policy.approveMinScore === undefined) {
+    return { questionId, outcome: "HUMAN_REVIEW", reason: "Score has no approval threshold.", calibrationStatus };
+  }
+  const reading = `Score ${score.toFixed(2)} against minimum ${policy.approveMinScore}.`;
+  if (score < policy.approveMinScore) return { questionId, outcome: "HUMAN_REVIEW", reason: reading, calibrationStatus };
+  if (calibrationStatus !== "calibrated") {
+    return { questionId, outcome: "HUMAN_REVIEW", reason: `${reading} It is uncalibrated, so it can only go to review.`, calibrationStatus };
+  }
+  return { questionId, outcome: "AUTO_APPROVE", reason: reading, calibrationStatus };
+}
+
+/** Evaluates every expected question under one policy. `expectedQuestionIds` lets a missing answer count as unresolved. */
 export function evaluateDecisionPolicy(
   answers: Record<string, JevAnswer>,
   policy: DecisionPolicy,
   expectedQuestionIds: string[] = Object.values(answers).map((answer) => answer.questionId),
 ): PolicyEvaluation {
   const votes: PolicyVote[] = [];
-  const unresolved: PolicyEvaluation["unresolved"] = [];
+  const unresolved: PolicyUnresolved[] = [];
   const byQuestion = new Map<string, JevAnswer>();
   for (const answer of Object.values(answers)) byQuestion.set(answer.questionId, answer);
 
@@ -160,7 +210,7 @@ export function evaluateDecisionPolicy(
     policyVersion: policy.version,
     votes,
     unresolved,
-    uncalibratedAnswers: votes.filter((vote) => vote.calibrationStatus !== "calibrated").length,
+    uncalibratedAnswers: votes.filter((vote) => vote.calibrationStatus === "uncalibrated").length,
   };
 }
 
@@ -185,14 +235,12 @@ export const CREATIVE_QA_POLICY: DecisionPolicy = {
 
 /**
  * Evaluates each question with its own policy, so a registry question keeps its own thresholds and unresolved outcome.
- * A question with no answer is unresolved under its policy. The most severe outcome across questions wins.
+ * A question with no answer is unresolved under its policy. A question with no policy goes to review. The most severe
+ * outcome across questions wins. AUTO_APPROVE needs every question to have a policy, evidence in scope, and an approval.
  */
-export function evaluateQuestionPolicies(
-  answers: Record<string, JevAnswer>,
-  questions: Array<{ questionId: string; policy: DecisionPolicy }>,
-): PolicyEvaluation {
+export function evaluateQuestionPolicies(answers: Record<string, JevAnswer>, questions: PolicyQuestion[]): PolicyEvaluation {
   const votes: PolicyVote[] = [];
-  const unresolved: PolicyEvaluation["unresolved"] = [];
+  const unresolved: PolicyUnresolved[] = [];
   const byQuestion = new Map<string, JevAnswer>();
   for (const answer of Object.values(answers)) byQuestion.set(answer.questionId, answer);
 
@@ -201,10 +249,26 @@ export function evaluateQuestionPolicies(
     if (RANK[candidate] > RANK[outcome]) outcome = candidate;
   };
 
-  for (const { questionId, policy } of questions) {
+  for (const { questionId, policy, scopePresent } of questions) {
+    if (!policy) {
+      unresolved.push({ questionId, status: "no_policy", reason: "No policy is mapped for this question, so its answer cannot approve it." });
+      raise("HUMAN_REVIEW");
+      continue;
+    }
     const answer = byQuestion.get(questionId);
     if (!answer) {
       unresolved.push({ questionId, status: "missing", reason: "No answer was returned for this question." });
+      raise(policy.unresolvedOutcome);
+      continue;
+    }
+    if (answer.status !== "answered") {
+      const status = answer.status;
+      unresolved.push({ questionId, status, reason: answer.abstainReason ?? `Answer status '${status}' is not an answer.` });
+      raise(policy.unresolvedOutcome);
+      continue;
+    }
+    if (scopePresent === false) {
+      unresolved.push({ questionId, status: "abstain_insufficient_evidence", reason: "No evidence was in this question's scope, so its answer cannot approve it." });
       raise(policy.unresolvedOutcome);
       continue;
     }
@@ -214,43 +278,31 @@ export function evaluateQuestionPolicies(
       raise(vote.outcome);
       continue;
     }
-    unresolved.push({
-      questionId,
-      status: answer.status,
-      reason: answer.abstainReason ?? `Answer status '${answer.status}' is not an answer.`,
-    });
+    unresolved.push({ questionId, status: answer.status, reason: answer.abstainReason ?? "The answer has no usable value." });
     raise(policy.unresolvedOutcome);
   }
 
   return {
     outcome,
-    policyVersion: questions.map((entry) => entry.policy.version).join(","),
+    policyVersion: questions.map((entry) => entry.policy?.version ?? `${entry.questionId}(no-policy)`).join(","),
     votes,
     unresolved,
-    uncalibratedAnswers: votes.filter((vote) => vote.calibrationStatus !== "calibrated").length,
+    uncalibratedAnswers: votes.filter((vote) => vote.calibrationStatus === "uncalibrated").length,
   };
 }
 
 /**
- * The policy for one registry question. Thresholds and values come from the question's policyMapping, so they are
- * versioned with the question. A question with no mapping gets the conservative defaults: review, never auto-approve.
+ * The policy for one registry question. Thresholds and values come from the question's policyMapping, so they are versioned
+ * with the question. A question with no mapping has no policy: it returns null, and the evaluator sends it to review.
  */
-export function policyForQuestion(spec: { id: string; version: string; policyMapping?: {
-  approveMinProbability?: number;
-  reviewMinProbability?: number;
-  rejectionValues?: string[];
-  approveValues?: string[];
-  approveMinScore?: number;
-  predicateDirection?: "pass_if_true" | "reject_if_true";
-  unresolvedOutcome?: "HUMAN_REVIEW" | "REJECT";
-  minConfidence?: number;
-} }): DecisionPolicy {
-  const mapping = spec.policyMapping ?? {};
+export function policyForQuestion(spec: Pick<JevQuestionSpec, "id" | "version" | "policyMapping">): DecisionPolicy | null {
+  const mapping = spec.policyMapping;
+  if (!mapping) return null;
   return {
     version: `${spec.id}@${spec.version}`,
     predicateDirection: mapping.predicateDirection ?? "pass_if_true",
-    // Defaults that can never auto-approve and never reject on their own: every probability falls in review.
-    approveMinProbability: mapping.approveMinProbability ?? 2,
+    // Left undefined when absent. A probability then cannot approve, and the evaluator says why.
+    approveMinProbability: mapping.approveMinProbability,
     reviewMinProbability: mapping.reviewMinProbability ?? 0,
     approveChoices: mapping.approveValues,
     rejectChoices: mapping.rejectionValues,
@@ -260,3 +312,7 @@ export function policyForQuestion(spec: { id: string; version: string; policyMap
   };
 }
 
+/** The version a question is recorded under. A question with no mapping is recorded as such, so a reviewer can see it. */
+export function policyVersionOf(spec: Pick<JevQuestionSpec, "id" | "version" | "policyMapping">): string {
+  return spec.policyMapping ? `${spec.id}@${spec.version}` : `${spec.id}@${spec.version}(no-policy)`;
+}

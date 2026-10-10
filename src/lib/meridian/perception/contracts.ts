@@ -78,3 +78,40 @@ export function contractEvidenceLines(
     return `${label(observation)} [${contract.id} ${contract.version}] ${facts.join("; ")}. Basis: inferred from the pixels by ${provenance}.`;
   });
 }
+
+/**
+ * The evidence item every visual question's observations are placed in. It is one item. Each question's scope decides whether
+ * the question receives it, and only a question whose own contract is satisfied has it in scope.
+ */
+export const PERCEPTION_EVIDENCE_NAME = "perception_observations";
+
+/**
+ * The check for one question's contract, by the contract's id. Each visual question names exactly one contract, so its check
+ * depends on its own contract only. A contract that is not registered is never satisfied.
+ */
+export function checkQuestionContract(contractId: string | undefined, observations: MediaObservation[]): ContractCheck {
+  const contract = contractId ? EVIDENCE_CONTRACTS[contractId] : undefined;
+  if (!contract) {
+    return { satisfied: false, reason: `No evidence contract named ${contractId ?? "(none)"} is registered.`, missing: [] };
+  }
+  return checkEvidenceContract(contract, observations);
+}
+
+/**
+ * The contract lines for one run, for the contracts its observations satisfy in full. A contract the observations do not satisfy
+ * contributes no lines at all, so no unknown fact is written out, and no question reads a fact it was not checked on.
+ */
+export function satisfiedContractLines(
+  observations: MediaObservation[],
+  label: (observation: MediaObservation) => string,
+  provenance: string,
+): { satisfied: string[]; lines: Record<string, string[]> } {
+  const satisfied: string[] = [];
+  const lines: Record<string, string[]> = {};
+  for (const contract of Object.values(EVIDENCE_CONTRACTS)) {
+    if (!checkEvidenceContract(contract, observations).satisfied) continue;
+    satisfied.push(contract.id);
+    lines[contract.id] = contractEvidenceLines(contract, observations, label, provenance);
+  }
+  return { satisfied, lines };
+}

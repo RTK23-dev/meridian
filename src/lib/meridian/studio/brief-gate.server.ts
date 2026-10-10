@@ -3,15 +3,16 @@
  *
  * Mechanical checks decide first and can reject with no engine call: the mandatory brief fields (audience, hook, message,
  * angle) must be present, and no stored prohibited claim may appear in the brief text. Semantic checks belong to the active
- * decision engine, asked once through the engine gate: brand fit, opportunity fit, and claim compliance. The outcome is
+ * decision engine, asked through the engine gate: brand fit, opportunity fit, and claim compliance. Each sees only its own
+ * scope, so the engine is called once per scope, all to the active engine. The outcome is
  * written as the brief's decision, which is the row `loadGatedJevDecision` reads before any production starts.
  */
 import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
-import { runEngineGate, type GateEvidence, type GateQuestion, type GateResult } from "../decisions/gate.ts";
+import { runEngineGate, type GateEvidenceInput, type GateQuestion, type GateResult } from "../decisions/gate.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { EngineSelection } from "../decisions/selection.ts";
-import { BRIEF_QUESTIONS } from "../jev/questions/brief.ts";
+import { BRIEF_EVIDENCE_SCOPES, BRIEF_QUESTIONS } from "../jev/questions/brief.ts";
 import { BRIEF_GATE_QUESTION_ID, BRIEF_GATE_SCHEMA_VERSION } from "../decisions/brief-contract.ts";
 
 export type BriefForGate = {
@@ -53,11 +54,41 @@ export function briefDeterministicRejections(brief: BriefForGate, brain: BriefBr
   return rejections;
 }
 
-function briefEvidence(brief: BriefForGate, brain: BriefBrain): GateEvidence[] {
-  const items: GateEvidence[] = [{ kind: "text", name: "brief_fields", source: "briefs" }];
-  if (brain.positioning.trim() || brain.valueProposition.trim()) items.push({ kind: "text", name: "brand_positioning", source: "brand_brain" });
-  if (brain.prohibitedClaims.trim()) items.push({ kind: "text", name: "brand_prohibited_claims", source: "brand_brain" });
-  if (brief.angle.trim()) items.push({ kind: "text", name: "opportunity_angle", source: "opportunity" });
+/**
+ * The evidence the brief questions can be scoped to, with its content. A brand fact that is blank is not evidence: a question
+ * that needs it abstains, and the brief goes to review. No image and no perception observation is ever part of a brief.
+ */
+function briefEvidence(brief: BriefForGate, brain: BriefBrain): GateEvidenceInput[] {
+  const items: GateEvidenceInput[] = [
+    {
+      kind: "text",
+      name: "brief_fields",
+      source: "briefs",
+      content: {
+        audience: brief.audience,
+        hook: brief.hook,
+        message: brief.message,
+        format: brief.format,
+        cta: brief.cta,
+        angle: brief.angle,
+        offer: brief.offer ?? "",
+      },
+    },
+  ];
+  if (brain.positioning.trim() || brain.valueProposition.trim()) {
+    items.push({
+      kind: "text",
+      name: "brand_positioning",
+      source: "brand_brain",
+      content: { positioning: brain.positioning, valueProposition: brain.valueProposition, tone: brain.tone },
+    });
+  }
+  if (brain.prohibitedClaims.trim()) {
+    items.push({ kind: "text", name: "brand_prohibited_claims", source: "brand_brain", content: { prohibitedClaims: brain.prohibitedClaims } });
+  }
+  if (brief.angle.trim()) {
+    items.push({ kind: "text", name: "opportunity_angle", source: "opportunity", content: { angle: brief.angle } });
+  }
   return items;
 }
 
@@ -76,7 +107,12 @@ export type BriefGateResult = GateResult & { deterministicRejections: Array<{ ru
 
 export async function judgeBriefFit(input: BriefGateInput): Promise<BriefGateResult> {
   const deterministicRejections = briefDeterministicRejections(input.brief, input.brain);
-  const questions: GateQuestion[] = Object.values(BRIEF_QUESTIONS).map((spec) => ({ key: spec.id, spec, needsImage: false }));
+  const questions: GateQuestion[] = Object.values(BRIEF_QUESTIONS).map((spec) => ({
+    key: spec.id,
+    spec,
+    needsImage: false,
+    evidenceScope: BRIEF_EVIDENCE_SCOPES[spec.id],
+  }));
   const gate = await runEngineGate({
     sql: input.sql,
     organizationId: input.organizationId,
@@ -84,22 +120,6 @@ export async function judgeBriefFit(input: BriefGateInput): Promise<BriefGateRes
     gate: "brief",
     subject: { type: "brief", id: input.briefId },
     description: "Creative brief for an approved direction. Judge only the brief and the brand facts provided.",
-    context: {
-      brief: {
-        audience: input.brief.audience,
-        hook: input.brief.hook,
-        message: input.brief.message,
-        format: input.brief.format,
-        cta: input.brief.cta,
-        angle: input.brief.angle,
-      },
-      brand: {
-        positioning: input.brain.positioning,
-        valueProposition: input.brain.valueProposition,
-        tone: input.brain.tone,
-        prohibitedClaims: input.brain.prohibitedClaims,
-      },
-    },
     questions,
     evidence: briefEvidence(input.brief, input.brain),
     deterministicRejections,

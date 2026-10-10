@@ -50,3 +50,18 @@ export const BRIEF_QUESTIONS: Record<string, JevQuestionSpec> = {
     policyMapping: { predicateDirection: "pass_if_true", approveMinProbability: 0.95, reviewMinProbability: 0.8 },
   },
 };
+
+/**
+ * The evidence each brief question may receive (GateQuestion.evidenceScope). Each scope is exactly the question's own
+ * requirements, so a question sees its own brief fields and only the brand fact it judges against:
+ * - brief_fields: the brief's audience, hook, message, format, call to action, angle, and offer.
+ * - brand_positioning: the stored positioning, value proposition, and tone (brand fit only).
+ * - opportunity_angle: the angle the opportunity names (opportunity fit only).
+ * - brand_prohibited_claims: the stored prohibited claims (claim compliance only).
+ * Brief creation never sends the image or any perception observation to a brief question.
+ */
+export const BRIEF_EVIDENCE_SCOPES: Record<string, readonly string[]> = {
+  "brief.brand_fit.v1": ["brief_fields", "brand_positioning"],
+  "brief.opportunity_fit.v1": ["brief_fields", "opportunity_angle"],
+  "brief.claim_compliance.v1": ["brief_fields", "brand_prohibited_claims"],
+};
