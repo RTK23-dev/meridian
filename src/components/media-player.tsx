@@ -1,31 +1,101 @@
 import { useState } from "react";
 
-export function MediaPlayer({ assetId, poster, durationMs, width, height, className = "" }: {
-  assetId: string;
-  poster?: string;
+/**
+ * A stored asset (by id, served from /api/assets/<id>) or an app-relative media URL. Not wired into a screen by itself.
+ */
+type MediaSource = { assetId: string; url?: never } | { url: string; assetId?: never };
+
+type VideoOptions = {
+  kind?: "video";
+  /** Poster image URL. Defaults to the asset's stored still (?thumb=1) when an asset id is given. Pass null for none. */
+  poster?: string | null;
   durationMs?: number | null;
   width?: number | null;
   height?: number | null;
-  className?: string;
-}) {
-  const [failed, setFailed] = useState(false);
+};
+
+type ImageOptions = {
+  kind: "image";
+  alt: string;
+  width: number;
+  height: number;
+};
+
+export type MediaPlayerProps = MediaSource & (VideoOptions | ImageOptions) & { className?: string };
+
+type LoadState = "loading" | "ready" | "error";
+
+/** Plain words for the failure. The browser does not say which check failed, so the message lists the likely causes. */
+const VIDEO_ERROR = "This video could not be played. It may have been removed, you may not have access to this workspace, or your browser may not support the file.";
+const IMAGE_ERROR = "This image could not be loaded. It may have been removed, or you may not have access to this workspace.";
+
+export function MediaPlayer(props: MediaPlayerProps) {
+  const src = props.assetId !== undefined ? `/api/assets/${encodeURIComponent(props.assetId)}` : props.url;
+  // The result is tied to the source it was measured for, so a new source starts in the loading state again.
+  const [settled, setSettled] = useState<{ src: string; ok: boolean } | null>(null);
+  const state: LoadState = settled?.src === src ? (settled.ok ? "ready" : "error") : "loading";
+  const settle = (ok: boolean) => setSettled({ src, ok });
+  const className = props.className ?? "";
+
+  if (props.kind === "image") {
+    return (
+      <div className={className}>
+        <div className="relative w-full max-w-full" style={{ aspectRatio: `${props.width} / ${props.height}` }}>
+          {state === "error" ? (
+            <p role="status" className="absolute inset-0 grid place-items-center rounded-md border border-line p-4 text-center text-sm text-muted">{IMAGE_ERROR}</p>
+          ) : (
+            <img
+              className="absolute inset-0 h-full w-full object-contain"
+              src={src}
+              alt={props.alt}
+              width={props.width}
+              height={props.height}
+              loading="lazy"
+              decoding="async"
+              onLoad={() => settle(true)}
+              onError={() => settle(false)}
+            />
+          )}
+          {state === "loading" ? (
+            <p role="status" className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-muted">Loading image...</p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  const poster = props.poster !== undefined ? props.poster ?? undefined : props.assetId !== undefined ? `${src}?thumb=1` : undefined;
+  const ratio = props.width && props.height ? `${props.width} / ${props.height}` : "16 / 9";
+  const seconds = props.durationMs ? `${(props.durationMs / 1000).toFixed(1)} seconds` : "duration not stored";
   return (
     <div className={className}>
-      {failed ? <p role="status" className="rounded-md border border-line p-4 text-sm text-muted">This stored video could not be loaded. Check your workspace access and try again.</p> : (
-        <video
-          className="max-h-[70vh] w-full rounded-md bg-black object-contain"
-          style={{ aspectRatio: width && height ? `${width} / ${height}` : "16 / 9" }}
-          src={`/api/assets/${encodeURIComponent(assetId)}`}
-          poster={poster}
-          controls
-          preload="metadata"
-          aria-label="Stored generated video"
-          onError={() => setFailed(true)}
-          {...(durationMs ? { "data-duration-ms": durationMs } : {})}
-        />
-      )}
-      {!failed ? <p role="status" className="mt-1 text-xs text-muted">Stored MP4 · {durationMs ? `${(durationMs / 1000).toFixed(1)} seconds` : "duration not stored"}</p> : null}
-      {!failed ? <a className="mt-1 inline-block text-sm underline underline-offset-4" href={`/api/assets/${encodeURIComponent(assetId)}?download=1`}>Download stored video</a> : null}
+      <div className="relative w-full max-w-full" style={{ aspectRatio: ratio }}>
+        {state === "error" ? (
+          <p role="status" className="absolute inset-0 grid place-items-center rounded-md border border-line p-4 text-center text-sm text-muted">{VIDEO_ERROR}</p>
+        ) : (
+          <video
+            className="absolute inset-0 h-full w-full rounded-md bg-black object-contain"
+            src={src}
+            poster={poster}
+            controls
+            preload="metadata"
+            aria-label="Generated video"
+            onLoadedMetadata={() => settle(true)}
+            onError={() => settle(false)}
+          />
+        )}
+        {state === "loading" ? (
+          <p role="status" className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-white/80">Loading video...</p>
+        ) : null}
+      </div>
+      {state === "ready" ? (
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 text-xs text-muted">
+          <span>Stored video · {seconds}</span>
+          {props.assetId !== undefined ? (
+            <a className="underline underline-offset-4" href={`${src}?download=1`}>Download video</a>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

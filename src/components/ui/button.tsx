@@ -44,7 +44,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cn(buttonVariants({ variant, size }), "max-sm:min-h-11", className)}
+      className={cn(buttonVariants({ variant, size }), "max-sm:min-h-11 pointer-coarse:min-h-11", className)}
     >
       {loading ? <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" /> : leftIcon}
       {asChild ? <Slottable>{children}</Slottable> : children}

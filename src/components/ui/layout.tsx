@@ -16,12 +16,20 @@ export function Stat({ label, value, delta, description, className }: { label: s
   return <div className={cn("min-w-0", className)}><div className="text-sm text-fg-muted">{label}</div><div className="mt-1 flex flex-wrap items-baseline gap-2"><strong className="font-display text-3xl text-fg">{value}</strong>{delta ? <Badge variant="neutral">{delta}</Badge> : null}</div>{description ? <p className="mt-1 text-xs text-fg-muted">{description}</p> : null}</div>;
 }
 
+/** The text alternative for a sparkline: the point count, first and last value, and the range. It only restates stored values. */
+export function sparklineSummary(label: string, values: number[]): string {
+  if (values.length === 0) return `${label} trend: no points stored.`;
+  const format = (value: number) => value.toLocaleString("en", { maximumFractionDigits: 2 });
+  const noun = values.length === 1 ? "point" : "points";
+  return `${label} trend over ${values.length} ${noun}: first ${format(values[0])}, last ${format(values[values.length - 1])}, lowest ${format(Math.min(...values))}, highest ${format(Math.max(...values))}.`;
+}
+
 export function KpiCard(props: Parameters<typeof Stat>[0] & { icon?: ReactNode; sparkline?: number[] }) {
   const { sparkline, ...statProps } = props;
   const min = sparkline ? Math.min(...sparkline) : 0;
   const range = sparkline ? Math.max(...sparkline) - min || 1 : 1;
   const points = sparkline?.map((value, index) => `${(index / Math.max(sparkline.length - 1, 1)) * 100},${28 - ((value - min) / range) * 24}`).join(" ");
-  return <div className="rounded-lg border border-border bg-surface p-4">{props.icon ? <div className="mb-3 text-fg-muted">{props.icon}</div> : null}<Stat {...statProps} />{points ? <svg role="img" aria-label={`${props.label} trend`} viewBox="0 0 100 32" className="mt-3 h-8 w-full text-accent"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg> : null}</div>;
+  return <div className="rounded-lg border border-border bg-surface p-4">{props.icon ? <div className="mb-3 text-fg-muted">{props.icon}</div> : null}<Stat {...statProps} />{points ? <svg role="img" aria-label={sparklineSummary(props.label, sparkline ?? [])} viewBox="0 0 100 32" className="mt-3 h-8 w-full text-accent"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg> : null}</div>;
 }
 
 export type StepState = "done" | "current" | "blocked" | "upcoming";

@@ -15,6 +15,25 @@ export function Skeleton({ variant = "line", className, ...props }: HTMLAttribut
   return <div {...props} aria-hidden="true" className={cn("animate-pulse rounded bg-surface-2", shapes[variant], className)} />;
 }
 
+/** Fallback while a chart module loads. It fills the plot's box, so the page does not jump when the chart arrives. */
+export function ChartSkeleton({ label = "Loading chart", className }: { label?: string; className?: string }) {
+  return <div role="status" aria-label={label} className={cn("grid h-full w-full place-items-center", className)}><Skeleton className="h-full w-full" /></div>;
+}
+
+/** Loading state shaped like a screen: a header block, then cards, rows or a form. The region is announced once with its label. */
+export function ScreenSkeleton({ label, shape = "cards", className }: { label: string; shape?: "cards" | "rows" | "form"; className?: string }) {
+  return <div role="status" aria-label={label} className={cn("space-y-6", className)}>
+    <div className="space-y-3">
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-9 w-72 max-w-full" />
+      <Skeleton className="h-4 w-full max-w-xl" />
+    </div>
+    {shape === "cards" ? <div className="grid gap-3 md:grid-cols-2">{[0, 1, 2, 3].map((index) => <Skeleton key={index} variant="card" />)}</div> : null}
+    {shape === "rows" ? <div className="space-y-3">{[0, 1, 2, 3, 4].map((index) => <Skeleton key={index} variant="table-row" />)}</div> : null}
+    {shape === "form" ? <Skeleton variant="card" className="h-72" /> : null}
+  </div>;
+}
+
 export function EmptyState({ icon, title, reason, action, className }: { icon?: ReactNode; title: string; reason: string; action?: ReactNode; className?: string }) {
   return <Card className={cn("flex flex-col items-center gap-3 py-10 text-center", className)}>
     <div className="grid size-11 place-items-center rounded-full bg-surface-2 text-fg-muted">{icon ?? <FileQuestion aria-hidden="true" className="size-5" />}</div>
@@ -27,12 +46,19 @@ export function ErrorState({ message = "We could not load this information.", re
     <div className="flex items-start gap-3"><CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-danger" /><div><h2 className="font-semibold">Something went wrong</h2><p className="mt-1 text-sm text-fg-muted">{message}</p></div></div>
     {onRetry ? <Button size="md" variant="secondary" onClick={onRetry}>Try again</Button> : null}
     {requestId ? <p className="text-xs text-fg-muted">Request ID: <code>{requestId}</code></p> : null}
-    {detail ? <details className="text-sm"><summary className="cursor-pointer text-fg-muted">Technical details</summary><pre className="mt-2 overflow-auto rounded bg-surface-2 p-3 text-xs">{detail}</pre></details> : null}
+    {detail ? <details className="text-sm"><summary className="cursor-pointer text-fg-muted">Details</summary><pre className="mt-2 overflow-auto rounded bg-surface-2 p-3 text-xs">{detail}</pre></details> : null}
   </Card>;
 }
 
 export function ErrorNotice({ children }: { children: ReactNode }) {
   return <p className="flex items-center gap-2 text-sm text-danger" role="alert"><AlertTriangle aria-hidden="true" className="size-4" />{children}</p>;
+}
+
+/** Plain words for any thrown value. Used wherever a failed request is shown to a person. */
+export function errorText(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error) return error;
+  return "Something went wrong.";
 }
 
 export function NotConnected({ service = "This service" }: { service?: string }) {

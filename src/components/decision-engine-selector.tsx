@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
-import { Button, Field, Notice, SelectInput } from "@/components/ui";
-import { getDecisionEngines, saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+
+const engineSchema = z.object({ engineId: z.string().min(1, "Choose a decision engine.") });
+import { Button, ErrorState, Field, SelectInput } from "@/components/ui";
+import { PlainErrorMessage } from "@/components/plain-error";
+import { plainError } from "@/lib/copy";
+import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
+import { qk } from "@/lib/query/keys";
+import { useDecisionEnginesQuery, useScopedMutation } from "@/lib/query/hooks";
 
 type EngineStatus = {
   id: "jev" | "openai-decisions";
@@ -31,52 +40,51 @@ interface DecisionEngineSelectorProps {
  * the chosen engine is configured, and the active engine is shown with the reason it is active.
  */
 export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEngineSelectorProps) {
-  const [status, setStatus] = useState<Status | null>(null);
-  const [choice, setChoice] = useState<string>("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  async function load() {
-    try {
-      const data = (await getDecisionEngines({ data: { organizationId } })) as Status;
-      setStatus(data);
-      setChoice(data.active.engineId);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load the decision engine status.");
-    }
-  }
-
+  const engines = useDecisionEnginesQuery(organizationId);
+  const status = (engines.data as Status | undefined) ?? null;
+  // The selection follows the stored engine until the person picks another one.
+  const form = useForm<{ engineId: string }>({
+    resolver: zodResolver(engineSchema),
+    defaultValues: { engineId: status?.active.engineId ?? "" },
+    mode: "onChange",
+  });
+  const choice = form.watch("engineId");
+  const storedEngineId = status?.active.engineId ?? "";
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationId]);
-
-  async function handleSave() {
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const result = (await saveDecisionEngine({ data: { organizationId, engineId: choice } })) as
+    if (!form.formState.isDirty) form.reset({ engineId: storedEngineId });
+  }, [storedEngineId, form]);
+  const [message, setMessage] = useState<string | null>(null);
+  const save = useScopedMutation({
+    mutationKey: ["mutation", "decision-engine.save", organizationId],
+    mutationFn: async (engineId: string) => {
+      const result = (await saveDecisionEngine({ data: { organizationId, engineId } })) as
         | { ok: true; engineId: string }
         | { ok: false; reason: string; activeEngineId?: string };
-      if (result.ok) {
-        setMessage(`Decision engine set to ${result.engineId}. Only this engine now receives decisions for this workspace.`);
-        await load();
-      } else {
-        setError(`${result.reason} The active engine is unchanged.`);
-        await load();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Saving the decision engine failed.");
-    } finally {
-      setSaving(false);
-    }
-  }
+      // A refused choice is an error the user must see, so it is thrown and shown rather than returned as a result.
+      if (!result.ok) throw new Error(`${result.reason} The active engine is unchanged.`);
+      return result;
+    },
+    invalidate: () => [qk.decisionEngines(organizationId)],
+    onSuccess: (result) => {
+      setMessage(`Decision engine set to ${result.engineId}. Only this engine now receives decisions for this workspace.`);
+      form.reset({ engineId: result.engineId });
+    },
+  });
+  const saving = save.isPending;
+  const error = save.error ? plainError(save.error) : null;
 
+  if (engines.isError && !status) {
+    return <ErrorState message="The decision engine status could not be loaded." onRetry={() => void engines.refetch()} />;
+  }
   if (!status) {
     return <p className="text-muted text-sm">Loading decision engine status...</p>;
+  }
+
+  async function handleSave() {
+    setMessage(null);
+    const valid = await form.trigger();
+    if (!valid) return;
+    await save.mutateAsync(form.getValues("engineId")).catch(() => undefined);
   }
 
   const activeLabel = status.engines.find((engine) => engine.isActive)?.label ?? status.active.engineId;
@@ -103,7 +111,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
         ) : null}
       </div>
 
-      {error ? <Notice>{error}</Notice> : null}
+      {error ? <PlainErrorMessage message={error.message} raw={error.raw} /> : null}
       {message ? <p className="text-sm text-success" role="status">{message}</p> : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -135,8 +143,8 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
       {canAdmin ? (
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[16rem]">
-            <Field label="Engine for this workspace">
-              <SelectInput value={choice} onChange={(e) => setChoice(e.target.value)} disabled={saving}>
+            <Field label="Engine for this workspace" error={form.formState.errors.engineId?.message}>
+              <SelectInput {...form.register("engineId")} disabled={saving}>
                 {status.engines.map((engine) => (
                   <option key={engine.id} value={engine.id} disabled={engine.health.status !== "READY" && engine.id !== status.active.engineId}>
                     {engine.label}
