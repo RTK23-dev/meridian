@@ -33,6 +33,7 @@ const WORKSPACE_LINKS: NavLink[] = [
 // Menus inside Command.Group: the heading gets the eyebrow treatment, the items stay in normal case.
 const GROUP_CLASS = "px-1 py-2 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-fg-muted";
 const ITEM_CLASS = "cursor-pointer rounded-md px-3 py-2 text-sm text-fg aria-selected:bg-surface-2";
+const SWITCHER_CLASS = "min-h-11 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-fg";
 
 function navGroups(brandId: string | undefined, reviews: number): { label: string; links: NavLink[] }[] {
   if (!brandId) return [{ label: "Workspace", links: [{ label: "Overview", to: "/", icon: House }, ...WORKSPACE_LINKS] }];
@@ -131,15 +132,15 @@ export function Shell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [brandId, go]);
 
-  // One brand switcher for every page. It stays visible with a placeholder when no brand is open.
+  // Brand switcher: shown in the sidebar on brand-scoped pages only (the caller checks brandId).
   const brandSwitcher = (className: string) => data?.brands.length ? (
-    <select aria-label="Switch brand" className={className} value={brandId ?? ""} onChange={(event) => { if (event.target.value) go(`/brands/${event.target.value}`); }}>
-      {brandId ? null : <option value="">Choose a brand</option>}
+    <select aria-label="Brand" className={className} value={brandId ?? ""} onChange={(event) => { if (event.target.value) go(`/brands/${event.target.value}`); }}>
       {data.brands.map((item) => <option key={item.id} value={item.id}>{item.name} · {Math.round(item.completeness * 100)}%</option>)}
     </select>
   ) : null;
+  // Workspace switcher: shown at the top of the sidebar on every page.
   const workspaceSwitcher = (className: string) => data?.organizations.length && active ? (
-    <select aria-label="Switch workspace" className={className} value={active.id} onChange={(event) => { void setActiveOrganization({ data: { organizationId: event.target.value } }).then(() => reload()); }}>
+    <select aria-label="Workspace" className={className} value={active.id} onChange={(event) => { void setActiveOrganization({ data: { organizationId: event.target.value } }).then(() => reload()); }}>
       {data.organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
     </select>
   ) : null;
@@ -164,9 +165,10 @@ export function Shell({ children }: { children: ReactNode }) {
         <Link to="/" onClick={() => setMobileNavOpen(false)} className="font-display text-lg font-semibold tracking-tight text-fg">Meridian</Link>
         {mobile ? <button className="grid size-11 place-items-center rounded-md text-fg-muted hover:bg-surface-2" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation"><X aria-hidden="true" className="size-5" /></button> : null}
       </div>
-      {mobile ? <div className="space-y-3 border-b border-border p-4">
-        {workspaceSwitcher("min-h-11 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-fg")}
-        {brandSwitcher("min-h-11 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-fg")}
+      {/* Workspace first, brand directly below it on brand-scoped pages. Hidden in the collapsed 5rem rail, which is too narrow for a select; the command palette still switches both. */}
+      {(mobile || !collapsed) && data ? <div className="space-y-3 border-b border-border p-4">
+        {workspaceSwitcher(SWITCHER_CLASS)}
+        {brandId ? brandSwitcher(SWITCHER_CLASS) : null}
       </div> : null}
       <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         {links.map((group) => <section key={group.label} className="mb-5">
@@ -195,14 +197,13 @@ export function Shell({ children }: { children: ReactNode }) {
     <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
     <div className="flex min-h-screen min-w-0 flex-col">
       <header className="sticky top-0 z-20 border-b border-border bg-surface/95 backdrop-blur">
-        <div className="flex min-h-16 flex-wrap items-center gap-2 px-3 py-2 sm:px-5">
-          <button type="button" className="grid size-11 place-items-center rounded-md text-fg-muted hover:bg-surface-2 lg:hidden" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
-          <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-2 text-sm md:flex">
-            <Link to="/" className="text-fg-muted hover:text-fg">Workspace</Link>{brand ? <><span aria-hidden="true" className="text-border-strong">/</span><span className="max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}<span aria-hidden="true" className="text-border-strong">/</span><span aria-current="page" className="font-semibold text-fg">{page}</span>
+        {/* One row at every width: the breadcrumb truncates; the switchers live in the sidebar, not here. */}
+        <div className="flex min-h-16 items-center gap-2 px-3 py-2 sm:px-5">
+          <button type="button" className="grid size-11 shrink-0 place-items-center rounded-md text-fg-muted hover:bg-surface-2 lg:hidden" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
+          <nav aria-label="Breadcrumb" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
+            <Link to="/" className="shrink-0 text-fg-muted hover:text-fg">Workspace</Link>{brand ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span className="min-w-0 max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}<span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="max-w-[70%] shrink-0 truncate font-semibold text-fg">{page}</span>
           </nav>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            {brandSwitcher("hidden h-10 max-w-52 rounded-md border border-border-strong bg-surface px-2 text-sm text-fg lg:block")}
-            {workspaceSwitcher("hidden h-10 max-w-48 rounded-md border border-border-strong bg-surface px-2 text-sm text-fg sm:block")}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             {active ? <span className="hidden text-xs uppercase tracking-wide text-fg-muted xl:inline">{active.role}</span> : null}
             <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong px-3 text-sm text-fg-muted hover:bg-surface-2" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">⌘K</kbd></button>
             <Link to="/alerts" aria-label="Open alerts" title="Alerts" className="grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2"><Bell aria-hidden="true" className="size-4" /></Link>
