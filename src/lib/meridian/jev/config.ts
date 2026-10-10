@@ -11,7 +11,8 @@ import type { JevRoutingMode, JevProviderId } from "./types.ts";
 export const jevRuntimeConfigSchema = z.object({
   mode: z.enum(["auto", "typesafe_direct", "openrouter", "compare"]).default("auto"),
   preferredProvider: z.enum(["typesafe_direct", "openrouter"]).default("typesafe_direct"),
-  fallbackEnabled: z.boolean().default(true),
+  // Off unless explicitly enabled: a decision never silently moves to another paid transport.
+  fallbackEnabled: z.boolean().default(false),
   timeoutMs: z.number().int().positive().default(30000),
   compareSampleRate: z.number().min(0).max(1).default(0.1),
 
@@ -68,7 +69,7 @@ export function resolveJevConfig(overrides?: Partial<JevRuntimeConfig>): JevRunt
   const preferredProvider = normalizeProviderId(rawPreferred);
 
   const rawFallback = overrides?.fallbackEnabled ?? env.MERIDIAN_JEV_FALLBACK_ENABLED ?? env.JEV_FALLBACK_ENABLED;
-  const fallbackEnabled = rawFallback !== undefined ? String(rawFallback).toLowerCase() !== "false" : true;
+  const fallbackEnabled = rawFallback !== undefined ? String(rawFallback).toLowerCase() === "true" : false;
 
   const timeoutMs = overrides?.timeoutMs ?? (env.MERIDIAN_JEV_TIMEOUT_MS ? parseInt(env.MERIDIAN_JEV_TIMEOUT_MS, 10) : 30000);
   const compareSampleRate = overrides?.compareSampleRate ?? (env.MERIDIAN_JEV_COMPARE_SAMPLE_RATE ? parseFloat(env.MERIDIAN_JEV_COMPARE_SAMPLE_RATE) : 0.1);

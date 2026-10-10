@@ -28,7 +28,8 @@ test("JEV Runtime Configuration: resolves defaults when no environment variables
     const config = resolveJevConfig();
     assert.equal(config.mode, "auto");
     assert.equal(config.preferredProvider, "typesafe_direct");
-    assert.equal(config.fallbackEnabled, true);
+    // Transport fallback is off unless explicitly enabled, so no decision moves to another paid route silently.
+    assert.equal(config.fallbackEnabled, false);
     assert.equal(config.typesafe.apiKey, "");
     assert.equal(config.typesafe.baseUrl, "https://api.typesafe.ai/v1/systemone");
     assert.equal(config.openrouter.baseUrl, "https://openrouter.ai/api/v1");
