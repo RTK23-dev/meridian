@@ -9,7 +9,7 @@ import type { EngineSelection } from "../decisions/selection.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { judgeBriefFit, writeBriefDecision, type BriefBrain, type BriefForGate, type BriefGateResult } from "./brief-gate.server.ts";
 import { briefStatusFor } from "./brief-review.server.ts";
-import { MIN_DIRECTION_REASON_LENGTH, type CreateGatedBriefInput, type CreateGatedBriefResult } from "./brief-service.contract.ts";
+import type { CreateGatedBriefInput, CreateGatedBriefResult } from "./brief-service.contract.ts";
 
 /** Engine selection for the gate. Production leaves it unset, so the workspace or deployment engine is used. Tests inject one. */
 export type BriefGateOptions = { selection?: EngineSelection; engines?: DecisionEngineRegistry };
@@ -49,11 +49,8 @@ export function briefGateJudge(
     });
 }
 
-/** Why a direction reason is refused, or null when it is long enough. The reason is trimmed before it is counted. */
-export function directionReasonProblem(reason: string): string | null {
-  if (reason.trim().length >= MIN_DIRECTION_REASON_LENGTH) return null;
-  return `Write the reason for this direction (at least ${MIN_DIRECTION_REASON_LENGTH} characters).`;
-}
+// The direction reason check lives in a file without server imports, so client code can use it.
+export { directionReasonProblem } from "../opportunity/direction-reason.ts";
 
 /**
  * Creates a brief through the gate, in the fixed order of contract section 3:

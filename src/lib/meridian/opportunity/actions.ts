@@ -9,7 +9,7 @@ import { rankOpportunities, type OpportunityDraft } from "@/lib/meridian/opportu
 import { hasRole, isRole } from "../access.ts";
 import { withTransaction } from "../learning/store.ts";
 import type { OpportunityDirectionInput } from "../studio/brief-service.contract.ts";
-import { directionReasonProblem } from "../studio/brief-service.server.ts";
+import { directionReasonProblem } from "./direction-reason.ts";
 import {
   id,
   asText,

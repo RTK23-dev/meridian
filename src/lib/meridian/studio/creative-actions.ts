@@ -30,7 +30,7 @@ import {
 } from "../machine-shared";
 import { assertOpportunityClear, opportunityView } from "../opportunity/actions";
 import { productionRefusalFor } from "@/lib/meridian/studio/brief-review.server";
-import { briefBrainFrom, briefGateJudge, createGatedBrief, type BriefGateOptions } from "./brief-service.server";
+import type { BriefGateOptions } from "./brief-service.server";
 
 function briefDraftFromRow(row: Record<string, unknown>): BriefDraft {
   return {
@@ -294,6 +294,9 @@ export async function createBriefFromOpportunityFor(
     rejections: loaded.rejections,
     observations,
   });
+  // Loaded here, not at the top of the module: the client bundle imports this file through the route tree, and the
+  // brief service is server-only.
+  const { briefBrainFrom, briefGateJudge, createGatedBrief } = await import("./brief-service.server.ts");
   const created = await createGatedBrief(sql, {
     organizationId: access.organizationId,
     brandId: data.brandId,
