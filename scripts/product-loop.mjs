@@ -136,7 +136,7 @@ try {
   if (!(await page.getByRole("button", { name: "Generate variants" }).isDisabled())) throw new Error("Generation was not blocked for a brief awaiting review.");
   await page.getByRole("tab", { name: "2. Brief" }).click();
   await page.getByRole("checkbox", { name: /I have read the failure/ }).check();
-  await page.getByLabel(/Reason \(at least 20 characters\)/).fill("E2E testing runtime: the decision engine is not configured, so the brief is reviewed explicitly here.");
+  await page.getByLabel("Reason", { exact: true }).fill("E2E testing runtime: the decision engine is not configured, so the brief is reviewed explicitly here.");
   await page.getByRole("button", { name: "Approve for production" }).click();
   await held.waitFor({ state: "hidden" });
   await page.getByRole("tab", { name: "3. Generate" }).click();
