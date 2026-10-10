@@ -372,18 +372,12 @@ test("12. Regression: Veo polling reads generatedSamples REST response path", as
       { status: 200 },
     );
 
-  const originalKey = process.env.GEMINI_API_KEY;
-  process.env.GEMINI_API_KEY = "test-gemini-key";
-
-  try {
-    const veo = new VeoProvider({ fetchImpl: fakeFetch });
-    const status = await veo.checkJobStatus("operations/123");
-    assert.equal(status.status, "RENDERED");
-    assert.equal(status.outputArtifactId, expectedUri);
-  } finally {
-    if (originalKey) process.env.GEMINI_API_KEY = originalKey;
-    else delete process.env.GEMINI_API_KEY;
-  }
+  // The poll uses the key of the workspace that owns the job, which the poller passes in the job's metadata.
+  const { fixedLookup } = await import("../credentials/fixtures.ts");
+  const veo = new VeoProvider({ fetchImpl: fakeFetch, lookup: fixedLookup("test-gemini-key") });
+  const status = await veo.checkJobStatus("operations/123", { organizationId: "org-1" });
+  assert.equal(status.status, "RENDERED");
+  assert.equal(status.outputArtifactId, expectedUri);
 });
 
 // 13. Higgsfield uses current request/status contract
@@ -797,7 +791,8 @@ test("28. Regression: Learned parameters cannot be marked validated without empi
 // 29. Dual JEV Provider Router routes explicitly without silent chat coercion
 test("29. Regression: Dual JEV Provider Router supports typesafe_direct and openrouter", async () => {
   const { TypeSafeDirectJevProvider, JevRouter } = await import("../jev/router.ts");
-  const directProvider = new TypeSafeDirectJevProvider({ apiKey: "" });
+  const { notConfiguredLookup } = await import("../credentials/fixtures.ts");
+  const directProvider = new TypeSafeDirectJevProvider({ lookup: notConfiguredLookup() });
   const router = new JevRouter({ typesafeProvider: directProvider });
 
   const health = await directProvider.health();
@@ -911,8 +906,9 @@ test("32. Regression: GeminiOmniVideoProvider uses Interactions API contract", a
     );
   };
 
-  process.env.GEMINI_API_KEY = "test-key";
-  const provider = new GeminiOmniVideoProvider({ fetchImpl: mockFetch as unknown as typeof fetch });
+  // The workspace's own production key is what the provider uses, so the test supplies one for the workspace.
+  const { fixedLookup } = await import("../credentials/fixtures.ts");
+  const provider = new GeminiOmniVideoProvider({ fetchImpl: mockFetch as unknown as typeof fetch, lookup: fixedLookup("test-key") });
   const job = await provider.submitJob({
     id: "spec-1",
     organizationId: "org-1",

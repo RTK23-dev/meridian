@@ -132,6 +132,11 @@ export interface DecisionEngine {
   readonly adapterVersion: string;
   capabilities(): DecisionCapabilities;
   health(): Promise<DecisionEngineHealth>;
+  /**
+   * Readiness for one workspace, for engines whose credentials are saved per workspace. Callers that know the workspace
+   * use this instead of `health()`, which has no workspace to check and never reports READY for one.
+   */
+  healthFor?(organizationId: string): Promise<DecisionEngineHealth>;
   decide(request: DecisionRequest): Promise<DecisionResult>;
 }
 

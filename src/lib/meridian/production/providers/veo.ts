@@ -5,6 +5,12 @@ import type {
   ProductionProvider,
   ProviderHealth,
 } from "../types.ts";
+import type { Sql } from "../../learning/store.ts";
+import { loadDefaultSql, resolveCredential, type CredentialEnv } from "../../credentials/resolve.ts";
+import { credentialStateOf, type CredentialResolution } from "../../credentials/contract.ts";
+
+/** A workspace's usable key, or the reason there is none. The provider is never called without a usable key. */
+type KeyAccess = { ok: true; apiKey: string } | { ok: false; reason: string };
 
 export type VideoCapability = {
   supportedDurations: number[];
@@ -50,13 +56,45 @@ export class VeoProvider implements ProductionProvider {
   };
 
   private fetchImpl: typeof fetch;
+  private readonly sql?: Sql;
+  private readonly env?: CredentialEnv;
+  private readonly lookup?: (organizationId: string) => Promise<CredentialResolution>;
 
-  constructor(options?: { fetchImpl?: typeof fetch }) {
+  /**
+   * No key is held here. Veo uses the workspace's production credential for each call, and the deployment key only when
+   * PRODUCTION_SHARED_DEFAULT=deployment is set.
+   */
+  constructor(options?: {
+    fetchImpl?: typeof fetch;
+    sql?: Sql;
+    env?: CredentialEnv;
+    lookup?: (organizationId: string) => Promise<CredentialResolution>;
+  }) {
     this.fetchImpl = options?.fetchImpl || globalThis.fetch;
+    this.sql = options?.sql;
+    this.env = options?.env;
+    this.lookup = options?.lookup;
   }
 
-  private getApiKey(): string | undefined {
-    return process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
+  /** The workspace's production credential, by the shared resolver. Nothing is cached between calls. */
+  private async credentialFor(organizationId: string): Promise<CredentialResolution> {
+    if (this.lookup) return this.lookup(organizationId);
+    const sql = this.sql ?? (await loadDefaultSql());
+    return resolveCredential(sql, organizationId, "production", this.env ?? process.env);
+  }
+
+  /** The usable key for this workspace, or the reason there is none. A failed read is "no call", never a fallback. */
+  private async keyFor(organizationId: string | undefined): Promise<KeyAccess> {
+    if (!organizationId) {
+      return { ok: false, reason: "Google Veo needs a workspace production credential, and no workspace was given. No request was sent." };
+    }
+    try {
+      const resolution = await this.credentialFor(organizationId);
+      if (resolution.status === "ready") return { ok: true, apiKey: resolution.secret };
+      return { ok: false, reason: resolution.reason };
+    } catch {
+      return { ok: false, reason: "The workspace's Gemini production credential could not be read. No request was sent." };
+    }
   }
 
   private getModel(): string {
@@ -67,16 +105,27 @@ export class VeoProvider implements ProductionProvider {
     return model ? VEO_MODEL_CAPABILITIES[model] : undefined;
   }
 
+  /** Without a workspace there is no key to check, so this reports only that a workspace credential is needed. */
   async health(): Promise<ProviderHealth> {
-    const key = this.getApiKey();
-    if (!key) {
-      return {
-        id: this.id,
-        state: "NOT_CONFIGURED",
-        capabilities: [],
-        detail: "Google Veo requires GEMINI_API_KEY or GOOGLE_API_KEY environment variable.",
-        checkedAt: new Date().toISOString(),
-      };
+    return {
+      id: this.id,
+      state: "NOT_CONFIGURED",
+      capabilities: [],
+      detail: "Google Veo needs a workspace production credential. Readiness is checked for a workspace, and none was given.",
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Readiness for one workspace. A workspace whose key is not usable is never reported as ready. */
+  async healthFor(organizationId: string): Promise<ProviderHealth> {
+    let state: ReturnType<typeof credentialStateOf>;
+    try {
+      state = credentialStateOf(await this.credentialFor(organizationId));
+    } catch {
+      return { id: this.id, state: "UNAVAILABLE", capabilities: [], detail: "The workspace's Gemini production credential could not be checked.", checkedAt: new Date().toISOString() };
+    }
+    if (state.state !== "usable") {
+      return { id: this.id, state: "NOT_CONFIGURED", capabilities: [], detail: state.reason ?? "No Gemini production credential is available.", checkedAt: new Date().toISOString() };
     }
 
     const model = this.getModel();
@@ -113,20 +162,21 @@ export class VeoProvider implements ProductionProvider {
       };
     }
 
+    const source = state.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
     return {
       id: this.id,
       state: "CONFIGURED",
       capabilities: ["textToVideo"],
-      detail: `Configured with model ${model}.`,
+      detail: `Configured with model ${model}, using ${source}.`,
       checkedAt: new Date().toISOString(),
     };
   }
 
   async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
-    const apiKey = this.getApiKey();
+    const access = await this.keyFor(spec.organizationId);
     const costEstimate = spec.durationTargetSeconds * this.capabilities.costPerSecondEstimateUsd;
 
-    if (!apiKey) {
+    if (!access.ok) {
       return {
         jobId: "",
         organizationId: spec.organizationId,
@@ -135,7 +185,7 @@ export class VeoProvider implements ProductionProvider {
         providerId: this.id,
         status: "NOT_CONFIGURED",
         costEstimateUsd: costEstimate,
-        error: "Google Veo API credentials are not configured.",
+        error: access.reason,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -212,7 +262,7 @@ export class VeoProvider implements ProductionProvider {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-goog-api-key": apiKey,
+            "x-goog-api-key": access.apiKey,
           },
           body: JSON.stringify({
             instances: [
@@ -287,17 +337,22 @@ export class VeoProvider implements ProductionProvider {
     }
   }
 
-  async checkJobStatus(jobId: string): Promise<ProductionJob> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
-      throw new Error("Cannot check Veo job status: API key not configured.");
+  /**
+   * The poll uses the key of the workspace that owns the job, which the job's metadata names. Without a usable key it
+   * throws, as it did without a key before, so the poller retries and no request is sent.
+   */
+  async checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob> {
+    const owner = typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined;
+    const access = await this.keyFor(owner);
+    if (!access.ok) {
+      throw new Error(`Cannot check Veo job status: ${access.reason}`);
     }
 
     const res = await this.fetchImpl(
       `https://generativelanguage.googleapis.com/v1beta/${jobId}`,
       {
         headers: {
-          "x-goog-api-key": apiKey,
+          "x-goog-api-key": access.apiKey,
         },
       },
     );

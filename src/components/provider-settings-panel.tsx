@@ -28,7 +28,9 @@ function readinessOf(summary: ProviderConfigSummary): Readiness {
 }
 
 function sourceLabelOf(summary: ProviderConfigSummary): string {
-  if (summary.category === "perception") {
+  // The three credential categories share one vocabulary, taken from the resolver's state. A deployment key is named as a
+  // shared default, because it is used only when its category's shared default is opted in.
+  if (summary.credentialState) {
     if (summary.credentialState === "usable") {
       return summary.source === "workspace" ? "Workspace key" : "Deployment shared default";
     }
@@ -182,7 +184,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
         <div className="flex flex-wrap gap-2">
           {(["jev", "perception", "sources", "production", "storage", "cyclone"] as ProviderCategory[]).map((tab) => {
             const sum = summaries?.[tab];
-            const isReady = sum?.configured;
+            const isReady = sum?.credentialState ? sum.credentialState === "usable" : sum?.configured;
             return (
               <button
                 key={tab}
@@ -304,6 +306,20 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 </SelectInput>
               </Field>
 
+              <p className="sm:col-span-2 text-xs text-muted">
+                The TypeSafe key is saved per workspace. A deployment TypeSafe key is used only when JEV_SHARED_DEFAULT=deployment
+                is set, and it is shown as the deployment shared default.
+              </p>
+              <div className="sm:col-span-2 rounded border border-line bg-panel p-3 text-xs text-muted">
+                <strong>OpenRouter is deployment-only.</strong>{" "}
+                {summaries?.jev?.settings?.openrouterConfigured
+                  ? `This deployment has an OPENROUTER_API_KEY (${summaries.jev.settings.openrouterFingerprint ?? "no fingerprint"}).`
+                  : "This deployment has no OPENROUTER_API_KEY."}{" "}
+                {summaries?.jev?.settings?.openrouterUsable
+                  ? "It is in use, because JEV_SHARED_DEFAULT=deployment is set."
+                  : "It is not used. It needs OPENROUTER_API_KEY on this deployment and JEV_SHARED_DEFAULT=deployment. It is never saved per workspace."}
+              </div>
+
               {modeInput === "compare" ? (
                 <div className="sm:col-span-2 rounded border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
                   ⚠️ <strong>Compare Mode Active</strong>: Runs both TypeSafe and OpenRouter in parallel to evaluate
@@ -312,10 +328,10 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               ) : null}
 
               <div className="sm:col-span-2">
-                <Field label="Replace API Key (Encrypted in Vault)">
+                <Field label="TypeSafe JEV API key (saved per workspace)">
                   <TextInput
                     type="password"
-                    placeholder="Enter new key to update..."
+                    placeholder="Enter a TypeSafe JEV key to save or replace it..."
                     value={apiKeyInput}
                     onChange={(e) => setApiKeyInput(e.target.value)}
                     disabled={!canAdmin}
@@ -342,10 +358,10 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               </Field>
 
               <div className="sm:col-span-2">
-                <Field label="Replace Production Provider Key (Omni / Google AI Studio)">
+                <Field label="Gemini production API key (Omni video, Veo, image)">
                   <TextInput
                     type="password"
-                    placeholder="Enter new production API key..."
+                    placeholder="Enter a Gemini API key to save or replace it..."
                     value={apiKeyInput}
                     onChange={(e) => setApiKeyInput(e.target.value)}
                     disabled={!canAdmin}
@@ -353,6 +369,14 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 </Field>
               </div>
             </div>
+          ) : null}
+
+          {activeTab === "production" ? (
+            <p className="text-xs text-muted">
+              The key is saved per workspace and used only for this workspace&apos;s production calls. A deployment key is
+              used only when PRODUCTION_SHARED_DEFAULT=deployment is set. Saving the settings without a new key keeps the
+              stored key.
+            </p>
           ) : null}
 
           {activeTab === "cyclone" ? (

@@ -28,6 +28,7 @@ import { upsertModelParameter } from "../learning/parameters.ts";
 
 // 5. JEV Decision Engine
 import { OpenRouterJevClient } from "../jev/client.ts";
+import { fixedLookup } from "../credentials/fixtures.ts";
 import type { JevQuestionSpec } from "../jev/types.ts";
 
 test("E2E Path 1: Organic Discovery -> Evidence -> Perception -> JEV -> CreativeSpec", async () => {
@@ -239,8 +240,7 @@ test("E2E Path 2: CreativeSpec -> ProductionRouter -> Veo/Higgsfield/Hypit -> Po
   // Veo capability validation: rejects unsupported duration
   const invalidDurationSpec = { ...spec, durationTargetSeconds: 15 };
   const fakeVeoFetch: typeof fetch = async () => new Response("{}", { status: 200 });
-  const veoProvider = new VeoProvider({ fetchImpl: fakeVeoFetch });
-  process.env.GEMINI_API_KEY = "mock-gemini-key";
+  const veoProvider = new VeoProvider({ fetchImpl: fakeVeoFetch, lookup: fixedLookup("mock-gemini-key") });
 
   const invalidVeoJob = await veoProvider.submitJob(invalidDurationSpec);
   assert.equal(invalidVeoJob.status, "FAILED");
@@ -268,12 +268,12 @@ test("E2E Path 2: CreativeSpec -> ProductionRouter -> Veo/Higgsfield/Hypit -> Po
     return new Response("Not found", { status: 404 });
   };
 
-  const validVeoProvider = new VeoProvider({ fetchImpl: validVeoFetch });
+  const validVeoProvider = new VeoProvider({ fetchImpl: validVeoFetch, lookup: fixedLookup("mock-gemini-key") });
   const submittedVeo = await validVeoProvider.submitJob(spec);
   assert.equal(submittedVeo.status, "RUNNING");
   assert.equal(submittedVeo.jobId, "operations/veo-op-12345");
 
-  const polledVeo = await validVeoProvider.checkJobStatus(submittedVeo.jobId);
+  const polledVeo = await validVeoProvider.checkJobStatus(submittedVeo.jobId, { organizationId: spec.organizationId });
   assert.equal(polledVeo.status, "RENDERED");
   assert.equal(polledVeo.outputArtifactId, "https://storage.googleapis.com/veo-sample.mp4");
 

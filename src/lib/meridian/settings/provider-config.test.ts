@@ -1,350 +1,371 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { readFileSync } from "node:fs";
 import {
   getWorkspaceProviderSettings,
+  removeWorkspaceProviderConfig,
   saveWorkspaceProviderConfig,
   testWorkspaceProviderConnection,
 } from "./provider-config.ts";
+import { resolveCredential } from "../credentials/resolve.ts";
+import { CREDENTIAL_VAULT_TYPE, credentialStateOf, type CredentialCategory, type CredentialState } from "../credentials/contract.ts";
+import { openTestBackends, vaultRowId, withEnv } from "../credentials/test-databases.ts";
+import { studioTenant } from "../testing/durable-image-fixtures.ts";
 import { storeVaultCredential } from "../vault/service.ts";
+import type { Sql } from "../learning/store.ts";
 
-const DEPLOYMENT_KEY = "shared-deployment-key-9876";
-const WORKSPACE_KEY = "workspace-gemini-key-1234";
+// Used only by this test process: the vault encrypts saved keys with this master key.
+process.env.TOKEN_ENCRYPTION_KEY = "test-encryption-key-for-provider-settings";
+
+const backends = await openTestBackends();
+after(async () => {
+  for (const backend of backends) await backend.close();
+});
+
+const DEPLOYMENT_GEMINI = "deployment-gemini-key-9876";
+const DEPLOYMENT_TYPESAFE = "deployment-typesafe-key-5432";
+const WORKSPACE_GEMINI = "workspace-gemini-key-1234";
+const WORKSPACE_JEV = "workspace-jev-key-4321";
+
+const CREDENTIAL_CATEGORIES: CredentialCategory[] = ["perception", "jev", "production"];
+
+/** The summary's source name for a resolver state. The panel and the summary use the same mapping. */
+function expectedSourceOf(state: CredentialState): string {
+  if (state.state === "not_configured") return "not_configured";
+  if (state.state === "unusable") return "workspace";
+  return state.source === "workspace" ? "workspace" : "deployment";
+}
 
 /**
- * A vault that really encrypts: saved rows hold ciphertext, and reads decrypt it through the production vault service.
- * Only the SQL shapes the provider settings path uses are answered; everything else resolves to no rows.
+ * A database wrapper that fails the vault insert, so a save can be checked against a write that fails after the old entry
+ * was removed. Transactions are passed through, so the failure happens inside the save's transaction.
  */
-function fakeVaultSql() {
-  const rows: Array<Record<string, any>> = [];
-  const executed: Array<{ query: string; values: any[] }> = [];
-  const sql: any = (strings: TemplateStringsArray, ...values: any[]) => {
-    const query = strings.join("?");
-    executed.push({ query, values });
-    if (query.includes("insert into credential_vault")) {
-      rows.push({
-        id: values[0],
-        organization_id: values[1],
-        credential_type: values[2],
-        ciphertext: values[3],
-        iv: values[4],
-        tag: values[5],
-        key_version: values[6],
-        expires_at: values[7] ?? null,
-        updated_at: new Date().toISOString(),
+function failingVaultInsert(sql: Sql): Sql {
+  const wrap = (inner: Sql): Sql => {
+    const run = (strings: TemplateStringsArray, ...values: unknown[]) => {
+      if (strings.join("?").includes("insert into credential_vault")) {
+        return Promise.reject(new Error("simulated write failure"));
+      }
+      return inner(strings, ...values);
+    };
+    const wrapped: any = run;
+    wrapped.query = inner.query.bind(inner);
+    if (inner.begin) {
+      wrapped.begin = (work: (tx: Sql) => Promise<unknown>) => inner.begin!((tx) => work(wrap(tx)));
+    }
+    return wrapped as Sql;
+  };
+  return wrap(sql);
+}
+
+for (const { name, sql } of backends) {
+  test(`[${name}] the settings summary shows each credential category's resolver state, for every scenario`, async () => {
+    const scenarios: Array<{ label: string; env: Record<string, string>; setup: (org: string, userId: string) => Promise<void> }> = [
+      { label: "nothing saved, no shared defaults", env: {}, setup: async () => {} },
+      {
+        label: "every category saved",
+        env: {},
+        setup: async (org) => {
+          for (const category of CREDENTIAL_CATEGORIES) {
+            await storeVaultCredential(sql, org, CREDENTIAL_VAULT_TYPE[category], { accessToken: "", apiKey: `${category}-workspace-key-7777` });
+          }
+        },
+      },
+      {
+        label: "shared defaults opted in, nothing saved",
+        env: { PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI, JEV_SHARED_DEFAULT: "deployment", TYPESAFE_JEV_API_KEY: DEPLOYMENT_TYPESAFE, PRODUCTION_SHARED_DEFAULT: "deployment" },
+        setup: async () => {},
+      },
+      {
+        label: "production saved but expired, shared default opted in",
+        env: { PRODUCTION_SHARED_DEFAULT: "deployment", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI },
+        setup: async (org) => {
+          await storeVaultCredential(sql, org, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: "expired-production-key-1111" }, { expiresAt: new Date(Date.now() - 60_000) });
+        },
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const tenant = await studioTenant(sql, `panel-${scenario.label.replace(/\W+/g, "-")}`);
+      await withEnv(scenario.env, async () => {
+        await scenario.setup(tenant.organizationId, tenant.userId);
+        const summary = await getWorkspaceProviderSettings(sql, tenant.organizationId);
+        for (const category of CREDENTIAL_CATEGORIES) {
+          const resolverState = credentialStateOf(await resolveCredential(sql, tenant.organizationId, category));
+          const shown = summary[category];
+          assert.equal(shown.credentialState, resolverState.state, `${scenario.label}: ${category} state`);
+          assert.equal(shown.configured, resolverState.state === "usable", `${scenario.label}: ${category} configured`);
+          assert.equal(shown.source, expectedSourceOf(resolverState), `${scenario.label}: ${category} source`);
+          assert.equal(shown.keyFingerprint, resolverState.state === "usable" ? resolverState.fingerprint || undefined : undefined, `${scenario.label}: ${category} fingerprint`);
+        }
       });
-      return Promise.resolve([]);
     }
-    if (query.includes("delete from credential_vault")) {
-      const index = rows.findIndex((r) => r.id === values[0] && r.organization_id === values[1]);
-      if (index >= 0) rows.splice(index, 1);
-      return Promise.resolve([]);
-    }
-    if (query.includes("select id, expires_at from credential_vault")) {
-      return Promise.resolve(
-        rows.filter((r) => r.organization_id === values[0] && r.credential_type === values[1]).slice(0, 1)
-          .map((r) => ({ id: r.id, expires_at: r.expires_at })),
+  });
+
+  test(`[${name}] JEV: the summary shows the workspace's saved key, and a deployment key only when JEV_SHARED_DEFAULT=deployment`, async () => {
+    const tenant = await studioTenant(sql, "jev-summary");
+    await storeVaultCredential(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE.jev, { accessToken: "", apiKey: WORKSPACE_JEV, customFields: { mode: "auto" } });
+
+    await withEnv({ TYPESAFE_JEV_API_KEY: DEPLOYMENT_TYPESAFE }, async () => {
+      const jev = (await getWorkspaceProviderSettings(sql, tenant.organizationId)).jev;
+      assert.equal(jev.credentialState, "usable");
+      assert.equal(jev.source, "workspace");
+      assert.equal(jev.keyFingerprint, "...4321");
+      assert.equal(JSON.stringify(jev).includes(DEPLOYMENT_TYPESAFE), false, "the deployment key is not shown");
+    });
+
+    const other = await studioTenant(sql, "jev-summary-other");
+    await withEnv({ TYPESAFE_JEV_API_KEY: DEPLOYMENT_TYPESAFE }, async () => {
+      const jev = (await getWorkspaceProviderSettings(sql, other.organizationId)).jev;
+      assert.equal(jev.credentialState, "not_configured", "a deployment key alone is not shown as configured for JEV");
+      assert.equal(jev.source, "not_configured");
+      assert.equal(jev.configured, false);
+    });
+
+    await withEnv({ JEV_SHARED_DEFAULT: "deployment", TYPESAFE_JEV_API_KEY: DEPLOYMENT_TYPESAFE }, async () => {
+      const jev = (await getWorkspaceProviderSettings(sql, other.organizationId)).jev;
+      assert.equal(jev.credentialState, "usable");
+      assert.equal(jev.source, "deployment", "the deployment shared default is named as the source");
+      assert.equal(jev.keyFingerprint, "...5432");
+      assert.equal(JSON.stringify(jev).includes(DEPLOYMENT_TYPESAFE), false);
+    });
+  });
+
+  test(`[${name}] OpenRouter is deployment-only, and is in use only when JEV_SHARED_DEFAULT=deployment is set`, async () => {
+    const tenant = await studioTenant(sql, "openrouter-summary");
+    await withEnv({ OPENROUTER_API_KEY: "openrouter-deployment-key-6543" }, async () => {
+      const settings = (await getWorkspaceProviderSettings(sql, tenant.organizationId)).jev.settings;
+      assert.equal(settings.openrouterDeploymentOnly, true);
+      assert.equal(settings.openrouterConfigured, true);
+      assert.equal(settings.openrouterUsable, false, "not opted in, so not in use");
+      assert.equal(settings.openrouterFingerprint, "...6543");
+      assert.equal(JSON.stringify(settings).includes("openrouter-deployment-key-6543"), false);
+    });
+    await withEnv({ JEV_SHARED_DEFAULT: "deployment", OPENROUTER_API_KEY: "openrouter-deployment-key-6543" }, async () => {
+      assert.equal((await getWorkspaceProviderSettings(sql, tenant.organizationId)).jev.settings.openrouterUsable, true);
+    });
+  });
+
+  test(`[${name}] production: a saved workspace key is the one shown, and the deployment key is not shown without the flag`, async () => {
+    const tenant = await studioTenant(sql, "production-summary");
+    await storeVaultCredential(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: WORKSPACE_GEMINI });
+
+    await withEnv({ MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI }, async () => {
+      const production = (await getWorkspaceProviderSettings(sql, tenant.organizationId)).production;
+      assert.equal(production.credentialState, "usable");
+      assert.equal(production.source, "workspace", "production reads the workspace's saved key");
+      assert.equal(production.keyFingerprint, "...1234");
+      assert.equal(JSON.stringify(production).includes(WORKSPACE_GEMINI), false);
+      assert.equal(JSON.stringify(production).includes(DEPLOYMENT_GEMINI), false);
+    });
+
+    const bare = await studioTenant(sql, "production-summary-bare");
+    await withEnv({ MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI }, async () => {
+      const production = (await getWorkspaceProviderSettings(sql, bare.organizationId)).production;
+      assert.equal(production.credentialState, "not_configured", "the environment key alone is not used for production");
+      assert.equal(production.configured, false);
+      assert.match(production.credentialReason ?? "", /PRODUCTION_SHARED_DEFAULT=deployment/);
+    });
+  });
+
+  test(`[${name}] saving production settings without a new key keeps the stored key`, async () => {
+    const tenant = await studioTenant(sql, "keep-key");
+    await withEnv({}, async () => {
+      await saveWorkspaceProviderConfig(sql, {
+        organizationId: tenant.organizationId,
+        actorId: tenant.userId,
+        category: "production",
+        credentials: { apiKey: WORKSPACE_GEMINI },
+        settings: { costPreference: "BALANCED" },
+      });
+      const before = await resolveCredential(sql, tenant.organizationId, "production");
+      assert.equal(before.status === "ready" && before.secret, WORKSPACE_GEMINI);
+
+      // The regression: a settings-only save used to write an empty key over the stored one.
+      await saveWorkspaceProviderConfig(sql, {
+        organizationId: tenant.organizationId,
+        actorId: tenant.userId,
+        category: "production",
+        settings: { costPreference: "QUALITY_FIRST" },
+      });
+      const after = await resolveCredential(sql, tenant.organizationId, "production");
+      assert.equal(after.status === "ready" && after.secret, WORKSPACE_GEMINI, "the stored key is kept");
+
+      const production = (await getWorkspaceProviderSettings(sql, tenant.organizationId)).production;
+      assert.equal(production.credentialState, "usable");
+      assert.equal(production.settings.costPreference, "QUALITY_FIRST", "the new setting is saved");
+    });
+  });
+
+  test(`[${name}] a save with no key and no stored key is refused for every credential category, and creates no entry`, async () => {
+    const tenant = await studioTenant(sql, "refused-save");
+    await withEnv({}, async () => {
+      for (const category of CREDENTIAL_CATEGORIES) {
+        await assert.rejects(
+          saveWorkspaceProviderConfig(sql, { organizationId: tenant.organizationId, actorId: tenant.userId, category, settings: {} }),
+          /Enter a/,
+          `${category} is refused`,
+        );
+        assert.equal(await vaultRowId(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE[category]), null, `${category}: no empty entry is created`);
+      }
+    });
+  });
+
+  test(`[${name}] a failed write during a save leaves the previous key in place: the save is one transaction`, async () => {
+    const tenant = await studioTenant(sql, "atomic-save");
+    await withEnv({}, async () => {
+      await storeVaultCredential(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE.jev, { accessToken: "", apiKey: WORKSPACE_JEV });
+      await assert.rejects(
+        saveWorkspaceProviderConfig(failingVaultInsert(sql), {
+          organizationId: tenant.organizationId,
+          actorId: tenant.userId,
+          category: "jev",
+          credentials: { apiKey: "replacement-jev-key-9999" },
+          settings: { mode: "openrouter" },
+        }),
+        /simulated write failure/,
       );
-    }
-    if (query.includes("select id from credential_vault")) {
-      return Promise.resolve(
-        rows.filter((r) => r.organization_id === values[0] && r.credential_type === values[1]).slice(0, 1)
-          .map((r) => ({ id: r.id })),
-      );
-    }
-    if (query.includes("select id, credential_type, updated_at from credential_vault")) {
-      return Promise.resolve(
-        rows.filter((r) => r.organization_id === values[0] && String(r.credential_type).startsWith("provider_config:"))
-          .map((r) => ({ id: r.id, credential_type: r.credential_type, updated_at: r.updated_at })),
-      );
-    }
-    if (query.includes("select id, organization_id, ciphertext")) {
-      return Promise.resolve(rows.filter((r) => r.id === values[0] && r.organization_id === values[1]));
-    }
-    return Promise.resolve([]);
-  };
-  return { sql, rows, executed };
-}
-
-async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
-  const keys = ["TOKEN_ENCRYPTION_KEY", "PERCEPTION_SHARED_DEFAULT", "MERIDIAN_GEMINI_API_KEY", ...Object.keys(vars)];
-  const original = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-  const next = {
-    TOKEN_ENCRYPTION_KEY: "test-encryption-key-for-provider-settings",
-    PERCEPTION_SHARED_DEFAULT: undefined,
-    MERIDIAN_GEMINI_API_KEY: undefined,
-    ...vars,
-  };
-  for (const [k, v] of Object.entries(next)) {
-    if (v === undefined) delete process.env[k];
-    else process.env[k] = v;
-  }
-  try {
-    return await fn();
-  } finally {
-    for (const k of keys) {
-      if (original[k] === undefined) delete process.env[k];
-      else process.env[k] = original[k];
-    }
-  }
-}
-
-test("ProviderConfigService: perception with no workspace key and no shared default is not configured", async () => {
-  await withEnv({ MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_KEY }, async () => {
-    const { sql } = fakeVaultSql();
-    const perception = (await getWorkspaceProviderSettings(sql, "org-none")).perception;
-    assert.equal(perception.configured, false);
-    assert.equal(perception.credentialState, "not_configured");
-    assert.equal(perception.source, "not_configured");
-    assert.equal(perception.keyFingerprint, undefined);
-    assert.match(perception.credentialReason ?? "", /does not share one/);
-    assert.equal(JSON.stringify(perception).includes(DEPLOYMENT_KEY), false, "a deployment key that is not shared must not appear");
+      const still = await resolveCredential(sql, tenant.organizationId, "jev");
+      assert.equal(still.status === "ready" && still.secret, WORKSPACE_JEV, "the previous key survives the failed save");
+      const audit = await sql<{ n: number }>`select count(*)::int as n from audit_log where organization_id = ${tenant.organizationId} and object_id = ${CREDENTIAL_VAULT_TYPE.jev}`;
+      assert.equal(Number(audit[0]?.n ?? 0), 0, "no audit record is written for a save that did not happen");
+    });
   });
-});
 
-test("ProviderConfigService: the deployment Gemini key is used for perception only as the intentional shared default", async () => {
-  await withEnv({ PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_KEY }, async () => {
-    const { sql } = fakeVaultSql();
-    const perception = (await getWorkspaceProviderSettings(sql, "org-shared")).perception;
-    assert.equal(perception.configured, true);
-    assert.equal(perception.credentialState, "usable");
-    assert.equal(perception.source, "deployment");
-    assert.equal(perception.keyFingerprint, "...9876");
-    assert.equal(perception.credentialReason, undefined);
-    assert.equal(JSON.stringify(perception).includes(DEPLOYMENT_KEY), false, "the raw deployment key must never appear");
+  test(`[${name}] removing a key deletes it and writes its audit record in one transaction`, async () => {
+    const tenant = await studioTenant(sql, "remove-key");
+    await withEnv({}, async () => {
+      await storeVaultCredential(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: WORKSPACE_GEMINI });
+      await removeWorkspaceProviderConfig(sql, { organizationId: tenant.organizationId, actorId: tenant.userId, category: "production" });
+      assert.equal(await vaultRowId(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE.production), null);
+      const audit = await sql<{ action: string }>`select action from audit_log where organization_id = ${tenant.organizationId} and object_id = ${CREDENTIAL_VAULT_TYPE.production}`;
+      assert.ok(audit.some((row) => row.action === "provider_config.remove"));
+    });
   });
-});
 
-test("ProviderConfigService: a stored workspace perception key that becomes unusable is reported unusable and never falls back to the deployment key", async () => {
-  await withEnv({ PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_KEY }, async () => {
-    const { sql, rows } = fakeVaultSql();
-    await saveWorkspaceProviderConfig(sql, {
-      organizationId: "org-regression",
-      actorId: "admin-1",
-      category: "perception",
-      credentials: { apiKey: WORKSPACE_KEY },
+  test(`[${name}] the audit record and the stored entry never hold the raw key`, async () => {
+    const tenant = await studioTenant(sql, "audit-secret");
+    await withEnv({}, async () => {
+      await saveWorkspaceProviderConfig(sql, {
+        organizationId: tenant.organizationId,
+        actorId: tenant.userId,
+        category: "jev",
+        credentials: { apiKey: "sk-super-secret-key-12345" },
+        settings: { mode: "typesafe_direct" },
+      });
+      const audit = await sql<{ metadata: unknown }>`select metadata from audit_log where organization_id = ${tenant.organizationId} and object_id = ${CREDENTIAL_VAULT_TYPE.jev}`;
+      assert.ok(audit.length > 0, "the save is audited");
+      assert.equal(JSON.stringify(audit).includes("sk-super-secret-key-12345"), false);
+      const rows = await sql<{ ciphertext: string }>`select ciphertext from credential_vault where organization_id = ${tenant.organizationId}`;
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].ciphertext.includes("sk-super-secret-key-12345"), false, "the stored entry is encrypted");
+    });
+  });
+
+  test(`[${name}] Test Connection reports READY only for a usable credential, and says the live provider was not called`, async () => {
+    const usable = await studioTenant(sql, "test-usable");
+    await storeVaultCredential(sql, usable.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: WORKSPACE_GEMINI });
+    const expired = await studioTenant(sql, "test-expired");
+    await storeVaultCredential(sql, expired.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: "expired-test-key-2222" }, { expiresAt: new Date(Date.now() - 60_000) });
+    const none = await studioTenant(sql, "test-none");
+
+    await withEnv({ MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI, PRODUCTION_SHARED_DEFAULT: "deployment" }, async () => {
+      const ok = await testWorkspaceProviderConnection(sql, { organizationId: usable.organizationId, category: "production" });
+      assert.equal(ok.status, "READY");
+      assert.match(ok.message, /not called/);
+      assert.equal(ok.message.includes(WORKSPACE_GEMINI), false);
+
+      const bad = await testWorkspaceProviderConnection(sql, { organizationId: expired.organizationId, category: "production" });
+      assert.equal(bad.status, "ERROR", "an expired saved key is never READY, even with the shared default on");
+      assert.match(bad.message, /expired/);
+      assert.equal(bad.message.includes(DEPLOYMENT_GEMINI), false);
     });
 
-    // 1. Usable: the workspace's own key is used, and the deployment key is not reported.
-    let summary = await getWorkspaceProviderSettings(sql, "org-regression");
-    assert.equal(summary.perception.credentialState, "usable");
-    assert.equal(summary.perception.source, "workspace");
-    assert.equal(summary.perception.keyFingerprint, "...1234");
-    const usableJson = JSON.stringify(summary);
-    assert.equal(usableJson.includes(WORKSPACE_KEY), false, "the raw workspace key must never appear");
-    assert.equal(usableJson.includes(DEPLOYMENT_KEY), false, "the deployment key must not appear while the workspace key is usable");
-
-    // 2. Expired: the saved key is unusable. The shared default is set and available, but must not be used.
-    rows[0].expires_at = "2020-01-01T00:00:00.000Z";
-    summary = await getWorkspaceProviderSettings(sql, "org-regression");
-    assert.equal(summary.perception.configured, false);
-    assert.equal(summary.perception.credentialState, "unusable");
-    assert.equal(summary.perception.source, "workspace", "the unusable entry is still the workspace's own entry, so Remove Key stays available");
-    assert.equal(summary.perception.keyFingerprint, undefined);
-    assert.match(summary.perception.credentialReason ?? "", /expired/);
-    assert.equal(summary.perception.lastTestedStatus, "ERROR");
-    const expiredJson = JSON.stringify(summary);
-    assert.equal(expiredJson.includes(DEPLOYMENT_KEY), false, "no fallback to the deployment key");
-    // Production legitimately fingerprints the deployment key for its own category, so check the perception entry alone.
-    assert.equal(JSON.stringify(summary.perception).includes("...9876"), false, "no fingerprint of the deployment key in perception");
-
-    // 3. Unreadable: the stored payload no longer decrypts. Still unusable, still no fallback.
-    rows[0].expires_at = null;
-    rows[0].ciphertext = "AAAA";
-    summary = await getWorkspaceProviderSettings(sql, "org-regression");
-    assert.equal(summary.perception.credentialState, "unusable");
-    assert.equal(summary.perception.keyFingerprint, undefined);
-    assert.match(summary.perception.credentialReason ?? "", /could not be read/);
-    assert.equal(JSON.stringify(summary).includes(DEPLOYMENT_KEY), false, "no fallback to the deployment key");
-
-    // The connection test reports the same thing, and does not claim READY.
-    const connection = await testWorkspaceProviderConnection(sql, { organizationId: "org-regression", category: "perception" });
-    assert.equal(connection.status, "ERROR");
-    assert.match(connection.message, /could not be read/);
-  });
-});
-
-test("ProviderConfigService: a workspace perception entry with no key is unusable, not configured", async () => {
-  await withEnv({ PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_KEY }, async () => {
-    const { sql } = fakeVaultSql();
-    // The entry decrypts, but holds no key. The save path refuses this, so it can only come from elsewhere.
-    await storeVaultCredential(sql, "org-empty", "provider_config:perception", {
-      accessToken: "",
-      apiKey: "",
-      refreshToken: "",
-      customFields: {},
+    await withEnv({ MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI }, async () => {
+      const unshared = await testWorkspaceProviderConnection(sql, { organizationId: none.organizationId, category: "production" });
+      assert.equal(unshared.status, "ERROR", "an unshared deployment key is not READY");
     });
-    const perception = (await getWorkspaceProviderSettings(sql, "org-empty")).perception;
-    assert.equal(perception.credentialState, "unusable");
-    assert.equal(perception.configured, false);
-    assert.match(perception.credentialReason ?? "", /holds no Gemini API key/);
-    assert.equal(JSON.stringify(perception).includes(DEPLOYMENT_KEY), false, "no fallback to the deployment key");
-  });
-});
 
-test("ProviderConfigService: Test Connection for perception reports READY only for a usable credential", async () => {
-  await withEnv({ PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_KEY }, async () => {
-    const shared = await testWorkspaceProviderConnection(fakeVaultSql().sql, { organizationId: "org-x", category: "perception" });
-    assert.equal(shared.status, "READY");
-    assert.match(shared.message, /not called/, "the check must say it did not call Gemini");
-    assert.equal(shared.message.includes(DEPLOYMENT_KEY), false, "the message must not carry the key");
-  });
-
-  await withEnv({ PERCEPTION_SHARED_DEFAULT: undefined, MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_KEY }, async () => {
-    const none = await testWorkspaceProviderConnection(fakeVaultSql().sql, { organizationId: "org-y", category: "perception" });
-    assert.equal(none.status, "ERROR", "an unshared deployment key is not a usable perception credential");
-  });
-});
-
-test("ProviderConfigService: PERCEPTION_PROVIDER=none turns perception off in the settings summary and in Test Connection, even with a saved key", async () => {
-  await withEnv({ PERCEPTION_PROVIDER: "none", PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_KEY }, async () => {
-    const { sql } = fakeVaultSql();
-    await saveWorkspaceProviderConfig(sql, {
-      organizationId: "org-off",
-      actorId: "admin-1",
-      category: "perception",
-      credentials: { apiKey: WORKSPACE_KEY },
+    await withEnv({ JEV_SHARED_DEFAULT: "deployment", TYPESAFE_JEV_API_KEY: DEPLOYMENT_TYPESAFE }, async () => {
+      const jev = await testWorkspaceProviderConnection(sql, { organizationId: none.organizationId, category: "jev" });
+      assert.equal(jev.status, "READY");
+      assert.match(jev.message, /not called/);
+      assert.match(jev.message, /OpenRouter is deployment-only and was not checked/);
+      assert.equal(jev.message.includes(DEPLOYMENT_TYPESAFE), false);
     });
-    const perception = (await getWorkspaceProviderSettings(sql, "org-off")).perception;
-    assert.equal(perception.configured, false, "the panel must not show perception as configured while it is turned off");
-    assert.equal(perception.credentialState, "not_configured");
-    assert.equal(perception.source, "not_configured");
-    assert.equal(perception.keyFingerprint, undefined);
-    assert.match(perception.credentialReason ?? "", /PERCEPTION_PROVIDER=none/);
-
-    const connection = await testWorkspaceProviderConnection(sql, { organizationId: "org-off", category: "perception" });
-    assert.equal(connection.status, "ERROR");
-    assert.match(connection.message, /PERCEPTION_PROVIDER=none/);
   });
-});
 
-test("ProviderConfigService: saving perception without a key is refused and leaves the stored key alone", async () => {
-  await withEnv({ PERCEPTION_SHARED_DEFAULT: undefined }, async () => {
-    const { sql, rows, executed } = fakeVaultSql();
-    await saveWorkspaceProviderConfig(sql, {
-      organizationId: "org-keep",
-      actorId: "admin-1",
-      category: "perception",
-      credentials: { apiKey: WORKSPACE_KEY },
-    });
-    const before = rows.map((r) => r.id);
-    const writesBefore = executed.length;
-
-    await assert.rejects(
-      saveWorkspaceProviderConfig(sql, {
-        organizationId: "org-keep",
-        actorId: "admin-1",
+  test(`[${name}] perception: PERCEPTION_PROVIDER=none turns it off in the summary and in Test Connection, even with a saved key`, async () => {
+    const tenant = await studioTenant(sql, "perception-off");
+    await withEnv({ PERCEPTION_PROVIDER: "none", PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI }, async () => {
+      await saveWorkspaceProviderConfig(sql, {
+        organizationId: tenant.organizationId,
+        actorId: tenant.userId,
         category: "perception",
-        settings: {},
-      }),
-      /Enter a Gemini API key/,
-    );
+        credentials: { apiKey: WORKSPACE_GEMINI },
+      });
+      const perception = (await getWorkspaceProviderSettings(sql, tenant.organizationId)).perception;
+      assert.equal(perception.configured, false, "the panel must not show perception as configured while it is turned off");
+      assert.equal(perception.credentialState, "not_configured");
+      assert.equal(perception.source, "not_configured");
+      assert.equal(perception.keyFingerprint, undefined);
+      assert.match(perception.credentialReason ?? "", /PERCEPTION_PROVIDER=none/);
 
-    assert.deepEqual(rows.map((r) => r.id), before, "the stored entry is untouched");
-    const writes = executed.slice(writesBefore).filter((q) => /insert into|delete from/.test(q.query));
-    assert.equal(writes.length, 0, "no delete or insert runs when the save is refused");
-  });
-});
-
-test("ProviderConfigService: summarizes settings without leaking secrets", async () => {
-  const originalKey = process.env.TOKEN_ENCRYPTION_KEY;
-  process.env.TOKEN_ENCRYPTION_KEY = "test-encryption-key-for-provider-settings";
-
-  const vaultRows: Array<{ id: string; organization_id: string; credential_type: string; updated_at: string }> = [];
-
-  const mockSql: any = (strings: TemplateStringsArray, ..._values: any[]) => {
-    const query = strings.join("?");
-    if (query.includes("select id, credential_type, updated_at from credential_vault")) {
-      return Promise.resolve(vaultRows);
-    }
-    return Promise.resolve([]);
-  };
-
-  try {
-    const summary = await getWorkspaceProviderSettings(mockSql, "org-test-1");
-    assert.ok(summary.jev);
-    assert.ok(summary.perception);
-    assert.ok(summary.sources);
-    assert.ok(summary.production);
-    assert.ok(summary.storage);
-    assert.ok(summary.cyclone);
-
-    // Verify secrets are never exposed in settings summary
-    for (const [cat, s] of Object.entries(summary)) {
-      assert.equal((s.settings as any).apiKey, undefined, `${cat} should never expose raw apiKey`);
-      assert.equal((s.settings as any).secret, undefined, `${cat} should never expose raw secret`);
-      assert.equal((s.settings as any).password, undefined, `${cat} should never expose raw password`);
-    }
-  } finally {
-    process.env.TOKEN_ENCRYPTION_KEY = originalKey;
-  }
-});
-
-test("ProviderConfigService: prevents SSRF on configurable endpoints", async () => {
-  const originalKey = process.env.TOKEN_ENCRYPTION_KEY;
-  process.env.TOKEN_ENCRYPTION_KEY = "test-encryption-key-for-provider-settings";
-
-  const mockSql: any = () => Promise.resolve([]);
-
-  try {
-    // Attempting to set an AWS metadata endpoint
-    await assert.rejects(
-      async () => {
-        await saveWorkspaceProviderConfig(mockSql, {
-          organizationId: "org-1",
-          actorId: "user-1",
-          category: "production",
-          settings: {
-            endpointUrl: "http://169.254.169.254/latest/meta-data/",
-          },
-        });
-      },
-      /Invalid URL for endpointUrl/
-    );
-  } finally {
-    process.env.TOKEN_ENCRYPTION_KEY = originalKey;
-  }
-});
-
-test("ProviderConfigService: saves encrypted credential and writes audit log without raw secrets", async () => {
-  const originalKey = process.env.TOKEN_ENCRYPTION_KEY;
-  process.env.TOKEN_ENCRYPTION_KEY = "test-encryption-key-for-provider-settings";
-
-  const executedQueries: Array<{ query: string; values: any[] }> = [];
-
-  const mockSql: any = (strings: TemplateStringsArray, ...values: any[]) => {
-    const query = strings.join("?");
-    executedQueries.push({ query, values });
-    return Promise.resolve([]);
-  };
-
-  try {
-    const result = await saveWorkspaceProviderConfig(mockSql, {
-      organizationId: "org-secure-1",
-      actorId: "admin-user",
-      category: "jev",
-      credentials: {
-        apiKey: "sk-super-secret-key-12345",
-      },
-      settings: {
-        mode: "typesafe_direct",
-      },
+      const connection = await testWorkspaceProviderConnection(sql, { organizationId: tenant.organizationId, category: "perception" });
+      assert.equal(connection.status, "ERROR");
+      assert.match(connection.message, /PERCEPTION_PROVIDER=none/);
     });
+  });
 
-    assert.equal(result.success, true);
-    assert.equal(result.category, "jev");
+  test(`[${name}] a perception entry with no key is unusable and never falls back to the deployment key`, async () => {
+    const tenant = await studioTenant(sql, "perception-empty");
+    await withEnv({ PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI }, async () => {
+      // The entry decrypts, but holds no key. The save path refuses this, so it can only come from elsewhere.
+      await storeVaultCredential(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE.perception, { accessToken: "", apiKey: "", customFields: {} });
+      const perception = (await getWorkspaceProviderSettings(sql, tenant.organizationId)).perception;
+      assert.equal(perception.credentialState, "unusable");
+      assert.equal(perception.configured, false);
+      assert.match(perception.credentialReason ?? "", /holds no key/);
+      assert.equal(JSON.stringify(perception).includes(DEPLOYMENT_GEMINI), false, "no fallback to the deployment key");
+    });
+  });
 
-    // Check that vault insert occurred
-    const vaultInsert = executedQueries.find((q) => q.query.includes("insert into credential_vault"));
-    assert.ok(vaultInsert, "Must insert encrypted credential into vault");
+  test(`[${name}] redaction: the summary never carries a raw key, and a short key shows no fingerprint`, async () => {
+    const tenant = await studioTenant(sql, "redaction");
+    await storeVaultCredential(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE.jev, { accessToken: "", apiKey: "short1" });
+    await storeVaultCredential(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: WORKSPACE_GEMINI });
+    await withEnv({ TYPESAFE_JEV_API_KEY: DEPLOYMENT_TYPESAFE, MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI, PERCEPTION_SHARED_DEFAULT: "gemini" }, async () => {
+      const summary = await getWorkspaceProviderSettings(sql, tenant.organizationId);
+      const json = JSON.stringify(summary);
+      for (const secret of ["short1", WORKSPACE_GEMINI, DEPLOYMENT_GEMINI, DEPLOYMENT_TYPESAFE]) {
+        assert.equal(json.includes(secret), false, `the summary must not carry ${secret}`);
+      }
+      assert.equal(summary.jev.keyFingerprint, undefined, "a key shorter than eight characters shows no fingerprint");
+      assert.equal(summary.production.keyFingerprint, "...1234");
 
-    // Check audit log query
-    const auditInsert = executedQueries.find((q) => q.query.includes("insert into audit_log"));
-    assert.ok(auditInsert, "Must write audit log entry");
+      for (const category of CREDENTIAL_CATEGORIES) {
+        const state = credentialStateOf(await resolveCredential(sql, tenant.organizationId, category));
+        assert.equal(JSON.stringify(state).includes(WORKSPACE_GEMINI), false);
+        assert.equal(JSON.stringify(state).includes(DEPLOYMENT_GEMINI), false);
+      }
+    });
+  });
+}
 
-    // Assert that the raw secret does not appear anywhere in values or metadata
-    const auditValues = JSON.stringify(auditInsert.values);
-    assert.ok(!auditValues.includes("sk-super-secret-key-12345"), "Raw secret must never be recorded in audit log");
-  } finally {
-    process.env.TOKEN_ENCRYPTION_KEY = originalKey;
-  }
+test("the settings summary and the save path never read a provider key from the environment directly", () => {
+  const source = readFileSync(new URL("./provider-config.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /process\.env\.(MERIDIAN_GEMINI_API_KEY|GOOGLE_AI_STUDIO_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|TYPESAFE_JEV_API_KEY)/);
+});
+
+test("SSRF: a configurable endpoint on a private address is refused before anything is written", async () => {
+  const noDatabase = {} as unknown as Sql;
+  await assert.rejects(
+    saveWorkspaceProviderConfig(noDatabase, {
+      organizationId: "org-1",
+      actorId: "user-1",
+      category: "production",
+      settings: { endpointUrl: "http://169.254.169.254/latest/meta-data/" },
+    }),
+    /Invalid URL for endpointUrl/,
+  );
 });

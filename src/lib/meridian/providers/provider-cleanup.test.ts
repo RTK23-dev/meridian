@@ -48,7 +48,7 @@ test("Nano Banana stores no URL-only substitute and returns verified image bytes
   const result = await generateNanoBananaImage({
     prompt: "brand-safe image",
     promptVersion: "test-v1",
-    env: { GOOGLE_AI_STUDIO_API_KEY: "google-test-key" },
+    apiKey: "google-test-key",
     fetchImpl: async (url, init) => {
       assert.equal(String(url), "https://generativelanguage.googleapis.com/v1beta/interactions");
       assert.equal(new Headers(init?.headers).get("x-goog-api-key"), "google-test-key");

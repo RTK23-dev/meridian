@@ -128,7 +128,8 @@ export const saveDecisionEngine = createServerFn({ method: "POST" })
       return { ok: false as const, reason: `'${data.engineId}' is not a decision engine.` };
     }
     const target = createDecisionEngines()[data.engineId];
-    const health = await target.health();
+    // The engine is checked for this workspace, so its own saved key is the one that decides READY.
+    const health = target.healthFor ? await target.healthFor(data.organizationId) : await target.health();
     const result = await saveWorkspaceEngine(sql, {
       organizationId: data.organizationId,
       actorId: context.userId,

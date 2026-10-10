@@ -34,7 +34,8 @@ export async function getDecisionEngineStatus(
         id,
         label: DECISION_ENGINE_LABELS[id],
         isActive: id === active.engineId,
-        health: await engine.health(),
+        // With a workspace in scope, each engine reports its readiness for that workspace. Without one, it cannot be READY.
+        health: organizationId && engine.healthFor ? await engine.healthFor(organizationId) : await engine.health(),
         adapterVersion: engine.adapterVersion,
         capabilities: engine.capabilities(),
       };
