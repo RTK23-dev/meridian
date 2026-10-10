@@ -6,6 +6,8 @@
  * option is offered only when the server says the test runtime is active.
  */
 
+import { CONNECTION_MESSAGES, providerLabel } from "../../lib/copy.ts";
+
 export const IMAGE_PROVIDER_VALUES = ["none", "test:image", "google:nano-banana"] as const;
 export type ImageProviderValue = (typeof IMAGE_PROVIDER_VALUES)[number];
 
@@ -90,7 +92,7 @@ export function imageProviderCards(input: { testImageAllowed: boolean; productio
   if (input.testImageAllowed) {
     cards.push({
       value: "test:image",
-      label: "Test image",
+      label: providerLabel("test:image"),
       description: "A fixture from the test runtime. It is labelled as a test, not a photograph.",
       connection: { kind: "available", text: "Available in the test runtime." },
       disabled: false,
@@ -99,7 +101,7 @@ export function imageProviderCards(input: { testImageAllowed: boolean; productio
   }
   cards.push({
     value: "google:nano-banana",
-    label: "Google Nano Banana",
+    label: providerLabel("google:nano-banana"),
     description: "Google AI Studio image model. It uses the workspace production key.",
     ...credentialGate(input.production),
   });
@@ -109,7 +111,7 @@ export function imageProviderCards(input: { testImageAllowed: boolean; productio
 export function videoProviderCards(input: { production: ProductionStatus }): ProviderCard<VideoProviderValue>[] {
   const hypit: ProviderCard<VideoProviderValue> = {
     value: "hypit",
-    label: "Hypit video",
+    label: providerLabel("hypit"),
     description: "A separate Hypit process. A clip is stored only after Hypit returns verified MP4 bytes.",
     connection: { kind: "checking", text: "Checking the connection…" },
     disabled: true,
@@ -126,7 +128,7 @@ export function videoProviderCards(input: { production: ProductionStatus }): Pro
       hypit.disabledReason = null;
     } else {
       hypit.connection = { kind: "not_connected", text: "Not connected" };
-      hypit.disabledReason = "HYPIT_BASE_URL is not set, so no video can be requested.";
+      hypit.disabledReason = CONNECTION_MESSAGES.hypitNotConnected;
     }
   }
 

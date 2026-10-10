@@ -119,7 +119,7 @@ try {
   await page.getByText("Discovered").first().waitFor({ timeout: 60000 });
   const discovered = await page.locator("body").innerText();
   if (!discovered.toLowerCase().includes("lather")) throw new Error(`Studio did not show the lather evidence. ${discovered.slice(0, 500)}`);
-  await page.locator("dd").filter({ hasText: /AUTO_APPROVE|HUMAN_REVIEW|REJECT/ }).first().waitFor();
+  await page.locator("dd").filter({ hasText: /Approved|Needs a person|Rejected/ }).first().waitFor();
   // Accepting a direction needs a reason of at least 20 characters. It is recorded with the decision.
   await page.getByLabel(/Why accept this direction/).fill("E2E testing run: the stored lather evidence supports this direction.");
   await page.getByRole("button", { name: "Accept direction and write the brief" }).click();
@@ -170,7 +170,7 @@ try {
   await page.getByLabel("Compare").selectOption({ index: 1 });
   await page.getByLabel("With").selectOption({ index: 2 });
   await page.getByRole("button", { name: "Publish with test publisher" }).first().click();
-  await page.getByText(/Test publication test:/).first().waitFor();
+  await page.getByText(/Test publication · publisher ID test:/).first().waitFor();
   await page.getByRole("button", { name: "Publish with test publisher" }).nth(0).click().catch(() => {});
   const publishButtons = page.getByRole("button", { name: "Publish with test publisher" });
   const publishCount = await publishButtons.count();

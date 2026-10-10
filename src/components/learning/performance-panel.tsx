@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { Button, Card, EmptyState, ErrorState, Field, Notice, SelectInput, Skeleton, Stat, TextInput, errorText } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorState, Field, SelectInput, Skeleton, Stat, TextInput } from "@/components/ui";
+import { PlainErrorMessage, PlainErrorNotice } from "@/components/plain-error";
+import { copy, plainError, type PlainError } from "@/lib/copy";
 import { downloadCsv } from "@/lib/csv";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getPerformanceRowsForExport } from "@/lib/meridian/performance/actions";
@@ -69,7 +71,7 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
       const result = await syncTelemetry.mutateAsync();
       setNote(`Synchronized ${result.syncedRecords} records to Bayesian flywheel. Learned ${result.patternsLearned} patterns. Top hooks: ${result.topHooks.join(", ") || "none"}.`);
     } catch (error) {
-      setNote(errorText(error));
+      setNote(plainError(error).message);
     }
   }
 
@@ -115,14 +117,14 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
       ) : null}
     </div>
     {note ? <p role="status" className="text-sm text-fg-muted">{note}</p> : null}
-    {exportRows.error ? <Notice>{errorText(exportRows.error)}</Notice> : null}
-    {syncTelemetry.error ? <Notice>{errorText(syncTelemetry.error)}</Notice> : null}
+    {exportRows.error ? <PlainErrorNotice error={exportRows.error} /> : null}
+    {syncTelemetry.error ? <PlainErrorNotice error={syncTelemetry.error} /> : null}
 
     {telemetryQuery.isError && !telemetryLoaded ? <ErrorState message="Telemetry could not be loaded." onRetry={() => void telemetryQuery.refetch()} /> : null}
     <section aria-labelledby="telemetry-summary-title" className="space-y-3">
       <div>
         <h3 id="telemetry-summary-title" className="text-base font-semibold">Telemetry summary</h3>
-        <p className="text-sm text-fg-muted">Uses up to the latest {TELEMETRY_SUMMARY_LIMIT} telemetry rows. Sync to JEV Brain updates the priors from these rows. Older rows count for less, with a 14-day half-life.</p>
+        <p className="text-sm text-fg-muted">Uses up to the latest {TELEMETRY_SUMMARY_LIMIT} telemetry rows. {copy.learning.startingEstimates} Older rows count for less, with a 14-day half-life.</p>
       </div>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Card><Stat label="Tracked views" value={kpiViews} description={telemetryLoaded ? `${summary?.totalRecords ?? 0} telemetry rows` : undefined} /></Card>
@@ -154,7 +156,7 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
       {!canEdit ? (
         <EmptyState title="Stored performance rows are for members" reason="Your role can see the telemetry summary above. Ask a workspace member to review creative-level rows." />
       ) : rowsQuery.isError ? (
-        <ErrorState message={errorText(rowsQuery.error)} onRetry={() => void rowsQuery.refetch()} />
+        <ErrorState message={plainError(rowsQuery.error).message} detail={plainError(rowsQuery.error).raw} onRetry={() => void rowsQuery.refetch()} />
       ) : rowsQuery.isPending ? (
         <Skeleton variant="card" className="h-72" />
       ) : rows.length === 0 ? (
@@ -223,7 +225,7 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
   const [fields, setFields] = useState<TelemetryFormFields>({
     platform: "", sourceType: "organic", creativeId: "", views: "", hookRetention3s: "", completionRate: "", engagements: "", shares: "", hookType: "", angle: "",
   });
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<PlainError | null>(null);
 
   function update<K extends keyof TelemetryFormFields>(key: K, value: TelemetryFormFields[K]) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -233,7 +235,7 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
     event.preventDefault();
     const parsed = parseTelemetryForm(fields);
     if (!parsed.ok) {
-      setFormError(parsed.message);
+      setFormError({ message: parsed.message, raw: "" });
       return;
     }
     setFormError(null);
@@ -241,7 +243,7 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
       await recordTelemetry.mutateAsync(parsed.payload);
       onSaved("Recorded new performance observation into telemetry store.");
     } catch (error) {
-      setFormError(errorText(error));
+      setFormError(plainError(error));
     }
   }
 
@@ -250,7 +252,7 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
       <h3 id="telemetry-form-title" className="text-base font-semibold">Add a telemetry row</h3>
       <p className="text-sm text-fg-muted">Enter numbers you measured. Leave an optional field blank if you do not have it; it is stored as unknown, not as 0.</p>
     </div>
-    {formError ? <Notice>{formError}</Notice> : null}
+    {formError ? <PlainErrorMessage message={formError.message} raw={formError.raw} /> : null}
 
     <fieldset className="grid gap-4 sm:grid-cols-3">
       <legend className="mb-2 text-sm font-semibold text-fg">Where it ran</legend>

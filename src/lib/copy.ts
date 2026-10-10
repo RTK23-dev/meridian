@@ -55,13 +55,16 @@ export function providerLabel(provider: string): string {
   return PROVIDER_LABELS[normalized] ?? normalized.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
-/**
- * Server codes that name a missing connection, with the sentence a person reads. Each sentence says what is missing and where
- * to fix it. Order matters: a longer code that contains a shorter one must come first.
- */
+/** Sentences for server codes that name a missing connection. Each says what is missing and where to fix it. */
+export const CONNECTION_MESSAGES = {
+  notConnected: "Not connected. Connect it in Settings or Integrations.",
+  hypitNotConnected: "Video engine not connected. Set up Hypit in Integrations.",
+} as const;
+
+/** Server codes mapped to their sentences. Order matters: a longer code that contains a shorter one must come first. */
 const SERVER_CODE_MESSAGES: ReadonlyArray<readonly [code: string, message: string]> = [
-  ["HYPIT_NOT_CONNECTED", "Video engine not connected. Set up Hypit in Integrations."],
-  ["NOT_CONNECTED", "Not connected. Connect it in Settings or Integrations."],
+  ["HYPIT_NOT_CONNECTED", CONNECTION_MESSAGES.hypitNotConnected],
+  ["NOT_CONNECTED", CONNECTION_MESSAGES.notConnected],
 ];
 
 /** The sentence for a known server code found in a message, or null when the message names none. */
@@ -159,5 +162,9 @@ export const copy = {
   studio: {
     publisherId: "Publisher ID",
     copyPublisherId: "publisher ID",
+    variantProblem: "This variant reported a problem. Open Details for the provider's message.",
+    generationFailed: "Generation did not finish. Open Details for the provider's message.",
+    noProviderReason: "The provider did not return a reason.",
+    publicationProblem: "This publication did not finish. Open Details for the exact message.",
   },
 } as const;

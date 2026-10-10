@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, TextArea } from "@/components/ui";
-import { providerLabel, statusLabel } from "@/lib/copy";
+import { PlainErrorMessage } from "@/components/plain-error";
+import { copy, providerLabel, serverCodeMessage, statusLabel } from "@/lib/copy";
 import { cn } from "@/lib/cn";
 import { CopyButton } from "./copy-button.tsx";
 import { frameShape } from "./aspect.ts";
@@ -127,12 +128,12 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
                     <p>
                       <span className="font-semibold">{names.get(receipt.channelId) ?? providerLabel(receipt.platform)}</span>: {statusLabel(receipt.status)}
                     </p>
-                    {receipt.error ? <p className="text-danger">{receipt.error}</p> : null}
+                    {receipt.error ? <PlainErrorMessage message={serverCodeMessage(receipt.error) ?? copy.studio.publicationProblem} raw={receipt.error} /> : null}
                     {receipt.url ? <a href={receipt.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">View the post</a> : null}
                     {receipt.externalId ? (
                       <div className="flex flex-wrap items-center gap-2">
-                        <span>Stored publisher id <code className="break-all font-mono text-xs">{receipt.externalId}</code></span>
-                        <CopyButton value={receipt.externalId} label="stored publisher id" />
+                        <span>{copy.studio.publisherId} <code className="break-all font-mono text-xs">{receipt.externalId}</code></span>
+                        <CopyButton value={receipt.externalId} label={copy.studio.copyPublisherId} />
                       </div>
                     ) : null}
                   </li>
