@@ -12,7 +12,7 @@ export function WorkspaceReady({ children }: { children: ReactNode }) {
     return <div className="mx-auto max-w-3xl p-6"><ScreenSkeleton label="Loading workspace" shape="cards" /></div>;
   }
   if (error && !data && forbidden) return <ForbiddenPage />;
-  if (error && !data) return <ErrorState message={error} onRetry={() => void reload()} />;
+  if (error && !data) return <ErrorState message={error.message} detail={error.raw} onRetry={() => void reload()} />;
   return <>{children}</>;
 }
 

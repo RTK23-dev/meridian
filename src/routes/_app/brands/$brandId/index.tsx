@@ -1,5 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Button, ErrorState, PageHeader, ScreenSkeleton, Skeleton, errorText } from "@/components/ui";
+import { Button, PageHeader, ScreenSkeleton, Skeleton } from "@/components/ui";
+import { PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { brainCompleteness } from "@/lib/meridian/brain";
 import { useBrandQuery, useMachineQuery, useOpportunitiesQuery, useReviewsQuery } from "@/lib/query/hooks";
@@ -26,7 +27,7 @@ function BrandHome({ brandId }: { brandId: string }) {
   const detail = detailQuery.data ?? null;
   const machine = machineQuery.data ?? null;
 
-  if (detailQuery.isError && !detail) return <ErrorState message={errorText(detailQuery.error)} onRetry={() => void detailQuery.refetch()} />;
+  if (detailQuery.isError && !detail) return <PlainErrorState error={detailQuery.error} onRetry={() => void detailQuery.refetch()} />;
   if (!detail) return <ScreenSkeleton label="Loading brand" shape="cards" />;
 
   const known = brainCompleteness(detail.brain);

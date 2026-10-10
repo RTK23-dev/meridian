@@ -1,7 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Button, Field, Notice, Sheet, SheetContent, SheetDescription, SheetTitle, TextArea, TextInput, errorText } from "@/components/ui";
+import {
+  Button, Field, Sheet, SheetContent, SheetDescription, SheetTitle, TextArea, TextInput,
+} from "@/components/ui";
+import { PlainErrorMessage } from "@/components/plain-error";
+import { plainError } from "@/lib/copy";
 import { saveProduct, type ProductRow } from "@/lib/meridian/api";
 import { productFieldsSchema, type ProductFields, type ProductFieldsInput } from "@/lib/meridian/schemas/product";
 import { useScopedMutation } from "@/lib/query/hooks";
@@ -56,7 +60,7 @@ export function ProductSheet({ brandId, open, product, onOpenChange }: {
     success: "Product saved.",
   });
   const pending = saveProductMutation.isPending;
-  const saveError = saveProductMutation.error ? errorText(saveProductMutation.error) : null;
+  const saveError = saveProductMutation.error ? plainError(saveProductMutation.error) : null;
 
   // Each time the sheet opens, load the chosen product, or a blank form for a new one.
   useEffect(() => {
@@ -130,7 +134,7 @@ export function ProductSheet({ brandId, open, product, onOpenChange }: {
               <TextInput {...register("url")} maxLength={500} placeholder="https://example.test" />
             </Field>
           </div>
-          {saveError ? <div className="md:col-span-2"><Notice>{saveError}</Notice></div> : null}
+          {saveError ? <div className="md:col-span-2"><PlainErrorMessage message={saveError.message} raw={saveError.raw} /></div> : null}
           {isDirty ? (
             <div role="status" className="md:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning bg-warning-soft p-3 text-sm">
               <span>{discardRequested ? "Discard your unsaved product changes?" : "Unsaved changes"}</span>

@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useWorkspace } from "@/components/workspace";
-import { Button, ErrorState, Panel, Skeleton, TextInput, errorText } from "@/components/ui";
+import { Button, Panel, Skeleton, TextInput } from "@/components/ui";
+import { PlainErrorState } from "@/components/plain-error";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listAuditPage } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "@/lib/query/keys";
@@ -24,7 +25,7 @@ function AuditPage() {
     queryFn: () => listAuditPage({ data: { organizationId, ...filters, page } }),
     enabled: !!user && !!organizationId,
   });
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.error) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!query.data) return <div role="status" aria-label="Loading audit log"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
 
   const data = query.data;

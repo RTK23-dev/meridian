@@ -1,5 +1,7 @@
 import { useState, type DragEvent } from "react";
-import { Button, Field, Notice, TextArea, errorText } from "@/components/ui";
+import { Button, Field, TextArea } from "@/components/ui";
+import { PlainErrorMessage } from "@/components/plain-error";
+import { plainError } from "@/lib/copy";
 import { cn } from "@/lib/cn";
 import type { BrainKey } from "@/lib/meridian/brain";
 import { storeMaterial, suggestFromDocument } from "@/lib/meridian/machine";
@@ -49,12 +51,12 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty }: {
         return false;
       }
       setStage("Asking the text model for suggestions…");
-      const suggested = await suggestMutation.mutateAsync(stored.id).catch((error: unknown) => ({ status: "failed" as const, message: errorText(error) }));
+      const suggested = await suggestMutation.mutateAsync(stored.id).catch((error: unknown) => ({ status: "failed" as const, message: plainError(error).message }));
       const summary = summariseUpload({ status: "stored", detail: stored.detail, droppedLines: stored.droppedLines }, suggested);
       setStatus(notice ? { ...summary, message: `${notice} ${summary.message}` } : summary);
       return true;
     } catch (error) {
-      setStatus({ tone: "danger", message: errorText(error) });
+      setStatus({ tone: "danger", message: plainError(error).message, detail: plainError(error).raw });
       return false;
     } finally {
       setWorking(false);
@@ -75,7 +77,7 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty }: {
         moreThanOne ? "Only the first file was used. Drop one file at a time." : undefined,
       );
     } catch (error) {
-      setStatus({ tone: "danger", message: errorText(error) });
+      setStatus({ tone: "danger", message: plainError(error).message, detail: plainError(error).raw });
     }
   }
 
@@ -140,7 +142,7 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty }: {
     {stage ? <p role="status" aria-live="polite" className="text-sm text-fg-muted">{stage}</p> : null}
     {status ? (
       status.tone === "danger"
-        ? <Notice>{status.message}</Notice>
+        ? <PlainErrorMessage message={status.message} raw={status.detail ?? ""} />
         : <p role="status" aria-live="polite" className="text-sm text-fg">{status.message}</p>
     ) : null}
 

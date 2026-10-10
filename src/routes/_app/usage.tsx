@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useWorkspace } from "@/components/workspace";
-import { ErrorState, Panel, Skeleton, errorText } from "@/components/ui";
+import { Panel, Skeleton } from "@/components/ui";
+import { PlainErrorState } from "@/components/plain-error";
 import { listUsage } from "@/lib/meridian/jobs/actions";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { qk, userScopedQueryKey } from "@/lib/query/keys";
@@ -17,7 +18,7 @@ function UsagePage() {
     queryFn: () => listUsage({ data: { organizationId } }),
     enabled: !!user && !!organizationId,
   });
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.error) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!query.data) return <div role="status" aria-label="Loading usage" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
 
   const { usage, daily } = query.data;

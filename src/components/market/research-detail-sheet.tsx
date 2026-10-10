@@ -1,4 +1,5 @@
-import { Badge, Notice, Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui";
+import { Badge, Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 import { AnalysisStateBadge, ConfidenceChip, MissingValue, SnapshotPlaceholder, StatusWord } from "./research-parts";
 import {
   ANALYSIS_FIELD_LABELS,
@@ -98,7 +99,7 @@ function ResearchDetail({ ad }: { ad: ResearchAdRow }) {
 
       <Provenance ad={ad} analysis={analysis} />
 
-      {ad.error ? <Notice>{ad.error}</Notice> : null}
+      {ad.error ? <PlainErrorNotice error={ad.error} /> : null}
     </div>
   </>;
 }

@@ -1,7 +1,10 @@
 import { Check, Minus } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
 import { MediaPlayer } from "@/components/media-player";
-import { Badge, Button, ErrorState, Field, Sheet, SheetContent, SheetDescription, SheetTitle, TextInput } from "@/components/ui";
+import {
+  Badge, Button, ErrorState, Field, Sheet, SheetContent, SheetDescription, SheetTitle, TextInput,
+} from "@/components/ui";
+import type { PlainError } from "@/lib/copy";
 import type { ManualPerformance, ManualPerformanceFields } from "@/lib/meridian/schemas/performance";
 import { downloadHref, previewBox, type LibraryMediaVariant } from "./library-model";
 import type { TraceStage } from "./trace-model";
@@ -13,8 +16,8 @@ export type TraceDrawerProps = {
   summary: string;
   /** The trace is still loading. */
   loading: boolean;
-  /** Plain words for a failed trace read, or null. */
-  error: string | null;
+  /** Plain words for a failed trace read, with the raw text for Details, or null. */
+  error: PlainError | null;
   onRetry: () => void;
   /** The timeline, or null before the trace has loaded. */
   stages: TraceStage[] | null;
@@ -69,7 +72,7 @@ export function TraceDrawer(props: TraceDrawerProps) {
           <SheetTitle className="font-display text-2xl">{title}</SheetTitle>
           <SheetDescription className="text-sm text-muted">{summary}</SheetDescription>
         </div>
-        {error ? <ErrorState message={error} onRetry={onRetry} /> : null}
+        {error ? <ErrorState message={error.message} detail={error.raw} onRetry={onRetry} /> : null}
         {stages === null ? (error || !loading ? null : <p role="status" className="text-sm text-muted">Loading trace</p>) : (
           <>
             <section aria-labelledby="trace-timeline-title" className="space-y-3">

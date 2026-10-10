@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Activity, AlertTriangle, CheckCircle2, Clock3 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useWorkspace } from "@/components/workspace";
-import { Button, ErrorState, Notice, Panel, ScreenSkeleton, errorText } from "@/components/ui";
+import { Button, Panel, ScreenSkeleton } from "@/components/ui";
+import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { cancelJob, retryJob } from "@/lib/meridian/jobs/actions";
 import { qk } from "@/lib/query/keys";
 import { useJobsQuery, useScopedMutation } from "@/lib/query/hooks";
@@ -27,7 +28,7 @@ function JobsPage() {
     mutationFn: (jobId: string) => cancelJob({ data: { organizationId, jobId } }),
     invalidate: () => [qk.jobs(organizationId)],
   });
-  if (query.isError && !data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!data) return <ScreenSkeleton label="Loading jobs and health" shape="rows" />;
   const counts = data.counts as Record<string, number>;
   const queued = (counts.queued ?? 0) + (counts.retry ?? 0);
@@ -35,8 +36,8 @@ function JobsPage() {
   return (
     <div className="space-y-6">
       <header><p className="text-xs font-semibold uppercase tracking-widest text-brass">Workspace operations</p><h1 className="font-display text-4xl">Jobs &amp; health</h1><p className="mt-2 max-w-2xl text-muted">Queue activity and worker heartbeats for this workspace. This page refreshes every 5 seconds while a job is queued or running, and when you return to it.</p></header>
-      {retry.error ? <Notice>{errorText(retry.error)}</Notice> : null}
-      {cancel.error ? <Notice>{errorText(cancel.error)}</Notice> : null}
+      {retry.error ? <PlainErrorNotice error={retry.error} /> : null}
+      {cancel.error ? <PlainErrorNotice error={cancel.error} /> : null}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <HealthCard label="Worker" value={statusLabel(data.worker)} icon={<Activity aria-hidden="true" />} />
         <HealthCard label="Scheduler" value={statusLabel(data.scheduler)} icon={<Clock3 aria-hidden="true" />} />

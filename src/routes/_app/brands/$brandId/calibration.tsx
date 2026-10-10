@@ -4,7 +4,8 @@ import { useCalibrationQuery, useLearningQuery, usePendingVariables, useScopedMu
 import { decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
 import { hasRole } from "@/lib/meridian/access";
 import { qk } from "@/lib/query/keys";
-import { Button, ErrorState, Notice, Panel, ScreenSkeleton, errorText } from "@/components/ui";
+import { Button, Panel, ScreenSkeleton } from "@/components/ui";
+import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { StatusText } from "@/components/status";
 
 export const Route = createFileRoute("/_app/brands/$brandId/calibration")({ staticData: { pageTitle: "Calibration" }, component: CalibrationPage });
@@ -38,14 +39,14 @@ function CalibrationPage() {
   const deciding = usePendingVariables<{ proposalId: string }>([...calibrationKey, "decide"]).map((vars) => vars.proposalId);
   const failures = [propose.error, decide.error].filter((error): error is Error => Boolean(error));
 
-  if (calibration.isError && !calibration.data) return <ErrorState message={errorText(calibration.error)} onRetry={() => void calibration.refetch()} />;
-  if (learning.isError && !learning.data) return <ErrorState message={errorText(learning.error)} onRetry={() => void learning.refetch()} />;
+  if (calibration.isError && !calibration.data) return <PlainErrorState error={calibration.error} onRetry={() => void calibration.refetch()} />;
+  if (learning.isError && !learning.data) return <PlainErrorState error={learning.error} onRetry={() => void learning.refetch()} />;
   if (!calibration.data || !learning.data) return <ScreenSkeleton label="Loading calibration" shape="rows" />;
   const canAdmin = hasRole(learning.data.role, "admin");
 
   return <div className="space-y-6">
     <header><p className="text-xs font-semibold uppercase tracking-widest text-brass">JEV governance</p><h1 className="font-display text-4xl">Calibration</h1><p className="mt-2 max-w-2xl text-muted">Review proposals based on recorded reviewer outcomes. A proposal changes no threshold until an admin approves it.</p></header>
-    {note ? <p role="status" className="text-sm text-muted">{note}</p> : null}{failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
+    {note ? <p role="status" className="text-sm text-muted">{note}</p> : null}{failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
     <Panel><h2 className="font-display text-2xl">Active threshold history</h2><p className="mt-2 text-sm text-muted">Each approved version records its approver and stored threshold values. Defaults remain active until a version is approved.</p>
       {calibration.data.versions.length ? <ul className="mt-3 space-y-3">{calibration.data.versions.map((version) => <li key={version.id} className="rounded border border-line p-3"><StatusText status={`Version ${version.version}`} description={`${version.questionId} · approved by ${version.approvedBy} · ${version.thresholds}`} /></li>)}</ul> : <p className="mt-3 text-sm text-muted">No approved threshold version. Code defaults remain active.</p>}
     </Panel>

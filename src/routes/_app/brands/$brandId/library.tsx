@@ -3,7 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { StatusText } from "@/components/status";
-import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea, TextInput, errorText } from "@/components/ui";
+import {
+  Button, Field, Panel, ScreenSkeleton, SelectInput, TextArea, TextInput,
+} from "@/components/ui";
+import { PlainErrorMessage, PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
+import { plainError } from "@/lib/copy";
 import { CreativeCard } from "@/components/library/creative-card";
 import { LibraryFilterBar } from "@/components/library/library-filters";
 import {
@@ -130,7 +134,7 @@ function Library({ brandId }: { brandId: string }) {
   const failures = [recordPerf, ownCreative, pausedObjects, attachImage].map((action) => action.error).filter((error): error is Error => Boolean(error));
 
   // Hooks stop above this line. The screen renders from here down.
-  if (query.isError && !data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!data) return <ScreenSkeleton label="Loading library" shape="rows" />;
   const canEdit = hasRole(data.role, "member");
 
@@ -178,7 +182,7 @@ function Library({ brandId }: { brandId: string }) {
         <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing stays paused and runs only when you submit the form below.</p>
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
-      {failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
+      {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
       <Button type="button" variant="quiet" disabled={!visibleCreatives.length} onClick={() => downloadCsv("meridian-library.csv", [
         { key: "id", label: "Creative ID" }, { key: "title", label: "Title" }, { key: "hook", label: "Hook" },
         { key: "angle", label: "Angle" }, { key: "status", label: "Status" }, { key: "origin", label: "Origin" }, { key: "createdAt", label: "Created at" },
@@ -265,10 +269,10 @@ function Library({ brandId }: { brandId: string }) {
           </ul>
         ) : null}
       </Panel>
-      {data.creatives.length === 0 ? <Panel>No brand creatives yet. Score an opportunity, brief it, and save a script. Or record one you already ran.</Panel> : (
+      {data.creatives.length === 0 ? <Panel>No brand creatives yet. Rank an opportunity, brief it, and save a script. Or record one you already ran.</Panel> : (
         <section aria-labelledby="library-creatives-title" className="space-y-4">
           <div><h2 id="library-creatives-title" className="font-display text-2xl">Creative library</h2><p className="text-sm text-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
-          {studio.isError ? <Notice>Media previews could not be loaded. {errorText(studio.error)}</Notice> : null}
+          {studio.isError ? <PlainErrorMessage message="Media previews could not be loaded. Open Details for the exact message." raw={plainError(studio.error).raw} /> : null}
           <LibraryFilterBar
             filters={filters}
             onChange={setFilters}
@@ -303,7 +307,7 @@ function Library({ brandId }: { brandId: string }) {
         title="Why this exists"
         summary={trace ? `${traceLabel} · ${trace.creative.status} · ${trace.creative.angle}` : "Opportunity to performance, in order."}
         loading={traceQuery.isPending}
-        error={traceCreativeId && traceQuery.error ? errorText(traceQuery.error) : null}
+        error={traceCreativeId && traceQuery.error ? plainError(traceQuery.error) : null}
         onRetry={() => void traceQuery.refetch()}
         stages={traceStages}
         script={trace?.creative.script ?? ""}

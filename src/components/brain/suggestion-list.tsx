@@ -1,4 +1,5 @@
-import { Button, Notice, Skeleton, errorText } from "@/components/ui";
+import { Button, Skeleton } from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 import { useWorkspace } from "@/components/workspace";
 import type { BrainKey } from "@/lib/meridian/brain";
 import { resolveSuggestion } from "@/lib/meridian/machine";
@@ -42,7 +43,7 @@ export function SuggestionList({ brandId, canEdit, saved, formDirty }: {
     <h4 className="text-sm font-semibold">Suggestions waiting</h4>
     {marketQuery.isError ? (
       <div className="space-y-2">
-        <Notice>{errorText(marketQuery.error)}</Notice>
+        <PlainErrorNotice error={marketQuery.error} />
         <Button type="button" variant="secondary" onClick={() => void marketQuery.refetch()}>Try again</Button>
       </div>
     ) : null}

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Field, TextArea, TextInput, errorText } from "@/components/ui";
+import {
+  Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Field, TextArea, TextInput,
+  errorText,
+} from "@/components/ui";
 import { FormError } from "@/components/settings/form-error";
 import { plainServerError } from "@/components/settings/form-model";
 import { updateBrand, type BrandDetail } from "@/lib/meridian/api";

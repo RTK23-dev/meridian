@@ -6,7 +6,7 @@ import { IDEA_TO_TEST } from "@/lib/copy";
  * Short definitions for the terms the screens use. Each one matches the code it describes. docs/GLOSSARY.md lists the same
  * terms with their sources.
  */
-export const TERMS = {
+const TERMS = {
   jev: {
     label: "JEV",
     description: "The decision engine. It reads the stored evidence and returns a decision, a probability and a confidence. It recommends or routes work, and the configured approval steps still apply.",

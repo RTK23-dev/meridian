@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { ErrorState, Notice, ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, errorText } from "@/components/ui";
+import { ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { Term } from "@/components/glossary";
 import { useWorkspace } from "@/components/workspace";
 import { providerLabel } from "@/lib/copy";
@@ -77,7 +78,7 @@ function Studio({ brandId }: { brandId: string }) {
     return () => window.clearInterval(timer);
   }, [hasSubmitted, refetch]);
 
-  if (query.isError && !session) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !session) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!session) return <ScreenSkeleton label="Loading studio" shape="cards" />;
 
   const canEdit = hasRole(session.role, "member");
@@ -145,7 +146,7 @@ function Studio({ brandId }: { brandId: string }) {
 
       <Stepper steps={studioStepperSteps(session, brief)} className="grid grid-cols-2 lg:grid-cols-4" />
 
-      {actions.actionErrors.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
+      {actions.actionErrors.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
       {actions.anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
 
       <Tabs value={step} onValueChange={(value) => setStep(value as StepKey)} className="space-y-5">

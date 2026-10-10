@@ -3,7 +3,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { FieldErrors, UseFormRegister } from "react-hook-form";
 import { useForm } from "react-hook-form";
-import { Button, Card, ErrorState, Field, Notice, ScreenSkeleton, SelectInput, TextArea, errorText } from "@/components/ui";
+import {
+  Button, Card, Field, ScreenSkeleton, SelectInput, TextArea,
+} from "@/components/ui";
+import { PlainErrorMessage, PlainErrorState } from "@/components/plain-error";
+import { plainError } from "@/lib/copy";
 import { useWorkspace } from "@/components/workspace";
 import { BrainMiniNav, type MiniNavItem } from "@/components/brain/brain-mini-nav";
 import { BRAIN_SECTIONS, sectionAnchor, sectionProgress, type BrainSectionId } from "@/components/brain/brain-sections";
@@ -63,7 +67,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
     onSuccess: () => reload(),
   });
   const pending = saveBrainMutation.isPending;
-  const saveError = saveBrainMutation.error ? errorText(saveBrainMutation.error) : null;
+  const saveError = saveBrainMutation.error ? plainError(saveBrainMutation.error) : null;
 
   useEffect(() => {
     if (detail && !isDirty) reset(detail.brain);
@@ -76,7 +80,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [isDirty]);
 
-  if (query.isError && !detail) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !detail) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!detail) return <ScreenSkeleton label="Loading brand brain" shape="form" />;
   const canEdit = hasRole(detail.identity.role, "member");
   const completeness = brainCompleteness(brain);
@@ -190,7 +194,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
         </div>
 
         <div className="sticky bottom-0 z-10 space-y-3 rounded-lg border border-border bg-surface p-4 shadow-md">
-          {saveError ? <Notice>{saveError}</Notice> : null}
+          {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
           <div className="flex flex-wrap items-center justify-between gap-3">
             {isDirty ? (
               <p role="status" className="text-sm font-semibold">{discardRequested ? "Discard your unsaved brain changes?" : "Unsaved changes"}</p>

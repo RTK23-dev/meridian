@@ -3,6 +3,7 @@ import * as SwitchPrimitive from "@radix-ui/react-switch";
 import { AlertCircle, Check, CheckCircle2, Clock3, Info, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Slider } from "@/components/ui";
+import { TechnicalDetails } from "@/components/plain-error";
 import type { EngineState } from "./pipeline-model";
 
 export type ChoiceOption<T extends string | number> = { value: T; label: string; disabled?: boolean };
@@ -202,7 +203,8 @@ export function EngineStateBadge({ state, label }: { state: EngineState; label: 
   );
 }
 
-export type Feedback = { tone: "success" | "info" | "error"; message: string };
+/** `detail` is the raw text for a failure. It is shown under Details, never above the message. */
+export type Feedback = { tone: "success" | "info" | "error"; message: string; detail?: string };
 
 const FEEDBACK_TONE: Record<Feedback["tone"], string> = {
   success: "border-success/40 bg-success-soft text-success",
@@ -220,7 +222,7 @@ export function FeedbackLine({ feedback, onDismiss }: { feedback: Feedback | nul
     >
       <span className="flex items-start gap-2">
         <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        <span>{feedback.message}</span>
+        <span>{feedback.message}{feedback.detail ? <TechnicalDetails>{feedback.detail}</TechnicalDetails> : null}</span>
       </span>
       <button
         type="button"

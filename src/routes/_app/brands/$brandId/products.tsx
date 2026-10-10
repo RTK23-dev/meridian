@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button, ErrorState, ScreenSkeleton, errorText } from "@/components/ui";
+import { Button, ScreenSkeleton } from "@/components/ui";
+import { PlainErrorState } from "@/components/plain-error";
 import { ProductSheet } from "@/components/brain/product-sheet";
 import { ProductsTable } from "@/components/brain/products-table";
 import { hasRole } from "@/lib/meridian/access";
@@ -21,7 +22,7 @@ function Products({ brandId }: { brandId: string }) {
   const detail = query.data ?? null;
   const [sheet, setSheet] = useState<{ open: boolean; product: ProductRow | null }>({ open: false, product: null });
 
-  if (query.isError && !detail) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !detail) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!detail) return <ScreenSkeleton label="Loading products" shape="rows" />;
   const canEdit = hasRole(detail.identity.role, "member");
 

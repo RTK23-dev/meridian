@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, TextInput, errorText } from "@/components/ui";
+import {
+  Button, Field, Panel, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger,
+  TextInput,
+} from "@/components/ui";
+import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
 import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
@@ -58,7 +62,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
   });
   const failures = [startRun, saveControls, killSwitch].map((action) => action.error).filter((error): error is Error => Boolean(error));
 
-  if (query.isError && !board) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !board) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!board) return <ScreenSkeleton label="Loading factory" shape="cards" />;
 
   const canEdit = hasRole(board.role, "member");
@@ -78,7 +82,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
       </header>
       {board.note ? <p className="text-sm text-muted">{board.note}</p> : null}
       {note ? <p className="text-sm text-muted" role="status">{note}</p> : null}
-      {failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
+      {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
 
       <Tabs defaultValue="pipeline">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">

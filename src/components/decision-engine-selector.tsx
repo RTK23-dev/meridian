@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Button, ErrorState, Field, Notice, SelectInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, SelectInput } from "@/components/ui";
+import { PlainErrorMessage } from "@/components/plain-error";
+import { plainError } from "@/lib/copy";
 import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useScopedMutation } from "@/lib/query/hooks";
@@ -56,7 +58,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
     },
   });
   const saving = save.isPending;
-  const error = save.error ? errorText(save.error) : null;
+  const error = save.error ? plainError(save.error) : null;
 
   if (engines.isError && !status) {
     return <ErrorState message="The decision engine status could not be loaded." onRetry={() => void engines.refetch()} />;
@@ -94,7 +96,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
         ) : null}
       </div>
 
-      {error ? <Notice>{error}</Notice> : null}
+      {error ? <PlainErrorMessage message={error.message} raw={error.raw} /> : null}
       {message ? <p className="text-sm text-success" role="status">{message}</p> : null}
 
       <div className="grid gap-3 sm:grid-cols-2">

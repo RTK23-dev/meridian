@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useWorkspace } from "@/components/workspace";
-import { Button, ErrorState, Panel, Skeleton, TextInput, errorText } from "@/components/ui";
+import { Button, Panel, Skeleton, TextInput } from "@/components/ui";
+import { PlainErrorState } from "@/components/plain-error";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listWebhookEvents } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "@/lib/query/keys";
@@ -21,7 +22,7 @@ function WebhooksPage() {
     queryFn: () => listWebhookEvents({ data: { organizationId, provider, page } }),
     enabled: !!user && !!organizationId,
   });
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.error) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!query.data) return <div role="status" aria-label="Loading webhook events"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
   const pageCount = Math.max(1, Math.ceil(query.data.total / 50));
   return <div className="space-y-6">

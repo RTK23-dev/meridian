@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { refreshAlerts, saveDeliveryTarget } from "@/lib/meridian/alerts/actions";
-import { Button, ErrorState, Notice, Panel, Skeleton, TextInput, errorText } from "@/components/ui";
+import { Button, ErrorState, Panel, Skeleton, TextInput } from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 import { StatusText } from "@/components/status";
 import { qk } from "@/lib/query/keys";
 import { useAcknowledgeAlert, useAlertsQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
@@ -50,7 +51,7 @@ export function AlertsPanel({ organizationId }: { organizationId: string }) {
         These are in-app records. External paging is {data.target}. A webhook is queued for the worker only after you save an https target. Nothing is marked delivered until that target accepts it.
       </p>
       {note ? <p className="mt-2 text-sm" role="status">{note}</p> : null}
-      {error ? <Notice>{errorText(error)}</Notice> : null}
+      {error ? <PlainErrorNotice error={error} /> : null}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           type="button"

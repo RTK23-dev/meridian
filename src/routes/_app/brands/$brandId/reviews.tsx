@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Group, Panel as ResizablePanel, Separator } from "react-resizable-panels";
 import { Inbox } from "lucide-react";
-import { EmptyState, ErrorState, Notice, ScreenSkeleton, errorText } from "@/components/ui";
+import { EmptyState, ScreenSkeleton } from "@/components/ui";
+import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { ReviewDetail } from "@/components/reviews/review-detail";
 import { ReviewInbox } from "@/components/reviews/review-inbox";
 import {
@@ -88,7 +89,7 @@ function Reviews({ brandId }: { brandId: string }) {
     if (selectedId) document.getElementById(`review-option-${selectedId}`)?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
 
-  if (query.isError && !data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!data) return <ScreenSkeleton label="Loading reviews" shape="rows" />;
 
   const now = new Date();
@@ -117,7 +118,7 @@ function Reviews({ brandId }: { brandId: string }) {
         <h1 className="font-display text-4xl">Holds a person has to clear</h1>
         <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject. A reject needs a reason.</p>
       </div>
-      {resolve.error ? <Notice>{errorText(resolve.error)}</Notice> : null}
+      {resolve.error ? <PlainErrorNotice error={resolve.error} /> : null}
       {open.length === 0 ? (
         confirmedEmpty ? (
           <EmptyState

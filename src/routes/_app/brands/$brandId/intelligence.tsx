@@ -1,23 +1,10 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  ErrorState,
-  KpiCard,
-  Panel,
-  ScreenSkeleton,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-  errorText,
+  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ErrorState, KpiCard,
+  Panel, ScreenSkeleton, Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui";
+import { plainError } from "@/lib/copy";
 import {
   useAccountIntelligenceQuery,
   useIntelligenceQuery,
@@ -58,15 +45,16 @@ function Intelligence({ brandId }: { brandId: string }) {
   const accountData = accountQuery.data ?? null;
   // A failed refetch is shown only when there is nothing stored to keep showing.
   const error = baseQuery.error && !baseData
-    ? errorText(baseQuery.error)
+    ? plainError(baseQuery.error)
     : accountQuery.error && !accountData
-    ? errorText(accountQuery.error)
+    ? plainError(accountQuery.error)
     : null;
 
   if (error) {
     return (
       <ErrorState
-        message={error}
+        message={error.message}
+        detail={error.raw}
         onRetry={() => {
           void baseQuery.refetch();
           void accountQuery.refetch();

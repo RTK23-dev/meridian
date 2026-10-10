@@ -1,21 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import {
-  Badge,
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-  ErrorState,
-  Field,
-  Notice,
-  Panel,
-  SelectInput,
-  ScreenSkeleton,
-  TextInput,
-  errorText,
+  Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Notice, Panel,
+  SelectInput, ScreenSkeleton, TextInput,
 } from "@/components/ui";
+import { PlainErrorState } from "@/components/plain-error";
 import { usePendingVariables, usePlatformAccountsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import {
@@ -114,7 +103,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
   };
 
   if (query.isError && !query.data) {
-    return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+    return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   }
 
   return (

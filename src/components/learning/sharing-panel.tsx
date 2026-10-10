@@ -1,6 +1,9 @@
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 import { useId, useState } from "react";
-import { Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, EmptyState, Notice, errorText } from "@/components/ui";
+import {
+  Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, EmptyState,
+} from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 import { setOrganizationLearning, sharePatternWithOrganization } from "@/lib/meridian/machine";
 import { usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
@@ -122,8 +125,8 @@ export function SharingPanel({ brandId, data, canEdit, canAdmin }: { brandId: st
     </Dialog>
 
     {note ? <p role="status" className="text-sm text-fg-muted">{note}</p> : null}
-    {toggleSharedPatterns.error ? <Notice>{errorText(toggleSharedPatterns.error)}</Notice> : null}
-    {sharePattern.error ? <Notice>{errorText(sharePattern.error)}</Notice> : null}
+    {toggleSharedPatterns.error ? <PlainErrorNotice error={toggleSharedPatterns.error} /> : null}
+    {sharePattern.error ? <PlainErrorNotice error={sharePattern.error} /> : null}
 
     {canAdmin ? (
       <section aria-labelledby="share-patterns-title" className="space-y-3">

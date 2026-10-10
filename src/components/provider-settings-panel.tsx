@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { Button, ErrorState, Field, Notice, Panel, SelectInput, TextInput, errorText } from "@/components/ui";
+import {
+  Button, ErrorState, Field, Panel, SelectInput, TextInput,
+} from "@/components/ui";
+import { PlainErrorMessage } from "@/components/plain-error";
+import { plainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
 import { useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import {
@@ -94,7 +98,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   const testing = testConnection.isPending;
   const saving = saveConfig.isPending || removeConfig.isPending;
   const failure = [saveConfig.error, removeConfig.error].find(Boolean);
-  const error = failure ? errorText(failure) : null;
+  const error = failure ? plainError(failure) : null;
 
   async function handleTest(category: ProviderCategory) {
     setTestResult(null);
@@ -180,7 +184,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
         </div>
       </div>
 
-      {error ? <Notice>{error}</Notice> : null}
+      {error ? <PlainErrorMessage message={error.message} raw={error.raw} /> : null}
       {message ? <p className="text-sm text-success" role="status">{message}</p> : null}
 
       {activeSummary ? (

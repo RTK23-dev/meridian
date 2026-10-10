@@ -2,7 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea, TextInput, errorText } from "@/components/ui";
+import {
+  Button, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea, TextInput,
+} from "@/components/ui";
+import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 import {
@@ -146,7 +149,7 @@ function MarketPage({ brandId }: { brandId: string }) {
 
   // Hooks above this line run on every render. The early returns below only choose what to draw.
   const selectedAd = useMemo(() => market?.researchAds.find((ad) => ad.id === selectedAdId) ?? null, [market, selectedAdId]);
-  if (query.isError && !market) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (query.isError && !market) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!market) return <ScreenSkeleton label="Loading market" shape="cards" />;
   const canEdit = hasRole(market.role, "member");
   const retryLimit = Number(researchForm.watch("limit")) || 50;
@@ -188,7 +191,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         ))}
       </ul>
       {note ? <Notice>{note}</Notice> : null}
-      {failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
+      {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
       <Panel>
         <div className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">JEV Research</p>

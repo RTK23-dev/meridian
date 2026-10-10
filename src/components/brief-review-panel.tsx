@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, ErrorState, Notice, Panel, Skeleton, TextArea, errorText } from "@/components/ui";
+import { Button, ErrorState, Notice, Panel, Skeleton, TextArea } from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 import { hasRole, type Role } from "@/lib/meridian/access";
 import { reviewStudioBrief } from "@/lib/meridian/studio/actions";
 import { useBriefReviewQuery, useScopedMutation } from "@/lib/query/hooks";
@@ -98,7 +99,7 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
                 <span className="text-muted">Reason (at least {MIN_REASON} characters). This is recorded with your review.</span>
                 <TextArea className="mt-1" rows={3} value={reason} onChange={(event) => setReason(event.target.value)} />
               </label>
-              {decision.error ? <Notice>{errorText(decision.error)}</Notice> : null}
+              {decision.error ? <PlainErrorNotice error={decision.error} /> : null}
               <div className="flex flex-wrap gap-2">
                 <Button type="button" disabled={decision.isPending || !acknowledged || reason.trim().length < MIN_REASON} onClick={() => decide("approve")}>
                   Approve for production

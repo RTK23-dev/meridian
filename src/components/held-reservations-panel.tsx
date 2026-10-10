@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, ErrorState, Field, Input, Notice, Panel, TextArea, errorText } from "@/components/ui";
+import { Button, ErrorState, Field, Input, Panel, TextArea } from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 import { resolveHeldBudgetReservation } from "@/lib/meridian/studio/actions";
 import type { HeldReservationResolution } from "@/lib/meridian/security/held-reservations";
 import { qk } from "@/lib/query/keys";
@@ -77,7 +78,7 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
       <p className="mt-1 text-sm text-muted">
         The provider outcome is uncertain, so this budget stays reserved until an admin resolves it. Nothing settles on its own.
       </p>
-      {resolveAction.error ? <Notice>{errorText(resolveAction.error)}</Notice> : null}
+      {resolveAction.error ? <PlainErrorNotice error={resolveAction.error} /> : null}
       {notice ? <p role="status" className="mt-2 text-sm">{notice}</p> : null}
       <ul className="mt-4 space-y-4">
         {held.data.map((row) => {

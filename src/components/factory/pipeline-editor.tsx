@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger, errorText } from "@/components/ui";
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { plainError } from "@/lib/copy";
 import {
   DEFAULT_GRADING_THRESHOLDS,
   DEFAULT_PROMPTS,
@@ -116,7 +117,7 @@ export function PipelineEditor({
       setDraft(getPresetConfig(key));
       setFeedback({ tone: "success", message: `${PRESET_LABEL[key]} is saved to this brand. Factory runs do not read it yet.` });
     } catch (error) {
-      setFeedback({ tone: "error", message: errorText(error) });
+      setFeedback({ tone: "error", message: plainError(error).message, detail: plainError(error).raw });
     } finally {
       setBusy(null);
     }
@@ -131,7 +132,7 @@ export function PipelineEditor({
       refreshSaved();
       setFeedback({ tone: "success", message: "Saved to this brand. Factory runs do not read these settings yet." });
     } catch (error) {
-      setFeedback({ tone: "error", message: errorText(error) });
+      setFeedback({ tone: "error", message: plainError(error).message, detail: plainError(error).raw });
     } finally {
       setBusy(null);
     }

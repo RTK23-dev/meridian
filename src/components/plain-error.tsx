@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
+import { ErrorState } from "@/components/ui";
 import { plainError } from "@/lib/copy";
 
 /**
@@ -9,6 +10,12 @@ import { plainError } from "@/lib/copy";
 export function PlainErrorNotice({ error }: { error: unknown }) {
   const { message, raw } = plainError(error);
   return <PlainErrorMessage message={message} raw={raw} />;
+}
+
+/** A screen-level failure: a plain sentence, the retry control, and the raw text under Details. */
+export function PlainErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const { message, raw } = plainError(error);
+  return <ErrorState message={message} detail={raw} onRetry={onRetry} />;
 }
 
 export function PlainErrorMessage({ message, raw }: { message: string; raw: string }) {

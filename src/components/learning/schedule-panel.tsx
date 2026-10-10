@@ -1,7 +1,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Button, Card, Field, Notice, SelectInput, TextInput, errorText } from "@/components/ui";
+import { Button, Card, Field, SelectInput, TextInput } from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 import { setPerformanceSchedule } from "@/lib/meridian/performance/actions";
 import { useScopedMutation } from "@/lib/query/hooks";
 import { performanceScheduleSchema, type PerformanceSchedule, type PerformanceScheduleFields } from "@/lib/meridian/schemas/performance-schedule";
@@ -100,7 +101,7 @@ export function SchedulePanel({ brandId, organizationId, canAdmin }: { brandId: 
       </fieldset>
 
       {note ? <p role="status" className="text-sm text-fg-muted">{note}</p> : null}
-      {saveSchedule.error ? <Notice>{errorText(saveSchedule.error)}</Notice> : null}
+      {saveSchedule.error ? <PlainErrorNotice error={saveSchedule.error} /> : null}
       {dirty ? (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning bg-warning-soft p-3 text-sm">
           <span>Unsaved changes</span>

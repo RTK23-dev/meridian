@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth/client";
-import { Button, Field, Notice, TextInput } from "@/components/ui";
-import { errorText } from "@/components/ui";
+import { Button, Field, TextInput } from "@/components/ui";
+import { PlainErrorNotice } from "@/components/plain-error";
 
 export function EmailAuth() {
   const [mode, setMode] = useState<"up" | "in">("up");
@@ -9,7 +9,8 @@ export function EmailAuth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /** The failure as it was thrown. The notice turns it into plain words and keeps the raw text under Details. */
+  const [error, setError] = useState<unknown>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -25,7 +26,7 @@ export function EmailAuth() {
       }
       window.location.assign("/");
     } catch (caught) {
-      setError(errorText(caught));
+      setError(caught);
       setPending(false);
     }
   }
@@ -56,7 +57,7 @@ export function EmailAuth() {
           autoComplete={mode === "up" ? "new-password" : "current-password"}
         />
       </Field>
-      {error ? <Notice>{error}</Notice> : null}
+      {error ? <PlainErrorNotice error={error} /> : null}
       <Button type="submit" disabled={pending} className="w-full">
         {pending ? "Working…" : mode === "up" ? "Create account" : "Sign in with email"}
       </Button>
