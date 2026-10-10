@@ -12,7 +12,7 @@
  * override is made auditable instead.
  */
 import { randomUUID } from "node:crypto";
-import type { Sql } from "../learning/store.ts";
+import { withTransaction, type Sql } from "../learning/store.ts";
 import { hasRole, isRole, type Role } from "../access.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
 
@@ -165,9 +165,8 @@ export type ReviewBriefInput = {
 };
 
 /**
- * Records one explicit review. The steps are ordered so a failure leaves the brief waiting, never approved: the decision is
- * claimed first (only an unreviewed row can be claimed), then the brief moves, then the append-only review and the audit
- * record are written. A failed step reverts the earlier ones.
+ * Records one explicit review. The claim, the brief move, the append-only review and the audit record are one transaction,
+ * so a failure at any step leaves the brief waiting and the decision unreviewed. A brief with no engine record is refused.
  */
 export async function reviewBrief(sql: Sql, input: ReviewBriefInput): Promise<{ briefStatus: BriefStatus; reviewId: string }> {
   if (!isRole(input.reviewerRole) || !hasRole(input.reviewerRole, BRIEF_REVIEW_MINIMUM_ROLE)) {
@@ -196,68 +195,58 @@ export async function reviewBrief(sql: Sql, input: ReviewBriefInput): Promise<{ 
   const briefStatus: BriefStatus = input.action === "approve" ? "ready" : "rejected";
   const reviewId = randomUUID();
 
-  // 1. Claim the decision. Only a row with no review can be claimed, so two reviews cannot both succeed.
-  const claimed = await sql<{ id: string }>`
-    update jev_decisions
-    set reviewer_id = ${input.reviewerId}, reviewer_decision = ${input.action === "approve" ? "approve" : "reject"},
-        reviewed_at = now(), reviewer_note = ${reason}
-    where id = ${disclosure.decisionId} and organization_id = ${input.organizationId} and reviewer_decision is null
-    returning id
-  `;
-  if (claimed.length === 0) throw new Error("This brief was reviewed by someone else a moment ago.");
+  // Every write below runs in one transaction. A failure at any step rolls back all of them, so the brief stays awaiting
+  // review and the decision stays unreviewed. Nothing is reverted by hand, because a hand revert can fail too.
+  await withTransaction(sql, async (tx) => {
+    // 1. Claim the decision. Only a row with no review can be claimed, so two reviews cannot both succeed.
+    const claimed = await tx<{ id: string }>`
+      update jev_decisions
+      set reviewer_id = ${input.reviewerId}, reviewer_decision = ${input.action === "approve" ? "approve" : "reject"},
+          reviewed_at = now(), reviewer_note = ${reason}
+      where id = ${disclosure.decisionId} and organization_id = ${input.organizationId} and reviewer_decision is null
+      returning id
+    `;
+    if (claimed.length === 0) throw new Error("This brief was reviewed by someone else a moment ago.");
 
-  const revertDecision = () => sql`
-    update jev_decisions set reviewer_id = null, reviewer_decision = null, reviewed_at = null, reviewer_note = ''
-    where id = ${disclosure.decisionId} and organization_id = ${input.organizationId}
-  `;
-  try {
-    // 2. Move the brief only if it is still awaiting review.
-    const moved = await sql<{ id: string }>`
+    // 2. Move the brief, only from awaiting review.
+    const moved = await tx<{ id: string }>`
       update briefs set status = ${briefStatus}
       where id = ${input.briefId} and organization_id = ${input.organizationId} and status = 'awaiting_review'
       returning id
     `;
     if (moved.length === 0) throw new Error("The brief is no longer awaiting review.");
 
-    try {
-      // 3. The append-only review, with the original engine outcome exactly as the reviewer was shown it.
-      await sql`
-        insert into decision_reviews (
-          id, organization_id, brand_id, decision_id, subject_type, subject_id, reviewer_id, reviewer_role,
-          reviewer_is_creator, action, reason, original_action, original_outcome
-        ) values (
-          ${reviewId}, ${input.organizationId}, ${input.brandId}, ${disclosure.decisionId}, 'brief', ${input.briefId},
-          ${input.reviewerId}, ${input.reviewerRole}, ${reviewerIsCreator}, ${input.action}, ${reason}, ${disclosure.decision},
-          ${JSON.stringify({
-            engineId: disclosure.engineId,
-            requestedModel: disclosure.requestedModel,
-            returnedModel: disclosure.returnedModel,
-            gateRecordId: disclosure.gateRecordId,
-            failureKind: disclosure.failureKind,
-            reasons: disclosure.reasons,
-            unresolved: disclosure.unresolved,
-            evidence: disclosure.evidence,
-            policyVersion: disclosure.policyVersion,
-          })}
-        )
-      `;
-    } catch (error) {
-      await sql`update briefs set status = 'awaiting_review' where id = ${input.briefId} and organization_id = ${input.organizationId}`;
-      throw error;
-    }
-  } catch (error) {
-    await revertDecision();
-    throw error;
-  }
+    // 3. The append-only review, with the original engine outcome exactly as the reviewer was shown it.
+    await tx`
+      insert into decision_reviews (
+        id, organization_id, brand_id, decision_id, subject_type, subject_id, reviewer_id, reviewer_role,
+        reviewer_is_creator, action, reason, original_action, original_outcome
+      ) values (
+        ${reviewId}, ${input.organizationId}, ${input.brandId}, ${disclosure.decisionId}, 'brief', ${input.briefId},
+        ${input.reviewerId}, ${input.reviewerRole}, ${reviewerIsCreator}, ${input.action}, ${reason}, ${disclosure.decision},
+        ${JSON.stringify({
+          engineId: disclosure.engineId,
+          requestedModel: disclosure.requestedModel,
+          returnedModel: disclosure.returnedModel,
+          gateRecordId: disclosure.gateRecordId,
+          failureKind: disclosure.failureKind,
+          reasons: disclosure.reasons,
+          unresolved: disclosure.unresolved,
+          evidence: disclosure.evidence,
+          policyVersion: disclosure.policyVersion,
+        })}
+      )
+    `;
 
-  // 4. The audit record. It names the reviewer, the decision, and the original outcome. It carries no credential.
-  await sql`
-    insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
-    values (
-      ${randomUUID()}, ${input.organizationId}, ${input.brandId}, ${input.reviewerId}, 'brief.review',
-      'brief', ${input.briefId},
-      ${JSON.stringify({ action: input.action, reviewId, originalAction: disclosure.decision, engineId: disclosure.engineId, failureKind: disclosure.failureKind, reviewerIsCreator })}
-    )
-  `;
+    // 4. The audit record. It names the reviewer, the decision, and the original outcome. It carries no credential.
+    await tx`
+      insert into audit_log (id, organization_id, brand_id, actor_id, action, object_type, object_id, metadata)
+      values (
+        ${randomUUID()}, ${input.organizationId}, ${input.brandId}, ${input.reviewerId}, 'brief.review',
+        'brief', ${input.briefId},
+        ${JSON.stringify({ action: input.action, reviewId, originalAction: disclosure.decision, engineId: disclosure.engineId, failureKind: disclosure.failureKind, reviewerIsCreator })}
+      )
+    `;
+  });
   return { briefStatus, reviewId };
 }
