@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { selectOffer, type SelectionRequirement, type ProviderCost } from "./capability-matrix.ts";
+import { configuredQuote, unknownQuote } from "./pricing.ts";
 import { modelCapabilityRegistry } from "./registry.ts";
 
+const perSecond = (id: string, amountUsd: number, zeroSpend = false): ProviderCost => ({
+  id, zeroSpend, price: configuredQuote("per_second", amountUsd, `test declaration ${id}`),
+});
+
 const costs: Record<string, ProviderCost> = {
-  google_omni: { id: "google_omni", costPerSecondEstimateUsd: 0.15, zeroSpend: false },
-  hypit: { id: "hypit", costPerSecondEstimateUsd: 0.05, zeroSpend: false },
-  higgsfield: { id: "higgsfield", costPerSecondEstimateUsd: 0.15, zeroSpend: false },
-  veo: { id: "veo", costPerSecondEstimateUsd: 0.2, zeroSpend: false },
-  manual_cloud: { id: "manual_cloud", costPerSecondEstimateUsd: 0, zeroSpend: true },
+  google_omni: perSecond("google_omni", 0.15),
+  hypit: perSecond("hypit", 0.05),
+  higgsfield: perSecond("higgsfield", 0.15),
+  veo: perSecond("veo", 0.2),
+  manual_cloud: perSecond("manual_cloud", 0, true),
 };
 
 const PREFERENCE = ["google_omni", "hypit", "higgsfield", "manual_cloud", "veo"];
@@ -24,7 +29,8 @@ function candidates(modelIds: string[]) {
 const ALL = ["gemini-omni-1.1-flash", "higgsfield-video-v1", "hypit-hyperframes", "veo-3.1-generate-preview", "manual-cloud"];
 
 function requirement(overrides: Partial<SelectionRequirement> = {}): SelectionRequirement {
-  return { task: "text-to-video", durationSeconds: 8, aspectRatio: "9:16", ...overrides };
+  const durationSeconds = overrides.durationSeconds ?? 8;
+  return { modality: "video", task: "text-to-video", aspectRatio: "9:16", ...overrides, durationSeconds, units: durationSeconds };
 }
 
 test("the cheapest eligible provider wins under LOWEST_COST, and the estimate is duration times the provider's cost", () => {
@@ -69,4 +75,38 @@ test("when nothing satisfies the requirement, nothing is chosen and every reject
   const choice = selectOffer({ candidates: candidates(ALL), requirement: requirement({ durationSeconds: 45, aspectRatio: "4:5" }), registry: modelCapabilityRegistry, mode: "LOWEST_COST" });
   assert.equal(choice.chosen, null);
   assert.ok(choice.rejected.length >= 4, "each candidate's refusal is recorded");
+});
+
+test("a requirement whose task produces another modality is an error, not a choice of some model", () => {
+  const inconsistent = { modality: "image", task: "text-to-video", durationSeconds: null, aspectRatio: "9:16", units: 1 } as SelectionRequirement;
+  assert.throws(
+    () => selectOffer({ candidates: candidates(ALL), requirement: inconsistent, registry: modelCapabilityRegistry, mode: "LOWEST_COST" }),
+    /text-to-video produces video, not image/,
+  );
+});
+
+test("a video requirement must bill its duration, and an image requirement has no duration to bill", () => {
+  const billed = { ...requirement(), units: 5 };
+  assert.throws(
+    () => selectOffer({ candidates: candidates(ALL), requirement: billed, registry: modelCapabilityRegistry, mode: "LOWEST_COST" }),
+    /units must equal durationSeconds/,
+  );
+  const withDuration = { modality: "image", task: "text-to-image", durationSeconds: 4, aspectRatio: "9:16", units: 1 } as SelectionRequirement;
+  assert.throws(
+    () => selectOffer({ candidates: candidates(ALL), requirement: withDuration, registry: modelCapabilityRegistry, mode: "LOWEST_COST" }),
+    /an image requirement has no duration/,
+  );
+});
+
+test("a known price is chosen before an allowed unknown price, because an unknown cost cannot be ranked", () => {
+  const unpriced: ProviderCost = { id: "google_omni", zeroSpend: false, price: unknownQuote("per_second", "none declared") };
+  const choice = selectOffer({
+    candidates: [
+      { provider: unpriced, record: modelCapabilityRegistry.getModel("gemini-omni-1.1-flash")! },
+      { provider: costs.hypit!, record: modelCapabilityRegistry.getModel("hypit-hyperframes")! },
+    ],
+    requirement: requirement(), registry: modelCapabilityRegistry, mode: "LOWEST_COST", allowUnknownCost: true,
+  });
+  assert.equal(choice.chosen?.providerId, "hypit");
+  assert.equal(choice.chosen?.costKnown, true);
 });

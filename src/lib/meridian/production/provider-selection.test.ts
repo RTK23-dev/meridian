@@ -15,7 +15,7 @@ function fakeProvider(id: string, costPerSecondEstimateUsd: number, zeroSpend = 
 
 function spec(overrides: Partial<CreativeSpec> = {}): CreativeSpec {
   return {
-    id: "spec-1", organizationId: "org", brandId: "brand", title: "t", format: "ugc",
+    id: "spec-1", organizationId: "org", brandId: "brand", title: "t", modality: "video", format: "ugc",
     aspectRatio: "9:16", durationTargetSeconds: 8, hookLine: "h", script: "s", scenes: [],
     ...overrides,
   } as CreativeSpec;

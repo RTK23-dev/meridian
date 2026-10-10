@@ -16,7 +16,8 @@ import { VeoProvider } from "./providers/veo.ts";
 import { GeminiOmniVideoProvider } from "./providers/omni.ts";
 import { HiggsfieldProvider } from "./providers/higgsfield.ts";
 import { modelCapabilityRegistry } from "./registry.ts";
-import { selectOffer, type SelectionCandidate, type SelectionRecord, type SelectionRequirement } from "./capability-matrix.ts";
+import { selectOffer, type SelectionCandidate, type SelectionModality, type SelectionRecord, type SelectionRequirement } from "./capability-matrix.ts";
+import { configuredQuote, estimateCost, unknownQuote, type PriceQuote } from "./pricing.ts";
 
 /** Automatic preference order by cost mode. The matrix decides eligibility first; this only orders eligible providers. */
 const PREFERENCE_BY_MODE: Record<"BALANCED" | "QUALITY_FIRST", string[]> = {
@@ -29,12 +30,36 @@ export interface ProviderSelection {
   selection: SelectionRecord;
 }
 
+/**
+ * The requirement a spec places on a provider. Only video is routed so far: an image or carousel needs its own
+ * durable path (P4b-2), so it is refused here rather than sent to a video model.
+ */
 export function requirementFor(spec: CreativeSpec): SelectionRequirement {
+  if (spec.modality !== "video") {
+    throw new Error(`production modality '${spec.modality}' is not routed yet; only video is selected by the capability matrix`);
+  }
   return {
+    modality: "video",
     task: spec.sourceMediaUrl ? "image-to-video" : "text-to-video",
     durationSeconds: spec.durationTargetSeconds,
     aspectRatio: spec.aspectRatio,
+    units: spec.durationTargetSeconds,
   };
+}
+
+/**
+ * The price Meridian holds for a provider. A video price is the owner's per-second declaration in provider configuration.
+ * No image price is declared for any provider, so an image price is unknown, not zero.
+ */
+export function priceFor(provider: ProductionProvider, modality: SelectionModality): PriceQuote {
+  if (modality === "video") {
+    const declared = provider.capabilities.costPerSecondEstimateUsd;
+    if (typeof declared !== "number" || !Number.isFinite(declared)) {
+      return unknownQuote("per_second", `provider ${provider.id} declares no per-second price`);
+    }
+    return configuredQuote("per_second", declared, `provider declaration (${provider.id})`);
+  }
+  return unknownQuote("per_image", `no image price is declared for ${provider.id}`);
 }
 
 export class ProductionRouter {
@@ -145,14 +170,16 @@ export class ProductionRouter {
     const requirement = requirementFor(spec);
     if (requestedProvider && requestedProvider !== "auto") {
       const provider = await this.routeExplicit(requestedProvider, spec);
+      // An explicit provider is a deliberate choice: deprecated, zero-spend and unpriced candidates are allowed, and recorded.
       const selection = selectOffer({
-        candidates: this.candidatesFor([provider]),
+        candidates: this.candidatesFor([provider], requirement.modality),
         requirement,
         registry: modelCapabilityRegistry,
         mode: "PREFERENCE",
         preference: [requestedProvider],
         allowDeprecated: true,
         allowZeroSpend: true,
+        allowUnknownCost: true,
       });
       if (!selection.chosen) {
         throw new Error(`Provider '${requestedProvider}' cannot produce this deliverable: ${summarize(selection)}`);
@@ -164,15 +191,28 @@ export class ProductionRouter {
     if (mode === "ZERO_SPEND") {
       const manualCloud = healthy.find((p) => p.id === "manual_cloud");
       if (!manualCloud) throw new Error("ManualCloud provider is NOT_CONFIGURED (Google Drive not connected).");
+      const cost = estimateCost(priceFor(manualCloud, requirement.modality), requirement.units, "per_second");
       return {
         provider: manualCloud,
-        selection: { requirement, mode: "PREFERENCE", chosen: { providerId: manualCloud.id, modelId: modelCapabilityRegistry.listModels(manualCloud.id)[0]?.model_id ?? "", estimateUsd: 0 }, rejected: [] },
+        selection: {
+          requirement,
+          mode: "PREFERENCE",
+          chosen: {
+            providerId: manualCloud.id,
+            modelId: modelCapabilityRegistry.listModels(manualCloud.id)[0]?.model_id ?? "",
+            costKnown: cost.costKnown,
+            costStatus: cost.costStatus,
+            estimateUsd: cost.estimateUsd,
+          },
+          rejected: [],
+        },
       };
     }
     if (healthy.length === 0) throw new Error(`No configured production providers available for mode ${mode}.`);
 
+    // Automatic selection never sends work to an unknown or stale price (allowUnknownCost is not set).
     const selection = selectOffer({
-      candidates: this.candidatesFor(healthy),
+      candidates: this.candidatesFor(healthy, requirement.modality),
       requirement,
       registry: modelCapabilityRegistry,
       mode: mode === "LOWEST_COST" ? "LOWEST_COST" : "PREFERENCE",
@@ -191,14 +231,14 @@ export class ProductionRouter {
     return checks.filter((c) => c.health.state === "HEALTHY" || c.health.state === "CONFIGURED").map((c) => c.provider);
   }
 
-  /** Every registered model of these providers, as selection candidates. */
-  private candidatesFor(providers: ProductionProvider[]): SelectionCandidate[] {
+  /** Every registered model of these providers, as selection candidates, priced for this modality. */
+  private candidatesFor(providers: ProductionProvider[], modality: SelectionModality): SelectionCandidate[] {
     return providers.flatMap((provider) =>
       modelCapabilityRegistry.listModels(provider.id).map((record) => ({
         provider: {
           id: provider.id,
-          costPerSecondEstimateUsd: provider.capabilities.costPerSecondEstimateUsd,
           zeroSpend: provider.capabilities.zeroSpend,
+          price: priceFor(provider, modality),
         },
         record,
       })),

@@ -37,6 +37,8 @@ export function creativeSpecFromManifest(
     organizationId: context.organizationId,
     brandId: context.brandId,
     title: context.title,
+    // A manifest projected here is a video deliverable: images and carousels have their own durable path (P4b-2).
+    modality: "video",
     format: manifest.deliverableType ?? manifest.mode,
     aspectRatio: manifest.format.aspectRatio,
     durationTargetSeconds: manifest.format.targetDurationSeconds ?? scenes.reduce((sum, scene) => sum + scene.durationSeconds, 0),
