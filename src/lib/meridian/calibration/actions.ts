@@ -4,6 +4,9 @@ import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
 import { approveThresholdChange, proposeThresholdChange, type ThresholdProposal } from "./propose.ts";
 import { calibrationVisible, proposalCreateDecision, reviewerRowsFromStored } from "./scope.ts";
+import { activeBaseline, calibrationProposalView, parseThresholds, type ThresholdPair } from "./versions.ts";
+import { isoTimestamp } from "@/lib/meridian/observability/timestamps";
+import { OPPORTUNITY_THRESHOLDS } from "@/lib/meridian/jev/questions";
 
 async function brandRole(userId: string, brandId: string) {
   const sql = await getSql();
@@ -166,4 +169,64 @@ export const proposeCalibration = createServerFn({ method: "POST" })
       values (${crypto.randomUUID()}, ${organizationId}, ${data.brandId}, ${context.userId}, 'calibration.proposed', 'calibration_proposal', ${id}, ${JSON.stringify({ samples: proposed.proposal.samples })})
     `;
     return { status: "proposed" as const, samples: proposed.proposal.samples, disagreement: proposed.proposal.disagreement };
+  });
+
+const OPPORTUNITY_GATE = "opportunity_gate";
+const CALIBRATION_PAGE_SIZE = 20;
+const CALIBRATION_HISTORY_LIMIT = 50;
+
+/**
+ * Proposed opportunity-gate threshold changes for one brand, each with its stored evidence and its difference from the
+ * active baseline. Admin only. Read only: approval and rejection stay in decideCalibration.
+ * Thresholds are stored per workspace, so the baseline is the workspace's highest version, not this brand's.
+ */
+export const listCalibrationVersions = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const value = input && typeof input === "object" ? input as Record<string, unknown> : {};
+    const brandId = typeof value.brandId === "string" ? value.brandId.trim() : "";
+    if (!brandId || brandId.length > 100) throw new Error("Choose a brand.");
+    const page = typeof value.page === "number" && Number.isInteger(value.page) ? Math.max(0, Math.min(value.page, 100_000)) : 0;
+    return { brandId, page };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId, role } = await brandRole(context.userId, data.brandId);
+    assertRole(role, "admin");
+    const codeDefault: ThresholdPair = { autoApprove: OPPORTUNITY_THRESHOLDS.autoApprove, humanReview: OPPORTUNITY_THRESHOLDS.humanReview };
+    const [versions, proposals, totals] = await Promise.all([
+      sql<{ id: string; version: number; thresholds: string; approved_by: string; created_at: unknown }>`
+        select id, version, thresholds, approved_by, created_at from jev_threshold_versions
+        where organization_id = ${organizationId} and question_id = ${OPPORTUNITY_GATE}
+        order by version desc limit ${CALIBRATION_HISTORY_LIMIT}
+      `,
+      sql<{ id: string; proposed: string; status: string; created_at: unknown }>`
+        select id, proposed, status, created_at from calibration_proposals
+        where organization_id = ${organizationId} and brand_id = ${data.brandId} and question_id = ${OPPORTUNITY_GATE}
+        order by created_at desc, id desc
+        limit ${CALIBRATION_PAGE_SIZE} offset ${data.page * CALIBRATION_PAGE_SIZE}
+      `,
+      sql<{ count: unknown }>`
+        select count(*) as count from calibration_proposals
+        where organization_id = ${organizationId} and brand_id = ${data.brandId} and question_id = ${OPPORTUNITY_GATE}
+      `,
+    ]);
+    const baseline = activeBaseline(
+      versions.map((row) => ({ version: Number(row.version), thresholds: row.thresholds })),
+      codeDefault,
+    );
+    return {
+      baseline,
+      codeDefault,
+      proposals: proposals.map((row) => calibrationProposalView(row, baseline)),
+      total: Number(totals[0]?.count ?? 0),
+      page: data.page,
+      pageSize: CALIBRATION_PAGE_SIZE,
+      versions: versions.map((row) => ({
+        id: row.id,
+        version: Number(row.version),
+        thresholds: parseThresholds(row.thresholds),
+        approvedBy: row.approved_by,
+        createdAt: isoTimestamp(row.created_at),
+      })),
+    };
   });
