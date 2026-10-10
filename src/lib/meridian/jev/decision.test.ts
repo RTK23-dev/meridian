@@ -20,15 +20,22 @@ function supportedGate(): OpportunityGateInput {
   };
 }
 
-test("strong evidence can auto-approve and the answer is yes", () => {
-  const decision = decide(claimSafety, cleanClaims);
+/** A calibration step that maps a score to itself. It stands for a calibrated value in these tests, and only that can approve. */
+const CALIBRATED = { calibration: { version: "identity.test.v1", apply: (score: number) => score } };
+
+test("strong evidence can auto-approve once its score is calibrated, and the answer is yes", () => {
+  // Uncalibrated, the same strong evidence can only go to review (the cap in jev/engine.ts decide).
+  const uncalibrated = decide(claimSafety, cleanClaims);
+  assert.equal(uncalibrated.decision, "HUMAN_REVIEW");
+  assert.equal(uncalibrated.calibrationVersion, null);
+  const decision = decide(claimSafety, cleanClaims, CALIBRATED);
   assert.equal(decision.decision, "AUTO_APPROVE");
   assert.equal(decision.answer.value, "yes");
   assert.equal(decision.answer.schemaVersion, "jev.answer.v1");
   assert.equal(decision.schemaVersion, "jev.answer.v1");
   assert.equal(decision.questionVersion, "v1");
   assert.ok(decision.policyVersion.startsWith("code:claim_safety"));
-  assert.equal(decision.calibrationVersion, null);
+  assert.equal(decision.calibrationVersion, "identity.test.v1");
   assert.ok(decision.decidedAt.length > 10);
   assert.ok(decision.evidence.length > 0);
 });
@@ -150,11 +157,12 @@ test("another tenant's evidence cannot influence a decision", () => {
       }),
     /Tenant scope/,
   );
-  const kept = decideForTenant(claimSafety, cleanClaims, {
-    organizationId: "org",
-    brandId: "brand",
-    evidence: own,
-  });
+  const kept = decideForTenant(
+    claimSafety,
+    cleanClaims,
+    { organizationId: "org", brandId: "brand", evidence: own },
+    CALIBRATED,
+  );
   assert.equal(kept.decision, "AUTO_APPROVE");
   const poisoned = decide(claimSafety, { ...cleanClaims, prohibitedHits: ["cure"] });
   assert.equal(poisoned.decision, "REJECT");
@@ -162,7 +170,11 @@ test("another tenant's evidence cannot influence a decision", () => {
 });
 
 test("calibration does not mutate a historical decision and an approved calibration changes the next one", () => {
-  const historical = decide(claimSafety, cleanClaims);
+  // The historical decision is made under calibration version 1. A later calibration must not change it.
+  const historical = decide(claimSafety, cleanClaims, {
+    calibration: { version: "threshold-version:1", apply: (probability) => probability },
+  });
+  assert.equal(decide(claimSafety, cleanClaims).decision, "HUMAN_REVIEW", "an uncalibrated decision cannot approve");
   const snapshot = {
     decision: historical.decision,
     probability: historical.probability,
@@ -176,7 +188,7 @@ test("calibration does not mutate a historical decision and an approved calibrat
   assert.equal(historical.decision, snapshot.decision);
   assert.equal(historical.probability, snapshot.probability);
   assert.equal(historical.policyVersion, snapshot.policyVersion);
-  assert.equal(historical.calibrationVersion, null);
+  assert.equal(historical.calibrationVersion, "threshold-version:1");
   assert.equal(historical.decision, "AUTO_APPROVE");
   assert.notEqual(future.probability, historical.probability);
   assert.equal(future.decision, "REJECT");
