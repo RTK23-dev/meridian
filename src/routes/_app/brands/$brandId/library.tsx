@@ -97,6 +97,8 @@ function Library({ brandId }: { brandId: string }) {
     onSuccess: () => {
       setNote("Performance stored and a learning job was queued. Scoring opportunities drains that job. No ad account is connected.");
       performanceForm.reset(EMPTY_PERFORMANCE);
+      // The note sits on the page behind the drawer, so the drawer closes to show it and to free the other cards.
+      setDrawerOpen(false);
     },
   });
   const ownCreative = useScopedMutation({
