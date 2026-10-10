@@ -16,12 +16,11 @@
  */
 import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
-import { loadBrandContext } from "../context/load.ts";
 import { semanticNearest } from "../embeddings/store.ts";
 import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
-import { accountSnapshots, competitorCopy, factsFor, visualFacts, writeJudgment } from "../studio/image-qc.server.ts";
+import { accountSnapshots, competitorCopy, factsFor, visualFacts, writeJudgment, type QcBrandContext } from "../studio/image-qc.server.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
 import type { CreativeSpec, ProductionModality } from "./types.ts";
 
@@ -328,7 +327,12 @@ export async function materializeImageArtifact(
   // ids, so a retry after a crash does not duplicate them.
   const product = productName || manifest.brand?.product || "";
   const copyWithProduct = `${product}. ${prompt}`;
-  const loaded = await loadBrandContext(sql, ref.organizationId, ref.brandId);
+  // The brand data the judgment compares against was captured when the image was submitted. It is never reloaded here.
+  const qcBrand = input.qcBrand as QcBrandContext | undefined;
+  if (!qcBrand || !qcBrand.brain || !Array.isArray(qcBrand.creatives)) {
+    throw new Error("Production job has no brand snapshot for its judgment; refusing to judge it against live brand data.");
+  }
+  const loaded = qcBrand;
   const visual = await visualFacts(sql, ref.organizationId, ref.brandId, stored.bytes);
   const ownSemantic = await semanticNearest(
     copyWithProduct,

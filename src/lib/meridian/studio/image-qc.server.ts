@@ -4,6 +4,28 @@
  */
 import type { Sql } from "../learning/store.ts";
 import type { loadBrandContext } from "../context/load.ts";
+
+/**
+ * The brand data a judgment compares an image against. It is captured when the image is submitted, so the judgment is the
+ * same whenever it is made: a sibling image created later in the same run is never part of the comparison.
+ */
+export type QcBrandContext = {
+  brain: { positioning: string; valueProposition: string; tone: string; prohibitedClaims: string; wordsToAvoid: string };
+  creatives: Array<{ origin: string; text: string }>;
+};
+
+export function qcBrandOf(loaded: Awaited<ReturnType<typeof loadBrandContext>>): QcBrandContext {
+  return {
+    brain: {
+      positioning: loaded.brain.positioning,
+      valueProposition: loaded.brain.valueProposition,
+      tone: loaded.brain.tone,
+      prohibitedClaims: loaded.brain.prohibitedClaims,
+      wordsToAvoid: loaded.brain.wordsToAvoid,
+    },
+    creatives: loaded.creatives.map((item) => ({ origin: item.origin, text: item.text })),
+  };
+}
 import { decisionRecordFields } from "../jev/decision-record.ts";
 import { loadAppliedPolicies } from "../jev/policy.ts";
 import { judgeMedia, rollupDecision, type MediaFacts } from "./features.ts";
@@ -50,12 +72,12 @@ export async function accountSnapshots(sql: Sql, organizationId: string): Promis
   });
 }
 
-export function competitorCopy(loaded: Awaited<ReturnType<typeof loadBrandContext>>): string[] {
+export function competitorCopy(loaded: QcBrandContext): string[] {
   return loaded.creatives.filter((item) => item.origin === "competitor").map((item) => item.text);
 }
 
 export function factsFor(
-  loaded: Awaited<ReturnType<typeof loadBrandContext>>,
+  loaded: QcBrandContext,
   input: Omit<MediaFacts, "positioning" | "tone" | "prohibited" | "wordsToAvoid" | "competitorTexts" | "ownTexts">,
 ): MediaFacts {
   return {

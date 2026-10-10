@@ -31,6 +31,7 @@ import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreationScope, AutonomyMode, CreativePlan } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
+import { defaultArtifactDrive } from "../storage/artifact-drive.ts";
 import { BudgetLedgerService, InvalidBudgetCapError, toMicros } from "../security/budget-ledger.ts";
 import { modelCapabilityRegistry } from "../production/registry.ts";
 import {
@@ -46,7 +47,7 @@ import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
 import { resolveProductionTarget } from "../production/target.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
-import { accountSnapshots, competitorCopy, factsFor, visualFacts, writeJudgment } from "./image-qc.server.ts";
+import { accountSnapshots, competitorCopy, factsFor, qcBrandOf, visualFacts, writeJudgment } from "./image-qc.server.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -202,7 +203,28 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
     select storage_key, body, mime_type from asset_blobs
     where brand_id = ${brandId} and organization_id = ${organizationId} and mime_type like 'image/%'
   `;
-  const blobByKey = new Map(blobs.map((row) => [row.storage_key, row]));
+  // Image previews come from the artifact store, where production writes image bytes. An artifact that cannot be read
+  // has no preview, so nothing is shown in its place.
+  const previewByKey = new Map<string, string>();
+  const artifactDrive = defaultArtifactDrive();
+  for (const asset of assets) {
+    const key = asText(asset.storage_key);
+    if (asText(asset.kind) !== "image" || !key || previewByKey.has(key)) continue;
+    const objects = await sql<{ provider_file_id: string }>`
+      select provider_file_id from storage_objects
+      where organization_id = ${organizationId} and brand_id = ${brandId} and name = ${key}
+      limit 1
+    `;
+    if (!objects[0]) continue;
+    try {
+      const stored = await artifactDrive.get(objects[0].provider_file_id);
+      if (stored.bytes.byteLength < 120_000) {
+        previewByKey.set(key, `data:${stored.mimeType};base64,${Buffer.from(stored.bytes).toString("base64")}`);
+      }
+    } catch {
+      // Unreadable artifact: no preview.
+    }
+  }
   const publications = await sql<{ external_id: string; idempotency_key: string; provider: string }>`
     select external_id, idempotency_key, provider from provider_objects
     where brand_id = ${brandId} and organization_id = ${organizationId} and object_type = 'ad'
@@ -261,10 +283,7 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
     brief: briefs[0] ? briefOf(briefs[0]) : null,
     variants: assets.map((row) => {
       const creativeId = asText(row.creative_id);
-      const blob = blobByKey.get(asText(row.storage_key));
-      const preview = blob && asText(row.kind) === "image" && blob.body.length < 120_000
-        ? `data:${blob.mime_type};base64,${blob.body}`
-        : "";
+      const preview = previewByKey.get(asText(row.storage_key)) ?? "";
       const questions = decisions
         .filter((item) => asText(item.subject_id) === creativeId)
         .map((item) => ({
@@ -1230,7 +1249,7 @@ export async function executeApprovedCreativePlan(
           input: JSON.stringify({
             kind: "image", creativeSpec: spec, runId, briefId, manifest: delivManifest, planDeliverableId: deliv.id,
             deliverableKind: deliv.kind, sequenceIndex: index, itemLabel, format: deliv.format, prompt, copy, productName,
-            promptVersion, providerSelection: selected.selection,
+            promptVersion, providerSelection: selected.selection, qcBrand: qcBrandOf(loaded),
           }),
         });
 

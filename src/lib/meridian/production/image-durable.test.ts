@@ -187,6 +187,12 @@ test("an image is a durable job: its row and reservation exist before the provid
     select id, title, workflow from creative_records where organization_id = ${tenant.organizationId}
   `;
   assert.equal(creatives.length, plan.deliverables.length, "each materialized image has a creative");
+  // Variants of one run are judged against the brand as it was when the run began, so a sibling variant from this run
+  // is never a duplicate of it. A later judgment that compares against this run's own output would reject siblings.
+  const statuses = await sql<{ status: string }>`
+    select status from creative_records where organization_id = ${tenant.organizationId}
+  `;
+  assert.ok(statuses.every((row) => row.status !== "rejected"), "no sibling variant is rejected as a duplicate of another from its own run");
   for (const creative of creatives) {
     assert.ok(creative.title.startsWith(TEST_PRODUCTION_CONTEXT.title), "the title comes from the plan's production context");
     assert.match(creative.title, /image \d+$/);
