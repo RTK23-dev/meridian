@@ -1,8 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { hasRole, isRole } from "@/lib/meridian/access";
 import { summarizeUsage } from "@/lib/meridian/observability/usage";
+import {
+  countsByStatus,
+  heartbeatState,
+  JOB_PAGE_SIZE,
+  jobDetailView,
+  jobListFilters,
+  jobRefInput,
+  jobView,
+  workerHealthView,
+  workspaceInput,
+} from "./ops.ts";
 
 function inputText(value: unknown, name: string): string {
   if (typeof value !== "string" || !value.trim() || value.trim().length > 100) throw new Error(`${name} is required.`);
@@ -19,42 +30,82 @@ async function requireAdmin(userId: string, organizationId: string) {
   return sql;
 }
 
+async function healthSnapshot(sql: Sql, organizationId: string) {
+  const [beats, counts] = await Promise.all([
+    sql<{ name: string; beat_at: unknown }>`select name, beat_at from process_heartbeats where name in ('worker', 'scheduler')`,
+    sql<{ status: string; count: unknown }>`select status, count(*) as count from jobs where organization_id = ${organizationId} group by status`,
+  ]);
+  return { beats, counts: countsByStatus(counts) };
+}
+
+/** Jobs for one workspace, filtered by status, job type and brand, 50 per page, newest first. */
 export const listJobs = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ({ organizationId: inputText((input as { organizationId?: unknown })?.organizationId, "Workspace") }))
+  .validator((input: unknown) => jobListFilters(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await requireAdmin(context.userId, data.organizationId);
-    const [rows, beats, counts] = await Promise.all([
+    const [rows, totals, health] = await Promise.all([
       sql<Record<string, unknown>>`
-        select j.id, j.brand_id, b.name as brand_name, j.job_type, j.status, j.attempts, j.max_attempts,
-               j.last_error, j.payload, j.created_at, j.updated_at, j.run_after, j.cancel_requested
-        from jobs j left join brands b on b.id = j.brand_id and b.organization_id = j.organization_id
+        select j.id, j.brand_id, coalesce(b.name, '') as brand_name, j.job_type, j.status, j.attempts, j.max_attempts,
+          j.last_error, j.payload, j.created_at, j.updated_at, j.run_after, j.cancel_requested
+        from jobs j
+        left join brands b on b.id = j.brand_id and b.organization_id = j.organization_id
         where j.organization_id = ${data.organizationId}
-        order by j.created_at desc limit 100
+          and (${data.status} = '' or j.status = ${data.status})
+          and (${data.type} = '' or j.job_type = ${data.type})
+          and (${data.brandId} = '' or j.brand_id = ${data.brandId})
+        order by j.created_at desc, j.id desc
+        limit ${JOB_PAGE_SIZE} offset ${data.page * JOB_PAGE_SIZE}
       `,
-      sql<{ name: string; beat_at: string }>`select name, beat_at from process_heartbeats where name in ('worker', 'scheduler')`,
-      sql<{ status: string; count: number }>`select status, count(*) as count from jobs where organization_id = ${data.organizationId} group by status`,
+      sql<{ count: unknown }>`
+        select count(*) as count from jobs j
+        where j.organization_id = ${data.organizationId}
+          and (${data.status} = '' or j.status = ${data.status})
+          and (${data.type} = '' or j.job_type = ${data.type})
+          and (${data.brandId} = '' or j.brand_id = ${data.brandId})
+      `,
+      healthSnapshot(sql, data.organizationId),
     ]);
     const now = Date.now();
-    const heartbeat = (name: string) => {
-      const time = Date.parse(String(beats.find((beat) => beat.name === name)?.beat_at ?? ""));
-      return Number.isFinite(time) && now - time < 30_000 ? "running" : "stopped";
-    };
+    const state = (name: string) => heartbeatState(health.beats.find((beat) => beat.name === name)?.beat_at, now).state;
     return {
-      worker: heartbeat("worker"),
-      scheduler: heartbeat("scheduler"),
-      counts: Object.fromEntries(counts.map((row) => [row.status, Number(row.count)])),
-      jobs: rows.map((row) => {
-        let payloadKeys: string[] = [];
-        try { const value = JSON.parse(String(row.payload ?? "{}")) as unknown; if (value && typeof value === "object" && !Array.isArray(value)) payloadKeys = Object.keys(value); } catch { /* payload details stay hidden when malformed */ }
-        return {
-          id: String(row.id), brandName: String(row.brand_name ?? "Workspace job"), jobType: String(row.job_type),
-          status: String(row.status), attempts: Number(row.attempts), maxAttempts: Number(row.max_attempts),
-          error: String(row.last_error ?? ""), payloadKeys, createdAt: String(row.created_at), updatedAt: String(row.updated_at),
-          runAfter: String(row.run_after ?? ""), cancelRequested: row.cancel_requested === true || row.cancel_requested === "t",
-        };
-      }),
+      worker: state("worker"),
+      scheduler: state("scheduler"),
+      counts: health.counts,
+      jobs: rows.map((row) => jobView(row)),
+      total: Number(totals[0]?.count ?? 0),
+      page: data.page,
+      pageSize: JOB_PAGE_SIZE,
     };
+  });
+
+/** One job in this workspace. Payload values are never returned, only field names and types. */
+export const getJobDetail = createServerFn({ method: "POST" })
+  .validator((input: unknown) => jobRefInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await requireAdmin(context.userId, data.organizationId);
+    const rows = await sql<Record<string, unknown>>`
+      select j.id, j.brand_id, coalesce(b.name, '') as brand_name, j.job_type, j.status, j.attempts, j.max_attempts,
+        j.last_error, j.payload, j.result, j.created_at, j.updated_at, j.run_after, j.cancel_requested,
+        j.lease_until, j.heartbeat_at, j.depends_on, j.priority
+      from jobs j
+      left join brands b on b.id = j.brand_id and b.organization_id = j.organization_id
+      where j.id = ${data.jobId} and j.organization_id = ${data.organizationId}
+      limit 1
+    `;
+    if (!rows[0]) throw new Error("That job is not available in this workspace.");
+    return jobDetailView(rows[0]);
+  });
+
+/** Worker and scheduler liveness (30-second rule), queue depth and dead-letter count for one workspace. */
+export const getWorkerHealth = createServerFn({ method: "POST" })
+  .validator((input: unknown) => workspaceInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await requireAdmin(context.userId, data.organizationId);
+    const health = await healthSnapshot(sql, data.organizationId);
+    return workerHealthView({ beats: health.beats, counts: health.counts, now: Date.now() });
   });
 
 export const retryJob = createServerFn({ method: "POST" })
