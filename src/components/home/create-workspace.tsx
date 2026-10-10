@@ -15,11 +15,19 @@ import { workspaceNameSchema, type WorkspaceNameInput } from "@/lib/meridian/sch
 /** First step for a signed-in person with no workspace. The workspace is created, then the home reloads. */
 export function CreateWorkspace({ onCreated }: { onCreated: () => Promise<void> }) {
   const navigate = useNavigate();
+  const [discardRequested, setDiscardRequested] = useState(false);
+  const { register, handleSubmit, reset, formState: { errors, isDirty, isSubmitting } } = useForm<WorkspaceNameInput>({
+    resolver: zodResolver(workspaceNameSchema),
+    defaultValues: { name: "" },
+    mode: "onBlur",
+  });
   const createWorkspace = useScopedMutation({
     mutationKey: ["mutation", "organization.create"],
     mutationFn: (values: WorkspaceNameInput) => createOrganization({ data: values }),
     success: "Workspace created.",
     onSuccess: async () => {
+      // Saved, so the form is clean before the screen leaves. Otherwise the unsaved-changes guard would ask.
+      reset({ name: "" });
       await onCreated();
       await navigate({ to: "/" });
     },
@@ -27,12 +35,6 @@ export function CreateWorkspace({ onCreated }: { onCreated: () => Promise<void> 
   const pending = createWorkspace.isPending;
   const rawError = createWorkspace.error ? errorText(createWorkspace.error) : null;
   const error = rawError ? plainServerError(rawError, "workspace") : null;
-  const [discardRequested, setDiscardRequested] = useState(false);
-  const { register, handleSubmit, reset, formState: { errors, isDirty, isSubmitting } } = useForm<WorkspaceNameInput>({
-    resolver: zodResolver(workspaceNameSchema),
-    defaultValues: { name: "" },
-    mode: "onBlur",
-  });
   async function submit(values: WorkspaceNameInput) {
     const created = await createWorkspace.mutateAsync(values).then(() => true, () => false);
     if (created) reset();

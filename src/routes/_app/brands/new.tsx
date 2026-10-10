@@ -23,17 +23,6 @@ function NewBrandPage() {
 function NewBrand() {
   const { data, reload } = useWorkspace();
   const navigate = useNavigate();
-  const createBrandMutation = useScopedMutation({
-    mutationKey: ["mutation", "brand.create"],
-    mutationFn: (vars: { organizationId: string; form: NewBrandFields }) => createBrand({ data: { organizationId: vars.organizationId, ...vars.form } }),
-    success: "Brand created.",
-    onSuccess: async (created) => {
-      await reload();
-      await navigate({ to: "/brands/$brandId", params: { brandId: created.id } });
-    },
-  });
-  const pending = createBrandMutation.isPending;
-  const rawError = createBrandMutation.error ? errorText(createBrandMutation.error) : null;
   const [discardRequested, setDiscardRequested] = useState(false);
   const blank: NewBrandFieldsInput = { name: "", website: "", sells: "", industry: "", targetCustomers: "", country: "", description: "", category: "" };
   const { register, handleSubmit, reset, formState: { errors, isDirty, isSubmitting } } = useForm<NewBrandFieldsInput, unknown, NewBrandFields>({
@@ -41,6 +30,19 @@ function NewBrand() {
     defaultValues: blank,
     mode: "onBlur",
   });
+  const createBrandMutation = useScopedMutation({
+    mutationKey: ["mutation", "brand.create"],
+    mutationFn: (vars: { organizationId: string; form: NewBrandFields }) => createBrand({ data: { organizationId: vars.organizationId, ...vars.form } }),
+    success: "Brand created.",
+    onSuccess: async (created) => {
+      // The brand is saved, so the form is clean before the screen leaves. Otherwise the unsaved-changes guard would ask.
+      reset(blank);
+      await reload();
+      await navigate({ to: "/brands/$brandId", params: { brandId: created.id } });
+    },
+  });
+  const pending = createBrandMutation.isPending;
+  const rawError = createBrandMutation.error ? errorText(createBrandMutation.error) : null;
   if (!data?.active) return <p className="text-fg-muted">Create a workspace before adding a brand.</p>;
   if (!hasRole(data.active.role, "member")) return <p className="text-fg-muted">You can view this workspace, not add brands.</p>;
 
