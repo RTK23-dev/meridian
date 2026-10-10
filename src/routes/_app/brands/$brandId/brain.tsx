@@ -85,8 +85,10 @@ function BrainEditor({ brandId }: { brandId: string }) {
     onRejected: () => { void trigger(); },
   });
   const saved = autosave.saved;
+  const [pasteDirty, setPasteDirty] = useState(false);
   // Compared the way Save reads the fields, so a stray space is not a change. Before the saved brain loads, nothing is dirty.
   const dirty = formReady && saved !== null && brainChanged(brain, saved);
+  // The brain's own fields and the pasted text share one guard, so a person is asked once.
   const dirtyRef = useRef(dirty);
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -135,7 +137,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
-      <UnsavedChangesGuard dirty={dirty} />
+      <UnsavedChangesGuard dirty={dirty || pasteDirty} />
       <form
         onSubmit={handleSubmit(submit)}
         className="space-y-8"
@@ -222,7 +224,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
             <SectionFrame id="assets" label="Assets" progress={progressFor("assets")}>
               <FieldList keys={sectionFor("assets")?.keys ?? []} shared={shared} />
               <LogoUploader brandId={brandId} canEdit={canEdit} />
-              <SourceMaterial brandId={brandId} canEdit={canEdit} saved={detail.brain} formDirty={dirty} />
+              <SourceMaterial brandId={brandId} canEdit={canEdit} saved={detail.brain} formDirty={dirty} onPasteDirtyChange={setPasteDirty} />
             </SectionFrame>
           </div>
         </div>

@@ -1,5 +1,9 @@
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { Badge, Button, Field, Panel, SelectInput } from "@/components/ui";
+import { FormDiscardBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { queueScheduleSchema, type QueueScheduleInput } from "@/components/forms/client-schemas";
 import { CheckCircle2, Clock, RefreshCw, Send, Share2 } from "lucide-react";
 import {
   usePlatformAccountsQuery,
@@ -27,10 +31,30 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
   const cancelJobMutation = useCancelPublishJob(brandId);
   const retryJobMutation = useRetryPublishJob(brandId);
 
-  const [queueCreativeId, setQueueCreativeId] = useState("");
-  const [queueAccountIds, setQueueAccountIds] = useState<string[]>([]);
-  const [queueScheduledTime, setQueueScheduledTime] = useState("");
-  const [queueTargetType, setQueueTargetType] = useState<"organic" | "paid_campaign">("organic");
+  const blankSchedule: QueueScheduleInput = { creativeId: "", targetType: "organic", targetAccountIds: [], scheduledTime: "" };
+  const queueForm = useForm<QueueScheduleInput>({ resolver: zodResolver(queueScheduleSchema), defaultValues: blankSchedule, mode: "onChange" });
+  const { register, formState: { errors, isDirty } } = queueForm;
+  const queueAccountIds = queueForm.watch("targetAccountIds");
+  const queueCreativeId = queueForm.watch("creativeId");
+
+  function enqueue() {
+    void queueForm.handleSubmit((values) => {
+      schedulePublishMutation.mutate(
+        {
+          creativeId: values.creativeId,
+          targetAccountIds: values.targetAccountIds,
+          scheduledTime: values.scheduledTime ? new Date(values.scheduledTime).toISOString() : undefined,
+          targetType: values.targetType,
+        },
+        {
+          onSuccess: () => {
+            // The creative and target type stay as chosen. The accounts and the time are cleared, as they always were.
+            queueForm.reset({ ...queueForm.getValues(), targetAccountIds: [], scheduledTime: "" });
+          },
+        },
+      );
+    })();
+  }
 
   const queueItems = ((queueQuery.data as any)?.queue as Array<{
     id: string;
@@ -52,6 +76,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
 
   return (
     <div className="space-y-6">
+      <UnsavedChangesGuard dirty={isDirty} />
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-2xl font-bold">Multi-Account Publishing Queue</h2>
         <p className="text-sm text-fg-muted">
@@ -66,8 +91,8 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
         </h3>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Choose Creative Variant">
-            <SelectInput value={queueCreativeId} onChange={(e) => setQueueCreativeId(e.target.value)}>
+          <Field label="Choose Creative Variant" error={errors.creativeId?.message}>
+            <SelectInput {...register("creativeId")}>
               <option value="">Select a variant…</option>
               {variants.map((v) => (
                 <option key={v.creativeId} value={v.creativeId}>
@@ -77,8 +102,8 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
             </SelectInput>
           </Field>
 
-          <Field label="Target Type">
-            <SelectInput value={queueTargetType} onChange={(e) => setQueueTargetType(e.target.value as "organic" | "paid_campaign")}>
+          <Field label="Target Type" error={errors.targetType?.message}>
+            <SelectInput {...register("targetType")}>
               <option value="organic">Organic Social Post</option>
               <option value="paid_campaign">Paid Ad Campaign</option>
             </SelectInput>
@@ -89,6 +114,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
           <p className="mb-2 block text-xs font-semibold uppercase tracking-wider text-fg-muted">
             Target Platform Accounts ({queueAccountIds.length} selected)
           </p>
+          {errors.targetAccountIds?.message ? <p role="alert" className="mb-2 text-sm text-danger">{errors.targetAccountIds.message}</p> : null}
           {(accountsQuery.data ?? []).length === 0 ? (
             <p className="text-xs text-fg-muted">
               No social accounts connected yet. Go to <a href={`/brands/${brandId}/accounts`} className="underline text-accent">Accounts</a> to connect Instagram, TikTok, or YouTube.
@@ -99,11 +125,8 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
                 <label key={acct.id} className="flex min-h-11 items-center gap-2.5 rounded-md border border-border bg-surface p-2 text-sm cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={queueAccountIds.includes(acct.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) setQueueAccountIds([...queueAccountIds, acct.id]);
-                      else setQueueAccountIds(queueAccountIds.filter((id) => id !== acct.id));
-                    }}
+                    value={acct.id}
+                    {...register("targetAccountIds")}
                     className="size-4"
                   />
                   <div className="truncate">
@@ -119,36 +142,21 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Schedule Time (optional, leave blank for immediate)">
+          <Field label="Schedule Time (optional, leave blank for immediate)" error={errors.scheduledTime?.message}>
             <input
               type="datetime-local"
-              value={queueScheduledTime}
-              onChange={(e) => setQueueScheduledTime(e.target.value)}
+              {...register("scheduledTime")}
               className="w-full rounded-md border border-border-strong bg-surface px-3 py-3 text-base text-fg"
             />
           </Field>
         </div>
 
+        <FormDiscardBar dirty={isDirty} subject="publishing schedule" onDiscard={() => queueForm.reset(blankSchedule)} />
         <div className="flex justify-end pt-2">
           <Button
             variant="primary"
             disabled={!canEdit || !queueCreativeId || queueAccountIds.length === 0 || schedulePublishMutation.isPending}
-            onClick={() => {
-              schedulePublishMutation.mutate(
-                {
-                  creativeId: queueCreativeId,
-                  targetAccountIds: queueAccountIds,
-                  scheduledTime: queueScheduledTime ? new Date(queueScheduledTime).toISOString() : undefined,
-                  targetType: queueTargetType,
-                },
-                {
-                  onSuccess: () => {
-                    setQueueAccountIds([]);
-                    setQueueScheduledTime("");
-                  },
-                },
-              );
-            }}
+            onClick={enqueue}
           >
             <Send className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {schedulePublishMutation.isPending ? "Enqueueing…" : `Enqueue to ${queueAccountIds.length} Account(s)`}

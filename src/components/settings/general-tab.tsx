@@ -63,7 +63,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
           <Field label="Name" error={renameForm.formState.errors.name?.message} required>
             <TextInput {...renameForm.register("name")} maxLength={80} disabled={!canAdmin} required />
           </Field>
-          {canAdmin ? <Button type="submit" disabled={renameWorkspace.isPending || renameForm.formState.isSubmitting}>Rename</Button> : null}
+          {canAdmin ? <Button type="submit" disabled={renameWorkspace.isPending || renameForm.formState.isSubmitting}>{renameWorkspace.isPending || renameForm.formState.isSubmitting ? "Renaming…" : "Rename"}</Button> : null}
         </form>
         <UnsavedChangesBar
           dirty={renameForm.formState.isDirty}
@@ -84,7 +84,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
           <Field label="Name" error={createForm.formState.errors.name?.message} required>
             <TextInput {...createForm.register("name")} maxLength={80} required />
           </Field>
-          <Button type="submit" variant="secondary" disabled={createWorkspaceAction.isPending || createForm.formState.isSubmitting}>Create workspace</Button>
+          <Button type="submit" variant="secondary" disabled={createWorkspaceAction.isPending || createForm.formState.isSubmitting}>{createWorkspaceAction.isPending || createForm.formState.isSubmitting ? "Creating…" : "Create workspace"}</Button>
         </form>
         <UnsavedChangesBar
           dirty={createForm.formState.isDirty}

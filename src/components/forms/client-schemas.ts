@@ -76,3 +76,19 @@ export const providerFieldsSchema = z.object({
 });
 
 export type ProviderFieldsInput = z.input<typeof providerFieldsSchema>;
+
+/**
+ * scheduleMultiAccountPublishAction: a creative and at least one destination account are required. The scheduled time is
+ * optional, and when it is given it must be a real date and time, because the client converts it before sending.
+ */
+export const queueScheduleSchema = z.object({
+  creativeId: z.string().min(1, "Select a creative variant."),
+  targetType: z.enum(["organic", "paid_campaign"]),
+  targetAccountIds: z.array(z.string()).min(1, "Select at least one destination account."),
+  scheduledTime: z.string().refine(
+    (value) => value === "" || !Number.isNaN(new Date(value).getTime()),
+    "Enter a valid date and time, or leave the field blank to publish now.",
+  ),
+});
+
+export type QueueScheduleInput = z.input<typeof queueScheduleSchema>;
