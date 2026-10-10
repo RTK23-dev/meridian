@@ -55,6 +55,9 @@ export function CompareView({ variants, first, second, onChangeFirst, onChangeSe
 
       {a && b && a.assetId !== b.assetId ? (
         <>
+          <p className="text-sm">
+            {a.promptVersion || "Prompt version not stored"} beside {b.promptVersion || "Prompt version not stored"}. They stay separate versions.
+          </p>
           {bothPlayable ? (
             <p className="text-sm text-fg-muted">Linked playback is on. Play, pause and seeking on one video apply to the other. Each keeps its own controls.</p>
           ) : null}
