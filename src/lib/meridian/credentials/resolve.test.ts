@@ -194,6 +194,8 @@ test("no Google or TypeSafe provider key is read from the environment outside th
     "lib/meridian/config/resolver.ts",
     "lib/meridian/jev/config.ts",
     "lib/meridian/distribution/youtube.ts",
+    // The integrations screen names the variable an operator should set, in its setup guidance. It reads no key.
+    "components/settings/integration-model.ts",
   ]);
   const names = /MERIDIAN_GEMINI_API_KEY|GOOGLE_AI_STUDIO_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|TYPESAFE_JEV_API_KEY|TYPESAFE_API_KEY|HIGGSFIELD_API_KEY/;
   const srcRoot = fileURLToPath(new URL("../../../", import.meta.url)); // src/

@@ -56,10 +56,10 @@ try {
   await productForm.getByLabel("Name").fill("Lather bar");
   await productForm.getByLabel("Description").fill("A plain bar with a visible lather.");
   await productForm.getByRole("button", { name: "Add product" }).click();
-  await page.getByRole("heading", { name: "Lather bar" }).waitFor();
+  await page.getByRole("cell", { name: "Lather bar", exact: true }).waitFor();
 
   await page.goto(`${brandUrl}/brain`, { waitUntil: "networkidle" });
-  await page.getByLabel("Positioning").fill("Cold-process soap. The point is the lather and the proof of a simple bar.");
+  await page.getByRole("textbox", { name: "Positioning", exact: true }).fill("Cold-process soap. The point is the lather and the proof of a simple bar.");
   await page.getByLabel("Value proposition").fill("Show the lather. Show the proof. Do not invent a cure.");
   await page.getByLabel("Target customers").fill("People who already buy a plain bar of soap.");
   await page.getByLabel("Tone").fill("Plain, specific, and calm.");
@@ -119,12 +119,12 @@ try {
   await page.getByText("Discovered").first().waitFor({ timeout: 60000 });
   const discovered = await page.locator("body").innerText();
   if (!discovered.toLowerCase().includes("lather")) throw new Error(`Studio did not show the lather evidence. ${discovered.slice(0, 500)}`);
-  await page.locator("dd").filter({ hasText: /Approved|Needs a person|Rejected/ }).first().waitFor();
+  await page.locator("dd").filter({ hasText: /Auto-approved|Approved|Needs a person|Rejected/ }).first().waitFor();
   // Accepting a direction needs a reason of at least 20 characters. It is recorded with the decision.
   await page.getByLabel(/Why accept this direction/).fill("E2E testing run: the stored lather evidence supports this direction.");
   await page.getByRole("button", { name: "Accept direction and write the brief" }).click();
   await page.getByRole("tab", { name: "2. Brief" }).click();
-  await page.getByRole("heading", { name: "Brief" }).waitFor();
+  await page.getByRole("heading", { name: "Brief", exact: true }).waitFor();
   const firstConstraints = await page.getByTestId("brief-constraints").innerText();
   // The decision engine is not configured in the testing runtime, so the brief the engine could not judge is held. Generation
   // must stay blocked until an explicit review is recorded, and that review is what this step performs.
@@ -140,16 +140,16 @@ try {
   await page.getByRole("button", { name: "Approve for production" }).click();
   await held.waitFor({ state: "hidden" });
   await page.getByRole("tab", { name: "3. Generate" }).click();
-  await page.locator("select[name='imageProvider']").selectOption("test:image");
-  await page.locator("select[name='videoProvider']").selectOption("none");
+  await page.getByRole("radio", { name: /^Test image/ }).check();
+  await page.getByRole("radio", { name: /^No video/ }).check();
   await page.getByRole("button", { name: "Generate variants" }).click();
   const planReview = page.getByRole("dialog", { name: "Review Creative Plan" });
   await planReview.waitFor({ state: "visible" });
-  await planReview.getByRole("button", { name: "Approve & Generate" }).click();
+  await planReview.getByRole("button", { name: "Approve and generate" }).click();
   await planReview.waitFor({ state: "hidden" });
   await page.getByRole("tab", { name: "4. Review" }).click();
-  await page.getByRole("img", { name: /test:image image variant/ }).first().waitFor({ timeout: 60000 });
-  const previewCount = await page.getByRole("img", { name: /test:image image variant/ }).count();
+  await page.getByRole("img", { name: /^Image \d+:/ }).first().waitFor({ timeout: 60000 });
+  const previewCount = await page.getByRole("img", { name: /^Image \d+:/ }).count();
   if (previewCount < 3) throw new Error(`Expected 3 image previews, saw ${previewCount}.`);
 
   const approve = page.getByRole("button", { name: "Approve" });
