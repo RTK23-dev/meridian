@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getSql } from "../../db.ts";
+import { createPoolSql, getSql } from "../../db.ts";
+import type { Sql } from "../learning/store.ts";
+import { failingSql } from "../testing/opportunity-fixtures.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
 import { BRAND_QUESTION, BRIEF, approvesBrief, createBrief, registryWith, stubEngine } from "../testing/brief-fixtures.ts";
 import { BRIEF_REVIEW_MINIMUM_ROLE, loadBriefReviewDisclosure, reviewBrief, briefStatusFor, productionRefusalFor } from "./brief-review.server.ts";
@@ -221,3 +223,75 @@ test("the real planning entry point refuses a held brief, and stops refusing it 
   const after = await generateStudioVariants(tenant.userId, request).then(() => null, (error: unknown) => (error instanceof Error ? error.message : String(error)));
   assert.ok(!(after !== null && /human review|JEV/i.test(after)), `after review, planning is no longer refused by the review gate (${after ?? "accepted"})`);
 });
+
+/**
+ * Atomicity of the review. A failing write is injected at each of the three writes that follow the claim. The brief must still
+ * be awaiting review, the decision unreviewed, and no review row or audit row left behind. The same check runs on PGlite and,
+ * when MERIDIAN_PG_TEST_URL is set, on PostgreSQL through a pinned pool connection.
+ */
+const PG_TEST_URL = process.env.MERIDIAN_PG_TEST_URL?.trim();
+const INJECTIONS = [
+  { step: "the audit insert", pattern: /insert into audit_log/ },
+  { step: "the decision_reviews insert", pattern: /insert into decision_reviews/ },
+  { step: "the brief move", pattern: /update briefs set status/ },
+];
+
+async function injectedReviewLeavesNothing(sql: Sql, pattern: RegExp) {
+  const tenant = await studioTenant(sql, `review-atomic-${Math.random().toString(36).slice(2, 8)}`);
+  const made = await createBrief(sql, tenant, {
+    engines: registryWith(stubEngine("jev"), stubEngine("openai-decisions", { failure: true })),
+    selected: { engineId: "openai-decisions", source: "workspace" },
+  });
+  assert.equal(made.action, "HUMAN_REVIEW");
+  const review = {
+    organizationId: tenant.organizationId,
+    brandId: tenant.brandId,
+    briefId: made.briefId,
+    reviewerId: "reviewer-atomic",
+    reviewerRole: "admin",
+    action: "approve" as const,
+    reason: REASON,
+    acknowledged: true,
+  };
+  await assert.rejects(reviewBrief(failingSql(sql, pattern), review), /injected write failure/);
+
+  const [brief] = await sql<{ status: string }>`select status from briefs where id = ${made.briefId}`;
+  assert.equal(brief?.status, "awaiting_review", "the brief is still awaiting review");
+  const [decision] = await sql<{ reviewer_decision: string | null; reviewer_id: string | null }>`
+    select reviewer_decision, reviewer_id from jev_decisions where id = ${made.decisionId}
+  `;
+  assert.equal(decision?.reviewer_decision, null, "the decision is still unreviewed");
+  assert.equal(decision?.reviewer_id, null, "no reviewer is recorded on the decision");
+  const [reviews] = await sql<{ count: number }>`select count(*)::int as count from decision_reviews where decision_id = ${made.decisionId}`;
+  assert.equal(reviews?.count, 0, "no decision_reviews row exists");
+  const [audits] = await sql<{ count: number }>`
+    select count(*)::int as count from audit_log where object_id = ${made.briefId} and action = 'brief.review'
+  `;
+  assert.equal(audits?.count, 0, "no audit row was left behind");
+
+  // The rollback leaves nothing that blocks the next attempt: the same review now succeeds.
+  const reviewed = await reviewBrief(sql, review);
+  assert.equal(reviewed.briefStatus, "ready");
+  const [after] = await sql<{ status: string }>`select status from briefs where id = ${made.briefId}`;
+  assert.equal(after?.status, "ready");
+}
+
+for (const injection of INJECTIONS) {
+  test(`review is atomic on PGlite: a failure at ${injection.step} leaves the brief awaiting review and the decision unreviewed`, async () => {
+    await injectedReviewLeavesNothing(await getSql(), injection.pattern);
+  });
+
+  test(`review is atomic on PostgreSQL: a failure at ${injection.step} leaves the brief awaiting review and the decision unreviewed`, async (t) => {
+    if (!PG_TEST_URL) {
+      t.skip("MERIDIAN_PG_TEST_URL is not set, so the PostgreSQL atomicity check was not run");
+      return;
+    }
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: PG_TEST_URL });
+    try {
+      await injectedReviewLeavesNothing(createPoolSql(pool), injection.pattern);
+    } finally {
+      await pool.end();
+    }
+  });
+}

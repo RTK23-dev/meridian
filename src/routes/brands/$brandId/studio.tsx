@@ -40,6 +40,25 @@ import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
 import { studioGenerationSchema, type StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
 import { Clock, RefreshCw, Send, CheckCircle2, Share2 } from "lucide-react";
 
+/** The shortest reason that can accept a direction. The server enforces the same length. */
+const DIRECTION_REASON_MIN = 20;
+
+/**
+ * The required reason for accepting a direction. It is recorded with the decision, who made it and when. It does not mean
+ * the brief has passed its gate: the brief is judged separately when it is written.
+ */
+function DirectionReasonField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block text-sm">
+      <span className="text-muted">
+        Why accept this direction (at least {DIRECTION_REASON_MIN} characters). This is recorded with your decision. It does not
+        mean the brief has passed its gate.
+      </span>
+      <TextArea className="mt-1" rows={2} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
 export const Route = createFileRoute("/brands/$brandId/studio")({ component: Page });
 
 function Page() {
@@ -82,6 +101,8 @@ function Studio({ brandId }: { brandId: string }) {
     note?: string;
   } | null>(null);
   const [planRejectReason, setPlanRejectReason] = useState("");
+  const [directionReason, setDirectionReason] = useState("");
+  const [nextBriefReason, setNextBriefReason] = useState("");
 
   const briefAction = useBusy([qk.studio(brandId), qk.opportunities(brandId)]);
   const generationAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
@@ -211,18 +232,21 @@ function Studio({ brandId }: { brandId: string }) {
             {recommendation.evidence.map((line) => <li key={line}>{line}</li>)}
           </ul>
           {canEdit ? (
-            <Button
-              className="mt-4"
-              type="button"
-              disabled={briefAction.pending}
-              onClick={() => {
-                void briefAction.run(async () => {
-                  await openStudioBrief({ data: { brandId, forceNew: false } });
-                });
-              }}
-            >
-              Accept direction and write the brief
-            </Button>
+            <div className="mt-4 space-y-3">
+              <DirectionReasonField value={directionReason} onChange={setDirectionReason} />
+              <Button
+                type="button"
+                disabled={briefAction.pending || directionReason.trim().length < DIRECTION_REASON_MIN}
+                onClick={() => {
+                  void briefAction.run(async () => {
+                    await openStudioBrief({ data: { brandId, forceNew: false, reason: directionReason.trim() } });
+                    setDirectionReason("");
+                  });
+                }}
+              >
+                Accept direction and write the brief
+              </Button>
+            </div>
           ) : null}
         </Panel>
       ) : (
@@ -302,19 +326,22 @@ function Studio({ brandId }: { brandId: string }) {
             <ul className="mt-3 text-sm">{brief.learningNotes.map((line) => <li key={line}>Learned: {line}</li>)}</ul>
           ) : <p className="mt-3 text-sm text-muted">No learned pattern is attached to this brief yet.</p>}
           {canEdit && brief.status !== "ready" ? (
-            <Button
-              className="mt-3"
-              type="button"
-              variant="quiet"
-              disabled={briefAction.pending}
-              onClick={() => {
-                void briefAction.run(async () => {
-                  await openStudioBrief({ data: { brandId, forceNew: true } });
-                });
-              }}
-            >
-              Write the next brief
-            </Button>
+            <div className="mt-3 space-y-3">
+              <DirectionReasonField value={nextBriefReason} onChange={setNextBriefReason} />
+              <Button
+                type="button"
+                variant="quiet"
+                disabled={briefAction.pending || nextBriefReason.trim().length < DIRECTION_REASON_MIN}
+                onClick={() => {
+                  void briefAction.run(async () => {
+                    await openStudioBrief({ data: { brandId, forceNew: true, reason: nextBriefReason.trim() } });
+                    setNextBriefReason("");
+                  });
+                }}
+              >
+                Write the next brief
+              </Button>
+            </div>
           ) : null}
         </Panel>
       ) : null}

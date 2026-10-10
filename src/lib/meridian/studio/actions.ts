@@ -21,10 +21,12 @@ export const getStudioSession = createServerFn({ method: "POST" })
 
 export const openStudioBrief = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
-    const body = input && typeof input === "object" ? (input as { brandId?: unknown; forceNew?: unknown }) : {};
+    const body = input && typeof input === "object" ? (input as { brandId?: unknown; forceNew?: unknown; reason?: unknown }) : {};
     const brandId = clip(body.brandId);
     if (!brandId) throw new Error("Choose a brand.");
-    return { brandId, forceNew: body.forceNew === true };
+    // The reason for accepting the direction is required. The session function checks its length.
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 4000) : "";
+    return { brandId, forceNew: body.forceNew === true, reason };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {

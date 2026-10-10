@@ -9,8 +9,8 @@ import { BRIEF_QUESTIONS } from "../jev/questions/brief.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import { abstainAll, type DecisionEngine, type DecisionEngineId, type DecisionRequest, type DecisionResult } from "../decisions/types.ts";
 import type { EngineSelection } from "../decisions/selection.ts";
-import { briefStatusFor } from "../studio/brief-review.server.ts";
-import { briefDeterministicRejections, judgeBriefFit, writeBriefDecision, type BriefBrain, type BriefForGate } from "../studio/brief-gate.server.ts";
+import { createGatedBrief } from "../studio/brief-service.server.ts";
+import { briefDeterministicRejections, judgeBriefFit, type BriefBrain, type BriefForGate, type BriefGateResult } from "../studio/brief-gate.server.ts";
 
 export const BRIEF: BriefForGate = {
   audience: "Busy parents",
@@ -119,43 +119,60 @@ export const registryWith = (
 ): DecisionEngineRegistry => ({ jev: jev.engine, "openai-decisions": openai.engine });
 
 /**
- * Writes a brief through the real gate and writer, then the brief row, with the status its gate outcome gives. Returns the
- * ids and the gate outcome, so a test can read the stored state the way production does.
+ * Creates a brief through the real path: the shared gate judges it, and `createGatedBrief` writes the decision and the brief
+ * row with the status its outcome gives. Returns the ids and the gate outcome, so a test reads the stored state the way
+ * production does.
  */
 export async function createBrief(
   sql: Sql,
   tenant: { organizationId: string; brandId: string; userId: string },
   options: { engines: DecisionEngineRegistry; selected: EngineSelection; brief?: BriefForGate; creatorId?: string },
 ) {
-  const briefId = `brief-${randomUUID()}`;
-  const decisionId = randomUUID();
   const brief = options.brief ?? BRIEF;
-  const result = await judgeBriefFit({
-    sql,
+  const outcome: { result?: BriefGateResult } = {};
+  const created = await createGatedBrief(sql, {
     organizationId: tenant.organizationId,
     brandId: tenant.brandId,
-    briefId,
-    brief,
-    brain: BRAIN,
-    engines: options.engines,
-    selection: options.selected,
+    createdBy: options.creatorId ?? tenant.userId,
+    brief: {
+      opportunityId: null,
+      title: `Fixture brief ${brief.angle}`,
+      audience: brief.audience,
+      angle: brief.angle,
+      hook: brief.hook,
+      message: brief.message,
+      offer: brief.offer ?? "",
+      cta: brief.cta,
+      format: brief.format,
+      proofType: "",
+      constraints: "",
+      context: {},
+      workflow: "test",
+      why: [],
+      learningNotes: [],
+      failureNotes: [],
+    },
+    judge: async (briefId) => {
+      outcome.result = await judgeBriefFit({
+        sql,
+        organizationId: tenant.organizationId,
+        brandId: tenant.brandId,
+        briefId,
+        brief,
+        brain: BRAIN,
+        engines: options.engines,
+        selection: options.selected,
+      });
+      return outcome.result;
+    },
   });
-  await writeBriefDecision(sql, {
-    organizationId: tenant.organizationId,
-    brandId: tenant.brandId,
-    briefId,
-    decisionId,
+  const result = outcome.result!;
+  return {
+    briefId: created.briefId,
+    decisionId: created.decisionId,
+    action: created.action,
+    gateRecordId: result.gateRecordId,
     result,
-  });
-  await sql`
-    insert into briefs (
-      id, organization_id, brand_id, title, audience, angle, hook, message, offer, cta, format, context_pack, workflow, why,
-      status, decision_id, created_by
-    ) values (
-      ${briefId}, ${tenant.organizationId}, ${tenant.brandId}, ${`Brief ${briefId}`}, ${brief.audience}, ${brief.angle},
-      ${brief.hook}, ${brief.message}, ${brief.offer ?? ""}, ${brief.cta}, ${brief.format}, '{}', 'test', '[]',
-      ${briefStatusFor(result.action)}, ${decisionId}, ${options.creatorId ?? tenant.userId}
-    )
-  `;
-  return { briefId, decisionId, action: result.action, gateRecordId: result.gateRecordId, result, deterministicRejections: briefDeterministicRejections(brief, BRAIN) };
+    deterministicRejections: briefDeterministicRejections(brief, BRAIN),
+  };
 }

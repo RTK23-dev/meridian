@@ -30,8 +30,7 @@ import {
 } from "../machine-shared";
 import { assertOpportunityClear, opportunityView } from "../opportunity/actions";
 import { productionRefusalFor } from "@/lib/meridian/studio/brief-review.server";
-import { judgeBriefFit } from "@/lib/meridian/studio/brief-gate.server";
-import { createGatedBrief } from "@/lib/meridian/studio/brief-service.server";
+import { briefBrainFrom, briefGateJudge, createGatedBrief, type BriefGateOptions } from "./brief-service.server";
 
 function briefDraftFromRow(row: Record<string, unknown>): BriefDraft {
   return {
@@ -244,89 +243,97 @@ export const createBriefFromOpportunity = createServerFn({ method: "POST" })
     return { brandId: clip(body.brandId, 80, "Brand", true), opportunityId: clip(body.opportunityId, 80, "Opportunity", true) };
   })
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    const rows = await sql<Record<string, unknown>>`
-      select * from opportunities
-      where id = ${data.opportunityId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
-      limit 1
-    `;
-    const row = rows[0];
-    if (!row) throw new Error("Opportunity not found.");
-    if (asText(row.status) === "rejected" || asText(row.status) === "dismissed") {
-      throw new Error("This opportunity was rejected or dismissed.");
-    }
-    await assertOpportunityClear(sql, data.opportunityId);
-    const existing = await sql<{ id: string }>`
-      select id from briefs
-      where opportunity_id = ${data.opportunityId} and status = 'ready'
-      order by created_at desc limit 1
-    `;
-    if (existing[0]) return { id: existing[0].id };
-    const loaded = await loadContext(sql, access.organizationId, data.brandId);
-    const draft = opportunityView(row, "", 0);
-    const sameAngle = loaded.creatives
-      .filter((creative) => creative.origin === "competitor" && creative.angle === draft.angle && creative.text)
-      .slice(0, 4)
-      .map((creative) => ({ id: creative.id, text: creative.text }));
-    const retrieved = selectContext(
-      `${draft.angle} ${draft.hookDirection}`,
-      loaded.creatives
-        .filter((creative) => creative.origin === "competitor")
-        .map((creative) => ({ id: creative.id, brandId: creative.brandId, text: creative.text })),
-      data.brandId,
-    );
-    const observations = (retrieved.length > 0 ? retrieved : sameAngle).map((item) => ({ id: item.id, text: item.text }));
-    const brief = buildBrief({
-      opportunity: draft,
-      brain: loaded.brain,
-      patterns: loaded.patterns,
-      rejections: loaded.rejections,
-      observations,
-    });
-    // The shared brief path: deterministic checks, then the active engine once, with its record, in one write.
-    const outcome = await createGatedBrief(sql, {
+  .handler(async ({ context, data }) => createBriefFromOpportunityFor(context.userId, data));
+
+/**
+ * Writes a brief from a stored opportunity for a signed-in user. The role and the tenant are checked here. The brief is judged
+ * by the shared brief gate and written through createGatedBrief, as every brief is. No local rule set decides it.
+ */
+export async function createBriefFromOpportunityFor(
+  userId: string,
+  data: { brandId: string; opportunityId: string },
+  gate: BriefGateOptions = {},
+) {
+  const sql = await getSql();
+  const access = await requireBrand(sql, userId, data.brandId, "member");
+  const rows = await sql<Record<string, unknown>>`
+    select * from opportunities
+    where id = ${data.opportunityId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row) throw new Error("Opportunity not found.");
+  if (asText(row.status) === "rejected" || asText(row.status) === "dismissed") {
+    throw new Error("This opportunity was rejected or dismissed.");
+  }
+  await assertOpportunityClear(sql, data.opportunityId);
+  const existing = await sql<{ id: string }>`
+    select id from briefs
+    where opportunity_id = ${data.opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
+    order by created_at desc limit 1
+  `;
+  if (existing[0]) return { id: existing[0].id };
+  const loaded = await loadContext(sql, access.organizationId, data.brandId);
+  const draft = opportunityView(row, "", 0);
+  const sameAngle = loaded.creatives
+    .filter((creative) => creative.origin === "competitor" && creative.angle === draft.angle && creative.text)
+    .slice(0, 4)
+    .map((creative) => ({ id: creative.id, text: creative.text }));
+  const retrieved = selectContext(
+    `${draft.angle} ${draft.hookDirection}`,
+    loaded.creatives
+      .filter((creative) => creative.origin === "competitor")
+      .map((creative) => ({ id: creative.id, brandId: creative.brandId, text: creative.text })),
+    data.brandId,
+  );
+  const observations = (retrieved.length > 0 ? retrieved : sameAngle).map((item) => ({ id: item.id, text: item.text }));
+  const brief = buildBrief({
+    opportunity: draft,
+    brain: loaded.brain,
+    patterns: loaded.patterns,
+    rejections: loaded.rejections,
+    observations,
+  });
+  const created = await createGatedBrief(sql, {
+    organizationId: access.organizationId,
+    brandId: data.brandId,
+    createdBy: userId,
+    brief: {
+      opportunityId: data.opportunityId,
+      title: brief.title,
+      audience: brief.audience,
+      angle: brief.angle,
+      hook: brief.hook,
+      message: brief.message,
+      offer: brief.offer,
+      cta: brief.cta,
+      format: brief.format,
+      proofType: brief.proofType,
+      constraints: brief.constraints,
+      context: brief.context,
+      workflow: brief.workflow,
+      why: brief.why,
+      learningNotes: brief.learningNotes,
+      failureNotes: brief.failureNotes,
+    },
+    judge: briefGateJudge(sql, {
       organizationId: access.organizationId,
       brandId: data.brandId,
-      createdBy: context.userId,
       brief: {
-        opportunityId: data.opportunityId,
-        title: brief.title,
         audience: brief.audience,
-        angle: brief.angle,
         hook: brief.hook,
         message: brief.message,
-        offer: brief.offer,
-        cta: brief.cta,
         format: brief.format,
-        proofType: brief.proofType,
-        constraints: brief.constraints,
-        context: brief.context,
-        workflow: brief.workflow,
-        why: brief.why,
-        learningNotes: brief.learningNotes,
-        failureNotes: brief.failureNotes,
+        cta: brief.cta,
+        angle: brief.angle,
+        offer: brief.offer,
       },
-      judge: (briefId) => judgeBriefFit({
-        sql,
-        organizationId: access.organizationId,
-        brandId: data.brandId,
-        briefId,
-        brief: {
-          audience: brief.audience,
-          hook: brief.hook,
-          message: brief.message,
-          format: brief.format,
-          cta: brief.cta,
-          angle: brief.angle,
-          offer: brief.offer,
-        },
-        brain: loaded.brain,
-      }),
-    });
-    return { id: outcome.briefId, decision: outcome.action };
+      brain: briefBrainFrom(loaded.brain),
+      ...gate,
+    }),
   });
+  return { id: created.briefId, decision: created.action };
+}
 
 export const composeCreative = createServerFn({ method: "POST" })
   .validator((input: unknown) => {

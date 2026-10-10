@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
@@ -5,6 +6,10 @@ import { decideForTenant } from "@/lib/meridian/jev/engine";
 import { opportunityGate } from "@/lib/meridian/jev/questions";
 import { loadQuestionPolicy } from "@/lib/meridian/jev/policy";
 import { rankOpportunities, type OpportunityDraft } from "@/lib/meridian/opportunity/engine";
+import { hasRole, isRole } from "../access.ts";
+import { withTransaction } from "../learning/store.ts";
+import type { OpportunityDirectionInput } from "../studio/brief-service.contract.ts";
+import { directionReasonProblem } from "../studio/brief-service.server.ts";
 import {
   id,
   asText,
@@ -188,6 +193,65 @@ export async function assertOpportunityClear(sql: Sql, opportunityId: string): P
     select id from reviews where opportunity_id = ${opportunityId} and status = 'open' limit 1
   `;
   if (held.length > 0) throw new Error("A person has to clear the review hold before this can move forward.");
+}
+
+/**
+ * Records an explicit decision about an opportunity's direction: who, when, what, and why. Accepting a direction clears its
+ * review hold. The decision never writes a brief's decision or a jev_decisions reviewer_decision, and it never means that a
+ * brief passed its gate. Each brief is judged when it is written (studio/brief-service.server.ts).
+ */
+export async function recordOpportunityDirection(
+  sql: Sql,
+  input: OpportunityDirectionInput,
+): Promise<{ directionId: string; opportunityStatus: string }> {
+  if (!isRole(input.actorRole) || !hasRole(input.actorRole, "member")) {
+    throw new Error("Only a member or higher can decide an opportunity's direction.");
+  }
+  if (input.action !== "approve" && input.action !== "decline") throw new Error("Choose approve or decline.");
+  const problem = directionReasonProblem(input.reason);
+  if (problem) throw new Error(problem);
+  const reason = input.reason.trim();
+  const directionId = randomUUID();
+  // The opportunity leaves 'open' with its decision. Ranking deletes open opportunities, and a direction row must not be
+  // deleted with them, so a declined direction is dismissed and an accepted one is accepted until its brief is written.
+  const opportunityStatus = input.action === "approve" ? "accepted" : "dismissed";
+  return withTransaction(sql, async (tx) => {
+    const [opportunity] = await tx<{ id: string; status: string }>`
+      select id, status from opportunities
+      where id = ${input.opportunityId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
+      limit 1 for update
+    `;
+    if (!opportunity) throw new Error("Opportunity not found.");
+    if (opportunity.status !== "open" && opportunity.status !== "accepted") {
+      throw new Error("This opportunity was rejected, dismissed, or already briefed, so its direction cannot be decided now.");
+    }
+    await tx`
+      insert into opportunity_direction_decisions (
+        id, organization_id, brand_id, opportunity_id, actor_id, actor_role, action, reason
+      ) values (
+        ${directionId}, ${input.organizationId}, ${input.brandId}, ${input.opportunityId}, ${input.actorId},
+        ${input.actorRole}, ${input.action}, ${reason}
+      )
+    `;
+    await tx`
+      update reviews set status = ${input.action === "approve" ? "approved" : "rejected"}
+      where opportunity_id = ${input.opportunityId} and organization_id = ${input.organizationId} and status = 'open'
+    `;
+    await tx`
+      update opportunities set status = ${opportunityStatus}
+      where id = ${input.opportunityId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
+    `;
+    await audit(tx, {
+      organizationId: input.organizationId,
+      brandId: input.brandId,
+      actorId: input.actorId,
+      action: `opportunity.direction.${input.action}`,
+      objectType: "opportunity",
+      objectId: input.opportunityId,
+      metadata: { directionId, actorRole: input.actorRole, opportunityStatus },
+    });
+    return { directionId, opportunityStatus };
+  });
 }
 
 export const dismissOpportunity = createServerFn({ method: "POST" })

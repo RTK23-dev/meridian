@@ -120,6 +120,8 @@ try {
   const discovered = await page.locator("body").innerText();
   if (!discovered.toLowerCase().includes("lather")) throw new Error(`Studio did not show the lather evidence. ${discovered.slice(0, 500)}`);
   await page.locator("dd").filter({ hasText: /AUTO_APPROVE|HUMAN_REVIEW|REJECT/ }).first().waitFor();
+  // Accepting a direction needs a reason of at least 20 characters. It is recorded with the decision.
+  await page.getByLabel(/Why accept this direction/).fill("E2E testing run: the stored lather evidence supports this direction.");
   await page.getByRole("button", { name: "Accept direction and write the brief" }).click();
   await page.getByRole("tab", { name: "2. Brief" }).click();
   await page.getByRole("heading", { name: "Brief" }).waitFor();

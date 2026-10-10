@@ -19,8 +19,8 @@ import { publishingReadiness } from "../jev/guards.ts";
 import { generationAllowed } from "../security/budget.ts";
 import { evaluateJevGate } from "../jev/reviewer-decision.ts";
 import { ruleDecisionRecordFields } from "../jev/decision-record.ts";
-import { judgeBriefFit, writeBriefDecision } from "./brief-gate.server.ts";
-import { briefStatusFor } from "./brief-review.server.ts";
+import type { BriefGateResult } from "./brief-gate.server.ts";
+import { briefBrainFrom, briefGateJudge, createGatedBrief, directionReasonProblem, type BriefGateOptions } from "./brief-service.server.ts";
 import { STUDIO_PROMPT_VERSION, isTestingRuntime, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
 import { productionRouter, type ImageProviderSelection } from "../production/router.ts";
@@ -367,10 +367,17 @@ export async function getStudioSession(userId: string, data: { brandId: string }
     return (await sessionFor(sql, context.userId, data.brandId, "viewer")).session;
 }
 
-export async function openStudioBrief(userId: string, data: { brandId: string; forceNew: boolean }) {
+export async function openStudioBrief(
+  userId: string,
+  data: { brandId: string; forceNew: boolean; reason: string },
+  gate: BriefGateOptions = {},
+) {
   const context = { userId };
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
+    // The reason is checked before anything is ranked or written, so a refused accept changes nothing.
+    const reasonProblem = directionReasonProblem(data.reason);
+    if (reasonProblem) throw new Error(reasonProblem);
     await rerankBrand(sql, access.organizationId, data.brandId);
     const loaded = await loadBrandContext(sql, access.organizationId, data.brandId);
     assertSameTenant(loaded.creatives, access.organizationId, data.brandId);
@@ -410,25 +417,26 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       throw new Error("JEV rejected this direction. A brief was not written.");
     }
     const opportunityId = asText(row.id);
-    await sql`
-      update reviews set status = 'approved'
-      where opportunity_id = ${opportunityId} and status = 'open' and organization_id = ${access.organizationId}
-    `;
-    await sql`
-      update jev_decisions set reviewer_id = ${context.userId}, reviewer_decision = 'approve', reviewed_at = now()
-      where id = ${asText(row.decision_id)} and organization_id = ${access.organizationId}
-    `;
-    if (data.forceNew) {
-      await sql`
-        update briefs set status = 'used'
-        where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
-      `;
-    }
-    const existing = await sql<{ id: string; decision_id: string }>`
-      select id, decision_id from briefs
-      where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
-      order by created_at desc limit 1
-    `;
+    // The direction is recorded first, as its own decision, with who, when, what and why. It writes no brief decision and
+    // does not mean that the brief passed its gate. The brief is judged by createGatedBrief below.
+    // Loaded on demand: the opportunity module pulls in the server-function layer, which this module does not need otherwise.
+    const { recordOpportunityDirection } = await import("../opportunity/actions.ts");
+    await recordOpportunityDirection(sql, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      opportunityId,
+      actorId: context.userId,
+      actorRole: access.role,
+      action: "approve",
+      reason: data.reason,
+    });
+    const existing = data.forceNew
+      ? []
+      : await sql<{ id: string; decision_id: string }>`
+          select id, decision_id from briefs
+          where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
+          order by created_at desc limit 1
+        `;
     if (!existing[0]) {
       const draft: OpportunityDraft = {
         hypothesisId: asText(row.hypothesis_id),
@@ -477,13 +485,10 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       }
       if (!brief.cta.trim()) brief.cta = "See it in use";
       brief.why.push("Success would test whether this direction beats this brand's stored baseline without copying a competitor line.");
-      const briefId = crypto.randomUUID();
-      const decisionId = crypto.randomUUID();
-      const briefGate = await judgeBriefFit({
-        sql,
+      const outcome: { result?: BriefGateResult } = {};
+      const judge = briefGateJudge(sql, {
         organizationId: access.organizationId,
         brandId: data.brandId,
-        briefId,
         brief: {
           audience: brief.audience,
           hook: brief.hook,
@@ -491,35 +496,50 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
           format: brief.format,
           cta: brief.cta,
           angle: brief.angle,
+          offer: brief.offer,
         },
-        brain: loaded.brain,
+        brain: briefBrainFrom(loaded.brain),
+        ...gate,
       });
-      await writeBriefDecision(sql, {
+      const created = await createGatedBrief(sql, {
         organizationId: access.organizationId,
         brandId: data.brandId,
-        briefId,
-        decisionId,
-        result: briefGate,
+        createdBy: context.userId,
+        brief: {
+          opportunityId,
+          title: brief.title,
+          audience: brief.audience,
+          angle: brief.angle,
+          hook: brief.hook,
+          message: brief.message,
+          offer: brief.offer,
+          cta: brief.cta,
+          format: brief.format,
+          proofType: brief.proofType,
+          constraints: brief.constraints,
+          context: brief.context,
+          workflow: brief.workflow,
+          why: brief.why,
+          learningNotes: brief.learningNotes,
+          failureNotes: brief.failureNotes,
+        },
+        judge: async (briefId) => {
+          outcome.result = await judge(briefId);
+          return outcome.result;
+        },
       });
-      if (briefGate.action === "REJECT") {
-        throw new Error(`The brief gate rejected this: ${briefGate.reason}. A person was not asked to ignore a stored rejection.`);
+      // A rejected brief is stored, so the rejection is on record, but it is not used. The person is told why.
+      if (created.status === "rejected") {
+        throw new Error(`The brief gate rejected this: ${outcome.result?.reason ?? "no reason was recorded"}. A person was not asked to ignore a stored rejection.`);
       }
-      // A brief the engine could not judge waits for an explicit review. Creating it is not that review.
-      const briefStatus = briefStatusFor(briefGate.action);
-      await sql`
-        insert into briefs (
-          id, organization_id, brand_id, opportunity_id, title, audience, angle, hook, message, offer, cta,
-          format, proof_type, constraints, context_pack, workflow, why, learning_notes, failure_notes,
-          status, decision_id, created_by
-        ) values (
-          ${briefId}, ${access.organizationId}, ${data.brandId}, ${opportunityId}, ${brief.title},
-          ${brief.audience}, ${brief.angle}, ${brief.hook}, ${brief.message}, ${brief.offer}, ${brief.cta},
-          ${brief.format}, ${brief.proofType}, ${brief.constraints}, ${JSON.stringify(brief.context)},
-          ${JSON.stringify(brief.workflow)}, ${JSON.stringify(brief.why)}, ${JSON.stringify(brief.learningNotes)},
-          ${JSON.stringify(brief.failureNotes)}, ${briefStatus}, ${decisionId}, ${context.userId}
-        )
-      `;
-      await sql`update opportunities set status = 'briefed' where id = ${opportunityId}`;
+      if (data.forceNew) {
+        // Superseded only after the new brief exists, so a refused or failed write never leaves the old brief unused.
+        await sql`
+          update briefs set status = 'used'
+          where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
+            and id <> ${created.briefId}
+        `;
+      }
     }
     return loadSession(sql, access.organizationId, data.brandId, access.role);
 }
@@ -1271,6 +1291,7 @@ export async function executeApprovedCreativePlan(
         let outcome: ImageGenerationOutcome;
         try {
           outcome = await selected.provider.generate({
+            organizationId: access.organizationId,
             prompt,
             seed: `${runId}:${deliv.kind}:${index}`,
             promptVersion,
