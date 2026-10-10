@@ -64,6 +64,7 @@ export const CREATIVE_QUESTIONS: Record<string, JevQuestionSpec> = {
       false: "A visible defect makes the image unfit to publish.",
     },
     evidenceRequirements: ["image"],
+    perceptionEvidence: { contract: "visual_quality", version: "1.0.0" },
     policyMapping: { predicateDirection: "pass_if_true", approveMinProbability: 0.9, reviewMinProbability: 0.7 },
   },
 
@@ -77,6 +78,7 @@ export const CREATIVE_QUESTIONS: Record<string, JevQuestionSpec> = {
       false: "The product is absent, hidden, or not identifiable.",
     },
     evidenceRequirements: ["image", "product_name"],
+    perceptionEvidence: { contract: "product_visibility", version: "1.0.0" },
     policyMapping: { predicateDirection: "pass_if_true", approveMinProbability: 0.85, reviewMinProbability: 0.6 },
   },
 };

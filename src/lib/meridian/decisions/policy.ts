@@ -224,7 +224,7 @@ export function evaluateQuestionPolicies(
 
   return {
     outcome,
-    policyVersion: questions.map((entry) => `${entry.questionId}@${entry.policy.version}`).join(","),
+    policyVersion: questions.map((entry) => entry.policy.version).join(","),
     votes,
     unresolved,
     uncalibratedAnswers: votes.filter((vote) => vote.calibrationStatus !== "calibrated").length,

@@ -14,6 +14,36 @@ interface ProviderSettingsPanelProps {
   canAdmin: boolean;
 }
 
+type Readiness = NonNullable<ProviderConfigSummary["credentialState"]>;
+
+// Each state gets its own badge. "Unusable" is never shown as configured, and "not configured" never shows a source.
+const READINESS_BADGE: Record<Readiness, { label: string; className: string }> = {
+  usable: { label: "CONFIGURED", className: "bg-success/20 text-success border border-success/30" },
+  unusable: { label: "UNUSABLE", className: "bg-danger/10 text-danger border border-danger/30" },
+  not_configured: { label: "NOT CONFIGURED", className: "bg-muted/20 text-muted border border-line" },
+};
+
+function readinessOf(summary: ProviderConfigSummary): Readiness {
+  return summary.credentialState ?? (summary.configured ? "usable" : "not_configured");
+}
+
+function sourceLabelOf(summary: ProviderConfigSummary): string {
+  if (summary.category === "perception") {
+    if (summary.credentialState === "usable") {
+      return summary.source === "workspace" ? "Workspace key" : "Deployment shared default";
+    }
+    if (summary.credentialState === "unusable") return "Workspace key (unusable)";
+    return "None";
+  }
+  const labels: Record<ProviderConfigSummary["source"], string> = {
+    workspace: "Workspace",
+    deployment: "Deployment",
+    default: "Built-in default",
+    not_configured: "None",
+  };
+  return labels[summary.source];
+}
+
 export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSettingsPanelProps) {
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState<Record<ProviderCategory, ProviderConfigSummary> | null>(null);
@@ -185,22 +215,26 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-lg capitalize">{activeTab} Provider Status</h3>
-                <span
-                  className={`rounded px-2 py-0.5 text-xs font-semibold ${
-                    activeSummary.configured
-                      ? "bg-success/20 text-success border border-success/30"
-                      : "bg-muted/20 text-muted border border-line"
-                  }`}
-                >
-                  {activeSummary.configured ? "CONFIGURED" : "NOT CONFIGURED"}
+                <span className={`rounded px-2 py-0.5 text-xs font-semibold ${READINESS_BADGE[readinessOf(activeSummary)].className}`}>
+                  {READINESS_BADGE[readinessOf(activeSummary)].label}
                 </span>
                 <span className="text-xs text-muted">
-                  Source: <strong className="uppercase">{activeSummary.source}</strong>
+                  Source: <strong>{sourceLabelOf(activeSummary)}</strong>
                 </span>
               </div>
               {activeSummary.keyFingerprint ? (
                 <p className="text-xs text-muted mt-1 font-mono">
                   Stored Key Fingerprint: <strong>{activeSummary.keyFingerprint}</strong>
+                </p>
+              ) : null}
+              {activeSummary.credentialReason ? (
+                <p className={`text-xs mt-1 ${readinessOf(activeSummary) === "unusable" ? "text-danger" : "text-muted"}`}>
+                  {activeSummary.credentialReason}
+                </p>
+              ) : null}
+              {activeSummary.category === "perception" && activeSummary.credentialState === "usable" && activeSummary.source === "deployment" ? (
+                <p className="text-xs mt-1 text-muted">
+                  The deployment&apos;s Gemini key is in use because PERCEPTION_SHARED_DEFAULT=gemini is set. This workspace has no key of its own.
                 </p>
               ) : null}
             </div>
@@ -352,11 +386,30 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
             </div>
           ) : null}
 
+          {activeTab === "perception" ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Field label="Gemini API Key (perception)">
+                  <TextInput
+                    type="password"
+                    placeholder="Enter a Gemini API key..."
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    disabled={!canAdmin}
+                  />
+                </Field>
+              </div>
+              <p className="sm:col-span-2 text-xs text-muted">
+                Used for still-image and video-frame perception. Saving replaces the stored key. The key is never shown again; only its last four characters are.
+              </p>
+            </div>
+          ) : null}
+
           {canAdmin && activeTab !== "storage" ? (
             <div className="flex justify-end pt-2">
               <Button
                 type="button"
-                disabled={saving}
+                disabled={saving || (activeTab === "perception" && !apiKeyInput.trim())}
                 onClick={() => handleSave(activeTab)}
               >
                 {saving ? "Saving..." : `Save ${activeTab.toUpperCase()} Configuration`}

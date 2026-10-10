@@ -11,6 +11,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { checkImageBytes } from "../media/image-input.ts";
 import { GeminiPerceptionProvider } from "./multimodal.ts";
+import { resolvePerceptionCredential } from "./credential.ts";
 import type { MediaObservation, MultimodalPerceptionProvider, PerceptionFailureKind, PerceptionMedia, PerceptionMediaKind } from "./types.ts";
 
 export const PERCEPTION_PROVIDER_ENV = "PERCEPTION_PROVIDER";
@@ -111,6 +112,7 @@ async function record(
     media: PerceptionMediaSummary[];
     observations: MediaObservation[];
     coverage: PerceptionCoverage;
+    credentialSource: string | null;
     latencyMs?: number;
     usage?: unknown;
   },
@@ -118,12 +120,12 @@ async function record(
   await sql`
     insert into perception_runs (
       id, organization_id, brand_id, subject_type, subject_id, provider, model, prompt_version, request_key, status,
-      failure_kind, failure_message, media, observations, coverage, latency_ms, usage
+      failure_kind, failure_message, media, observations, coverage, latency_ms, usage, credential_source
     ) values (
       ${row.id}, ${input.organizationId}, ${input.brandId}, ${input.subjectType}, ${input.subjectId}, ${row.providerId},
       ${row.model}, ${row.promptVersion}, ${row.requestKey}, ${row.status}, ${row.failureKind ?? null}, ${row.message ?? null},
       ${JSON.stringify(row.media)}, ${JSON.stringify(row.observations)}, ${JSON.stringify(row.coverage)},
-      ${row.latencyMs ?? null}, ${row.usage === undefined ? null : JSON.stringify(row.usage)}
+      ${row.latencyMs ?? null}, ${row.usage === undefined ? null : JSON.stringify(row.usage)}, ${row.credentialSource}
     )
   `;
 }
@@ -155,9 +157,10 @@ export async function runPerception(
   const providerId = input.provider?.id ?? "none";
   const model = input.provider?.model ?? "none";
   const promptVersion = input.provider?.promptVersion ?? "none";
+  let credentialSource: string | null = null;
   const failedOutcome = async (failureKind: PerceptionFailureKind, message: string, media: PerceptionMediaSummary[] = []): Promise<PerceptionRunOutcome> => {
     const requestKey = sha256Hex(Buffer.from(JSON.stringify({ providerId, model, promptVersion, kind: input.kind, failureKind, subject: input.subjectId, runId })));
-    await record(sql, scope, { id: runId, providerId, model, promptVersion, requestKey, status: "failed", failureKind, message, media, observations: [], coverage: noneCoverage });
+    await record(sql, scope, { id: runId, providerId, model, promptVersion, requestKey, status: "failed", failureKind, message, media, observations: [], coverage: noneCoverage, credentialSource });
     return {
       status: "failed", runId, reused: false, providerId: input.provider?.id ?? null, model: input.provider?.model ?? null,
       promptVersion: input.provider?.promptVersion ?? null, observations: [], media, coverage: noneCoverage, failureKind, message,
@@ -165,6 +168,13 @@ export async function runPerception(
   };
 
   if (!input.provider) return failedOutcome("not_configured", input.providerReason ?? "No perception provider is configured.");
+  // The credential is resolved first, for every run, reused ones included. A credential that is removed or unusable stops
+  // perception at once, instead of serving results from it.
+  const credential = await resolvePerceptionCredential(sql, input.organizationId);
+  if (credential.status !== "ready") {
+    return failedOutcome(credential.status === "unusable" ? "credential_unusable" : "not_configured", credential.reason);
+  }
+  credentialSource = credential.source;
   if (selected.length === 0) return failedOutcome("no_media", "No media was supplied for perception.");
 
   // Every item is checked by its own bytes before anything is sent. One invalid item fails the run.
@@ -201,7 +211,7 @@ export async function runPerception(
 
   let result;
   try {
-    result = await input.provider.perceive({ kind: input.kind, media: prepared.map(({ label: _label, ...item }) => item) });
+    result = await input.provider.perceive({ kind: input.kind, media: prepared.map(({ label: _label, ...item }) => item) }, { apiKey: credential.apiKey });
   } catch (error) {
     result = {
       status: "failed" as const, providerId, model, promptVersion, failureKind: "provider_unavailable" as const,
@@ -209,7 +219,7 @@ export async function runPerception(
     };
   }
   if (result.status === "failed") {
-    await record(sql, scope, { id: runId, providerId: result.providerId, model: result.model, promptVersion: result.promptVersion, requestKey, status: "failed", failureKind: result.failureKind, message: result.message, media: summaries, observations: [], coverage: noneCoverage, latencyMs: result.latencyMs });
+    await record(sql, scope, { id: runId, providerId: result.providerId, model: result.model, promptVersion: result.promptVersion, requestKey, status: "failed", failureKind: result.failureKind, message: result.message, media: summaries, observations: [], coverage: noneCoverage, credentialSource, latencyMs: result.latencyMs });
     return {
       status: "failed", runId, reused: false, providerId: result.providerId, model: result.model, promptVersion: result.promptVersion,
       observations: [], media: summaries, coverage: noneCoverage, failureKind: result.failureKind, message: result.message,
@@ -217,7 +227,7 @@ export async function runPerception(
   }
   await record(sql, scope, {
     id: runId, providerId: result.providerId, model: result.model, promptVersion: result.promptVersion, requestKey, status: "observed",
-    media: summaries, observations: result.observations, coverage, latencyMs: result.latencyMs, usage: result.usage,
+    media: summaries, observations: result.observations, coverage, credentialSource, latencyMs: result.latencyMs, usage: result.usage,
   });
   return {
     status: "observed", runId, reused: false, providerId: result.providerId, model: result.model, promptVersion: result.promptVersion,
@@ -232,6 +242,7 @@ export async function runPerception(
 export function groundedPerceptionText(outcome: PerceptionRunOutcome): string[] {
   if (outcome.status !== "observed") return [];
   const byId = new Map(outcome.media.map((item) => [item.id, item]));
+  // Every line says what the observation is: an inference by the named model, never a measurement.
   const lines = outcome.observations.map((observation) => {
     const media = byId.get(observation.mediaId);
     const where = observation.timestampMs !== null ? `Frame at ${observation.timestampMs}ms` : "Image";
@@ -242,7 +253,24 @@ export function groundedPerceptionText(outcome: PerceptionRunOutcome): string[] 
       observation.setting ? `setting ${observation.setting}` : null,
       observation.ocrText ? `on-screen text "${observation.ocrText}"` : null,
     ].filter((item): item is string => item !== null);
-    return `${where} (${media?.label ?? observation.mediaId}, sha256 ${observation.sha256.slice(0, 12)}…): ${facts.join("; ") || "no detail reported"}. Model description from ${outcome.providerId} ${outcome.model}, prompt ${outcome.promptVersion}.`;
+    return `${where} (${media?.label ?? observation.mediaId}, sha256 ${observation.sha256.slice(0, 12)}…): ${facts.join("; ") || "no detail reported"}. Inferred from the pixels by ${outcome.providerId} ${outcome.model}, prompt ${outcome.promptVersion}.`;
   });
   return [...lines, outcome.coverage.note];
+}
+
+/**
+ * Whether perception can run for this workspace right now, by the same rules a production call uses. Callers that decide
+ * whether to sample frames for a perception run use this, so a readiness check cannot disagree with the run it prepares.
+ */
+export async function perceptionReadiness(
+  sql: Sql,
+  organizationId: string,
+  provider: MultimodalPerceptionProvider | null,
+): Promise<{ ready: boolean; reason: string; source: string | null }> {
+  if (!provider) return { ready: false, reason: "No perception provider is configured.", source: null };
+  const health = await provider.health();
+  if (health.state !== "HEALTHY") return { ready: false, reason: health.detail, source: null };
+  const credential = await resolvePerceptionCredential(sql, organizationId);
+  if (credential.status !== "ready") return { ready: false, reason: credential.reason, source: null };
+  return { ready: true, reason: `Ready with the ${credential.source === "workspace" ? "workspace's saved" : "deployment's shared"} Gemini credential.`, source: credential.source };
 }

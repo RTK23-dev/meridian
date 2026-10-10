@@ -159,28 +159,39 @@ A brief whose required question the engine could not answer waits in `awaiting_r
 
 ## Perception
 
-Perception and judgment are separate layers. A perception provider extracts grounded observations from images and video frames. A DecisionEngine judges the evidence under Meridian's policy. A perception provider is never a decision engine, and no engine is ever used for perception.
+Perception and judgment are separate layers. A perception provider extracts grounded observations from images and video frames. A DecisionEngine judges that evidence under Meridian's policy. A perception provider is never a decision engine, and no engine is used for perception.
 
-- **Provider.** `PERCEPTION_PROVIDER` selects the provider, independently of `DECISION_ENGINE`. Unset selects Gemini (`gemini-2.5-flash` by default, `PERCEPTION_MODEL`). `none` turns it off. Any other value is refused, and the reason is recorded. Gemini uses the canonical key (`MERIDIAN_GEMINI_API_KEY`, or a documented alias). The key goes in a request header, never in the URL.
-- **Interface.** `MultimodalPerceptionProvider.perceive` returns one of three outcomes: observed, failed (with a kind), or never called. Nothing is filled in to hide a gap. Gemini implements still images and video frames through the same path.
-- **Observations.** Each observation is attached to the media at its index, and carries that media's id, hash, and real timestamp (none for a still). Each is marked `basis: model_description`. These are the model's descriptions, not measurements. A missing, repeated or out-of-range observation is a failure, and nothing is attached. There is no invented end time and no invented quality score.
-- **Validation.** Every item is checked by its own bytes before anything is sent: format (PNG, JPEG, WebP or GIF), size (20 MB per item, 48 MB in total), and hash. One invalid item fails the whole run.
-- **Bounded.** At most four items per call. A video is judged on at most four frames, and its coverage says how many were analysed.
-- **Reuse.** An identical earlier observed run (same media hashes and timestamps, same provider, model and prompt version, same kind) is reused. The provider is not called a second time.
-- **Record.** Every run writes `perception_runs`: the media with its hashes, byte lengths and real timestamps; the provider, model and prompt version; the observations; the coverage; the latency and usage; and any failure kind. A run that never reached the provider is recorded too, with its reason.
-- **Private media.** Media is read from Meridian's own storage and sent inline. No URL is made public to send it.
+- **Provider.** `PERCEPTION_PROVIDER` selects the provider, independently of `DECISION_ENGINE`. Unset selects Gemini (`gemini-2.5-flash`, or `PERCEPTION_MODEL`). `none` turns it off. Any other value is refused, and the reason is recorded.
+- **Credentials.** One resolver, `perception/credential.ts`, decides the credential for both production calls and the settings panel:
+  1. **The workspace's own saved key** (the encrypted vault entry for the perception category, read only for this organisation). A saved entry that is expired, unreadable, or holds no key is reported as **unusable**. It is never silently replaced by the deployment key.
+  2. **The deployment's Gemini key**, only when the operator sets `PERCEPTION_SHARED_DEFAULT=gemini`. It is an intentional shared default. Without that setting, a deployment key alone is not used for perception.
+  3. Otherwise **not configured**, with the reason shown.
+  The key is never returned to the settings panel or logged. The settings panel shows one explicit state, from `getWorkspaceProviderSettings`, which uses the same resolver:
+  - `usable`, with source **Workspace key** or **Deployment shared default**, and a masked fingerprint (the workspace key's, or the deployment key's when the shared default is in use);
+  - `unusable`, for a saved workspace key that is expired, unreadable, or empty. The reason is shown. The panel shows no deployment fingerprint and offers Remove Key, so the saved entry can be replaced;
+  - `not_configured`, with the reason shown. Source reads **None**.
+  "Test Connection" for perception reports READY only for a usable credential. It checks the credential the resolver would use, and does not call Gemini, so the message says so. The save button stays disabled until a key is entered, and the server refuses a save without one, so a save can't replace a stored key with an empty one.
+  Every perception run records which credential source it used.
+- **Interface.** `MultimodalPerceptionProvider.perceive(input, { apiKey })` returns observed, or failed with a kind. The credential is passed in by the caller that resolved it. Gemini sends the key in a request header, never in the URL.
+- **Observations and evidence.** Each observation is attached to the media at its index, with that media's id, hash and real timestamp (none for a still image). Every observation is `basis: inferred`, because it is a model's inference from the pixels. A fact the model does not report, or reports as unknown, stays unknown (`null`). Unknown is never a negative, and no value, confidence or end time is invented. A missing, duplicate or out-of-range observation is a failure.
+- **Evidence contracts.** Each visual question names the facts it needs (`perception/contracts.ts`, versioned):
+  - `product_visibility` 1.0.0: `productPresence`, `productProminence`, `productObstructed`.
+  - `visual_quality` 1.0.0: `sharpness`, `lighting`, `composition`, `legibility`, `artifactsVisible`.
+  The contract must be fully known for every analysed item. Otherwise the question is not judged from text.
+- **Validation and bounds.** Every item is checked by its own bytes before anything is sent: format (PNG, JPEG, WebP or GIF), size, and hash. At most four items per call. Identical earlier observed runs are reused, so the provider is not called again. Each run records its media with hashes and real timestamps, the provider and model, the prompt version, the observations, the coverage, the credential source, the latency and the usage.
+- **Private media.** Media comes from Meridian's own storage and is sent inline. No URL is made public to send it.
 
 ### Routing
 
-| Engine selected | Media | What happens |
+| Engine selected | What the engine receives | Perception |
 |---|---|---|
-| `openai-decisions` | Images, or up to four sampled frames | Sent directly to OpenAI Decisions with their timestamps. Perception is not called, so the same frames are not analysed twice. |
-| `jev` | Images, or up to four sampled frames | Perception runs once. Its grounded text (with timestamps, hashes, model and prompt version, and the coverage) goes to JEV. No image is sent to JEV. |
-| `jev`, perception unavailable or failed | Any | Nothing is sent to OpenAI. The visual questions go to review. The text questions are still judged by JEV, and the failure is shown in the gate record. |
+| `openai-decisions` | Images or up to four timestamped frames, directly, through its validated image input | **Not called.** The same frames are not analysed twice. |
+| `jev` | Text only: the text questions, the perception observation lines, and each visual question's contract lines (unknown facts shown as `unknown`) | Runs once. Its evidence is sent to JEV as text. No image is sent. |
+| `jev`, perception unavailable, failed, or incomplete | The text questions only | Nothing is sent to OpenAI. Each visual question that lacks its evidence is refused with the specific reason and goes to review. |
 
-Under JEV, the two visual creative questions (`visual_quality`, `product_visible`) are `unsupported`. Perception describes what is visible, but it cannot stand in for a judgment of visual quality or of how clearly a product is shown, so those questions go to review. Perception feeds the text questions, for example on-screen claims that the copy alone would not show.
+Under JEV, a visual question is judged from text only when its contract is satisfied for every analysed item. JEV then judges the grounded textual evidence under the question's policy, which is still the shared policy. The judgment covers the analysed frames, and the record says how many sampled frames that was. A video is never described as inspected in full.
 
-A video is never described as inspected in full. Each judgment records how many sampled frames were offered and how many were analysed.
+The two visual questions have no image-only path under JEV. Where the evidence is incomplete, the decision fails closed to human review, and nothing is approved from an incomplete description.
 
 ## Frames
 
@@ -202,11 +213,12 @@ Implemented and covered by tests that run on PGlite:
 - Representative frame selection, including missing timestamps, duplicates, determinism, and the four-frame limit (`decisions/frames.test.ts`).
 - ffmpeg frame sampling: real timestamps, recorded failures, unavailable reasons, cleanup, and one test on a real clip that is skipped with its reason when ffmpeg is not installed (`video/sample-frames.test.ts`).
 - The brief review: an engine failure, an unsupported result, or an unresolved judgment holds the brief; creation approves nothing; planning and production refuse it; the explicit review needs an admin, an acknowledgement and a reason; a rejection is final; the creator's self-review is recorded; the record is append-only (`studio/brief-review.test.ts`, 11 tests). The product-loop e2e performs the review.
-- Perception: the Gemini provider's responses, failures and validation, with stubbed responses (`perception/multimodal.test.ts`, 9 tests); the runner's recording, reuse, bound and refusals against the database (`perception/run.test.ts`, 9 tests); and the creative routing, where OpenAI never triggers perception and JEV reads its grounded text (`studio/creative-gate.test.ts`).
+- Perception: the Gemini provider's responses, the v2 fields, unknowns and the header-only key, with stubbed responses (`perception/multimodal.test.ts`, 12 tests); the runner's recording, reuse, bound and refusals (`perception/run.test.ts`, 9 tests); the credential resolver's precedence, tenant isolation, unusable states and shared default, with the settings panel read through the same resolver (`perception/credential.test.ts`, 8 tests); and the evidence contracts, JEV's text judgment from complete evidence, fail-closed unknowns, and what each engine receives (`studio/visual-evidence.test.ts`, 5 tests).
 - The brief gate: both engine selections, deterministic rejections that stop the engine, a provider failure that is never approved or switched, a claim-policy rejection, and the stored decision read by the same gate that loads a brief (`studio/brief-gate.test.ts`).
 - The OpenAI Decisions adapter against fixtures shaped like the documented contract (`openai-engine.test.ts`): request shape, typed questions, data-URL images, refusals, missing and malformed answers, retries, timeouts, unknown models, authentication errors without key leakage, usage, and returned model.
 - The JEV adapter and cross-engine fixtures (`engines.contract.test.ts`): both engines answer the same question kinds with the same semantics, and the same fixture values produce the same policy outcome.
 - The shared policy and its thresholds and version lineage (`policy.test.ts`).
+- The settings summary for perception: the three explicit states, an unusable workspace key with no fallback to the deployment key (checked by changing the resolver to fall back, which fails the test), the shared default, Test Connection's READY only for a usable credential, and the refused empty save (`settings/provider-config.test.ts`, 9 tests).
 - The control panel selector and its server functions. Selection is saved only for a READY engine, and only admins can change it.
 
 Implemented but not verified against the live service:
@@ -216,8 +228,8 @@ Implemented but not verified against the live service:
 Not implemented, or known to be incomplete:
 
 - **Video visual judgment needs ffmpeg and a frame reader.** Frames are sampled at real timestamps only where ffmpeg is installed, and only for OpenAI Decisions or for JEV with ready perception. Video creatives were already routed to review, so their status is unchanged.
-- **Perception is wired for JEV and for OpenAI routing, but has not been run against Gemini.** The Gemini provider is tested with stubbed responses only. Its real responses, its real limits and its real behaviour on frames are unverified.
-- **Workspace-vault perception credentials are not used.** The perception provider reads only the deployment's canonical Gemini key. The settings panel reports the same.
+- **Gemini perception has not been called with a real credential.** Its responses are tested with stubbed responses only. Whether real responses fill the v2 fields well enough to satisfy the contracts is unverified, and until it is, JEV's visual questions may go to review often.
+- **Only two contracts exist** (`product_visibility`, `visual_quality`). Other registered questions are not judged from perception evidence.
 - **Plan fit** is not a gate. Only brief fit and creative QA use the engine.
 - **Research outcome.** The research gate's action is computed and recorded, but nothing downstream acts on it yet. The research worker still discards the answers' outcome.
 - **Calibration.** No calibration report exists for either engine. Every value is uncalibrated, and the policy thresholds are configuration, not measured error rates.

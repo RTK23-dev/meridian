@@ -30,6 +30,11 @@ export type GateQuestion = {
   /** True when the question cannot be answered from text alone. */
   needsImage: boolean;
   /**
+   * Why this question is refused when the engine cannot see images, and with which status. The caller sets it when it knows
+   * the reason (for example, perception evidence is missing). Without it, the gate says the engine cannot judge images.
+   */
+  localRefusal?: { status: "unsupported" | "abstain_insufficient_evidence"; reason: string };
+  /**
    * False for analysis questions: they are answered and recorded, but they do not decide the action. Default true.
    * A gate with no gating question cannot approve anything, so its action is review.
    */
@@ -108,7 +113,8 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
     policy: policyForQuestion(question.spec),
   }));
   const questionVersions = input.questions.map((question) => `${question.spec.id}@${question.spec.version}`);
-  const policyVersion = policies.map((entry) => `${entry.questionId}@${entry.policy.version}`).join(",");
+  // A policy version already names its question (`question-id@version`), so it is not prefixed again.
+  const policyVersion = policies.map((entry) => entry.policy.version).join(",");
 
   // 1. Deterministic rejection: decided by code, before any engine. No engine call, no override.
   if (input.deterministicRejections && input.deterministicRejections.length > 0) {
@@ -150,8 +156,8 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
       continue;
     }
     if (!engineAcceptsImages) {
-      localAnswers[question.key] = localRefusal(question, selection.engineId, "unsupported",
-        `${selection.engineId} cannot judge images, and this question needs one. Routed to human review.`);
+      localAnswers[question.key] = localRefusal(question, selection.engineId, question.localRefusal?.status ?? "unsupported",
+        question.localRefusal?.reason ?? `${selection.engineId} cannot judge images, and this question needs one. Routed to human review.`);
       continue;
     }
     if (images.length === 0) {

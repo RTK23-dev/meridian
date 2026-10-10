@@ -128,7 +128,8 @@ try {
   // must stay blocked until an explicit review is recorded, and that review is what this step performs.
   const held = page.getByRole("heading", { name: /Held for review:/ });
   await held.waitFor({ timeout: 60000 });
-  if (!(await page.getByText("Questions the engine did not answer").isVisible())) throw new Error("The held brief did not disclose its unresolved questions.");
+  // The disclosure loads after the panel heading, so wait for its content rather than checking once.
+  await page.getByText("Questions the engine did not answer").waitFor({ timeout: 60000 });
   await page.getByRole("tab", { name: "3. Generate" }).click();
   if (!(await page.getByRole("button", { name: "Generate variants" }).isDisabled())) throw new Error("Generation was not blocked for a brief awaiting review.");
   await page.getByRole("tab", { name: "2. Brief" }).click();

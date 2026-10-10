@@ -1,4 +1,4 @@
-import { ProviderConfigResolver } from "../config/resolver.ts";
+import { resolvePerceptionCredential } from "../perception/credential.ts";
 /**
  * Workspace Provider Configuration Service
  *
@@ -23,10 +23,22 @@ import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
 
 export type ProviderCategory = "jev" | "perception" | "sources" | "production" | "storage" | "cyclone";
 
+/**
+ * Perception readiness, as the production resolver sees it. "usable" means a call would use the credential shown.
+ * "unusable" means the workspace has a saved credential that cannot be used; the deployment key is never used in its
+ * place. "not_configured" means nothing is available to use.
+ */
+export type PerceptionCredentialState = "usable" | "unusable" | "not_configured";
+
 export type ProviderConfigSummary = {
   category: ProviderCategory;
   configured: boolean;
-  source: "workspace" | "deployment" | "default";
+  /** Where the credential comes from. For perception, "not_configured" means no credential is available. */
+  source: "workspace" | "deployment" | "default" | "not_configured";
+  /** Explicit readiness. Set for perception, which resolves its credential through perception/credential.ts. */
+  credentialState?: PerceptionCredentialState;
+  /** Why the credential is not usable, in words that contain no secret. Set when credentialState is not "usable". */
+  credentialReason?: string;
   keyFingerprint?: string;
   lastTestedStatus?: "READY" | "ERROR" | "NOT_CONFIGURED";
   lastTestedAt?: string;
@@ -103,18 +115,27 @@ export async function getWorkspaceProviderSettings(
     capabilities: ["choice_decisions", "score_decisions", "noul_probabilities", "evidence_audit_trail"],
   };
 
-  // 2. Perception Category. The perception provider reads the deployment's canonical Gemini key. A workspace-vault
-  // credential is not read by it, so this summary does not report one as the perception configuration.
-  const deploymentPerceptionKey = ProviderConfigResolver.resolveGoogle({ env: process.env }).apiKey;
-  const perceptionConfigured = Boolean(deploymentPerceptionKey);
-  const perceptionSource = deploymentPerceptionKey ? "deployment" : "default";
+  // 2. Perception Category. This summary reads the same credential resolver production perception calls use
+  // (perception/credential.ts), so it never reports a credential the provider cannot use. A saved workspace key that
+  // cannot be used is "unusable", and the deployment key is not offered in its place.
+  const perceptionCredential = await resolvePerceptionCredential(sql, organizationId);
+  const perceptionConfigured = perceptionCredential.status === "ready";
+  const perceptionState: PerceptionCredentialState =
+    perceptionCredential.status === "ready" ? "usable" : perceptionCredential.status === "unusable" ? "unusable" : "not_configured";
+  const perceptionSource: ProviderConfigSummary["source"] =
+    perceptionCredential.status === "ready"
+      ? perceptionCredential.source === "workspace" ? "workspace" : "deployment"
+      : perceptionCredential.status === "unusable" ? "workspace" : "not_configured";
 
   const perceptionSummary: ProviderConfigSummary = {
     category: "perception",
     configured: perceptionConfigured,
     source: perceptionSource,
-    keyFingerprint: fingerprint(deploymentPerceptionKey),
-    lastTestedStatus: perceptionConfigured ? "READY" : "NOT_CONFIGURED",
+    credentialState: perceptionState,
+    credentialReason: perceptionCredential.status === "ready" ? undefined : perceptionCredential.reason,
+    keyFingerprint: perceptionCredential.status === "ready" ? perceptionCredential.fingerprint : undefined,
+    lastTestedStatus: perceptionConfigured ? "READY" : perceptionCredential.status === "unusable" ? "ERROR" : "NOT_CONFIGURED",
+    lastTestedMessage: perceptionConfigured ? undefined : perceptionCredential.reason,
     settings: {
       provider: "gemini",
       model: process.env.PERCEPTION_MODEL || "gemini-2.5-flash",
@@ -263,6 +284,12 @@ export async function saveWorkspaceProviderConfig(
 
   const credentialType = vaultTypeForCategory(input.category);
 
+  // The perception entry is the Gemini key itself. Saving it without a key would replace the stored key with an empty
+  // one, so the save is refused instead.
+  if (input.category === "perception" && !input.credentials?.apiKey?.trim()) {
+    throw new Error("Enter a Gemini API key to save the perception credential.");
+  }
+
   // Check if existing credential exists
   const existingRows = await sql<{ id: string }>`
     select id from credential_vault
@@ -364,6 +391,22 @@ export async function testWorkspaceProviderConnection(
         message: ready ? "JEV provider responded with READY status." : "Configured JEV provider is not ready.",
         latencyMs,
       };
+    }
+
+    if (input.category === "perception") {
+      // Checks the credential the production resolver would use. It does not call Gemini, so READY means "a usable
+      // credential is in place", not "the live API answered".
+      const credential = await resolvePerceptionCredential(sql, input.organizationId);
+      const latencyMs = Date.now() - started;
+      if (credential.status === "ready") {
+        const source = credential.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
+        return {
+          status: "READY",
+          message: `Gemini credential is usable (${source}). The live Gemini API was not called by this check.`,
+          latencyMs,
+        };
+      }
+      return { status: "ERROR", message: credential.reason, latencyMs };
     }
 
     if (input.category === "storage") {

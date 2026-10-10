@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+
+// The runner resolves a credential for every run, exactly as production does. These tests use the deployment's shared default,
+// which is the explicit setting that makes a Gemini key usable for perception without a saved workspace key.
+process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || "test-master-key-0123456789abcdef-test";
+process.env.PERCEPTION_SHARED_DEFAULT = "gemini";
+process.env.MERIDIAN_GEMINI_API_KEY = "test-shared-gemini-key";
 import { getSql } from "../../db.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
 import { solidFrame } from "../video/inspect.ts";
@@ -22,7 +28,7 @@ function stubProvider(options: { health?: PerceptionHealth; fail?: "provider" | 
         return { status: "failed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", failureKind: "rate_limited", message: "stub limit", latencyMs: 1 };
       }
       const observations: MediaObservation[] = input.media.map((item) => ({
-        mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "model_description", productPresence: true, ocrText: "Lather bar",
+        mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "inferred", productPresence: true, ocrText: "Lather bar",
       }));
       return { status: "observed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", observations, latencyMs: 2 };
     },
@@ -72,7 +78,7 @@ test("an observed run records the media with its hashes and real timestamps, the
   assert.equal(row?.model, "stub-model-1");
   assert.equal(row?.prompt_version, "stub-prompt.v1");
   assert.match(JSON.stringify(row?.media), /"timestampMs":1500/);
-  assert.match(JSON.stringify(row?.observations), /"basis":"model_description"/);
+  assert.match(JSON.stringify(row?.observations), /"basis":"inferred"/);
 });
 
 test("the grounded text says the observations are descriptions and that a video was only partly analysed", async () => {
@@ -83,7 +89,7 @@ test("the grounded text says the observations are descriptions and that a video 
   const outcome = await runPerception(sql, { ...subject(tenant), kind: "video_frames", durationMs: 3000, provider, media });
   const text = groundedPerceptionText(outcome);
   assert.ok(text.some((line) => line.startsWith("Frame at 0ms")), "the first frame is named with its real time");
-  assert.ok(text.some((line) => /Model description from stub_perception stub-model-1/.test(line)), "the line says it is a description");
+  assert.ok(text.some((line) => /Inferred from the pixels by stub_perception stub-model-1/.test(line)), "the line says it is an inference, not a measurement");
   assert.ok(text.some((line) => /Analysed 4 of 6 sampled frames/.test(line)), "the coverage is stated");
   assert.ok(text.some((line) => /not inspected in full/.test(line)), "the video is not described as inspected in full");
 });

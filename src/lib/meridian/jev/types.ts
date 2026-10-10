@@ -31,6 +31,11 @@ export type JevQuestionSpec = {
   options?: string[];
   evidenceRequirements: string[];
   outputInterpretation?: Record<string, string>;
+  /**
+   * The perception evidence contract a visual question may be judged from under JEV. JEV judges the grounded observations
+   * only when every fact the contract requires is known for every analysed item. Otherwise the question goes to review.
+   */
+  perceptionEvidence?: { contract: string; version: string };
   policyMapping?: {
     approveMinProbability?: number;
     reviewMinProbability?: number;

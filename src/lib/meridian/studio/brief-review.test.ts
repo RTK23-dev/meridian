@@ -175,3 +175,15 @@ test("the status a gate outcome gives a brief: only an automatic approval is rea
   assert.equal(briefStatusFor("HUMAN_REVIEW"), "awaiting_review");
   assert.equal(briefStatusFor("REJECT"), "rejected");
 });
+
+test("the real planning entry point refuses a held brief, and stops refusing it only after an explicit review", async () => {
+  const { generateStudioVariants } = await import("./session.server.ts");
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "review-planning-gate");
+  const made = await createBrief(sql, tenant, { engines: registryWith(stubEngine("jev"), stubEngine("openai-decisions", { failure: true })), selected: { engineId: "openai-decisions", source: "workspace" } });
+  const request = { brandId: tenant.brandId, briefId: made.briefId, imageProvider: "none", videoProvider: "none", creationScope: "research_only", autonomy: "manual", maxSpendUsd: 1, mode: "research_only", source: "new_brief", aspectRatio: "1:1" } as unknown as Parameters<typeof generateStudioVariants>[1];
+  await assert.rejects(generateStudioVariants(tenant.userId, request), /human review/i, "a held brief cannot be planned");
+  await reviewBrief(sql, { organizationId: tenant.organizationId, brandId: tenant.brandId, briefId: made.briefId, reviewerId: tenant.userId, reviewerRole: "admin", action: "approve", reason: REASON, acknowledged: true });
+  const after = await generateStudioVariants(tenant.userId, request).then(() => null, (error: unknown) => (error instanceof Error ? error.message : String(error)));
+  assert.ok(!(after !== null && /human review|JEV/i.test(after)), `after review, planning is no longer refused by the review gate (${after ?? "accepted"})`);
+});

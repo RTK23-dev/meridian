@@ -50,7 +50,7 @@ import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
 import { accountSnapshots, competitorCopy, factsFor, frameLike, qcBrandOf, videoVisualEvidence, visualFacts, writeJudgment } from "./image-qc.server.ts";
 import { resolveActiveEngine } from "../decisions/selection.ts";
-import { selectPerceptionProvider } from "../perception/run.ts";
+import { perceptionReadiness, selectPerceptionProvider } from "../perception/run.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 function answerValue(raw: unknown): string {
@@ -1523,8 +1523,8 @@ export async function executeApprovedCreativePlan(
       const selection = await resolveActiveEngine(sql, access.organizationId);
       // Perception is used only when the engine cannot see frames. It is checked here, before any frame is sampled for it.
       const perceptionCandidate = selectPerceptionProvider().provider;
-      const perceptionForJudgment = selection.engineId !== "openai-decisions" && perceptionCandidate &&
-        (await perceptionCandidate.health()).state === "HEALTHY" ? perceptionCandidate : null;
+      const perceptionForJudgment = selection.engineId !== "openai-decisions" &&
+        (await perceptionReadiness(sql, access.organizationId, perceptionCandidate)).ready ? perceptionCandidate : null;
       const facts = factsFor(loaded, {
         kind: "video",
         productName,

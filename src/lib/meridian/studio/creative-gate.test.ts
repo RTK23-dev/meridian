@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+
+// The runner resolves a credential for every run, exactly as production does. These tests use the deployment's shared default,
+// which is the explicit setting that makes a Gemini key usable for perception without a saved workspace key.
+process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || "test-master-key-0123456789abcdef-test";
+process.env.PERCEPTION_SHARED_DEFAULT = "gemini";
+process.env.MERIDIAN_GEMINI_API_KEY = "test-shared-gemini-key";
 import { getSql } from "../../db.ts";
 import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 import { CREATIVE_QUESTIONS } from "../jev/questions/creative.ts";
@@ -219,7 +225,7 @@ test("under JEV, the visual checks are unsupported: the creative goes to review,
     select unresolved from decision_gate_records where id = ${judged.gateRecordId}
   `;
   assert.match(JSON.stringify(record?.unresolved), /creative\.visual_quality\.v1/);
-  assert.match(JSON.stringify(record?.unresolved), /unsupported/);
+  assert.match(JSON.stringify(record?.unresolved), /abstain_insufficient_evidence/, "the missing perception evidence is stated as missing, not as a judgment");
 });
 
 test("under OpenAI, the image reaches the engine once with the text questions, and a visual defect rejects the creative", async () => {
@@ -291,7 +297,7 @@ function stubPerception(options: { fail?: boolean } = {}) {
         return { status: "failed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", failureKind: "timeout", message: "stub timeout", latencyMs: 1 };
       }
       const observations: MediaObservation[] = input.media.map((item) => ({
-        mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "model_description", productPresence: true, ocrText: "Calm dinner, ten minutes",
+        mediaId: item.id, sha256: item.sha256, timestampMs: item.timestampMs, basis: "inferred", productPresence: true, ocrText: "Calm dinner, ten minutes",
       }));
       return { status: "observed", providerId: "stub_perception", model: "stub-model-1", promptVersion: "stub-prompt.v1", observations, latencyMs: 2 };
     },
