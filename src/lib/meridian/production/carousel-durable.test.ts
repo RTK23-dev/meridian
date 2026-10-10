@@ -151,7 +151,7 @@ test("slides are ordered by their position even when they materialize in the rev
   const sql = await getSql();
   const tenant = await studioTenant(sql, "carousel-order");
   const plan = carouselPlan(tenant.decisionId);
-  // No approver yet: each slide completes with its artifact stored but cannot be materialized, so the poller finishes them.
+  // No approver yet: each slide completes with its artifact stored but cannot be materialized until the plan is approved.
   await insertExecutingPlan(sql, tenant, plan, null);
   const stub = stubGoogleImage(sql, tenant.organizationId, "ready");
   try {
@@ -173,19 +173,23 @@ test("slides are ordered by their position even when they materialize in the rev
   assert.equal(await carouselCreative(sql, parentId), null, "no carousel is made from unmaterialized slides");
 
   try {
-    // Make the poller reach the last slide first: it claims oldest-created first, so position 3 gets the oldest timestamp.
-    for (const slide of pending) {
-      await sql`update production_jobs set created_at = now() - (${slide.sequence_index} * interval '1 second') where id = ${slide.id}`;
-    }
     await sql`update creative_plans set approved_by = ${tenant.userId} where id = ${plan.id}`;
-    // The inline materialization failure left a 30-second retry lease on each slide; the test clears it to claim them now.
-    await sql`update production_jobs set next_poll_at = null where creative_plan_id = ${plan.id}`;
-    await pollProductionJobs(sql, { limit: 50 });
+    // Materialize the slides directly, in the order 3, 2, 1, 0, so the completion order is fixed by the test rather than
+    // by which job a poller happens to claim first. Position 0 completes last.
+    const ref = (productionJobId: string) => ({ organizationId: tenant.organizationId, brandId: tenant.brandId, productionJobId });
+    const slideAt = (index: number) => {
+      const slide = pending.find((row) => row.sequence_index === index);
+      assert.ok(slide, `slide at position ${index} exists`);
+      return slide;
+    };
+    for (const index of [3, 2, 1]) {
+      await completeProductionJob(sql, ref(slideAt(index).id));
+      assert.equal(await carouselCreative(sql, parentId), null, `the carousel waits while position 0 is unmaterialized (after position ${index})`);
+    }
+    await completeProductionJob(sql, ref(slideAt(0).id));
 
     const materialized = await slidesOf(sql, parentId);
-    assert.ok(materialized.every((slide) => slide.materialized_at != null), "every slide is materialized by the poller");
-    const at = (index: number) => new Date(String(materialized.find((slide) => slide.sequence_index === index)?.materialized_at)).getTime();
-    assert.ok(at(3) <= at(0), "the poller materialized position 3 before position 0, so the order was reversed");
+    assert.ok(materialized.every((slide) => slide.materialized_at != null), "every slide is materialized");
 
     const creative = await carouselCreative(sql, parentId);
     assert.ok(creative, "the carousel completes once its last slide materializes");
@@ -193,7 +197,10 @@ test("slides are ordered by their position even when they materialize in the rev
     assert.deepEqual(order, [0, 1, 2, 3], "the carousel lists slides by position, not by when they materialized");
     assert.equal((await parentOf(sql, parentId))?.status, "COMPLETED");
   } finally {
-    await sql`update production_jobs set status = 'CANCELLED', error_code = 'released by test' where creative_plan_id = ${plan.id}`;
+    await sql`
+      update production_jobs set status = 'CANCELLED', error_code = 'released by test'
+      where creative_plan_id = ${plan.id} and materialized_at is null
+    `;
   }
 });
 
