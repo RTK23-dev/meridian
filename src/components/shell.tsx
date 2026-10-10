@@ -7,8 +7,9 @@ import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { useWorkspace } from "@/components/workspace";
 import { useMachineQuery } from "@/lib/query/hooks";
+import { prefetchScreen } from "@/lib/query/prefetch";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { userScopedQueryKey } from "@/lib/query/keys";
+import { qk, userScopedQueryKey } from "@/lib/query/keys";
 import { Button, Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, Kbd, Sheet, SheetContent, SheetTitle, useTheme } from "@/components/ui";
 
 type NavLink = { label: string; to: string; icon: LucideIcon; badge?: number };
@@ -69,6 +70,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const page = pageName(path);
+  const activeOrganizationId = data?.active?.id;
+  // Hover and focus warm the cache for the target screen, so the click renders from cache.
+  const prefetch = useCallback((to: string) => prefetchScreen(queryClient, { userId: user?.id, organizationId: activeOrganizationId }, to), [queryClient, user?.id, activeOrganizationId]);
 
   useEffect(() => {
     document.title = `${page} · Meridian`;
@@ -175,7 +179,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <h2 className={`eyebrow mb-1 px-2 ${collapsed && !mobile ? "sr-only" : ""}`}>{group.label}</h2>
           {group.links.map(({ label, to, icon: Icon, badge }) => {
             const current = path === to || (label === "Overview" && path === `${to}/`);
-            return <Link key={to} to={to as never} params={to.includes("$brandId") && brandId ? { brandId } as never : undefined} aria-current={current ? "page" : undefined} title={collapsed && !mobile ? label : undefined} onClick={() => setMobileNavOpen(false)} className={`mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors ${current ? "bg-accent-soft font-semibold text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
+            return <Link key={to} to={to as never} params={to.includes("$brandId") && brandId ? { brandId } as never : undefined} aria-current={current ? "page" : undefined} title={collapsed && !mobile ? label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(to)} onFocus={() => prefetch(to)} className={`mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors ${current ? "bg-accent-soft font-semibold text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
               <Icon aria-hidden="true" className={`size-4 shrink-0 ${current ? "text-accent" : ""}`} />
               <span className={collapsed && !mobile ? "sr-only" : "flex-1"}>{label}</span>
               {badge ? <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-fg">{badge}</span> : null}
@@ -215,7 +219,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="border-b border-border bg-surface px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{page}</div>
       <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-8">{children}</main>
       <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-        {quickLinks.map(({ label, to, icon: Icon }) => <Link key={label} to={to as never} aria-current={path === to ? "page" : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] ${path === to ? "font-semibold text-accent" : "text-fg-muted"}`}><Icon aria-hidden="true" className="size-5" />{label}</Link>)}
+        {quickLinks.map(({ label, to, icon: Icon }) => <Link key={label} to={to as never} aria-current={path === to ? "page" : undefined} onMouseEnter={() => prefetch(to)} onFocus={() => prefetch(to)} className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] ${path === to ? "font-semibold text-accent" : "text-fg-muted"}`}><Icon aria-hidden="true" className="size-5" />{label}</Link>)}
       </nav>
       <p className="sr-only" aria-live="polite" aria-atomic="true">{page}</p>
     </div>
@@ -271,7 +275,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </Command.Group>
         <Command.Group heading="Preferences &amp; System" className={GROUP_CLASS}>
           <Command.Item value="Toggle theme" onSelect={() => { setPaletteOpen(false); setTheme(theme === "dark" ? "light" : "dark"); }} className={ITEM_CLASS}>Toggle theme</Command.Item>
-          {brandId ? <Command.Item value="Refresh opportunities" onSelect={() => { setPaletteOpen(false); void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, ["opportunities", brandId]) }); }} className={ITEM_CLASS}>Refresh opportunities</Command.Item> : null}
+          {brandId ? <Command.Item value="Refresh opportunities" onSelect={() => { setPaletteOpen(false); void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.opportunities(brandId)) }); }} className={ITEM_CLASS}>Refresh opportunities</Command.Item> : null}
           {brandId ? <Command.Item value="Open reviews" onSelect={() => go(`/brands/${brandId}/reviews`)} className={ITEM_CLASS}>Open reviews</Command.Item> : null}
           {data && data.organizations.length > 1 && active ? <Command.Item value="Switch workspace" onSelect={() => { setPaletteOpen(false); const index = data.organizations.findIndex((item) => item.id === active.id); const next = data.organizations[(index + 1) % data.organizations.length]; void setActiveOrganization({ data: { organizationId: next.id } }).then(() => reload()); }} className={ITEM_CLASS}>Switch workspace</Command.Item> : null}
           <Command.Item value="Keyboard shortcuts" onSelect={() => { setPaletteOpen(false); setShortcutsOpen(true); }} className={ITEM_CLASS}>Keyboard shortcuts</Command.Item>

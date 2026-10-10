@@ -1,10 +1,12 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useMutationState, useQueries, useQuery, useQueryClient, type MutationKey, type QueryKey } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { errorText } from "@/components/ui";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBrand } from "@/lib/meridian/api";
-import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, listLibrary, listOpportunities, listReviews, getTrace } from "@/lib/meridian/machine";
+import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, listLibrary, listOpportunities, listReviews, getTrace, resolveReview, dismissOpportunity } from "@/lib/meridian/machine";
 import { getCalibration } from "@/lib/meridian/calibration/actions";
 import { getFactoryBoard } from "@/lib/meridian/factory/actions";
-import { getStudioBriefReview, getStudioSession } from "@/lib/meridian/studio/actions";
+import { getStudioBriefReview, getStudioSession, listHeldBudgetReservations } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
 import { getJevAccountIntelligenceFn, updateWhitespaceStatusFn, runAccountIntelligenceAnalysisFn } from "@/lib/meridian/jev/actions";
@@ -21,249 +23,549 @@ import {
 } from "@/lib/meridian/learning/telemetry-actions";
 import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
+import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
+import { getDecisionEngines, getProviderSettings } from "@/lib/meridian/settings/server-actions";
+import { cancelJob, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
+import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";
 
-function useUserScopedKey(key: readonly unknown[]) {
+/** Screens refresh every 5 seconds while a job they show is queued, retrying, or running. */
+export const ACTIVE_POLL_MS = 5_000;
+
+const ACTIVE_JOB_STATUSES = new Set(["queued", "running", "retry"]);
+
+/** The user and whether the session has resolved. Queries stay disabled until both are known. */
+function useSession() {
   const { user, isPending } = useCurrentUserState();
-  return { queryKey: userScopedQueryKey(user?.id, key), enabled: !isPending && !!user };
+  return { userId: user?.id ?? null, ready: !isPending && !!user };
 }
 
+// ---------------------------------------------------------------------------
+// Query option factories. Hooks and prefetching both use these, so a prefetched
+// entry is exactly the entry the screen reads.
+// ---------------------------------------------------------------------------
+
+export const brandQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.brand(brandId)),
+  queryFn: () => getBrand({ data: { brandId } }),
+});
+export const machineQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.machine(brandId)),
+  queryFn: () => getMachine({ data: { brandId } }),
+});
+export const intelligenceQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.intelligence(brandId)),
+  queryFn: () => getIntelligence({ data: { brandId } }),
+});
+export const studioQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.studio(brandId)),
+  queryFn: () => getStudioSession({ data: { brandId } }),
+});
+export const briefReviewQueryOptions = (userId: string | null | undefined, brandId: string, briefId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.briefReview(brandId, briefId)),
+  queryFn: () => getStudioBriefReview({ data: { brandId, briefId } }),
+});
+export const opportunitiesQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.opportunities(brandId)),
+  queryFn: () => listOpportunities({ data: { brandId } }),
+});
+export const marketQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.market(brandId)),
+  queryFn: () => getMarket({ data: { brandId } }),
+});
+export const reviewsQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.reviews(brandId)),
+  queryFn: () => listReviews({ data: { brandId } }),
+});
+export const libraryQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.library(brandId)),
+  queryFn: () => listLibrary({ data: { brandId } }),
+});
+export const assetsQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.assets(brandId)),
+  queryFn: () => listBrandAssets({ data: { brandId } }),
+});
+export const learningQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.learning(brandId)),
+  queryFn: () => getLearning({ data: { brandId } }),
+});
+export const factoryQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.factory(brandId)),
+  queryFn: () => getFactoryBoard({ data: { brandId } }),
+});
+export const calibrationQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.calibration(brandId)),
+  queryFn: () => getCalibration({ data: { brandId } }),
+});
+export const integrationsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.integrations(organizationId)),
+  queryFn: () => getSystemStatus({ data: { organizationId } }),
+});
+export const channelsQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.channels(brandId)),
+  queryFn: () => getDistributionChannels({ data: { brandId } }),
+});
+export const organicQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.organic(brandId)),
+  queryFn: () => getOrganicDistribution({ data: { brandId } }),
+});
+export const accountsQueryOptions = (userId: string | null | undefined, brandId: string, platform?: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, platform ? [...qk.accounts(brandId), platform] : qk.accounts(brandId)),
+  queryFn: () => getPlatformAccountsAction({ data: { brandId, platform } }),
+});
+export const accountIntelligenceQueryOptions = (userId: string | null | undefined, brandId: string, platform: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.accountIntelligence(brandId, platform)),
+  queryFn: () => getJevAccountIntelligenceFn({ data: { brandId, platform } }),
+});
+export const publishingQueueQueryOptions = (userId: string | null | undefined, brandId: string, status?: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.publishingQueue(brandId, status)),
+  queryFn: () => listPublishingQueueAction({ data: { brandId, status } }),
+});
+export const telemetryQueryOptions = (userId: string | null | undefined, brandId: string, platform?: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.telemetry(brandId, platform)),
+  queryFn: () => getTelemetrySummaryAction({ data: { brandId, platform } }),
+});
+export const pipelineConfigQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.pipelineConfig(brandId)),
+  queryFn: () => getPipelineConfig({ data: { brandId } }),
+});
+export const heldReservationsQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.heldReservations(brandId)),
+  queryFn: () => listHeldBudgetReservations({ data: { brandId } }),
+});
+export const alertsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.alerts(organizationId)),
+  queryFn: () => getAlerts({ data: { organizationId } }),
+});
+export const providerSettingsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.providerSettings(organizationId)),
+  queryFn: () => getProviderSettings({ data: { organizationId } }),
+});
+export const decisionEnginesQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.decisionEngines(organizationId)),
+  queryFn: () => getDecisionEngines({ data: { organizationId } }),
+});
+export const jobsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.jobs(organizationId)),
+  queryFn: () => listJobs({ data: { organizationId } }),
+});
+export const usageQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.usage(organizationId)),
+  queryFn: () => listUsage({ data: { organizationId } }),
+});
+export const notificationsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.notifications(organizationId)),
+  queryFn: () => getNotificationPreferences({ data: { organizationId } }),
+});
+
+// ---------------------------------------------------------------------------
+// Query hooks. Each returns the cached value at once on revisit (staleTime from the client).
+// ---------------------------------------------------------------------------
+
 export const useBrandQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.brand(brandId));
-  return useQuery({ ...scope, queryFn: () => getBrand({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...brandQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
+
 export const useMachineQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.machine(brandId));
-  return useQuery({ ...scope, queryFn: () => getMachine({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...machineQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
+
 export function useMachinesQuery(brandIds: string[]) {
-  const { user, isPending } = useCurrentUserState();
+  const { userId, ready } = useSession();
   const queries = useQueries({
     queries: brandIds.map((brandId) => ({
-      queryKey: userScopedQueryKey(user?.id, qk.machine(brandId)),
-      queryFn: () => getMachine({ data: { brandId } }),
-      enabled: !isPending && !!user && !!brandId,
+      ...machineQueryOptions(userId, brandId),
+      enabled: ready && !!brandId,
     })),
   });
   return queries.map((query, index) => ({ brandId: brandIds[index], ...query }));
 }
+
 export const useIntelligenceQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.intelligence(brandId));
-  return useQuery({ ...scope, queryFn: () => getIntelligence({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...intelligenceQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
+
 export const useStudioQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.studio(brandId));
+  const { userId, ready } = useSession();
   return useQuery({
-    ...scope, queryFn: () => getStudioSession({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId,
-    refetchInterval: (query) => query.state.data?.variants.some((variant) => variant.mediaStatus === "queued" || variant.mediaStatus === "running") ? 5_000 : false,
+    ...studioQueryOptions(userId, brandId),
+    enabled: ready && enabled && !!brandId,
+    refetchInterval: (query) => query.state.data?.variants.some((variant) => variant.mediaStatus === "queued" || variant.mediaStatus === "running") ? ACTIVE_POLL_MS : false,
   });
 };
+
 export const useBriefReviewQuery = (brandId: string, briefId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.briefReview(brandId, briefId));
-  return useQuery({
-    ...scope, queryFn: () => getStudioBriefReview({ data: { brandId, briefId } }),
-    enabled: scope.enabled && enabled && !!brandId && !!briefId,
-  });
+  const { userId, ready } = useSession();
+  return useQuery({ ...briefReviewQueryOptions(userId, brandId, briefId), enabled: ready && enabled && !!brandId && !!briefId });
 };
+
 export const useOpportunitiesQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.opportunities(brandId));
-  return useQuery({ ...scope, queryFn: () => listOpportunities({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...opportunitiesQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
+
 export const useMarketQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.market(brandId));
+  const { userId, ready } = useSession();
   return useQuery({
-    ...scope, queryFn: () => getMarket({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId,
-    refetchInterval: (query) => query.state.data?.researchRuns.some((run) => run.status === "queued" || run.status === "running") ? 5_000 : false,
+    ...marketQueryOptions(userId, brandId),
+    enabled: ready && enabled && !!brandId,
+    refetchInterval: (query) => query.state.data?.researchRuns.some((run) => run.status === "queued" || run.status === "running") ? ACTIVE_POLL_MS : false,
   });
 };
+
 export const useReviewsQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.reviews(brandId));
-  return useQuery({ ...scope, queryFn: () => listReviews({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...reviewsQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
+
 export const useLibraryQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.library(brandId));
-  return useQuery({ ...scope, queryFn: () => listLibrary({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...libraryQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
+
 export const useTraceQuery = (brandId: string, creativeId: string | null, enabled = true) => {
-  const scope = useUserScopedKey(qk.trace(brandId, creativeId ?? ""));
-  return useQuery({ ...scope, queryFn: () => getTrace({ data: { brandId, creativeId: creativeId! } }), enabled: scope.enabled && enabled && !!brandId && !!creativeId });
-};
-export const useAssetsQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.assets(brandId));
-  return useQuery({ ...scope, queryFn: () => listBrandAssets({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
-};
-export const useLearningQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.learning(brandId));
-  return useQuery({ ...scope, queryFn: () => getLearning({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
-};
-export const useFactoryQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.factory(brandId));
+  const { userId, ready } = useSession();
   return useQuery({
-    ...scope,
-    queryFn: () => getFactoryBoard({ data: { brandId } }),
-    enabled: scope.enabled && enabled && !!brandId,
-    refetchInterval: (query) => query.state.data?.runs.some((run) => run.status === "queued" || run.status === "running") ? 5_000 : false,
+    queryKey: userScopedQueryKey(userId, qk.trace(brandId, creativeId ?? "")),
+    queryFn: () => getTrace({ data: { brandId, creativeId: creativeId! } }),
+    enabled: ready && enabled && !!brandId && !!creativeId,
   });
 };
+
+export const useAssetsQuery = (brandId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...assetsQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
+};
+
+export const useLearningQuery = (brandId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...learningQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
+};
+
+export const useFactoryQuery = (brandId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({
+    ...factoryQueryOptions(userId, brandId),
+    enabled: ready && enabled && !!brandId,
+    refetchInterval: (query) => query.state.data?.runs.some((run) => run.status === "queued" || run.status === "running") ? ACTIVE_POLL_MS : false,
+  });
+};
+
 export const useCalibrationQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.calibration(brandId));
-  return useQuery({ ...scope, queryFn: () => getCalibration({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...calibrationQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
+
 export const useIntegrationsQuery = (organizationId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.integrations(organizationId));
-  return useQuery({ ...scope, queryFn: () => getSystemStatus({ data: { organizationId } }), enabled: scope.enabled && enabled && !!organizationId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...integrationsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
 };
+
 export const useDistributionChannelsQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.channels(brandId));
-  return useQuery({ ...scope, queryFn: () => getDistributionChannels({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...channelsQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
+
 export const useOrganicDistributionQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.organic(brandId));
-  return useQuery({ ...scope, queryFn: () => getOrganicDistribution({ data: { brandId } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...organicQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
+
 export const usePlatformAccountsQuery = (brandId: string, platform?: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.accounts(brandId));
-  return useQuery({ ...scope, queryFn: () => getPlatformAccountsAction({ data: { brandId, platform } }), enabled: scope.enabled && enabled && !!brandId });
+  const { userId, ready } = useSession();
+  return useQuery({ ...accountsQueryOptions(userId, brandId, platform), enabled: ready && enabled && !!brandId });
 };
 
 export const useAccountIntelligenceQuery = (brandId: string, platform = "instagram", enabled = true) => {
-  const scope = useUserScopedKey(qk.accountIntelligence(brandId, platform));
-  return useQuery({
-    ...scope,
-    queryFn: () => getJevAccountIntelligenceFn({ data: { brandId, platform } }),
-    enabled: scope.enabled && enabled && !!brandId,
-  });
-};
-
-export const useUpdateWhitespaceStatus = (brandId: string) => {
-  const qc = useQueryClient();
-  const { user } = useCurrentUserState();
-  return useMutation({
-    mutationFn: (vars: { opportunityId: string; status: "proposed" | "accepted" | "rejected" | "explored" }) =>
-      updateWhitespaceStatusFn({ data: { brandId, ...vars } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.accountIntelligence(brandId)) });
-    },
-  });
-};
-
-export const useRunAccountIntelligence = (brandId: string) => {
-  const qc = useQueryClient();
-  const { user } = useCurrentUserState();
-  return useMutation({
-    mutationFn: (vars: { platform: string; accountHandle: string; items: any[] }) =>
-      runAccountIntelligenceAnalysisFn({ data: { brandId, ...vars } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.accountIntelligence(brandId)) });
-    },
-  });
+  const { userId, ready } = useSession();
+  return useQuery({ ...accountIntelligenceQueryOptions(userId, brandId, platform), enabled: ready && enabled && !!brandId });
 };
 
 export const usePublishingQueueQuery = (brandId: string, status?: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.publishingQueue(brandId, status));
+  const { userId, ready } = useSession();
   return useQuery({
-    ...scope,
-    queryFn: () => listPublishingQueueAction({ data: { brandId, status } }),
-    enabled: scope.enabled && enabled && !!brandId,
+    ...publishingQueueQueryOptions(userId, brandId, status),
+    enabled: ready && enabled && !!brandId,
     refetchInterval: (query) => {
       const data = query.state.data as { queue?: Array<{ status: string }> } | undefined;
-      return data?.queue?.some((item) => item.status === "queued" || item.status === "processing") ? 4_000 : false;
-    },
-  });
-};
-
-export const useScheduleMultiAccountPublish = (brandId: string) => {
-  const qc = useQueryClient();
-  const { user } = useCurrentUserState();
-  return useMutation({
-    mutationFn: (vars: { creativeId: string; targetAccountIds: string[]; scheduledTime?: string; targetType?: "organic" | "paid_campaign" }) =>
-      scheduleMultiAccountPublishAction({ data: { brandId, ...vars } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.publishingQueue(brandId)) });
-    },
-  });
-};
-
-export const useCancelPublishJob = (brandId: string) => {
-  const qc = useQueryClient();
-  const { user } = useCurrentUserState();
-  return useMutation({
-    mutationFn: (vars: { queueId: string }) => cancelPublishJobAction({ data: { brandId, ...vars } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.publishingQueue(brandId)) });
-    },
-  });
-};
-
-export const useRetryPublishJob = (brandId: string) => {
-  const qc = useQueryClient();
-  const { user } = useCurrentUserState();
-  return useMutation({
-    mutationFn: (vars: { queueId: string }) => retryPublishJobAction({ data: { brandId, ...vars } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.publishingQueue(brandId)) });
+      return data?.queue?.some((item) => item.status === "queued" || item.status === "processing") ? ACTIVE_POLL_MS : false;
     },
   });
 };
 
 export const useTelemetryQuery = (brandId: string, platform?: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.telemetry(brandId, platform));
-  return useQuery({
-    ...scope,
-    queryFn: () => getTelemetrySummaryAction({ data: { brandId, platform } }),
-    enabled: scope.enabled && enabled && !!brandId,
-  });
-};
-
-export const useRecordTelemetry = (brandId: string) => {
-  const qc = useQueryClient();
-  const { user } = useCurrentUserState();
-  return useMutation({
-    mutationFn: (vars: {
-      platform: string;
-      sourceType?: "organic" | "paid" | "hybrid";
-      creativeId?: string;
-      variantId?: string;
-      views?: number;
-      impressions?: number;
-      reach?: number;
-      clicks?: number;
-      engagements?: number;
-      shares?: number;
-      saves?: number;
-      conversions?: number;
-      hookType?: string;
-      angle?: string;
-      hookRetention3s?: number;
-      completionRate?: number;
-    }) => recordTelemetryAction({ data: { brandId, ...vars } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.telemetry(brandId)) });
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.learning(brandId)) });
-    },
-  });
-};
-
-export const useSyncTelemetry = (brandId: string) => {
-  const qc = useQueryClient();
-  const { user } = useCurrentUserState();
-  return useMutation({
-    mutationFn: () => syncTelemetryPriorsAction({ data: { brandId } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.telemetry(brandId)) });
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.learning(brandId)) });
-      qc.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, qk.accountIntelligence(brandId)) });
-    },
-  });
+  const { userId, ready } = useSession();
+  return useQuery({ ...telemetryQueryOptions(userId, brandId, platform), enabled: ready && enabled && !!brandId });
 };
 
 export const usePipelineConfigQuery = (brandId: string, enabled = true) => {
-  const scope = useUserScopedKey(qk.pipelineConfig(brandId));
+  const { userId, ready } = useSession();
+  return useQuery({ ...pipelineConfigQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
+};
+
+export const useHeldReservationsQuery = (brandId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...heldReservationsQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
+};
+
+export const useAlertsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...alertsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+export const useProviderSettingsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...providerSettingsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+export const useDecisionEnginesQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...decisionEnginesQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+/** The jobs list polls only while a job is queued, retrying, or running. Otherwise it waits for focus or navigation. */
+export const useJobsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
   return useQuery({
-    ...scope,
-    queryFn: () => getPipelineConfig({ data: { brandId } }),
-    enabled: scope.enabled && enabled && !!brandId,
+    ...jobsQueryOptions(userId, organizationId),
+    enabled: ready && enabled && !!organizationId,
+    refetchInterval: (query) => query.state.data?.jobs.some((job) => ACTIVE_JOB_STATUSES.has(job.status)) ? ACTIVE_POLL_MS : false,
   });
 };
 
+export const useUsageQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...usageQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
 
+export const useNotificationPreferencesQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...notificationsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+// ---------------------------------------------------------------------------
+// Mutations. Each mutation invalidates only the keys it changes, and toasts its outcome.
+// ---------------------------------------------------------------------------
+
+type ScopedMutationOptions<TVars, TData> = {
+  /** Identifies the action. Pending state is read back with usePendingVariables(mutationKey). */
+  mutationKey: MutationKey;
+  mutationFn: (vars: TVars) => Promise<TData>;
+  /** Unscoped keys to invalidate after success. The user scope is applied here. */
+  invalidate?: (vars: TVars, data: TData) => readonly QueryKey[];
+  /** Toast text shown after success. */
+  success?: string | ((vars: TVars, data: TData) => string);
+  /** Runs after invalidation, for state the query keys do not cover (for example the workspace list). */
+  onSuccess?: (data: TData, vars: TVars) => void | Promise<void>;
+};
+
+/**
+ * One action on a screen. It has its own pending state, so a running action does not disable unrelated controls.
+ * Success invalidates only the keys the caller names and shows a toast. Failure shows an error toast; screens keep
+ * their inline error for decisions.
+ */
+export function useScopedMutation<TVars, TData = unknown>(options: ScopedMutationOptions<TVars, TData>) {
+  const queryClient = useQueryClient();
+  const { userId } = useSession();
+  return useMutation<TData, Error, TVars>({
+    mutationKey: options.mutationKey,
+    mutationFn: options.mutationFn,
+    onSuccess: async (data, vars) => {
+      const keys = options.invalidate?.(vars, data) ?? [];
+      await Promise.all(keys.map((key) => queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, key) })));
+      await options.onSuccess?.(data, vars);
+      const message = typeof options.success === "function" ? options.success(vars, data) : options.success;
+      if (message) toast.success(message);
+    },
+    onError: (error) => {
+      toast.error(errorText(error));
+    },
+  });
+}
+
+/** The variables of every in-flight call to the action with this key, so a list can mark only its own rows as busy. */
+export function usePendingVariables<TVars>(mutationKey: MutationKey): TVars[] {
+  return useMutationState({
+    filters: { mutationKey, status: "pending" },
+    select: (mutation) => mutation.state.variables as TVars,
+  });
+}
+
+type ReviewsData = Awaited<ReturnType<typeof listReviews>>;
+type OpportunitiesData = Awaited<ReturnType<typeof listOpportunities>>;
+type AlertsData = Awaited<ReturnType<typeof getAlerts>>;
+
+/**
+ * Approve or reject a review. The row leaves the open list at once and returns if the server refuses.
+ * The keys refresh on settle, so the cache matches the server after both success and failure.
+ */
+export function useResolveReview(brandId: string) {
+  const queryClient = useQueryClient();
+  const { userId } = useSession();
+  const key = userScopedQueryKey(userId, qk.reviews(brandId));
+  return useMutation({
+    mutationKey: ["mutation", "review.resolve", brandId],
+    mutationFn: (vars: { reviewId: string; action: "approve" | "reject"; reasonCode: string; note: string }) =>
+      resolveReview({ data: { brandId, ...vars } }),
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ReviewsData>(key);
+      queryClient.setQueryData<ReviewsData>(key, (current) => current && {
+        ...current,
+        reviews: current.reviews.map((item) => item.id === vars.reviewId
+          ? { ...item, status: vars.action === "approve" ? "approved" : "rejected" }
+          : item),
+      });
+      return { previous };
+    },
+    onError: (error, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+      toast.error(errorText(error));
+    },
+    onSuccess: (_data, vars) => {
+      toast.success(vars.action === "approve" ? "Review approved." : "Review rejected.");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: key });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.machine(brandId)) });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.opportunities(brandId)) });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.studio(brandId)) });
+    },
+  });
+}
+
+/** Dismiss one or more opportunities. Rows show as dismissed at once and roll back if the server refuses. */
+export function useDismissOpportunities(brandId: string) {
+  const queryClient = useQueryClient();
+  const { userId } = useSession();
+  const key = userScopedQueryKey(userId, qk.opportunities(brandId));
+  return useMutation({
+    mutationKey: ["mutation", "opportunity.dismiss", brandId],
+    mutationFn: async (opportunityIds: string[]) => {
+      for (const opportunityId of opportunityIds) {
+        await dismissOpportunity({ data: { brandId, opportunityId } });
+      }
+    },
+    onMutate: async (opportunityIds) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<OpportunitiesData>(key);
+      const ids = new Set(opportunityIds);
+      queryClient.setQueryData<OpportunitiesData>(key, (current) => current && {
+        ...current,
+        opportunities: current.opportunities.map((item) => ids.has(item.id) ? { ...item, status: "dismissed" } : item),
+      });
+      return { previous };
+    },
+    onError: (error, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+      toast.error(errorText(error));
+    },
+    onSuccess: (_data, opportunityIds) => {
+      toast.success(opportunityIds.length === 1 ? "Opportunity dismissed." : `${opportunityIds.length} opportunities dismissed.`);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: key });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.machine(brandId)) });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.studio(brandId)) });
+    },
+  });
+}
+
+/** Acknowledge a stored alert. The alert shows as acknowledged at once and rolls back if the server refuses. */
+export function useAcknowledgeAlert(organizationId: string) {
+  const queryClient = useQueryClient();
+  const { userId } = useSession();
+  const key = userScopedQueryKey(userId, qk.alerts(organizationId));
+  return useMutation({
+    mutationKey: ["mutation", "alert.acknowledge", organizationId],
+    mutationFn: (alertId: string) => acknowledgeStoredAlert({ data: { organizationId, alertId } }),
+    onMutate: async (alertId) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<AlertsData>(key);
+      queryClient.setQueryData<AlertsData>(key, (current) => current && {
+        ...current,
+        alerts: current.alerts.map((alert) => alert.id === alertId ? { ...alert, acknowledged: true } : alert),
+      });
+      return { previous };
+    },
+    onError: (error, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+      toast.error(errorText(error));
+    },
+    onSuccess: () => {
+      toast.success("Acknowledged. Thresholds and providers were not changed.");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+
+export const useUpdateWhitespaceStatus = (brandId: string) => useScopedMutation({
+  mutationKey: ["mutation", "whitespace.status", brandId],
+  mutationFn: (vars: { opportunityId: string; status: "proposed" | "accepted" | "rejected" | "explored" }) =>
+    updateWhitespaceStatusFn({ data: { brandId, ...vars } }),
+  invalidate: () => [qk.accountIntelligence(brandId)],
+});
+
+export const useRunAccountIntelligence = (brandId: string) => useScopedMutation({
+  mutationKey: ["mutation", "account-intelligence.run", brandId],
+  mutationFn: (vars: { platform: string; accountHandle: string; items: any[] }) =>
+    runAccountIntelligenceAnalysisFn({ data: { brandId, ...vars } }),
+  invalidate: () => [qk.accountIntelligence(brandId)],
+});
+
+export const useScheduleMultiAccountPublish = (brandId: string) => useScopedMutation({
+  mutationKey: ["mutation", "publish.schedule", brandId],
+  mutationFn: (vars: { creativeId: string; targetAccountIds: string[]; scheduledTime?: string; targetType?: "organic" | "paid_campaign" }) =>
+    scheduleMultiAccountPublishAction({ data: { brandId, ...vars } }),
+  invalidate: () => [qk.publishingQueue(brandId)],
+  success: "Publish scheduled. The queue shows its progress.",
+});
+
+export const useCancelPublishJob = (brandId: string) => useScopedMutation({
+  mutationKey: ["mutation", "publish.cancel", brandId],
+  mutationFn: (vars: { queueId: string }) => cancelPublishJobAction({ data: { brandId, ...vars } }),
+  invalidate: () => [qk.publishingQueue(brandId)],
+  success: "Publish job cancelled.",
+});
+
+export const useRetryPublishJob = (brandId: string) => useScopedMutation({
+  mutationKey: ["mutation", "publish.retry", brandId],
+  mutationFn: (vars: { queueId: string }) => retryPublishJobAction({ data: { brandId, ...vars } }),
+  invalidate: () => [qk.publishingQueue(brandId)],
+  success: "Publish job queued for retry.",
+});
+
+export const useRecordTelemetry = (brandId: string) => useScopedMutation({
+  mutationKey: ["mutation", "telemetry.record", brandId],
+  mutationFn: (vars: {
+    platform: string;
+    sourceType?: "organic" | "paid" | "hybrid";
+    creativeId?: string;
+    variantId?: string;
+    views?: number;
+    impressions?: number;
+    reach?: number;
+    clicks?: number;
+    engagements?: number;
+    shares?: number;
+    saves?: number;
+    conversions?: number;
+    hookType?: string;
+    angle?: string;
+    hookRetention3s?: number;
+    completionRate?: number;
+  }) => recordTelemetryAction({ data: { brandId, ...vars } }),
+  invalidate: () => [qk.telemetry(brandId), qk.learning(brandId)],
+  success: "Telemetry row recorded.",
+});
+
+export const useSyncTelemetry = (brandId: string) => useScopedMutation({
+  mutationKey: ["mutation", "telemetry.sync", brandId],
+  mutationFn: () => syncTelemetryPriorsAction({ data: { brandId } }),
+  invalidate: () => [qk.telemetry(brandId), qk.learning(brandId), qk.accountIntelligence(brandId)],
+});
