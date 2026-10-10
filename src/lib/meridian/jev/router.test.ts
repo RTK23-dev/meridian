@@ -11,6 +11,7 @@ import type {
   JevCapabilities,
   JevProviderHealth,
 } from "./types.ts";
+import { fixedLookup, notConfiguredLookup } from "../credentials/fixtures.ts";
 
 const sampleRequest: JevDecisionRequest = {
   organizationId: "org-test",
@@ -48,9 +49,10 @@ const sampleRequest: JevDecisionRequest = {
 };
 
 test("TypeSafeDirectJevProvider reports NOT_CONFIGURED when API key is missing", async () => {
-  const provider = new TypeSafeDirectJevProvider({ apiKey: "" });
+  const provider = new TypeSafeDirectJevProvider({ lookup: notConfiguredLookup() });
   const health = await provider.health();
   assert.equal(health.status, "NOT_CONFIGURED");
+  assert.equal((await provider.healthFor("org-test")).status, "NOT_CONFIGURED");
 
   const res = await provider.decide(sampleRequest);
   assert.equal(res.provider, "typesafe_direct");
@@ -95,7 +97,7 @@ test("TypeSafeDirectJevProvider calls /v1/systemone with Bearer token and parses
   };
 
   const provider = new TypeSafeDirectJevProvider({
-    apiKey: "test-typesafe-key-123",
+    lookup: fixedLookup("test-typesafe-key-123"),
     fetchImpl: fakeFetch,
   });
 
@@ -125,7 +127,7 @@ test("TypeSafeDirectJevProvider handles HTTP errors without silent coercion", as
     new Response("Rate limit exceeded", { status: 429 });
 
   const provider = new TypeSafeDirectJevProvider({
-    apiKey: "key",
+    lookup: fixedLookup("key"),
     fetchImpl: fakeFetch,
   });
 
@@ -147,7 +149,7 @@ test("TypeSafeDirectJevProvider marks unreturned questions as abstain_uncertain"
     );
 
   const provider = new TypeSafeDirectJevProvider({
-    apiKey: "key",
+    lookup: fixedLookup("key"),
     fetchImpl: fakeFetch,
   });
 
@@ -193,7 +195,7 @@ test("JevRouter routes to openrouter when typesafe_direct is unconfigured in AUT
   };
 
   const router = new JevRouter({
-    typesafeProvider: new TypeSafeDirectJevProvider({ apiKey: "" }),
+    typesafeProvider: new TypeSafeDirectJevProvider({ lookup: notConfiguredLookup() }),
     openrouterProvider: mockOpenRouter,
   });
 
@@ -211,7 +213,7 @@ test("JevRouter routes to openrouter when typesafe_direct is unconfigured in AUT
 
 test("JevRouter enforces explicit mode selection without silent fallback", async () => {
   const router = new JevRouter({
-    typesafeProvider: new TypeSafeDirectJevProvider({ apiKey: "" }),
+    typesafeProvider: new TypeSafeDirectJevProvider({ lookup: notConfiguredLookup() }),
   });
 
   const res = await router.decide(sampleRequest, {

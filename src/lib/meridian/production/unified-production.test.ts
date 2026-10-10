@@ -125,7 +125,7 @@ test("VeoProvider returns NOT_CONFIGURED and no job id without API key", async (
 
     assert.equal(job.status, "NOT_CONFIGURED");
     assert.equal(job.jobId, "");
-    assert.ok(job.error?.includes("not configured"));
+    assert.match(job.error ?? "", /no saved Gemini credential/, "the reason names the missing workspace credential");
   } finally {
     if (originalKey) process.env.GEMINI_API_KEY = originalKey;
     if (originalGoogleKey) process.env.GOOGLE_API_KEY = originalGoogleKey;

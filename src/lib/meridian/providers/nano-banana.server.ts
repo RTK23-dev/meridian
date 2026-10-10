@@ -84,26 +84,31 @@ export function normalizeGoogleImageResponse(body: unknown): NormalizedImageBloc
   return { error: "Google Interactions response did not contain an image content block." };
 }
 
-/** Google AI Studio image adapter with documented Interactions REST parsing. */
+/**
+ * Google AI Studio image adapter with documented Interactions REST parsing. The key is the caller's: the workspace's
+ * production credential, resolved by credentials/resolve.ts. This adapter never reads a key from the environment, and
+ * without a key it makes no request.
+ */
 export async function generateNanoBananaImage(input: {
   prompt: string;
   promptVersion: string;
   model?: string;
   aspectRatio?: string;
+  apiKey?: string;
   env?: Record<string, string | undefined>;
   fetchImpl?: typeof fetch;
 }): Promise<ImageResult> {
-  const resolved = ProviderConfigResolver.resolveGoogle({ env: input.env });
-  const apiKey = resolved.apiKey;
+  const apiKey = input.apiKey?.trim() ?? "";
   if (!apiKey) {
     return {
       status: "NOT_CONNECTED",
       provider: "google:nano-banana",
-      error: "Google Gemini image credentials are not configured (MERIDIAN_GEMINI_API_KEY). Image generation is optional; no image was created.",
+      error: "No usable Google production credential is available for this workspace. Image generation is optional; no image was created.",
     };
   }
 
-  const model = input.env?.GOOGLE_NANO_BANANA_MODEL?.trim() || resolved.imageModel;
+  const imageModel = ProviderConfigResolver.resolveGoogle({ env: input.env ?? process.env }).imageModel;
+  const model = input.env?.GOOGLE_NANO_BANANA_MODEL?.trim() || imageModel;
   if (input.model && input.model !== model) {
     return {
       status: "failed",

@@ -3,6 +3,7 @@ import test from "node:test";
 import { JevDecisionService } from "./service.ts";
 import { JevRouter, TypeSafeDirectJevProvider } from "./router.ts";
 import type { EvidenceBundle } from "../evidence/types.ts";
+import { fixedLookup } from "../credentials/fixtures.ts";
 
 const sampleCompleteBundle: EvidenceBundle = {
   id: "bundle-integration-123",
@@ -73,7 +74,7 @@ test("JevDecisionService: dispatches typed evidence to TypeSafe provider via int
 
   const router = new JevRouter({
     typesafeProvider: new TypeSafeDirectJevProvider({
-      apiKey: "test_typesafe_key",
+      lookup: fixedLookup("test_typesafe_key"),
       baseUrl: "https://api.typesafe.ai/v1/systemone",
       fetchImpl: mockFetch as typeof fetch,
     }),
@@ -124,7 +125,7 @@ test("JevDecisionService: abstains with typed reason and skips network dispatch 
 
   const router = new JevRouter({
     typesafeProvider: new TypeSafeDirectJevProvider({
-      apiKey: "test_typesafe_key",
+      lookup: fixedLookup("test_typesafe_key"),
       baseUrl: "https://api.typesafe.ai/v1/systemone",
       fetchImpl: mockFetch as typeof fetch,
     }),
@@ -179,7 +180,7 @@ test("JevDecisionService: persists decisions and answers to SQL ledger when SQL 
 
   const router = new JevRouter({
     typesafeProvider: new TypeSafeDirectJevProvider({
-      apiKey: "test_typesafe_key",
+      lookup: fixedLookup("test_typesafe_key"),
       baseUrl: "https://api.typesafe.ai/v1/systemone",
       fetchImpl: mockFetch as typeof fetch,
     }),

@@ -20,6 +20,19 @@ import { selectOffer, type SelectionCandidate, type SelectionModality, type Sele
 import { configuredQuote, estimateCost, unknownQuote, type PriceQuote } from "./pricing.ts";
 import { GoogleNanoBananaImageProvider, TestImageProvider, type ProductionImageProvider } from "./image-providers.ts";
 import { isTestingRuntimeNow as testingRuntimeNow } from "../runtime-mode.ts";
+import type { ProviderHealth } from "./types.ts";
+
+/**
+ * A provider's readiness for one workspace. A provider whose key is saved per workspace implements `healthFor`, and that
+ * check is used whenever the workspace is known. Every other provider uses `health`.
+ */
+async function healthOf(
+  provider: { health(): Promise<ProviderHealth> },
+  organizationId: string | undefined,
+): Promise<ProviderHealth> {
+  const scoped = provider as { health(): Promise<ProviderHealth>; healthFor?: (organizationId: string) => Promise<ProviderHealth> };
+  return organizationId && scoped.healthFor ? scoped.healthFor(organizationId) : provider.health();
+}
 
 /** Automatic preference order by cost mode. The matrix decides eligibility first; this only orders eligible providers. */
 const PREFERENCE_BY_MODE: Record<"BALANCED" | "QUALITY_FIRST", string[]> = {
@@ -204,14 +217,14 @@ export class ProductionRouter {
   /**
    * Explicit provider routing: verifies requested provider without silent fallback.
    */
-  async routeExplicit(id: string, _spec: CreativeSpec): Promise<ProductionProvider> {
+  async routeExplicit(id: string, spec: CreativeSpec): Promise<ProductionProvider> {
     const provider = this.get(id);
     if (!provider) {
       throw new Error(
         `Production provider '${id}' is not registered or cannot be resolved in ${this.runtime} runtime.`,
       );
     }
-    const health = await provider.health();
+    const health = await healthOf(provider, spec.organizationId);
     if (health.state === "NOT_CONFIGURED") {
       throw new Error(`Provider '${id}' is NOT_CONFIGURED: ${health.detail || "Credentials missing."}`);
     }
@@ -254,7 +267,7 @@ export class ProductionRouter {
       return { provider, selection };
     }
 
-    const healthy = await this.healthyProviders();
+    const healthy = await this.healthyProviders(spec.organizationId);
     if (mode === "ZERO_SPEND") {
       const manualCloud = healthy.find((p) => p.id === "manual_cloud");
       if (!manualCloud) throw new Error("ManualCloud provider is NOT_CONFIGURED (Google Drive not connected).");
@@ -308,7 +321,7 @@ export class ProductionRouter {
         if (requested === "test:image") throw new Error("The test image provider is not enabled outside the testing runtime.");
         throw new Error(`Image provider '${requested}' is not registered or cannot be resolved in ${this.runtime} runtime.`);
       }
-      const health = await provider.health();
+      const health = await healthOf(provider, spec.organizationId);
       if (health.state === "NOT_CONFIGURED") throw new Error(`Provider '${requested}' is NOT_CONFIGURED: ${health.detail || "Credentials missing."}`);
       if (health.state === "UNAVAILABLE" || health.state === "AUTH_FAILED") throw new Error(`Provider '${requested}' is ${health.state}: ${health.detail || "Provider offline."}`);
       const selection = selectOffer({
@@ -325,7 +338,7 @@ export class ProductionRouter {
       return { provider, selection };
     }
 
-    const healthy = await this.healthyImageProviders();
+    const healthy = await this.healthyImageProviders(spec.organizationId);
     if (healthy.length === 0) throw new Error("No configured image provider is available.");
     const selection = selectOffer({
       candidates: this.candidatesFor(healthy, "image"),
@@ -341,15 +354,16 @@ export class ProductionRouter {
     return { provider, selection };
   }
 
-  private async healthyImageProviders(): Promise<ProductionImageProvider[]> {
+  /** Image providers that are ready for this workspace. Without a workspace, a workspace-keyed provider is not ready. */
+  private async healthyImageProviders(organizationId?: string): Promise<ProductionImageProvider[]> {
     const usable = Array.from(this.imageProviders.values()).filter((p) => p.id !== "test:image" || testingRuntimeNow());
-    const checks = await Promise.all(usable.map(async (p) => ({ provider: p, health: await p.health() })));
+    const checks = await Promise.all(usable.map(async (p) => ({ provider: p, health: await healthOf(p, organizationId) })));
     return checks.filter((c) => c.health.state === "HEALTHY" || c.health.state === "CONFIGURED").map((c) => c.provider);
   }
 
-  private async healthyProviders(): Promise<ProductionProvider[]> {
+  private async healthyProviders(organizationId?: string): Promise<ProductionProvider[]> {
     const checks = await Promise.all(
-      Array.from(this.providers.values()).map(async (p) => ({ provider: p, health: await p.health() })),
+      Array.from(this.providers.values()).map(async (p) => ({ provider: p, health: await healthOf(p, organizationId) })),
     );
     return checks.filter((c) => c.health.state === "HEALTHY" || c.health.state === "CONFIGURED").map((c) => c.provider);
   }

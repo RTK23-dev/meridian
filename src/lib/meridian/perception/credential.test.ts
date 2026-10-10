@@ -95,11 +95,11 @@ test("readiness and the provider's production call use the same credential: a re
   }
 });
 
-test("the settings panel reads perception through the same resolver, and never from a stored key or environment directly", () => {
+test("the settings summary reads perception through the one resolver, and never from a provider key in the environment", () => {
   const source = readFileSync(new URL("../settings/provider-config.ts", import.meta.url), "utf8");
-  assert.match(source, /resolvePerceptionCredential\(/, "the panel uses the production resolver");
-  assert.doesNotMatch(source, /GOOGLE_AI_STUDIO_API_KEY \|\| process\.env\.OPENROUTER/, "no separate perception key lookup remains");
-  assert.doesNotMatch(source, /perceptionCreds\?\.apiKey/, "no separate perception vault read remains");
+  assert.match(source, /perceptionStateFor\(/, "the summary reads perception through the resolver");
+  assert.match(source, /resolveCredential\(/, "the summary calls the shared resolver");
+  assert.doesNotMatch(source, /process\.env\.(MERIDIAN_GEMINI_API_KEY|GOOGLE_AI_STUDIO_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|TYPESAFE_JEV_API_KEY)/, "no provider key is read from the environment here");
 });
 
 test("fingerprintOf never returns the key itself", () => {

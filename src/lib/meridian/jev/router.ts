@@ -26,23 +26,58 @@ import type {
 } from "./types.ts";
 import { OpenRouterJevClient, openRouterJevClient, checkEvidenceSufficiency } from "./client.ts";
 import { resolveJevConfig } from "./config.ts";
+import type { Sql } from "../learning/store.ts";
+import { loadDefaultSql, resolveCredential, sharedDefaultOptedIn, type CredentialEnv } from "../credentials/resolve.ts";
+import { credentialStateOf, type CredentialResolution } from "../credentials/contract.ts";
+
+/**
+ * Looks up the TypeSafe key for one workspace. The default reads the workspace's saved key, through the shared resolver.
+ * A test or another caller can inject a lookup instead of a database.
+ */
+export type JevCredentialLookup = (organizationId: string) => Promise<CredentialResolution>;
+
+/**
+ * The transport's readiness for one workspace. TypeSafe checks the workspace's key. OpenRouter is deployment-only, and it
+ * keeps its own health check.
+ */
+export async function transportHealth(provider: JevProvider, organizationId: string): Promise<JevProviderHealth> {
+  const scoped = provider as JevProvider & { healthFor?: (organizationId: string) => Promise<JevProviderHealth> };
+  return scoped.healthFor ? scoped.healthFor(organizationId) : provider.health();
+}
 
 export class TypeSafeDirectJevProvider implements JevProvider {
   readonly id: JevProviderId = "typesafe_direct";
 
-  private apiKey?: string;
   private baseUrl?: string;
   private fetchImpl: typeof fetch;
+  private readonly sql?: Sql;
+  private readonly env?: CredentialEnv;
+  private readonly lookup?: JevCredentialLookup;
 
+  /**
+   * No key is held here. Each request names its workspace, and the key is looked up for that workspace when the request is
+   * made. One process-wide key is therefore never used for another workspace's decision.
+   */
   constructor(options?: {
-    apiKey?: string;
+    sql?: Sql;
+    env?: CredentialEnv;
     baseUrl?: string;
     fetchImpl?: typeof fetch;
+    lookup?: JevCredentialLookup;
   }) {
     const config = resolveJevConfig();
-    this.apiKey = options?.apiKey ?? (config.typesafe.apiKey || undefined);
     this.baseUrl = options?.baseUrl ?? config.typesafe.baseUrl;
     this.fetchImpl = options?.fetchImpl ?? globalThis.fetch;
+    this.sql = options?.sql;
+    this.env = options?.env;
+    this.lookup = options?.lookup;
+  }
+
+  /** The workspace's TypeSafe credential, by the shared resolver. Nothing is cached between requests. */
+  async credentialFor(organizationId: string): Promise<CredentialResolution> {
+    if (this.lookup) return this.lookup(organizationId);
+    const sql = this.sql ?? (await loadDefaultSql());
+    return resolveCredential(sql, organizationId, "jev", this.env ?? process.env);
   }
 
   private getEndpoint(): string {
@@ -68,19 +103,40 @@ export class TypeSafeDirectJevProvider implements JevProvider {
     };
   }
 
+  /**
+   * Without a workspace there is no key to check, so this never reports READY. The key is saved per workspace.
+   */
   async health(): Promise<JevProviderHealth> {
-    if (!this.apiKey) {
-      return {
-        status: "NOT_CONFIGURED",
-        message: "TYPESAFE_JEV_API_KEY is not configured for direct TypeSafe JEV.",
-      };
+    return {
+      status: "NOT_CONFIGURED",
+      message: "The TypeSafe JEV key is saved per workspace, so readiness needs a workspace. No workspace was given.",
+    };
+  }
+
+  /** Readiness for one workspace, by the same resolution a decision uses. No live request is made. */
+  async healthFor(organizationId: string): Promise<JevProviderHealth> {
+    let state: ReturnType<typeof credentialStateOf>;
+    try {
+      state = credentialStateOf(await this.credentialFor(organizationId));
+    } catch {
+      return { status: "UNAVAILABLE", message: "The workspace's TypeSafe JEV credential could not be checked. No live request was made." };
     }
-    return { status: "READY" };
+    if (state.state === "usable") {
+      const source = state.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
+      return { status: "READY", message: `TypeSafe JEV uses ${source}. No live request was made.` };
+    }
+    return { status: "NOT_CONFIGURED", message: state.reason ?? "The TypeSafe JEV key is not configured." };
   }
 
   async decide(request: JevDecisionRequest): Promise<JevDecisionResponse> {
-    const health = await this.health();
-    if (health.status !== "READY") {
+    // The key is resolved for this request's workspace. When it is not usable, no request is sent.
+    let credential: CredentialResolution;
+    try {
+      credential = await this.credentialFor(request.organizationId);
+    } catch {
+      credential = { status: "not_configured", reason: "The workspace's TypeSafe JEV credential could not be read. No request was sent." };
+    }
+    if (credential.status !== "ready") {
       const answers: Record<string, JevAnswer> = {};
       const now = new Date().toISOString();
       for (const [key, q] of Object.entries(request.questions)) {
@@ -92,7 +148,7 @@ export class TypeSafeDirectJevProvider implements JevProvider {
           provider: this.id,
           status: "not_configured",
           evidenceRefs: [],
-          abstainReason: health.message,
+          abstainReason: credential.reason,
           evaluatedAt: now,
         };
       }
@@ -106,6 +162,7 @@ export class TypeSafeDirectJevProvider implements JevProvider {
         answers,
       };
     }
+    const apiKey = credential.secret;
 
     // Direct System One endpoint execution
     const model = request.model || "typesafe/jev-1.13";
@@ -170,7 +227,7 @@ export class TypeSafeDirectJevProvider implements JevProvider {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
       });
@@ -274,19 +331,57 @@ export class OpenRouterJevProvider implements JevProvider {
     };
   }
 
+  /**
+   * OpenRouter is deployment-only. Its key is OPENROUTER_API_KEY on this deployment, and no workspace key is used for it.
+   * The deployment key is used only when JEV_SHARED_DEFAULT=deployment is set, the same flag that opts in the TypeSafe
+   * deployment key. The health check does not depend on a workspace.
+   */
   async health(): Promise<JevProviderHealth> {
-    const config = resolveJevConfig();
-    const key = config.openrouter.apiKey;
+    if (!sharedDefaultOptedIn("jev")) {
+      return {
+        status: "NOT_CONFIGURED",
+        message: "OpenRouter is deployment-only. Its deployment key is used only when JEV_SHARED_DEFAULT=deployment is set.",
+      };
+    }
+    const key = resolveJevConfig().openrouter.apiKey;
     if (!key) {
       return {
         status: "NOT_CONFIGURED",
-        message: "OPENROUTER_API_KEY is not configured.",
+        message: "OpenRouter is deployment-only, and OPENROUTER_API_KEY is not set on this deployment.",
       };
     }
-    return { status: "READY" };
+    return { status: "READY", message: "OpenRouter uses the deployment's OPENROUTER_API_KEY. No workspace key is used." };
   }
 
   async decide(request: JevDecisionRequest): Promise<JevDecisionResponse> {
+    // Not opted in, or no deployment key: no request is sent, and each question says why.
+    const health = await this.health();
+    if (health.status !== "READY") {
+      const answers: Record<string, JevAnswer> = {};
+      const now = new Date().toISOString();
+      for (const [key, q] of Object.entries(request.questions)) {
+        answers[key] = {
+          questionId: q.id,
+          questionVersion: q.version,
+          type: q.type,
+          model: request.model ?? "typesafe/jev-1.13",
+          provider: this.id,
+          status: "not_configured",
+          evidenceRefs: [],
+          abstainReason: health.message,
+          evaluatedAt: now,
+        };
+      }
+      return {
+        runId: globalThis.crypto.randomUUID(),
+        model: request.model ?? "typesafe/jev-1.13",
+        provider: this.id,
+        inputHash: "not_configured",
+        cached: false,
+        latencyMs: 0,
+        answers,
+      };
+    }
     const res = await this.client.decide(request);
     return {
       ...res,
@@ -352,9 +447,7 @@ export class JevRouter implements JevProviderRouter {
         ? "typesafe_direct"
         : rawPref === "openrouter"
           ? "openrouter"
-          : config.typesafe.apiKey
-            ? "typesafe_direct"
-            : "openrouter";
+          : "typesafe_direct";
 
     const fallbackEnabled =
       policy?.fallbackEnabled ?? config.fallbackEnabled;
@@ -408,7 +501,8 @@ export class JevRouter implements JevProviderRouter {
 
     // AUTO mode: prefer configured provider, fall back on eligible transport failure
     const preferred = this.getProvider(preferredProviderId);
-    const prefHealth = await preferred.health();
+    // Readiness is checked for this request's workspace, so the TypeSafe key is the one this workspace would use.
+    const prefHealth = await transportHealth(preferred, request.organizationId);
 
     if (prefHealth.status === "READY") {
       const resp = await preferred.decide(request);
@@ -420,7 +514,7 @@ export class JevRouter implements JevProviderRouter {
         const fallbackId: JevProviderId =
           preferredProviderId === "typesafe_direct" ? "openrouter" : "typesafe_direct";
         const fallback = this.getProvider(fallbackId);
-        const fbHealth = await fallback.health();
+        const fbHealth = await transportHealth(fallback, request.organizationId);
         if (fbHealth.status === "READY") {
           const fallbackResp = await fallback.decide(request);
           return {

@@ -13,9 +13,9 @@
  * The JEV client sends text evidence only. JEV is therefore declared text-only here: a decision that requires images is
  * refused as unsupported, and optional images are recorded as not seen.
  */
-import { jevRouter } from "../jev/router.ts";
+import { jevRouter, transportHealth } from "../jev/router.ts";
 import { resolveJevConfig } from "../jev/config.ts";
-import type { JevProviderRouter, JevRoutingPolicy } from "../jev/types.ts";
+import type { JevProviderHealth, JevProviderId, JevProviderRouter, JevRoutingPolicy } from "../jev/types.ts";
 import {
   abstainAll,
   type DecisionCapabilities,
@@ -58,24 +58,39 @@ export class JevDecisionEngine implements DecisionEngine {
     };
   }
 
+  /** Without a workspace, no JEV key can be checked, so this never reports READY. The keys are saved per workspace. */
   async health(): Promise<DecisionEngineHealth> {
-    const transports = await this.router.health();
+    return {
+      status: "NOT_CONFIGURED",
+      message: "JEV keys are saved per workspace. No workspace was given, so no JEV key was checked.",
+    };
+  }
+
+  /**
+   * Readiness for one workspace. The TypeSafe transport uses the workspace's own key, by the same resolution a decision
+   * uses. The OpenRouter transport is deployment-only. No live request is made.
+   */
+  async healthFor(organizationId: string): Promise<DecisionEngineHealth> {
     const config = resolveJevConfig();
+    const transports: Partial<Record<JevProviderId, JevProviderHealth>> = {};
+    for (const id of ["typesafe_direct", "openrouter"] as const) {
+      transports[id] = await transportHealth(this.router.getProvider(id), organizationId);
+    }
     const preferred = transports[config.preferredProvider];
-    if (preferred?.status === "READY") return { status: "READY", message: `JEV via ${config.preferredProvider}.` };
-    const anyReady = Object.entries(transports).find(([, health]) => health.status === "READY");
+    if (preferred?.status === "READY") return { status: "READY", message: `JEV via ${config.preferredProvider}. ${preferred.message ?? ""}`.trim() };
+    const anyReady = Object.entries(transports).find(([, health]) => health?.status === "READY");
     if (anyReady && config.mode !== "auto") {
       return { status: "READY", message: `JEV via ${anyReady[0]}.` };
     }
     if (anyReady && config.mode === "auto") {
       return {
         status: "DEGRADED",
-        message: `The preferred JEV transport ${config.preferredProvider} is not configured; ${anyReady[0]} is, but is used only when it is selected or transport fallback is enabled.`,
+        message: `The preferred JEV transport ${config.preferredProvider} is not ready for this workspace; ${anyReady[0]} is, but is used only when it is selected or transport fallback is enabled.`,
       };
     }
     return {
       status: "NOT_CONFIGURED",
-      message: "No JEV transport is configured. Set TYPESAFE_JEV_API_KEY or OPENROUTER_API_KEY.",
+      message: "No JEV transport is ready for this workspace. TypeSafe needs the workspace's saved key or an opted-in shared default. OpenRouter is deployment-only.",
     };
   }
 

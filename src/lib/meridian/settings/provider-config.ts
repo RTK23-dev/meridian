@@ -1,43 +1,49 @@
-import { resolvePerceptionCredential, type PerceptionCredential } from "../perception/credential.ts";
-import { selectPerceptionProvider } from "../perception/run.ts";
 /**
  * Workspace Provider Configuration Service
  *
- * Provides typed, secure, organization-scoped credential and operational configuration
- * for JEV, Perception, Sources & Crawling, Production, Storage, and Cyclone Scout.
+ * Provides typed, secure, organization-scoped credential and operational configuration for JEV, Perception, Sources &
+ * Crawling, Production, Storage, and Cyclone Scout.
  *
  * Rules:
- * - Server-only credential resolution and AES-256-GCM encryption at rest via Vault.
- * - Never returns raw secret keys or tokens back to the browser; returns only fingerprints.
+ * - Every credential category (perception, jev, production) is read through the one resolver, credentials/resolve.ts. The
+ *   summary, Test Connection and runtime readiness all show that resolver's state, so they cannot disagree with a call.
+ * - A saved workspace key is used first. An unusable saved key is shown as unusable, and the deployment key is never shown
+ *   in its place. The deployment key is shown only when its category's shared default is opted in.
+ * - The OpenRouter JEV transport is deployment-only, and the summary says so.
+ * - Server-only encryption at rest via the vault. Raw secrets never leave the server; only masked fingerprints do.
+ * - Saves and removals run in one real transaction. A save that supplies no new key keeps the stored key.
  * - Enforces SSRF prevention via publicUrlIssue before testing any configurable endpoint.
  * - Audits all credential mutations without logging secret values.
- * - Precedence: Workspace DB vault -> Deployment env fallback -> Default.
  */
 
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
+import { withTransaction } from "../learning/store.ts";
 import { storeVaultCredential, retrieveVaultCredential, deleteVaultCredential, type VaultCredentialPayload } from "../vault/service.ts";
 import { resolveJevConfig } from "../jev/config.ts";
-import { jevRouter } from "../jev/router.ts";
+import { resolveCredential, sharedDefaultOptedIn } from "../credentials/resolve.ts";
+import { credentialStateOf, type CredentialCategory, type CredentialState } from "../credentials/contract.ts";
+import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
 
 export type ProviderCategory = "jev" | "perception" | "sources" | "production" | "storage" | "cyclone";
 
-/**
- * Perception readiness, as the production resolver sees it. "usable" means a call would use the credential shown.
- * "unusable" means the workspace has a saved credential that cannot be used; the deployment key is never used in its
- * place. "not_configured" means nothing is available to use.
- */
-export type PerceptionCredentialState = "usable" | "unusable" | "not_configured";
+/** The categories whose key the resolver governs. Their saves cannot store an empty key, because an empty entry is unusable. */
+const CREDENTIAL_CATEGORIES: readonly CredentialCategory[] = ["jev", "perception", "production"];
+
+/** Readiness as the resolver reports it. "usable" means a call would use the credential shown. */
+export type CredentialReadiness = CredentialState["state"];
+/** @deprecated Use CredentialReadiness. Kept so existing imports keep compiling. */
+export type PerceptionCredentialState = CredentialReadiness;
 
 export type ProviderConfigSummary = {
   category: ProviderCategory;
   configured: boolean;
-  /** Where the credential comes from. For perception, "not_configured" means no credential is available. */
+  /** Where the credential comes from. "not_configured" means no credential is available. */
   source: "workspace" | "deployment" | "default" | "not_configured";
-  /** Explicit readiness. Set for perception, which resolves its credential through perception/credential.ts. */
-  credentialState?: PerceptionCredentialState;
+  /** Set for every credential category. It is the resolver's state, and it is the only readiness the panel shows. */
+  credentialState?: CredentialReadiness;
   /** Why the credential is not usable, in words that contain no secret. Set when credentialState is not "usable". */
   credentialReason?: string;
   keyFingerprint?: string;
@@ -54,22 +60,59 @@ function fingerprint(secret?: string): string | undefined {
   return `...${clean.slice(-4)}`;
 }
 
-/**
- * The perception credential as production sees it: the provider selection first (PERCEPTION_PROVIDER=none turns
- * perception off), then the credential resolver. Settings and Test Connection both read this, so they cannot disagree
- * with a perception run.
- */
-async function perceptionCredentialFor(sql: Sql, organizationId: string): Promise<PerceptionCredential> {
-  const selection = selectPerceptionProvider();
-  if (!selection.provider) return { status: "not_configured", reason: selection.reason };
-  return resolvePerceptionCredential(sql, organizationId);
+/** The vault entry type for a category. */
+function vaultTypeForCategory(category: ProviderCategory): string {
+  return `provider_config:${category}`;
+}
+
+/** The resolver's state for a credential category, and the reason it is not usable when it is not. */
+async function credentialStateFor(sql: Sql, organizationId: string, category: CredentialCategory): Promise<CredentialState> {
+  return credentialStateOf(await resolveCredential(sql, organizationId, category));
 }
 
 /**
- * Resolves the vault credential type key for a given provider category.
+ * Perception also depends on the provider selection: PERCEPTION_PROVIDER=none turns it off, whatever key is saved. Settings
+ * and Test Connection both apply that first, as a perception run does.
  */
-function vaultTypeForCategory(category: ProviderCategory): string {
-  return `provider_config:${category}`;
+async function perceptionStateFor(sql: Sql, organizationId: string): Promise<CredentialState> {
+  const selection = selectPerceptionProvider();
+  if (!selection.provider) return { state: "not_configured", source: null, fingerprint: null, reason: selection.reason };
+  return credentialStateFor(sql, organizationId, "perception");
+}
+
+/** How the summary names the source. An unusable workspace entry is still the workspace's own entry. */
+function sourceOf(state: CredentialState): ProviderConfigSummary["source"] {
+  if (state.state === "not_configured") return "not_configured";
+  if (state.state === "unusable") return "workspace";
+  return state.source === "workspace" ? "workspace" : "deployment";
+}
+
+function lastTestedStatusOf(state: CredentialState): NonNullable<ProviderConfigSummary["lastTestedStatus"]> {
+  if (state.state === "usable") return "READY";
+  return state.state === "unusable" ? "ERROR" : "NOT_CONFIGURED";
+}
+
+/** A credential category's summary fields, all taken from the resolver's state. */
+function credentialFields(state: CredentialState) {
+  return {
+    configured: state.state === "usable",
+    source: sourceOf(state),
+    credentialState: state.state,
+    credentialReason: state.state === "usable" ? undefined : state.reason ?? undefined,
+    keyFingerprint: state.state === "usable" && state.fingerprint ? state.fingerprint : undefined,
+    lastTestedStatus: lastTestedStatusOf(state),
+    lastTestedMessage: state.state === "usable" ? undefined : state.reason ?? undefined,
+  };
+}
+
+/** The stored settings of a vault entry. An entry that cannot be decrypted contributes no settings, and no key. */
+async function savedSettings(sql: Sql, organizationId: string, entryId: string | undefined): Promise<Record<string, any>> {
+  if (!entryId) return {};
+  try {
+    return (await retrieveVaultCredential(sql, organizationId, entryId))?.customFields ?? {};
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -80,74 +123,45 @@ export async function getWorkspaceProviderSettings(
   sql: Sql,
   organizationId: string
 ): Promise<Record<ProviderCategory, ProviderConfigSummary>> {
-  // Query existing vault credentials for this tenant
   const rows = await sql<{ id: string; credential_type: string; updated_at: string }>`
     select id, credential_type, updated_at
     from credential_vault
     where organization_id = ${organizationId}
       and credential_type like 'provider_config:%'
   `;
+  const vaultMap = new Map<string, { id: string }>();
+  for (const r of rows) vaultMap.set(r.credential_type, { id: r.id });
 
-  const vaultMap = new Map<string, { id: string; updatedAt: string }>();
-  for (const r of rows) {
-    vaultMap.set(r.credential_type, { id: r.id, updatedAt: r.updated_at });
-  }
-
-  // 1. JEV Category
-  const jevVaultEntry = vaultMap.get(vaultTypeForCategory("jev"));
-  let jevCreds: VaultCredentialPayload | null = null;
-  if (jevVaultEntry) {
-    try {
-      jevCreds = await retrieveVaultCredential(sql, organizationId, jevVaultEntry.id);
-    } catch {
-      // Ignored
-    }
-  }
-
-  const deploymentJev = resolveJevConfig();
-  const jevConfigured = Boolean(jevCreds?.apiKey || deploymentJev.typesafe.apiKey || deploymentJev.openrouter.apiKey);
-  const jevSource = jevCreds?.apiKey ? "workspace" : (deploymentJev.typesafe.apiKey || deploymentJev.openrouter.apiKey ? "deployment" : "default");
-
+  // 1. JEV: the TypeSafe key is the workspace's own, through the resolver. OpenRouter is deployment-only.
+  const jevState = await credentialStateFor(sql, organizationId, "jev");
+  const jevSettings = await savedSettings(sql, organizationId, vaultMap.get(vaultTypeForCategory("jev"))?.id);
+  // OpenRouter's deployment key is used only when JEV_SHARED_DEFAULT=deployment, the same flag that opts in TypeSafe's.
+  const openrouterKey = resolveJevConfig().openrouter.apiKey;
+  const openrouterOptedIn = sharedDefaultOptedIn("jev");
   const jevSummary: ProviderConfigSummary = {
     category: "jev",
-    configured: jevConfigured,
-    source: jevSource,
-    keyFingerprint: fingerprint(jevCreds?.apiKey || deploymentJev.typesafe.apiKey || deploymentJev.openrouter.apiKey),
-    lastTestedStatus: (jevCreds?.customFields?.lastTestedStatus as any) || (jevConfigured ? "READY" : "NOT_CONFIGURED"),
-    lastTestedAt: (jevCreds?.customFields?.lastTestedAt as string) || (jevVaultEntry?.updatedAt ?? undefined),
-    lastTestedMessage: jevCreds?.customFields?.lastTestedMessage as string,
+    ...credentialFields(jevState),
     settings: {
-      mode: jevCreds?.customFields?.mode || deploymentJev.mode,
-      preferredProvider: jevCreds?.customFields?.preferredProvider || deploymentJev.preferredProvider,
-      fallbackEnabled: jevCreds?.customFields?.fallbackEnabled ?? deploymentJev.fallbackEnabled,
-      timeoutMs: jevCreds?.customFields?.timeoutMs || deploymentJev.timeoutMs,
-      typesafeModel: jevCreds?.customFields?.typesafeModel || deploymentJev.typesafe.model,
-      openrouterModel: jevCreds?.customFields?.openrouterModel || deploymentJev.openrouter.model,
+      mode: jevSettings.mode || resolveJevConfig().mode,
+      preferredProvider: jevSettings.preferredProvider || resolveJevConfig().preferredProvider,
+      fallbackEnabled: jevSettings.fallbackEnabled ?? resolveJevConfig().fallbackEnabled,
+      timeoutMs: jevSettings.timeoutMs || resolveJevConfig().timeoutMs,
+      typesafeModel: jevSettings.typesafeModel || resolveJevConfig().typesafe.model,
+      openrouterModel: jevSettings.openrouterModel || resolveJevConfig().openrouter.model,
+      // OpenRouter is deployment-only: the key is OPENROUTER_API_KEY on this deployment, and no workspace key is used.
+      openrouterDeploymentOnly: true,
+      openrouterConfigured: Boolean(openrouterKey),
+      openrouterUsable: Boolean(openrouterKey) && openrouterOptedIn,
+      openrouterFingerprint: fingerprint(openrouterKey),
     },
     capabilities: ["choice_decisions", "score_decisions", "noul_probabilities", "evidence_audit_trail"],
   };
 
-  // 2. Perception Category. This summary reads the same credential resolver production perception calls use
-  // (perception/credential.ts), so it never reports a credential the provider cannot use. A saved workspace key that
-  // cannot be used is "unusable", and the deployment key is not offered in its place.
-  const perceptionCredential = await perceptionCredentialFor(sql, organizationId);
-  const perceptionConfigured = perceptionCredential.status === "ready";
-  const perceptionState: PerceptionCredentialState =
-    perceptionCredential.status === "ready" ? "usable" : perceptionCredential.status === "unusable" ? "unusable" : "not_configured";
-  const perceptionSource: ProviderConfigSummary["source"] =
-    perceptionCredential.status === "ready"
-      ? perceptionCredential.source === "workspace" ? "workspace" : "deployment"
-      : perceptionCredential.status === "unusable" ? "workspace" : "not_configured";
-
+  // 2. Perception: the same resolver perception calls use, after the provider selection.
+  const perceptionState = await perceptionStateFor(sql, organizationId);
   const perceptionSummary: ProviderConfigSummary = {
     category: "perception",
-    configured: perceptionConfigured,
-    source: perceptionSource,
-    credentialState: perceptionState,
-    credentialReason: perceptionCredential.status === "ready" ? undefined : perceptionCredential.reason,
-    keyFingerprint: perceptionCredential.status === "ready" ? perceptionCredential.fingerprint : undefined,
-    lastTestedStatus: perceptionConfigured ? "READY" : perceptionCredential.status === "unusable" ? "ERROR" : "NOT_CONFIGURED",
-    lastTestedMessage: perceptionConfigured ? undefined : perceptionCredential.reason,
+    ...credentialFields(perceptionState),
     settings: {
       provider: "gemini",
       model: process.env.PERCEPTION_MODEL || "gemini-2.5-flash",
@@ -157,25 +171,18 @@ export async function getWorkspaceProviderSettings(
   };
 
   // 3. Sources & Crawling Category
-  const sourcesVaultEntry = vaultMap.get(vaultTypeForCategory("sources"));
-  let sourcesCreds: VaultCredentialPayload | null = null;
-  if (sourcesVaultEntry) {
-    try {
-      sourcesCreds = await retrieveVaultCredential(sql, organizationId, sourcesVaultEntry.id);
-    } catch {
-      // Ignored
-    }
-  }
-  const metaAdToken = sourcesCreds?.customFields?.metaAdLibraryToken as string || process.env.META_AD_LIBRARY_TOKEN;
+  const sourcesEntryId = vaultMap.get(vaultTypeForCategory("sources"))?.id;
+  const sourcesCustom = await savedSettings(sql, organizationId, sourcesEntryId);
+  const metaAdToken = sourcesCustom.metaAdLibraryToken as string || process.env.META_AD_LIBRARY_TOKEN;
 
   const sourcesSummary: ProviderConfigSummary = {
     category: "sources",
     configured: true,
-    source: sourcesCreds?.customFields ? "workspace" : "default",
+    source: sourcesEntryId ? "workspace" : "default",
     settings: {
-      maxPagesPerRun: Number(sourcesCreds?.customFields?.maxPages || 50),
-      maxDepth: Number(sourcesCreds?.customFields?.maxDepth || 2),
-      concurrency: Number(sourcesCreds?.customFields?.concurrency || 4),
+      maxPagesPerRun: Number(sourcesCustom.maxPages || 50),
+      maxDepth: Number(sourcesCustom.maxDepth || 2),
+      concurrency: Number(sourcesCustom.concurrency || 4),
       metaAdLibraryConfigured: Boolean(metaAdToken),
       metaAdLibraryFingerprint: fingerprint(metaAdToken),
       allowedSources: ["website", "instagram", "tiktok", "youtube", "meta_ad_library"],
@@ -183,28 +190,15 @@ export async function getWorkspaceProviderSettings(
     capabilities: ["public_page_scrape", "meta_ad_library", "open_graph", "json_ld", "repeated_card_discovery"],
   };
 
-  // 4. Production Category
-  const prodVaultEntry = vaultMap.get(vaultTypeForCategory("production"));
-  let prodCreds: VaultCredentialPayload | null = null;
-  if (prodVaultEntry) {
-    try {
-      prodCreds = await retrieveVaultCredential(sql, organizationId, prodVaultEntry.id);
-    } catch {
-      // Ignored
-    }
-  }
-  const deploymentOmniKey = process.env.MERIDIAN_GEMINI_API_KEY || process.env.GOOGLE_AI_STUDIO_API_KEY;
-  const prodConfigured = Boolean(prodCreds?.apiKey || deploymentOmniKey);
-  const prodSource = prodCreds?.apiKey ? "workspace" : (deploymentOmniKey ? "deployment" : "default");
-
+  // 4. Production: the Omni video and Google image key is the workspace's own, through the resolver.
+  const productionState = await credentialStateFor(sql, organizationId, "production");
+  const productionSettings = await savedSettings(sql, organizationId, vaultMap.get(vaultTypeForCategory("production"))?.id);
   const prodSummary: ProviderConfigSummary = {
     category: "production",
-    configured: prodConfigured,
-    source: prodSource,
-    keyFingerprint: fingerprint(prodCreds?.apiKey || deploymentOmniKey),
+    ...credentialFields(productionState),
     settings: {
-      costPreference: prodCreds?.customFields?.costPreference || process.env.PRODUCTION_COST_PREFERENCE || "BALANCED",
-      preferredEngine: prodCreds?.customFields?.preferredEngine || "gemini_omni",
+      costPreference: productionSettings.costPreference || process.env.PRODUCTION_COST_PREFERENCE || "BALANCED",
+      preferredEngine: productionSettings.preferredEngine || "gemini_omni",
       hypitConfigured: Boolean(process.env.HYPIT_BASE_URL),
     },
     capabilities: ["gemini_omni_video", "image_to_video", "manual_cloud_handoff", "durable_job_polling"],
@@ -226,15 +220,8 @@ export async function getWorkspaceProviderSettings(
   };
 
   // 6. Cyclone Scout Category
-  const cycloneVaultEntry = vaultMap.get(vaultTypeForCategory("cyclone"));
-  let cycloneCreds: VaultCredentialPayload | null = null;
-  if (cycloneVaultEntry) {
-    try {
-      cycloneCreds = await retrieveVaultCredential(sql, organizationId, cycloneVaultEntry.id);
-    } catch {
-      // Ignored
-    }
-  }
+  const cycloneEntryId = vaultMap.get(vaultTypeForCategory("cyclone"));
+  const cycloneCreds = cycloneEntryId ? await savedCycloneCredentials(sql, organizationId, cycloneEntryId.id) : null;
   const cycloneGatewayUrl = (cycloneCreds?.customFields?.gatewayUrl as string) || process.env.CYCLONE_GATEWAY_URL;
   const cycloneApiKey = cycloneCreds?.apiKey || process.env.CYCLONE_API_KEY;
   const cycloneConfigured = Boolean(cycloneGatewayUrl);
@@ -263,9 +250,21 @@ export async function getWorkspaceProviderSettings(
   };
 }
 
+/** The Cyclone entry's payload, or null when it cannot be read. Cyclone is not a resolver category. */
+async function savedCycloneCredentials(sql: Sql, organizationId: string, entryId: string): Promise<VaultCredentialPayload | null> {
+  try {
+    return await retrieveVaultCredential(sql, organizationId, entryId);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Saves or updates workspace credentials and operational settings for a category.
- * Encrypts secrets at rest and emits audit records.
+ *
+ * The replacement runs in one transaction: the old entry is removed and the new one written, or neither happens. A save
+ * that supplies no new key keeps the stored key and its expiry. A save for a credential category with no key, and no stored
+ * key to keep, is refused, so an empty entry is never created.
  */
 export async function saveWorkspaceProviderConfig(
   sql: Sql,
@@ -295,54 +294,66 @@ export async function saveWorkspaceProviderConfig(
   }
 
   const credentialType = vaultTypeForCategory(input.category);
+  const newKey = input.credentials?.apiKey?.trim() ?? "";
+  const isCredentialCategory = (CREDENTIAL_CATEGORIES as readonly string[]).includes(input.category);
 
-  // The perception entry is the Gemini key itself. Saving it without a key would replace the stored key with an empty
-  // one, so the save is refused instead.
-  if (input.category === "perception" && !input.credentials?.apiKey?.trim()) {
-    throw new Error("Enter a Gemini API key to save the perception credential.");
-  }
+  await withTransaction(sql, async (tx) => {
+    const existing = await tx<{ id: string; expires_at: unknown }>`
+      select id, expires_at from credential_vault
+      where organization_id = ${input.organizationId} and credential_type = ${credentialType}
+      limit 1
+    `;
+    const prior = existing[0];
 
-  // Check if existing credential exists
-  const existingRows = await sql<{ id: string }>`
-    select id from credential_vault
-    where organization_id = ${input.organizationId}
-      and credential_type = ${credentialType}
-    limit 1
-  `;
+    // Without a new key, the stored payload is read so its key is kept. If it cannot be read, nothing is replaced.
+    let kept: VaultCredentialPayload | null = null;
+    if (!newKey && prior) {
+      try {
+        kept = await retrieveVaultCredential(tx, input.organizationId, prior.id);
+      } catch {
+        throw new Error("The stored key for this workspace cannot be read, so it cannot be kept. Enter the key again to save.");
+      }
+    }
+    const keptKey = kept?.apiKey?.trim() ?? "";
+    if (isCredentialCategory && !newKey && !keptKey) {
+      throw new Error(`Enter a ${input.category === "perception" ? "Gemini" : input.category === "jev" ? "TypeSafe JEV" : "Gemini production"} API key to save this configuration.`);
+    }
 
-  if (existingRows[0]) {
-    await deleteVaultCredential(sql, input.organizationId, existingRows[0].id);
-  }
+    const payload: VaultCredentialPayload = {
+      accessToken: input.credentials?.accessToken || kept?.accessToken || "",
+      apiKey: newKey || keptKey,
+      refreshToken: input.credentials?.refreshToken || kept?.refreshToken || "",
+      customFields: input.settings ?? kept?.customFields ?? {},
+    };
+    // A new key starts a new entry with no expiry. Keeping the stored key keeps its expiry too.
+    const keptExpiry = !newKey && prior?.expires_at ? toDate(prior.expires_at) : undefined;
 
-  const payload: VaultCredentialPayload = {
-    accessToken: input.credentials?.accessToken || "",
-    apiKey: input.credentials?.apiKey || "",
-    refreshToken: input.credentials?.refreshToken || "",
-    customFields: input.settings || {},
-  };
+    if (prior) await deleteVaultCredential(tx, input.organizationId, prior.id);
+    await storeVaultCredential(tx, input.organizationId, credentialType, payload, { expiresAt: keptExpiry });
 
-  await storeVaultCredential(sql, input.organizationId, credentialType, payload);
-
-  // Audit record (without secret contents!)
-  try {
-    await sql`
+    // Audit record (without secret contents). It is written in the same transaction, so a save is never unaudited.
+    await tx`
       insert into audit_log (
         id, organization_id, actor_id, action, object_type, object_id, metadata
       ) values (
         ${randomUUID()}, ${input.organizationId}, ${input.actorId},
         ${`provider_config.update`}, ${input.category}, ${credentialType},
-        ${JSON.stringify({ updatedKeys: Object.keys(input.settings || {}), hasApiKey: Boolean(input.credentials?.apiKey) })}
+        ${JSON.stringify({ updatedKeys: Object.keys(input.settings || {}), hasApiKey: Boolean(newKey), keptStoredKey: Boolean(!newKey && keptKey) })}
       )
     `;
-  } catch {
-    // Non-fatal
-  }
+  });
 
   return { success: true, category: input.category };
 }
 
+function toDate(value: unknown): Date | undefined {
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date : undefined;
+}
+
 /**
- * Removes workspace-level credential for a category, reverting to deployment/default.
+ * Removes workspace-level credential for a category, reverting to deployment/default. The removal and its audit record
+ * run in one transaction.
  */
 export async function removeWorkspaceProviderConfig(
   sql: Sql,
@@ -354,19 +365,15 @@ export async function removeWorkspaceProviderConfig(
 ): Promise<{ success: boolean }> {
   const credentialType = vaultTypeForCategory(input.category);
 
-  const existingRows = await sql<{ id: string }>`
-    select id from credential_vault
-    where organization_id = ${input.organizationId}
-      and credential_type = ${credentialType}
-    limit 1
-  `;
+  await withTransaction(sql, async (tx) => {
+    const existing = await tx<{ id: string }>`
+      select id from credential_vault
+      where organization_id = ${input.organizationId} and credential_type = ${credentialType}
+      limit 1
+    `;
+    if (existing[0]) await deleteVaultCredential(tx, input.organizationId, existing[0].id);
 
-  if (existingRows[0]) {
-    await deleteVaultCredential(sql, input.organizationId, existingRows[0].id);
-  }
-
-  try {
-    await sql`
+    await tx`
       insert into audit_log (
         id, organization_id, actor_id, action, object_type, object_id, metadata
       ) values (
@@ -374,15 +381,16 @@ export async function removeWorkspaceProviderConfig(
         ${`provider_config.remove`}, ${input.category}, ${credentialType}, '{}'
       )
     `;
-  } catch {
-    // Ignored
-  }
+  });
 
   return { success: true };
 }
 
 /**
  * Tests connection for a specific provider category with SSRF protection and live health checks.
+ *
+ * READY is reported only for a usable credential, by the same resolver the runtime uses. The credential categories do
+ * not call their live provider here, and the message says so.
  */
 export async function testWorkspaceProviderConnection(
   sql: Sql,
@@ -394,31 +402,22 @@ export async function testWorkspaceProviderConnection(
   const started = Date.now();
 
   try {
-    if (input.category === "jev") {
-      const health = await jevRouter.health();
-      const ready = Object.values(health).some((h) => h.status === "READY");
+    if (input.category === "jev" || input.category === "production" || input.category === "perception") {
+      const state = input.category === "perception"
+        ? await perceptionStateFor(sql, input.organizationId)
+        : await credentialStateFor(sql, input.organizationId, input.category);
       const latencyMs = Date.now() - started;
-      return {
-        status: ready ? "READY" : "ERROR",
-        message: ready ? "JEV provider responded with READY status." : "Configured JEV provider is not ready.",
-        latencyMs,
-      };
-    }
-
-    if (input.category === "perception") {
-      // Checks the credential the production resolver would use. It does not call Gemini, so READY means "a usable
-      // credential is in place", not "the live API answered".
-      const credential = await perceptionCredentialFor(sql, input.organizationId);
-      const latencyMs = Date.now() - started;
-      if (credential.status === "ready") {
-        const source = credential.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
+      if (state.state === "usable") {
+        const source = state.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
+        const label = input.category === "jev" ? "TypeSafe JEV" : "Gemini";
+        const extra = input.category === "jev" ? " OpenRouter is deployment-only and was not checked." : "";
         return {
           status: "READY",
-          message: `Gemini credential is usable (${source}). The live Gemini API was not called by this check.`,
+          message: `${label} credential is usable (${source}). The live provider was not called by this check.${extra}`,
           latencyMs,
         };
       }
-      return { status: "ERROR", message: credential.reason, latencyMs };
+      return { status: "ERROR", message: state.reason ?? "No credential is available for this workspace.", latencyMs };
     }
 
     if (input.category === "storage") {

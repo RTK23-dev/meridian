@@ -26,6 +26,12 @@ import type {
 } from "../types.ts";
 import { modelCapabilityRegistry } from "../registry.ts";
 import { ProviderConfigResolver } from "../../config/resolver.ts";
+import type { Sql } from "../../learning/store.ts";
+import { loadDefaultSql, resolveCredential, type CredentialEnv } from "../../credentials/resolve.ts";
+import { credentialStateOf, type CredentialResolution } from "../../credentials/contract.ts";
+
+/** A workspace's usable key, or the reason there is none. The provider is never called without a usable key. */
+type KeyAccess = { ok: true; apiKey: string } | { ok: false; reason: string };
 
 export const SUPPORTED_OMNI_TASKS = ["text_to_video", "image_to_video"] as const;
 export type OmniSupportedTask = (typeof SUPPORTED_OMNI_TASKS)[number];
@@ -158,33 +164,79 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
   };
 
   private fetchImpl: typeof fetch;
+  private readonly sql?: Sql;
+  private readonly env?: CredentialEnv;
+  private readonly lookup?: (organizationId: string) => Promise<CredentialResolution>;
 
-  constructor(options?: { fetchImpl?: typeof fetch }) {
+  /**
+   * No key is held here. Each call names its workspace, and the workspace's production credential is resolved for that
+   * call. The deployment key is used only when PRODUCTION_SHARED_DEFAULT=deployment is set.
+   */
+  constructor(options?: {
+    fetchImpl?: typeof fetch;
+    sql?: Sql;
+    env?: CredentialEnv;
+    lookup?: (organizationId: string) => Promise<CredentialResolution>;
+  }) {
     this.fetchImpl = options?.fetchImpl || globalThis.fetch;
+    this.sql = options?.sql;
+    this.env = options?.env;
+    this.lookup = options?.lookup;
   }
 
-  private getApiKey(): string | undefined {
-    return ProviderConfigResolver.resolveGoogle().apiKey;
+  /** The workspace's production credential, by the shared resolver. Nothing is cached between calls. */
+  private async credentialFor(organizationId: string): Promise<CredentialResolution> {
+    if (this.lookup) return this.lookup(organizationId);
+    const sql = this.sql ?? (await loadDefaultSql());
+    return resolveCredential(sql, organizationId, "production", this.env ?? process.env);
+  }
+
+  /** The usable key for this workspace, or the reason there is none. A failed read is "no call", never a fallback. */
+  private async keyFor(organizationId: string | undefined): Promise<KeyAccess> {
+    if (!organizationId) {
+      return { ok: false, reason: "Google Gemini Omni needs a workspace production credential, and no workspace was given. No request was sent." };
+    }
+    try {
+      const resolution = await this.credentialFor(organizationId);
+      if (resolution.status === "ready") return { ok: true, apiKey: resolution.secret };
+      return { ok: false, reason: resolution.reason };
+    } catch {
+      return { ok: false, reason: "The workspace's Gemini production credential could not be read. No request was sent." };
+    }
   }
 
   private getModel(): string {
-    return ProviderConfigResolver.resolveGoogle().omniModel;
+    return ProviderConfigResolver.resolveGoogle({ env: this.env }).omniModel;
   }
 
+  /**
+   * Without a workspace there is no key to check, so this reports only that a workspace credential is needed. It never
+   * reports READY.
+   */
   async health(): Promise<ProviderHealth> {
-    const googleConfig = ProviderConfigResolver.resolveGoogle();
-    const key = googleConfig.apiKey;
-    if (!key) {
-      return {
-        id: this.id,
-        state: "NOT_CONFIGURED",
-        capabilities: [],
-        detail: "Google Gemini Omni requires MERIDIAN_GEMINI_API_KEY (or GEMINI_API_KEY / GOOGLE_API_KEY).",
-        checkedAt: new Date().toISOString(),
-      };
+    return {
+      id: this.id,
+      state: "NOT_CONFIGURED",
+      capabilities: [],
+      detail: "Google Gemini Omni needs a workspace production credential. Readiness is checked for a workspace, and none was given.",
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Readiness for one workspace. A workspace whose key is not usable is never reported as ready. */
+  async healthFor(organizationId: string): Promise<ProviderHealth> {
+    const checkedAt = new Date().toISOString();
+    let state: ReturnType<typeof credentialStateOf>;
+    try {
+      state = credentialStateOf(await this.credentialFor(organizationId));
+    } catch {
+      return { id: this.id, state: "UNAVAILABLE", capabilities: [], detail: "The workspace's Gemini production credential could not be checked.", checkedAt };
+    }
+    if (state.state !== "usable") {
+      return { id: this.id, state: "NOT_CONFIGURED", capabilities: [], detail: state.reason ?? "No Gemini production credential is available.", checkedAt };
     }
 
-    const model = googleConfig.omniModel;
+    const model = this.getModel();
     const lifecycle = modelCapabilityRegistry.checkModelLifecycle(model);
 
     if (!lifecycle.usable) {
@@ -193,24 +245,25 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         state: "UNAVAILABLE",
         capabilities: [],
         detail: lifecycle.warning || `Model '${model}' is unavailable.`,
-        checkedAt: new Date().toISOString(),
+        checkedAt,
       };
     }
 
+    const source = state.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
     return {
       id: this.id,
       state: "CONFIGURED",
       capabilities: ["textToVideo", "imageToVideo", "timelineEditing"],
-      detail: `Configured with model ${model}.${lifecycle.warning ? ` Warning: ${lifecycle.warning}` : ""}`,
-      checkedAt: new Date().toISOString(),
+      detail: `Configured with model ${model}, using ${source}.${lifecycle.warning ? ` Warning: ${lifecycle.warning}` : ""}`,
+      checkedAt,
     };
   }
 
   async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
-    const apiKey = this.getApiKey();
+    const access = await this.keyFor(spec.organizationId);
     const costEstimate = (spec.durationTargetSeconds || 5) * this.capabilities.costPerSecondEstimateUsd;
 
-    if (!apiKey) {
+    if (!access.ok) {
       return {
         jobId: "",
         organizationId: spec.organizationId,
@@ -219,7 +272,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         providerId: this.id,
         status: "NOT_CONFIGURED",
         costEstimateUsd: costEstimate,
-        error: "Google Gemini Omni API credentials are not configured.",
+        error: access.reason,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -305,7 +358,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-goog-api-key": apiKey,
+            "x-goog-api-key": access.apiKey,
           },
           body: JSON.stringify(payload),
         }
@@ -363,6 +416,8 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         costEstimateUsd: costEstimate,
         outputArtifactId: parsed?.uri,
         metadata: {
+          // The workspace that owns the job. A later poll resolves that workspace's key, and no other.
+          organizationId: spec.organizationId,
           model,
           apiFamily: "interactions",
           interactionId,
@@ -392,10 +447,12 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
   }
 
   async checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob> {
-    const apiKey = this.getApiKey();
+    // The poll uses the key of the workspace that owns the job, which the job's metadata names.
+    const owner = typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined;
+    const access = await this.keyFor(owner);
     const interactionId = (metadata?.interactionId as string) || (metadata?.operationName as string) || jobId;
 
-    if (!apiKey) {
+    if (!access.ok) {
       return {
         jobId,
         organizationId: "",
@@ -404,7 +461,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         providerId: this.id,
         status: "NOT_CONFIGURED",
         costEstimateUsd: 0,
-        error: "Google Gemini Omni API credentials not configured.",
+        error: access.reason,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -419,7 +476,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         `https://generativelanguage.googleapis.com/v1beta/${cleanId}`,
         {
           headers: {
-            "x-goog-api-key": apiKey,
+            "x-goog-api-key": access.apiKey,
           },
         }
       );

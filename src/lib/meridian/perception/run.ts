@@ -12,6 +12,8 @@ import type { Sql } from "../learning/store.ts";
 import { checkImageBytes } from "../media/image-input.ts";
 import { GeminiPerceptionProvider } from "./multimodal.ts";
 import { resolvePerceptionCredential } from "./credential.ts";
+import { resolveCredential } from "../credentials/resolve.ts";
+import { credentialStateOf } from "../credentials/contract.ts";
 import type { MediaObservation, MultimodalPerceptionProvider, PerceptionFailureKind, PerceptionMedia, PerceptionMediaKind } from "./types.ts";
 
 export const PERCEPTION_PROVIDER_ENV = "PERCEPTION_PROVIDER";
@@ -271,7 +273,13 @@ export async function perceptionReadiness(
   if (!provider) return { ready: false, reason: "No perception provider is configured.", source: null };
   const health = await provider.health();
   if (health.state !== "HEALTHY") return { ready: false, reason: health.detail, source: null };
-  const credential = await resolvePerceptionCredential(sql, organizationId);
-  if (credential.status !== "ready") return { ready: false, reason: credential.reason, source: null };
-  return { ready: true, reason: `Ready with the ${credential.source === "workspace" ? "workspace's saved" : "deployment's shared"} Gemini credential.`, source: credential.source };
+  const state = credentialStateOf(await resolveCredential(sql, organizationId, "perception"));
+  if (state.state !== "usable" || !state.source) {
+    return { ready: false, reason: state.reason ?? "No Gemini credential is available for this workspace.", source: null };
+  }
+  return {
+    ready: true,
+    reason: `Ready with the ${state.source === "workspace" ? "workspace's saved" : "deployment's shared"} Gemini credential.`,
+    source: state.source,
+  };
 }

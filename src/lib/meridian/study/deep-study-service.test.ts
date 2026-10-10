@@ -3,6 +3,7 @@ import test from "node:test";
 import { DeepStudyService } from "./deep-study-service.ts";
 import { JevDecisionService } from "../jev/service.ts";
 import { JevRouter, TypeSafeDirectJevProvider } from "../jev/router.ts";
+import { fixedLookup } from "../credentials/fixtures.ts";
 import type { ContrastSubject } from "./contrast-engine.ts";
 import type { EvidenceBundle } from "../evidence/types.ts";
 import type { DiscoveredReelItem } from "../discovery/types.ts";
@@ -31,7 +32,7 @@ test("DeepStudyService: conducts contrast analysis and constructs versioned Conc
 
   const router = new JevRouter({
     typesafeProvider: new TypeSafeDirectJevProvider({
-      apiKey: "test_key",
+      lookup: fixedLookup("test_key"),
       baseUrl: "https://api.typesafe.ai/v1/systemone",
       fetchImpl: mockFetch as typeof fetch,
     }),
