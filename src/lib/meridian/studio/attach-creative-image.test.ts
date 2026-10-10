@@ -10,9 +10,9 @@ import { storeVaultCredential } from "../vault/service.ts";
 // Used only by this test process: the vault encrypts saved keys with this master key.
 process.env.TOKEN_ENCRYPTION_KEY = "test-encryption-key-for-attach-creative-image";
 
-// creative-actions.ts uses the "@/" alias, so the alias hook is registered before the module is loaded.
+// The server module uses the "@/" alias, so the alias hook is registered before the module is loaded.
 enableAppAliases();
-const { attachCreativeImageFor } = await import("./creative-actions.ts");
+const { attachCreativeImageFor } = await import("./creative-image.server.ts");
 
 const NANO_BANANA_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 

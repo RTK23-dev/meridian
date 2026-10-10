@@ -11,6 +11,7 @@ import {
   approvesBrief,
   approvesBriefCalibrated,
   calibratedProbability,
+  createBrief,
   registryWith,
   stubEngine,
 } from "../testing/brief-fixtures.ts";
@@ -25,10 +26,12 @@ import { enableAppAliases } from "../testing/module-aliases.ts";
 import { briefGateJudge, createGatedBrief, type BriefGateOptions } from "./brief-service.server.ts";
 import type { BriefRecord } from "./brief-service.contract.ts";
 import { briefStatusFor, loadBriefReviewDisclosure } from "./brief-review.server.ts";
+import { judgeBriefFit } from "./brief-gate.server.ts";
 
 // The paths under test import modules that use the "@/" alias, so the alias hook is registered before they are loaded.
 enableAppAliases();
-const { createBriefFromOpportunityFor } = await import("./creative-actions.ts");
+const { createBriefFromOpportunityFor } = await import("./opportunity-brief.server.ts");
+const { generateCreativeFor } = await import("./creative-generation.server.ts");
 const { openStudioBrief } = await import("./session.server.ts");
 const { reviewBriefForUser } = await import("./brief-review-access.server.ts");
 const { recordOpportunityDirection } = await import("../opportunity/actions.ts");
@@ -357,6 +360,28 @@ test("openStudioBrief records the direction with who and why, and never writes t
   assert.equal(approved?.count, 0, "accepting a direction writes no reviewer_decision on any opportunity decision");
 });
 
+test("the next brief (forceNew) is written when it is given a reason, and is refused without one", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "svc-next-brief");
+  await seedBrandBrain(sql, tenant);
+  await seedCompetitorCreative(sql, tenant, DISCOVERED_ANGLE);
+  const gate = gateFor("AUTO_APPROVE");
+  await openStudioBrief(tenant.userId, { brandId: tenant.brandId, forceNew: false, reason: REASON }, gate);
+  const [first] = await sql<{ count: number }>`select count(*)::int as count from briefs where brand_id = ${tenant.brandId} and opportunity_id is not null`;
+  assert.equal(first?.count, 1, "the first brief is written");
+
+  await assert.rejects(
+    openStudioBrief(tenant.userId, { brandId: tenant.brandId, forceNew: true, reason: "" }, gate),
+    /at least 20 characters/,
+    "the next brief needs a reason, as the accept does",
+  );
+  await openStudioBrief(tenant.userId, { brandId: tenant.brandId, forceNew: true, reason: "Write the next brief from what the test learned." }, gate);
+  const [second] = await sql<{ count: number }>`select count(*)::int as count from briefs where brand_id = ${tenant.brandId} and opportunity_id is not null`;
+  assert.equal(second?.count, 2, "the next brief is written");
+  const [directions] = await sql<{ count: number }>`select count(*)::int as count from opportunity_direction_decisions where brand_id = ${tenant.brandId}`;
+  assert.equal(directions?.count, 2, "each brief has its own recorded direction");
+});
+
 test("openStudioBrief refuses a reason shorter than 20 characters before ranking or writing anything", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "svc-short-reason");
@@ -380,4 +405,153 @@ test("a viewer cannot accept a direction or write a brief from an opportunity", 
   await assert.rejects(createBriefFromOpportunityFor(viewerId, { brandId: tenant.brandId, opportunityId: opportunity.opportunityId }, gateFor("AUTO_APPROVE")));
   const [directions] = await sql<{ count: number }>`select count(*)::int as count from opportunity_direction_decisions where brand_id = ${tenant.brandId}`;
   assert.equal(directions?.count, 0);
+});
+
+/** The copy the stubbed text model answers with. Only the request count matters to the refusal tests. */
+const COPY = { hook: "Dinner in ten minutes", script: "A calm dinner plan that needs no planning.", offer: "", cta: "See it in use", visualTreatment: "Kitchen counter", claims: [] };
+
+/**
+ * Replaces the text model for one test. The chat provider is OpenRouter over fetch, so the stub counts the requests the process
+ * sends to it. The environment and fetch are restored afterwards.
+ */
+async function withTextModel<T>(run: (calls: { count: number }) => Promise<T>): Promise<T> {
+  const saved = { fetch: globalThis.fetch, key: process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_MODEL };
+  const calls = { count: 0 };
+  process.env.OPENROUTER_API_KEY = "test-key";
+  process.env.OPENROUTER_MODEL = "test-model";
+  globalThis.fetch = (async () => {
+    calls.count += 1;
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(COPY) } }], usage: { total_tokens: 12 } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  try {
+    return await run(calls);
+  } finally {
+    globalThis.fetch = saved.fetch;
+    if (saved.key === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = saved.key;
+    if (saved.model === undefined) delete process.env.OPENROUTER_MODEL;
+    else process.env.OPENROUTER_MODEL = saved.model;
+  }
+}
+
+for (const outcome of ["HUMAN_REVIEW", "REJECT"] as const) {
+  test(`generateCreative: a ${outcome} brief is refused before any text model is called, and no model run is recorded`, async () => {
+    const sql = await getSql();
+    const tenant = await studioTenant(sql, `svc-generate-${outcome}`);
+    const made = await createBrief(sql, tenant, {
+      engines: registryWith(stubEngine("jev"), stubEngine("openai-decisions", { failure: true })),
+      selected: { engineId: "openai-decisions", source: "workspace" },
+      // A brief with no hook is a deterministic rejection: no engine is asked, and the brief is stored as rejected.
+      brief: outcome === "REJECT" ? { ...BRIEF, hook: "" } : undefined,
+    });
+    assert.equal(made.action, outcome);
+    await withTextModel(async (calls) => {
+      await assert.rejects(
+        generateCreativeFor(tenant.userId, { brandId: tenant.brandId, briefId: made.briefId }),
+        outcome === "HUMAN_REVIEW" ? /awaiting review/ : /did not pass the gate/,
+      );
+      assert.equal(calls.count, 0, "no text model was called for a brief that production refuses");
+    });
+    const [runs] = await sql<{ count: number }>`select count(*)::int as count from model_runs where input_ref = ${made.briefId}`;
+    assert.equal(runs?.count, 0, "no model run was recorded for the refused brief");
+  });
+}
+
+test("generateCreative: a ready brief calls the text model once and records the run (the control for the refusals)", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "svc-generate-ready");
+  // A brief built the way the brief builder builds one: the context carries its observations, and the workflow is an object.
+  const ready = await createGatedBrief(sql, {
+    organizationId: tenant.organizationId,
+    brandId: tenant.brandId,
+    createdBy: tenant.userId,
+    brief: {
+      ...briefRecord(null),
+      context: { brandPositioning: BRAIN.positioning, untrustedObservations: [] },
+      why: ["Why this brief exists."],
+      workflow: { templateId: "", templateVersion: "", label: "", stages: [], variables: { product: "" } },
+    },
+    judge: judgeFor(sql, tenant, gateFor("AUTO_APPROVE")),
+  });
+  assert.equal(ready.status, "ready");
+  await withTextModel(async (calls) => {
+    const result = await generateCreativeFor(tenant.userId, { brandId: tenant.brandId, briefId: ready.briefId });
+    assert.equal(calls.count, 1, "the text model is called for a ready brief");
+    assert.equal(result.status, "completed");
+  });
+  const [runs] = await sql<{ count: number }>`
+    select count(*)::int as count from model_runs where input_ref = ${ready.briefId} and status = 'completed'
+  `;
+  assert.equal(runs?.count, 1);
+});
+
+test("an engine-judged brief whose gate record cannot be written is not created: the decision could not be recorded", async () => {
+  const base = await getSql();
+  const tenant = await studioTenant(base, "svc-no-record");
+  const opportunity = await seedOpportunity(base, tenant);
+  // Only the gate record write fails. The engine is called and answers; the decision then has no record to point to.
+  const recordSql = failingSql(base, /insert into decision_gate_records/);
+  const engines = registryWith(stubEngine("jev", { respond: approvesBriefCalibrated }), stubEngine("openai-decisions"));
+  let judgedId = "";
+  await assert.rejects(
+    createGatedBrief(base, {
+      organizationId: tenant.organizationId,
+      brandId: tenant.brandId,
+      createdBy: tenant.userId,
+      brief: briefRecord(opportunity.opportunityId),
+      judge: async (briefId) => {
+        judgedId = briefId;
+        return judgeBriefFit({
+          sql: recordSql,
+          organizationId: tenant.organizationId,
+          brandId: tenant.brandId,
+          briefId,
+          brief: BRIEF,
+          brain: BRAIN,
+          engines,
+          selection: { engineId: "jev", source: "workspace" },
+        });
+      },
+    }),
+    /could not be recorded/,
+  );
+  const [briefs] = await base<{ count: number }>`select count(*)::int as count from briefs where id = ${judgedId}`;
+  assert.equal(briefs?.count, 0, "no brief was written for the unrecorded decision");
+  const [decisions] = await base<{ count: number }>`select count(*)::int as count from jev_decisions where subject_id = ${judgedId}`;
+  assert.equal(decisions?.count, 0, "no decision was written for the unrecorded decision");
+  const [opp] = await base<{ status: string }>`select status from opportunities where id = ${opportunity.opportunityId}`;
+  assert.equal(opp?.status, "open", "the opportunity is not marked briefed");
+});
+
+test("a deterministic rejection makes no engine call, so it is still written when its gate record cannot be", async () => {
+  const base = await getSql();
+  const tenant = await studioTenant(base, "svc-det-record");
+  const opportunity = await seedOpportunity(base, tenant);
+  const recordSql = failingSql(base, /insert into decision_gate_records/);
+  const jev = stubEngine("jev", { respond: approvesBriefCalibrated });
+  const created = await createGatedBrief(base, {
+    organizationId: tenant.organizationId,
+    brandId: tenant.brandId,
+    createdBy: tenant.userId,
+    brief: briefRecord(opportunity.opportunityId),
+    judge: (briefId) =>
+      judgeBriefFit({
+        sql: recordSql,
+        organizationId: tenant.organizationId,
+        brandId: tenant.brandId,
+        briefId,
+        brief: { ...BRIEF, hook: "" },
+        brain: BRAIN,
+        engines: registryWith(jev, stubEngine("openai-decisions")),
+        selection: { engineId: "jev", source: "workspace" },
+      }),
+  });
+  assert.equal(jev.requests.length, 0, "no engine is asked about a deterministic rejection");
+  assert.equal(created.action, "REJECT");
+  assert.equal(created.status, "rejected", "the rejection is stored");
+  const [decision] = await base<{ decision: string }>`select decision from jev_decisions where subject_id = ${created.briefId}`;
+  assert.equal(decision?.decision, "REJECT");
 });

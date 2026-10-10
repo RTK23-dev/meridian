@@ -1,16 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
-import { buildBrief, renderGenerationPrompt, type BriefDraft } from "@/lib/meridian/brief/engine";
+import type { BriefDraft } from "@/lib/meridian/brief/engine";
 import { decideForTenant } from "@/lib/meridian/jev/engine";
-import { creativeQa, visualQa } from "@/lib/meridian/jev/questions";
+import { creativeQa } from "@/lib/meridian/jev/questions";
 import { loadQuestionPolicy } from "@/lib/meridian/jev/policy";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { assessCopy } from "@/lib/meridian/production/assess";
 import { promptById } from "@/lib/meridian/prompts/registry";
 import { contentHash } from "@/lib/meridian/assets/lifecycle";
 import { deriveMetrics } from "@/lib/meridian/performance/metrics";
-import { selectContext } from "@/lib/meridian/retrieval/pack";
 import { summarizeIntelligence } from "@/lib/meridian/intelligence/summary";
 import { inspectImage } from "@/lib/meridian/assets/images";
 import {
@@ -28,11 +27,10 @@ import {
   writeRelationships,
   notify,
 } from "../machine-shared";
-import { assertOpportunityClear, opportunityView } from "../opportunity/actions";
-import { productionRefusalFor } from "@/lib/meridian/studio/brief-review.server";
-import type { BriefGateOptions } from "./brief-service.server";
+import { assertOpportunityClear } from "../opportunity/actions";
+import { productionRefusalFor } from "./brief-status";
 
-function briefDraftFromRow(row: Record<string, unknown>): BriefDraft {
+export function briefDraftFromRow(row: Record<string, unknown>): BriefDraft {
   return {
     title: asText(row.title),
     audience: asText(row.audience),
@@ -61,7 +59,7 @@ function briefDraftFromRow(row: Record<string, unknown>): BriefDraft {
   };
 }
 
-async function produceCreative(
+export async function produceCreative(
   sql: Sql,
   input: {
     userId: string;
@@ -243,100 +241,7 @@ export const createBriefFromOpportunity = createServerFn({ method: "POST" })
     return { brandId: clip(body.brandId, 80, "Brand", true), opportunityId: clip(body.opportunityId, 80, "Opportunity", true) };
   })
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => createBriefFromOpportunityFor(context.userId, data));
-
-/**
- * Writes a brief from a stored opportunity for a signed-in user. The role and the tenant are checked here. The brief is judged
- * by the shared brief gate and written through createGatedBrief, as every brief is. No local rule set decides it.
- */
-export async function createBriefFromOpportunityFor(
-  userId: string,
-  data: { brandId: string; opportunityId: string },
-  gate: BriefGateOptions = {},
-) {
-  const sql = await getSql();
-  const access = await requireBrand(sql, userId, data.brandId, "member");
-  const rows = await sql<Record<string, unknown>>`
-    select * from opportunities
-    where id = ${data.opportunityId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
-    limit 1
-  `;
-  const row = rows[0];
-  if (!row) throw new Error("Opportunity not found.");
-  if (asText(row.status) === "rejected" || asText(row.status) === "dismissed") {
-    throw new Error("This opportunity was rejected or dismissed.");
-  }
-  await assertOpportunityClear(sql, data.opportunityId);
-  const existing = await sql<{ id: string }>`
-    select id from briefs
-    where opportunity_id = ${data.opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
-    order by created_at desc limit 1
-  `;
-  if (existing[0]) return { id: existing[0].id };
-  const loaded = await loadContext(sql, access.organizationId, data.brandId);
-  const draft = opportunityView(row, "", 0);
-  const sameAngle = loaded.creatives
-    .filter((creative) => creative.origin === "competitor" && creative.angle === draft.angle && creative.text)
-    .slice(0, 4)
-    .map((creative) => ({ id: creative.id, text: creative.text }));
-  const retrieved = selectContext(
-    `${draft.angle} ${draft.hookDirection}`,
-    loaded.creatives
-      .filter((creative) => creative.origin === "competitor")
-      .map((creative) => ({ id: creative.id, brandId: creative.brandId, text: creative.text })),
-    data.brandId,
-  );
-  const observations = (retrieved.length > 0 ? retrieved : sameAngle).map((item) => ({ id: item.id, text: item.text }));
-  const brief = buildBrief({
-    opportunity: draft,
-    brain: loaded.brain,
-    patterns: loaded.patterns,
-    rejections: loaded.rejections,
-    observations,
-  });
-  // Loaded here, not at the top of the module: the client bundle imports this file through the route tree, and the
-  // brief service is server-only.
-  const { briefBrainFrom, briefGateJudge, createGatedBrief } = await import("./brief-service.server.ts");
-  const created = await createGatedBrief(sql, {
-    organizationId: access.organizationId,
-    brandId: data.brandId,
-    createdBy: userId,
-    brief: {
-      opportunityId: data.opportunityId,
-      title: brief.title,
-      audience: brief.audience,
-      angle: brief.angle,
-      hook: brief.hook,
-      message: brief.message,
-      offer: brief.offer,
-      cta: brief.cta,
-      format: brief.format,
-      proofType: brief.proofType,
-      constraints: brief.constraints,
-      context: brief.context,
-      workflow: brief.workflow,
-      why: brief.why,
-      learningNotes: brief.learningNotes,
-      failureNotes: brief.failureNotes,
-    },
-    judge: briefGateJudge(sql, {
-      organizationId: access.organizationId,
-      brandId: data.brandId,
-      brief: {
-        audience: brief.audience,
-        hook: brief.hook,
-        message: brief.message,
-        format: brief.format,
-        cta: brief.cta,
-        angle: brief.angle,
-        offer: brief.offer,
-      },
-      brain: briefBrainFrom(loaded.brain),
-      ...gate,
-    }),
-  });
-  return { id: created.briefId, decision: created.action };
-}
+  .handler(async ({ context, data }) => (await import("./opportunity-brief.server.ts")).createBriefFromOpportunityFor(context.userId, data));
 
 export const composeCreative = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
@@ -379,70 +284,7 @@ export const generateCreative = createServerFn({ method: "POST" })
     return { brandId: clip(body.brandId, 80, "Brand", true), briefId: clip(body.briefId, 80, "Brief", true) };
   })
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    const briefs = await sql<Record<string, unknown>>`
-      select * from briefs where id = ${data.briefId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId} limit 1
-    `;
-    const briefRow = briefs[0];
-    if (!briefRow) throw new Error("Brief not found.");
-    const prompt = promptById("creative_script");
-    if (!prompt) throw new Error("Creative prompt is not active.");
-    const { activeChatProvider, extractJson, providerStatus } = await import("@/lib/meridian/providers/chat.server");
-    const provider = activeChatProvider();
-    const status = providerStatus();
-    if (!provider) return { status: "unavailable" as const, message: "No text model is configured. You can still write the script yourself." };
-    const brief = briefDraftFromRow(briefRow);
-    const rendered = renderGenerationPrompt(brief);
-    const result = await provider.complete({
-      model: status.model,
-      temperature: prompt.temperature,
-      maxTokens: 900,
-      system: rendered.system,
-      user: rendered.user,
-    });
-    const correlationId = id();
-    await ensurePromptRows(sql);
-    await sql`
-      insert into model_runs (
-        id, organization_id, brand_id, correlation_id, operation, provider, model, prompt_id, prompt_version,
-        input_ref, output, latency_ms, tokens, status, error
-      ) values (
-        ${id()}, ${access.organizationId}, ${data.brandId}, ${correlationId}, 'creative_script',
-        ${result.ok ? result.provider : provider.id}, ${status.model}, ${prompt.id}, ${prompt.version},
-        ${data.briefId}, ${result.ok ? result.content.slice(0, 8000) : ""}, ${result.ok ? result.latencyMs : 0},
-        ${result.ok ? result.tokens : null}, ${result.ok ? "completed" : result.status}, ${result.ok ? "" : result.error}
-      )
-    `;
-    if (!result.ok) return { status: "failed" as const, message: result.error };
-    let copy: { hook: string; script: string; offer: string; cta: string; visualTreatment: string; claims: string[] };
-    try {
-      const parsed = extractJson(result.content) as Record<string, unknown>;
-      copy = {
-        hook: clip(parsed.hook, 400, "Hook", true),
-        script: clip(parsed.script, 4000, "Script", true),
-        offer: clip(parsed.offer, 400, "Offer"),
-        cta: clip(parsed.cta, 240, "Call to action", true),
-        visualTreatment: clip(parsed.visualTreatment, 400, "Visual treatment"),
-        claims: Array.isArray(parsed.claims) ? parsed.claims.filter((item) => typeof item === "string").map((item) => item.trim()).slice(0, 8) : [],
-      };
-    } catch (error) {
-      return { status: "failed" as const, message: error instanceof Error ? error.message : "The model output was not usable." };
-    }
-    const produced = await produceCreative(sql, {
-      userId: context.userId,
-      organizationId: access.organizationId,
-      brandId: data.brandId,
-      briefId: data.briefId,
-      ...copy,
-      provider: result.provider,
-      model: result.model,
-      modelResponse: result.content,
-      jobStatus: "completed",
-    });
-    return { status: "completed" as const, ...produced };
-  });
+  .handler(async ({ context, data }) => (await import("./creative-generation.server.ts")).generateCreativeFor(context.userId, data));
 
 export const listLibrary = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ brandId: clip(objectInput(input).brandId, 80, "Brand", true) }))
@@ -592,151 +434,7 @@ export const attachCreativeImage = createServerFn({ method: "POST" })
     return { brandId: clip(body.brandId, 80, "Brand", true), creativeId: clip(body.creativeId, 80, "Creative", true) };
   })
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => attachCreativeImageFor(context.userId, data));
-
-/**
- * Generates and stores an image for a creative, for a signed-in user. The role and the tenant are checked here. The image is
- * generated with the creative's own workspace production key, resolved through the shared credential resolver.
- */
-export async function attachCreativeImageFor(userId: string, data: { brandId: string; creativeId: string }) {
-    const sql = await getSql();
-    const access = await requireBrand(sql, userId, data.brandId, "member");
-    const creatives = await sql<{ title: string; raw_text: string; hook: string; status: string; brief_id: string | null }>`
-      select title, raw_text, hook, status, brief_id from creative_records
-      where id = ${data.creativeId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
-        and origin <> 'competitor'
-      limit 1
-    `;
-    const creative = creatives[0];
-    if (!creative) throw new Error("Creative not found.");
-    if (creative.status === "rejected") throw new Error("Rejected creatives are not illustrated.");
-    const briefRows = creative.brief_id ? await sql<{ decision_id: string }>`
-      select decision_id from briefs
-      where id = ${creative.brief_id} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}
-      limit 1
-    ` : [];
-    const jevDecisionId = briefRows[0]?.decision_id ?? "";
-    const { generateNanoBananaImage } = await import("@/lib/meridian/providers/nano-banana.server");
-    const prompt = `Advertising still for ${creative.title}. ${creative.hook}. ${creative.raw_text}`.slice(0, 1800);
-    // The image is generated with the creative's workspace key. An unusable or absent key means no request is made.
-    const { resolveCredential } = await import("@/lib/meridian/credentials/resolve");
-    const workspaceKey = await resolveCredential(sql, access.organizationId, "production");
-    const image = await generateNanoBananaImage({
-      prompt,
-      promptVersion: "creative-image-v1",
-      apiKey: workspaceKey.status === "ready" ? workspaceKey.secret : undefined,
-    });
-    if (image.status !== "ready") return { status: image.status, message: image.error };
-    const assetId = id();
-    const storageKey = `${access.organizationId}/${data.brandId}/creative/${data.creativeId}/${assetId}.png`;
-    await sql`
-      insert into asset_blobs (storage_key, organization_id, brand_id, body, mime_type, checksum, byte_size, version, lifecycle)
-      values (${storageKey}, ${access.organizationId}, ${data.brandId}, ${Buffer.from(image.bytes).toString("base64")}, 'image/png', ${image.sha256}, ${image.bytes.byteLength}, 1, 'stored')
-      on conflict (storage_key) do nothing
-    `;
-    await sql`
-      insert into assets (
-        id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
-        lifecycle, checksum, width, height, byte_size, provider, model, prompt_version, kind, media_status, provenance
-      ) values (
-        ${assetId}, ${access.organizationId}, ${data.brandId}, ${data.creativeId}, 1, ${storageKey}, ${image.sha256},
-        'image/png', 'google:nano-banana', 'stored', 'stored', ${image.sha256}, ${image.width}, ${image.height},
-        ${image.bytes.byteLength}, ${image.provider}, ${image.model}, ${image.promptVersion}, 'image', 'completed', ${`jev-creative-image:${jevDecisionId || "no-decision"}`}
-      )
-    `;
-    await sql`update creative_records set asset_url = ${storageKey}, updated_at = now() where id = ${data.creativeId} and organization_id = ${access.organizationId} and brand_id = ${data.brandId}`;
-    const loaded = await loadContext(sql, access.organizationId, data.brandId);
-    const product = loaded.products.find((item) => creative.raw_text.includes(item.name) || creative.title.includes(item.name)) ?? loaded.products[0];
-    const { readCreativeImage } = await import("@/lib/meridian/providers/vision.server");
-    const reading = await readCreativeImage({
-      imageUrl: `data:image/png;base64,${Buffer.from(image.bytes).toString("base64")}`,
-      productName: product?.name ?? "",
-      allowedClaims: product?.allowedClaims ?? "",
-      prohibitedClaims: [loaded.brain.prohibitedClaims, product?.prohibitedClaims ?? ""].filter(Boolean).join("\n"),
-    });
-    const visualInput = reading.ok
-      ? reading.evidence
-      : {
-          available: false,
-          logoPresent: null,
-          logoMatchProbability: null,
-          paletteMatch: null,
-          productMatch: null,
-          claimDetected: null,
-          claimSupported: null,
-          toneFit: null,
-        };
-    const visualPolicy = await loadQuestionPolicy(sql, access.organizationId, visualQa);
-    const visual = decideForTenant(visualPolicy.question, visualInput, {
-      organizationId: access.organizationId,
-      brandId: data.brandId,
-      evidence: loaded.creatives,
-    }, {
-      policyVersion: visualPolicy.policy.policyVersion,
-      calibration: visualPolicy.policy.calibration,
-      provider: reading.ok ? reading.provider : "jev",
-      model: reading.ok ? reading.model : "visual-qa",
-    });
-    const decisionId = id();
-    const correlationId = id();
-    await insertDecision(sql, {
-      id: decisionId,
-      organizationId: access.organizationId,
-      brandId: data.brandId,
-      correlationId,
-      questionId: visual.questionId,
-      questionVersion: visual.questionVersion,
-      subjectType: "creative_image",
-      subjectId: data.creativeId,
-      input: visualInput,
-      evidence: visual.evidence,
-      probability: visual.probability,
-      confidence: visual.confidence,
-      thresholds: visual.thresholds,
-      decision: visual.decision,
-      reasons: visual.reasons,
-      provider: reading.ok ? reading.provider : visual.provider,
-      model: reading.ok ? reading.model : visual.model,
-      modelResponse: reading.ok ? reading.raw : "",
-      answer: visual.answer,
-      schemaVersion: visual.schemaVersion,
-      policyVersion: visual.policyVersion,
-      calibrationVersion: visual.calibrationVersion,
-    });
-    if (reading.ok) {
-      const promptAsset = promptById("visual_evidence");
-      if (promptAsset) {
-        await ensurePromptRows(sql);
-        await sql`
-          insert into model_runs (
-            id, organization_id, brand_id, correlation_id, operation, provider, model, prompt_id, prompt_version,
-            input_ref, output, latency_ms, tokens, status, error
-          ) values (
-            ${id()}, ${access.organizationId}, ${data.brandId}, ${correlationId}, 'visual_evidence',
-            ${reading.provider}, ${reading.model}, ${promptAsset.id}, ${promptAsset.version},
-            ${data.creativeId}, ${reading.raw}, ${reading.latencyMs}, ${reading.tokens}, 'completed', ''
-          )
-        `;
-      }
-    }
-    if (visual.decision === "HUMAN_REVIEW") {
-      await sql`
-        insert into reviews (id, organization_id, brand_id, decision_id, creative_id, subject_label)
-        values (${id()}, ${access.organizationId}, ${data.brandId}, ${decisionId}, ${data.creativeId}, ${reading.ok ? "Image needs a person" : "Image has no vision check"})
-      `;
-    }
-    if (visual.decision === "REJECT") {
-      await sql`
-        insert into rejections (id, organization_id, brand_id, creative_id, decision_id, reason_code, note, rejected_by)
-        values (
-          ${id()}, ${access.organizationId}, ${data.brandId}, ${data.creativeId}, ${decisionId},
-          ${"visual_mismatch"}, ${visual.reasons.join(" ").slice(0, 500)}, ${"jev"}
-        )
-      `;
-    }
-    const message = reading.ok ? (visual.reasons[0] ?? "Vision evidence was scored.") : reading.error;
-    return { status: "stored" as const, decision: visual.decision, message };
-}
+  .handler(async ({ context, data }) => (await import("./creative-image.server.ts")).attachCreativeImageFor(context.userId, data));
 
 export const getIntelligence = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ brandId: clip(objectInput(input).brandId, 80, "Brand", true) }))

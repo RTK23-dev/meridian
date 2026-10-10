@@ -181,6 +181,8 @@ try {
   await page.getByRole("button", { name: "Record test-provider performance and learn" }).click();
   await page.getByText(/angle=offer:/).first().waitFor({ timeout: 30000 });
   await page.getByRole("tab", { name: "2. Brief" }).click();
+  // Writing the next brief accepts a direction too, so it needs the same reason as the accept step.
+  await page.getByLabel(/Why accept this direction/).fill("E2E testing run: the learned offer angle is the next direction.");
   await page.getByRole("button", { name: "Write the next brief" }).click();
   await page.waitForFunction((previous) => {
     const node = document.querySelector("[data-testid='brief-constraints']");
