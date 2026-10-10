@@ -79,6 +79,7 @@ export function WeightsTab({ organizationId, saved, canAdmin }: { organizationId
                   max={WEIGHT_MAX}
                   step={WEIGHT_STEP}
                   disabled={!canAdmin}
+                  className="h-11"
                   onValueChange={([value]) => { if (value !== undefined) setWeight(key, value); }}
                 />
                 <div className="flex flex-wrap items-center gap-3">

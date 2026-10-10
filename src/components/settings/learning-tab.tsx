@@ -76,14 +76,17 @@ function LearningRow({ brand }: { brand: BrandSummary }) {
         </div>
         <Button asChild variant="quiet" size="md"><Link to="/brands/$brandId/learning" params={{ brandId: brand.id }}>Open learning</Link></Button>
       </div>
-      <Switch
-        id={`shared-patterns-${brand.id}`}
-        label="Use shared workspace patterns"
-        hint={canEdit ? undefined : "Only a member or admin can change this."}
-        checked={learning.data.useOrganizationLearning}
-        disabled={!canEdit || toggle.isPending}
-        onCheckedChange={(checked) => { void toggle.mutateAsync(checked).catch(() => undefined); }}
-      />
+      {/* The label row is 44 px tall, so the words and the switch share one large touch target on mobile. */}
+      <div className="[&_label]:flex [&_label]:min-h-11 [&_label]:items-center">
+        <Switch
+          id={`shared-patterns-${brand.id}`}
+          label="Use shared workspace patterns"
+          hint={canEdit ? undefined : "Only a member or admin can change this."}
+          checked={learning.data.useOrganizationLearning}
+          disabled={!canEdit || toggle.isPending}
+          onCheckedChange={(checked) => { void toggle.mutateAsync(checked).catch(() => undefined); }}
+        />
+      </div>
       {rawError ? <FormError message={plainServerError(rawError, "settings")} raw={rawError} /> : null}
     </li>
   );
