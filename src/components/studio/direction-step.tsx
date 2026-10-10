@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Button, Panel, TextArea } from "@/components/ui";
-import { Term } from "@/components/glossary";
+import { IdeaToTestBadge, Term } from "@/components/glossary";
+import { copy, decisionOutcome, percentOrUnknown } from "@/lib/copy";
 import { alternativeDirections, directionSourceLabel, type DirectionCandidate } from "./direction.ts";
-import { decisionPlainLabel, formatUnitInterval } from "./evidence.ts";
 import type { StudioData } from "./types.ts";
 
 /** The shortest reason that can accept a direction. The server enforces the same length. */
@@ -44,7 +44,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
       {recommendation ? (
         <Panel>
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">
-            Discovered · {recommendation.posture === "exploitation" ? "Exploitation" : "Exploration"} · {recommendation.angle}
+            Discovered · {recommendation.posture === "exploitation" ? "Builds on past results" : "Tests something new"} · {recommendation.angle}
           </p>
           <h2 className="mt-2 font-display text-3xl">{recommendation.label}</h2>
           <p className="mt-3">{recommendation.reason}</p>
@@ -54,14 +54,15 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
             <div><dt className="text-fg-muted">Market density</dt><dd>{recommendation.marketSignal.toFixed(2)} signal, {recommendation.saturation.toFixed(2)} saturation</dd></div>
             <div><dt className="text-fg-muted">Brand fit</dt><dd>{recommendation.brandFit.toFixed(2)}</dd></div>
             <div><dt className="text-fg-muted">Novelty</dt><dd>{recommendation.novelty.toFixed(2)}</dd></div>
-            <div><dt className="text-fg-muted">Historical learning</dt><dd>{recommendation.historicalEvidence.toFixed(2)}</dd></div>
-            <div><dt className="text-fg-muted">Rank</dt><dd>{recommendation.expectedValue.toFixed(2)}</dd></div>
+            <div><dt className="text-fg-muted">Past results</dt><dd>{recommendation.historicalEvidence.toFixed(2)}</dd></div>
+            <div><dt className="text-fg-muted">Rank score</dt><dd>{recommendation.expectedValue.toFixed(2)}</dd></div>
             <div>
-              <dt className="text-fg-muted">JEV decision</dt>
+              <dt className="text-fg-muted">Decision engine</dt>
               <dd>
                 {recommendation.decision
-                  ? `${decisionPlainLabel(recommendation.decision)} · probability ${formatUnitInterval(recommendation.probability)}`
-                  : "Not stored yet"}
+                  ? `${decisionOutcome(recommendation.decision)} (probability ${percentOrUnknown(recommendation.probability)})`
+                  : copy.opportunities.decisionNotYet}
+                {" · "}<Term id="jev">What is JEV?</Term>
               </dd>
             </div>
           </dl>
@@ -89,13 +90,13 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
           <p className="mt-2 text-sm text-fg-muted">
             {session.observationCount === 0
               ? "Add competitor ads you have seen. An empty library is not whitespace."
-              : "Stored creatives do not yet show a direction outside the exploration seeds. Nothing was invented."}
+              : "Stored creatives do not yet show a direction beyond the starting ideas. Nothing was invented."}
           </p>
         </Panel>
       )}
 
       {session.exploration ? (
-        <p className="text-sm text-fg-muted">Exploration, not a finding: {session.exploration.label}. {session.exploration.reason}</p>
+        <p className="flex flex-wrap items-center gap-2 text-sm text-fg-muted"><IdeaToTestBadge /><span>{session.exploration.label}. {session.exploration.reason}</span></p>
       ) : null}
 
       {recommendation ? (
@@ -116,7 +117,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
               {alternatives.map((item) => (
                 <li key={item.id} className="rounded-md border border-border p-3">
                   <p className="font-semibold">{item.label}</p>
-                  <p className="text-fg-muted">{item.angle} · {directionSourceLabel(item.source)} · rank {item.expectedValue.toFixed(2)}</p>
+                  <p className="text-fg-muted">{item.angle} · {item.source === "discovered" ? directionSourceLabel(item.source) : <IdeaToTestBadge />} · rank {item.expectedValue.toFixed(2)}</p>
                 </li>
               ))}
             </ul>

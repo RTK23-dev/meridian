@@ -3,6 +3,7 @@
  * the fixed order opportunity, decision, brief, generation, QA, review, publish, performance. A stage with no record says
  * so. It is never filled with a guess.
  */
+import { decisionOutcome, percentOrUnknown } from "../../lib/copy.ts";
 import type { LibraryMediaVariant, MediaLoad } from "./library-model";
 
 export const TRACE_STAGES = ["opportunity", "decision", "brief", "generation", "qa", "review", "publish", "performance"] as const;
@@ -95,8 +96,8 @@ export function buildTraceTimeline(input: TraceInput): TraceStage[] {
 
   const decisions = input.decisions.map((item) => ({
     key: `decision-${item.id}`,
-    title: `${item.decision} · ${item.question}`,
-    detail: `p ${item.probability.toFixed(2)}${item.reasons[0] ? ` · ${item.reasons[0]}` : ""}`,
+    title: `${decisionOutcome(item.decision)} · ${item.question}`,
+    detail: `Probability ${percentOrUnknown(item.probability)}${item.reasons[0] ? ` · ${item.reasons[0]}` : ""}`,
     at: item.createdAt,
   }));
 

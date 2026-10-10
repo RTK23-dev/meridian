@@ -1,4 +1,5 @@
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui";
+import { TechnicalDetails } from "@/components/plain-error";
 import { describeQuestion } from "./jev-question-text.ts";
 import { decisionPlainLabel, formatUnitInterval, summarizeEvidence } from "./evidence.ts";
 import type { StudioVariant } from "./types.ts";
@@ -15,7 +16,7 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
             <SheetDescription className="mt-2 text-sm">{summarizeEvidence(questions)}</SheetDescription>
             <div className="mt-4 overflow-x-auto rounded-md border border-border">
               <table className="w-full min-w-[44rem] text-left text-sm">
-                <caption className="sr-only">JEV questions stored for this variant</caption>
+                <caption className="sr-only">Decision questions stored for this variant</caption>
                 <thead className="bg-surface-2 text-xs uppercase tracking-wider text-fg-muted">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-semibold">ID</th>
@@ -30,7 +31,7 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
                 <tbody className="divide-y divide-border">
                   {questions.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-4 text-fg-muted">No JEV row is stored for this variant.</td>
+                      <td colSpan={7} className="px-3 py-4 text-fg-muted">No decision record is stored for this variant.</td>
                     </tr>
                   ) : questions.map((question) => (
                     <tr key={question.id} className="align-top">
@@ -39,7 +40,7 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
                       <td className="px-3 py-2">{question.answer || "Unrecorded"}</td>
                       <td className="px-3 py-2 font-semibold">
                         {decisionPlainLabel(question.decision)}
-                        <span className="block font-mono text-xs font-normal text-fg-muted">{question.decision || "none"}</span>
+                        <TechnicalDetails>Decision code: {question.decision || "none"}</TechnicalDetails>
                       </td>
                       <td className="px-3 py-2 tabular-nums">{formatUnitInterval(question.probability)}</td>
                       <td className="px-3 py-2 tabular-nums">{formatUnitInterval(question.confidence)}</td>

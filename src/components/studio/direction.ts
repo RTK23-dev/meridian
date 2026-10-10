@@ -3,6 +3,8 @@
  * or invented here. The brief is always written from the recommended direction, so these are for comparison only.
  */
 
+import { IDEA_TO_TEST } from "../../lib/copy.ts";
+
 export type DirectionCandidate = {
   id: string;
   label: string;
@@ -23,7 +25,7 @@ export function alternativeDirections<T extends DirectionCandidate>(candidates: 
     .slice(0, ALTERNATIVE_LIMIT);
 }
 
-/** The source as a person reads it. A prior is exploration, and the screen must not call it a finding. */
+/** The source as a person reads it. A starting idea is an idea to test, and the screen must not call it a finding. */
 export function directionSourceLabel(source: string): string {
-  return source === "discovered" ? "Discovered from stored evidence" : "Exploration, not a finding";
+  return source === "discovered" ? "Discovered from stored evidence" : IDEA_TO_TEST.badge;
 }

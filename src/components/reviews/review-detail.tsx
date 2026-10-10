@@ -1,5 +1,8 @@
 import { Term } from "@/components/glossary";
+import { TechnicalDetails } from "@/components/plain-error";
+import { describeQuestion } from "@/components/studio/jev-question-text";
 import { Badge, Button, Field, Kbd, Panel, SelectInput, TextInput } from "@/components/ui";
+import { decisionOutcome, percentOrUnknown } from "@/lib/copy";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
 import { ageBadge, confidenceBadge, formatOpened, reviewNoteFieldId, reviewPriority, reviewReasonFieldId, type ReviewDraft, type ReviewRow } from "./review-model";
 
@@ -42,8 +45,9 @@ export function ReviewDetail({
         <Badge variant={confidence.tone}>{confidence.label}</Badge>
       </div>
       <p className="text-xs font-semibold uppercase tracking-widest text-brass">
-        {item.question} · {item.decision} · answer {item.answer || "unrecorded"} · score {item.probability.toFixed(2)} · <Term id="confidence" /> {item.confidence.toFixed(2)}
+        {describeQuestion(item.question)} · {decisionOutcome(item.decision)} · answer {item.answer || "unrecorded"} · probability {percentOrUnknown(item.probability)} · <Term id="confidence" /> {percentOrUnknown(item.confidence)}
       </p>
+      <TechnicalDetails>Question {item.question}. Decision code {item.decision || "none"}.</TechnicalDetails>
       <h2 id="review-detail-title" className="font-display text-2xl">{item.label || "Untitled"}</h2>
       <p className="text-sm text-muted">Opened {formatOpened(item.createdAt)}. {priority.because}</p>
       <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
