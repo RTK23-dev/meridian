@@ -1,18 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useBusy } from "@/components/gate";
 import { useWorkspace } from "@/components/workspace";
 import { StatusText } from "@/components/status";
-import { Button, ErrorState, Notice, Panel, Skeleton, errorText } from "@/components/ui";
+import { Button, ErrorState, Notice, Panel, ScreenSkeleton, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { beginOauth } from "@/lib/meridian/oauth/begin";
 import { refreshStoredToken } from "@/lib/meridian/oauth/refresh";
 import { disconnectProvider, probeProviderConnection, reconnectProvider } from "@/lib/meridian/providers/connect";
-import { useIntegrationsQuery } from "@/lib/query/hooks";
+import type { getSystemStatus } from "@/lib/meridian/system";
+import { useIntegrationsQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { providerLabel } from "@/lib/copy";
 
 export const Route = createFileRoute("/integrations")({ component: Page });
+
+type IntegrationProvider = Awaited<ReturnType<typeof getSystemStatus>>["connections"][number]["provider"];
+type OAuthProvider = Extract<IntegrationProvider, "meta" | "tiktok" | "google">;
+
+function isOAuthProvider(provider: IntegrationProvider): provider is OAuthProvider {
+  return provider === "meta" || provider === "tiktok" || provider === "google";
+}
 
 function Page() {
   return (
@@ -27,14 +34,49 @@ function Integrations() {
   const query = useIntegrationsQuery(organizationId);
   const data = query.data ?? null;
   const [note, setNote] = useState<string | null>(null);
-  const busy = useBusy([qk.integrations(organizationId)]);
+  const connectKey = ["mutation", "integrations.connect", organizationId] as const;
+  const probeKey = ["mutation", "integrations.probe", organizationId] as const;
+  const disconnectKey = ["mutation", "integrations.disconnect", organizationId] as const;
+  const refreshKey = ["mutation", "integrations.refresh", organizationId] as const;
+  // Connecting leaves the page for the provider's consent screen, so it refreshes nothing here.
+  const connect = useScopedMutation({
+    mutationKey: connectKey,
+    mutationFn: (provider: OAuthProvider) => beginOauth({ data: { organizationId, provider, origin: window.location.origin } }),
+    onSuccess: (result) => window.location.assign(result.url),
+  });
+  const probe = useScopedMutation({
+    mutationKey: probeKey,
+    mutationFn: (vars: { provider: IntegrationProvider; reconnect: boolean }) => vars.reconnect
+      ? reconnectProvider({ data: { organizationId, provider: vars.provider } })
+      : probeProviderConnection({ data: { organizationId, provider: vars.provider } }),
+    invalidate: () => [qk.integrations(organizationId)],
+    onSuccess: (result, vars) => setNote(`${vars.provider}: ${result.phase}. ${result.detail}`),
+  });
+  const disconnect = useScopedMutation({
+    mutationKey: disconnectKey,
+    mutationFn: (provider: IntegrationProvider) => disconnectProvider({ data: { organizationId, provider } }),
+    invalidate: () => [qk.integrations(organizationId)],
+    success: "Provider disconnected.",
+    onSuccess: (result, provider) => setNote(`${provider}: ${result.detail}`),
+  });
+  const refreshToken = useScopedMutation({
+    mutationKey: refreshKey,
+    mutationFn: (provider: OAuthProvider) => refreshStoredToken({ data: { organizationId, provider } }),
+    invalidate: () => [qk.integrations(organizationId)],
+    onSuccess: (result, provider) => setNote(`${provider}: ${result.detail}`),
+  });
+  const connecting = usePendingVariables<OAuthProvider>(connectKey);
+  const probing = usePendingVariables<{ provider: IntegrationProvider }>(probeKey).map((vars) => vars.provider);
+  const disconnecting = usePendingVariables<IntegrationProvider>(disconnectKey);
+  const refreshing = usePendingVariables<OAuthProvider>(refreshKey);
+  const failures = [connect, probe, disconnect, refreshToken].map((action) => action.error).filter((error): error is Error => Boolean(error));
   const providerGroups = [
     { label: "Advertising accounts", providers: ["meta", "tiktok", "google"] },
     { label: "Research sources", providers: ["ad_library"] },
   ];
 
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
-  if (!data) return <div role="status" aria-label="Loading integration status" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="card" /></div>;
+  if (query.isError && !data) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!data) return <ScreenSkeleton label="Loading integration status" shape="rows" />;
 
   return (
     <div className="space-y-8">
@@ -63,7 +105,7 @@ function Integrations() {
         </Panel>
       </div>
       {note ? <p className="text-sm" role="status">{note}</p> : null}
-      {busy.error ? <Notice>{busy.error}</Notice> : null}
+      {failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
       <div className="space-y-6">
       {providerGroups.map((group) => {
         const connections = data.connections.filter((item) => group.providers.includes(item.provider));
@@ -80,13 +122,10 @@ function Integrations() {
                 <Button
                   type="button"
                   variant="quiet"
-                  disabled={busy.pending || (item.provider !== "meta" && item.provider !== "tiktok" && item.provider !== "google")}
+                  disabled={!isOAuthProvider(item.provider) || connecting.includes(item.provider)}
                   onClick={() => {
-                    if (item.provider !== "meta" && item.provider !== "tiktok" && item.provider !== "google") return;
-                    void busy.run(async () => {
-                      const result = await beginOauth({ data: { organizationId, provider: item.provider, origin: window.location.origin } });
-                      window.location.assign(result.url);
-                    });
+                    if (!isOAuthProvider(item.provider)) return;
+                    void connect.mutateAsync(item.provider).catch(() => undefined);
                   }}
                 >
                   Connect
@@ -94,14 +133,9 @@ function Integrations() {
                 <Button
                   type="button"
                   variant="quiet"
-                  disabled={busy.pending}
+                  disabled={probing.includes(item.provider)}
                   onClick={() => {
-                    void busy.run(async () => {
-                      const result = item.phase === "DISCONNECTED"
-                        ? await reconnectProvider({ data: { organizationId, provider: item.provider } })
-                        : await probeProviderConnection({ data: { organizationId, provider: item.provider } });
-                      setNote(`${item.provider}: ${result.phase}. ${result.detail}`);
-                    });
+                    void probe.mutateAsync({ provider: item.provider, reconnect: item.phase === "DISCONNECTED" }).catch(() => undefined);
                   }}
                 >
                   {item.phase === "DISCONNECTED" ? "Reconnect" : "Test connection"}
@@ -109,12 +143,9 @@ function Integrations() {
                 <Button
                   type="button"
                   variant="quiet"
-                  disabled={busy.pending || item.phase === "DISCONNECTED"}
+                  disabled={disconnecting.includes(item.provider) || item.phase === "DISCONNECTED"}
                   onClick={() => {
-                    void busy.run(async () => {
-                      const result = await disconnectProvider({ data: { organizationId, provider: item.provider } });
-                      setNote(`${item.provider}: ${result.detail}`);
-                    });
+                    void disconnect.mutateAsync(item.provider).catch(() => undefined);
                   }}
                 >
                   Disconnect
@@ -122,13 +153,10 @@ function Integrations() {
                 <Button
                   type="button"
                   variant="quiet"
-                  disabled={busy.pending || (item.provider !== "meta" && item.provider !== "tiktok" && item.provider !== "google")}
+                  disabled={!isOAuthProvider(item.provider) || refreshing.includes(item.provider)}
                   onClick={() => {
-                    if (item.provider !== "meta" && item.provider !== "tiktok" && item.provider !== "google") return;
-                    void busy.run(async () => {
-                      const result = await refreshStoredToken({ data: { organizationId, provider: item.provider } });
-                      setNote(`${item.provider}: ${result.detail}`);
-                    });
+                    if (!isOAuthProvider(item.provider)) return;
+                    void refreshToken.mutateAsync(item.provider).catch(() => undefined);
                   }}
                 >
                   Refresh token

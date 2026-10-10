@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useBusy } from "@/components/gate";
-import { Button, Notice } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
+import { Button, Notice, errorText } from "@/components/ui";
 import { acceptInvite } from "@/lib/meridian/api";
+import { useScopedMutation } from "@/lib/query/hooks";
 
 export const Route = createFileRoute("/invite")({ component: Page });
 
@@ -13,23 +14,30 @@ function Page() {
 }
 
 function Accept() {
-  const busy = useBusy();
+  const { reload } = useWorkspace();
   const [done, setDone] = useState("");
+  const accept = useScopedMutation({
+    mutationKey: ["mutation", "invite.accept"],
+    mutationFn: (token: string) => acceptInvite({ data: { token } }),
+    success: (_token, result) => result.message,
+    // An accepted invitation adds a workspace to the list, so the workspace reloads.
+    onSuccess: async (result) => {
+      setDone(result.message);
+      await reload();
+    },
+  });
   const token = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("token") ?? "";
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <h1 className="font-display text-3xl">Accept invitation</h1>
       <p className="text-sm text-muted">The link works once. It is not shown again after you accept.</p>
-      {busy.error ? <Notice>{busy.error}</Notice> : null}
+      {accept.error ? <Notice>{errorText(accept.error)}</Notice> : null}
       {done ? <p>{done}</p> : null}
       <Button
         type="button"
-        disabled={busy.pending || !token || Boolean(done)}
+        disabled={accept.isPending || !token || Boolean(done)}
         onClick={() => {
-          void busy.run(async () => {
-            const result = await acceptInvite({ data: { token } });
-            setDone(result.message);
-          });
+          void accept.mutateAsync(token).catch(() => undefined);
         }}
       >
         Accept invitation

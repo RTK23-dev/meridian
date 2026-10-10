@@ -2,11 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useBusy } from "@/components/gate";
 import { AuditList } from "@/components/audit";
 import { AlertsPanel } from "@/components/alerts-panel";
-import { Button, Field, Notice, Panel, SelectInput, TextInput } from "@/components/ui";
+import { Button, Field, Notice, Panel, SelectInput, TextInput, errorText } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import { useScopedMutation } from "@/lib/query/hooks";
 import { hasRole, ROLES } from "@/lib/meridian/access";
 import { addMember, changeMemberRole, createOrganization, renameOrganization, updateWeights } from "@/lib/meridian/api";
 import { WEIGHT_KEYS, type ScoreWeights } from "@/lib/meridian/scoring";
@@ -34,8 +34,55 @@ function SettingsPage() {
 function Settings() {
   const { data, reload } = useWorkspace();
   const activeWorkspace = data?.active;
-  const { pending, error, run } = useBusy();
   const [message, setMessage] = useState<string | null>(null);
+  const organizationId = activeWorkspace?.id ?? "";
+  // Each action reloads the workspace on success, because the members, weights and name it changes come from there.
+  const renameWorkspace = useScopedMutation({
+    mutationKey: ["mutation", "workspace.rename", organizationId],
+    mutationFn: (values: WorkspaceNameInput) => renameOrganization({ data: { organizationId, ...values } }),
+    success: "Workspace renamed.",
+    onSuccess: async () => {
+      setMessage("Workspace renamed.");
+      await reload();
+    },
+  });
+  const inviteMember = useScopedMutation({
+    mutationKey: ["mutation", "workspace.invite", organizationId],
+    mutationFn: (values: MemberInviteInput) => addMember({ data: { organizationId, ...values } }),
+    success: (_values, result) => result.message,
+    onSuccess: async (result) => {
+      setMessage(result.message);
+      await reload();
+    },
+  });
+  const weightsMutation = useScopedMutation({
+    mutationKey: ["mutation", "workspace.weights", organizationId],
+    mutationFn: (weights: ScoreWeights) => updateWeights({ data: { organizationId, weights } }),
+    success: "Diagnostic weights saved.",
+    onSuccess: async () => {
+      setMessage("Diagnostic weights saved. They do not create opportunities.");
+      await reload();
+    },
+  });
+  const createWorkspaceAction = useScopedMutation({
+    mutationKey: ["mutation", "organization.create"],
+    mutationFn: (values: WorkspaceNameInput) => createOrganization({ data: values }),
+    success: "Workspace created.",
+    onSuccess: async () => {
+      setMessage("Workspace created and selected.");
+      await reload();
+    },
+  });
+  const changeRole = useScopedMutation({
+    mutationKey: ["mutation", "workspace.role", organizationId],
+    mutationFn: (vars: { userId: string; role: string }) => changeMemberRole({ data: { organizationId, userId: vars.userId, role: vars.role } }),
+    success: (vars) => vars.role === "remove" ? "Member removed." : "Member role updated.",
+    onSuccess: async () => {
+      await reload();
+    },
+  });
+  const failure = [renameWorkspace.error, inviteMember.error, weightsMutation.error, createWorkspaceAction.error, changeRole.error].find(Boolean);
+  const error = failure ? errorText(failure) : null;
   const renameForm = useForm<WorkspaceNameInput>({ resolver: zodResolver(workspaceNameSchema), defaultValues: { name: "" }, mode: "onBlur" });
   const inviteForm = useForm<MemberInviteInput>({ resolver: zodResolver(memberInviteSchema), defaultValues: { email: "", role: "member" }, mode: "onBlur" });
   const weightsForm = useForm<ScoringWeightsInput, unknown, ScoreWeights>({ resolver: zodResolver(scoringWeightsSchema), defaultValues: { brandFit: "", historicalEvidence: "", marketSignal: "", novelty: "", reproducibility: "", saturation: "", risk: "" }, mode: "onBlur" });
@@ -57,38 +104,22 @@ function Settings() {
   const canAdmin = hasRole(active.role, "admin");
 
   async function rename(values: WorkspaceNameInput) {
-    const saved = await run(async () => {
-      await renameOrganization({ data: { organizationId: active.id, ...values } });
-      setMessage("Workspace renamed.");
-      await reload();
-    });
+    const saved = await renameWorkspace.mutateAsync(values).then(() => true, () => false);
     if (saved) renameForm.reset(values);
   }
 
   async function invite(values: MemberInviteInput) {
-    const saved = await run(async () => {
-      const result = await addMember({ data: { organizationId: active.id, ...values } });
-      setMessage(result.message);
-      await reload();
-    });
+    const saved = await inviteMember.mutateAsync(values).then(() => true, () => false);
     if (saved) inviteForm.reset({ email: "", role: "member" });
   }
 
   async function saveWeights(values: ScoreWeights) {
-    const saved = await run(async () => {
-      await updateWeights({ data: { organizationId: active.id, weights: values } });
-      setMessage("Diagnostic weights saved. They do not create opportunities.");
-      await reload();
-    });
+    const saved = await weightsMutation.mutateAsync(values).then(() => true, () => false);
     if (saved) weightsForm.reset(Object.fromEntries(WEIGHT_KEYS.map((key) => [key, String(values[key])])) as ScoringWeightsInput);
   }
 
   async function createWorkspace(values: WorkspaceNameInput) {
-    const saved = await run(async () => {
-      await createOrganization({ data: values });
-      setMessage("Workspace created and selected.");
-      await reload();
-    });
+    const saved = await createWorkspaceAction.mutateAsync(values).then(() => true, () => false);
     if (saved) createForm.reset();
   }
 
@@ -110,7 +141,7 @@ function Settings() {
             <TextInput {...renameForm.register("name")} maxLength={80} disabled={!canAdmin} required />
           </Field>
           {renameForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => renameForm.reset({ name: active.name })}>Discard</Button> : null}
-          {canAdmin ? <Button type="submit" disabled={pending || renameForm.formState.isSubmitting}>Rename</Button> : null}
+          {canAdmin ? <Button type="submit" disabled={renameWorkspace.isPending || renameForm.formState.isSubmitting}>Rename</Button> : null}
         </form>
       </Panel>
       <ProviderSettingsPanel organizationId={active.id} canAdmin={canAdmin} />
@@ -130,12 +161,7 @@ function Settings() {
                   value={member.role}
                   onChange={(event) => {
                     const role = event.target.value;
-                    void run(async () => {
-                      await changeMemberRole({
-                        data: { organizationId: active.id, userId: member.userId, role },
-                      });
-                      await reload();
-                    });
+                    void changeRole.mutateAsync({ userId: member.userId, role }).catch(() => undefined);
                   }}
                 >
                   {ROLES.map((role) => (
@@ -161,7 +187,7 @@ function Settings() {
               <option value="viewer">viewer</option>
             </SelectInput></Field>
             {inviteForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => inviteForm.reset({ email: "", role: "member" })}>Discard</Button> : null}
-            <Button type="submit" disabled={pending || inviteForm.formState.isSubmitting}>Add</Button>
+            <Button type="submit" disabled={inviteMember.isPending || inviteForm.formState.isSubmitting}>Add</Button>
           </form>
         ) : null}
         {data.invites.length > 0 ? (
@@ -197,7 +223,7 @@ function Settings() {
             </Field>
           ))}
           {weightsForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => weightsForm.reset(Object.fromEntries(WEIGHT_KEYS.map((key) => [key, String(active.weights[key])])) as ScoringWeightsInput)}>Discard</Button> : null}
-          {canAdmin ? <Button type="submit" disabled={pending || weightsForm.formState.isSubmitting}>Save diagnostic weights</Button> : <p className="text-sm text-muted">Only an admin can change these.</p>}
+          {canAdmin ? <Button type="submit" disabled={weightsMutation.isPending || weightsForm.formState.isSubmitting}>Save diagnostic weights</Button> : <p className="text-sm text-muted">Only an admin can change these.</p>}
         </form>
       </details>
       <Panel>
@@ -210,7 +236,7 @@ function Settings() {
             <TextInput {...createForm.register("name")} maxLength={80} required />
           </Field>
           {createForm.formState.isDirty ? <Button type="button" variant="quiet" onClick={() => createForm.reset()}>Discard</Button> : null}
-          <Button type="submit" variant="quiet" disabled={pending || createForm.formState.isSubmitting}>Create</Button>
+          <Button type="submit" variant="quiet" disabled={createWorkspaceAction.isPending || createForm.formState.isSubmitting}>Create</Button>
         </form>
       </Panel>
       <Panel id="workspace-audit">
