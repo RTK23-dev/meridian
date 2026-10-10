@@ -13,7 +13,7 @@ import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
 import { performanceScheduleSchema, type PerformanceSchedule, type PerformanceScheduleFields } from "@/lib/meridian/schemas/performance-schedule";
 
-export const Route = createFileRoute("/brands/$brandId/learning")({ component: Page });
+export const Route = createFileRoute("/_app/brands/$brandId/learning")({ component: Page });
 
 function Page() {
   const { brandId } = Route.useParams();

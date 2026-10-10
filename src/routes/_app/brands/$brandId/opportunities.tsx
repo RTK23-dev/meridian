@@ -9,7 +9,7 @@ import { useDismissOpportunities, useOpportunitiesQuery, usePendingVariables, us
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
 
-export const Route = createFileRoute("/brands/$brandId/opportunities")({ component: Page });
+export const Route = createFileRoute("/_app/brands/$brandId/opportunities")({ component: Page });
 
 function Page() {
   const { brandId } = Route.useParams();

@@ -1,10 +1,8 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
-import { WorkspaceProvider } from "@/components/workspace";
-import { ThemeProvider, themeBootstrap, Toaster } from "@/components/ui";
+import { ThemeProvider, themeBootstrap } from "@/components/ui";
 import { AppQueryProvider } from "@/lib/query/client";
-import { AppFrame } from "@/components/app-frame";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -35,11 +33,8 @@ export const Route = createRootRoute({
         <ThemeProvider>
           <AppQueryProvider>
             <AuthProvider>
-              <WorkspaceProvider>
-                <AppFrame><Outlet /></AppFrame>
-              </WorkspaceProvider>
+              <Outlet />
             </AuthProvider>
-            <Toaster />
           </AppQueryProvider>
         </ThemeProvider>
         <Scripts />

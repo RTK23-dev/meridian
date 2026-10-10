@@ -1,22 +1,11 @@
 import type { ReactNode } from "react";
 import { GROK_PROVIDERS, signIn } from "@/lib/auth/client";
-import { SignInGate } from "@/lib/auth/gates";
-import { EmailAuth } from "@/components/email-auth";
-import { Shell } from "@/components/shell";
 import { useWorkspace } from "@/components/workspace";
+import { EmailAuth } from "@/components/email-auth";
 import { ErrorState, ScreenSkeleton } from "@/components/ui";
 
-export function ProtectedApp({ children }: { children: ReactNode }) {
-  return (
-    <SignInGate fallback={<Welcome />}>
-      <Shell>
-        <Ready>{children}</Ready>
-      </Shell>
-    </SignInGate>
-  );
-}
-
-function Ready({ children }: { children: ReactNode }) {
+/** Waits for the workspace bootstrap. Rendered inside the shell, so the navigation stays usable while it loads or fails. */
+export function WorkspaceReady({ children }: { children: ReactNode }) {
   const { data, loading, error, reload } = useWorkspace();
   if (loading && !data) {
     return <div className="mx-auto max-w-3xl p-6"><ScreenSkeleton label="Loading workspace" shape="cards" /></div>;
@@ -55,4 +44,3 @@ export function Welcome() {
     </main>
   );
 }
-

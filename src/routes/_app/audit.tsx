@@ -7,7 +7,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listAuditPage } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "@/lib/query/keys";
 
-export const Route = createFileRoute("/audit")({ component: AuditPage });
+export const Route = createFileRoute("/_app/audit")({ component: AuditPage });
 
 type Filters = { actor: string; action: string; brandId: string; from: string; to: string };
 const EMPTY_FILTERS: Filters = { actor: "", action: "", brandId: "", from: "", to: "" };

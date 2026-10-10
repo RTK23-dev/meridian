@@ -9,7 +9,7 @@ import { startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridi
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { qk } from "@/lib/query/keys";
 
-export const Route = createFileRoute("/brands/$brandId/factory")({ component: Page });
+export const Route = createFileRoute("/_app/brands/$brandId/factory")({ component: Page });
 
 function dollars(cents: number): string {
   return `$${(Math.max(0, cents) / 100).toFixed(2)}`;

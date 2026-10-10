@@ -40,7 +40,7 @@ import {
   Zap,
 } from "lucide-react";
 
-export const Route = createFileRoute("/brands/$brandId/intelligence")({ component: Page });
+export const Route = createFileRoute("/_app/brands/$brandId/intelligence")({ component: Page });
 
 function Page() {
   const { brandId } = Route.useParams();

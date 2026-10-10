@@ -17,7 +17,7 @@ import { useBrandQuery, useMachineQuery, useOpportunitiesQuery, useReviewsQuery,
 import { qk } from "@/lib/query/keys";
 import { brandIdentitySchema, type BrandIdentity, type BrandIdentityInput } from "@/lib/meridian/schemas/brand";
 
-export const Route = createFileRoute("/brands/$brandId/")({ component: BrandPage });
+export const Route = createFileRoute("/_app/brands/$brandId/")({ component: BrandPage });
 
 function BrandPage() {
   const { brandId } = Route.useParams();

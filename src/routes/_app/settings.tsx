@@ -13,7 +13,7 @@ import { WEIGHT_KEYS, type ScoreWeights } from "@/lib/meridian/scoring";
 import { memberInviteSchema, scoringWeightsSchema, workspaceNameSchema, type MemberInviteInput, type ScoringWeightsInput, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
 import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
 
-export const Route = createFileRoute("/settings")({ component: SettingsPage });
+export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
 
 const LABELS: Record<keyof ScoreWeights, string> = {
   brandFit: "Brand fit",

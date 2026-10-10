@@ -8,7 +8,7 @@ import { qk } from "@/lib/query/keys";
 import { useJobsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { statusLabel } from "@/lib/copy";
 
-export const Route = createFileRoute("/jobs")({ component: JobsPage });
+export const Route = createFileRoute("/_app/jobs")({ component: JobsPage });
 
 function JobsPage() {
   const { data: workspace } = useWorkspace();

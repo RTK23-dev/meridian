@@ -10,7 +10,7 @@ import { useBrandQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { productFieldsSchema, type ProductFields, type ProductFieldsInput } from "@/lib/meridian/schemas/product";
 
-export const Route = createFileRoute("/brands/$brandId/products")({ component: ProductsPage });
+export const Route = createFileRoute("/_app/brands/$brandId/products")({ component: ProductsPage });
 
 const blank = {
   name: "",

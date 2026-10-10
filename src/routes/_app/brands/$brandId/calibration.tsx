@@ -8,7 +8,7 @@ import { qk } from "@/lib/query/keys";
 import { Button, ErrorState, Notice, Panel, ScreenSkeleton, errorText } from "@/components/ui";
 import { StatusText } from "@/components/status";
 
-export const Route = createFileRoute("/brands/$brandId/calibration")({ component: CalibrationPage });
+export const Route = createFileRoute("/_app/brands/$brandId/calibration")({ component: CalibrationPage });
 
 function CalibrationPage() {
   const { brandId } = Route.useParams();

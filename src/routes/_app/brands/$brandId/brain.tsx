@@ -20,7 +20,7 @@ import { useAssetsQuery, useBrandQuery, useScopedMutation } from "@/lib/query/ho
 import { qk } from "@/lib/query/keys";
 import { brainValuesSchema, type BrainFieldsInput } from "@/lib/meridian/schemas/brain";
 
-export const Route = createFileRoute("/brands/$brandId/brain")({ component: BrainPage });
+export const Route = createFileRoute("/_app/brands/$brandId/brain")({ component: BrainPage });
 
 function BrainPage() {
   const { brandId } = Route.useParams();

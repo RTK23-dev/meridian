@@ -7,7 +7,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listWebhookEvents } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "@/lib/query/keys";
 
-export const Route = createFileRoute("/webhooks")({ component: WebhooksPage });
+export const Route = createFileRoute("/_app/webhooks")({ component: WebhooksPage });
 
 function WebhooksPage() {
   const { user } = useCurrentUserState();

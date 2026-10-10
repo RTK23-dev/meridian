@@ -60,16 +60,18 @@ async function discoverRoutes(page, seededBrandId) {
     .map((entry) => relative("src/routes", join(entry.parentPath, entry.name)))
     .filter((file) => file !== "__root.tsx" && !file.includes("[_design]"));
   const sourceRoutes = routeFiles.map((file) => {
-    const route = file === "index.tsx"
-      ? ""
-      : file
-        .split(sep)
-        .join("/")
-        .replace(/\.tsx$/, "")
-        .replace(/\/index$/, "")
-        .split("/")
-        .map((part) => part.replace(/^\[([^\]]+)\]$/, "$1"))
-        .join("/");
+    // `_app/` is the pathless layout folder for signed-in screens, so it never appears in a URL.
+    const route = file
+      .split(sep)
+      .join("/")
+      .replace(/\.tsx$/, "")
+      .split("/")
+      .filter((part) => part !== "_app")
+      .join("/")
+      .replace(/(^|\/)index$/, "")
+      .split("/")
+      .map((part) => part.replace(/^\[([^\]]+)\]$/, "$1"))
+      .join("/");
     return `/${route.split("/").map((part) => {
       if (!part.startsWith("$")) return part;
       if (!brandId) throw new Error(`Cannot capture dynamic route ${file}: no seeded brand route was discovered.`);

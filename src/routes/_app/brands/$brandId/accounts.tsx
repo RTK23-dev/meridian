@@ -25,7 +25,7 @@ import {
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 
-export const Route = createFileRoute("/brands/$brandId/accounts")({
+export const Route = createFileRoute("/_app/brands/$brandId/accounts")({
   component: Page,
 });
 
