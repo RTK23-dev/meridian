@@ -14,6 +14,7 @@
  */
 
 import type { Sql } from "./store.ts";
+import { latestCalibrationReport, learnedWeightUsable } from "./calibration-gate.ts";
 
 export type ParameterState = "seed_prior" | "candidate_fit" | "fitted" | "validated" | "retired";
 export type ModelParameterStatus = ParameterState;
@@ -82,6 +83,11 @@ export async function upsertModelParameter(
   if (state === "validated" && (sampleSize < 100 || !hasCalibration)) {
     throw new Error("Cannot validate parameter without at least 100 observations and an empirical calibration score.");
   }
+  // P5c: a learned parameter is promoted only with a stored calibration report that improves held-out prediction.
+  if (state === "fitted" || state === "validated") {
+    const gate = learnedWeightUsable(await latestCalibrationReport(sql, { organizationId: input.organizationId, brandId, decisionClass: input.parameterName }));
+    if (!gate.usable) throw new Error(`Cannot promote parameter to '${state}': ${gate.reason}.`);
+  }
 
   const rows = await sql<any>`
     insert into model_parameters (
@@ -114,7 +120,7 @@ export async function upsertModelParameter(
       ${JSON.stringify(calibrationMetrics)}::jsonb,
       ${provenanceFilter},
       ${input.notes ?? null},
-      ${state === "fitted" || state === "validated" ? sql`now()` : null},
+      ${state === "fitted" || state === "validated" ? new Date().toISOString() : null},
       now()
     )
     on conflict (organization_id, brand_id, population, parameter_name, version) do update set
