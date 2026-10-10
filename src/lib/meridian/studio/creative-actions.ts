@@ -3,7 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { buildBrief, renderGenerationPrompt, type BriefDraft } from "@/lib/meridian/brief/engine";
 import { decideForTenant } from "@/lib/meridian/jev/engine";
-import { briefGate, creativeQa, visualQa } from "@/lib/meridian/jev/questions";
+import { creativeQa, visualQa } from "@/lib/meridian/jev/questions";
 import { loadQuestionPolicy } from "@/lib/meridian/jev/policy";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { assessCopy } from "@/lib/meridian/production/assess";
@@ -29,7 +29,9 @@ import {
   notify,
 } from "../machine-shared";
 import { assertOpportunityClear, opportunityView } from "../opportunity/actions";
-import { briefStatusFor, productionRefusalFor } from "@/lib/meridian/studio/brief-review.server";
+import { productionRefusalFor } from "@/lib/meridian/studio/brief-review.server";
+import { judgeBriefFit } from "@/lib/meridian/studio/brief-gate.server";
+import { createGatedBrief } from "@/lib/meridian/studio/brief-service.server";
 
 function briefDraftFromRow(row: Record<string, unknown>): BriefDraft {
   return {
@@ -283,68 +285,47 @@ export const createBriefFromOpportunity = createServerFn({ method: "POST" })
       rejections: loaded.rejections,
       observations,
     });
-    const briefPolicy = await loadQuestionPolicy(sql, access.organizationId, briefGate);
-    const gate = decideForTenant(briefPolicy.question, {
-      hasAudience: brief.audience.trim().length > 1,
-      hasProduct: brief.workflow.variables.product.trim().length > 1 || draft.productName.trim().length > 1,
-      hasHook: brief.hook.trim().length > 1,
-      hasAngle: brief.angle.trim().length > 1,
-      hasCta: brief.cta.trim().length > 1,
-      hasFormat: brief.format.trim().length > 1,
-    }, {
+    // The shared brief path: deterministic checks, then the active engine once, with its record, in one write.
+    const outcome = await createGatedBrief(sql, {
       organizationId: access.organizationId,
       brandId: data.brandId,
-      evidence: loaded.creatives,
-    }, {
-      policyVersion: briefPolicy.policy.policyVersion,
-      calibration: briefPolicy.policy.calibration,
-      provider: "jev",
-      model: "brief-gate",
+      createdBy: context.userId,
+      brief: {
+        opportunityId: data.opportunityId,
+        title: brief.title,
+        audience: brief.audience,
+        angle: brief.angle,
+        hook: brief.hook,
+        message: brief.message,
+        offer: brief.offer,
+        cta: brief.cta,
+        format: brief.format,
+        proofType: brief.proofType,
+        constraints: brief.constraints,
+        context: brief.context,
+        workflow: brief.workflow,
+        why: brief.why,
+        learningNotes: brief.learningNotes,
+        failureNotes: brief.failureNotes,
+      },
+      judge: (briefId) => judgeBriefFit({
+        sql,
+        organizationId: access.organizationId,
+        brandId: data.brandId,
+        briefId,
+        brief: {
+          audience: brief.audience,
+          hook: brief.hook,
+          message: brief.message,
+          format: brief.format,
+          cta: brief.cta,
+          angle: brief.angle,
+          offer: brief.offer,
+        },
+        brain: loaded.brain,
+      }),
     });
-    const briefId = id();
-    const decisionId = id();
-    const correlationId = id();
-    await insertDecision(sql, {
-      id: decisionId,
-      organizationId: access.organizationId,
-      brandId: data.brandId,
-      correlationId,
-      questionId: gate.questionId,
-      questionVersion: gate.questionVersion,
-      subjectType: "brief",
-      subjectId: briefId,
-      input: { title: brief.title, angle: brief.angle, format: brief.format },
-      evidence: gate.evidence,
-      probability: gate.probability,
-      confidence: gate.confidence,
-      thresholds: gate.thresholds,
-      decision: gate.decision,
-      reasons: gate.reasons,
-      provider: gate.provider,
-      model: gate.model,
-      answer: gate.answer,
-      schemaVersion: gate.schemaVersion,
-      policyVersion: gate.policyVersion,
-      calibrationVersion: gate.calibrationVersion,
-    });
-    await sql`
-      insert into briefs (
-        id, organization_id, brand_id, opportunity_id, title, audience, angle, hook, message, offer, cta,
-        format, proof_type, constraints, context_pack, workflow, why, learning_notes, failure_notes,
-        status, decision_id, created_by
-      ) values (
-        ${briefId}, ${access.organizationId}, ${data.brandId}, ${data.opportunityId}, ${brief.title},
-        ${brief.audience}, ${brief.angle}, ${brief.hook}, ${brief.message}, ${brief.offer}, ${brief.cta},
-        ${brief.format}, ${brief.proofType}, ${brief.constraints}, ${JSON.stringify(brief.context)},
-        ${JSON.stringify(brief.workflow)}, ${JSON.stringify(brief.why)}, ${JSON.stringify(brief.learningNotes)},
-        ${JSON.stringify(brief.failureNotes)}, ${briefStatusFor(gate.decision)},
-        ${decisionId}, ${context.userId}
-      )
-    `;
-    if (gate.decision !== "REJECT") {
-      await sql`update opportunities set status = 'briefed' where id = ${data.opportunityId}`;
-    }
-    return { id: briefId, decision: gate.decision };
+    return { id: outcome.briefId, decision: outcome.action };
   });
 
 export const composeCreative = createServerFn({ method: "POST" })

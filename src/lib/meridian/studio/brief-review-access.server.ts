@@ -3,7 +3,7 @@
  * so the server enforces who may review; the form only shows the control. The core review logic is in brief-review.server.ts.
  */
 import type { Sql } from "../learning/store.ts";
-import { requireBrand } from "../machine-shared.ts";
+import { requireBrand } from "../brand-membership.ts";
 import { BRIEF_REVIEW_MINIMUM_ROLE, loadBriefReviewDisclosure, reviewBrief } from "./brief-review.server.ts";
 
 /** The disclosure a member of the brand may read. Anyone who can see the brief can see why it is held. */

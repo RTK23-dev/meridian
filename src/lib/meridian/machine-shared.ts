@@ -1,5 +1,4 @@
 import { type Sql } from "@/lib/db";
-import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { loadBrandContext } from "@/lib/meridian/context/load";
 import { PROMPTS } from "@/lib/meridian/prompts/registry";
 import { relationshipEdges } from "@/lib/meridian/knowledge/relations";
@@ -60,25 +59,7 @@ export function fingerprint(value: string): string {
   return (hash >>> 0).toString(16);
 }
 
-export async function requireBrand(
-  sql: Sql,
-  userId: string,
-  brandId: string,
-  minimum: Role,
-): Promise<{ organizationId: string; role: Role }> {
-  const rows = await sql<{ organization_id: string }>`
-    select organization_id from brands where id = ${brandId} and deleted_at is null limit 1
-  `;
-  const organizationId = rows[0]?.organization_id;
-  if (!organizationId) throw new Error("Brand not found.");
-  const members = await sql<{ role: string }>`
-    select role from memberships where user_id = ${userId} and organization_id = ${organizationId} limit 1
-  `;
-  const role = members[0]?.role;
-  if (!role || !isRole(role)) throw new Error("That workspace is not available to you.");
-  assertRole(role, minimum);
-  return { organizationId, role };
-}
+export { requireBrand } from "@/lib/meridian/brand-membership";
 
 export async function audit(
   sql: Sql,
