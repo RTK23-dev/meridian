@@ -65,7 +65,7 @@ export function CompareView({ variants, first, second, onChangeFirst, onChangeSe
             <ComparePane label="A" variant={a} position={variants.indexOf(a) + 1} paneRef={firstPane} />
             <ComparePane label="B" variant={b} position={variants.indexOf(b) + 1} paneRef={secondPane} />
           </div>
-          <div className="overflow-x-auto rounded-md border border-border">
+          <div className="hidden overflow-x-auto rounded-md border border-border md:block">
             <table className="w-full min-w-[32rem] text-left text-sm">
               <caption className="sr-only">Metadata compared for the two variants. Each row says whether the values match.</caption>
               <thead className="bg-surface-2 text-xs uppercase tracking-wider text-fg-muted">
@@ -88,6 +88,18 @@ export function CompareView({ variants, first, second, onChangeFirst, onChangeSe
               </tbody>
             </table>
           </div>
+          <ul className="grid gap-3 md:hidden">
+            {variantMetadataDiff(a, b).map((row) => (
+              <li key={row.field} className="space-y-2 rounded-md border border-border p-3 text-sm">
+                <p className="font-semibold">{row.field}</p>
+                <dl className="grid gap-2">
+                  <div><dt className="text-xs font-semibold text-fg-muted">A</dt><dd className="break-words">{row.a}</dd></div>
+                  <div><dt className="text-xs font-semibold text-fg-muted">B</dt><dd className="break-words">{row.b}</dd></div>
+                  <div><dt className="text-xs font-semibold text-fg-muted">Match</dt><dd className="font-semibold">{row.same ? "Same" : "Different"}</dd></div>
+                </dl>
+              </li>
+            ))}
+          </ul>
         </>
       ) : null}
     </section>

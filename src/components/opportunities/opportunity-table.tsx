@@ -21,7 +21,7 @@ type TableProps = {
   onDismiss: (id: string) => void;
 };
 
-/** Table on wide screens, one card per opportunity below the sm breakpoint. Both read the same rows and state. */
+/** Table from md (768px) up, one card per opportunity below it. Both read the same rows and state. */
 export function OpportunityTable(props: TableProps) {
   const { rows, positions, brandId, canEdit, sortKey, sortDirection, onSort, selectedIds, onSelectedChange, onSelectAll, onOpen, dismissingIds, onDismiss } = props;
   const selectableIds = rows.filter((item) => canEdit && isBulkSelectable(item.status)).map((item) => item.id);
@@ -29,7 +29,7 @@ export function OpportunityTable(props: TableProps) {
   const allSelected = selectableIds.length > 0 && selectedVisible.length === selectableIds.length;
 
   return <>
-    <div className="hidden overflow-x-auto rounded-lg border border-border sm:block">
+    <div className="hidden overflow-x-auto rounded-lg border border-border md:block">
       <table className="w-full border-collapse text-left text-sm">
         <caption className="sr-only">Opportunities for this brand. Use the column buttons to sort. A missing JEV probability is marked Unknown.</caption>
         <thead className="bg-surface-2">
@@ -70,7 +70,7 @@ export function OpportunityTable(props: TableProps) {
       </table>
     </div>
 
-    <ul className="grid gap-3 sm:hidden">
+    <ul className="grid gap-3 md:hidden">
       {rows.map((item) => {
         const eligible = canEdit && isBulkSelectable(item.status);
         return <li key={item.id} className="space-y-3 rounded-lg border border-border bg-surface p-4">

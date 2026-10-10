@@ -47,7 +47,9 @@ function ResearchCard({ ad, onView }: { ad: ResearchAdRow; onView: (id: string) 
 
 function ResearchTable({ ads, onView }: { ads: readonly ResearchAdRow[]; onView: (id: string) => void }) {
   const headers = ["Advertiser", "State", "First seen", "Last seen", "Media", "Transcript", "Duration", "Confidence"];
-  return <div className="overflow-x-auto rounded-lg border border-border">
+  // The table needs about 46rem, so below md the same ads show as the gallery cards.
+  return <>
+  <div className="hidden overflow-x-auto rounded-lg border border-border md:block">
     <table className="w-full min-w-[46rem] border-collapse text-left text-sm">
       <caption className="sr-only">Analysed ads with saved source, media, transcript and analysis states. Use Details to open one ad.</caption>
       <thead className="bg-surface-2">
@@ -70,5 +72,7 @@ function ResearchTable({ ads, onView }: { ads: readonly ResearchAdRow[]; onView:
         </tr>)}
       </tbody>
     </table>
-  </div>;
+  </div>
+  <ul className="grid gap-3 md:hidden">{ads.map((ad) => <ResearchCard key={ad.id} ad={ad} onView={onView} />)}</ul>
+  </>;
 }
