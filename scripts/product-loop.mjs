@@ -157,27 +157,38 @@ try {
   if (approveCount < 3) throw new Error(`Expected review buttons, saw ${approveCount}.`);
   await approve.first().focus();
   await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: "Publish with test publisher" }).first().waitFor({ timeout: 60000 });
+  // Approve opens the review dialog. Its confirm button sends the decision, so the card's Publish button appears after it.
+  const approveDialog = page.getByRole("dialog", { name: "Approve this variant" });
+  await approveDialog.waitFor({ state: "visible" });
+  await approveDialog.getByRole("button", { name: "Approve variant" }).click();
+  await approveDialog.waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: /^Publish…/ }).first().waitFor({ timeout: 60000 });
   await page.getByRole("button", { name: "Inspect evidence" }).first().click();
   await page.getByText("logo_match").first().waitFor();
-  await page.getByText(/answer (yes|no|uncertain|insufficient|violation)/).first().waitFor();
+  // The testing runtime records no engine answers, so the drawer shows "Unrecorded". The Answer column is what is stable.
+  await page.getByRole("columnheader", { name: "Answer" }).first().waitFor();
+  await page.keyboard.press("Escape");
+  // Reject needs a reason from the server's list and a reviewer note.
   await page.getByRole("button", { name: "Reject" }).first().click();
-  await page.getByLabel("Reviewer note").fill("Reject this test fixture variant.");
-  await page.getByRole("button", { name: "Confirm rejection" }).click();
+  const rejectDialog = page.getByRole("dialog", { name: "Reject this variant" });
+  await rejectDialog.getByLabel(/^Reason/).selectOption({ index: 1 });
+  await rejectDialog.getByLabel(/^Reviewer note/).fill("Reject this test fixture variant.");
+  await rejectDialog.getByRole("button", { name: "Confirm rejection" }).click();
+  await rejectDialog.waitFor({ state: "hidden" });
+  // A revision request needs a reviewer note.
   await page.getByRole("button", { name: "Request revision" }).first().click();
-  await page.getByLabel("Reviewer note").fill("Request a clearer product demonstration.");
-  await page.getByRole("button", { name: "Send revision request" }).click();
-  await page.getByLabel("Compare").selectOption({ index: 1 });
-  await page.getByLabel("With").selectOption({ index: 2 });
-  await page.getByRole("button", { name: "Publish with test publisher" }).first().click();
-  await page.getByText(/Test publication test:/).first().waitFor();
-  await page.getByRole("button", { name: "Publish with test publisher" }).nth(0).click().catch(() => {});
-  const publishButtons = page.getByRole("button", { name: "Publish with test publisher" });
-  const publishCount = await publishButtons.count();
-  for (let index = 0; index < Math.min(publishCount, 2); index += 1) {
-    await publishButtons.nth(0).click();
-    await page.waitForTimeout(200);
-  }
+  const revisionDialog = page.getByRole("dialog", { name: "Request a revision" });
+  await revisionDialog.getByLabel(/^Reviewer note/).fill("Request a clearer product demonstration.");
+  await revisionDialog.getByRole("button", { name: "Send revision request" }).click();
+  await revisionDialog.waitFor({ state: "hidden" });
+  await page.getByLabel("First variant").selectOption({ index: 1 });
+  await page.getByLabel("Second variant").selectOption({ index: 2 });
+  // Publishing opens a dialog that lists destinations. The test publisher is connected in the testing runtime.
+  await page.getByRole("button", { name: /^Publish…/ }).first().click();
+  const publishDialog = page.getByRole("dialog", { name: "Publish this variant" });
+  await publishDialog.getByRole("button", { name: /^Publish to \d+ destination/ }).click();
+  await page.locator("code").filter({ hasText: /^test:/ }).first().waitFor();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Record test-provider performance and learn" }).click();
   await page.getByText(/angle=offer:/).first().waitFor({ timeout: 30000 });
   await page.getByRole("tab", { name: "2. Brief" }).click();
@@ -197,6 +208,9 @@ try {
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
   await page.getByRole("tab", { name: "Scoring weights" }).click();
   const weightForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Save diagnostic weights" }) });
+  // Save stays disabled until a weight changes, so the run edits the first one before validating and saving.
+  const firstWeight = weightForm.getByLabel(/typed value/).first();
+  await firstWeight.fill((await firstWeight.inputValue()) === "1.25" ? "1.5" : "1.25");
   const entries = await weightForm.locator("input").evaluateAll((nodes) => nodes.map((node) => ({ name: node.name, value: node.value, message: node.validationMessage })));
   const bad = entries.filter((entry) => entry.message);
   if (bad.length) throw new Error(`Weight widgets failed validation: ${JSON.stringify(bad)}`);
