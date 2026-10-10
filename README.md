@@ -5,7 +5,7 @@
 
 [![CI](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml/badge.svg)](https://github.com/RTK23-dev/meridian/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status: Beta](https://img.shields.io/badge/Release-0.1.0--beta.8-emerald.svg)](CHANGELOG.md)
+[![Status: Beta](https://img.shields.io/badge/Release-0.1.0--beta.10-emerald.svg)](CHANGELOG.md)
 
 ---
 
