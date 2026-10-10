@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Badge, Button, Sheet, SheetContent, SheetDescription, SheetTitle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
-import { statusLabel } from "@/lib/copy";
+import { copy, percentOrUnknown, statusLabel } from "@/lib/copy";
+import { Term } from "@/components/glossary";
+import { TechnicalDetails } from "@/components/plain-error";
 import { ScoreRadar } from "./score-radar";
 import { CategoryChip, HoldBadge, OpportunityActions, OpportunityStatusBadge, ScoreValue, UnknownValue } from "./opportunity-parts";
 import { canDismiss, categoryLabel, finiteOrNull, isHeld, jevDecisionLabel, jevProbability, scoreDimensions, whyNotFacts, type OpportunityRow } from "./opportunity-model";
@@ -66,13 +68,13 @@ function OpportunityDetail({ item, position, brandId, canEdit, dismissing, onDis
       </section>
 
       <section aria-labelledby="opportunity-jev" className="space-y-2">
-        <h3 id="opportunity-jev" className="font-semibold">JEV decision</h3>
+        <h3 id="opportunity-jev" className="font-semibold">Decision engine <Term id="jev">What is JEV?</Term></h3>
         <dl className="grid gap-3 text-sm sm:grid-cols-3">
           <div><dt className="text-muted">Decision</dt><dd className="font-semibold">{jevDecisionLabel(item.decision)}</dd></div>
-          <div><dt className="text-muted">Probability</dt><dd className="font-semibold">{probability === null ? <UnknownValue /> : probability.toFixed(2)}</dd></div>
+          <div><dt className="text-muted">Probability</dt><dd className="font-semibold">{probability === null ? <UnknownValue /> : percentOrUnknown(probability)}</dd></div>
           <div><dt className="text-muted">Evidence confidence</dt><dd className="font-semibold">{item.confidence.toFixed(2)}</dd></div>
         </dl>
-        {item.decision ? <p className="text-xs text-muted">Decision code: <code>{item.decision}</code></p> : <p className="text-sm text-muted">No JEV decision is stored yet, so no probability is shown.</p>}
+        {item.decision ? <TechnicalDetails>Decision code: {item.decision}</TechnicalDetails> : <p className="text-sm text-muted">{copy.opportunities.decisionNotYet}</p>}
       </section>
 
       <section aria-labelledby="opportunity-evidence" className="space-y-2">

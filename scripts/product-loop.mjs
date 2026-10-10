@@ -91,8 +91,8 @@ try {
   }
 
   await page.goto(`${brandUrl}/opportunities`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Score from evidence" }).click();
-  await page.getByText(/candidates scored/).waitFor();
+  await page.getByRole("button", { name: "Rank opportunities" }).click();
+  await page.getByText(/candidates? ranked/).waitFor();
 
   await page.goto(`${brandUrl}/library`, { waitUntil: "networkidle" });
   for (let index = 1; index <= 3; index += 1) {
