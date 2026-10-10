@@ -219,12 +219,12 @@ function ShellChrome({ children }: { children: ReactNode }) {
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {active ? <span className="hidden text-xs uppercase tracking-wide text-fg-muted xl:inline">{active.role}</span> : null}
-            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong px-3 text-sm text-fg-muted hover:bg-surface-2" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">⌘K</kbd></button>
-            <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2">
+            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong px-3 text-sm text-fg-muted hover:bg-surface-2 pointer-coarse:h-11" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">⌘K</kbd></button>
+            <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2 pointer-coarse:size-11">
               <Bell aria-hidden="true" className="size-4" />
               {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] font-bold leading-4 text-accent-fg">{bellLabel}</span> : null}
             </Link>
-            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
+            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2 pointer-coarse:size-11">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
             <UserButton />
           </div>
         </div>

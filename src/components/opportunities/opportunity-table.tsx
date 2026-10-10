@@ -49,10 +49,10 @@ export function OpportunityTable(props: TableProps) {
           {rows.map((item) => {
             const eligible = canEdit && isBulkSelectable(item.status);
             return <tr key={item.id} className="align-top hover:bg-surface-2">
-              {canEdit ? <td className="px-3 py-3">{eligible ? <input type="checkbox" className="size-5" aria-label={`Select ${item.label} for bulk dismiss`} checked={selectedIds.includes(item.id)} onChange={(event) => onSelectedChange(item.id, event.currentTarget.checked)} /> : null}</td> : null}
+              {canEdit ? <td className="px-3 py-3">{eligible ? <input type="checkbox" className="size-6 pointer-coarse:size-11" aria-label={`Select ${item.label} for bulk dismiss`} checked={selectedIds.includes(item.id)} onChange={(event) => onSelectedChange(item.id, event.currentTarget.checked)} /> : null}</td> : null}
               <td className="px-3 py-3 tabular-nums">{positions.get(item.id) ?? "-"}</td>
               <td className="min-w-56 px-3 py-3">
-                <button type="button" onClick={() => onOpen(item.id)} className="text-left font-semibold underline-offset-4 hover:underline">{item.label}</button>
+                <button type="button" onClick={() => onOpen(item.id)} className="inline-flex min-h-6 items-center text-left font-semibold underline-offset-4 hover:underline pointer-coarse:min-h-11">{item.label}</button>
                 <div className="mt-2 flex flex-wrap gap-2"><CategoryChip category={item.category} />{isHeld(item) ? <HoldBadge /> : null}</div>
               </td>
               <td className="px-3 py-3"><ScoreValue value={finiteOrNull(item.expectedValue)} /></td>
@@ -87,7 +87,7 @@ export function OpportunityTable(props: TableProps) {
             <div><dt className="text-xs font-semibold text-fg-muted">Risk</dt><dd className="mt-1"><ScoreValue value={finiteOrNull(item.risk)} /></dd></div>
           </dl>
           {eligible ? <label className="inline-flex min-h-11 items-center gap-3 text-sm">
-            <input type="checkbox" className="size-5" checked={selectedIds.includes(item.id)} onChange={(event) => onSelectedChange(item.id, event.currentTarget.checked)} />
+            <input type="checkbox" className="size-6 pointer-coarse:size-11" checked={selectedIds.includes(item.id)} onChange={(event) => onSelectedChange(item.id, event.currentTarget.checked)} />
             Select for bulk dismiss
           </label> : null}
           <div className="flex flex-wrap gap-2">
@@ -110,7 +110,7 @@ function SortHeader({ label, sortKey, active, direction, onSort }: {
   const Icon = !active ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown;
   const ariaSort = !active ? "none" : direction === "asc" ? "ascending" : "descending";
   return <th scope="col" aria-sort={ariaSort} className="px-3 py-2 font-semibold whitespace-nowrap">
-    <button type="button" onClick={() => onSort(sortKey)} className="inline-flex min-h-10 items-center gap-1.5 rounded focus-visible:outline-2 focus-visible:outline-accent">
+    <button type="button" onClick={() => onSort(sortKey)} className="inline-flex min-h-10 items-center gap-1.5 rounded pointer-coarse:min-h-11 focus-visible:outline-2 focus-visible:outline-accent">
       {label}<Icon aria-hidden="true" className="size-3.5 opacity-70" />
     </button>
   </th>;
@@ -122,5 +122,5 @@ function SelectAllBox({ checked, indeterminate, label, onChange }: { checked: bo
   useEffect(() => {
     if (ref.current) ref.current.indeterminate = indeterminate;
   }, [indeterminate]);
-  return <input ref={ref} type="checkbox" className="size-5" aria-label={label} checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} />;
+  return <input ref={ref} type="checkbox" className="size-6 pointer-coarse:size-11" aria-label={label} checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} />;
 }

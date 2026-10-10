@@ -98,7 +98,7 @@ function CapturedDateFilter({ from, to, onChange }: { from: Date | null; to: Dat
             month_grid: "w-full border-collapse",
             weekday: "w-11 pb-1 text-xs font-semibold text-fg-muted",
             day: "p-0.5 text-center",
-            day_button: "size-10 rounded-md hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent",
+            day_button: "size-10 rounded-md hover:bg-surface-2 pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-accent",
             range_middle: "bg-accent-soft",
             range_start: "bg-accent-soft",
             range_end: "bg-accent-soft",

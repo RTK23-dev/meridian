@@ -39,7 +39,7 @@ export const WORKSPACE_SCREEN_LINKS: { label: string; to: string }[] = [
 
 // Menus inside Command.Group: the heading gets the eyebrow treatment, the items stay in normal case.
 const GROUP_CLASS = "px-1 py-2 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-fg-muted";
-const ITEM_CLASS = "cursor-pointer rounded-md px-3 py-2 text-sm text-fg aria-selected:bg-surface-2";
+const ITEM_CLASS = "cursor-pointer rounded-md px-3 py-2 text-sm text-fg pointer-coarse:min-h-11 aria-selected:bg-surface-2";
 
 export function CommandPalette({
   open,

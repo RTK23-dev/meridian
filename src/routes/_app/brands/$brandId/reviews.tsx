@@ -147,7 +147,7 @@ function Reviews({ brandId }: { brandId: string }) {
                   <ReviewInbox items={open} selectedIndex={index} now={now} onSelect={setSelectedIndex} />
                 </div>
               </ResizablePanel>
-              <Separator aria-label="Resize the review list" className="w-2 shrink-0 rounded-full bg-border hover:bg-border-strong focus-visible:outline-2 focus-visible:outline-accent" />
+              <Separator aria-label="Resize the review list" className="relative w-2 shrink-0 rounded-full bg-border hover:bg-border-strong focus-visible:outline-2 focus-visible:outline-accent before:absolute before:inset-y-0 before:-inset-x-2 before:content-[''] pointer-coarse:before:-inset-x-[18px]" />
               <ResizablePanel defaultSize="64%" minSize="40%" className="min-w-0">
                 <div className="max-h-[75vh] overflow-y-auto pl-1">{detail}</div>
               </ResizablePanel>

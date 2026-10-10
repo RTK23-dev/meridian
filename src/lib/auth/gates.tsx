@@ -103,7 +103,7 @@ export function UserButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" aria-label="Account and appearance settings" title={label} className="flex min-h-10 min-w-10 items-center gap-2 rounded-md px-1 text-sm text-fg hover:bg-surface-2">
+        <button type="button" aria-label="Account and appearance settings" title={label} className="flex min-h-10 min-w-10 items-center gap-2 rounded-md px-1 text-sm text-fg hover:bg-surface-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
           {user.profileImageUrl ? (
             <img src={user.profileImageUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
           ) : (
