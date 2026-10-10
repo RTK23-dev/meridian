@@ -64,6 +64,11 @@ export async function createGatedBrief(sql: Sql, input: CreateGatedBriefInput): 
   const briefId = randomUUID();
   const decisionId = randomUUID();
   const result = await input.judge(briefId);
+  // An engine-judged brief is written only with its gate record. If the record could not be written, the decision cannot be
+  // traced, so the brief is not created. A deterministic rejection made no engine call and is written as it always was.
+  if (result.engineCalled && !result.gateRecordId) {
+    throw new Error("The brief's decision could not be recorded, so the brief was not created. Try again.");
+  }
   const status = briefStatusFor(result.action);
   const brief = input.brief;
   return withTransaction(sql, async (tx) => {
