@@ -45,7 +45,6 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
   const { register, formState: { errors, isDirty } } = form;
   const watched = form.watch();
   const action = watched.action as ReviewAction;
-  const groupName = useId();
   const descriptionId = useId();
   const check = checkReview({ action, reasonCode: watched.reasonCode, note: watched.note }, allowedCodes);
   const dismiss = useDirtyDismiss({
@@ -82,7 +81,6 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
                     <input
                       type="radio"
                       {...register("action")}
-                      name={groupName}
                       value={option}
                       disabled={pending}
                       className="size-4"
