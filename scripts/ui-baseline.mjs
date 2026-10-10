@@ -60,16 +60,18 @@ async function discoverRoutes(page, seededBrandId) {
     .map((entry) => relative("src/routes", join(entry.parentPath, entry.name)))
     .filter((file) => file !== "__root.tsx" && !file.includes("[_design]"));
   const sourceRoutes = routeFiles.map((file) => {
-    const route = file === "index.tsx"
-      ? ""
-      : file
-        .split(sep)
-        .join("/")
-        .replace(/\.tsx$/, "")
-        .replace(/\/index$/, "")
-        .split("/")
-        .map((part) => part.replace(/^\[([^\]]+)\]$/, "$1"))
-        .join("/");
+    // `_app/` is the pathless layout folder for signed-in screens, so it never appears in a URL.
+    const route = file
+      .split(sep)
+      .join("/")
+      .replace(/\.tsx$/, "")
+      .split("/")
+      .filter((part) => part !== "_app")
+      .join("/")
+      .replace(/(^|\/)index$/, "")
+      .split("/")
+      .map((part) => part.replace(/^\[([^\]]+)\]$/, "$1"))
+      .join("/");
     return `/${route.split("/").map((part) => {
       if (!part.startsWith("$")) return part;
       if (!brandId) throw new Error(`Cannot capture dynamic route ${file}: no seeded brand route was discovered.`);
@@ -89,13 +91,13 @@ async function prepareFixtureWorkspace(page) {
   if (await page.getByRole("button", { name: "Create account", exact: true }).count()) {
     await page.getByLabel("Your name").fill(testUser.name);
     await page.getByLabel("Email").fill(testUser.email);
-    await page.getByLabel("Password").fill(testUser.password);
+    await page.getByLabel(/^Password/).fill(testUser.password);
     await page.getByRole("button", { name: "Create account", exact: true }).click();
     await page.waitForTimeout(800);
     if (await page.getByRole("button", { name: "Create account", exact: true }).count()) {
       await page.getByRole("button", { name: "I already have an account" }).click();
       await page.getByLabel("Email").fill(testUser.email);
-      await page.getByLabel("Password").fill(testUser.password);
+      await page.getByLabel(/^Password/).fill(testUser.password);
       await page.getByRole("button", { name: "Sign in with email" }).click();
     }
   }

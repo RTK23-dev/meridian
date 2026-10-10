@@ -39,7 +39,7 @@ if (!mainFocused) failures.push({ name: "skip-link-target", violations: [{ id: "
 
 await page.getByLabel("Your name").fill("A11y Fixture");
 await page.getByLabel("Email").fill(`a11y-${stamp}@example.com`);
-await page.getByLabel("Password").fill("fixture-pass-1");
+await page.getByLabel(/^Password/).fill("fixture-pass-1");
 await page.getByRole("button", { name: "Create account" }).click();
 await page.waitForURL((url) => !url.pathname.endsWith("/login"), { timeout: 20000 });
 await page.goto(`${base}/`, { waitUntil: "networkidle" });

@@ -11,7 +11,7 @@ import {
   PageHeader, Popover, PopoverContent, PopoverTrigger, Progress, RadioGroup, RadioGroupItem,
   ScrollArea, Select, SelectItem, Separator, Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger, Skeleton, Slider,
   Stat, StatusBadge, Switch, Tabs, TabsContent, TabsList, TabsTrigger, Textarea,
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, toast,
+  Toaster, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, toast,
 } from "@/components/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -31,6 +31,7 @@ function DesignSystemPage() {
   const [open, setOpen] = useState(false);
   const [checked, setChecked] = useState(true);
   return <TooltipProvider>
+    <Toaster />
     <main className="mx-auto max-w-7xl space-y-10 px-4 py-8 text-fg">
       <PageHeader title="Design system" description="Component specimens only. Values below are not Meridian account or campaign data." breadcrumbs={[{ label: "Developer tools" }, { label: "Design system" }]} actions={<Button leftIcon={<Plus aria-hidden="true" />}>Primary action</Button>} secondaryActions={<Button variant="secondary">Secondary</Button>} />
       <p className="rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning">All rows and statuses are design examples, not production records.</p>
