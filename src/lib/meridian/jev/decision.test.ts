@@ -253,7 +253,8 @@ test("the signed-in paths call this engine instead of a hardcoded decision", () 
   assert.match(session, /decide\(publishingReadiness/);
   assert.doesNotMatch(session, /readiness\.state === "READY" \? 0\.9/);
   assert.match(opportunity, /decideForTenant\(active\.question/);
-  assert.match(studio, /decideForTenant\(visualPolicy\.question/);
+  // The visual judgment moved with attachCreativeImage into its server-only module, so the check reads that module.
+  assert.match(readFileSync(new URL("../studio/creative-image.server.ts", import.meta.url), "utf8"), /decideForTenant\(visualPolicy\.question/);
   assert.match(studio, /decideForTenant\(textPolicy\.question/);
   assert.match(rerank, /decideForTenant\(active\.question/);
   assert.doesNotMatch(opportunity, /expectedValue >= [^;]*AUTO_APPROVE/);
