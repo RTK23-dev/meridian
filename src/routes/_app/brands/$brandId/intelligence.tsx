@@ -21,21 +21,22 @@ import {
 import {
   useAccountIntelligenceQuery,
   useIntelligenceQuery,
+  usePendingVariables,
   useUpdateWhitespaceStatus,
 } from "@/lib/query/hooks";
 import { hasRole } from "@/lib/meridian/access";
+import { ClusterCards } from "@/components/market/intelligence-clusters";
+import { TraitBarChart, traitRows } from "@/components/market/intelligence-patterns";
+import { WhitespaceRanking } from "@/components/market/intelligence-whitespace";
 import {
   Activity,
   AlertTriangle,
-  ArrowUpRight,
-  CheckCircle2,
   Clock,
   Compass,
   Layers,
   Sparkles,
   TrendingUp,
   Volume2,
-  XCircle,
   Zap,
 } from "lucide-react";
 
@@ -51,6 +52,7 @@ function Intelligence({ brandId }: { brandId: string }) {
   const baseQuery = useIntelligenceQuery(brandId);
   const accountQuery = useAccountIntelligenceQuery(brandId, platform);
   const updateStatusMutation = useUpdateWhitespaceStatus(brandId);
+  const whitespacePending = usePendingVariables<{ opportunityId: string }>(["mutation", "whitespace.status", brandId]).map((vars) => vars.opportunityId);
 
   const baseData = baseQuery.data ?? null;
   const accountData = accountQuery.data ?? null;
@@ -103,6 +105,7 @@ function Intelligence({ brandId }: { brandId: string }) {
           <p className="mt-1 text-sm text-muted">
             Macro-portfolio rollups, 6-beat creative DNA decomposition, and competitor whitespace discovery.
           </p>
+          <p className="mt-1 text-xs text-muted">Counts describe stored posts and creatives, not ad effectiveness or causation.</p>
         </div>
       </div>
 
@@ -132,6 +135,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                 key={p}
                 size="sm"
                 variant={platform === p ? "primary" : "secondary"}
+                aria-pressed={platform === p}
                 onClick={() => setPlatform(p)}
                 className="capitalize"
               >
@@ -185,43 +189,31 @@ function Intelligence({ brandId }: { brandId: string }) {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                      <TrendingUp className="h-4 w-4 text-emerald-500" />
+                      <TrendingUp className="h-4 w-4 text-success" />
                       Top 10% vs. Bottom 10% Creative Trait Lift
                     </CardTitle>
                     <CardDescription>
-                      Differentiating variables that separate viral posts from underperforming ones.
+                      Traits stored for the top and bottom decile of posts, with how many posts carry each trait.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    {Object.keys(profile.topDecileTraits).length === 0 ? (
+                  <CardContent className="space-y-6">
+                    {Object.keys(profile.topDecileTraits).length === 0 && Object.keys(profile.bottomDecileTraits).length === 0 ? (
                       <p className="text-sm text-muted">More post volume needed for decile statistical separation.</p>
                     ) : (
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wider text-emerald-500">
-                            Winning Patterns (Top Decile)
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {Object.entries(profile.topDecileTraits).map(([trait, count]) => (
-                              <Badge key={trait} variant="success">
-                                {trait.replace(/_/g, " ")} ({count})
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="pt-2 border-t border-line">
-                          <p className="text-xs font-medium uppercase tracking-wider text-rose-500">
-                            Underperforming Patterns (Bottom Decile)
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {Object.entries(profile.bottomDecileTraits).map(([trait, count]) => (
-                              <Badge key={trait} variant="danger">
-                                {trait.replace(/_/g, " ")} ({count})
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+                      <>
+                        <TraitBarChart
+                          title="Winning patterns (top decile)"
+                          description="Counts of posts in the top decile that carry each trait."
+                          rows={traitRows(profile.topDecileTraits)}
+                          tone="success"
+                        />
+                        <TraitBarChart
+                          title="Underperforming patterns (bottom decile)"
+                          description="Counts of posts in the bottom decile that carry each trait."
+                          rows={traitRows(profile.bottomDecileTraits)}
+                          tone="danger"
+                        />
+                      </>
                     )}
                   </CardContent>
                 </Card>
@@ -255,8 +247,8 @@ function Intelligence({ brandId }: { brandId: string }) {
                       </div>
                     </div>
                     <div className="pt-2 border-t border-line">
-                      <p className="text-xs font-medium uppercase tracking-wider text-amber-500 flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" /> Saturated Angles (&ge; 30% of content)
+                      <p className="text-xs font-medium uppercase tracking-wider text-warning flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" aria-hidden="true" /> Saturated Angles (&ge; 30% of content)
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {profile.saturatedAngles.length === 0 ? (
@@ -307,7 +299,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div className="rounded bg-panel/80 p-2">
                             <span className="text-muted block">3s Retention</span>
-                            <span className="font-semibold text-emerald-800 dark:text-emerald-400">
+                            <span className="font-semibold text-success">
                               {((item.threeSecondRetention ?? 0) * 100).toFixed(1)}%
                             </span>
                           </div>
@@ -321,11 +313,11 @@ function Intelligence({ brandId }: { brandId: string }) {
 
                         <div className="flex items-center gap-3 text-xs text-muted">
                           <span className="flex items-center gap-1">
-                            <Volume2 className="h-3 w-3" />
+                            <Volume2 className="h-3 w-3" aria-hidden="true" />
                             {(item.speechWpm ?? 0) > 0 ? `${item.speechWpm} WPM` : "Music"}
                           </span>
                           <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
+                            <Clock className="h-3 w-3" aria-hidden="true" />
                             Cut cadence
                           </span>
                         </div>
@@ -335,7 +327,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                             <span className="text-[10px] font-medium uppercase tracking-wider text-muted">
                               Mined Objections:
                             </span>
-                            <p className="mt-1 text-xs text-amber-300/90 truncate">
+                            <p className="mt-1 text-xs text-warning truncate">
                               {item.detectedObjections.join(", ")}
                             </p>
                           </div>
@@ -348,7 +340,7 @@ function Intelligence({ brandId }: { brandId: string }) {
             </>
           ) : (
             <Panel className="space-y-3 py-8 text-center">
-              <Compass className="mx-auto h-8 w-8 text-brass" />
+              <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
               <h3 className="font-display text-lg font-semibold">No profile for {platform}</h3>
               <p className="mx-auto max-w-md text-sm text-muted">
                 JEV computes rolling portfolio profiles automatically once accounts are connected and content is ingested.
@@ -370,129 +362,27 @@ function Intelligence({ brandId }: { brandId: string }) {
             <div>
               <h2 className="font-display text-xl font-semibold">Competitor Whitespace Radar</h2>
               <p className="text-sm text-muted">
-                Unsaturated angles with high expected win probability based on market observation and creative gap analysis.
+                Unsaturated angles ranked by expected win probability from market observation and creative gap analysis.
               </p>
             </div>
           </div>
 
           {whitespace.length === 0 ? (
             <Panel className="py-8 text-center">
-              <Compass className="mx-auto h-8 w-8 text-brass" />
+              <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
               <h3 className="mt-3 font-display text-lg font-semibold">No whitespace opportunities detected</h3>
               <p className="mt-1 text-sm text-muted">
                 As market evidence and competitor campaigns are collected, JEV automatically flags high-probability gaps.
               </p>
             </Panel>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {whitespace.map((opp) => (
-                <Card key={opp.id} className="flex flex-col justify-between p-5 space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="neutral" className="capitalize">
-                        {opp.category}
-                      </Badge>
-                      <Badge
-                        variant={
-                          opp.status === "accepted"
-                            ? "success"
-                            : opp.status === "rejected"
-                            ? "danger"
-                            : "neutral"
-                        }
-                        className="capitalize"
-                      >
-                        {opp.status}
-                      </Badge>
-                    </div>
-
-                    <h3 className="font-display text-lg font-semibold text-foreground capitalize">
-                      {opp.unsaturatedAngle.replace(/_/g, " ")}
-                    </h3>
-
-                    {/* Meters */}
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="rounded bg-panel/80 p-3">
-                        <span className="text-muted block">Competitor Saturation</span>
-                        <span className="font-semibold text-foreground text-sm">
-                          {(opp.competitorSaturationScore * 100).toFixed(1)}%
-                        </span>
-                        <span className="text-[10px] text-muted block mt-0.5">Low saturation is favorable</span>
-                      </div>
-                      <div className="rounded bg-panel/80 p-3">
-                        <span className="text-muted block">Win Probability</span>
-                        <span className="font-semibold text-emerald-800 dark:text-emerald-400 text-sm">
-                          {(opp.expectedWinProbability * 100).toFixed(1)}%
-                        </span>
-                        <span className="text-[10px] text-muted block mt-0.5">Bayesian prior model</span>
-                      </div>
-                    </div>
-
-                    {/* Evidence */}
-                    {opp.supportingEvidence && opp.supportingEvidence.length > 0 && (
-                      <div className="space-y-1">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-                          Supporting Evidence:
-                        </span>
-                        <ul className="list-disc list-inside space-y-0.5 text-xs text-muted">
-                          {opp.supportingEvidence.map((ev, i) => (
-                            <li key={i}>{ev}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions (Enforce Role Check) */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
-                    {canEdit ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        {opp.status !== "accepted" && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="h-8 text-xs text-emerald-800 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
-                            disabled={updateStatusMutation.isPending}
-                            onClick={() =>
-                              updateStatusMutation.mutate({
-                                opportunityId: opp.id,
-                                status: "accepted",
-                              })
-                            }
-                          >
-                            <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Accept
-                          </Button>
-                        )}
-                        {opp.status !== "rejected" && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="h-8 text-xs text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
-                            disabled={updateStatusMutation.isPending}
-                            onClick={() =>
-                              updateStatusMutation.mutate({
-                                opportunityId: opp.id,
-                                status: "rejected",
-                              })
-                            }
-                          >
-                            <XCircle className="mr-1 h-3.5 w-3.5" /> Reject
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted">Viewer role (read-only)</span>
-                    )}
-
-                    <Button size="sm" variant="primary" className="h-8 text-xs" asChild>
-                      <Link to="/brands/$brandId/studio" params={{ brandId }}>
-                        Create Brief <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
+            <WhitespaceRanking
+              items={whitespace}
+              brandId={brandId}
+              canEdit={canEdit}
+              pendingIds={whitespacePending}
+              onStatus={(opportunityId, status) => updateStatusMutation.mutate({ opportunityId, status })}
+            />
           )}
         </TabsContent>
 
@@ -524,31 +414,7 @@ function Intelligence({ brandId }: { brandId: string }) {
             </Panel>
           </div>
 
-          {baseData.semanticClusters.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-display text-base font-semibold">Semantic Vector Clusters</h3>
-              <ul className="space-y-2">
-                {baseData.semanticClusters.map((group) => (
-                  <li key={group.summary} className="rounded-lg border border-line bg-panel px-4 py-3 text-sm">
-                    {group.summary}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {baseData.angleClusters.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-display text-base font-semibold">Angle Fingerprints</h3>
-              <ul className="space-y-2">
-                {baseData.angleClusters.map((group) => (
-                  <li key={group.key} className="rounded-lg border border-line bg-panel px-4 py-3 text-sm">
-                    Fingerprint {group.key} &middot; {group.count} posts
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <ClusterCards angleClusters={baseData.angleClusters} semanticClusters={baseData.semanticClusters} />
 
           <Panel>
             <h3 className="font-display text-lg font-semibold">System Notices</h3>
