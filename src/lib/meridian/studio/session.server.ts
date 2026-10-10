@@ -24,6 +24,7 @@ import { briefBrainFrom, briefGateJudge, createGatedBrief, directionReasonProble
 import { STUDIO_PROMPT_VERSION, isTestingRuntime, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
 import { productionRouter, type ImageProviderSelection } from "../production/router.ts";
+import { productionCostMode } from "../production/cost-mode.ts";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
 import { combineLogoFrames, combinePaletteFrames } from "../vision/measure.ts";
@@ -1408,7 +1409,7 @@ export async function executeApprovedCreativePlan(
         // P4a: the provider and model are chosen by the capability matrix, and the choice is recorded on the job.
         const { provider, selection } = await productionRouter.selectForSpec(
           creativeSpec,
-          "BALANCED",
+          await productionCostMode(sql, creativeSpec.organizationId),
           targetVidProvider === "auto" ? undefined : targetVidProvider,
         );
         creativeSpec.providerId = provider.id;

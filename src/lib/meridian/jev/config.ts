@@ -16,9 +16,8 @@ export const jevRuntimeConfigSchema = z.object({
   timeoutMs: z.number().int().positive().default(30000),
   compareSampleRate: z.number().min(0).max(1).default(0.1),
 
-  // TypeSafe Direct Configuration
+  // TypeSafe Direct: the key is not runtime config. It is resolved per organization by credentials/resolve.ts.
   typesafe: z.object({
-    apiKey: z.string().default(""),
     baseUrl: z.string().url().default("https://api.typesafe.ai/v1/systemone"),
     model: z.string().default("typesafe/jev-1.13"),
   }),
@@ -75,7 +74,6 @@ export function resolveJevConfig(overrides?: Partial<JevRuntimeConfig>): JevRunt
   const compareSampleRate = overrides?.compareSampleRate ?? (env.MERIDIAN_JEV_COMPARE_SAMPLE_RATE ? parseFloat(env.MERIDIAN_JEV_COMPARE_SAMPLE_RATE) : 0.1);
 
   // TypeSafe Direct: canonical TYPESAFE_JEV_*, with fallback to TYPESAFE_*
-  const typesafeApiKey = overrides?.typesafe?.apiKey ?? env.TYPESAFE_JEV_API_KEY?.trim() ?? env.TYPESAFE_API_KEY?.trim() ?? "";
   const typesafeBaseUrl = overrides?.typesafe?.baseUrl ?? env.TYPESAFE_JEV_BASE_URL?.trim() ?? env.TYPESAFE_BASE_URL?.trim() ?? "https://api.typesafe.ai/v1/systemone";
   const typesafeModel = overrides?.typesafe?.model ?? env.TYPESAFE_JEV_MODEL?.trim() ?? env.TYPESAFE_MODEL?.trim() ?? "typesafe/jev-1.13";
 
@@ -91,7 +89,6 @@ export function resolveJevConfig(overrides?: Partial<JevRuntimeConfig>): JevRunt
     timeoutMs,
     compareSampleRate,
     typesafe: {
-      apiKey: typesafeApiKey,
       baseUrl: typesafeBaseUrl,
       model: typesafeModel,
     },
