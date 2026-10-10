@@ -1,20 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getSql } from "../../../db.ts";
+import { studioTenant } from "../../testing/durable-image-fixtures.ts";
+import { storeVaultCredential } from "../../vault/service.ts";
+import { fixedLookup } from "../../credentials/fixtures.ts";
 import { GeminiOmniVideoProvider, buildOmniTextToVideoPayload } from "./omni.ts";
 import type { CreativeSpec } from "../types.ts";
 
-const hasGoogleCreds = Boolean(
-  (process.env.GOOGLE_CLOUD_PROJECT && process.env.GOOGLE_APPLICATION_CREDENTIALS) ||
-  process.env.GEMINI_API_KEY
-);
+// The vault encrypts each workspace's saved production key with this master key. Only this test process uses it.
+process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || "test-master-key-omni-live-0123456789abcdef";
 
-test("GeminiOmniVideoProvider Live Smoke Test (Credential-Gated)", { skip: !hasGoogleCreds }, async (t) => {
-  if (!hasGoogleCreds) {
-    t.skip("Skipping Gemini Omni Live Test: GOOGLE_APPLICATION_CREDENTIALS or GEMINI_API_KEY not configured.");
-    return;
-  }
+/**
+ * The key for the live smoke test, when one is configured. It is handed to the provider as the workspace's key for that one
+ * test. The provider itself never reads a key from the environment.
+ */
+const liveKey = process.env.MERIDIAN_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_STUDIO_API_KEY || process.env.GOOGLE_API_KEY || "";
 
-  const provider = new GeminiOmniVideoProvider();
+test("GeminiOmniVideoProvider Live Smoke Test (Credential-Gated)", { skip: !liveKey && "no live Gemini key is configured" }, async () => {
+  const provider = new GeminiOmniVideoProvider({ lookup: fixedLookup(liveKey) });
 
   const spec: CreativeSpec = {
     id: "spec-live-omni-1",
@@ -42,9 +45,10 @@ test("GeminiOmniVideoProvider Live Smoke Test (Credential-Gated)", { skip: !hasG
 test("GeminiOmniVideoProvider Contract & Duration Limits Validation", async () => {
   const provider = new GeminiOmniVideoProvider();
 
-  // 1. Health check returns canonical google_omni ID
+  // 1. Health check returns canonical google_omni ID, and with no workspace it is never READY
   const health = await provider.health();
   assert.equal(health.id, "google_omni", "Provider ID must be canonical google_omni");
+  assert.equal(health.state, "NOT_CONFIGURED", "without a workspace, the provider reports only that a workspace credential is needed");
   assert.equal(provider.capabilities.textToVideo, true, "Must support textToVideo");
 
   // 2. Payload builder enforces 3s to 10s duration constraint
@@ -76,26 +80,23 @@ test("GeminiOmniVideoProvider Contract & Duration Limits Validation", async () =
     "Omni must reject duration < 3s",
   );
 
-  // 3. submitJob returns FAILED if duration is out of range
-  const oldKey = process.env.MERIDIAN_GEMINI_API_KEY;
-  try {
-    process.env.MERIDIAN_GEMINI_API_KEY = "test-key-contract";
-    const invalidSpec: CreativeSpec = {
-      id: "spec-invalid-dur",
-      organizationId: "org-test",
-      brandId: "brand-test",
-      title: "Too Long Spec",
-      modality: "video", format: "video_ugc",
-      aspectRatio: "9:16",
-      durationTargetSeconds: 20,
-      hookLine: "Hook",
-      script: "Script",
-      scenes: [],
-    };
-    const failedJob = await provider.submitJob(invalidSpec);
-    assert.equal(failedJob.status, "FAILED");
-    assert.ok(failedJob.error?.includes("duration"), "Error must cite duration limit");
-  } finally {
-    process.env.MERIDIAN_GEMINI_API_KEY = oldKey;
-  }
+  // 3. submitJob returns FAILED if duration is out of range. The workspace has its own saved key, so the duration check is reached.
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "omni-contract");
+  await storeVaultCredential(sql, tenant.organizationId, "provider_config:production", { accessToken: "", apiKey: "test-key-contract" });
+  const invalidSpec: CreativeSpec = {
+    id: "spec-invalid-dur",
+    organizationId: tenant.organizationId,
+    brandId: tenant.brandId,
+    title: "Too Long Spec",
+    modality: "video", format: "video_ugc",
+    aspectRatio: "9:16",
+    durationTargetSeconds: 20,
+    hookLine: "Hook",
+    script: "Script",
+    scenes: [],
+  };
+  const failedJob = await provider.submitJob(invalidSpec);
+  assert.equal(failedJob.status, "FAILED");
+  assert.ok(failedJob.error?.includes("duration"), "Error must cite duration limit");
 });
