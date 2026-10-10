@@ -13,10 +13,12 @@ function isDescribedQuestion(value: unknown): value is DescribedQuestion {
   return typeof candidate.id === "string" && typeof candidate.description === "string";
 }
 
+function describedQuestions(values: readonly unknown[]): DescribedQuestion[] {
+  return values.filter(isDescribedQuestion);
+}
+
 const QUESTIONS = new Map<string, string>(
-  Object.values(questionModules)
-    .filter(isDescribedQuestion)
-    .map((question) => [question.id, question.description] as const),
+  describedQuestions(Object.values(questionModules)).map((question) => [question.id, question.description] as const),
 );
 
 export const UNDECLARED_QUESTION = "No question text is declared for this id.";
