@@ -6,7 +6,10 @@ import { DEV_USER_ID, authConfigured } from "@/lib/auth/verify.server";
 import { gateIdentityEnabled } from "@/lib/auth/gate-identity.server";
 import {
   canAccessStoredAsset,
+  contentDispositionFor,
+  framePosterStorageKey,
   isInActiveWorkspace,
+  isNotModified,
   parseByteRange,
   pickActiveOrganization,
   storedBytesMatch,
@@ -116,9 +119,14 @@ export const Route = createFileRoute("/api/assets/$assetId")({
         const assetBrandId = String(asset.brand_id);
         if (!isInActiveWorkspace(assetOrganizationId, active)) return notFound();
 
+        const url = new URL(request.url);
+        // ?thumb=1 serves the stored still of a video. When no still exists the answer is 404, never a stand-in image.
+        const wantsPoster = url.searchParams.get("thumb") === "1";
+        const storageKey = wantsPoster ? framePosterStorageKey(String(asset.storage_key)) : String(asset.storage_key);
+
         let source: StoredSource | null;
         try {
-          source = await loadStoredSource(sql, { storageKey: String(asset.storage_key), organizationId: assetOrganizationId, brandId: assetBrandId });
+          source = await loadStoredSource(sql, { storageKey, organizationId: assetOrganizationId, brandId: assetBrandId });
         } catch (error) {
           console.error("[assets] stored bytes could not be read", error instanceof Error ? error.name : "unknown");
           return new Response("The stored file could not be read right now. Try again shortly.", { status: 503, headers: { "Retry-After": "30" } });
@@ -140,16 +148,26 @@ export const Route = createFileRoute("/api/assets/$assetId")({
           return new Response("Asset unavailable", { status: 404 });
         }
 
+        const etag = `"${sha256Hex}"`;
+        if (isNotModified(request.headers.get("if-none-match"), etag)) {
+          return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, max-age=3600" } });
+        }
         const headers = new Headers({
           "Content-Type": mime,
           "Content-Length": String(bytes.byteLength),
-          ETag: `"${sha256Hex}"`,
+          ETag: etag,
           "Cache-Control": "private, max-age=3600",
-          "Content-Disposition": new URL(request.url).searchParams.get("download") === "1" ? "attachment" : "inline",
+          "Content-Disposition": contentDispositionFor({
+            download: !wantsPoster && url.searchParams.get("download") === "1",
+            assetId: params.assetId,
+            mimeType: mime,
+          }),
           "X-Content-Type-Options": "nosniff",
           "Content-Security-Policy": "default-src 'none'; sandbox",
-          "Accept-Ranges": "bytes",
         });
+        // A poster is a single still, so it is always served whole. Only the video itself supports Range requests.
+        if (wantsPoster) return new Response(bytes, { status: 200, headers });
+        headers.set("Accept-Ranges", "bytes");
         const range = parseByteRange(request.headers.get("range"), bytes.byteLength);
         if (range === "invalid") {
           headers.set("Content-Range", `bytes */${bytes.byteLength}`);
