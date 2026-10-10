@@ -1,7 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BrandNav } from "@/components/brand-nav";
 import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, Sheet, SheetContent, SheetDescription, SheetTitle, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { refreshOpportunities } from "@/lib/meridian/machine";
@@ -51,7 +50,6 @@ function Opportunities({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
-      <BrandNav brandId={brandId} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-3">
           <p className="text-sm font-semibold uppercase tracking-widest text-brass">Opportunities</p>

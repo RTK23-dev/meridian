@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { BrandNav } from "@/components/brand-nav";
 import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
@@ -70,7 +69,6 @@ function FactoryPage({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-6">
-      <BrandNav brandId={brandId} />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-2">
           <p className="text-sm font-semibold uppercase tracking-widest text-brass">Factory</p>

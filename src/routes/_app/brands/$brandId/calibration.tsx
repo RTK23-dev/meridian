@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { BrandNav } from "@/components/brand-nav";
 import { useCalibrationQuery, useLearningQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 import { decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
 import { hasRole } from "@/lib/meridian/access";
@@ -46,7 +45,6 @@ function CalibrationPage() {
   const canAdmin = hasRole(learning.data.role, "admin");
 
   return <div className="space-y-6">
-    <BrandNav brandId={brandId} />
     <header><p className="text-xs font-semibold uppercase tracking-widest text-brass">JEV governance</p><h1 className="font-display text-4xl">Calibration</h1><p className="mt-2 max-w-2xl text-muted">Review proposals based on recorded reviewer outcomes. A proposal changes no threshold until an admin approves it.</p></header>
     {note ? <p role="status" className="text-sm text-muted">{note}</p> : null}{failures.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
     <Panel><h2 className="font-display text-2xl">Active threshold history</h2><p className="mt-2 text-sm text-muted">Each approved version records its approver and stored threshold values. Defaults remain active until a version is approved.</p>

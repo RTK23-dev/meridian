@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { BrandNav } from "@/components/brand-nav";
 import {
   Badge,
   Button,
@@ -86,7 +85,6 @@ function Intelligence({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
-      <BrandNav brandId={brandId} />
 
       {/* Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

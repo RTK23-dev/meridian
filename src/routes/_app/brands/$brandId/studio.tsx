@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Input, Notice, Panel, ScreenSkeleton, SelectInput, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
-import { BrandNav } from "@/components/brand-nav";
 import { MediaPlayer } from "@/components/media-player";
 import { Term } from "@/components/term";
 import { HeldReservationsPanel } from "@/components/held-reservations-panel";
@@ -240,7 +239,6 @@ function Studio({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-6">
-      <BrandNav brandId={brandId} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">Studio</p>

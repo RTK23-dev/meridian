@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { BrandNav } from "@/components/brand-nav";
 import { StatusText } from "@/components/status";
 import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
@@ -135,7 +134,6 @@ function Library({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
-      <BrandNav brandId={brandId} />
       <div className="max-w-2xl space-y-3">
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Library</p>
         <h1 className="font-display text-4xl">Creatives this brand owns</h1>

@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { BrandNav } from "@/components/brand-nav";
 import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, Sheet, SheetContent, SheetDescription, SheetTitle, TextArea, TextInput, errorText } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
@@ -215,7 +214,6 @@ function MarketPage({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
-      <BrandNav brandId={brandId} />
       <div className="max-w-2xl space-y-3">
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Market</p>
         <h1 className="font-display text-4xl">What has actually been seen</h1>

@@ -2,7 +2,6 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { BrandNav } from "@/components/brand-nav";
 import { Button, ErrorState, Field, Notice, Panel, ScreenSkeleton, SelectInput, TextArea } from "@/components/ui";
 import { errorText } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -79,7 +78,6 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
-      <BrandNav brandId={brandId} />
       <form onSubmit={handleSubmit(submit)} className="space-y-8" onKeyDown={(event) => {
         if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
           event.preventDefault();

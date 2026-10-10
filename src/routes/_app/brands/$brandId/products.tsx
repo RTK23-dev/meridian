@@ -2,7 +2,6 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { BrandNav } from "@/components/brand-nav";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Notice, Panel, ScreenSkeleton, TextArea, TextInput, errorText } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { deleteProduct, saveProduct, type ProductRow } from "@/lib/meridian/api";
@@ -115,7 +114,6 @@ function Products({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
-      <BrandNav brandId={brandId} />
       <div>
         <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-muted">{detail.identity.name}</Link>
         <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="font-display text-4xl">Products</h1>{canEdit ? <Button type="button" onClick={() => { reset(blank); setEditing(null); setDiscardRequested(false); setFormOpen(true); }}>Add product</Button> : null}</div>
