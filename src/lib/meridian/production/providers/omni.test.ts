@@ -264,6 +264,7 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
 
   const { pollProductionJobs } = await import("../poller.ts");
   const pollResult = await pollProductionJobs(sql, {
+    organizationId: tenant.organizationId,
     driveClient: mockDrive as any,
     router: mockRouter as any,
     fetchImpl: mockOmniFetch as unknown as typeof fetch,

@@ -20,8 +20,8 @@ test("production pollers atomically lease a due job and do not claim it twice", 
   `;
 
   const [first, second] = await Promise.all([
-    pollProductionJobs(sql),
-    pollProductionJobs(sql),
+    pollProductionJobs(sql, { organizationId }),
+    pollProductionJobs(sql, { organizationId }),
   ]);
 
   assert.equal(first.claimed + second.claimed, 1, "Concurrent workers must not claim the same due job");

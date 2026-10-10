@@ -39,6 +39,7 @@ import {
   ESTIMATOR_VERSION,
   openProductionReview,
   settleCreativePlanIfComplete,
+  settleCarouselParent,
   settleProductionReservation,
 } from "../production/materialization.ts";
 import type { ImageGenerationOutcome } from "../production/image-providers.ts";
@@ -916,6 +917,8 @@ async function insertImageJobRow(sql: Sql, row: {
   status: "SUBMITTING" | "FAILED";
   creativePlanId: string;
   sequenceIndex: number;
+  /** The carousel this slide belongs to, or null for a single image. */
+  parentJobId: string | null;
   costStatus: string | null;
   /** Null when the cost is unknown. A zero here would be an invented price. */
   estimateCents: number | null;
@@ -927,11 +930,11 @@ async function insertImageJobRow(sql: Sql, row: {
     insert into production_jobs (
       id, organization_id, brand_id, provider, provider_job_id, request_id, status_url, cancel_url,
       status, cost_mode, estimated_cost_cents, input, created_at, submitted_at, updated_at, creative_plan_id,
-      modality, sequence_index, cost_status, error_code, error_message
+      modality, sequence_index, parent_job_id, cost_status, error_code, error_message
     ) values (
       ${row.id}, ${row.organizationId}, ${row.brandId}, ${row.providerId}, null, null, null, null,
       ${row.status}, 'BALANCED', ${row.estimateCents}, ${row.input}, now(), null, now(), ${row.creativePlanId},
-      'image', ${row.sequenceIndex}, ${row.costStatus}, ${row.errorCode ?? null}, ${row.errorMessage ?? null}
+      'image', ${row.sequenceIndex}, ${row.parentJobId}, ${row.costStatus}, ${row.errorCode ?? null}, ${row.errorMessage ?? null}
     )
     on conflict (id) do nothing
   `;
@@ -1158,6 +1161,8 @@ export async function executeApprovedCreativePlan(
   }
 
   const runId = crypto.randomUUID();
+  // A carousel is one parent job whose slides are its children. The parent holds no reservation: each slide reserves its own.
+  const carouselJobId = creativePlan.deliverables.some((d) => d.kind === "carousel_slide") ? `carousel-job-${creativePlan.id}` : null;
   const firstImgDeliv = creativePlan.deliverables.find((d) => d.kind === "image" || d.kind === "carousel_slide");
   const firstVidDeliv = creativePlan.deliverables.find((d) => d.kind === "video");
   const effectiveImageProvider = firstImgDeliv?.provider || "none";
@@ -1173,6 +1178,22 @@ export async function executeApprovedCreativePlan(
   `;
 
   try {
+
+    if (carouselJobId) {
+      const slideCount = creativePlan.deliverables.filter((d) => d.kind === "carousel_slide").length;
+      await sql`
+        insert into production_jobs (
+          id, organization_id, brand_id, provider, provider_job_id, request_id, status_url, cancel_url,
+          status, cost_mode, estimated_cost_cents, input, created_at, submitted_at, updated_at, creative_plan_id,
+          modality, sequence_index, parent_job_id, cost_status
+        ) values (
+          ${carouselJobId}, ${access.organizationId}, ${brandId}, 'carousel', null, null, null, null,
+          'SUBMITTING', 'BALANCED', null, ${JSON.stringify({ kind: "carousel", slideCount, runId, briefId, planDeliverableIds: creativePlan.deliverables.filter((d) => d.kind === "carousel_slide").map((d) => d.id) })},
+          now(), null, now(), ${creativePlan.id}, 'carousel', null, null, null
+        )
+        on conflict (id) do nothing
+      `;
+    }
 
     for (const deliv of creativePlan.deliverables) {
       if (deliv.kind === "image" || deliv.kind === "carousel_slide") {
@@ -1228,7 +1249,7 @@ export async function executeApprovedCreativePlan(
           // Refused before any provider call. The refusal is recorded on the job, and its reservation is released.
           await insertImageJobRow(sql, {
             id: prodJobId, organizationId: access.organizationId, brandId, providerId: imageTarget.provider, status: "FAILED",
-            creativePlanId: creativePlan.id, sequenceIndex: index, costStatus: null, estimateCents: null,
+            creativePlanId: creativePlan.id, sequenceIndex: index, parentJobId: deliv.kind === "carousel_slide" ? carouselJobId : null, costStatus: null, estimateCents: null,
             input: JSON.stringify({ kind: "image", creativeSpec: spec, runId, briefId, planDeliverableId: deliv.id }),
             errorCode: "SELECTION_REFUSED", errorMessage: errorText(refusal),
           });
@@ -1244,7 +1265,7 @@ export async function executeApprovedCreativePlan(
         // The job's snapshot is written once, before the provider call. Materialization reads only this snapshot.
         await insertImageJobRow(sql, {
           id: prodJobId, organizationId: access.organizationId, brandId, providerId: selected.provider.id, status: "SUBMITTING",
-          creativePlanId: creativePlan.id, sequenceIndex: index, costStatus: chosen.costStatus,
+          creativePlanId: creativePlan.id, sequenceIndex: index, parentJobId: deliv.kind === "carousel_slide" ? carouselJobId : null, costStatus: chosen.costStatus,
           estimateCents: chosen.estimateUsd === null ? null : Math.round(chosen.estimateUsd * 100),
           input: JSON.stringify({
             kind: "image", creativeSpec: spec, runId, briefId, manifest: delivManifest, planDeliverableId: deliv.id,
@@ -1481,6 +1502,10 @@ export async function executeApprovedCreativePlan(
       }
     }
 
+    if (carouselJobId) {
+      await settleCarouselParent(sql, { organizationId: access.organizationId, brandId, productionJobId: carouselJobId });
+    }
+
     const videos = await sql<Record<string, unknown>>`
       select a.id, a.creative_id, a.storage_key, a.media_status, a.byte_size, a.width, a.height, a.duration_ms, a.transcript,
              a.scenes, a.checksum, a.mime_type, a.prompt_version, c.raw_text, c.angle
@@ -1569,6 +1594,10 @@ export async function executeApprovedCreativePlan(
     });
     return loadSession(sql, access.organizationId, brandId, access.role);
   } catch (error) {
+    if (carouselJobId) {
+      await settleCarouselParent(sql, { organizationId: access.organizationId, brandId, productionJobId: carouselJobId }, { interrupted: true })
+        .catch(() => undefined);
+    }
     await releaseUnheldReservations(sql, reservations, error instanceof Error ? error.message : String(error));
     await sql`
       update generation_runs set status = 'failed'
