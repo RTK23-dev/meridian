@@ -64,7 +64,9 @@ export function TraceDrawer(props: TraceDrawerProps) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full space-y-6 overflow-y-auto p-6 sm:mx-auto sm:max-w-xl">
+      {/* One explicit scroll region holds the whole body, so the performance form and its button are always reachable. */}
+      <SheetContent className="flex max-h-[90vh] w-full flex-col overflow-hidden p-0 sm:mx-auto sm:max-w-xl">
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
         <div className="space-y-1 pr-8">
           <SheetTitle className="font-display text-2xl">{title}</SheetTitle>
           <SheetDescription className="text-sm text-muted">{summary}</SheetDescription>
@@ -158,6 +160,7 @@ export function TraceDrawer(props: TraceDrawerProps) {
             ) : null}
           </>
         )}
+      </div>
       </SheetContent>
     </Sheet>
   );

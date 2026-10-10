@@ -96,12 +96,14 @@ export function ProductSheet({ brandId, open, product, onOpenChange }: {
 
   return (
     <Sheet open={open} onOpenChange={(next) => { if (next) onOpenChange(true); else requestClose(); }}>
-      <SheetContent aria-describedby="product-sheet-description" className="max-h-[92vh]">
+      <SheetContent aria-describedby="product-sheet-description" className="flex max-h-[92vh] flex-col overflow-hidden">
         <SheetTitle className="font-display text-2xl">{product ? "Edit product" : "Add product"}</SheetTitle>
         <SheetDescription id="product-sheet-description" className="mt-1 text-sm text-fg-muted">
           Product details and claim rules are used when creative evidence is checked.
         </SheetDescription>
-        <form onSubmit={handleSubmit(submit)} className="mt-6 grid gap-4 md:grid-cols-2">
+        {/* The fields scroll inside the sheet; the actions stay pinned below them, so they are always reachable. */}
+        <form onSubmit={handleSubmit(submit)} className="mt-6 flex min-h-0 flex-1 flex-col">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto pb-2 md:grid-cols-2">
           <Field label="Name" error={errors.name?.message} required>
             <TextInput {...register("name")} required maxLength={160} />
           </Field>
@@ -144,12 +146,13 @@ export function ProductSheet({ brandId, open, product, onOpenChange }: {
               )}
             </div>
           ) : null}
-          <div className="md:col-span-2 flex flex-wrap gap-2">
-            <Button type="submit" disabled={pending || isSubmitting}>
-              {pending || isSubmitting ? "Saving…" : product ? "Update product" : "Add product"}
-            </Button>
-            <Button type="button" variant="secondary" onClick={requestClose}>Cancel</Button>
-          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2 border-t border-border pt-4">
+          <Button type="submit" disabled={pending || isSubmitting}>
+            {pending || isSubmitting ? "Saving…" : product ? "Update product" : "Add product"}
+          </Button>
+          <Button type="button" variant="secondary" onClick={requestClose}>Cancel</Button>
+        </div>
         </form>
       </SheetContent>
     </Sheet>
