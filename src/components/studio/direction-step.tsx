@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Panel, TextArea } from "@/components/ui";
-import { Term } from "@/components/term";
+import { Term } from "@/components/glossary";
 import { alternativeDirections, directionSourceLabel, type DirectionCandidate } from "./direction.ts";
 import { decisionPlainLabel, formatUnitInterval } from "./evidence.ts";
 import type { StudioData } from "./types.ts";

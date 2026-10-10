@@ -80,8 +80,8 @@ export type PlainError = {
 };
 
 const UNREACHABLE = "Meridian could not be reached. Check your connection and try again.";
-const GENERIC = "Something went wrong. Try again.";
-const GENERIC_WITH_DETAILS = "Something went wrong. Try again. Open Details for the exact message.";
+const GENERIC = "The request did not finish. Try again.";
+const GENERIC_WITH_DETAILS = "The request did not finish. Try again. Open Details for the exact message.";
 const NETWORK_TEXT = /failed to fetch|networkerror|network request failed|load failed|fetch failed/i;
 
 /**
@@ -154,7 +154,7 @@ export const copy = {
     patternsStored: (count: number) => `${count} ${count === 1 ? "pattern" : "patterns"} stored. Queued learning jobs were drained. Rank opportunities again to use them.`,
     noTestPublication: "No test publication is recorded for this brand yet.",
     testPublication: (id: string) => `Test publication · publisher ID ${id}`,
-    startingEstimates: "Sync to JEV Brain updates the starting estimates from these rows. Older rows count for less, with a 14-day half-life.",
+    startingEstimates: "Sync to JEV Brain updates the starting estimates from these rows.",
   },
   studio: {
     publisherId: "Publisher ID",

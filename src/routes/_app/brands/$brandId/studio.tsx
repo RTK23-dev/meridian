@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { ErrorState, Notice, ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, errorText } from "@/components/ui";
-import { Term } from "@/components/term";
+import { Term } from "@/components/glossary";
 import { useWorkspace } from "@/components/workspace";
 import { providerLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";

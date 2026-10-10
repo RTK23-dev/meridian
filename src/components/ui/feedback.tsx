@@ -41,7 +41,7 @@ export function ErrorState({ message = "We could not load this information.", re
     <div className="flex items-start gap-3"><CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-danger" /><div><h2 className="font-semibold">Something went wrong</h2><p className="mt-1 text-sm text-fg-muted">{message}</p></div></div>
     {onRetry ? <Button size="md" variant="secondary" onClick={onRetry}>Try again</Button> : null}
     {requestId ? <p className="text-xs text-fg-muted">Request ID: <code>{requestId}</code></p> : null}
-    {detail ? <details className="text-sm"><summary className="cursor-pointer text-fg-muted">Technical details</summary><pre className="mt-2 overflow-auto rounded bg-surface-2 p-3 text-xs">{detail}</pre></details> : null}
+    {detail ? <details className="text-sm"><summary className="cursor-pointer text-fg-muted">Details</summary><pre className="mt-2 overflow-auto rounded bg-surface-2 p-3 text-xs">{detail}</pre></details> : null}
   </Card>;
 }
 

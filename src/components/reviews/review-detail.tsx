@@ -1,4 +1,4 @@
-import { Term } from "@/components/term";
+import { Term } from "@/components/glossary";
 import { Badge, Button, Field, Kbd, Panel, SelectInput, TextInput } from "@/components/ui";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
 import { ageBadge, confidenceBadge, formatOpened, reviewNoteFieldId, reviewPriority, reviewReasonFieldId, type ReviewDraft, type ReviewRow } from "./review-model";
