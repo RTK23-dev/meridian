@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as Char91_designChar93RouteImport } from './routes/[_design]'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAlertsRouteImport } from './routes/_app/alerts'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppIntegrationsRouteImport } from './routes/_app/integrations'
@@ -59,6 +60,11 @@ const LoginRoute = LoginRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSplatRoute = AppSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAlertsRoute = AppAlertsRouteImport.update({
@@ -212,6 +218,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/_design': typeof Char91_designChar93Route
   '/login': typeof LoginRoute
+  '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
   '/integrations': typeof AppIntegrationsRoute
@@ -244,6 +251,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/_design': typeof Char91_designChar93Route
   '/login': typeof LoginRoute
+  '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
   '/integrations': typeof AppIntegrationsRoute
@@ -279,6 +287,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/_design': typeof Char91_designChar93Route
   '/login': typeof LoginRoute
+  '/_app/$': typeof AppSplatRoute
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/audit': typeof AppAuditRoute
   '/_app/integrations': typeof AppIntegrationsRoute
@@ -315,6 +324,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_design'
     | '/login'
+    | '/$'
     | '/alerts'
     | '/audit'
     | '/integrations'
@@ -347,6 +357,7 @@ export interface FileRouteTypes {
   to:
     | '/_design'
     | '/login'
+    | '/$'
     | '/alerts'
     | '/audit'
     | '/integrations'
@@ -381,6 +392,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/_design'
     | '/login'
+    | '/_app/$'
     | '/_app/alerts'
     | '/_app/audit'
     | '/_app/integrations'
@@ -451,6 +463,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/$': {
+      id: '/_app/$'
+      path: '/$'
+      fullPath: '/$'
+      preLoaderRoute: typeof AppSplatRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/alerts': {
@@ -653,6 +672,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppSplatRoute: typeof AppSplatRoute
   AppAlertsRoute: typeof AppAlertsRoute
   AppAuditRoute: typeof AppAuditRoute
   AppIntegrationsRoute: typeof AppIntegrationsRoute
@@ -680,6 +700,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppSplatRoute: AppSplatRoute,
   AppAlertsRoute: AppAlertsRoute,
   AppAuditRoute: AppAuditRoute,
   AppIntegrationsRoute: AppIntegrationsRoute,

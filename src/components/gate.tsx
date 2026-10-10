@@ -3,13 +3,15 @@ import { GROK_PROVIDERS, signIn } from "@/lib/auth/client";
 import { useWorkspace } from "@/components/workspace";
 import { EmailAuth } from "@/components/email-auth";
 import { ErrorState, ScreenSkeleton } from "@/components/ui";
+import { ForbiddenPage } from "@/components/status-pages";
 
 /** Waits for the workspace bootstrap. Rendered inside the shell, so the navigation stays usable while it loads or fails. */
 export function WorkspaceReady({ children }: { children: ReactNode }) {
-  const { data, loading, error, reload } = useWorkspace();
+  const { data, loading, error, forbidden, reload } = useWorkspace();
   if (loading && !data) {
     return <div className="mx-auto max-w-3xl p-6"><ScreenSkeleton label="Loading workspace" shape="cards" /></div>;
   }
+  if (error && !data && forbidden) return <ForbiddenPage />;
   if (error && !data) return <ErrorState message={error} onRetry={() => void reload()} />;
   return <>{children}</>;
 }

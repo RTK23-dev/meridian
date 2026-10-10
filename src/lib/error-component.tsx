@@ -1,5 +1,7 @@
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { ErrorState } from "@/components/ui";
+import { ForbiddenPage } from "@/components/status-pages";
+import { isForbiddenError } from "@/lib/navigation/model";
 
 const FALLBACK_MESSAGE = "An unexpected error occurred. Try again.";
 
@@ -14,6 +16,7 @@ function errorMessage(error: unknown): string {
  * route that failed.
  */
 export function AppErrorComponent({ error, reset }: ErrorComponentProps) {
+  if (isForbiddenError(error)) return <ForbiddenPage />;
   return (
     <section className="mx-auto max-w-2xl">
       <ErrorState message={errorMessage(error)} onRetry={reset} />

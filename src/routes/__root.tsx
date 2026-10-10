@@ -3,9 +3,11 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { ThemeProvider, themeBootstrap } from "@/components/ui";
 import { AppQueryProvider } from "@/lib/query/client";
+import { RootNotFound } from "@/components/status-pages";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
+  notFoundComponent: RootNotFound,
   head: () => ({
     meta: [
       { charSet: "utf-8" },
