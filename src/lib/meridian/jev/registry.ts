@@ -11,6 +11,7 @@ import { CREATOR_QUESTIONS } from "./questions/creator.ts";
 import { BRAND_QUESTIONS } from "./questions/brand.ts";
 import { SAFETY_QUESTIONS } from "./questions/safety.ts";
 import { PRODUCTION_QUESTIONS } from "./questions/production.ts";
+import { CREATIVE_QUESTIONS } from "./questions/creative.ts";
 import { QUESTIONS } from "./questions.ts";
 
 export type QuestionRecord = {
@@ -37,6 +38,7 @@ export const UNIFIED_QUESTION_REGISTRY: Record<string, JevQuestionSpec> = {
   ...BRAND_QUESTIONS,
   ...SAFETY_QUESTIONS,
   ...PRODUCTION_QUESTIONS,
+  ...CREATIVE_QUESTIONS,
 };
 
 export function getQuestionById(id: string): JevQuestionSpec | undefined {

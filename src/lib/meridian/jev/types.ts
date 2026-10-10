@@ -35,6 +35,16 @@ export type JevQuestionSpec = {
     approveMinProbability?: number;
     reviewMinProbability?: number;
     rejectionValues?: string[];
+    /** Choice values that approve. A choice in neither list goes to review. */
+    approveValues?: string[];
+    /** Minimum score index that approves. Without it, a score always goes to human review. */
+    approveMinScore?: number;
+    /** "reject_if_true" when the predicate describes a defect. Default "pass_if_true". */
+    predicateDirection?: "pass_if_true" | "reject_if_true";
+    /** Outcome when the answer is refused, unsupported, malformed, or missing. Default HUMAN_REVIEW. */
+    unresolvedOutcome?: "HUMAN_REVIEW" | "REJECT";
+    /** An answer below this confidence goes to human review. */
+    minConfidence?: number;
   };
 };
 

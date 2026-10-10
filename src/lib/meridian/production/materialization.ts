@@ -20,7 +20,7 @@ import { semanticNearest } from "../embeddings/store.ts";
 import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
-import { accountSnapshots, competitorCopy, factsFor, visualFacts, writeJudgment, type QcBrandContext } from "../studio/image-qc.server.ts";
+import { accountSnapshots, competitorCopy, factsFor, generatedImageVisual, visualFacts, writeJudgment, type QcBrandContext } from "../studio/image-qc.server.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
 import type { CreativeSpec, ProductionModality } from "./types.ts";
 
@@ -373,7 +373,13 @@ export async function materializeImageArtifact(
     ownSemanticSimilarity: ownSemantic,
     publishing,
   });
-  const judged = await writeJudgment(sql, { organizationId: ref.organizationId, brandId: ref.brandId, creativeId, facts });
+  const judged = await writeJudgment(sql, {
+    organizationId: ref.organizationId,
+    brandId: ref.brandId,
+    creativeId,
+    facts,
+    visual: generatedImageVisual(stored.bytes, artifact.sha256),
+  });
   const status = judged.rollup === "REJECT" ? "rejected" : judged.rollup === "AUTO_APPROVE" ? "approved" : "in_review";
 
   await sql`

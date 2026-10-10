@@ -364,6 +364,13 @@ export function judgeBrief(input: {
   );
 }
 
+/**
+ * Media questions whose local check was lexical (token overlap, an angle-present check) and is no longer the approval
+ * authority. Their meaning is judged by the active decision engine through the creative gate. The local decisions for
+ * them are not persisted or rolled up.
+ */
+export const ENGINE_REPLACED_MEDIA_QUESTIONS: ReadonlySet<string> = new Set(["brand_fit", "opportunity_quality"]);
+
 export function judgeMedia(facts: MediaFacts, policies?: ReadonlyMap<string, AppliedPolicy>): AuditedDecision[] {
   const ids = facts.kind === "video" ? VIDEO_QUESTIONS : IMAGE_QUESTIONS;
   return ids.map((id) => {

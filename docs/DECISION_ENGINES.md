@@ -24,7 +24,9 @@ question registry (Meridian)  ->  evidence (Meridian)  ->  DecisionRequest
 - `decisions/types.ts`: the provider-neutral domain. `DecisionEngine`, `DecisionRequest`, `DecisionResult`, and `DecisionCapabilities`. Provider request and response types never leave the adapters.
 - `decisions/dispatcher.ts`: `decideWithActiveEngine`, the single entry point for production decisions. It resolves the active engine, calls that engine once, records the lineage, and returns the result. It never calls the other engine.
 - `decisions/selection.ts`: the active-engine rule and the save path.
-- `decisions/policy.ts`: the shared policy. It reads normalized answers only, so it is the same for every engine.
+- `decisions/gate.ts`: `runEngineGate`, the one path for production decisions that need contextual judgment (below).
+- `decisions/policy.ts`: the shared policy. It reads normalized answers only, so it is the same for every engine. Each question is evaluated under its own versioned policy, taken from its registry `policyMapping`.
+- `decisions/frames.ts`: representative frame selection for image judgments on video.
 - `decisions/lineage.ts`: the decision ledger (`jev_runs`, `jev_answers`), with engine columns.
 
 ## Choosing the active engine
@@ -112,11 +114,45 @@ Credentials stay on the server. The control panel shows configuration status and
 
 Migration `0046_decision_engines.sql` adds `decision_engine_settings` and the engine columns. Rows written before it have no engine and were made by JEV.
 
+## The engine gate
+
+`runEngineGate` (`decisions/gate.ts`) is how a production decision gets judgment from the active engine. It runs in this order:
+
+1. **Deterministic rejections first.** Budget, source permission, media integrity, schema, provider capability, and rights are checked by code. If one fails, the gate rejects and no engine is called. An engine cannot override it.
+2. **One selection, one call.** The active engine is resolved once, and one call to it carries every answerable question. There is no fallback to the other engine and no second opinion from it.
+3. **Images are refused locally, never rerouted.** A question that needs an image is `unsupported` when JEV is active, and `abstain_insufficient_evidence` when no image was supplied. Neither is sent to the other engine.
+4. **Policy per question.** Each gating question is evaluated under its own policy (`policyForQuestion`). The most severe outcome wins. A refused, unsupported, malformed, or missing answer, or a provider failure, resolves to the question's `unresolvedOutcome`, which is `HUMAN_REVIEW` unless the question says otherwise. A thrown engine error is a provider failure, so the gate fails closed.
+5. **Persistence.** The gate writes `decision_gate_records` (migration `0048`): the engine, requested and returned model, question and policy versions, the evidence names and image hashes and timestamps that were provided, votes, unresolved answers, action, reason, latency, usage, and failure kind. The engine run is written to `jev_runs` and `jev_answers`, linked by `run_id`. Image bytes are never recorded.
+
+Analysis questions (`gating: false`) are answered and recorded, but they do not decide the action. A gate with no gating question cannot approve anything, so it goes to review, and its reason says so.
+
+## Production gates that use the engine
+
+| Gate | Entry point | Asked of the engine | Stays local (deterministic) |
+|---|---|---|---|
+| Creative QA, images and video | `studio/image-qc.server.ts` `writeJudgment` | Text: `creative.brand_fit.v1`, `creative.opportunity_fit.v1`, `creative.claim_compliance.v1`. Image: `creative.visual_quality.v1`, `creative.product_visible.v1`. | A literal prohibited claim, an avoided word, product-name presence, measured logo and palette, competitor copy overlap, duplicates, novelty, and publishing readiness. A local REJECT is final and the engine is not called. |
+| Research evidence | `jev/service.ts` `evaluateEvidence` | Gating: `safety.*` (claim compliance and rights). The organic questions are analysis only. | Nothing in the gate. |
+
+The lexical checks that were the previous semantic authority (token overlap for brand fit, and an angle-present check for opportunity) are no longer written as decisions (`ENGINE_REPLACED_MEDIA_QUESTIONS` in `studio/features.ts`).
+
+**Behaviour change to know about.** Under the default engine, JEV, the two visual questions are `unsupported`, so every generated image now routes to human review. Before this change, the local model could approve an image without looking at it. Selecting `openai-decisions` in the JEV tab lets the visual questions run, with the image sent. A workspace that stays on JEV will see its generated images in review until a visual check is available to it.
+
+Generated images reach the engine as their verified stored bytes. Competitor copy and the generation prompt are never sent.
+
+## Frames
+
+`decisions/frames.ts` picks at most four frames for a video judgment: the **hook** (earliest), the **middle** beat, a **proof** frame (the one with the most on-screen text observed by OCR; no text, no proof frame), and the **call to action** (latest). Only frames whose timestamp the source reported are eligible. A timestamp is never estimated. The selection is deterministic, and the record names every frame provided with its real timestamp and hash.
+
+Stored video frames are PNGs found by scanning the container (`video/inspect.ts`), and they carry no timestamp. So every stored frame is omitted with reason `no_timestamp`, and the gate context records the count. No frame reaches a decision today.
+
 ## Status of each part
 
 Implemented and covered by tests that run on PGlite:
 
 - The shared domain, the dispatcher, selection precedence, and lineage persistence (`dispatch.test.ts`).
+- The engine gate: deterministic-first, one engine call, local refusal of image questions, per-question policies, unresolved outcomes, analysis questions, provider failures, a thrown engine error, persistence, and no fallback or double execution (`gate.test.ts`, 21 tests, both selections).
+- The creative gate and its image evidence, including a rejection from the engine, a deterministic rejection that stops the engine, and frame omission (`studio/creative-gate.test.ts`).
+- Representative frame selection, including missing timestamps, duplicates, determinism, and the four-frame limit (`decisions/frames.test.ts`).
 - The OpenAI Decisions adapter against fixtures shaped like the documented contract (`openai-engine.test.ts`): request shape, typed questions, data-URL images, refusals, missing and malformed answers, retries, timeouts, unknown models, authentication errors without key leakage, usage, and returned model.
 - The JEV adapter and cross-engine fixtures (`engines.contract.test.ts`): both engines answer the same question kinds with the same semantics, and the same fixture values produce the same policy outcome.
 - The shared policy and its thresholds and version lineage (`policy.test.ts`).
@@ -124,13 +160,14 @@ Implemented and covered by tests that run on PGlite:
 
 Implemented but not verified against the live service:
 
-- The OpenAI Decisions adapter. No request has been sent to `api.openai.com` from this repository. The fixtures reflect the documented contract at the time of writing, and the public beta may change it. Verify with a credentialed run before relying on it.
+- **OpenAI Decisions has not been called live.** No request has been sent to `api.openai.com` from this repository. The fixtures reflect the documented contract at the time of writing, and the public beta may change it. Verify with a credentialed run before relying on it. This applies to the visual judgments in particular.
 
-Not implemented in this change:
+Not implemented, or known to be incomplete:
 
-- Engine-specific question sets beyond the existing registry. The registry's questions are used as they are.
-- A calibration report for either engine. Every value is uncalibrated.
-- Shadow evaluation. The flag exists, but it only gates JEV's existing compare mode, and no shadow runner exists.
-- **No production approval gate consumes engine decisions yet.** Engine answers are produced for research evidence analysis only (`research/worker.ts` and `study/deep-study-service.ts` persist answers; no outcome is computed from them). The production gates are local, deterministic models: the creative and image gate (`jev/judgment.ts` `judgeFeatures`, used by `studio/features.ts` and `studio/image-qc.server.ts`), and the opportunity rule gate (`jev/engine.ts` `decideForTenant`). `jev/policy.ts` `evaluatePolicy` has no production caller. Making any gate depend on a remote engine changes approval behaviour and cost, so it needs an explicit decision.
-- **Image and frame evidence does not reach any decision.** An evidence bundle carries a keyframe reference, not frame bytes, and no loader turns that reference into an image. OpenAI Decisions can take images, but no production path supplies them.
-- The new policy module is tested, and no production path uses it yet.
+- **Video visual judgment.** Stored frames have no timestamps, so no video is judged on its frames. Video creatives were already routed to review, so their status is unchanged.
+- **Brief fit.** No writer uses the engine. `loadGatedJevDecision` reads brief and plan decisions that other code wrote.
+- **Research outcome.** The research gate's action is computed and recorded, but nothing downstream acts on it yet. The research worker still discards the answers' outcome.
+- **Calibration.** No calibration report exists for either engine. Every value is uncalibrated, and the policy thresholds are configuration, not measured error rates.
+- **Engine-specific question sets.** The question sets are the registry's, plus the creative set above. No engine has its own.
+- **Shadow evaluation.** The flag exists, but it only gates JEV's existing compare mode, and no shadow runner exists.
+- **Local measured checks are heuristics, not semantic judgments.** `competitor_copy_risk`, `duplicate_risk`, `logo_match`, and `palette_match` are measured comparisons. They are kept as deterministic evidence, and nothing calls them a semantic judgment.

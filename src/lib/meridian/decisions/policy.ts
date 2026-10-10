@@ -36,6 +36,8 @@ export type DecisionPolicy = {
   approveMinScore?: number;
   /** Outcome when a required answer is refused, unsupported, malformed, unavailable, or missing. */
   unresolvedOutcome: "HUMAN_REVIEW" | "REJECT";
+  /** An answer whose provider confidence is below this goes to human review. Never approves on low confidence. */
+  minConfidence?: number;
 };
 
 export type PolicyVote = {
@@ -58,6 +60,16 @@ const RANK: Record<PolicyOutcome, number> = { AUTO_APPROVE: 0, HUMAN_REVIEW: 1, 
 function voteFor(answer: JevAnswer, policy: DecisionPolicy): PolicyVote | null {
   if (answer.status !== "answered") return null;
   const calibrationStatus = answer.calibrationStatus ?? "uncalibrated";
+  const lowConfidence =
+    policy.minConfidence !== undefined && typeof answer.confidence === "number" && answer.confidence < policy.minConfidence;
+  if (lowConfidence) {
+    return {
+      questionId: answer.questionId,
+      outcome: "HUMAN_REVIEW",
+      reason: `Confidence ${answer.confidence} is below the policy minimum ${policy.minConfidence}.`,
+      calibrationStatus,
+    };
+  }
 
   if (answer.semantics === "probability" || typeof answer.probability === "number") {
     const probability = answer.probability ?? answer.noul;
@@ -170,3 +182,81 @@ export const CREATIVE_QA_POLICY: DecisionPolicy = {
   reviewMinProbability: 0.6,
   unresolvedOutcome: "HUMAN_REVIEW",
 };
+
+/**
+ * Evaluates each question with its own policy, so a registry question keeps its own thresholds and unresolved outcome.
+ * A question with no answer is unresolved under its policy. The most severe outcome across questions wins.
+ */
+export function evaluateQuestionPolicies(
+  answers: Record<string, JevAnswer>,
+  questions: Array<{ questionId: string; policy: DecisionPolicy }>,
+): PolicyEvaluation {
+  const votes: PolicyVote[] = [];
+  const unresolved: PolicyEvaluation["unresolved"] = [];
+  const byQuestion = new Map<string, JevAnswer>();
+  for (const answer of Object.values(answers)) byQuestion.set(answer.questionId, answer);
+
+  let outcome: PolicyOutcome = questions.length === 0 ? "HUMAN_REVIEW" : "AUTO_APPROVE";
+  const raise = (candidate: PolicyOutcome) => {
+    if (RANK[candidate] > RANK[outcome]) outcome = candidate;
+  };
+
+  for (const { questionId, policy } of questions) {
+    const answer = byQuestion.get(questionId);
+    if (!answer) {
+      unresolved.push({ questionId, status: "missing", reason: "No answer was returned for this question." });
+      raise(policy.unresolvedOutcome);
+      continue;
+    }
+    const vote = voteFor(answer, policy);
+    if (vote) {
+      votes.push(vote);
+      raise(vote.outcome);
+      continue;
+    }
+    unresolved.push({
+      questionId,
+      status: answer.status,
+      reason: answer.abstainReason ?? `Answer status '${answer.status}' is not an answer.`,
+    });
+    raise(policy.unresolvedOutcome);
+  }
+
+  return {
+    outcome,
+    policyVersion: questions.map((entry) => `${entry.questionId}@${entry.policy.version}`).join(","),
+    votes,
+    unresolved,
+    uncalibratedAnswers: votes.filter((vote) => vote.calibrationStatus !== "calibrated").length,
+  };
+}
+
+/**
+ * The policy for one registry question. Thresholds and values come from the question's policyMapping, so they are
+ * versioned with the question. A question with no mapping gets the conservative defaults: review, never auto-approve.
+ */
+export function policyForQuestion(spec: { id: string; version: string; policyMapping?: {
+  approveMinProbability?: number;
+  reviewMinProbability?: number;
+  rejectionValues?: string[];
+  approveValues?: string[];
+  approveMinScore?: number;
+  predicateDirection?: "pass_if_true" | "reject_if_true";
+  unresolvedOutcome?: "HUMAN_REVIEW" | "REJECT";
+  minConfidence?: number;
+} }): DecisionPolicy {
+  const mapping = spec.policyMapping ?? {};
+  return {
+    version: `${spec.id}@${spec.version}`,
+    predicateDirection: mapping.predicateDirection ?? "pass_if_true",
+    // Defaults that can never auto-approve and never reject on their own: every probability falls in review.
+    approveMinProbability: mapping.approveMinProbability ?? 2,
+    reviewMinProbability: mapping.reviewMinProbability ?? 0,
+    approveChoices: mapping.approveValues,
+    rejectChoices: mapping.rejectionValues,
+    approveMinScore: mapping.approveMinScore,
+    unresolvedOutcome: mapping.unresolvedOutcome ?? "HUMAN_REVIEW",
+    minConfidence: mapping.minConfidence,
+  };
+}
+

@@ -14,6 +14,7 @@ import type { EvidenceBundle } from "../evidence/types.ts";
 import { compressEvidenceForJev } from "../evidence/bundle.ts";
 import { jevRouter } from "./router.ts";
 import { createDecisionEngines, decideWithActiveEngine } from "../decisions/dispatcher.ts";
+import { runEngineGate } from "../decisions/gate.ts";
 import type { DecisionRequest } from "../decisions/types.ts";
 import { jevRegistry } from "./registry.ts";
 import type {
@@ -96,8 +97,14 @@ export class JevDecisionService {
     model: string;
     provider: string;
     answers: JevAnswer[];
-    comparison?: any;
-    fallbackFrom?: string;
+    /** The gate's outcome over the gating questions. Analysis answers do not appear here. Absent when nothing was asked. */
+    gate?: {
+      action: "AUTO_APPROVE" | "HUMAN_REVIEW" | "REJECT";
+      reason: string;
+      gateRecordId: string | null;
+      votes: Array<{ questionId: string; outcome: string; reason: string }>;
+      unresolved: Array<{ questionId: string; status: string; reason: string }>;
+    };
     persisted: boolean;
   }> {
     const questionIds = input.questionIds || [
@@ -107,33 +114,39 @@ export class JevDecisionService {
       "safety.claim_compliance.v1",
     ];
 
-    const questionsRecord: Record<string, JevQuestionSpec> = {};
+    const questions: Array<{ key: string; spec: JevQuestionSpec; needsImage: false; gating: boolean }> = [];
     for (const qid of questionIds) {
       const q = resolveQuestionSpec(qid);
-      if (q) questionsRecord[q.id] = q;
+      // Claim and rights questions gate the evidence. The organic questions are analysis: answered and recorded only.
+      if (q) questions.push({ key: q.id, spec: q, needsImage: false, gating: q.id.startsWith("safety.") });
     }
 
-    if (Object.keys(questionsRecord).length === 0) {
+    if (questions.length === 0) {
       return {
         bundleId: input.bundle.id,
         runId: randomUUID(),
         model: "none",
         provider: "none",
         answers: [],
+        gate: undefined,
         persisted: false,
       };
     }
 
-    const allQuestions = Object.values(questionsRecord);
-    const compressed = compressEvidenceForJev(input.bundle, allQuestions);
+    const compressed = compressEvidenceForJev(input.bundle, questions.map((entry) => entry.spec));
+    const availableEvidence = input.bundle.availableEvidence || compressed.availableEvidence;
 
-    const request: JevDecisionRequest = {
+    // One gate, one active engine, one call. The gate computes the outcome of the gating questions under their policies,
+    // and records it. Nothing downstream approves or rejects research on the answers alone.
+    const gate = await runEngineGate({
+      sql: input.sql,
       organizationId: input.organizationId,
       brandId: input.brandId,
-      state: {
-        description: compressed.description,
+      gate: "research_evidence",
+      subject: { type: "evidence_bundle", id: input.bundle.id },
+      description: compressed.description,
+      context: {
         bundleId: input.bundle.id,
-        availableEvidence: input.bundle.availableEvidence || compressed.availableEvidence,
         evidenceRefs: compressed.evidenceRefs,
         source: input.bundle.source || compressed.source,
         platform: input.bundle.source?.platform,
@@ -146,24 +159,26 @@ export class JevDecisionService {
         comments: compressed.comments,
         performance: input.bundle.performance,
       },
-      questions: questionsRecord,
-    };
-
-    const result = await this.decideSemantic(request, {
-      policy: input.policy,
-      sql: input.sql,
-      recordId: input.bundle.id,
+      questions,
+      evidence: availableEvidence.map((name) => ({ kind: "text" as const, name })),
+      routingPolicy: input.policy,
+      engines: createDecisionEngines({ jevRouter: this.router }),
     });
 
     return {
       bundleId: input.bundle.id,
-      runId: result.runId,
-      model: result.model,
-      provider: result.provider,
-      answers: Object.values(result.answers),
-      comparison: result.comparison,
-      fallbackFrom: result.fallbackFrom,
-      persisted: result.persisted,
+      runId: gate.runId ?? randomUUID(),
+      model: gate.model ?? "none",
+      provider: gate.provider ?? "none",
+      answers: Object.values(gate.answers),
+      gate: {
+        action: gate.action,
+        reason: gate.reason,
+        gateRecordId: gate.gateRecordId,
+        votes: gate.votes,
+        unresolved: gate.unresolved,
+      },
+      persisted: gate.lineagePersisted,
     };
   }
 

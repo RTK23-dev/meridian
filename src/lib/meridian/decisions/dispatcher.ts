@@ -48,9 +48,11 @@ export async function decideWithActiveEngine(input: {
   request: DecisionRequest;
   engines?: DecisionEngineRegistry;
   recordId?: string;
+  /** The selection the caller already resolved, so a gate records the engine it actually called. */
+  selection?: EngineSelection;
 }): Promise<DispatchedDecision> {
   const engines = input.engines ?? createDecisionEngines();
-  const selection = await resolveActiveEngine(input.sql, input.request.organizationId);
+  const selection = input.selection ?? (await resolveActiveEngine(input.sql, input.request.organizationId));
   const engine = engines[selection.engineId];
   if (!engine) {
     throw new Error(`No decision engine is registered for '${selection.engineId}'.`);

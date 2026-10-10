@@ -48,7 +48,7 @@ import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
 import { resolveProductionTarget } from "../production/target.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
-import { accountSnapshots, competitorCopy, factsFor, qcBrandOf, visualFacts, writeJudgment } from "./image-qc.server.ts";
+import { accountSnapshots, competitorCopy, factsFor, frameLike, qcBrandOf, videoVisualEvidence, visualFacts, writeJudgment } from "./image-qc.server.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 function answerValue(raw: unknown): string {
@@ -527,10 +527,6 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       await sql`update opportunities set status = 'briefed' where id = ${opportunityId}`;
     }
     return loadSession(sql, access.organizationId, data.brandId, access.role);
-}
-
-function frameLike(storageKey: string): string {
-  return `${storageKey.replace(/[\\%_]/g, (char) => `\\${char}`)}.frame.%`;
 }
 
 async function measuredVideoFrames(sql: Sql, organizationId: string, brandId: string, storageKey: string) {
@@ -1558,6 +1554,7 @@ export async function executeApprovedCreativePlan(
         brandId,
         creativeId: asText(video.creative_id),
         facts,
+        visual: await videoVisualEvidence(sql, access.organizationId, brandId, asText(video.storage_key)),
       });
       const status = judged.rollup === "REJECT" ? "rejected" : "in_review";
       await sql`update creative_records set status = ${status}, updated_at = now() where id = ${asText(video.creative_id)}`;
