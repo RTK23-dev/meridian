@@ -78,8 +78,9 @@ test("research: each organic question receives only the structure it judges from
   await service.evaluateEvidence({ organizationId: "org-research-scope", brandId: "brand-research-scope", bundle });
   const hook = requests.find((request) => askedIds(request).includes(HOOK));
   assert.ok(hook, "the hook question is asked");
-  assert.deepEqual([...(hook.state.availableEvidence as string[])].sort(), ["scene_frames", "transcript"]);
-  assert.deepEqual(Object.keys((hook.state.evidence ?? {}) as Record<string, unknown>).sort(), ["scene_frames", "transcript"], "the hook call holds only its own scope");
+  // The hook call holds its own scope: the bundle's identity and its two structures. Nothing else reaches it.
+  assert.deepEqual([...(hook.state.availableEvidence as string[])].sort(), ["bundle_source", "scene_frames", "transcript"]);
+  assert.deepEqual(Object.keys((hook.state.evidence ?? {}) as Record<string, unknown>).sort(), ["bundle_source", "scene_frames", "transcript"], "the hook call holds only its own scope");
   // The hook scope and the call-to-action scope differ, and the format and retention questions share one scope, so two calls.
   // The claim question has no scope with evidence, so it has no call.
   assert.equal(requests.length, 2, "two distinct organic scopes, one call each; the claim question has no call");

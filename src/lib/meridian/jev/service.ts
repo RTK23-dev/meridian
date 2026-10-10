@@ -19,14 +19,28 @@ import type { DecisionRequest } from "../decisions/types.ts";
 import { jevRegistry } from "./registry.ts";
 import { ORGANIC_EVIDENCE_SCOPES } from "./questions/organic.ts";
 import { SAFETY_EVIDENCE_SCOPES } from "./questions/safety.ts";
+import type {
+  JevDecisionRequest,
+  JevDecisionResponse,
+  JevProviderRouter,
+  JevRoutingPolicy,
+  JevQuestionSpec,
+  JevAnswer,
+} from "./types.ts";
+
+export interface SemanticDecisionResult extends JevDecisionResponse {
+  engineType: "remoteJev";
+  persisted: boolean;
+}
 
 /** The evidence each research question may receive, declared with the question (jev/questions/organic.ts, safety.ts). */
 const RESEARCH_EVIDENCE_SCOPES: Record<string, readonly string[]> = { ...ORGANIC_EVIDENCE_SCOPES, ...SAFETY_EVIDENCE_SCOPES };
 
 /**
- * The research evidence the gate may place in a question's scope, each with the content it carries. A name is listed only when
- * the bundle supplies its structure. A name with no content is not evidence, so a question that requires it abstains. The
- * research bundle does not supply script or brand-allowed claims, so claim questions have no evidence and go to review.
+ * The research evidence the gate may place in a question's scope, each with the content it carries. The bundle's identity and
+ * source travel as `bundle_source`, which every research scope names. A structural name is listed only when the bundle supplies
+ * its structure. A name with no content is not evidence, so a question that requires it abstains. The research bundle does not
+ * supply script or brand-allowed claims, so claim questions have no evidence and go to review.
  */
 function researchEvidence(
   bundle: EvidenceBundle,
@@ -43,26 +57,26 @@ function researchEvidence(
     performance_snapshot: { performance: bundle.performance, metrics: compressed.metrics },
     comparison_context: { comparisonContext: compressed.comparisonContext },
   };
-  return availableEvidence.flatMap((name): GateEvidenceInput[] => {
+  const structural = availableEvidence.flatMap((name): GateEvidenceInput[] => {
     const value = content[name];
     if (value === undefined) return [];
     const fields = Object.values(value as Record<string, unknown>);
     if (fields.every((field) => field === undefined)) return [];
     return [{ kind: "text", name, source: "evidence_bundle", content: value }];
   });
-}
-import type {
-  JevDecisionRequest,
-  JevDecisionResponse,
-  JevProviderRouter,
-  JevRoutingPolicy,
-  JevQuestionSpec,
-  JevAnswer,
-} from "./types.ts";
-
-export interface SemanticDecisionResult extends JevDecisionResponse {
-  engineType: "remoteJev";
-  persisted: boolean;
+  const provenance: GateEvidenceInput = {
+    kind: "text",
+    name: "bundle_source",
+    source: "evidence_bundle",
+    content: {
+      bundleId: bundle.id,
+      source: bundle.source,
+      platform: bundle.source?.platform,
+      contentType: bundle.content?.type,
+      evidenceRefs: compressed.evidenceRefs,
+    },
+  };
+  return [provenance, ...structural];
 }
 
 function resolveQuestionSpec(id: string): JevQuestionSpec | undefined {

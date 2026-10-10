@@ -345,7 +345,8 @@ function featuresFor(
   },
 ): Feature[] {
   if (id === "logo_match") {
-    if (flags.logoMismatch) return [feature("mismatch", 1, "Logo similarity is below the match line.")];
+    // A measured mismatch is a violation, not a score, as features.ts classifies it. A score cannot reject without calibration.
+    if (flags.logoMismatch) return [feature("violation", 1, "Logo similarity is below the match line.")];
     if (flags.aligned) return [feature("aligned", 1, "Logo similarity supports the stored mark.")];
     return [];
   }
