@@ -173,3 +173,27 @@ export function videoProviderCards(input: { production: ProductionStatus }): Pro
     },
   ];
 }
+
+/** The part of the provider settings read that the Generate step needs. The settings call returns more; only these are read. */
+export type ProviderSettingsSnapshot = {
+  production?: {
+    configured: boolean;
+    credentialState?: "usable" | "unusable" | "not_configured";
+    credentialReason?: string;
+    settings?: Record<string, unknown>;
+  };
+};
+
+/** The production status as the Generate step reads it. A failed read or a missing workspace is "unavailable", never a connection. */
+export function productionStatusFrom(input: { organizationId: string; data: ProviderSettingsSnapshot | undefined; isError: boolean }): ProductionStatus {
+  if (!input.organizationId || input.isError) return { status: "unavailable" };
+  if (!input.data) return { status: "loading" };
+  const production = input.data.production;
+  if (!production) return { status: "unavailable" };
+  return {
+    status: "ready",
+    credential: production.credentialState ?? (production.configured ? "usable" : "not_configured"),
+    credentialReason: production.credentialReason ?? null,
+    hypitConfigured: Boolean(production.settings?.hypitConfigured),
+  };
+}

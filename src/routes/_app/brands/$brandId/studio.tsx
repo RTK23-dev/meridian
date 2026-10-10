@@ -8,7 +8,6 @@ import { useWorkspace } from "@/components/workspace";
 import { providerLabel } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
-import type { getProviderSettings } from "@/lib/meridian/settings/server-actions";
 import { studioGenerationSchema, type StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
 import { ACTIVE_POLL_MS, useDistributionChannelsQuery, useOpportunitiesQuery, useOrganicDistributionQuery, useProviderSettingsQuery, useStudioQuery } from "@/lib/query/hooks";
 import { DirectionStep } from "@/components/studio/direction-step.tsx";
@@ -18,8 +17,8 @@ import { ReviewStep } from "@/components/studio/review-step.tsx";
 import { QueuePanel } from "@/components/studio/queue-panel.tsx";
 import { PlanDialog } from "@/components/studio/plan-dialog.tsx";
 import { useStudioActions } from "@/components/studio/use-studio-actions.ts";
-import { isImageProviderValue, isVideoProviderValue, type ProductionStatus } from "@/components/studio/provider-options.ts";
-import type { PublishTarget } from "@/components/studio/publish-dialog.tsx";
+import { isImageProviderValue, isVideoProviderValue, productionStatusFrom } from "@/components/studio/provider-options.ts";
+import { studioStepperSteps } from "@/components/studio/stepper-states.ts";
 import type { ReviewPayload } from "@/components/studio/review-rules.ts";
 import type { StudioVariant } from "@/components/studio/types.ts";
 
@@ -42,20 +41,6 @@ const DEFAULT_GENERATION: StudioGeneration = {
   source: "new_brief",
   aspectRatio: "9:16",
 };
-
-/** The production category as the Generate step reads it. A failed read is "unavailable", never a connection. */
-function productionStatusOf(organizationId: string, query: { data?: Awaited<ReturnType<typeof getProviderSettings>>; isError: boolean }): ProductionStatus {
-  if (!organizationId || query.isError) return { status: "unavailable" };
-  const settings = query.data;
-  if (!settings) return { status: "loading" };
-  const production = settings.production;
-  return {
-    status: "ready",
-    credential: production.credentialState ?? (production.configured ? "usable" : "not_configured"),
-    credentialReason: production.credentialReason ?? null,
-    hypitConfigured: Boolean(production.settings?.hypitConfigured),
-  };
-}
 
 function Studio({ brandId }: { brandId: string }) {
   const query = useStudioQuery(brandId);
@@ -101,7 +86,7 @@ function Studio({ brandId }: { brandId: string }) {
   const previous = briefIndex >= 0 ? session.briefs[briefIndex + 1] ?? null : null;
   const changed = Boolean(brief && previous && brief.constraints !== previous.constraints);
   const recommendation = session.recommendation;
-  const production = productionStatusOf(organizationId, providerQuery);
+  const production = productionStatusFrom({ organizationId, data: providerQuery.data, isError: providerQuery.isError });
 
   async function generate(values: StudioGeneration) {
     if (!brief) return;
@@ -142,25 +127,6 @@ function Studio({ brandId }: { brandId: string }) {
     return actions.reviewVariant.mutateAsync({ creativeId, ...payload });
   }
 
-  /** The test publisher goes through its own action; any other choice goes through the channel publish, with receipts. */
-  async function confirmPublish(target: PublishTarget, channelIds: string[], caption: string) {
-    if (channelIds.length === 1 && channelIds[0] === "test-publisher") {
-      await actions.publishTest.mutateAsync(target.creativeId).then((stored) => {
-        const publication = stored.publications.find((item) => item.creativeId === target.creativeId);
-        actions.setPublishResults([{
-          channelId: "test-publisher",
-          platform: "test",
-          type: "paid",
-          status: publication ? "published" : "not confirmed",
-          externalId: publication?.externalId,
-          error: publication ? undefined : "The publisher did not return a stored id for this variant.",
-        }]);
-      }, () => undefined);
-      return;
-    }
-    await actions.publishMulti.mutateAsync({ creativeId: target.creativeId, channelIds, caption }).catch(() => undefined);
-  }
-
   const reviewPending = actions.reviewVariant.isPending;
   const publishPending = actions.publishTest.isPending || actions.publishMulti.isPending;
   const organicPosts = organicQuery.data ?? [];
@@ -177,15 +143,7 @@ function Studio({ brandId }: { brandId: string }) {
         </p>
       </div>
 
-      <Stepper
-        steps={[
-          { label: "Direction", state: recommendation ? "done" : "current", description: recommendation ? "Evidence-backed opportunity" : "Waiting for evidence" },
-          { label: "Brief", state: brief?.status === "ready" ? "done" : recommendation ? "current" : "upcoming", description: brief?.status === "ready" ? "Approved for production" : "JEV decision to brief" },
-          { label: "Generate", state: session.variants.length ? "done" : brief?.status === "ready" ? "current" : "upcoming", description: `${session.variants.length} stored variants` },
-          { label: "Review", state: session.variants.some((variant) => variant.reviewStatus === "open" || variant.creativeStatus === "in_review") ? "current" : session.variants.length ? "done" : "upcoming", description: `${session.variants.filter((variant) => variant.creativeStatus === "in_review").length} awaiting review` },
-        ]}
-        className="grid grid-cols-2 lg:grid-cols-4"
-      />
+      <Stepper steps={studioStepperSteps(session, brief)} className="grid grid-cols-2 lg:grid-cols-4" />
 
       {actions.actionErrors.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
       {actions.anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
@@ -254,7 +212,7 @@ function Studio({ brandId }: { brandId: string }) {
             recordingTest={actions.recordTestPerformance.isPending}
             recordingOrganic={actions.recordOrganic.isPending}
             onReviewSubmit={submitReview}
-            onPublishConfirm={confirmPublish}
+            onPublishConfirm={(target, channelIds, caption) => actions.confirmPublish(target, channelIds, caption)}
             onPublishClose={() => actions.setPublishResults(null)}
             onRetry={retryVariant}
             onRecordTest={() => { void actions.recordTestPerformance.mutateAsync().catch(() => undefined); }}

@@ -125,7 +125,27 @@ export function useStudioActions(brandId: string) {
   const actionErrors = studioActions.map((action) => action.error).filter((error): error is Error => Boolean(error));
   const anyActionPending = studioActions.some((action) => action.isPending);
 
+  /** The test publisher goes through its own action; any other choice goes through the channel publish, with receipts. */
+  async function confirmPublish(target: { creativeId: string }, channelIds: string[], caption: string) {
+    if (channelIds.length === 1 && channelIds[0] === "test-publisher") {
+      await publishTest.mutateAsync(target.creativeId).then((stored) => {
+        const publication = stored.publications.find((item) => item.creativeId === target.creativeId);
+        setPublishResults([{
+          channelId: "test-publisher",
+          platform: "test",
+          type: "paid",
+          status: publication ? "published" : "not confirmed",
+          externalId: publication?.externalId,
+          error: publication ? undefined : "The publisher did not return a stored id for this variant.",
+        }]);
+      }, () => undefined);
+      return;
+    }
+    await publishMulti.mutateAsync({ creativeId: target.creativeId, channelIds, caption }).catch(() => undefined);
+  }
+
   return {
+    confirmPublish,
     openBrief,
     generateVariants,
     approvePlan,
