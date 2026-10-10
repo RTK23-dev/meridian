@@ -3,7 +3,8 @@ import test from "node:test";
 import type { BrainSlice, ObservedCreative, ProductFact } from "../domain.ts";
 import { learnPatterns } from "../learning/engine.ts";
 import { readMp4Timing } from "../video/provider.ts";
-import { calibrationChangesProbability, deadImage, emptyWhitespace, questionIds, retryPublish, runCoreLoop } from "./loop.ts";
+import { calibrationChangesProbability, deadImage, emptyWhitespace, featuresFor, questionIds, retryPublish, runCoreLoop } from "./loop.ts";
+import { PRIOR_JUDGMENT, QUESTION_SPECS, judgeFeatures } from "../jev/judgment.ts";
 
 const org = "org";
 const brand = "brand";
@@ -43,6 +44,26 @@ function creative(id: string, angle: string, hookType: string, text: string, ori
     text,
   };
 }
+
+test("a product missing from the copy is a violation: rejected calibrated or not, by the local rule and no engine", () => {
+  // The copy does not name the product: productNamed is false. The rule is local. judgeFeatures calls no engine.
+  const flags = {
+    aligned: true, logoMismatch: false, paletteMissing: false, productNamed: false, copies: false,
+    imageReady: true, videoReady: true, saturated: false, logoKnown: true,
+  };
+  const features = featuresFor("product_match", flags);
+  assert.deepEqual(features.map((item) => item.name), ["violation"], "a literal miss is a violation, not a score");
+  const spec = QUESTION_SPECS.find((item) => item.id === "product_match");
+  assert.ok(spec, "the product question is registered");
+  const uncalibrated = judgeFeatures(spec, features, PRIOR_JUDGMENT, true);
+  assert.equal(uncalibrated.decision, "REJECT");
+  const calibrated = judgeFeatures(spec, features, PRIOR_JUDGMENT, true, {
+    calibration: { version: "identity.loop.v1", apply: (score: number) => score },
+    policyVersion: "loop-test",
+    provider: "local",
+  });
+  assert.equal(calibrated.decision, "REJECT", "a violation rejects whether or not a score is calibrated");
+});
 
 test("one brand moves from observations through media, review, publish, and a different next brief", () => {
   const observations = [

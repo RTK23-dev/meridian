@@ -330,7 +330,7 @@ export function questionIds(): string[] {
   return QUESTION_SPECS.map((spec) => spec.id);
 }
 
-function featuresFor(
+export function featuresFor(
   id: string,
   flags: {
     aligned: boolean;
@@ -362,7 +362,7 @@ function featuresFor(
   if (id === "product_match") {
     return flags.productNamed
       ? [feature("aligned", 1, "The briefed product is named.")]
-      : [feature("mismatch", 1, "The briefed product is not in the copy.")];
+      : [feature("violation", 1, "The briefed product is not in the copy.")];
   }
   if (id === "image_readiness") {
     return flags.imageReady ? [feature("aligned", 1, "An image object was stored.")] : [];
