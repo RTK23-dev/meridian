@@ -8,7 +8,14 @@ import { abstainAll, type DecisionEngine, type DecisionEngineId, type DecisionRe
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import { PNG, studioTenant } from "../testing/durable-image-fixtures.ts";
 import { generatedImageVisual, videoVisualEvidence, writeJudgment, type VisualEvidence } from "./image-qc.server.ts";
+import { sampleTimestamps } from "../video/sample-frames.ts";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { MediaFacts } from "./features.ts";
+
+const ffmpegAvailable = spawnSync("ffmpeg", ["-version"]).status === 0;
 
 const facts: MediaFacts = {
   kind: "image",
@@ -266,19 +273,79 @@ test("a provider failure on the engine is human review, never approval, and the 
   assert.equal(jev.requests.length, 0, "no silent switch to JEV");
 });
 
-test("a video with no stored frame that carries a real timestamp provides no frame, and the record says why", async () => {
+test("a video is sampled only for an engine that can see images; under JEV nothing is sampled or sent", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-video-jev");
+  const storageKey = `video-${randomUUID()}.mp4`;
+  let extracted = 0;
+  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, storageKey, 3000, {
+    selection: { engineId: "jev", source: "workspace" },
+    extractor: async () => {
+      extracted += 1;
+      return PNG;
+    },
+  });
+  assert.deepEqual(visual.images, []);
+  assert.equal(visual.frames?.unavailable, "engine_cannot_see_images");
+  assert.equal(extracted, 0, "no frame is extracted for an engine that cannot use it");
+});
+
+test("under OpenAI, a video with no stored container sends no frame and says why", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-video-no-container");
+  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, `missing-${randomUUID()}.mp4`, 3000, {
+    selection: { engineId: "openai-decisions", source: "workspace" },
+  });
+  assert.deepEqual(visual.images, []);
+  assert.equal(visual.frames?.unavailable, "no_stored_container");
+});
+
+test("real ffmpeg, under OpenAI: up to four sampled frames reach the engine with their real timestamps, and the record names them", { skip: ffmpegAvailable ? false : "ffmpeg is not installed here" }, async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "creative-video-frames");
   const storageKey = `video-${randomUUID()}.mp4`;
-  for (let index = 0; index < 2; index += 1) {
-    await sql`
-      insert into asset_blobs (storage_key, organization_id, brand_id, body, mime_type, checksum, byte_size, lifecycle)
-      values (${`${storageKey}.frame.${index}.png`}, ${tenant.organizationId}, ${tenant.brandId},
-              ${Buffer.from(PNG).toString("base64")}, 'image/png', ${`sum${index}`}, ${PNG.byteLength}, 'stored')
-    `;
+  const dir = mkdtempSync(join(tmpdir(), "meridian-creative-video-"));
+  let clip: Buffer;
+  try {
+    const path = join(dir, "clip.mp4");
+    const made = spawnSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=duration=3:size=320x240:rate=10", "-c:v", "mpeg4", "-pix_fmt", "yuv420p", "-movflags", "+faststart", path]);
+    assert.equal(made.status, 0, String(made.stderr));
+    clip = readFileSync(path);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
-  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, storageKey);
-  assert.deepEqual(visual.images, [], "no frame is sent without a real timestamp");
-  assert.equal(visual.frames?.provided, 0);
-  assert.equal(visual.frames?.omitted.no_timestamp, 2, "both frames are recorded as omitted, not hidden");
+  await sql`
+    insert into asset_blobs (storage_key, organization_id, brand_id, body, mime_type, checksum, byte_size, lifecycle)
+    values (${storageKey}, ${tenant.organizationId}, ${tenant.brandId}, ${clip.toString("base64")}, 'video/mp4', 'sum', ${clip.byteLength}, 'stored')
+  `;
+  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, storageKey, 3000, {
+    selection: { engineId: "openai-decisions", source: "workspace" },
+  });
+  assert.equal(visual.frames?.unavailable, undefined);
+  assert.equal(visual.frames?.sampled, sampleTimestamps(3000).length, "every sample was taken from the clip");
+  assert.ok(visual.images.length >= 1 && visual.images.length <= 4, "at most four frames are provided");
+  assert.equal(visual.images.length, visual.evidence.length);
+  for (const item of visual.evidence) {
+    assert.equal(item.kind, "image");
+    assert.equal(typeof item.timestampMs, "number", "each frame carries its real timestamp");
+    assert.ok(sampleTimestamps(3000).includes(item.timestampMs!), "the timestamp is one that was actually sampled");
+  }
+
+  const creativeId = `creative-${randomUUID()}`;
+  const openai = stubEngine("openai-decisions", { respond: textApproves });
+  const judged = await judge({
+    tenant,
+    creativeId,
+    facts: { ...facts, kind: "video", transcript: "", durationMs: 3000, sceneCount: 1 },
+    visual,
+    engines: registryWith(stubEngine("jev"), openai),
+    selectedEngine: "openai-decisions",
+  });
+  assert.equal(openai.requests.length, 1);
+  assert.equal(openai.requests[0]!.images?.length, visual.images.length, "the engine receives exactly the frames that were provided");
+  assert.equal(judged.gateEngineCalled, true);
+  const [record] = await sql<{ evidence: unknown }>`
+    select evidence from decision_gate_records where id = ${judged.gateRecordId}
+  `;
+  assert.match(JSON.stringify(record?.evidence), /ffmpeg_sample/, "the record names where each frame came from");
 });

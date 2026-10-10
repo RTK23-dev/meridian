@@ -21,6 +21,8 @@ import { measureLogo, measurePalette } from "../vision/measure.ts";
 import { runEngineGate, type GateEvidence, type GateQuestion } from "../decisions/gate.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import { selectRepresentativeFrames, FRAME_SELECTION_VERSION } from "../decisions/frames.ts";
+import { sampleVideoFrames, type FrameExtractor } from "../video/sample-frames.ts";
+import { resolveActiveEngine, type EngineSelection } from "../decisions/selection.ts";
 import type { DecisionImageInput } from "../decisions/types.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
 
@@ -105,8 +107,15 @@ export function factsFor(
 export type VisualEvidence = {
   images: DecisionImageInput[];
   evidence: GateEvidence[];
-  /** For video: how representative frames were chosen and how many were omitted, by reason. */
-  frames?: { version: string; provided: number; omitted: Record<string, number> };
+  /** For video: how frames were sampled, chosen, and omitted. Recorded with the decision so the evidence is traceable. */
+  frames?: {
+    version: string;
+    sampler?: string;
+    sampled: number;
+    provided: number;
+    omitted: Record<string, number>;
+    unavailable?: string;
+  };
 };
 
 export const NO_VISUAL_EVIDENCE: VisualEvidence = { images: [], evidence: [] };
@@ -118,6 +127,8 @@ export type CreativeJudgmentInput = {
   facts: MediaFacts;
   /** Visual evidence the engine may see. Absent means no image or frame was provided. */
   visual?: VisualEvidence;
+  /** The engine the caller resolved. When absent, it is resolved here, once. */
+  selection?: EngineSelection;
   engines?: DecisionEngineRegistry;
 };
 
@@ -174,6 +185,7 @@ function creativeTextEvidence(facts: MediaFacts): GateEvidence[] {
 
 export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Promise<CreativeJudgment> {
   const visual = input.visual ?? NO_VISUAL_EVIDENCE;
+  const selection = input.selection ?? (await resolveActiveEngine(sql, input.organizationId));
   const policies = await loadAppliedPolicies(sql, input.organizationId);
   // Local checks decide only the deterministic questions. The lexical brand and opportunity checks are not authorities.
   const local = judgeMedia(input.facts, policies).filter((decision) => !ENGINE_REPLACED_MEDIA_QUESTIONS.has(decision.questionId));
@@ -197,6 +209,7 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     evidence: [...creativeTextEvidence(input.facts), ...visual.evidence],
     images: visual.images,
     deterministicRejections,
+    selection,
     engines: input.engines,
   });
 
@@ -248,22 +261,49 @@ export function frameLike(storageKey: string): string {
 }
 
 /**
- * The frames of a stored video that the engine may see. Stored frames are PNGs found in the container, and they carry no
- * timestamp, so the selector omits them all and nothing is sent. The omission is recorded, not hidden.
+ * The frames of a stored video that the engine may see: up to four, chosen from frames sampled at real timestamps. Sampling
+ * runs only when the active engine can see images, so JEV never triggers an ffmpeg run whose output would not be sent. A
+ * video with no container, no known duration, or no ffmpeg yields no frame, and the reason is recorded.
  */
-export async function videoVisualEvidence(sql: Sql, organizationId: string, brandId: string, storageKey: string): Promise<VisualEvidence> {
-  if (!storageKey || storageKey.startsWith("pending/")) return NO_VISUAL_EVIDENCE;
-  const rows = await sql<{ storage_key: string; body: string }>`
-    select storage_key, body from asset_blobs
-    where organization_id = ${organizationId} and brand_id = ${brandId}
-      and storage_key like ${frameLike(storageKey)} escape '\\'
-    order by storage_key asc
+export async function videoVisualEvidence(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  storageKey: string,
+  durationMs: number | null,
+  options: { selection: EngineSelection; extractor?: FrameExtractor },
+): Promise<VisualEvidence> {
+  const none = (unavailable: string): VisualEvidence => ({
+    images: [],
+    evidence: [],
+    frames: { version: FRAME_SELECTION_VERSION, sampled: 0, provided: 0, omitted: {}, unavailable },
+  });
+  if (options.selection.engineId !== "openai-decisions") return none("engine_cannot_see_images");
+  if (!storageKey || storageKey.startsWith("pending/")) return none("no_stored_container");
+  const rows = await sql<{ body: string }>`
+    select body from asset_blobs
+    where organization_id = ${organizationId} and brand_id = ${brandId} and storage_key = ${storageKey}
+    limit 1
   `;
+  const container = rows[0]?.body;
+  if (!container) return none("no_stored_container");
+
+  const sample = await sampleVideoFrames({
+    bytes: new Uint8Array(Buffer.from(container, "base64")),
+    durationMs,
+    extractor: options.extractor,
+  });
   const selection = selectRepresentativeFrames(
-    rows.map((row) => ({ id: row.storage_key, bytes: new Uint8Array(Buffer.from(row.body, "base64")), timestampMs: null })),
+    sample.frames.map((frame) => ({
+      id: `${storageKey}@${frame.timestampMs}ms`,
+      bytes: frame.bytes,
+      timestampMs: frame.timestampMs,
+      durationMs,
+    })),
   );
   const omitted: Record<string, number> = {};
   for (const item of selection.omitted) omitted[item.reason] = (omitted[item.reason] ?? 0) + 1;
+  for (const failure of sample.failures) omitted[`sample_${failure.reason}`] = (omitted[`sample_${failure.reason}`] ?? 0) + 1;
   return {
     images: selection.frames.map((frame) => ({
       bytes: frame.bytes,
@@ -275,9 +315,15 @@ export async function videoVisualEvidence(sql: Sql, organizationId: string, bran
       name: frame.id,
       sha256: frame.sha256,
       timestampMs: frame.timestampMs,
-      source: "asset_blobs",
+      source: "ffmpeg_sample",
     })),
-    frames: { version: FRAME_SELECTION_VERSION, provided: selection.frames.length, omitted },
+    frames: {
+      version: FRAME_SELECTION_VERSION,
+      sampler: sample.version,
+      sampled: sample.frames.length,
+      provided: selection.frames.length,
+      omitted,
+      unavailable: sample.unavailable,
+    },
   };
 }
-

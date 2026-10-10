@@ -131,19 +131,27 @@ Analysis questions (`gating: false`) are answered and recorded, but they do not 
 | Gate | Entry point | Asked of the engine | Stays local (deterministic) |
 |---|---|---|---|
 | Creative QA, images and video | `studio/image-qc.server.ts` `writeJudgment` | Text: `creative.brand_fit.v1`, `creative.opportunity_fit.v1`, `creative.claim_compliance.v1`. Image: `creative.visual_quality.v1`, `creative.product_visible.v1`. | A literal prohibited claim, an avoided word, product-name presence, measured logo and palette, competitor copy overlap, duplicates, novelty, and publishing readiness. A local REJECT is final and the engine is not called. |
+| Brief | `studio/brief-gate.server.ts` `judgeBriefFit` | `brief.brand_fit.v1`, `brief.opportunity_fit.v1`, `brief.claim_compliance.v1`. | Mandatory fields present (audience, hook, message, angle) and no stored prohibited claim in the brief text. A failure rejects with no engine call. |
 | Research evidence | `jev/service.ts` `evaluateEvidence` | Gating: `safety.*` (claim compliance and rights). The organic questions are analysis only. | Nothing in the gate. |
 
 The lexical checks that were the previous semantic authority (token overlap for brand fit, and an angle-present check for opportunity) are no longer written as decisions (`ENGINE_REPLACED_MEDIA_QUESTIONS` in `studio/features.ts`).
 
-**Behaviour change to know about.** Under the default engine, JEV, the two visual questions are `unsupported`, so every generated image now routes to human review. Before this change, the local model could approve an image without looking at it. Selecting `openai-decisions` in the JEV tab lets the visual questions run, with the image sent. A workspace that stays on JEV will see its generated images in review until a visual check is available to it.
+**Behaviour changes to know about.**
+
+- Under the default engine, JEV, the two visual questions are `unsupported`, so every generated image routes to human review. Before this change, the local model could approve an image without looking at it. Selecting `openai-decisions` in the JEV tab lets the visual questions run, with the image sent. A workspace that stays on JEV sees its generated images in review until a visual check is available to it.
+- The brief's completeness check was a logistic prior, and it never rejected an empty brief. It is replaced by mechanical rules: the mandatory fields must be present, and a stored prohibited claim in the brief text rejects. Brand fit, opportunity fit, and claim compliance are the engine's. A brief the engine cannot judge goes to human review, and creating the brief is the user's explicit approval.
 
 Generated images reach the engine as their verified stored bytes. Competitor copy and the generation prompt are never sent.
 
 ## Frames
 
-`decisions/frames.ts` picks at most four frames for a video judgment: the **hook** (earliest), the **middle** beat, a **proof** frame (the one with the most on-screen text observed by OCR; no text, no proof frame), and the **call to action** (latest). Only frames whose timestamp the source reported are eligible. A timestamp is never estimated. The selection is deterministic, and the record names every frame provided with its real timestamp and hash.
+For a video judgment, frames are sampled from the stored container with ffmpeg (`video/sample-frames.ts`). Eight evenly spaced timestamps run from the opening frame toward the end, with a 250 ms margin before the end, since a seek into the final frames often finds nothing. Each frame is recorded with the time ffmpeg sought to, and that time is the recorded timestamp. A timestamp is never estimated. A frame that fails to extract, or is not a PNG, is a recorded failure and is never replaced.
 
-Stored video frames are PNGs found by scanning the container (`video/inspect.ts`), and they carry no timestamp. So every stored frame is omitted with reason `no_timestamp`, and the gate context records the count. No frame reaches a decision today.
+`decisions/frames.ts` then picks at most four frames: the **hook** (earliest), the **middle** beat, a **proof** frame (the one with the most on-screen text observed by OCR; no text, no proof frame), and the **call to action** (latest).
+
+Sampling runs only when the active engine is `openai-decisions`. JEV cannot see images, so nothing is sampled for it. The gate context records how the frames were chosen: how many were sampled, provided, and omitted, by reason, and why sampling did not run if it did not (`engine_cannot_see_images`, `no_stored_container`, `no_duration`, `ffmpeg_unavailable`). The record names each frame with its timestamp and hash.
+
+ffmpeg must be installed where the creative judgment runs (`FFMPEG_PATH`, or `ffmpeg` on the path). Without it, no frame is sent and the record says `ffmpeg_unavailable`.
 
 ## Status of each part
 
@@ -153,6 +161,8 @@ Implemented and covered by tests that run on PGlite:
 - The engine gate: deterministic-first, one engine call, local refusal of image questions, per-question policies, unresolved outcomes, analysis questions, provider failures, a thrown engine error, persistence, and no fallback or double execution (`gate.test.ts`, 21 tests, both selections).
 - The creative gate and its image evidence, including a rejection from the engine, a deterministic rejection that stops the engine, and frame omission (`studio/creative-gate.test.ts`).
 - Representative frame selection, including missing timestamps, duplicates, determinism, and the four-frame limit (`decisions/frames.test.ts`).
+- ffmpeg frame sampling: real timestamps, recorded failures, unavailable reasons, cleanup, and one test on a real clip that is skipped with its reason when ffmpeg is not installed (`video/sample-frames.test.ts`).
+- The brief gate: both engine selections, deterministic rejections that stop the engine, a provider failure that is never approved or switched, a claim-policy rejection, and the stored decision read by the same gate that loads a brief (`studio/brief-gate.test.ts`).
 - The OpenAI Decisions adapter against fixtures shaped like the documented contract (`openai-engine.test.ts`): request shape, typed questions, data-URL images, refusals, missing and malformed answers, retries, timeouts, unknown models, authentication errors without key leakage, usage, and returned model.
 - The JEV adapter and cross-engine fixtures (`engines.contract.test.ts`): both engines answer the same question kinds with the same semantics, and the same fixture values produce the same policy outcome.
 - The shared policy and its thresholds and version lineage (`policy.test.ts`).
@@ -164,8 +174,9 @@ Implemented but not verified against the live service:
 
 Not implemented, or known to be incomplete:
 
-- **Video visual judgment.** Stored frames have no timestamps, so no video is judged on its frames. Video creatives were already routed to review, so their status is unchanged.
-- **Brief fit.** No writer uses the engine. `loadGatedJevDecision` reads brief and plan decisions that other code wrote.
+- **Video visual judgment is only as available as ffmpeg.** The frames are sampled at real timestamps, but only where ffmpeg is installed and only under OpenAI Decisions. Video creatives were already routed to review, so their status is unchanged.
+- **Perception is not wired into JEV.** The perception contract (`perception/types.ts`) and its Gemini implementation exist, but production never calls them. The Gemini implementation handles keyframes only; its still-image method is not implemented. So JEV's visual questions remain `unsupported`, and no perception observation reaches a decision. Wiring it means choosing which provider sees the frames, so it needs a decision rather than a default.
+- **Plan fit** is not a gate. Only brief fit and creative QA use the engine.
 - **Research outcome.** The research gate's action is computed and recorded, but nothing downstream acts on it yet. The research worker still discards the answers' outcome.
 - **Calibration.** No calibration report exists for either engine. Every value is uncalibrated, and the policy thresholds are configuration, not measured error rates.
 - **Engine-specific question sets.** The question sets are the registry's, plus the creative set above. No engine has its own.

@@ -15,12 +15,11 @@ import { publishThrough } from "../providers/boundaries.ts";
 import { testProviderPerformance } from "../providers/test-provider.ts";
 import { claimAndRun } from "../jobs/sql-worker.ts";
 import { decide } from "../jev/engine.ts";
-import { decisionRecordFields, ruleDecisionRecordFields } from "../jev/decision-record.ts";
 import { publishingReadiness } from "../jev/guards.ts";
-import { loadAppliedPolicies } from "../jev/policy.ts";
 import { generationAllowed } from "../security/budget.ts";
 import { evaluateJevGate } from "../jev/reviewer-decision.ts";
-import { judgeBrief } from "./features.ts";
+import { ruleDecisionRecordFields } from "../jev/decision-record.ts";
+import { judgeBriefFit, writeBriefDecision } from "./brief-gate.server.ts";
 import { STUDIO_PROMPT_VERSION, isTestingRuntime, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
 import { productionRouter, type ImageProviderSelection } from "../production/router.ts";
@@ -49,6 +48,7 @@ import { resolveProductionTarget } from "../production/target.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
 import { accountSnapshots, competitorCopy, factsFor, frameLike, qcBrandOf, videoVisualEvidence, visualFacts, writeJudgment } from "./image-qc.server.ts";
+import { resolveActiveEngine } from "../decisions/selection.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 function answerValue(raw: unknown): string {
@@ -483,34 +483,32 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       brief.why.push("Success would test whether this direction beats this brand's stored baseline without copying a competitor line.");
       const briefId = crypto.randomUUID();
       const decisionId = crypto.randomUUID();
-      const policies = await loadAppliedPolicies(sql, access.organizationId);
-      const gate = judgeBrief({
-        audience: brief.audience,
-        hook: brief.hook,
-        message: brief.message,
-        format: brief.format,
-        cta: brief.cta,
-        angle: brief.angle,
-      }, policies.get("brief_completeness"));
-      if (gate.decision === "REJECT") {
-        throw new Error("The brief gate rejected this. A person was not asked to ignore a stored rejection.");
+      const briefGate = await judgeBriefFit({
+        sql,
+        organizationId: access.organizationId,
+        brandId: data.brandId,
+        briefId,
+        brief: {
+          audience: brief.audience,
+          hook: brief.hook,
+          message: brief.message,
+          format: brief.format,
+          cta: brief.cta,
+          angle: brief.angle,
+        },
+        brain: loaded.brain,
+      });
+      await writeBriefDecision(sql, {
+        organizationId: access.organizationId,
+        brandId: data.brandId,
+        briefId,
+        decisionId,
+        reviewerId: context.userId,
+        result: briefGate,
+      });
+      if (briefGate.action === "REJECT") {
+        throw new Error(`The brief gate rejected this: ${briefGate.reason}. A person was not asked to ignore a stored rejection.`);
       }
-      const gateRecord = decisionRecordFields(gate);
-      await sql`
-        insert into jev_decisions (
-          id, organization_id, brand_id, correlation_id, question_id, question_version,
-          subject_type, subject_id, input, evidence, probability, confidence, thresholds, decision, reasons,
-          provider, model, answer, schema_version, policy_version, calibration_version,
-          reviewer_id, reviewer_decision, reviewed_at, decision_fingerprint, outcome_digest
-        ) values (
-          ${decisionId}, ${access.organizationId}, ${data.brandId}, ${crypto.randomUUID()},
-          ${gate.questionId}, ${gate.questionVersion}, 'brief', ${briefId}, ${JSON.stringify(gate.features)},
-          ${JSON.stringify(gate.evidence)}, ${gate.probability}, ${gate.confidence}, ${JSON.stringify(gate.policy)},
-          ${gate.decision}, ${JSON.stringify(gate.reasons)}, ${gate.provider}, ${gate.modelVersion},
-          ${JSON.stringify(gate.answer)}, ${gate.schemaVersion}, ${gate.policyVersion}, ${gate.calibrationVersion ?? ""},
-          ${context.userId}, 'approve', now(), ${gateRecord.decisionFingerprint}, ${gateRecord.outcomeDigest}
-        )
-      `;
       await sql`
         insert into briefs (
           id, organization_id, brand_id, opportunity_id, title, audience, angle, hook, message, offer, cta,
@@ -1525,6 +1523,7 @@ export async function executeApprovedCreativePlan(
         destinationUrl: "",
       });
       const visual = await measuredVideoFrames(sql, access.organizationId, brandId, asText(video.storage_key));
+      const selection = await resolveActiveEngine(sql, access.organizationId);
       const facts = factsFor(loaded, {
         kind: "video",
         productName,
@@ -1554,7 +1553,8 @@ export async function executeApprovedCreativePlan(
         brandId,
         creativeId: asText(video.creative_id),
         facts,
-        visual: await videoVisualEvidence(sql, access.organizationId, brandId, asText(video.storage_key)),
+        selection,
+        visual: await videoVisualEvidence(sql, access.organizationId, brandId, asText(video.storage_key), video.duration_ms == null ? null : asNumber(video.duration_ms), { selection }),
       });
       const status = judged.rollup === "REJECT" ? "rejected" : "in_review";
       await sql`update creative_records set status = ${status}, updated_at = now() where id = ${asText(video.creative_id)}`;
