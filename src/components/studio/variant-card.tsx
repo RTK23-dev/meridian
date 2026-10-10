@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { MediaPlayer } from "@/components/media-player";
+import { LazyMediaPlayer } from "@/components/lazy-media-player";
 import { PlainErrorMessage, TechnicalDetails } from "@/components/plain-error";
 import { Button } from "@/components/ui";
 import { copy, providerLabel, serverCodeMessage, statusLabel } from "@/lib/copy";
@@ -138,13 +138,13 @@ function VariantMedia({ variant, phase, frame, title, onOpenImage }: { variant: 
   if (variant.kind === "video") {
     return (
       <div className={frameClass}>
-        <MediaPlayer assetId={variant.assetId} durationMs={variant.durationMs} width={variant.width} height={variant.height} />
+        <LazyMediaPlayer assetId={variant.assetId} durationMs={variant.durationMs} width={variant.width} height={variant.height} />
       </div>
     );
   }
   return (
     <div className={frameClass}>
-      <MediaPlayer
+      <LazyMediaPlayer
         kind="image"
         assetId={variant.assetId}
         alt={`${title}: ${variant.title || kindLabel(variant.kind)}`}

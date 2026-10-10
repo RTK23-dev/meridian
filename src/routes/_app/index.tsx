@@ -4,7 +4,7 @@ import { Button, PageHeader, Skeleton } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { useIntegrationsQuery, useMachinesQuery } from "@/lib/query/hooks";
 import { hasRole } from "@/lib/meridian/access";
-import { getOnboardingSteps } from "@/lib/onboarding";
+import { getOnboardingSteps, reviewedCreativeState } from "@/lib/onboarding";
 import { providerLabel } from "@/lib/copy";
 import { countDecidedReviews } from "@/components/brand-overview/pipeline";
 import { KpiRow } from "@/components/home/kpi-row";
@@ -55,7 +55,8 @@ function Home() {
   const kpis = homeKpis({ brandCount: data.brands.length, reviews, overview: data.overviewMetrics });
 
   const hasConnectedProvider = connectionFacts.some((connection) => ["HEALTHY", "CONNECTED"].includes(connection.phase));
-  const hasReviewedCreative = data.audit.some((entry) => entry.action === "review.approved" || entry.action === "review.rejected");
+  // Each count is null until its data has loaded, so the checklist shows "Unknown" rather than "To do". The review check reads
+  // the stored review lists, not the audit feed, which holds only the newest few entries.
   const setupSteps = getOnboardingSteps({
     brands: data.brands.map((brand) => {
       const snapshot = machineByBrand.get(brand.id);
@@ -63,13 +64,17 @@ function Home() {
       return {
         id: brand.id,
         completeness: brand.completeness,
-        competitors: counts?.competitors ?? 0,
-        opportunities: counts?.openOpportunities ?? 0,
-        creatives: counts?.creatives ?? 0,
+        competitors: counts ? counts.competitors : null,
+        opportunities: counts ? counts.openOpportunities : null,
+        creatives: counts ? counts.creatives : null,
       };
     }),
-    providerConnected: hasConnectedProvider,
-    reviewedCreative: hasReviewedCreative,
+    providerConnected: connectionsState === "ready" ? hasConnectedProvider : null,
+    reviewedCreative: reviewedCreativeState(reviewLists.map((query) => ({
+      loaded: query.data !== undefined,
+      decided: query.data ? countDecidedReviews(query.data.reviews) : 0,
+      listed: query.data?.reviews.length ?? 0,
+    }))),
   });
   const canCreate = hasRole(data.active.role, "member");
 

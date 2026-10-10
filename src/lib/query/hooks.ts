@@ -4,7 +4,7 @@ import { errorText } from "@/components/ui";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBrand } from "@/lib/meridian/api";
 import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, listLibrary, listOpportunities, listReviews, getTrace, resolveReview, dismissOpportunity } from "@/lib/meridian/machine";
-import { getCalibration } from "@/lib/meridian/calibration/actions";
+import { getCalibration, listCalibrationVersions } from "@/lib/meridian/calibration/actions";
 import { getFactoryBoard } from "@/lib/meridian/factory/actions";
 import { getStudioBriefReview, getStudioSession, listHeldBudgetReservations } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
@@ -25,7 +25,7 @@ import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
 import { getDecisionEngines, getProviderSettings } from "@/lib/meridian/settings/server-actions";
-import { listJobs, listUsage } from "@/lib/meridian/jobs/actions";
+import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";
 
@@ -145,9 +145,24 @@ export const decisionEnginesQueryOptions = (userId: string | null | undefined, o
   queryKey: userScopedQueryKey(userId, qk.decisionEngines(organizationId)),
   queryFn: () => getDecisionEngines({ data: { organizationId } }),
 });
-export const jobsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
-  queryKey: userScopedQueryKey(userId, qk.jobs(organizationId)),
-  queryFn: () => listJobs({ data: { organizationId } }),
+/** Filters for the jobs list. The default is the first, unfiltered page, which is what route prefetch loads. */
+export type JobQueryFilters = { status: string; type: string; brandId: string; page: number };
+export const EMPTY_JOB_QUERY: JobQueryFilters = { status: "", type: "", brandId: "", page: 0 };
+export const jobsQueryOptions = (userId: string | null | undefined, organizationId: string, filters: JobQueryFilters = EMPTY_JOB_QUERY) => queryOptions({
+  queryKey: userScopedQueryKey(userId, [...qk.jobs(organizationId), filters]),
+  queryFn: () => listJobs({ data: { organizationId, ...filters } }),
+});
+export const jobDetailQueryOptions = (userId: string | null | undefined, organizationId: string, jobId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, [...qk.jobDetail(organizationId), jobId]),
+  queryFn: () => getJobDetail({ data: { organizationId, jobId } }),
+});
+export const workerHealthQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.workerHealth(organizationId)),
+  queryFn: () => getWorkerHealth({ data: { organizationId } }),
+});
+export const calibrationVersionsQueryOptions = (userId: string | null | undefined, brandId: string, page = 0) => queryOptions({
+  queryKey: userScopedQueryKey(userId, [...qk.calibrationVersions(brandId), page]),
+  queryFn: () => listCalibrationVersions({ data: { brandId, page } }),
 });
 export const usageQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.usage(organizationId)),
@@ -193,7 +208,8 @@ export const useStudioQuery = (brandId: string, enabled = true) => {
   return useQuery({
     ...studioQueryOptions(userId, brandId),
     enabled: ready && enabled && !!brandId,
-    refetchInterval: (query) => query.state.data?.variants.some((variant) => variant.mediaStatus === "queued" || variant.mediaStatus === "running") ? ACTIVE_POLL_MS : false,
+    // A variant that is queued, running or submitted to the provider is polled until it settles.
+    refetchInterval: (query) => query.state.data?.variants.some((variant) => variant.mediaStatus === "queued" || variant.mediaStatus === "running" || variant.mediaStatus === "submitted") ? ACTIVE_POLL_MS : false,
   });
 };
 
@@ -327,13 +343,38 @@ export const useDecisionEnginesQuery = (organizationId: string, enabled = true) 
 };
 
 /** The jobs list polls only while a job is queued, retrying, or running. Otherwise it waits for focus or navigation. */
-export const useJobsQuery = (organizationId: string, enabled = true) => {
+export const useJobsQuery = (organizationId: string, enabled = true, filters: JobQueryFilters = EMPTY_JOB_QUERY) => {
   const { userId, ready } = useSession();
   return useQuery({
-    ...jobsQueryOptions(userId, organizationId),
+    ...jobsQueryOptions(userId, organizationId, filters),
     enabled: ready && enabled && !!organizationId,
     refetchInterval: (query) => query.state.data?.jobs.some((job) => ACTIVE_JOB_STATUSES.has(job.status)) ? ACTIVE_POLL_MS : false,
   });
+};
+
+/** Worker and scheduler heartbeats with queue counts. It polls only while `poll` is set, which the jobs screen sets while a job is active. */
+export const useWorkerHealthQuery = (organizationId: string, enabled = true, poll = false) => {
+  const { userId, ready } = useSession();
+  return useQuery({
+    ...workerHealthQueryOptions(userId, organizationId),
+    enabled: ready && enabled && !!organizationId,
+    refetchInterval: poll ? ACTIVE_POLL_MS : false,
+  });
+};
+
+/** One job for the detail drawer. It polls while that job is queued, retrying, or running. */
+export const useJobDetailQuery = (organizationId: string, jobId: string | null) => {
+  const { userId, ready } = useSession();
+  return useQuery({
+    ...jobDetailQueryOptions(userId, organizationId, jobId ?? ""),
+    enabled: ready && !!organizationId && !!jobId,
+    refetchInterval: (query) => query.state.data && ACTIVE_JOB_STATUSES.has(query.state.data.status) ? ACTIVE_POLL_MS : false,
+  });
+};
+
+export const useCalibrationVersionsQuery = (brandId: string, page = 0, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...calibrationVersionsQueryOptions(userId, brandId, page), enabled: ready && enabled && !!brandId });
 };
 
 export const useUsageQuery = (organizationId: string, enabled = true) => {
@@ -500,6 +541,29 @@ export function useAcknowledgeAlert(organizationId: string) {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+
+export type JobAction = "retry" | "cancel";
+export const jobActionKey = (action: JobAction, organizationId: string) => ["mutation", `jobs.${action}`, organizationId] as const;
+
+/**
+ * Retry a dead job or cancel a queued one. This hook shows no toast: the server's refusal is the error, and the jobs screen
+ * shows it as a message next to the job. The jobs list, the job detail and the health cards refresh once the call settles.
+ */
+export function useJobActionMutation(organizationId: string, action: JobAction) {
+  const queryClient = useQueryClient();
+  const { userId } = useSession();
+  return useMutation({
+    mutationKey: jobActionKey(action, organizationId),
+    mutationFn: async (jobId: string): Promise<{ status: "queued" | "cancel_requested"; jobId: string }> => action === "retry"
+      ? retryJob({ data: { organizationId, jobId } })
+      : cancelJob({ data: { organizationId, jobId } }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.jobs(organizationId)) });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.jobDetail(organizationId)) });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.workerHealth(organizationId)) });
     },
   });
 }

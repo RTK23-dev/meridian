@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button, ErrorState, Field, Panel, ScreenSkeleton, SelectInput } from "@/components/ui";
+import { Button, ErrorState, Field, Card, ScreenSkeleton, SelectInput } from "@/components/ui";
 import { PlainErrorNotice } from "@/components/plain-error";
 import { copy, plainError } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
@@ -154,7 +154,7 @@ function Opportunities({ brandId }: { brandId: string }) {
       {dismiss.error ? <PlainErrorNotice error={dismiss.error} /> : null}
       {hasHold ? <HoldBanner brandId={brandId} /> : null}
       {rows.length === 0 ? (
-        <Panel>{copy.opportunities.empty}</Panel>
+        <Card>{copy.opportunities.empty}</Card>
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -172,10 +172,10 @@ function Opportunities({ brandId }: { brandId: string }) {
             <p className="text-sm text-muted" aria-live="polite">{visibleRows.length} of {rows.length} opportunities</p>
           </div>
           {visibleRows.length === 0 ? (
-            <Panel className="flex flex-wrap items-center justify-between gap-3">
+            <Card className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-muted">No opportunities match these filters.</p>
               <Button type="button" variant="secondary" onClick={() => { setCategory("all"); setStatusFilter("all"); }}>Clear filters</Button>
-            </Panel>
+            </Card>
           ) : (
             <OpportunityTable
               rows={visibleRows}

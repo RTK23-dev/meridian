@@ -2,12 +2,12 @@ import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogTitle, Badge, Button, Dialog, DialogClose, DialogContent, DialogDescription,
-  DialogTitle, DataTable, Field, SelectInput, TextInput, errorText,
-} from "@/components/ui";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, DataTable, Field, SelectInput, Input, errorText } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { ROLES } from "@/lib/meridian/access";
 import { addMember, changeMemberRole, type InviteRow, type MemberRow } from "@/lib/meridian/api";
 import { memberInviteSchema, type MemberInviteInput } from "@/lib/meridian/schemas/settings";
@@ -159,29 +159,37 @@ function InviteDialog({ open, onOpenChange, organizationId, onInvited }: {
   onInvited: (message: string) => void;
 }) {
   const { reload } = useWorkspace();
-  const form = useForm<MemberInviteInput>({ resolver: zodResolver(memberInviteSchema), defaultValues: { email: "", role: "member" }, mode: "onBlur" });
+  const blank: MemberInviteInput = { email: "", role: "member" };
+  const form = useForm<MemberInviteInput>({ resolver: zodResolver(memberInviteSchema), defaultValues: blank, mode: "onBlur" });
   const invite = useScopedMutation({
     mutationKey: ["mutation", "workspace.invite", organizationId],
     mutationFn: (values: MemberInviteInput) => addMember({ data: { organizationId, ...values } }),
     onSuccess: async (result) => {
       onInvited(result.message);
       await reload();
-      form.reset({ email: "", role: "member" });
+      form.reset(blank);
       onOpenChange(false);
     },
   });
   const rawError = invite.error ? errorText(invite.error) : null;
+  // Escape, the close button and Cancel all ask first while the email or role has been changed.
+  const dismiss = useDirtyDismiss({
+    dirty: form.formState.isDirty,
+    onOpenChange: (next) => { onOpenChange(next); if (!next) invite.reset(); },
+    onDiscard: () => { form.reset(blank); invite.reset(); },
+  });
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { onOpenChange(next); if (!next) { form.reset({ email: "", role: "member" }); invite.reset(); } }}>
+    <Dialog open={open} onOpenChange={dismiss.requestOpenChange}>
+      <UnsavedChangesGuard dirty={form.formState.isDirty && open} />
       <DialogContent>
         <DialogTitle className="text-section font-semibold text-fg">Invite a member</DialogTitle>
         <DialogDescription className="mt-2 text-sm text-fg-muted">
           If the person already has an account, they are added now. Otherwise an invitation is recorded for them.
         </DialogDescription>
-        <form className="mt-4 space-y-4" onSubmit={form.handleSubmit((values) => { void invite.mutateAsync(values).catch(() => undefined); })} noValidate>
+        <form className="mt-4 space-y-4" onSubmit={form.handleSubmit((values) => { void invite.mutateAsync(values).catch(() => undefined); })} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
           <Field label="Email" error={form.formState.errors.email?.message} required>
-            <TextInput {...form.register("email")} type="email" autoComplete="email" maxLength={200} required />
+            <Input {...form.register("email")} type="email" autoComplete="email" maxLength={200} required />
           </Field>
           <Field label="Role" error={form.formState.errors.role?.message} required>
             <SelectInput {...form.register("role")}>
@@ -190,11 +198,16 @@ function InviteDialog({ open, onOpenChange, organizationId, onInvited }: {
               <option value="viewer">viewer</option>
             </SelectInput>
           </Field>
+          <UnsavedChangesBar
+            dirty={form.formState.isDirty}
+            subject="invitation"
+            confirming={dismiss.confirming}
+            onConfirmingChange={dismiss.setConfirming}
+            onDiscard={dismiss.discard}
+          />
           {rawError ? <FormError message={plainServerError(rawError, "invite")} raw={rawError} /> : null}
           <div className="flex flex-wrap justify-end gap-2">
-            <DialogClose asChild>
-              <Button type="button" variant="secondary">Cancel</Button>
-            </DialogClose>
+            <Button type="button" variant="secondary" onClick={() => dismiss.requestOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={invite.isPending || form.formState.isSubmitting}>
               {invite.isPending ? "Sending…" : "Invite"}
             </Button>

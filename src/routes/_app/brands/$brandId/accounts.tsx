@@ -1,9 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import {
-  Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Notice, Panel,
-  SelectInput, ScreenSkeleton, TextInput,
-} from "@/components/ui";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
+import { connectAccountSchema, type ConnectAccountInput } from "@/components/forms/client-schemas";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, ErrorNotice, Card, SelectInput, ScreenSkeleton, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { usePendingVariables, usePlatformAccountsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
@@ -42,12 +46,15 @@ function BrandAccounts({ brandId }: { brandId: string }) {
   const accounts = query.data ?? [];
 
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [platform, setPlatform] = useState<string>("instagram");
-  const [name, setName] = useState("");
-  const [handle, setHandle] = useState("");
-  const [externalAccountId, setExternalAccountId] = useState("");
-  const [token, setToken] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const blankAccount: ConnectAccountInput = { platform: "instagram", name: "", handle: "", externalAccountId: "", token: "" };
+  const form = useForm<ConnectAccountInput>({ resolver: zodResolver(connectAccountSchema), defaultValues: blankAccount, mode: "onBlur" });
+  const platform = form.watch("platform");
+  const dismiss = useDirtyDismiss({
+    dirty: form.formState.isDirty,
+    onOpenChange: (open) => setAddModalOpen(open),
+    onDiscard: () => form.reset(blankAccount),
+  });
 
   const connectAccount = useScopedMutation({
     mutationKey: ["mutation", "accounts.connect", brandId],
@@ -58,10 +65,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
     success: "Account connected.",
     onSuccess: () => {
       setAddModalOpen(false);
-      setName("");
-      setHandle("");
-      setExternalAccountId("");
-      setToken("");
+      form.reset(blankAccount);
     },
   });
   const disconnectKey = ["mutation", "accounts.disconnect", brandId] as const;
@@ -75,28 +79,24 @@ function BrandAccounts({ brandId }: { brandId: string }) {
 
   const selectedPlatformMeta = PLATFORMS.find((p) => p.id === platform) || PLATFORMS[0];
 
-  const handleConnect = async () => {
-    if (!name.trim() || !externalAccountId.trim()) {
-      setErrorMessage("Account name and Account ID are required.");
-      return;
-    }
-
+  // The fields are checked by the schema before this runs, with the same limits the server applies.
+  const handleConnect = form.handleSubmit(async (values) => {
     setErrorMessage(null);
     const ok = await connectAccount
       .mutateAsync({
-        platform,
-        name: name.trim(),
-        handle: handle.trim(),
-        externalAccountId: externalAccountId.trim(),
+        platform: values.platform,
+        name: values.name.trim(),
+        handle: values.handle.trim(),
+        externalAccountId: values.externalAccountId.trim(),
         accountType: selectedPlatformMeta.type,
-        token: token.trim(),
+        token: values.token.trim(),
       })
       .then(() => true, () => false);
 
     if (!ok) {
       setErrorMessage("Failed to connect account.");
     }
-  };
+  });
 
   const handleDisconnect = async (accountId: string) => {
     await disconnectAccount.mutateAsync(accountId).catch(() => undefined);
@@ -127,7 +127,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       {query.isPending && !query.data ? (
         <ScreenSkeleton label="Loading accounts" shape="rows" />
       ) : accounts.length === 0 ? (
-        <Panel className="p-8 text-center">
+        <Card className="p-8 text-center">
           <p className="text-lg font-semibold">No accounts connected yet</p>
           <p className="mt-1 text-sm text-muted">
             Connect an Instagram page, YouTube channel, TikTok account, or ad account to enable multi-channel publishing and automated performance telemetry.
@@ -139,13 +139,13 @@ function BrandAccounts({ brandId }: { brandId: string }) {
               </Button>
             </div>
           ) : null}
-        </Panel>
+        </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {accounts.map((account) => {
             const isConnected = account.status === "connected";
             return (
-              <Panel key={account.id} className="flex flex-col justify-between p-5 space-y-4">
+              <Card key={account.id} className="flex flex-col justify-between p-5 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-widest text-brass">
@@ -182,27 +182,25 @@ function BrandAccounts({ brandId }: { brandId: string }) {
                     </Button>
                   ) : null}
                 </div>
-              </Panel>
+              </Card>
             );
           })}
         </div>
       )}
 
-      <Dialog open={addModalOpen} onOpenChange={(open) => setAddModalOpen(open)}>
+      <Dialog open={addModalOpen} onOpenChange={dismiss.requestOpenChange}>
+        <UnsavedChangesGuard dirty={form.formState.isDirty && addModalOpen} />
         <DialogContent aria-describedby="connect-account-description">
           <DialogTitle>Connect Platform Account</DialogTitle>
           <DialogDescription id="connect-account-description">
             Add an account to this brand. Tokens are encrypted using AES-256-GCM before writing to the database.
           </DialogDescription>
 
-          <div className="mt-4 space-y-4">
-            {errorMessage ? <Notice>{errorMessage}</Notice> : null}
+          <form className="mt-4 space-y-4" noValidate onSubmit={handleConnect} onKeyDown={(event) => submitOnShortcut(event)}>
+            {errorMessage ? <ErrorNotice>{errorMessage}</ErrorNotice> : null}
 
-            <Field label="Platform">
-              <SelectInput
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-              >
+            <Field label="Platform" error={form.formState.errors.platform?.message}>
+              <SelectInput {...form.register("platform")}>
                 {PLATFORMS.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.type.replace("_", " ")})
@@ -211,59 +209,64 @@ function BrandAccounts({ brandId }: { brandId: string }) {
               </SelectInput>
             </Field>
 
-            <Field label="Account Display Name">
-              <TextInput
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+            <Field label="Account Display Name" error={form.formState.errors.name?.message} required>
+              <Input
+                {...form.register("name")}
+                maxLength={120}
                 placeholder="e.g. Acme Official Store"
                 required
               />
             </Field>
 
-            <Field label="Account Handle / Username">
-              <TextInput
-                value={handle}
-                onChange={(e) => setHandle(e.target.value)}
+            <Field label="Account Handle / Username" error={form.formState.errors.handle?.message}>
+              <Input
+                {...form.register("handle")}
+                maxLength={120}
                 placeholder={selectedPlatformMeta.placeholder}
               />
             </Field>
 
-            <Field label="External Account ID / Page ID">
-              <TextInput
-                value={externalAccountId}
-                onChange={(e) => setExternalAccountId(e.target.value)}
+            <Field label="External Account ID / Page ID" error={form.formState.errors.externalAccountId?.message} required>
+              <Input
+                {...form.register("externalAccountId")}
+                maxLength={120}
                 placeholder="e.g. 1029384756 or act_12345"
                 required
               />
             </Field>
 
-            <Field label="Access Token / API Key (Optional, Encrypted in Vault)">
-              <TextInput
+            <Field label="Access Token / API Key (Optional, Encrypted in Vault)" error={form.formState.errors.token?.message}>
+              <Input
+                {...form.register("token")}
                 type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
                 placeholder="Paste token or leave blank to rely on environment default"
               />
             </Field>
 
+            <UnsavedChangesBar
+              dirty={form.formState.isDirty}
+              subject="account connection"
+              confirming={dismiss.confirming}
+              onConfirmingChange={dismiss.setConfirming}
+              onDiscard={dismiss.discard}
+            />
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 type="button"
                 variant="quiet"
-                onClick={() => setAddModalOpen(false)}
+                onClick={() => dismiss.requestOpenChange(false)}
                 disabled={connectAccount.isPending}
               >
                 Cancel
               </Button>
               <Button
-                type="button"
-                onClick={handleConnect}
-                disabled={connectAccount.isPending}
+                type="submit"
+                disabled={connectAccount.isPending || form.formState.isSubmitting}
               >
                 {connectAccount.isPending ? "Connecting…" : "Save & Connect"}
               </Button>
             </div>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

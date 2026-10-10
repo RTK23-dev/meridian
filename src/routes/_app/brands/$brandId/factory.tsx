@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import {
-  Button, Field, Panel, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger,
-  TextInput,
-} from "@/components/ui";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Button, Field, Card, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, Input } from "@/components/ui";
+import { FormDiscardBar } from "@/components/forms/unsaved-bar";
+import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
+import { submitOnShortcut } from "@/components/forms/shortcut";
+import { factoryControlsPayload, factoryControlsSchema, factoryRunSchema, type FactoryControlsInput, type FactoryRunInput } from "@/components/factory/factory-forms";
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
@@ -31,12 +34,15 @@ function FactoryPage({ brandId }: { brandId: string }) {
   const pipelineQuery = usePipelineConfigQuery(brandId);
   // Workspace provider summary: the Gemini production key and the Google Drive setting, for the engine states.
   const settingsQuery = useProviderSettingsQuery(board?.organizationId ?? "", Boolean(board));
-  const [niche, setNiche] = useState("");
-  const [daily, setDaily] = useState("");
-  const [total, setTotal] = useState("");
-  const [level, setLevel] = useState("0");
-  const [ceiling, setCeiling] = useState("1");
   const [note, setNote] = useState<string | null>(null);
+  const nicheForm = useForm<FactoryRunInput>({ resolver: zodResolver(factoryRunSchema), defaultValues: { niche: "" }, mode: "onBlur" });
+  const controlsForm = useForm<FactoryControlsInput>({
+    resolver: zodResolver(factoryControlsSchema),
+    defaultValues: { level: "0", ceiling: "1", daily: "", total: "" },
+    mode: "onBlur",
+  });
+  const niche = nicheForm.watch("niche");
+  const factoryFormsDirty = nicheForm.formState.isDirty || controlsForm.formState.isDirty;
   const factoryKey = (name: string) => ["mutation", `factory.${name}`, brandId] as const;
   const startRun = useScopedMutation({
     mutationKey: factoryKey("run"),
@@ -45,7 +51,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.studio(brandId)],
     onSuccess: (result) => {
       setNote(`Queued ${result.jobs} factory jobs as run ${result.runId}.`);
-      setNiche("");
+      nicheForm.reset({ niche: "" });
     },
   });
   const saveControls = useScopedMutation({
@@ -72,6 +78,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-6">
+      <UnsavedChangesGuard dirty={factoryFormsDirty} />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-2">
           <p className="text-sm font-semibold uppercase tracking-widest text-brass">Factory</p>
@@ -114,7 +121,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
         </TabsContent>
 
         <TabsContent value="discover" className="space-y-6">
-          <Panel className="space-y-4 p-5">
+          <Card className="space-y-4 p-5">
             <h2 className="font-display text-2xl">Sources</h2>
             <ul className="grid gap-3 md:grid-cols-2">
               {board.sources.map((source) => (
@@ -126,22 +133,21 @@ function FactoryPage({ brandId }: { brandId: string }) {
             </ul>
             <p className="text-sm text-muted">Ad Library snapshot video is {board.snapshotMediaEnabled ? "on" : "off"}. Metadata-only is the default after the rights review.</p>
             <p className="text-sm text-muted">Video engine: {board.video.status} ({board.video.provider}). {board.video.detail}</p>
-          </Panel>
+          </Card>
 
-          <Panel className="space-y-4 p-5">
+          <Card className="space-y-4 p-5">
             <h2 className="font-display text-2xl">Watch a niche</h2>
             {canEdit ? (
               <form
                 className="flex flex-wrap items-end gap-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void startRun.mutateAsync({ niche, level: board.level }).catch(() => undefined);
-                }}
+                onSubmit={nicheForm.handleSubmit((values) => { void startRun.mutateAsync({ niche: values.niche, level: board.level }).catch(() => undefined); })}
+                onKeyDown={(event) => submitOnShortcut(event)}
               >
-                <Field label="Niche" required>
-                  <TextInput value={niche} onChange={(event) => setNiche(event.currentTarget.value)} maxLength={80} required placeholder="skincare" />
+                <Field label="Niche" required error={nicheForm.formState.errors.niche?.message}>
+                  <Input {...nicheForm.register("niche")} maxLength={80} required placeholder="skincare" />
                 </Field>
-                <Button type="submit" disabled={startRun.isPending || !niche.trim()}>{startRun.isPending ? "Queueing…" : "Queue factory run"}</Button>
+                <Button type="submit" disabled={startRun.isPending || nicheForm.formState.isSubmitting || !niche.trim()}>{startRun.isPending || nicheForm.formState.isSubmitting ? "Queueing…" : "Queue factory run"}</Button>
+                <FormDiscardBar dirty={nicheForm.formState.isDirty} subject="niche" onDiscard={() => nicheForm.reset({ niche: "" })} className="basis-full" />
               </form>
             ) : <p className="text-sm text-muted">Viewers cannot queue runs.</p>}
             {board.runs.length === 0 ? <p className="text-sm text-muted">No factory runs are stored.</p> : (
@@ -154,9 +160,9 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
 
-          <Panel className="space-y-4 p-5">
+          <Card className="space-y-4 p-5">
             <h2 className="font-display text-2xl">Likely winners</h2>
             {board.winners.length === 0 ? <p className="text-muted">No tracked ads yet. Nothing is invented to fill this list.</p> : (
               <ul className="space-y-3">
@@ -170,9 +176,9 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
 
-          <Panel className="space-y-4 p-5">
+          <Card className="space-y-4 p-5">
             <h2 className="font-display text-2xl">Trends</h2>
             {board.trends.length === 0 ? <p className="text-muted">No stored ads to cluster. Rising concepts stay unnamed until ads exist.</p> : (
               <ul className="space-y-3">
@@ -184,9 +190,9 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
 
-          <Panel className="space-y-3 p-5">
+          <Card className="space-y-3 p-5">
             <h2 className="font-display text-2xl">Ad Library yield</h2>
             {board.yieldRows.length === 0 ? <p className="text-muted">No collection runs are stored, so yield is unknown.</p> : (
               <ul className="space-y-2 text-sm">
@@ -197,11 +203,11 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
         </TabsContent>
 
         <TabsContent value="templates" className="space-y-4">
-          <Panel className="space-y-3 p-5">
+          <Card className="space-y-3 p-5">
             <h2 className="font-display text-2xl">Storyboard templates</h2>
             <p className="text-muted">A winner becomes timed beats, shot types, and overlay roles. Footage, slogans, and look are dropped.</p>
             {board.templates.length === 0 ? <p className="text-muted">No templates are stored.</p> : (
@@ -213,11 +219,11 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
         </TabsContent>
 
         <TabsContent value="production" className="space-y-4">
-          <Panel className="space-y-3 p-5">
+          <Card className="space-y-3 p-5">
             <h2 className="font-display text-2xl">Production queue</h2>
             <ol className="grid gap-2 md:grid-cols-2">
               {board.stages.map((stage) => (
@@ -234,11 +240,11 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
         </TabsContent>
 
         <TabsContent value="review" className="space-y-4">
-          <Panel className="space-y-3 p-5">
+          <Card className="space-y-3 p-5">
             <h2 className="font-display text-2xl">Gate results</h2>
             <p className="text-muted">Originality, claims, policy, and rights can block. Brand gaps go to a person. Missing evidence is review, not a pass.</p>
             {board.variants.length === 0 ? <p className="text-muted">No variants are waiting.</p> : (
@@ -250,39 +256,35 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Panel>
+          </Card>
         </TabsContent>
 
         <TabsContent value="tests" className="space-y-4">
-          <Panel className="space-y-4 p-5">
+          <Card className="space-y-4 p-5">
             <h2 className="font-display text-2xl">Caps and kill switch</h2>
             <p className="text-muted">Daily cap {dollars(board.cap.dailyCents)} · total cap {dollars(board.cap.totalCents)}. Spending starts only after the owner sets a cap. Automation never invents a live campaign.</p>
             {canOwnControls ? (
               <form
                 className="grid gap-3 md:grid-cols-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void saveControls.mutateAsync({
-                    level: Number(level),
-                    ceiling: Number(ceiling),
-                    dailyCents: Math.round(Number(daily || board.cap.dailyCents / 100) * 100),
-                    totalCents: Math.round(Number(total || board.cap.totalCents / 100) * 100),
-                  }).catch(() => undefined);
-                }}
+                onSubmit={controlsForm.handleSubmit((values) => {
+                  void saveControls.mutateAsync(factoryControlsPayload(values, board.cap)).then(() => controlsForm.reset(values, { keepValues: true }), () => undefined);
+                })}
+                onKeyDown={(event) => submitOnShortcut(event)}
               >
-                <Field label="Running level">
-                  <SelectInput value={level} onChange={(event) => setLevel(event.currentTarget.value)}>
+                <Field label="Running level" error={controlsForm.formState.errors.level?.message}>
+                  <SelectInput {...controlsForm.register("level")}>
                     {([0, 1] as const).map((value) => <option key={value} value={String(value)}>{value} · {FACTORY_LEVEL_LABELS[value]} — {FACTORY_LEVEL_DETAIL[value]}</option>)}
                   </SelectInput>
                 </Field>
-                <Field label="Ceiling">
-                  <SelectInput value={ceiling} onChange={(event) => setCeiling(event.currentTarget.value)}>
+                <Field label="Ceiling" error={controlsForm.formState.errors.ceiling?.message}>
+                  <SelectInput {...controlsForm.register("ceiling")}>
                     {([0, 1] as const).map((value) => <option key={value} value={String(value)}>{value} · {FACTORY_LEVEL_LABELS[value]}</option>)}
                   </SelectInput>
                 </Field>
-                <Field label="Daily spend cap (USD)"><TextInput type="number" min="0" step="0.01" value={daily} onChange={(event) => setDaily(event.currentTarget.value)} placeholder={String(board.cap.dailyCents / 100)} /></Field>
-                <Field label="Total spend cap (USD)"><TextInput type="number" min="0" step="0.01" value={total} onChange={(event) => setTotal(event.currentTarget.value)} placeholder={String(board.cap.totalCents / 100)} /></Field>
-                <Button type="submit" disabled={saveControls.isPending}>Save caps and level</Button>
+                <Field label="Daily spend cap (USD)" error={controlsForm.formState.errors.daily?.message}><Input {...controlsForm.register("daily")} type="number" min="0" step="0.01" placeholder={String(board.cap.dailyCents / 100)} /></Field>
+                <Field label="Total spend cap (USD)" error={controlsForm.formState.errors.total?.message}><Input {...controlsForm.register("total")} type="number" min="0" step="0.01" placeholder={String(board.cap.totalCents / 100)} /></Field>
+                <FormDiscardBar dirty={controlsForm.formState.isDirty} subject="factory controls" onDiscard={() => controlsForm.reset()} className="md:col-span-2" />
+                <Button type="submit" disabled={saveControls.isPending || controlsForm.formState.isSubmitting}>{saveControls.isPending || controlsForm.formState.isSubmitting ? "Saving…" : "Save caps and level"}</Button>
               </form>
             ) : <p className="text-sm text-muted">Only workspace owners set factory levels and spend caps.</p>}
             {canAdmin ? (
@@ -295,9 +297,9 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 {board.killSwitch.brand ? "Clear brand kill switch" : "Engage brand kill switch"}
               </Button>
             ) : null}
-          </Panel>
+          </Card>
 
-          <Panel className="space-y-4 p-5">
+          <Card className="space-y-4 p-5">
             <h2 className="font-display text-2xl">Multi-Channel Distribution & Organic Telemetry</h2>
             <p className="text-muted">
               Creatives are selectively dispatched to paid ad networks and organic social accounts. JEV learns from paid conversions and organic engagement without requiring every account to be connected.
@@ -341,11 +343,11 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 <p className="text-sm text-muted mt-2">No organic posts published yet. Select organic channels in Studio Review to publish.</p>
               )}
             </div>
-          </Panel>
+          </Card>
         </TabsContent>
 
         <TabsContent value="learnings" className="space-y-4">
-          <Panel className="space-y-3 p-5">
+          <Card className="space-y-3 p-5">
             <h2 className="font-display text-2xl">Weekly strategist report</h2>
             <p className="text-muted">{board.report.note}</p>
             <section>
@@ -360,7 +362,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
               <h3 className="font-semibold">Drop</h3>
               {board.report.drop.length === 0 ? <p className="text-sm text-muted">No fading concepts with evidence.</p> : board.report.drop.map((item) => <p key={item.concept} className="text-sm">{item.concept}: {item.evidence.join("; ")}</p>)}
             </section>
-          </Panel>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

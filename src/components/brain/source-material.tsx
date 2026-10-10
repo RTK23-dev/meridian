@@ -1,5 +1,9 @@
-import { useState, type DragEvent } from "react";
-import { Button, Field, TextArea } from "@/components/ui";
+import { useEffect, useState, type DragEvent } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Button, Field, Textarea } from "@/components/ui";
+import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { cn } from "@/lib/cn";
@@ -10,23 +14,38 @@ import { qk } from "@/lib/query/keys";
 import { SuggestionList } from "./suggestion-list";
 import { documentProblem, readFileAsBase64, summariseUpload, type UploadSummary } from "./uploads";
 
+/** storeMaterial keeps the first 20,000 characters of text. The box stops there, so nothing is cut without a word. */
+const PASTE_MAX = 20_000;
+const pastedTextSchema = z.object({
+  pasted: z.string()
+    .refine((value) => value.trim().length > 0, "Paste some text first.")
+    .max(PASTE_MAX, `Use ${PASTE_MAX.toLocaleString("en-US")} characters or fewer.`),
+});
+type PastedTextInput = z.input<typeof pastedTextSchema>;
+
 type StoreVars = { filename: string; mime: string; text: string; base64: string };
 
 /**
  * "Suggest from document": a dropped or chosen file is stored as untrusted text, then the text model
  * proposes brain edits from it. Proposals wait in the suggestion list until someone accepts them.
  */
-export function SourceMaterial({ brandId, canEdit, saved, formDirty }: {
+export function SourceMaterial({ brandId, canEdit, saved, formDirty, onPasteDirtyChange }: {
   brandId: string;
   canEdit: boolean;
   saved: Partial<Record<BrainKey, string>>;
   formDirty: boolean;
+  onPasteDirtyChange?: (dirty: boolean) => void;
 }) {
   const [status, setStatus] = useState<UploadSummary | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [pasted, setPasted] = useState("");
   const [working, setWorking] = useState(false);
+  const pasteForm = useForm<PastedTextInput>({ resolver: zodResolver(pastedTextSchema), defaultValues: { pasted: "" }, mode: "onChange" });
+  const pasteDirty = pasteForm.formState.isDirty;
+  // The brain page owns the one unsaved-changes guard, so it hears about pasted text too.
+  useEffect(() => {
+    onPasteDirtyChange?.(pasteDirty);
+  }, [pasteDirty, onPasteDirtyChange]);
   const storeMutation = useScopedMutation({
     mutationKey: ["mutation", "brand.material", brandId],
     mutationFn: (vars: StoreVars) => storeMaterial({ data: { brandId, ...vars } }),
@@ -96,13 +115,11 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty }: {
     void chooseFile(files[0], files.length > 1);
   }
 
-  async function storePasted() {
-    if (!pasted.trim()) {
-      setStatus({ tone: "danger", message: "Paste some text first." });
-      return;
-    }
-    const stored = await storeAndSuggest({ filename: "pasted.txt", mime: "text/plain", text: pasted, base64: "" });
-    if (stored) setPasted("");
+  function storePasted() {
+    void pasteForm.handleSubmit(async (values) => {
+      const stored = await storeAndSuggest({ filename: "pasted.txt", mime: "text/plain", text: values.pasted, base64: "" });
+      if (stored) pasteForm.reset({ pasted: "" });
+    })();
   }
 
   return <div className="space-y-5 rounded-lg border border-border bg-surface p-5">
@@ -148,15 +165,16 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty }: {
 
     {canEdit ? (
       <div className="space-y-3">
-        <Field label="Or paste text" hint="Pasted text is stored the same way as a file.">
-          <TextArea
-            value={pasted}
-            onChange={(event) => setPasted(event.target.value)}
+        <Field label="Or paste text" hint="Pasted text is stored the same way as a file." error={pasteForm.formState.errors.pasted?.message}>
+          <Textarea
+            {...pasteForm.register("pasted")}
+            maxLength={PASTE_MAX}
             placeholder="Paste brand or product text"
             disabled={working}
           />
         </Field>
-        <Button type="button" variant="secondary" disabled={working} onClick={() => void storePasted()}>Store pasted text and suggest</Button>
+        <FormDiscardBar dirty={pasteDirty} subject="pasted text" onDiscard={() => pasteForm.reset({ pasted: "" })} />
+        <Button type="button" variant="secondary" disabled={working} onClick={storePasted}>Store pasted text and suggest</Button>
       </div>
     ) : null}
 

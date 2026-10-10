@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
-import { Button, Field, Input, Panel, SelectInput } from "@/components/ui";
+import { Button, Field, Input, Card, SelectInput } from "@/components/ui";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { submitOnShortcut } from "@/components/forms/shortcut";
 import type { StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
 import { DAILY_GENERATION_LIMIT, GENERATION_CONCURRENCY } from "@/lib/meridian/security/budget";
 import { imageProviderCards, videoProviderCards, type ProductionStatus } from "./provider-options.ts";
@@ -28,9 +31,10 @@ export function GenerateStep({ brief, canEdit, form, testImageAllowed, productio
   const videoCards = videoProviderCards({ production });
   const errors = form.formState.errors;
   const dirty = form.formState.isDirty;
+  const [discardRequested, setDiscardRequested] = useState(false);
 
   return (
-    <Panel>
+    <Card>
       <h2 className="font-display text-2xl">Generate from the approved brief</h2>
       {brief ? (
         <p className="mt-2 text-sm text-fg-muted">Current brief: {brief.title}. A brief that is not ready cannot be used for generation.</p>
@@ -52,16 +56,7 @@ export function GenerateStep({ brief, canEdit, form, testImageAllowed, productio
       </div>
 
       {canEdit && brief ? (
-        <form
-          className="mt-4 space-y-6"
-          onSubmit={form.handleSubmit(onGenerate)}
-          onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-              event.preventDefault();
-              event.currentTarget.requestSubmit();
-            }
-          }}
-        >
+        <form className="mt-4 space-y-6" onSubmit={form.handleSubmit(onGenerate)} onKeyDown={(event) => submitOnShortcut(event)}>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="What to create" hint="Deliverable format strategy for this creative plan.">
               <SelectInput {...form.register("creationScope")}>
@@ -80,8 +75,9 @@ export function GenerateStep({ brief, canEdit, form, testImageAllowed, productio
                 <option value="fully_automatic">Fully automatic (Execute within spend cap)</option>
               </SelectInput>
             </Field>
-            <Field label="Spend cap (USD)" hint="Authoritative hard budget cap. Generation halts if exceeded.">
-              <Input type="number" step="0.5" min="0" max="500" {...form.register("maxSpendUsd", { valueAsNumber: true })} />
+            {/* An empty cap is no cap, as the server reads it. Anything typed is read with Number(), as the server reads it. */}
+            <Field label="Spend cap (USD)" hint="Authoritative hard budget cap. Generation halts if exceeded." error={errors.maxSpendUsd?.message}>
+              <Input type="number" step="0.5" min="0" max="500" {...form.register("maxSpendUsd", { setValueAs: (value: string) => (value === "" ? undefined : Number(value)) })} />
             </Field>
             <Field label="Starting material" hint="Source lineage used to anchor the creative.">
               <SelectInput {...form.register("source")}>
@@ -133,12 +129,13 @@ export function GenerateStep({ brief, canEdit, form, testImageAllowed, productio
           />
 
           <div className="space-y-3">
-            {dirty ? (
-              <div role="status" className="flex items-center justify-between gap-3 rounded-md border border-warning bg-warning-soft p-3 text-sm">
-                <span>Unsaved changes</span>
-                <Button type="button" variant="quiet" onClick={() => form.reset()}>Discard</Button>
-              </div>
-            ) : null}
+            <UnsavedChangesBar
+              dirty={dirty}
+              subject="generation"
+              confirming={discardRequested}
+              onConfirmingChange={setDiscardRequested}
+              onDiscard={() => { form.reset(); setDiscardRequested(false); }}
+            />
             <Button type="submit" disabled={pending || form.formState.isSubmitting || brief.status !== "ready"}>
               {form.formState.isSubmitting ? "Generating…" : "Generate variants"}
             </Button>
@@ -146,6 +143,6 @@ export function GenerateStep({ brief, canEdit, form, testImageAllowed, productio
           </div>
         </form>
       ) : null}
-    </Panel>
+    </Card>
   );
 }

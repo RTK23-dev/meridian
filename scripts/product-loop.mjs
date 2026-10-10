@@ -136,7 +136,7 @@ try {
   if (!(await page.getByRole("button", { name: "Generate variants" }).isDisabled())) throw new Error("Generation was not blocked for a brief awaiting review.");
   await page.getByRole("tab", { name: "2. Brief" }).click();
   await page.getByRole("checkbox", { name: /I have read the failure/ }).check();
-  await page.getByLabel(/Reason \(at least 20 characters\)/).fill("E2E testing runtime: the decision engine is not configured, so the brief is reviewed explicitly here.");
+  await page.getByLabel("Reason", { exact: true }).fill("E2E testing runtime: the decision engine is not configured, so the brief is reviewed explicitly here.");
   await page.getByRole("button", { name: "Approve for production" }).click();
   await held.waitFor({ state: "hidden" });
   await page.getByRole("tab", { name: "3. Generate" }).click();
@@ -207,8 +207,7 @@ try {
 
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
   await page.getByRole("tab", { name: "Scoring weights" }).click();
-  // This phase's weights panel is not a form element, so the panel holding the save button is the scope.
-  const weightForm = page.getByRole("tabpanel").filter({ has: page.getByRole("button", { name: "Save diagnostic weights" }) });
+  const weightForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Save diagnostic weights" }) });
   // Save stays disabled until a weight changes, so the run edits the first one before validating and saving.
   const firstWeight = weightForm.getByLabel(/typed value/).first();
   await firstWeight.fill((await firstWeight.inputValue()) === "1.25" ? "1.5" : "1.25");

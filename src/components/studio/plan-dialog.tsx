@@ -1,6 +1,16 @@
-import { useId, useState } from "react";
-import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, TextArea } from "@/components/ui";
+import { useId } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Textarea } from "@/components/ui";
+import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
+import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { planCostText } from "./plan-cost.ts";
+
+/** The optional reason for rejecting a plan. The dialog stops at 200 characters, as it always has. */
+const planReasonSchema = z.object({
+  reason: z.string().trim().max(200, "Use 200 characters or fewer."),
+});
 
 export type PlanDeliverable = { id?: string; kind?: string; title?: string; provider?: string; aspectRatio?: string };
 
@@ -29,11 +39,19 @@ type PlanDialogProps = {
 
 /** A plan waiting for approval before billable generation. Approval and rejection are the only ways out. */
 export function PlanDialog({ plan, approving, rejecting, onApprove, onReject, onClose }: PlanDialogProps) {
-  const [reason, setReason] = useState("");
+  const form = useForm<{ reason: string }>({ resolver: zodResolver(planReasonSchema), defaultValues: { reason: "" }, mode: "onChange" });
+  const { register, formState: { errors, isDirty } } = form;
   const descriptionId = useId();
   const busy = approving || rejecting;
+  const dismiss = useDirtyDismiss({
+    dirty: isDirty && !!plan,
+    onOpenChange: (open) => { if (!open && !busy) onClose(); },
+    onDiscard: () => form.reset({ reason: "" }),
+  });
+  // Reject is a button, not a submit, so Cmd+Enter cannot reject a plan by accident.
+  const rejectPlan = form.handleSubmit((values) => onReject(values.reason));
   return (
-    <Dialog open={!!plan} onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
+    <Dialog open={!!plan} onOpenChange={dismiss.requestOpenChange}>
       {plan ? (
         <DialogContent aria-describedby={descriptionId} className="max-w-xl">
           <DialogTitle className="font-display text-2xl">Review creative plan</DialogTitle>
@@ -67,11 +85,18 @@ export function PlanDialog({ plan, approving, rejecting, onApprove, onReject, on
                 ))}
               </ul>
             </div>
-            <Field label="Reason for rejecting (optional)" hint="Recorded with the rejection if you give one.">
-              <TextArea rows={2} maxLength={200} value={reason} disabled={busy} onChange={(event) => setReason(event.currentTarget.value)} />
+            <Field label="Reason for rejecting (optional)" hint="Recorded with the rejection if you give one." error={errors.reason?.message}>
+              <Textarea {...register("reason")} rows={2} maxLength={200} disabled={busy} />
             </Field>
+            <UnsavedChangesBar
+              dirty={isDirty}
+              subject="rejection reason"
+              confirming={dismiss.confirming}
+              onConfirmingChange={dismiss.setConfirming}
+              onDiscard={dismiss.discard}
+            />
             <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-4">
-              <Button type="button" variant="quiet" disabled={busy} onClick={() => onReject(reason.trim())}>
+              <Button type="button" variant="quiet" disabled={busy} onClick={() => void rejectPlan()}>
                 {rejecting ? "Rejecting…" : "Reject plan"}
               </Button>
               <Button type="button" disabled={busy} onClick={onApprove}>
