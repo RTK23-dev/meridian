@@ -2,8 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useBusy } from "@/components/gate";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Input, Notice, Panel, SelectInput, Skeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, ErrorState, Field, Input, Notice, Panel, ScreenSkeleton, SelectInput, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TextArea, errorText } from "@/components/ui";
 import { BrandNav } from "@/components/brand-nav";
 import { MediaPlayer } from "@/components/media-player";
 import { Term } from "@/components/term";
@@ -34,6 +33,8 @@ import {
   useCancelPublishJob,
   useRetryPublishJob,
   usePlatformAccountsQuery,
+  usePendingVariables,
+  useScopedMutation,
 } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
@@ -104,12 +105,6 @@ function Studio({ brandId }: { brandId: string }) {
   const [directionReason, setDirectionReason] = useState("");
   const [nextBriefReason, setNextBriefReason] = useState("");
 
-  const briefAction = useBusy([qk.studio(brandId), qk.opportunities(brandId)]);
-  const generationAction = useBusy([qk.studio(brandId), qk.library(brandId)]);
-  const reviewAction = useBusy([qk.studio(brandId), qk.reviews(brandId)]);
-  const publishAction = useBusy([qk.studio(brandId), qk.library(brandId), qk.organic(brandId)]);
-  const performanceAction = useBusy([qk.studio(brandId), qk.learning(brandId)]);
-  const organicTelemetryAction = useBusy([qk.studio(brandId), qk.organic(brandId), qk.learning(brandId)]);
   const generationForm = useForm<StudioGeneration>({
     resolver: zodResolver(studioGenerationSchema),
     defaultValues: {
@@ -131,30 +126,21 @@ function Studio({ brandId }: { brandId: string }) {
     window.addEventListener("beforeunload", warnBeforeLeave);
     return () => window.removeEventListener("beforeunload", warnBeforeLeave);
   }, [generationDirty]);
-  const actionErrors = [briefAction.error, generationAction.error, reviewAction.error, publishAction.error, performanceAction.error, organicTelemetryAction.error].filter(Boolean);
-  const anyActionPending = briefAction.pending || generationAction.pending || reviewAction.pending || publishAction.pending || performanceAction.pending || organicTelemetryAction.pending;
-
-  if (query.error) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
-  if (!session) return <div role="status" aria-label="Loading studio" className="space-y-3"><Skeleton variant="line" /><Skeleton variant="media" /></div>;
-  const canEdit = hasRole(session.role, "member");
-  const brief = session.briefs.find((item) => item.status === "ready") ?? session.brief;
-  const previous = session.briefs[1];
-  const changed = Boolean(brief && previous && brief.constraints !== previous.constraints);
-  const recommendation = session.recommendation;
-
-  async function generate(values: StudioGeneration) {
-    if (!brief) return;
-    await generationAction.run(async () => {
-      const res = await generateStudioVariants({ data: { brandId, briefId: brief.id, ...values } });
+  // One mutation per studio action. Each invalidates only the keys it changes. A running action disables only its own controls.
+  const studioKey = (name: string) => ["mutation", `studio.${name}`, brandId] as const;
+  const openBrief = useScopedMutation({
+    mutationKey: studioKey("brief"),
+    mutationFn: (vars: { forceNew: boolean; reason: string }) => openStudioBrief({ data: { brandId, forceNew: vars.forceNew, reason: vars.reason } }),
+    invalidate: () => [qk.studio(brandId), qk.opportunities(brandId)],
+    success: (vars) => vars.forceNew ? "Next brief written." : "Brief written from the accepted direction.",
+  });
+  const generateVariants = useScopedMutation({
+    mutationKey: studioKey("generate"),
+    mutationFn: async (vars: { briefId: string; values: StudioGeneration }) => {
+      const res = await generateStudioVariants({ data: { brandId, briefId: vars.briefId, ...vars.values } });
       if (res && typeof res === "object" && "status" in res) {
         if (res.status === "awaiting_approval") {
-          setPendingPlan({
-            planId: (res as any).planId,
-            plan: (res as any).plan,
-            estimatedCostUsd: (res as any).estimatedCostUsd,
-            note: (res as any).note,
-          });
-          return;
+          return { kind: "awaiting" as const, planId: (res as any).planId as string, plan: (res as any).plan, estimatedCostUsd: (res as any).estimatedCostUsd as number | undefined, note: (res as any).note as string | undefined };
         }
         if (res.status === "abstained") {
           throw new Error((res as any).note || "JEV abstained from automated format selection. Please select an explicit format.");
@@ -163,25 +149,93 @@ function Studio({ brandId }: { brandId: string }) {
           throw new Error((res as any).error || "Creative plan was rejected by Brand Guardian policy.");
         }
       }
-      generationForm.reset(values);
-    });
+      return { kind: "generated" as const, values: vars.values };
+    },
+    invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.machine(brandId)],
+    success: (_vars, result) => result.kind === "awaiting" ? "" : "Variants generated.",
+    onSuccess: (result) => {
+      if (result.kind === "awaiting") {
+        setPendingPlan({ planId: result.planId, plan: result.plan, estimatedCostUsd: result.estimatedCostUsd, note: result.note });
+        return;
+      }
+      generationForm.reset(result.values);
+    },
+  });
+  const approvePlan = useScopedMutation({
+    mutationKey: studioKey("plan-approve"),
+    mutationFn: (planId: string) => approveAndExecuteCreativePlan({ data: { brandId, planId } }),
+    invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.machine(brandId)],
+    success: "Plan approved. Generation is running.",
+    onSuccess: () => setPendingPlan(null),
+  });
+  const rejectPlan = useScopedMutation({
+    mutationKey: studioKey("plan-reject"),
+    mutationFn: (vars: { planId: string; reason?: string }) => rejectCreativePlan({ data: { brandId, planId: vars.planId, reason: vars.reason } }),
+    invalidate: () => [qk.studio(brandId)],
+    success: "Plan rejected. Nothing was generated.",
+    onSuccess: () => {
+      setPendingPlan(null);
+      setPlanRejectReason("");
+    },
+  });
+  const reviewVariant = useScopedMutation({
+    mutationKey: studioKey("variant-review"),
+    mutationFn: (vars: { creativeId: string; action: "approve" | "reject" | "revision"; reasonCode: string; note: string }) => reviewStudioVariant({ data: { brandId, ...vars } }),
+    invalidate: () => [qk.studio(brandId), qk.reviews(brandId), qk.machine(brandId)],
+    success: (vars) => vars.action === "approve" ? "Variant approved." : vars.action === "reject" ? "Variant rejected." : "Revision requested.",
+  });
+  const publishTest = useScopedMutation({
+    mutationKey: studioKey("publish-test"),
+    mutationFn: (creativeId: string) => publishStudioVariant({ data: { brandId, creativeId, publisher: "test" } }),
+    invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.organic(brandId)],
+    success: "Published with the test publisher.",
+  });
+  const publishMulti = useScopedMutation({
+    mutationKey: studioKey("publish-channels"),
+    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string }) => publishMultiChannelVariant({ data: { brandId, ...vars } }),
+    invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.organic(brandId)],
+    success: "Publish finished. The receipts are in the dialog.",
+    onSuccess: (receipts) => setPublishResults(receipts),
+  });
+  const recordTestPerformance = useScopedMutation({
+    mutationKey: studioKey("performance"),
+    mutationFn: () => recordStudioTestPerformance({ data: { brandId } }),
+    invalidate: () => [qk.studio(brandId), qk.learning(brandId), qk.machine(brandId)],
+    success: "Test-provider performance recorded and learned.",
+  });
+  const recordOrganic = useScopedMutation({
+    mutationKey: studioKey("organic-telemetry"),
+    mutationFn: () => recordOrganicTelemetryAction({ data: { brandId } }),
+    invalidate: () => [qk.studio(brandId), qk.organic(brandId), qk.learning(brandId)],
+    success: "Organic telemetry recorded and learned.",
+  });
+  const reviewingVariants = usePendingVariables<{ creativeId: string }>(studioKey("variant-review")).map((vars) => vars.creativeId);
+  const publishingVariants = usePendingVariables<string>(studioKey("publish-test"));
+  const studioActions = [openBrief, generateVariants, approvePlan, rejectPlan, reviewVariant, publishTest, publishMulti, recordTestPerformance, recordOrganic];
+  const actionErrors = studioActions.map((action) => action.error).filter((error): error is Error => Boolean(error));
+  const anyActionPending = studioActions.some((action) => action.isPending);
+
+  if (query.isError && !session) return <ErrorState message={errorText(query.error)} onRetry={() => void query.refetch()} />;
+  if (!session) return <ScreenSkeleton label="Loading studio" shape="cards" />;
+  const canEdit = hasRole(session.role, "member");
+  const brief = session.briefs.find((item) => item.status === "ready") ?? session.brief;
+  const previous = session.briefs[1];
+  const changed = Boolean(brief && previous && brief.constraints !== previous.constraints);
+  const recommendation = session.recommendation;
+
+  async function generate(values: StudioGeneration) {
+    if (!brief) return;
+    await generateVariants.mutateAsync({ briefId: brief.id, values }).catch(() => undefined);
   }
 
   async function handleApprovePlan() {
     if (!pendingPlan) return;
-    await generationAction.run(async () => {
-      await approveAndExecuteCreativePlan({ data: { brandId, planId: pendingPlan.planId } });
-      setPendingPlan(null);
-    });
+    await approvePlan.mutateAsync(pendingPlan.planId).catch(() => undefined);
   }
 
   async function handleRejectPlan() {
     if (!pendingPlan) return;
-    await generationAction.run(async () => {
-      await rejectCreativePlan({ data: { brandId, planId: pendingPlan.planId, reason: planRejectReason || undefined } });
-      setPendingPlan(null);
-      setPlanRejectReason("");
-    });
+    await rejectPlan.mutateAsync({ planId: pendingPlan.planId, reason: planRejectReason || undefined }).catch(() => undefined);
   }
 
   return (
@@ -202,7 +256,7 @@ function Studio({ brandId }: { brandId: string }) {
         { label: "Generate", state: session.variants.length ? "done" : brief?.status === "ready" ? "current" : "upcoming", description: `${session.variants.length} stored variants` },
         { label: "Review", state: session.variants.some((variant) => variant.reviewStatus === "open" || variant.creativeStatus === "in_review") ? "current" : session.variants.length ? "done" : "upcoming", description: `${session.variants.filter((variant) => variant.creativeStatus === "in_review").length} awaiting review` },
       ]} className="grid grid-cols-2 lg:grid-cols-4" />
-      {actionErrors.map((error) => <Notice key={error}>{error}</Notice>)}
+      {actionErrors.map((error, index) => <Notice key={index}>{errorText(error)}</Notice>)}
       {anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
       <Tabs defaultValue="direction" className="space-y-5">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5">
@@ -236,12 +290,9 @@ function Studio({ brandId }: { brandId: string }) {
               <DirectionReasonField value={directionReason} onChange={setDirectionReason} />
               <Button
                 type="button"
-                disabled={briefAction.pending || directionReason.trim().length < DIRECTION_REASON_MIN}
+                disabled={openBrief.isPending || directionReason.trim().length < DIRECTION_REASON_MIN}
                 onClick={() => {
-                  void briefAction.run(async () => {
-                    await openStudioBrief({ data: { brandId, forceNew: false, reason: directionReason.trim() } });
-                    setDirectionReason("");
-                  });
+                  void openBrief.mutateAsync({ forceNew: false, reason: directionReason.trim() }).then(() => setDirectionReason(""), () => undefined);
                 }}
               >
                 Accept direction and write the brief
@@ -331,12 +382,9 @@ function Studio({ brandId }: { brandId: string }) {
               <Button
                 type="button"
                 variant="quiet"
-                disabled={briefAction.pending || nextBriefReason.trim().length < DIRECTION_REASON_MIN}
+                disabled={openBrief.isPending || nextBriefReason.trim().length < DIRECTION_REASON_MIN}
                 onClick={() => {
-                  void briefAction.run(async () => {
-                    await openStudioBrief({ data: { brandId, forceNew: true, reason: nextBriefReason.trim() } });
-                    setNextBriefReason("");
-                  });
+                  void openBrief.mutateAsync({ forceNew: true, reason: nextBriefReason.trim() }).then(() => setNextBriefReason(""), () => undefined);
                 }}
               >
                 Write the next brief
@@ -405,7 +453,7 @@ function Studio({ brandId }: { brandId: string }) {
                   <option value="google:nano-banana">Google AI Studio · Nano Banana</option>
                 </SelectInput>
               </Field>
-              <div className="md:col-span-2">{generationDirty ? <div role="status" className="mb-3 flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => generationForm.reset()}>Discard</Button></div> : null}<Button type="submit" disabled={generationAction.pending || generationForm.formState.isSubmitting || brief.status !== "ready"}>{generationForm.formState.isSubmitting ? "Generating…" : "Generate variants"}</Button><p className="mt-2 text-sm text-muted">Estimated cost appears only when a provider returns one. Daily or concurrency limits can block a run.</p></div>
+              <div className="md:col-span-2">{generationDirty ? <div role="status" className="mb-3 flex items-center justify-between rounded-md border border-warning bg-warning-soft p-3 text-sm"><span>Unsaved changes</span><Button type="button" variant="quiet" onClick={() => generationForm.reset()}>Discard</Button></div> : null}<Button type="submit" disabled={generateVariants.isPending || generationForm.formState.isSubmitting || brief.status !== "ready"}>{generationForm.formState.isSubmitting ? "Generating…" : "Generate variants"}</Button><p className="mt-2 text-sm text-muted">Estimated cost appears only when a provider returns one. Daily or concurrency limits can block a run.</p></div>
             </form> : null}
           </Panel>
         </TabsContent>
@@ -449,20 +497,18 @@ function Studio({ brandId }: { brandId: string }) {
                 </Button>
                 {canEdit && variant.creativeStatus === "in_review" ? (
                   <>
-                    <Button type="button" disabled={reviewAction.pending} onClick={() => { void reviewAction.run(async () => { await reviewStudioVariant({ data: { brandId, creativeId: variant.creativeId, action: "approve", reasonCode: "", note: "" } }); }); }}>Approve</Button>
-                    <Button type="button" variant="danger" disabled={reviewAction.pending} onClick={() => { setReviewReason("other"); setReviewNote(""); setReviewTarget({ creativeId: variant.creativeId, mode: "reject" }); }}>Reject</Button>
-                    <Button type="button" variant="quiet" disabled={reviewAction.pending} onClick={() => { setReviewReason("other"); setReviewNote(""); setReviewTarget({ creativeId: variant.creativeId, mode: "revision" }); }}>Request revision</Button>
+                    <Button type="button" disabled={reviewingVariants.includes(variant.creativeId)} onClick={() => { void reviewVariant.mutateAsync({ creativeId: variant.creativeId, action: "approve", reasonCode: "", note: "" }).catch(() => undefined); }}>Approve</Button>
+                    <Button type="button" variant="danger" disabled={reviewingVariants.includes(variant.creativeId)} onClick={() => { setReviewReason("other"); setReviewNote(""); setReviewTarget({ creativeId: variant.creativeId, mode: "reject" }); }}>Reject</Button>
+                    <Button type="button" variant="quiet" disabled={reviewingVariants.includes(variant.creativeId)} onClick={() => { setReviewReason("other"); setReviewNote(""); setReviewTarget({ creativeId: variant.creativeId, mode: "revision" }); }}>Request revision</Button>
                   </>
                 ) : null}
                 {canEdit && (variant.creativeStatus === "approved" || variant.creativeStatus === "testing") ? (
                   <>
                     <Button
                       type="button"
-                      disabled={publishAction.pending}
+                      disabled={publishingVariants.includes(variant.creativeId)}
                       onClick={() => {
-                        void publishAction.run(async () => {
-                          await publishStudioVariant({ data: { brandId, creativeId: variant.creativeId, publisher: "test" } });
-                        });
+                        void publishTest.mutateAsync(variant.creativeId).catch(() => undefined);
                       }}
                     >
                       Publish with test publisher
@@ -470,7 +516,7 @@ function Studio({ brandId }: { brandId: string }) {
                     <Button
                       type="button"
                       variant="quiet"
-                      disabled={publishAction.pending}
+                      disabled={publishingVariants.includes(variant.creativeId)}
                       onClick={() => {
                         setPublishTarget({ creativeId: variant.creativeId, title: variant.title, defaultCaption: variant.transcript || variant.title || "" });
                         setPublishCaption(variant.transcript || variant.title || "");
@@ -557,11 +603,9 @@ function Studio({ brandId }: { brandId: string }) {
           <div className="mt-4 flex flex-wrap gap-2">
             <Button
               type="button"
-              disabled={performanceAction.pending || session.publications.length === 0}
+              disabled={recordTestPerformance.isPending || session.publications.length === 0}
               onClick={() => {
-                void performanceAction.run(async () => {
-                  await recordStudioTestPerformance({ data: { brandId } });
-                });
+                void recordTestPerformance.mutateAsync().catch(() => undefined);
               }}
             >
               Record test-provider performance and learn
@@ -569,11 +613,9 @@ function Studio({ brandId }: { brandId: string }) {
             <Button
               type="button"
               variant="quiet"
-              disabled={organicTelemetryAction.pending || !(organicQuery.data && organicQuery.data.length > 0)}
+              disabled={recordOrganic.isPending || !(organicQuery.data && organicQuery.data.length > 0)}
               onClick={() => {
-                void organicTelemetryAction.run(async () => {
-                  await recordOrganicTelemetryAction({ data: { brandId } });
-                });
+                void recordOrganic.mutateAsync().catch(() => undefined);
               }}
             >
               Record organic telemetry & learn
@@ -581,26 +623,25 @@ function Studio({ brandId }: { brandId: string }) {
           </div>
         ) : null}
       </Panel>
-      <Dialog open={!!reviewTarget} onOpenChange={(open) => { if (!open && !reviewAction.pending) setReviewTarget(null); }}>
+      <Dialog open={!!reviewTarget} onOpenChange={(open) => { if (!open && !reviewVariant.isPending) setReviewTarget(null); }}>
         <DialogContent aria-describedby="variant-review-description">
           <DialogTitle>{reviewTarget?.mode === "reject" ? "Reject this variant" : "Request a revision"}</DialogTitle>
           <DialogDescription id="variant-review-description">Record the reviewer’s reason and note. These details remain attached to the review lineage.</DialogDescription>
           <div className="mt-4 space-y-4">
             {reviewTarget?.mode === "reject" ? <Field label="Reason"><SelectInput value={reviewReason} onChange={(event) => setReviewReason(event.currentTarget.value)}>{REVIEW_REASON_CODES.map((code) => <option key={code} value={code}>{code.replaceAll("_", " ")}</option>)}</SelectInput></Field> : null}
             <Field label="Reviewer note"><TextArea value={reviewNote} onChange={(event) => setReviewNote(event.currentTarget.value)} required maxLength={400} /></Field>
-            <Button disabled={!reviewTarget || !reviewNote.trim() || reviewAction.pending} onClick={() => {
+            <Button disabled={!reviewTarget || !reviewNote.trim() || reviewVariant.isPending} onClick={() => {
               if (!reviewTarget || !reviewNote.trim()) return;
               const target = reviewTarget;
-              void reviewAction.run(async () => {
-                await reviewStudioVariant({ data: { brandId, creativeId: target.creativeId, action: target.mode, reasonCode: target.mode === "reject" ? reviewReason : "", note: reviewNote.trim() } });
+              void reviewVariant.mutateAsync({ creativeId: target.creativeId, action: target.mode, reasonCode: target.mode === "reject" ? reviewReason : "", note: reviewNote.trim() }).then(() => {
                 setReviewTarget(null);
                 setReviewNote("");
-              });
+              }, () => undefined);
             }}>{reviewTarget?.mode === "reject" ? "Confirm rejection" : "Send revision request"}</Button>
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={!!publishTarget} onOpenChange={(open) => { if (!open && !publishAction.pending) { setPublishTarget(null); setPublishResults(null); } }}>
+      <Dialog open={!!publishTarget} onOpenChange={(open) => { if (!open && !publishMulti.isPending) { setPublishTarget(null); setPublishResults(null); } }}>
         <DialogContent aria-describedby="multi-channel-publish-description">
           <DialogTitle>Publish Creative Across Channels</DialogTitle>
           <DialogDescription id="multi-channel-publish-description">
@@ -684,30 +725,20 @@ function Studio({ brandId }: { brandId: string }) {
               <Button
                 type="button"
                 variant="quiet"
-                disabled={publishAction.pending}
+                disabled={publishMulti.isPending}
                 onClick={() => { setPublishTarget(null); setPublishResults(null); }}
               >
                 Cancel
               </Button>
               <Button
                 type="button"
-                disabled={publishAction.pending || selectedChannels.length === 0}
+                disabled={publishMulti.isPending || selectedChannels.length === 0}
                 onClick={() => {
                   if (!publishTarget) return;
-                  void publishAction.run(async () => {
-                    const res = await publishMultiChannelVariant({
-                      data: {
-                        brandId,
-                        creativeId: publishTarget.creativeId,
-                        channelIds: selectedChannels,
-                        caption: publishCaption,
-                      },
-                    });
-                    setPublishResults(res);
-                  });
+                  void publishMulti.mutateAsync({ creativeId: publishTarget.creativeId, channelIds: selectedChannels, caption: publishCaption }).catch(() => undefined);
                 }}
               >
-                {publishAction.pending ? "Publishing…" : `Publish to selected (${selectedChannels.length})`}
+                {publishMulti.isPending ? "Publishing…" : `Publish to selected (${selectedChannels.length})`}
               </Button>
             </div>
           </div>
@@ -1039,17 +1070,17 @@ function Studio({ brandId }: { brandId: string }) {
                 <Button
                   type="button"
                   variant="quiet"
-                  disabled={generationAction.pending}
+                  disabled={rejectPlan.isPending || approvePlan.isPending}
                   onClick={() => void handleRejectPlan()}
                 >
                   Reject Plan
                 </Button>
                 <Button
                   type="button"
-                  disabled={generationAction.pending}
+                  disabled={approvePlan.isPending || rejectPlan.isPending}
                   onClick={() => void handleApprovePlan()}
                 >
-                  {generationAction.pending ? "Executing…" : "Approve & Generate"}
+                  {approvePlan.isPending ? "Executing…" : "Approve & Generate"}
                 </Button>
               </div>
             </div>
