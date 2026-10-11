@@ -7,6 +7,7 @@ import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useWorkspace } from "@/components/workspace";
 import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
+import { SetupPanel } from "./setup-panel";
 import { createOrganization, renameOrganization } from "@/lib/meridian/api";
 import { workspaceNameSchema, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
 import { useScopedMutation } from "@/lib/query/hooks";
@@ -95,6 +96,8 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         />
         {createRaw ? <FormError message={plainServerError(createRaw, "workspace")} raw={createRaw} /> : null}
       </section>
+
+      <SetupPanel organizationId={organizationId} canAdmin={canAdmin} />
 
       <section aria-labelledby="provider-settings-title" className="space-y-3">
         <div>
