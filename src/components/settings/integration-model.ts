@@ -21,7 +21,7 @@ export const INTEGRATION_GROUPS: ReadonlyArray<{ id: IntegrationGroup; label: st
 export type IntegrationId =
   | "meta" | "tiktok" | "google" | "ad_library"
   | "google_ai_studio" | "embeddings"
-  | "openrouter" | "hypit"
+  | "hypit"
   | "s3" | "email";
 
 /** account: connected through OAuth or a stored token. key: a workspace key can be saved. deployment: set on the server only. */
@@ -125,7 +125,6 @@ export function integrationCards(input: { status: SystemStatus; summaries: Summa
     accountCard("ad_library", connection("ad_library")),
     ready ? perceptionCard(ready.perception) : unavailableCard("google_ai_studio", "Google AI Studio", "research", "key", summaries.state),
     embeddingsCard(status),
-    ready ? openRouterCard(ready.jev) : unavailableCard("openrouter", "OpenRouter", "generation", "deployment", summaries.state),
     ready ? hypitCard(ready.production) : unavailableCard("hypit", "Hypit video", "generation", "deployment", summaries.state),
     s3Card(status),
     emailCard(status),
@@ -186,36 +185,6 @@ function embeddingsCard(status: SystemStatus): CardModel {
     summary: status.embeddings.detail,
     missing: external ? null : "Set EXTERNAL_SEMANTIC_URL and EXTERNAL_SEMANTIC_KEY on the server to use the external embeddings API. The local model needs no key.",
     facts: [status.localSemantic.status === "AVAILABLE" ? `Local model ${status.localSemantic.model} is available in process.` : "Local model is not available."],
-  };
-}
-
-function openRouterCard(summary: ProviderConfigSummary): CardModel {
-  const usable = Boolean(summary.settings.openrouterUsable);
-  const configured = Boolean(summary.settings.openrouterConfigured);
-  if (usable) {
-    return {
-      id: "openrouter", label: "OpenRouter", group: "generation", kind: "deployment",
-      status: "AVAILABLE",
-      summary: "OPENROUTER_API_KEY is set on this deployment, and JEV decisions may use it.",
-      missing: null,
-      facts: ["Deployment only. No workspace key is used."],
-    };
-  }
-  if (configured) {
-    return {
-      id: "openrouter", label: "OpenRouter", group: "generation", kind: "deployment",
-      status: "DISABLED",
-      summary: "OPENROUTER_API_KEY is set, but JEV decisions do not use it yet.",
-      missing: "Set JEV_SHARED_DEFAULT=deployment on the server to allow its use.",
-      facts: ["Deployment only. No workspace key is used."],
-    };
-  }
-  return {
-    id: "openrouter", label: "OpenRouter", group: "generation", kind: "deployment",
-    status: "NOT_CONFIGURED",
-    summary: "No OpenRouter key is set on this deployment.",
-    missing: "Set OPENROUTER_API_KEY on the server. It is deployment only.",
-    facts: ["Deployment only. No workspace key is used."],
   };
 }
 

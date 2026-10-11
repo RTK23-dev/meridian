@@ -15,7 +15,7 @@
  */
 import { jevRouter, transportHealth } from "../jev/router.ts";
 import { resolveJevConfig } from "../jev/config.ts";
-import type { JevProviderHealth, JevProviderId, JevProviderRouter, JevRoutingPolicy } from "../jev/types.ts";
+import type { JevProviderRouter } from "../jev/types.ts";
 import {
   abstainAll,
   type DecisionCapabilities,
@@ -68,43 +68,17 @@ export class JevDecisionEngine implements DecisionEngine {
 
   /**
    * Readiness for one workspace. The TypeSafe transport uses the workspace's own key, by the same resolution a decision
-   * uses. The OpenRouter transport is deployment-only. No live request is made.
+   * uses. No live request is made.
    */
   async healthFor(organizationId: string): Promise<DecisionEngineHealth> {
-    const config = resolveJevConfig();
-    const transports: Partial<Record<JevProviderId, JevProviderHealth>> = {};
-    for (const id of ["typesafe_direct", "openrouter"] as const) {
-      transports[id] = await transportHealth(this.router.getProvider(id), organizationId);
-    }
-    const preferred = transports[config.preferredProvider];
-    if (preferred?.status === "READY") return { status: "READY", message: `JEV via ${config.preferredProvider}. ${preferred.message ?? ""}`.trim() };
-    const anyReady = Object.entries(transports).find(([, health]) => health?.status === "READY");
-    if (anyReady && config.mode !== "auto") {
-      return { status: "READY", message: `JEV via ${anyReady[0]}.` };
-    }
-    if (anyReady && config.mode === "auto") {
-      return {
-        status: "DEGRADED",
-        message: `The preferred JEV transport ${config.preferredProvider} is not ready for this workspace; ${anyReady[0]} is, but is used only when it is selected or transport fallback is enabled.`,
-      };
-    }
-    return {
-      status: "NOT_CONFIGURED",
-      message: "No JEV transport is ready for this workspace. TypeSafe needs the workspace's saved key or an opted-in shared default. OpenRouter is deployment-only.",
-    };
-  }
-
-  /** The routing policy actually applied: explicit configuration only, never a silent second paid call. */
-  routingPolicy(): JevRoutingPolicy {
-    const config = resolveJevConfig();
-    const mode = config.mode === "compare" && !decisionShadowEnabled() ? "auto" : config.mode;
-    return { mode, preferredProvider: config.preferredProvider, fallbackEnabled: config.fallbackEnabled };
+    const health = await transportHealth(this.router.getProvider("typesafe_direct"), organizationId);
+    if (health.status === "READY") return { status: "READY", message: `JEV via TypeSafe. ${health.message ?? ""}`.trim() };
+    return { status: "NOT_CONFIGURED", message: health.message ?? "No TypeSafe key is saved for this workspace." };
   }
 
   async decide(request: DecisionRequest): Promise<DecisionResult> {
     const config = resolveJevConfig();
-    const requestedModel =
-      request.model ?? (config.preferredProvider === "openrouter" ? config.openrouter.model : config.typesafe.model);
+    const requestedModel = request.model ?? config.typesafe.model;
     const imageCount = request.images?.length ?? 0;
 
     if (imageCount > 0 && request.imagePolicy === "required") {
@@ -112,11 +86,11 @@ export class JevDecisionEngine implements DecisionEngine {
       return {
         runId: globalThis.crypto.randomUUID(),
         model: requestedModel,
-        provider: config.preferredProvider,
+        provider: "typesafe_direct",
         inputHash: "not_sent",
         cached: false,
         latencyMs: 0,
-        answers: abstainAll(request, { status: "unsupported", reason, model: requestedModel, provider: config.preferredProvider }),
+        answers: abstainAll(request, { status: "unsupported", reason, model: requestedModel, provider: "typesafe_direct" }),
         engineId: this.id,
         adapterVersion: this.adapterVersion,
         requestedModel,
@@ -129,10 +103,10 @@ export class JevDecisionEngine implements DecisionEngine {
     }
 
     // The JEV request carries no image bytes: images are never forwarded to a text-only route.
-    const { images: _images, imagePolicy: _policy, routingPolicy, ...jevRequest } = request;
+    const { images: _images, imagePolicy: _policy, ...jevRequest } = request;
     void _images;
     void _policy;
-    const response = await this.router.decide(jevRequest, routingPolicy ?? this.routingPolicy());
+    const response = await this.router.decide(jevRequest);
     // Give every answered value the same semantics and calibration fields the other engine returns.
     for (const answer of Object.values(response.answers)) {
       if (answer.status !== "answered") continue;

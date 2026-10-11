@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { JevDecisionRequest, JevDecisionResponse, JevProvider, JevProviderHealth, JevProviderRouter, JevRoutingPolicy } from "../jev/types.ts";
+import type { JevDecisionRequest, JevDecisionResponse, JevProvider, JevProviderHealth, JevProviderRouter } from "../jev/types.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
 import { OpenAiDecisionsEngine } from "./openai-engine.ts";
 import { evaluateDecisionPolicy, CREATIVE_QA_POLICY } from "./policy.ts";
@@ -10,7 +10,7 @@ import type { DecisionRequest, DecisionResult } from "./types.ts";
 // Both engines run the same provider-neutral fixtures. The JEV side uses a router stub shaped like the existing JEV
 // router's output. The OpenAI side uses a fetch stub shaped like the documented Decisions response.
 
-type RouterCall = { request: JevDecisionRequest; policy?: JevRoutingPolicy };
+type RouterCall = { request: JevDecisionRequest };
 
 function jevRouterStub(calls: RouterCall[], answers?: Record<string, unknown>): JevProviderRouter {
   const provider: JevProvider = {
@@ -21,9 +21,9 @@ function jevRouterStub(calls: RouterCall[], answers?: Record<string, unknown>): 
   };
   return {
     getProvider: () => provider,
-    health: async () => ({ typesafe_direct: { status: "READY" }, openrouter: { status: "NOT_CONFIGURED", message: "unset" } }),
-    decide: async (request: JevDecisionRequest, policy?: JevRoutingPolicy): Promise<JevDecisionResponse> => {
-      calls.push({ request, policy });
+    health: async () => ({ typesafe_direct: { status: "READY" } }),
+    decide: async (request: JevDecisionRequest): Promise<JevDecisionResponse> => {
+      calls.push({ request });
       const out: JevDecisionResponse["answers"] = {};
       for (const [key, spec] of Object.entries(request.questions)) {
         const base = { questionId: spec.id, questionVersion: spec.version, type: spec.type, model: "typesafe/jev-1.13", provider: "typesafe_direct", evidenceRefs: [], evaluatedAt: new Date().toISOString() };
@@ -110,12 +110,6 @@ test("optional images are not forwarded to JEV, and the omission is recorded", a
   assert.equal("images" in calls[0].request, false, "no image bytes reach the JEV transport");
   assert.equal(result.imagesOmitted, 2);
   assert.equal(result.inputModality, "text");
-});
-
-test("the caller's routing policy is the one the existing JEV router receives", async () => {
-  const calls: RouterCall[] = [];
-  await new JevDecisionEngine(jevRouterStub(calls)).decide({ ...contractRequest(), routingPolicy: { mode: "openrouter", fallbackEnabled: false } });
-  assert.deepEqual(calls[0].policy, { mode: "openrouter", fallbackEnabled: false });
 });
 
 test("a JEV answer that was refused is not converted into an approval", async () => {

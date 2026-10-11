@@ -27,7 +27,7 @@ import { recordTelemetry, calculateTelemetryFeaturePosteriors, type TelemetryRec
 import { upsertModelParameter } from "../learning/parameters.ts";
 
 // 5. JEV Decision Engine
-import { OpenRouterJevClient } from "../jev/client.ts";
+import { TypeSafeDirectJevProvider } from "../jev/router.ts";
 import { fixedLookup } from "../credentials/fixtures.ts";
 import type { JevQuestionSpec } from "../jev/types.ts";
 
@@ -168,8 +168,8 @@ test("E2E Path 1: Organic Discovery -> Evidence -> Perception -> JEV -> Creative
     );
   };
 
-  const jevClient = new OpenRouterJevClient({
-    apiKey: "test-key-mock",
+  const jevClient = new TypeSafeDirectJevProvider({
+    lookup: fixedLookup("test-key-mock"),
     fetchImpl: fakeJevFetch,
   });
 
@@ -187,7 +187,7 @@ test("E2E Path 1: Organic Discovery -> Evidence -> Perception -> JEV -> Creative
   assert.equal(jevAns.type, "noul");
   assert.equal(jevAns.probability, 0.84);
   assert.equal(jevAns.confidence, undefined); // Native noul has NO fabricated confidence
-  assert.equal(jevAns.answer, true);
+  assert.equal(jevAns.answer, jevAns.probability, "a noul's answer is its probability");
 
   // 6. Synthesize final CreativeSpec
   const creativeSpec: CreativeSpec = {

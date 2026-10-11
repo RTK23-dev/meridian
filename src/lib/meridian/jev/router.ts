@@ -19,15 +19,14 @@ import type {
   JevProviderHealth,
   JevDecisionRequest,
   JevDecisionResponse,
-  JevRoutingPolicy,
-  JevRoutingMode,
   JevProviderRouter,
   JevAnswer,
+  JevQuestionSpec,
 } from "./types.ts";
-import { OpenRouterJevClient, openRouterJevClient, checkEvidenceSufficiency } from "./client.ts";
+import { checkEvidenceSufficiency } from "./client.ts";
 import { resolveJevConfig } from "./config.ts";
 import type { Sql } from "../learning/store.ts";
-import { loadDefaultSql, resolveCredential, sharedDefaultOptedIn, type CredentialEnv } from "../credentials/resolve.ts";
+import { loadDefaultSql, resolveCredential, type CredentialEnv } from "../credentials/resolve.ts";
 import type { CredentialResolution } from "../credentials/contract.ts";
 
 /**
@@ -43,6 +42,30 @@ export type JevCredentialLookup = (organizationId: string) => Promise<Credential
 export async function transportHealth(provider: JevProvider, organizationId: string): Promise<JevProviderHealth> {
   const scoped = provider as JevProvider & { healthFor?: (organizationId: string) => Promise<JevProviderHealth> };
   return scoped.healthFor ? scoped.healthFor(organizationId) : provider.health();
+}
+
+/**
+ * The reason a TypeSafe answer cannot be used for its question, or null when it fits. A noul is a probability between 0 and 1,
+ * a score is a number, and a choice is one of the question's options.
+ */
+function malformedAnswerReason(spec: JevQuestionSpec, raw: any, prob: unknown): string | null {
+  if (spec.type === "noul") {
+    return typeof prob === "number" && Number.isFinite(prob) && prob >= 0 && prob <= 1
+      ? null
+      : `TypeSafe returned a noul value that is not a probability between 0 and 1 for ${spec.id}.`;
+  }
+  if (spec.type === "score") {
+    return typeof raw.score === "number" && Number.isFinite(raw.score)
+      ? null
+      : `TypeSafe returned a score that is not a number for ${spec.id}.`;
+  }
+  if (spec.type === "choice") {
+    const options = Array.isArray(spec.options) ? spec.options : [];
+    return typeof raw.choice === "string" && (options.length === 0 || options.includes(raw.choice))
+      ? null
+      : `TypeSafe returned a choice that is not one of the options for ${spec.id}.`;
+  }
+  return null;
 }
 
 export class TypeSafeDirectJevProvider implements JevProvider {
@@ -254,6 +277,22 @@ export class TypeSafeDirectJevProvider implements JevProvider {
         const rawAns = rawDecisions[key] || rawDecisions[qSpec.id];
         if (rawAns && (rawAns.choice !== undefined || rawAns.noul !== undefined || rawAns.score !== undefined || rawAns.probability !== undefined || rawAns.answer !== undefined)) {
           const prob = rawAns.noul ?? rawAns.probability;
+          // A value that does not fit its question is a provider error. It is never coerced into an answer.
+          const malformed = malformedAnswerReason(qSpec, rawAns, prob);
+          if (malformed) {
+            answers[key] = {
+              questionId: qSpec.id,
+              questionVersion: qSpec.version,
+              type: qSpec.type,
+              model: resolvedModel,
+              provider: this.id,
+              status: "provider_error",
+              evidenceRefs: [],
+              abstainReason: malformed,
+              evaluatedAt: new Date().toISOString(),
+            };
+            continue;
+          }
           answers[key] = {
             questionId: qSpec.id,
             questionVersion: qSpec.version,
@@ -324,96 +363,15 @@ export class TypeSafeDirectJevProvider implements JevProvider {
   }
 }
 
-export class OpenRouterJevProvider implements JevProvider {
-  readonly id: JevProviderId = "openrouter";
-  private client: OpenRouterJevClient;
-
-  constructor(client: OpenRouterJevClient = openRouterJevClient) {
-    this.client = client;
-  }
-
-  capabilities(): JevCapabilities {
-    return {
-      primitives: ["noul", "choice", "score"],
-      batchDecisions: true,
-      explanation: false,
-    };
-  }
-
-  /**
-   * OpenRouter is deployment-only. Its key is OPENROUTER_API_KEY on this deployment, and no workspace key is used for it.
-   * The deployment key is used only when JEV_SHARED_DEFAULT=deployment is set, the same flag that opts in the TypeSafe
-   * deployment key. The health check does not depend on a workspace.
-   */
-  async health(): Promise<JevProviderHealth> {
-    if (!sharedDefaultOptedIn("jev")) {
-      return {
-        status: "NOT_CONFIGURED",
-        message: "OpenRouter is deployment-only. Its deployment key is used only when JEV_SHARED_DEFAULT=deployment is set.",
-      };
-    }
-    const key = resolveJevConfig().openrouter.apiKey;
-    if (!key) {
-      return {
-        status: "NOT_CONFIGURED",
-        message: "OpenRouter is deployment-only, and OPENROUTER_API_KEY is not set on this deployment.",
-      };
-    }
-    return { status: "READY", message: "OpenRouter uses the deployment's OPENROUTER_API_KEY. No workspace key is used." };
-  }
-
-  async decide(request: JevDecisionRequest): Promise<JevDecisionResponse> {
-    // Not opted in, or no deployment key: no request is sent, and each question says why.
-    const health = await this.health();
-    if (health.status !== "READY") {
-      const answers: Record<string, JevAnswer> = {};
-      const now = new Date().toISOString();
-      for (const [key, q] of Object.entries(request.questions)) {
-        answers[key] = {
-          questionId: q.id,
-          questionVersion: q.version,
-          type: q.type,
-          model: request.model ?? "typesafe/jev-1.13",
-          provider: this.id,
-          status: "not_configured",
-          evidenceRefs: [],
-          abstainReason: health.message,
-          evaluatedAt: now,
-        };
-      }
-      return {
-        runId: globalThis.crypto.randomUUID(),
-        model: request.model ?? "typesafe/jev-1.13",
-        provider: this.id,
-        inputHash: "not_configured",
-        cached: false,
-        latencyMs: 0,
-        answers,
-      };
-    }
-    const res = await this.client.decide(request);
-    return {
-      ...res,
-      provider: this.id,
-    };
-  }
-}
-
+/**
+ * The JEV router. The decision transport is TypeSafe Direct only, so one engine serves each workspace. A decision never
+ * compares, falls back to, or pays for a second transport.
+ */
 export class JevRouter implements JevProviderRouter {
   private providers: Map<JevProviderId, JevProvider> = new Map();
 
-  constructor(options?: {
-    typesafeProvider?: JevProvider;
-    openrouterProvider?: JevProvider;
-  }) {
-    this.providers.set(
-      "typesafe_direct",
-      options?.typesafeProvider ?? new TypeSafeDirectJevProvider()
-    );
-    this.providers.set(
-      "openrouter",
-      options?.openrouterProvider ?? new OpenRouterJevProvider()
-    );
+  constructor(options?: { typesafeProvider?: JevProvider }) {
+    this.providers.set("typesafe_direct", options?.typesafeProvider ?? new TypeSafeDirectJevProvider());
   }
 
   getProvider(id: JevProviderId): JevProvider {
@@ -435,134 +393,9 @@ export class JevRouter implements JevProviderRouter {
     return result as Record<JevProviderId, JevProviderHealth>;
   }
 
-  async decide(
-    request: JevDecisionRequest,
-    policy?: JevRoutingPolicy
-  ): Promise<JevDecisionResponse> {
-    const config = resolveJevConfig();
-    const rawMode = (policy?.mode ?? config.mode).toLowerCase();
-    const mode: JevRoutingMode =
-      rawMode === "typesafe" || rawMode === "typesafe_direct"
-        ? "typesafe_direct"
-        : rawMode === "openrouter"
-          ? "openrouter"
-          : rawMode === "compare"
-            ? "compare"
-            : "auto";
-
-    const rawPref = (policy?.preferredProvider ?? config.preferredProvider).toLowerCase();
-    const preferredProviderId: JevProviderId =
-      rawPref === "typesafe" || rawPref === "typesafe_direct"
-        ? "typesafe_direct"
-        : rawPref === "openrouter"
-          ? "openrouter"
-          : "typesafe_direct";
-
-    const fallbackEnabled =
-      policy?.fallbackEnabled ?? config.fallbackEnabled;
-
-    if (mode === "typesafe_direct") {
-      return this.getProvider("typesafe_direct").decide(request);
-    }
-
-    if (mode === "openrouter") {
-      return this.getProvider("openrouter").decide(request);
-    }
-
-    if (mode === "compare") {
-      const [directRes, openrouterRes] = await Promise.all([
-        this.getProvider("typesafe_direct").decide(request),
-        this.getProvider("openrouter").decide(request),
-      ]);
-
-      const primary = preferredProviderId === "typesafe_direct" ? directRes : openrouterRes;
-      const secondary = preferredProviderId === "typesafe_direct" ? openrouterRes : directRes;
-
-      let agreementCount = 0;
-      let totalQuestions = 0;
-      const disagreements: Record<string, { primary: unknown; compared: unknown }> = {};
-
-      for (const [qKey, pAns] of Object.entries(primary.answers)) {
-        const sAns = secondary.answers[qKey];
-        if (!sAns) continue;
-        totalQuestions++;
-        const pVal = pAns.choice ?? pAns.score ?? pAns.noul ?? pAns.answer;
-        const sVal = sAns.choice ?? sAns.score ?? sAns.noul ?? sAns.answer;
-        if (pVal !== undefined && sVal !== undefined && pVal === sVal) {
-          agreementCount++;
-        } else {
-          disagreements[qKey] = { primary: pVal, compared: sVal };
-        }
-      }
-
-      const agreementRate = totalQuestions > 0 ? Math.round((agreementCount / totalQuestions) * 100) / 100 : 1;
-
-      return {
-        ...primary,
-        comparison: {
-          comparedWith: secondary.provider,
-          agreementRate,
-          disagreements,
-          comparedResponse: secondary,
-        },
-      };
-    }
-
-    // AUTO mode: prefer configured provider, fall back on eligible transport failure
-    const preferred = this.getProvider(preferredProviderId);
-    // Readiness is checked for this request's workspace, so the TypeSafe key is the one this workspace would use.
-    const prefHealth = await transportHealth(preferred, request.organizationId);
-
-    if (prefHealth.status === "READY") {
-      const resp = await preferred.decide(request);
-      // Check if all answers failed with provider_error
-      const allFailed = Object.values(resp.answers).every(
-        (a) => a.status === "provider_error" || a.status === "not_configured"
-      );
-      if (allFailed && fallbackEnabled) {
-        const fallbackId: JevProviderId =
-          preferredProviderId === "typesafe_direct" ? "openrouter" : "typesafe_direct";
-        const fallback = this.getProvider(fallbackId);
-        const fbHealth = await transportHealth(fallback, request.organizationId);
-        if (fbHealth.status === "READY") {
-          const fallbackResp = await fallback.decide(request);
-          return {
-            ...fallbackResp,
-            fallbackUsed: true,
-            fallbackFrom: preferredProviderId,
-            fallbackReason: "Primary provider encountered provider_error on all questions.",
-            requestedProvider: preferredProviderId,
-            requestedModel: request.model,
-          };
-        }
-      }
-      return {
-        ...resp,
-        requestedProvider: preferredProviderId,
-        requestedModel: request.model,
-      };
-    }
-
-    // Preferred provider is not ready, fall back if enabled. An unusable saved workspace entry is UNAVAILABLE, and it never falls
-    // back: the other transport is not used in place of a workspace's own entry that cannot be used
-    // (docs/ARCHITECTURE_CONTRACTS.md, section 1.2). The preferred transport then answers not_configured without a request.
-    if (fallbackEnabled && prefHealth.status !== "UNAVAILABLE") {
-      const fallbackId: JevProviderId =
-        preferredProviderId === "typesafe_direct" ? "openrouter" : "typesafe_direct";
-      const fallback = this.getProvider(fallbackId);
-      const fallbackResp = await fallback.decide(request);
-      return {
-        ...fallbackResp,
-        fallbackUsed: true,
-        fallbackFrom: preferredProviderId,
-        fallbackReason: `Primary provider ${preferredProviderId} was NOT_CONFIGURED.`,
-        requestedProvider: preferredProviderId,
-        requestedModel: request.model,
-      };
-    }
-
-    // Otherwise return preferred decision (which will yield NOT_CONFIGURED answers)
-    return preferred.decide(request);
+  async decide(request: JevDecisionRequest): Promise<JevDecisionResponse> {
+    const response = await this.getProvider("typesafe_direct").decide(request);
+    return { ...response, requestedProvider: "typesafe_direct", requestedModel: request.model };
   }
 }
 

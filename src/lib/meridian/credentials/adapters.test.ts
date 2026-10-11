@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { randomUUID } from "node:crypto";
-import { JevRouter, OpenRouterJevProvider, TypeSafeDirectJevProvider } from "../jev/router.ts";
-import { OpenRouterJevClient } from "../jev/client.ts";
+import { JevRouter, TypeSafeDirectJevProvider } from "../jev/router.ts";
 import type { JevDecisionRequest } from "../jev/types.ts";
 import { GeminiOmniVideoProvider } from "../production/providers/omni.ts";
 import { GoogleNanoBananaImageProvider } from "../production/image-providers.ts";
@@ -85,12 +84,12 @@ for (const { name, sql } of backends) {
     await withEnv({}, async () => {
       const rec = recorder(jevResponse);
       const router = new JevRouter({ typesafeProvider: new TypeSafeDirectJevProvider({ sql, fetchImpl: rec.fetchImpl }) });
-      await router.decide(jevRequest(a.organizationId), { mode: "auto", preferredProvider: "typesafe_direct", fallbackEnabled: false });
+      await router.decide(jevRequest(a.organizationId));
       assert.equal(rec.calls(), 1);
       assert.equal(rec.requests[0].get("authorization"), "Bearer jev-workspace-key-1111");
 
       // Workspace B has no saved key and no shared default. Its request is answered not_configured, and no request is sent.
-      const answered = await router.decide(jevRequest(b.organizationId), { mode: "auto", preferredProvider: "typesafe_direct", fallbackEnabled: false });
+      const answered = await router.decide(jevRequest(b.organizationId));
       assert.equal(rec.calls(), 1, "no request for a workspace with no usable key");
       assert.equal(answered.answers["acceptance.hook"].status, "not_configured");
     });
@@ -142,28 +141,6 @@ for (const { name, sql } of backends) {
       await provider.decide(jevRequest(tenant.organizationId));
       assert.equal(rec.calls(), 1);
       assert.equal(rec.requests[0].get("authorization"), "Bearer deployment-typesafe-key-3333");
-    });
-  });
-
-  test(`[${name}] OpenRouter: deployment-only, and it sends nothing unless JEV_SHARED_DEFAULT=deployment is set`, async () => {
-    const rec = recorder(jevResponse);
-    const client = new OpenRouterJevClient({ apiKey: "openrouter-deployment-key-4444", fetchImpl: rec.fetchImpl });
-    const provider = new OpenRouterJevProvider(client);
-
-    await withEnv({ OPENROUTER_API_KEY: "openrouter-deployment-key-4444" }, async () => {
-      const health = await provider.health();
-      assert.equal(health.status, "NOT_CONFIGURED");
-      assert.match(health.status === "NOT_CONFIGURED" ? health.message : "", /JEV_SHARED_DEFAULT=deployment/);
-      const res = await provider.decide(jevRequest("org-openrouter"));
-      assert.equal(rec.calls(), 0, "not opted in: no request");
-      assert.equal(res.answers["acceptance.hook"].status, "not_configured");
-    });
-
-    await withEnv({ JEV_SHARED_DEFAULT: "deployment", OPENROUTER_API_KEY: "openrouter-deployment-key-4444" }, async () => {
-      assert.equal((await provider.health()).status, "READY");
-      await provider.decide(jevRequest("org-openrouter"));
-      assert.equal(rec.calls(), 1, "opted in: the deployment key is used");
-      assert.equal(rec.requests[0].get("authorization"), "Bearer openrouter-deployment-key-4444");
     });
   });
 

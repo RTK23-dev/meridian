@@ -231,7 +231,8 @@ export interface JevClient {
   decide(request: JevDecisionRequest): Promise<JevDecisionResponse>;
 }
 
-export type JevProviderId = "typesafe_direct" | "openrouter";
+/** The one decision transport. Each workspace is served by one engine, so the id has one value. */
+export type JevProviderId = "typesafe_direct";
 
 export type JevCapabilities = {
   primitives: JevQuestionType[];
@@ -251,17 +252,8 @@ export interface JevProvider {
   decide(request: JevDecisionRequest): Promise<JevDecisionResponse>;
 }
 
-export type JevRoutingMode = "auto" | "typesafe_direct" | "openrouter" | "compare";
-
-export interface JevRoutingPolicy {
-  mode?: JevRoutingMode;
-  preferredProvider?: JevProviderId;
-  fallbackEnabled?: boolean;
-  compareMode?: boolean;
-}
-
 export interface JevProviderRouter {
-  decide(request: JevDecisionRequest, policy?: JevRoutingPolicy): Promise<JevDecisionResponse>;
+  decide(request: JevDecisionRequest): Promise<JevDecisionResponse>;
   getProvider(id: JevProviderId): JevProvider;
   health(id?: JevProviderId): Promise<Record<JevProviderId, JevProviderHealth>>;
 }

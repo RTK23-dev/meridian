@@ -324,37 +324,9 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               <DecisionEngineSelector organizationId={organizationId} canAdmin={canAdmin} />
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">TypeSafe JEV transport</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="JEV Routing Mode">
-                <Input value={String(activeSummary.settings.mode)} readOnly />
-              </Field>
-
-              <Field label="Preferred Provider">
-                <Input value={String(activeSummary.settings.preferredProvider)} readOnly />
-              </Field>
-
               <p className="sm:col-span-2 text-xs text-muted">
-                The TypeSafe key is saved per workspace. A deployment TypeSafe key is used only when JEV_SHARED_DEFAULT=deployment
-                is set, and it is shown as the deployment shared default.
-              </p>
-              <div className="sm:col-span-2 rounded border border-line bg-panel p-3 text-xs text-muted">
-                <strong>OpenRouter is deployment-only.</strong>{" "}
-                {summaries?.jev?.settings?.openrouterConfigured
-                  ? `This deployment has an OPENROUTER_API_KEY (${summaries.jev.settings.openrouterFingerprint ?? "no fingerprint"}).`
-                  : "This deployment has no OPENROUTER_API_KEY."}{" "}
-                {summaries?.jev?.settings?.openrouterUsable
-                  ? "It is in use, because JEV_SHARED_DEFAULT=deployment is set."
-                  : "It is not used. It needs OPENROUTER_API_KEY on this deployment and JEV_SHARED_DEFAULT=deployment. It is never saved per workspace."}
-              </div>
-
-              {activeSummary.settings.mode === "compare" ? (
-                <div className="sm:col-span-2 rounded border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
-                  ⚠️ <strong>Compare Mode Active</strong>: Runs both TypeSafe and OpenRouter in parallel to evaluate
-                  decision agreement. Incurs dual API provider fees.
-                </div>
-              ) : null}
-
-              <p className="sm:col-span-2 text-xs text-muted">
-                Routing is set on the deployment (MERIDIAN_JEV_PROVIDER_MODE, MERIDIAN_JEV_PREFERRED_PROVIDER). A routing choice saved in this workspace is not used, so it is not offered.
+                TypeSafe is the decision transport. Its key is saved per workspace, and a deployment key is used only when
+                JEV_SHARED_DEFAULT=deployment is set. A decision never calls a second provider.
               </p>
               <div className="sm:col-span-2">
                 <Field label="TypeSafe JEV API key (saved per workspace)" error={fieldErrors.jevKey?.message}>

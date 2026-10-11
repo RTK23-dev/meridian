@@ -132,21 +132,6 @@ for (const { name, sql } of backends) {
     });
   });
 
-  test(`[${name}] OpenRouter is deployment-only, and is in use only when JEV_SHARED_DEFAULT=deployment is set`, async () => {
-    const tenant = await studioTenant(sql, "openrouter-summary");
-    await withEnv({ OPENROUTER_API_KEY: "openrouter-deployment-key-6543" }, async () => {
-      const settings = (await getWorkspaceProviderSettings(sql, tenant.organizationId)).jev.settings;
-      assert.equal(settings.openrouterDeploymentOnly, true);
-      assert.equal(settings.openrouterConfigured, true);
-      assert.equal(settings.openrouterUsable, false, "not opted in, so not in use");
-      assert.equal(settings.openrouterFingerprint, "...6543");
-      assert.equal(JSON.stringify(settings).includes("openrouter-deployment-key-6543"), false);
-    });
-    await withEnv({ JEV_SHARED_DEFAULT: "deployment", OPENROUTER_API_KEY: "openrouter-deployment-key-6543" }, async () => {
-      assert.equal((await getWorkspaceProviderSettings(sql, tenant.organizationId)).jev.settings.openrouterUsable, true);
-    });
-  });
-
   test(`[${name}] production: a saved workspace key is the one shown, and the deployment key is not shown without the flag`, async () => {
     const tenant = await studioTenant(sql, "production-summary");
     await storeVaultCredential(sql, tenant.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: WORKSPACE_GEMINI });

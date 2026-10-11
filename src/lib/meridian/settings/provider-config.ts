@@ -21,7 +21,7 @@ import type { Sql } from "../learning/store.ts";
 import { withTransaction } from "../learning/store.ts";
 import { storeVaultCredential, retrieveVaultCredential, deleteVaultCredential, type VaultCredentialPayload } from "../vault/service.ts";
 import { resolveJevConfig } from "../jev/config.ts";
-import { resolveCredential, sharedDefaultOptedIn } from "../credentials/resolve.ts";
+import { resolveCredential } from "../credentials/resolve.ts";
 import { isCostMode, resolveCostMode } from "../production/cost-mode.ts";
 import { CREDENTIAL_VAULT_TYPE, credentialStateOf, type CredentialCategory, type CredentialState, type SourceCredentialCategory } from "../credentials/contract.ts";
 import { selectPerceptionProvider } from "../perception/run.ts";
@@ -134,26 +134,14 @@ export async function getWorkspaceProviderSettings(
   const vaultMap = new Map<string, { id: string }>();
   for (const r of rows) vaultMap.set(r.credential_type, { id: r.id });
 
-  // 1. JEV: the TypeSafe key is the workspace's own, through the resolver. OpenRouter is deployment-only.
+  // 1. JEV: the TypeSafe key is the workspace's own, through the resolver. It is the only JEV transport.
   const jevState = await credentialStateFor(sql, organizationId, "jev");
-  // OpenRouter's deployment key is used only when JEV_SHARED_DEFAULT=deployment, the same flag that opts in TypeSafe's.
-  const openrouterKey = resolveJevConfig().openrouter.apiKey;
-  const openrouterOptedIn = sharedDefaultOptedIn("jev");
   const jevSummary: ProviderConfigSummary = {
     category: "jev",
     ...credentialFields(jevState),
     settings: {
-      mode: resolveJevConfig().mode,
-      preferredProvider: resolveJevConfig().preferredProvider,
-      fallbackEnabled: resolveJevConfig().fallbackEnabled,
       timeoutMs: resolveJevConfig().timeoutMs,
       typesafeModel: resolveJevConfig().typesafe.model,
-      openrouterModel: resolveJevConfig().openrouter.model,
-      // OpenRouter is deployment-only: the key is OPENROUTER_API_KEY on this deployment, and no workspace key is used.
-      openrouterDeploymentOnly: true,
-      openrouterConfigured: Boolean(openrouterKey),
-      openrouterUsable: Boolean(openrouterKey) && openrouterOptedIn,
-      openrouterFingerprint: fingerprint(openrouterKey),
     },
     capabilities: ["choice_decisions", "score_decisions", "noul_probabilities", "evidence_audit_trail"],
   };

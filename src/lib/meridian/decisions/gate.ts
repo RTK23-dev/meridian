@@ -22,7 +22,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
-import type { JevAnswer, JevQuestionSpec, JevRoutingPolicy } from "../jev/types.ts";
+import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 import { checkEvidenceSufficiency } from "../jev/client.ts";
 import { decideWithActiveEngine, type DecisionEngineRegistry } from "./dispatcher.ts";
 import { calibrationStatusOf, evaluateQuestionPolicies, policyForQuestion, policyVersionOf, type CalibrationStatus, type PolicyOutcome } from "./policy.ts";
@@ -97,7 +97,6 @@ export type GateInput = {
   /** The selection the caller already resolved. When absent, the gate resolves the workspace's active engine once. */
   selection?: EngineSelection;
   /** Transport routing for the JEV engine. Other engines ignore it. */
-  routingPolicy?: JevRoutingPolicy;
   engines?: DecisionEngineRegistry;
 };
 
@@ -305,7 +304,6 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
       questions: Object.fromEntries(group.questions.map((question) => [question.key, question.spec])),
       images: groupImages.map((image) => ({ bytes: image.bytes, evidenceRef: image.evidenceRef, label: image.label })),
       imagePolicy: group.needsImage ? "required" : "optional",
-      routingPolicy: input.routingPolicy,
     };
     call.engineCalled = true;
     try {
