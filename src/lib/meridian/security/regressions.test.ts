@@ -11,7 +11,7 @@ import { collectAdLibrarySource } from "../market/pipeline.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { createMemoryObjectStore, safeStorageKey } from "../storage/object-store.ts";
 import { combineLogoFrames } from "../vision/measure.ts";
-import { signWebhookBody, verifyWebhook } from "../webhooks/verify.ts";
+import { signWebhookDelivery, verifyWebhook } from "../webhooks/verify.ts";
 
 test("generation stops at the daily and concurrency limits and does not invent a cost", () => {
   const open = generationAllowed({ runsToday: 1, running: 0 });
@@ -37,15 +37,13 @@ test("storage, urls, webhooks, and tenants reject the cross-scope cases", () => 
   assert.match(publicUrlIssue("file:///etc/passwd") ?? "", /Only http/);
   const now = Date.now();
   const body = "{\"ok\":true}";
-  const signature = signWebhookBody("secret", String(now), body);
-  assert.equal(
-    verifyWebhook({ secret: "secret", timestamp: String(now), signature: "00", rawBody: body, eventId: "e1", nowMs: now, seenEventIds: [], accountKnown: true }).status,
-    "rejected",
-  );
-  assert.equal(
-    verifyWebhook({ secret: "secret", timestamp: String(now), signature, rawBody: body, eventId: "e1", nowMs: now, seenEventIds: [], accountKnown: true }).status,
-    "accepted",
-  );
+  const fields = { provider: "meta", account: "acct-1", eventId: "e1", timestamp: String(now), rawBody: body };
+  const signature = signWebhookDelivery({ secret: "secret", ...fields });
+  const verify = (overrides: Partial<Parameters<typeof verifyWebhook>[0]> = {}) =>
+    verifyWebhook({ secret: "secret", ...fields, signature, nowMs: now, seenEventIds: [], accountKnown: true, ...overrides }).status;
+  assert.equal(verify({ signature: "00" }), "rejected");
+  assert.equal(verify({ account: "acct-2" }), "rejected", "a signed delivery re-addressed to another account is refused");
+  assert.equal(verify(), "accepted");
   assert.throws(() => assertRole("viewer", "member"), /permission/);
   assert.throws(
     () => assertSameTenant([{ organizationId: "other", brandId: "brand-a" }], "org-a", "brand-a"),

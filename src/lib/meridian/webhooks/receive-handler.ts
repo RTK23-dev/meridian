@@ -94,7 +94,8 @@ async function readBoundedBody(request: Request, deadlineMs: number): Promise<{ 
  * how an account is connected. An account with no active connection stays 401.
  *
  * The order is fixed. The media type is checked first (415). The body is read within the cap and the deadline (413, 408).
- * The signature, the timestamp and the JSON are checked over those raw bytes (401) before any database access. Only then
+ * The v2 signature over the routing headers and the raw bytes, the timestamp and the JSON are checked (401) before any
+ * database access. Only then
  * is the account resolved. The event and its job are recorded in one transaction: 202 "recorded" for a new event, and 200
  * "already received" for a repeat, whose job is still ensured.
  */
@@ -111,6 +112,8 @@ export async function handleWebhookReceive(request: Request, deps: WebhookReceiv
   const account = request.headers.get("x-meridian-account") ?? "";
   const delivery = verifyDeliverySignature({
     secret: deps.secret,
+    provider,
+    account,
     timestamp,
     signature,
     rawBody: body.text,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
 import {
@@ -7,7 +8,7 @@ import {
   WEBHOOK_BODY_LIMIT_BYTES,
   type WebhookReceiveDeps,
 } from "./receive-handler.ts";
-import { signWebhookBody } from "./verify.ts";
+import { signWebhookDelivery } from "./verify.ts";
 
 const SECRET = "test-webhook-secret";
 const NOW = Date.UTC(2026, 9, 11, 12, 0, 0);
@@ -75,17 +76,39 @@ function fakeWebhookDb(connections: Connection[]) {
   return { sql: sql as unknown as Sql, events, jobs, faults, opens: 0 };
 }
 
+/**
+ * A delivery with the v2 headers. `signedAs` signs for different routing fields than the headers carry, which is how a
+ * test shows that a re-addressed delivery is refused while its signature is kept.
+ */
 function delivery(
-  input: { account?: string; eventId?: string; signedWith?: string; body?: object; rawBody?: string; contentType?: string | null } = {},
+  input: {
+    account?: string;
+    eventId?: string;
+    signedWith?: string;
+    signedAs?: { provider?: string; account?: string; eventId?: string };
+    body?: object;
+    rawBody?: string;
+    contentType?: string | null;
+  } = {},
 ): Request {
   const rawBody = input.rawBody ?? JSON.stringify(input.body ?? { type: "ad.updated" });
   const timestamp = String(NOW);
+  const provider = "meta";
+  const account = input.account ?? "acct-1";
+  const eventId = input.eventId ?? "evt-1";
   const headers: Record<string, string> = {
-    "x-meridian-provider": "meta",
-    "x-meridian-account": input.account ?? "acct-1",
-    "x-meridian-event": input.eventId ?? "evt-1",
+    "x-meridian-provider": provider,
+    "x-meridian-account": account,
+    "x-meridian-event": eventId,
     "x-meridian-timestamp": timestamp,
-    "x-meridian-signature": signWebhookBody(input.signedWith ?? SECRET, timestamp, rawBody),
+    "x-meridian-signature": signWebhookDelivery({
+      secret: input.signedWith ?? SECRET,
+      provider: input.signedAs?.provider ?? provider,
+      account: input.signedAs?.account ?? account,
+      eventId: input.signedAs?.eventId ?? eventId,
+      timestamp,
+      rawBody,
+    }),
   };
   if (input.contentType !== null) headers["content-type"] = input.contentType ?? "application/json";
   // Bytes, not a string: Node would add a text/plain content type to a string body.
@@ -340,7 +363,14 @@ test("a body altered after signing makes zero database calls", async () => {
       "x-meridian-account": "acct-1",
       "x-meridian-event": "evt-1",
       "x-meridian-timestamp": timestamp,
-      "x-meridian-signature": signWebhookBody(SECRET, timestamp, signedBody),
+      "x-meridian-signature": signWebhookDelivery({
+        secret: SECRET,
+        provider: "meta",
+        account: "acct-1",
+        eventId: "evt-1",
+        timestamp,
+        rawBody: signedBody,
+      }),
     },
     body: new TextEncoder().encode(sentBody),
   });
@@ -361,7 +391,14 @@ test("a correctly signed delivery outside the replay window makes zero database 
       "x-meridian-account": "acct-1",
       "x-meridian-event": "evt-1",
       "x-meridian-timestamp": stale,
-      "x-meridian-signature": signWebhookBody(SECRET, stale, rawBody),
+      "x-meridian-signature": signWebhookDelivery({
+        secret: SECRET,
+        provider: "meta",
+        account: "acct-1",
+        eventId: "evt-1",
+        timestamp: stale,
+        rawBody,
+      }),
     },
     body: new TextEncoder().encode(rawBody),
   });
@@ -393,4 +430,42 @@ test("a job insert that fails stores no event, so the provider's retry is record
   assert.equal(await retry.text(), "recorded");
   assert.deepEqual(db.events.map((row) => row.eventId), ["evt-1"]);
   assert.deepEqual(db.jobs.map((job) => job.organizationId), ["org-a"]);
+});
+
+test("a delivery re-addressed to another account, provider or event id keeps its signature and is refused with zero database calls", async () => {
+  const cases: Array<{ name: string; request: Request }> = [
+    { name: "account", request: delivery({ account: "acct-2", signedAs: { account: "acct-1" } }) },
+    { name: "provider", request: delivery({ signedAs: { provider: "google" } }) },
+    { name: "event id", request: delivery({ eventId: "evt-2", signedAs: { eventId: "evt-1" } }) },
+  ];
+  for (const { name, request } of cases) {
+    const { deps, opened } = untouchableDeps();
+    const response = await handleWebhookReceive(request, deps);
+    assert.equal(response.status, 401, `changing the ${name} while keeping the signature`);
+    assert.equal(await response.text(), "The webhook signature does not match.", `changing the ${name}`);
+    assert.equal(opened(), 0, `changing the ${name}: the database was opened`);
+  }
+});
+
+test("a signature in the old form, over the timestamp and body only, is refused with 401 and zero database calls", async () => {
+  const { deps, opened } = untouchableDeps();
+  const rawBody = JSON.stringify({ type: "ad.updated" });
+  const timestamp = String(NOW);
+  const oldForm = createHmac("sha256", SECRET).update(`${timestamp}.${rawBody}`).digest("hex");
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-meridian-provider": "meta",
+      "x-meridian-account": "acct-1",
+      "x-meridian-event": "evt-1",
+      "x-meridian-timestamp": timestamp,
+      "x-meridian-signature": oldForm,
+    },
+    body: new TextEncoder().encode(rawBody),
+  });
+  const response = await handleWebhookReceive(request, deps);
+  assert.equal(response.status, 401);
+  assert.equal(await response.text(), "The webhook signature does not match.");
+  assert.equal(opened(), 0);
 });
