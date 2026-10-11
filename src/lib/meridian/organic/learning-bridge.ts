@@ -28,14 +28,15 @@ export type IngestOrganicInput = {
   format: string;
   proofType?: string;
   visualStyle?: string;
+  /** Unknown metrics are null or omitted. They are stored as unknown, never as zero. */
   metrics: {
-    views: number;
-    threeSecondViews?: number;
-    completionRate?: number; // 0.0 to 1.0
-    shares?: number;
-    likes?: number;
-    comments?: number;
-    saves?: number;
+    views?: number | null;
+    threeSecondViews?: number | null;
+    completionRate?: number | null; // 0.0 to 1.0
+    shares?: number | null;
+    likes?: number | null;
+    comments?: number | null;
+    saves?: number | null;
   };
   commentsList?: Array<{ text: string; author?: string; likes?: number }>;
 };
@@ -188,10 +189,10 @@ export async function ingestOrganicContentForLearning(
       ${views},
       ${threeSecondViews},
       ${completionRate},
-      ${input.metrics.shares ?? 0},
-      ${input.metrics.likes ?? 0},
-      ${input.metrics.comments ?? 0},
-      ${input.metrics.saves ?? 0},
+      ${extracted.shares},
+      ${extracted.likes},
+      ${extracted.comments},
+      ${extracted.saves},
       current_date,
       ${JSON.stringify(rawMetrics)},
       ${now}

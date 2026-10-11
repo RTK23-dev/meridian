@@ -85,7 +85,8 @@ export async function scrapeAndLearnOrganicContent(
   }
   const observedViews = scraped.views;
   const estimatedViews = input.estimatedViews;
-  const views = observedViews ?? estimatedViews ?? 0;
+  // Unknown stays unknown: a missing view count is not a zero, so it is not written as one (AGENTS.md rule 1).
+  const views: number | null = observedViews ?? estimatedViews ?? null;
 
   // 3. Optional creator snapshot recording
   if (scraped.authorHandle) {
@@ -95,12 +96,12 @@ export async function scrapeAndLearnOrganicContent(
         platform: scraped.platform,
         handle: scraped.authorHandle,
         displayName: scraped.authorName,
-        engagementRate: scraped.likes && views > 0 ? scraped.likes / views : undefined,
+        engagementRate: scraped.likes && views !== null && views > 0 ? scraped.likes / views : undefined,
       });
       await recordCreatorSnapshot(sql, {
         creatorId: creator.id,
         organizationId: input.organizationId,
-        viewsMedian: views,
+        viewsMedian: views ?? undefined,
         likesMedian: scraped.likes,
         commentsMedian: scraped.comments,
       });
@@ -124,9 +125,9 @@ export async function scrapeAndLearnOrganicContent(
     visualStyle: input.visualStyle,
     metrics: {
       views,
-      likes: scraped.likes ?? 0,
-      comments: scraped.comments ?? 0,
-      shares: scraped.shares ?? 0,
+      likes: scraped.likes ?? null,
+      comments: scraped.comments ?? null,
+      shares: scraped.shares ?? null,
     },
     commentsList: input.comments,
   });

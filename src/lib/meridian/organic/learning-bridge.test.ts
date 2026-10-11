@@ -176,3 +176,24 @@ test("scrapeAndLearnOrganicContent handles social URL, infers traits, and feeds 
   assert.equal(store.organic_observations.length, 1);
   assert.equal(store.organic_observations[0].views, 15000);
 });
+
+test("an organic metric the platform did not report is stored as unknown, never as zero", async () => {
+  const { sql, store } = createMockSql();
+  await ingestOrganicContentForLearning(sql, {
+    organizationId: "org_test",
+    brandId: "brand_test",
+    platform: "tiktok",
+    sourceUrl: "https://www.tiktok.com/@creator/video/987654321",
+    title: "Unmeasured post",
+    rawText: "A post whose view and like counts were never returned",
+    angle: "pain_point",
+    hookType: "bold_claim",
+    format: "demo",
+    metrics: { views: null, likes: null, shares: null, comments: null },
+  });
+  const [observation] = store.organic_observations;
+  assert.ok(observation, "the observation is written");
+  assert.equal(observation.views, null, "views stays unknown");
+  assert.equal(observation.likes, null, "likes stays unknown");
+  assert.equal(observation.shares, null, "shares stays unknown");
+});

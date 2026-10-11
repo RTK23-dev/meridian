@@ -113,11 +113,7 @@ export class ProductionRouter {
   readonly runtime: "production" | "testing";
 
   constructor(options?: { runtime?: "production" | "testing"; providers?: ProductionProvider[]; imageProviders?: ProductionImageProvider[] }) {
-    this.runtime =
-      options?.runtime ||
-      (process.env.NODE_ENV === "test" || process.env.MERIDIAN_TESTING_RUNTIME === "true"
-        ? "testing"
-        : "production");
+    this.runtime = options?.runtime || (testingRuntimeNow() ? "testing" : "production");
 
     if (options?.providers) {
       for (const p of options.providers) {
