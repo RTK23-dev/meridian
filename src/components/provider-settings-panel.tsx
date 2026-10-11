@@ -78,7 +78,7 @@ function isKeyCategory(category: ProviderCategory): category is KeyCategory {
 }
 
 /** The fields each category's Save checks and sends. A key field belongs to its own category only. */
-const FIELDS_SAVED_BY: Record<ProviderCategory, Array<FieldPath<ProviderFieldsInput>>> = {
+const FIELDS_SAVED_BY: Partial<Record<ProviderCategory, Array<FieldPath<ProviderFieldsInput>>>> = {
   jev: ["jevKey"],
   production: ["productionKey", "costPreference"],
   cyclone: ["gatewayUrl"],
@@ -107,7 +107,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   const providerDirty = providerForm.formState.isDirty;
   const fieldErrors = providerForm.formState.errors;
   // The discard bar looks at the active category's fields only, so another category's unsaved key is not counted here.
-  const activeDirty = FIELDS_SAVED_BY[activeTab].some((name) => Boolean(providerForm.formState.dirtyFields[name]));
+  const activeDirty = (FIELDS_SAVED_BY[activeTab] ?? []).some((name) => Boolean(providerForm.formState.dirtyFields[name]));
   const [discardRequested, setDiscardRequested] = useState(false);
   useEffect(() => {
     const stored = storedFieldsOf(summaries);
@@ -166,7 +166,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   async function handleSave(category: ProviderCategory) {
     setMessage(null);
     // Only the fields this category saves are checked, so a bad draft for another category does not block this save.
-    const valid = await providerForm.trigger(FIELDS_SAVED_BY[category]);
+    const valid = await providerForm.trigger(FIELDS_SAVED_BY[category] ?? []);
     if (!valid) return;
     const values = providerForm.getValues();
     // Only this category's own key field is sent, and only a category that takes a key sends one. A key typed for another
@@ -199,7 +199,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   // Discard clears only the active category's unsaved edits, so it cannot clear another category's draft.
   function discardActiveCategory() {
     const stored = storedFieldsOf(summaries);
-    for (const name of FIELDS_SAVED_BY[activeTab]) providerForm.resetField(name, { defaultValue: stored[name] });
+    for (const name of FIELDS_SAVED_BY[activeTab] ?? []) providerForm.resetField(name, { defaultValue: stored[name] });
     setDiscardRequested(false);
   }
 
