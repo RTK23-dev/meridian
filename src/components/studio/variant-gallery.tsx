@@ -65,7 +65,11 @@ export function VariantGallery({ variants, canEdit, reviewBusyIds, publishBusyId
           </p>
         ) : null}
       </div>
-      {variants.length === 0 ? <p className="text-sm text-fg-muted">No media yet. Generate variants in step 3.</p> : null}
+      {variants.length === 0 ? (
+        <p className="text-sm text-fg-muted">
+          No media is stored yet. Generate variants in step 3. A video appears here only after its engine stores the file: Gemini Omni, Hypit, or a manual cloud file.
+        </p>
+      ) : null}
       <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {variants.map((variant, position) => (
           <VariantCard

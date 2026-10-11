@@ -136,6 +136,54 @@ for (const backend of await openBackends()) {
     const response = await serveFor(sql, ws, assetId, { headers: { range: "bytes=9999-" } });
     assert.equal(response.status, 416);
     assert.equal(response.headers.get("content-range"), `bytes */${MP4.byteLength}`);
+    assert.equal(response.headers.get("content-length"), "0", "a 416 has no body, so its length is zero, not the file size");
+    assert.equal(await response.text(), "");
+  });
+
+  test(`[${name}] answers an open-ended range from the offset to the end of the video`, async () => {
+    const ws = await seedWorkspace(sql);
+    const { assetId } = await addBlobAsset(sql, ws, { mimeType: "video/mp4", bytes: MP4 });
+    const response = await serveFor(sql, ws, assetId, { headers: { range: "bytes=10-" } });
+    assert.equal(response.status, 206);
+    assert.equal(response.headers.get("content-range"), `bytes 10-${MP4.byteLength - 1}/${MP4.byteLength}`);
+    assert.equal(response.headers.get("content-length"), String(MP4.byteLength - 10));
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), MP4.subarray(10));
+  });
+
+  test(`[${name}] answers a suffix range with the last bytes of the video`, async () => {
+    const ws = await seedWorkspace(sql);
+    const { assetId } = await addBlobAsset(sql, ws, { mimeType: "video/mp4", bytes: MP4 });
+    const response = await serveFor(sql, ws, assetId, { headers: { range: "bytes=-6" } });
+    assert.equal(response.status, 206);
+    assert.equal(response.headers.get("content-range"), `bytes ${MP4.byteLength - 6}-${MP4.byteLength - 1}/${MP4.byteLength}`);
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), MP4.subarray(MP4.byteLength - 6));
+  });
+
+  test(`[${name}] sends the whole video when If-Range names a copy the client no longer has`, async () => {
+    const ws = await seedWorkspace(sql);
+    const { assetId } = await addBlobAsset(sql, ws, { mimeType: "video/mp4", bytes: MP4 });
+    const stale = await serveFor(sql, ws, assetId, { headers: { range: "bytes=4-7", "if-range": '"not-the-current-etag"' } });
+    assert.equal(stale.status, 200, "a stale validator ignores the Range header");
+    assert.deepEqual(new Uint8Array(await stale.arrayBuffer()), MP4);
+    const current = await serveFor(sql, ws, assetId, { headers: { range: "bytes=4-7", "if-range": `"${sha256(MP4)}"` } });
+    assert.equal(current.status, 206, "the current validator keeps the range");
+  });
+
+  test(`[${name}] streams a range of a video kept in the artifact store`, async () => {
+    const ws = await seedWorkspace(sql);
+    const assetId = `asset-${randomUUID()}`;
+    const storageKey = `production/${randomUUID()}/clip.mp4`;
+    const providerFileId = `drive-${randomUUID()}`;
+    await sql`insert into assets (id, organization_id, brand_id, storage_key, content_hash, mime_type, source, status)
+      values (${assetId}, ${ws.orgId}, ${ws.brandId}, ${storageKey}, ${sha256(MP4)}, 'video/mp4', 'production', 'stored')`;
+    await sql`insert into storage_objects (id, organization_id, brand_id, provider, provider_file_id, name, mime_type, size_bytes, sha256)
+      values (${`obj-${randomUUID()}`}, ${ws.orgId}, ${ws.brandId}, 'google_drive', ${providerFileId}, ${storageKey}, 'video/mp4', ${MP4.byteLength}, ${sha256(MP4)})`;
+    const drive: ArtifactFileReader = { get: async () => ({ bytes: MP4 }) };
+    const response = await serveFor(sql, ws, assetId, { drive, headers: { range: "bytes=0-7" } });
+    assert.equal(response.status, 206);
+    assert.equal(response.headers.get("content-range"), `bytes 0-7/${MP4.byteLength}`);
+    assert.equal(response.headers.get("content-type"), "video/mp4");
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), MP4.subarray(0, 8));
   });
 
   test(`[${name}] answers a matching If-None-Match with 304 and no body`, async () => {

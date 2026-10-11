@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
-import { Button, Field, Input, Card, SelectInput } from "@/components/ui";
+import { Button, DisabledReason, Field, Input, Card, SelectInput } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import type { StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
@@ -34,6 +34,14 @@ export function GenerateStep({ brief, usage, canEdit, form, testImageAllowed, pr
   const errors = form.formState.errors;
   const dirty = form.formState.isDirty;
   const [discardRequested, setDiscardRequested] = useState(false);
+  // The Generate button is off for a reason the person can read: the brief is not ready, or a chosen engine is not connected.
+  const selectedImage = imageCards.find((card) => card.value === form.watch("imageProvider"));
+  const selectedVideo = videoCards.find((card) => card.value === form.watch("videoProvider"));
+  const blockedReason = !brief ? null
+    : brief.status !== "ready" ? "This brief is not ready for generation. Review it in step 2 first."
+    : selectedImage?.disabled ? `Generation is blocked. ${selectedImage.disabledReason ?? "The chosen image engine is not connected."}`
+    : selectedVideo?.disabled ? `Generation is blocked. ${selectedVideo.disabledReason ?? "The chosen video engine is not connected."}`
+    : null;
 
   return (
     <Card>
@@ -138,9 +146,12 @@ export function GenerateStep({ brief, usage, canEdit, form, testImageAllowed, pr
               onConfirmingChange={setDiscardRequested}
               onDiscard={() => { form.reset(); setDiscardRequested(false); }}
             />
-            <Button type="submit" disabled={pending || form.formState.isSubmitting || brief.status !== "ready"}>
-              {form.formState.isSubmitting ? "Generating…" : "Generate variants"}
-            </Button>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <Button type="submit" disabled={pending || form.formState.isSubmitting || blockedReason !== null} aria-describedby={blockedReason ? "generate-blocked-reason" : undefined}>
+                {form.formState.isSubmitting ? "Generating…" : "Generate variants"}
+              </Button>
+              {blockedReason ? <DisabledReason id="generate-blocked-reason" className="basis-full">{blockedReason}</DisabledReason> : null}
+            </div>
             <p className="text-sm text-fg-muted">Estimated cost appears only when a provider returns one. Daily or concurrency limits can block a run.</p>
           </div>
         </form>

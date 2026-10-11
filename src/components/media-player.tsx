@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { aspectRatio, assetSource, durationLabel, posterSource } from "./media-source.ts";
 
 /**
@@ -30,13 +30,44 @@ type LoadState = "loading" | "ready" | "error";
 const VIDEO_ERROR = "This video could not be played. It may have been removed, you may not have access to this workspace, or your browser may not support the file.";
 const IMAGE_ERROR = "This image could not be loaded. It may have been removed, or you may not have access to this workspace.";
 
+/**
+ * The media element's events are listened to on the element itself, when React mounts it. A prop handler can miss an event
+ * that fired first, and then the box would read "Loading" for a file that plays. So the listeners are attached here, and an
+ * element that has already loaded is read as ready at once.
+ */
 export function MediaPlayer(props: MediaPlayerProps) {
   const src = props.assetId !== undefined ? assetSource(props.assetId) : props.url;
   // The result is tied to the source it was measured for, so a new source starts in the loading state again.
   const [settled, setSettled] = useState<{ src: string; ok: boolean } | null>(null);
   const state: LoadState = settled?.src === src ? (settled.ok ? "ready" : "error") : "loading";
-  const settle = (ok: boolean) => setSettled({ src, ok });
   const className = props.className ?? "";
+
+  const imageRef = useCallback((image: HTMLImageElement | null) => {
+    if (!image) return undefined;
+    const loaded = () => setSettled({ src, ok: true });
+    const failed = () => setSettled({ src, ok: false });
+    image.addEventListener("load", loaded);
+    image.addEventListener("error", failed);
+    if (image.complete) (image.naturalWidth > 0 ? loaded : failed)();
+    return () => {
+      image.removeEventListener("load", loaded);
+      image.removeEventListener("error", failed);
+    };
+  }, [src]);
+
+  const videoRef = useCallback((video: HTMLVideoElement | null) => {
+    if (!video) return undefined;
+    const ready = () => setSettled({ src, ok: true });
+    const failed = () => setSettled({ src, ok: false });
+    video.addEventListener("loadedmetadata", ready);
+    video.addEventListener("error", failed);
+    if (video.readyState >= 1) ready();
+    else if (video.error) failed();
+    return () => {
+      video.removeEventListener("loadedmetadata", ready);
+      video.removeEventListener("error", failed);
+    };
+  }, [src]);
 
   if (props.kind === "image") {
     return (
@@ -46,6 +77,7 @@ export function MediaPlayer(props: MediaPlayerProps) {
             <p role="status" className="absolute inset-0 grid place-items-center rounded-md border border-line p-4 text-center text-sm text-muted">{IMAGE_ERROR}</p>
           ) : (
             <img
+              ref={imageRef}
               className="absolute inset-0 h-full w-full object-contain"
               src={src}
               alt={props.alt}
@@ -53,8 +85,6 @@ export function MediaPlayer(props: MediaPlayerProps) {
               height={props.height}
               loading="lazy"
               decoding="async"
-              onLoad={() => settle(true)}
-              onError={() => settle(false)}
             />
           )}
           {state === "loading" ? (
@@ -75,14 +105,13 @@ export function MediaPlayer(props: MediaPlayerProps) {
           <p role="status" className="absolute inset-0 grid place-items-center rounded-md border border-line p-4 text-center text-sm text-muted">{VIDEO_ERROR}</p>
         ) : (
           <video
+            ref={videoRef}
             className="absolute inset-0 h-full w-full rounded-md bg-black object-contain"
             src={src}
             poster={poster}
             controls
             preload="metadata"
             aria-label="Generated video"
-            onLoadedMetadata={() => settle(true)}
-            onError={() => settle(false)}
           />
         )}
         {state === "loading" ? (

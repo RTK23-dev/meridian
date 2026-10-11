@@ -177,8 +177,12 @@ export async function serveStoredAsset(input: AssetRequest): Promise<Response> {
   // A poster is a single still, so it is always served whole. Only the video itself supports Range requests.
   if (wantsPoster) return new Response(bytes, { status: 200, headers });
   headers.set("Accept-Ranges", "bytes");
-  const range = parseByteRange(request.headers.get("range"), bytes.byteLength);
+  // If-Range names the copy the client already has. When it no longer matches, the whole file is sent, as RFC 9110 asks.
+  const ifRange = request.headers.get("if-range");
+  const range = !ifRange || ifRange.trim() === etag ? parseByteRange(request.headers.get("range"), bytes.byteLength) : null;
   if (range === "invalid") {
+    // A 416 has no body, so its Content-Length is zero. The full size is given only in Content-Range.
+    headers.set("Content-Length", "0");
     headers.set("Content-Range", `bytes */${bytes.byteLength}`);
     return new Response(null, { status: 416, headers });
   }
