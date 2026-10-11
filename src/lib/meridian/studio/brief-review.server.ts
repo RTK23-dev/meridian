@@ -146,8 +146,9 @@ export type ReviewBriefInput = {
 };
 
 /**
- * Records one explicit review. The claim, the brief move, the append-only review and the audit record are one transaction,
- * so a failure at any step leaves the brief waiting and the decision unreviewed. A brief with no engine record is refused.
+ * Records one explicit review. The disclosure read, the claim, the brief move, the reopen of a rejected brief's direction, the
+ * append-only review and the audit record are one transaction, so a failure at any step leaves the brief waiting and the
+ * decision unreviewed. A brief with no engine record is refused.
  */
 export async function reviewBrief(sql: Sql, input: ReviewBriefInput): Promise<{ briefStatus: BriefStatus; reviewId: string }> {
   if (!isRole(input.reviewerRole) || !hasRole(input.reviewerRole, BRIEF_REVIEW_MINIMUM_ROLE)) {
