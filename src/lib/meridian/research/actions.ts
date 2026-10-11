@@ -4,9 +4,10 @@ import { sourceRegistry } from "../sources/registry.ts";
 import { discoveryService } from "../discovery/service.ts";
 import { discoverySourceStatuses } from "../discovery/planner.ts";
 import { listDiscoveryRuns } from "../discovery/run-listing.ts";
+import { acceptBrainSuggestion } from "./suggestion-accept.ts";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { BRAIN_FIELDS, type BrainKey, type ProvenanceMap } from "@/lib/meridian/brain";
+import { BRAIN_FIELDS } from "@/lib/meridian/brain";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { promptById } from "@/lib/meridian/prompts/registry";
 import { contentHash } from "@/lib/meridian/assets/lifecycle";
@@ -23,7 +24,6 @@ import {
   id,
   asText,
   asNumber,
-  asJson,
   clip,
   objectInput,
   fingerprint,
@@ -585,37 +585,24 @@ export const resolveSuggestion = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    const rows = await sql<{ field_key: string; proposed_value: string }>`
-      select field_key, proposed_value from brain_suggestions
-      where id = ${data.suggestionId} and brand_id = ${data.brandId}
-        and organization_id = ${access.organizationId} and status = 'pending'
-      limit 1
-    `;
-    const suggestion = rows[0];
-    if (!suggestion) throw new Error("That suggestion is not pending.");
     if (data.action === "dismiss") {
+      const pending = await sql<{ id: string }>`
+        select id from brain_suggestions
+        where id = ${data.suggestionId} and brand_id = ${data.brandId}
+          and organization_id = ${access.organizationId} and status = 'pending'
+        limit 1
+      `;
+      if (!pending[0]) throw new Error("That suggestion is not pending.");
       await sql`update brain_suggestions set status = 'dismissed' where id = ${data.suggestionId}`;
       return { ok: true };
     }
-    const field = BRAIN_FIELDS.find((entry) => entry.key === suggestion.field_key);
-    if (!field) throw new Error("Unknown brain field.");
-    const currentRows = await sql.query<Record<string, unknown>>(
-      `select ${BRAIN_FIELDS.map((entry) => entry.column).join(", ")}, provenance, version from brand_brains where brand_id = $1 limit 1`,
-      [data.brandId],
-    );
-    const current = currentRows[0];
-    const provenance = asJson<ProvenanceMap>(current?.provenance, {});
-    provenance[field.key as BrainKey] = "user_defined";
-    const nextVersion = asNumber(current?.version) + 1;
-    await sql.query(
-      `update brand_brains set ${field.column} = $1, provenance = $2, version = $3, updated_by = $4, updated_at = now() where brand_id = $5`,
-      [suggestion.proposed_value, JSON.stringify(provenance), nextVersion, context.userId, data.brandId],
-    );
-    await sql`
-      insert into brand_brain_versions (id, brand_id, version, snapshot, note, created_by)
-      values (${id()}, ${data.brandId}, ${nextVersion}, ${JSON.stringify({ field: field.key, value: suggestion.proposed_value, provenance: "user_defined" })}, ${"Accepted a suggestion"}, ${context.userId})
-    `;
-    await sql`update brain_suggestions set status = 'accepted' where id = ${data.suggestionId}`;
+    // The brain changes through the brand brain save path, so an accepted suggestion is a change-only save with a version row.
+    const accepted = await acceptBrainSuggestion(sql, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      suggestionId: data.suggestionId,
+      actorId: context.userId,
+    });
     await audit(sql, {
       organizationId: access.organizationId,
       brandId: data.brandId,
@@ -623,7 +610,7 @@ export const resolveSuggestion = createServerFn({ method: "POST" })
       action: "brand_brain.suggestion_accepted",
       objectType: "brand_brain",
       objectId: data.brandId,
-      metadata: { field: field.key },
+      metadata: { field: accepted.field, changed: String(accepted.changed) },
     });
     return { ok: true };
   });
