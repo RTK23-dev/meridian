@@ -3,10 +3,57 @@ import { activeWebhookOrganizations, findStoredWebhookEventIds, storeWebhookEven
 import { verifyWebhook } from "./verify.ts";
 
 export interface WebhookReceiveDeps {
-  /** Opens the database. Called after the request is accepted for routing, so a refused request does not reach it. */
+  /** Opens the database. Called only after the body is read and within the cap, so a refused request does not reach it. */
   sql: () => Promise<Sql>;
   secret: string;
   nowMs: number;
+}
+
+/**
+ * The largest webhook body the receiver reads: 256 KB. Provider events are small JSON objects, so the cap is generous.
+ * It is enforced before buffering. A declared Content-Length above it is refused without reading the body, and a body
+ * that grows past it while streaming is cut off, so memory stays bounded even without a Content-Length. The edge rate
+ * limit in front of this route is separate and is not implemented here.
+ */
+export const WEBHOOK_BODY_LIMIT_BYTES = 256 * 1024;
+
+/** Providers send JSON; a charset parameter is accepted. Any other media type is refused with 415. */
+function isJsonContentType(value: string | null): boolean {
+  return (value ?? "").split(";")[0]?.trim().toLowerCase() === "application/json";
+}
+
+function refusal(message: string, status: number): Response {
+  return new Response(message, { status });
+}
+
+/** Reads the body up to the cap. The result is the text, or the refusal to return instead. */
+async function readBoundedBody(request: Request): Promise<{ text: string } | { refusal: Response }> {
+  const declared = request.headers.get("content-length");
+  if (declared !== null) {
+    if (!/^\d+$/.test(declared)) return { refusal: refusal("Content-Length must be a number.", 400) };
+    if (Number(declared) > WEBHOOK_BODY_LIMIT_BYTES) return { refusal: refusal("The webhook payload is too large.", 413) };
+  }
+  if (!request.body) return { text: "" };
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > WEBHOOK_BODY_LIMIT_BYTES) {
+      await reader.cancel();
+      return { refusal: refusal("The webhook payload is too large.", 413) };
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(bytes) };
 }
 
 /**
@@ -16,9 +63,17 @@ export interface WebhookReceiveDeps {
  * connected in several organizations is refused with 409 and nothing is stored, because the delivery cannot say which
  * workspace it belongs to. The 409 is returned only after the signature checks pass, so an unsigned caller cannot tell
  * how an account is connected. An account with no active connection stays 401.
+ *
+ * The media type is checked first (415), then the body is read within the cap (413), then the signature is checked over
+ * those raw bytes before the JSON is parsed.
  */
 export async function handleWebhookReceive(request: Request, deps: WebhookReceiveDeps): Promise<Response> {
-  const rawBody = await request.text();
+  if (!isJsonContentType(request.headers.get("content-type"))) {
+    return refusal("Webhook payloads must be application/json.", 415);
+  }
+  const body = await readBoundedBody(request);
+  if ("refusal" in body) return body.refusal;
+  const rawBody = body.text;
   const provider = request.headers.get("x-meridian-provider") ?? "";
   const signature = request.headers.get("x-meridian-signature") ?? "";
   const timestamp = request.headers.get("x-meridian-timestamp") ?? "";

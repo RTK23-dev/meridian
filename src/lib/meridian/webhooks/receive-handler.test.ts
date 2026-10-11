@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
-import { handleWebhookReceive, type WebhookReceiveDeps } from "./receive-handler.ts";
+import { handleWebhookReceive, WEBHOOK_BODY_LIMIT_BYTES, type WebhookReceiveDeps } from "./receive-handler.ts";
 import { signWebhookBody } from "./verify.ts";
 
 const SECRET = "test-webhook-secret";
@@ -47,28 +47,36 @@ function fakeWebhookDb(connections: Connection[]) {
     }
     throw new Error(`The fake database does not answer this statement: ${text}`);
   }) as unknown as Sql;
-  return { sql, events, jobs };
+  return { sql, events, jobs, opens: 0 };
 }
 
-function delivery(input: { account?: string; eventId?: string; signedWith?: string; body?: object } = {}): Request {
-  const rawBody = JSON.stringify(input.body ?? { type: "ad.updated" });
+function delivery(
+  input: { account?: string; eventId?: string; signedWith?: string; body?: object; rawBody?: string; contentType?: string | null } = {},
+): Request {
+  const rawBody = input.rawBody ?? JSON.stringify(input.body ?? { type: "ad.updated" });
   const timestamp = String(NOW);
-  return new Request(URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-meridian-provider": "meta",
-      "x-meridian-account": input.account ?? "acct-1",
-      "x-meridian-event": input.eventId ?? "evt-1",
-      "x-meridian-timestamp": timestamp,
-      "x-meridian-signature": signWebhookBody(input.signedWith ?? SECRET, timestamp, rawBody),
-    },
-    body: rawBody,
-  });
+  const headers: Record<string, string> = {
+    "x-meridian-provider": "meta",
+    "x-meridian-account": input.account ?? "acct-1",
+    "x-meridian-event": input.eventId ?? "evt-1",
+    "x-meridian-timestamp": timestamp,
+    "x-meridian-signature": signWebhookBody(input.signedWith ?? SECRET, timestamp, rawBody),
+  };
+  if (input.contentType !== null) headers["content-type"] = input.contentType ?? "application/json";
+  // Bytes, not a string: Node would add a text/plain content type to a string body.
+  return new Request(URL, { method: "POST", headers, body: new TextEncoder().encode(rawBody) });
 }
 
-function depsFor(db: { sql: Sql }): WebhookReceiveDeps {
-  return { sql: async () => db.sql, secret: SECRET, nowMs: NOW };
+/** Counts how often the handler opens the database, so a refused request can be shown not to have reached it. */
+function depsFor(db: { sql: Sql; opens: number }): WebhookReceiveDeps {
+  return {
+    sql: async () => {
+      db.opens += 1;
+      return db.sql;
+    },
+    secret: SECRET,
+    nowMs: NOW,
+  };
 }
 
 test("an account connected to two organizations is refused with 409, nothing is stored, and the log says why", async (t) => {
@@ -138,4 +146,90 @@ test("an account with no active connection is still 401 and stores nothing", asy
   assert.equal(await response.text(), "The account on the webhook is not connected to a workspace.");
   assert.deepEqual(db.events, []);
   assert.deepEqual(db.jobs, []);
+});
+
+const ONE_ORG = [{ provider: "meta", accountId: "acct-1", organizationId: "org-a" }];
+
+test("a declared body over 256 KB is refused with 413 before the body is read or the database is opened", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  const request = new Request(URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", "content-length": String(WEBHOOK_BODY_LIMIT_BYTES + 1) },
+    body: "{}",
+  });
+  const response = await handleWebhookReceive(request, depsFor(db));
+  assert.equal(response.status, 413);
+  assert.equal(request.bodyUsed, false, "the body was never read");
+  assert.equal(db.opens, 0);
+  assert.deepEqual(db.events, []);
+});
+
+test("a body with no Content-Length is cut off at 256 KB while it streams, and refused with 413", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  let pulls = 0;
+  let cancelled = false;
+  // A body of up to 1,000 chunks of 64 KB each: the 256 KB cap is passed on the fifth chunk.
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1;
+      if (pulls > 1000) controller.close();
+      else controller.enqueue(new Uint8Array(64 * 1024));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const request = new Request(URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: stream,
+    duplex: "half",
+  } as RequestInit);
+  const response = await handleWebhookReceive(request, depsFor(db));
+  assert.equal(response.status, 413);
+  assert.equal(cancelled, true, "the rest of the body was not read");
+  assert.ok(pulls < 10, `read ${pulls} of 1000 chunks before refusing`);
+  assert.equal(db.opens, 0);
+});
+
+test("a body of exactly 256 KB with a valid signature is accepted and stored", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  const prefix = '{"pad":"';
+  const suffix = '"}';
+  const rawBody = prefix + "x".repeat(WEBHOOK_BODY_LIMIT_BYTES - prefix.length - suffix.length) + suffix;
+  assert.equal(new TextEncoder().encode(rawBody).byteLength, WEBHOOK_BODY_LIMIT_BYTES);
+  const response = await handleWebhookReceive(delivery({ rawBody }), depsFor(db));
+  assert.equal(response.status, 202);
+  assert.deepEqual(db.events.map((row) => row.organizationId), ["org-a"]);
+});
+
+test("a Content-Length that is not a number is refused with 400 before the body is read", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  const request = new Request(URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", "content-length": "12abc" },
+    body: "{}",
+  });
+  const response = await handleWebhookReceive(request, depsFor(db));
+  assert.equal(response.status, 400);
+  assert.equal(request.bodyUsed, false);
+  assert.equal(db.opens, 0);
+});
+
+test("a body that is not application/json is refused with 415 before anything is read", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  for (const contentType of ["text/plain;charset=UTF-8", "application/x-www-form-urlencoded", null]) {
+    const request = delivery({ contentType });
+    const response = await handleWebhookReceive(request, depsFor(db));
+    assert.equal(response.status, 415, `content-type ${contentType ?? "(missing)"}`);
+    assert.equal(request.bodyUsed, false, `content-type ${contentType ?? "(missing)"}: the body was never read`);
+  }
+  assert.equal(db.opens, 0);
+  assert.deepEqual(db.events, []);
+});
+
+test("application/json with a charset parameter is accepted", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  const response = await handleWebhookReceive(delivery({ contentType: "application/json; charset=utf-8" }), depsFor(db));
+  assert.equal(response.status, 202);
 });
