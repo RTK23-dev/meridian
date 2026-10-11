@@ -82,9 +82,6 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
     if (raw.videoProvider === "omni") {
       raw.videoProvider = "google_omni";
     }
-    if (raw.videoProvider === "veo") {
-      throw new Error("Google Veo 3.1 (Preview) is deprecated and shut down. Please select Google Gemini Omni (google_omni).");
-    }
     if (!raw.imageProvider) raw.imageProvider = "none";
     if (!raw.videoProvider) raw.videoProvider = "none";
 

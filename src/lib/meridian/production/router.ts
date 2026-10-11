@@ -12,7 +12,6 @@ import type {
 } from "./types.ts";
 import { ManualCloudProvider } from "./providers/manual-cloud.ts";
 import { HypitProvider } from "./providers/hypit.ts";
-import { VeoProvider } from "./providers/veo.ts";
 import { GeminiOmniVideoProvider } from "./providers/omni.ts";
 import { HiggsfieldProvider } from "./providers/higgsfield.ts";
 import { modelCapabilityRegistry } from "./registry.ts";
@@ -36,8 +35,8 @@ async function healthOf(
 
 /** Automatic preference order by cost mode. The matrix decides eligibility first; this only orders eligible providers. */
 const PREFERENCE_BY_MODE: Record<"BALANCED" | "QUALITY_FIRST", string[]> = {
-  BALANCED: ["google_omni", "hypit", "higgsfield", "manual_cloud", "veo"],
-  QUALITY_FIRST: ["google_omni", "higgsfield", "hypit", "manual_cloud", "veo"],
+  BALANCED: ["google_omni", "hypit", "higgsfield", "manual_cloud"],
+  QUALITY_FIRST: ["google_omni", "higgsfield", "hypit", "manual_cloud"],
 };
 
 export interface ProviderSelection {
@@ -128,7 +127,6 @@ export class ProductionRouter {
       this.register(new ManualCloudProvider());
       this.register(new HypitProvider());
       this.register(new GeminiOmniVideoProvider());
-      this.register(new VeoProvider());
       this.register(new HiggsfieldProvider());
     }
 
@@ -195,14 +193,14 @@ export class ProductionRouter {
       });
     }
     if (mode === "QUALITY_FIRST") {
-      // Veo preview is excluded from automatic priority; Omni is primary Google video
-      const preferred = ["google_omni", "higgsfield", "hypit", "manual_cloud", "veo"];
+      // Omni is the primary Google video engine.
+      const preferred = ["google_omni", "higgsfield", "hypit", "manual_cloud"];
       return [...available].sort(
         (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
       );
     }
     // BALANCED
-    const preferred = ["google_omni", "hypit", "higgsfield", "manual_cloud", "veo"];
+    const preferred = ["google_omni", "hypit", "higgsfield", "manual_cloud"];
     return [...available].sort(
       (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
     );

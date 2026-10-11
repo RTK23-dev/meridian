@@ -98,23 +98,23 @@ test("evaluateProductionPostflight rejects empty byte artifacts", () => {
   assert.equal(postflight.decision, "REJECT_DEFECTIVE");
 });
 
-test("VeoProvider returns NOT_CONFIGURED and no job id without API key", async () => {
+test("GeminiOmniVideoProvider returns NOT_CONFIGURED and no job id without API key", async () => {
   const originalKey = process.env.GEMINI_API_KEY;
   const originalGoogleKey = process.env.GOOGLE_API_KEY;
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_API_KEY;
 
   try {
-    const { VeoProvider } = await import("./providers/veo.ts");
-    const provider = new VeoProvider();
+    const { GeminiOmniVideoProvider } = await import("./providers/omni.ts");
+    const provider = new GeminiOmniVideoProvider();
     const health = await provider.health();
     assert.equal(health.state, "NOT_CONFIGURED");
 
     const job = await provider.submitJob({
-      id: "spec-veo",
+      id: "spec-omni",
       organizationId: "org-1",
       brandId: "brand-1",
-      title: "Veo Test",
+      title: "Omni Test",
       modality: "video", format: "ai_video",
       aspectRatio: "9:16",
       durationTargetSeconds: 5,

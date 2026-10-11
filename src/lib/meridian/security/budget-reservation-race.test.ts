@@ -13,7 +13,7 @@ test("Budget Reservation Concurrency: race condition prevention under parallel r
 
   // Reservations tied to a plan require that plan to exist for this tenant (fail closed).
   for (let i = 0; i < 5; i += 1) {
-    await sql`insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd, decision_id) values (${`plan-race-${i}`}, ${orgId}, ${brandId}, '1', 'executing', 'video_only', 'semi_automatic', 'conversion', '{}'::jsonb, 0, null, 'jev-test-decision') on conflict do nothing`;
+    await sql`insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd, decision_id) values (${`plan-race-${orgId}-${i}`}, ${orgId}, ${brandId}, '1', 'executing', 'video_only', 'semi_automatic', 'conversion', '{}'::jsonb, 0, null, 'jev-test-decision') on conflict do nothing`;
   }
 
   // 1. Initialize account with exact $10.00 cap
@@ -29,7 +29,7 @@ test("Budget Reservation Concurrency: race condition prevention under parallel r
       organizationId: orgId,
       brandId,
       amountMicros: reserveAmount,
-      creativePlanId: `plan-race-${i}`,
+      creativePlanId: `plan-race-${orgId}-${i}`,
     })
   );
 

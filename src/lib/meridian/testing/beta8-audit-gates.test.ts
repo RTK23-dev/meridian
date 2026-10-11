@@ -193,7 +193,7 @@ test("Gate 5: Format Selection Enforces Exact Job Types (P0.5)", () => {
   assert.equal(resPlan.productionPlan.length, 0);
 });
 
-test("Gate 6: Model Capability Registry & Veo Deprecation / Auto Fallback Removal (P1.6)", () => {
+test("Gate 6: Model Capability Registry & Gemini Omni as the Google video engine (P1.6)", () => {
   // Image models registered
   const nano = modelCapabilityRegistry.getModel("gemini-nano-banana-2.1");
   assert.ok(nano);
@@ -203,20 +203,15 @@ test("Gate 6: Model Capability Registry & Veo Deprecation / Auto Fallback Remova
   assert.ok(flashLite);
   assert.equal(flashLite.availability_state, "ACTIVE");
 
-  // Veo 3.1 preview deprecated
-  const veo = modelCapabilityRegistry.checkModelLifecycle(
-    "veo-3.1-generate-preview",
-    new Date("2026-10-09T00:00:00Z")
-  );
-  assert.equal(veo.state, "DEPRECATED");
-  assert.equal(veo.replacement, "gemini-omni-1.1-flash");
-
-  // Router excludes Veo from automatic priority order
+  // Veo is not registered, and the router has no Veo provider
+  assert.equal(modelCapabilityRegistry.getModel("veo-3.1-generate-preview"), undefined);
   const router = new ProductionRouter({ runtime: "production" });
+  assert.equal(router.get("veo"), undefined);
+
+  // Gemini Omni leads the automatic ranking
   const ranked = router.rankProviders({} as any, "QUALITY_FIRST");
-  const omniIdx = ranked.findIndex((p) => p.id === "google_omni");
-  const veoIdx = ranked.findIndex((p) => p.id === "veo");
-  assert.ok(omniIdx < veoIdx, "Omni must precede Veo in automatic ranking");
+  assert.equal(ranked.some((p) => p.id === "veo"), false);
+  assert.equal(ranked[0]?.id, "google_omni", "Omni is the primary Google video engine");
 });
 
 test("Gate 7: Multi-Source Discovery with Cyclone Optional (P1.3, P1.4)", async () => {

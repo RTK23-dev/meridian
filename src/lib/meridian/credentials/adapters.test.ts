@@ -5,7 +5,6 @@ import { JevRouter, OpenRouterJevProvider, TypeSafeDirectJevProvider } from "../
 import { OpenRouterJevClient } from "../jev/client.ts";
 import type { JevDecisionRequest } from "../jev/types.ts";
 import { GeminiOmniVideoProvider } from "../production/providers/omni.ts";
-import { VeoProvider } from "../production/providers/veo.ts";
 import { GoogleNanoBananaImageProvider } from "../production/image-providers.ts";
 import { ProductionRouter } from "../production/router.ts";
 import { JevDecisionEngine } from "../decisions/jev-engine.ts";
@@ -40,7 +39,6 @@ function recorder(respond: () => Response) {
 
 const jevResponse = () => new Response(JSON.stringify({ model: "typesafe/jev-1.13", answers: {} }), { status: 200 });
 const omniResponse = () => new Response(JSON.stringify({ interaction_id: "interactions/acceptance-1", status: "in_progress", steps: [] }), { status: 200 });
-const veoResponse = () => new Response(JSON.stringify({ name: "operations/acceptance-1", done: false }), { status: 200 });
 const imageRefused = () => new Response("refused", { status: 403 });
 
 function jevRequest(organizationId: string): JevDecisionRequest {
@@ -218,29 +216,6 @@ for (const { name, sql } of backends) {
       assert.equal((await provider.health()).state, "NOT_CONFIGURED");
       assert.equal((await provider.healthFor(a.organizationId)).state, "CONFIGURED");
       assert.equal((await provider.healthFor(b.organizationId)).state, "NOT_CONFIGURED");
-    });
-  });
-
-  test(`[${name}] Veo: reads its key through the resolver, and refuses without a workspace key`, async () => {
-    const a = await studioTenant(sql, "veo-a");
-    const b = await studioTenant(sql, "veo-b");
-    await storeVaultCredential(sql, a.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: "veo-workspace-key-1111" });
-
-    await withEnv({ GEMINI_API_KEY: "veo-env-key-must-not-be-used" }, async () => {
-      const rec = recorder(veoResponse);
-      const provider = new VeoProvider({ sql, fetchImpl: rec.fetchImpl });
-
-      const submitted = await provider.submitJob(specFor(a));
-      assert.equal(submitted.status, "RUNNING");
-      assert.equal(rec.requests[0].get("x-goog-api-key"), "veo-workspace-key-1111", "the workspace key, not the environment key");
-
-      const refused = await provider.submitJob(specFor(b));
-      assert.equal(refused.status, "NOT_CONFIGURED");
-      assert.equal(rec.calls(), 1, "workspace B sends no request");
-
-      await assert.rejects(provider.checkJobStatus("operations/acceptance-1"), /Cannot check Veo job status/, "a poll with no owning workspace is refused");
-      assert.equal(rec.calls(), 1);
-      assert.equal((await provider.health()).state, "NOT_CONFIGURED");
     });
   });
 

@@ -12,7 +12,8 @@ test("Budget Failure Release: failed production jobs release reserved funds comp
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Release Brand', 'user') on conflict do nothing`;
 
   // Reservations tied to a plan require that plan to exist for this tenant (fail closed).
-  for (const planId of ["plan-fail-1", "plan-retry-1"]) {
+  // The plan ids carry the run's organization, so a re-run on the same database never reuses another tenant's row.
+  for (const planId of [`plan-fail-${orgId}`, `plan-retry-${orgId}`]) {
     await sql`insert into creative_plans (id, organization_id, brand_id, version, status, scope, autonomy, objective, plan_payload, budget_reserved_usd, spend_cap_usd, decision_id) values (${planId}, ${orgId}, ${brandId}, '1', 'executing', 'video_only', 'semi_automatic', 'conversion', '{}'::jsonb, 0, null, 'jev-test-decision') on conflict do nothing`;
   }
 
@@ -24,7 +25,7 @@ test("Budget Failure Release: failed production jobs release reserved funds comp
     organizationId: orgId,
     brandId,
     amountMicros: toMicros(5.0),
-    creativePlanId: "plan-fail-1",
+    creativePlanId: `plan-fail-${orgId}`,
   });
   assert.equal(reservation.status, "RESERVED");
 
@@ -48,7 +49,7 @@ test("Budget Failure Release: failed production jobs release reserved funds comp
     organizationId: orgId,
     brandId,
     amountMicros: toMicros(10.0),
-    creativePlanId: "plan-retry-1",
+    creativePlanId: `plan-retry-${orgId}`,
   });
   assert.equal(fullReservation.status, "RESERVED");
   assert.equal(fullReservation.amountMicros, 10_000_000n);

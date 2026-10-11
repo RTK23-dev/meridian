@@ -385,7 +385,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               </Field>
 
               <div className="sm:col-span-2">
-                <Field label="Gemini production API key (Omni video, Veo, image)" error={fieldErrors.productionKey?.message}>
+                <Field label="Gemini production API key (Omni video, image)" error={fieldErrors.productionKey?.message}>
                   <Input
                     type="password"
                     placeholder="Enter a Gemini API key to save or replace it..."

@@ -335,24 +335,9 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
   assert.equal(creative!.status, "in_review");
 });
 
-test("ModelCapabilityRegistry tracks Veo 3.1 deprecation and Veo 2.0 shutdown", () => {
-  // Veo 3.1 preview deprecation
-  const checkVeo31 = modelCapabilityRegistry.checkModelLifecycle(
-    "veo-3.1-generate-preview",
-    new Date("2026-10-09T00:00:00Z")
-  );
-  assert.equal(checkVeo31.state, "DEPRECATED");
-  assert.equal(checkVeo31.usable, true);
-  assert.ok(checkVeo31.warning?.includes("2026-10-22"));
-  assert.equal(checkVeo31.replacement, "gemini-omni-1.1-flash");
-
-  // Veo 2.0 GA is shut down as of 2026-06-30
-  const checkVeo20 = modelCapabilityRegistry.checkModelLifecycle(
-    "veo-2.0-generate-001",
-    new Date("2026-10-09T00:00:00Z")
-  );
-  assert.equal(checkVeo20.state, "SHUTDOWN");
-  assert.equal(checkVeo20.usable, false);
+test("ModelCapabilityRegistry does not list Veo: Gemini Omni is the only Google video model", () => {
+  assert.equal(modelCapabilityRegistry.getModel("veo-3.1-generate-preview"), undefined);
+  assert.equal(modelCapabilityRegistry.getModel("veo-2.0-generate-001"), undefined);
 
   // Active Omni model
   const checkOmni = modelCapabilityRegistry.checkModelLifecycle("gemini-omni-1.1-flash");

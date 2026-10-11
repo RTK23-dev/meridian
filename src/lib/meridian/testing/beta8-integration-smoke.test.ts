@@ -6,7 +6,7 @@
  * - P0-B: Canonical google_omni provider ID resolution.
  * - P0-C: Fail-closed artifact finalizer (no fake 0-byte completed assets).
  * - P0-D: Autonomy mode approval gates & spend-cap budget enforcement.
- * - P0-E: Omni 3-10s duration limits & Veo deprecation lifecycle exclusion.
+ * - P0-E: Omni 3-10s duration limits; Veo is not a registered model.
  * - P1-A: Durable discovery run and item persistence across restart.
  * - P1-D: Google Interactions API contract fixtures.
  */
@@ -205,7 +205,7 @@ test("Smoke 5: Autonomy Mode Gates Generation and Enforces Spend Cap (P0-D)", ()
   assert.ok(overCapPlan.approvalRequirements.some((r) => r.level === "spend_threshold" && r.status === "pending"));
 });
 
-test("Smoke 6: Gemini Omni 3-10s Duration Bounds & Veo Lifecycle Exclusion (P0-E)", () => {
+test("Smoke 6: Gemini Omni 3-10s Duration Bounds & Veo Is Not Registered (P0-E)", () => {
   // Valid duration 5s
   const valid = buildOmniTextToVideoPayload({
     model: "gemini-omni-1.1-flash",
@@ -220,9 +220,8 @@ test("Smoke 6: Gemini Omni 3-10s Duration Bounds & Veo Lifecycle Exclusion (P0-E
     /Gemini Omni supports video durations between 3 and 10 seconds/
   );
 
-  // Veo preview is DEPRECATED in registry and excluded from active generation choices
-  const veoRecord = modelCapabilityRegistry.getModel("veo-3.1-generate-preview");
-  assert.equal(veoRecord?.availability_state, "DEPRECATED");
+  // Veo is not in the registry, so no generation choice can select it
+  assert.equal(modelCapabilityRegistry.getModel("veo-3.1-generate-preview"), undefined);
 });
 
 test("Smoke 7: Google Interactions API Fixture Parsing (P1-D)", () => {

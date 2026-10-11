@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const studioGenerationSchema = z.object({
   imageProvider: z.enum(["none", "test:image", "google:nano-banana"]),
-  videoProvider: z.enum(["hypit", "none", "auto", "manual_cloud", "veo", "higgsfield", "omni", "google_omni", "test:video"]),
+  videoProvider: z.enum(["hypit", "none", "auto", "manual_cloud", "higgsfield", "omni", "google_omni", "test:video"]),
   creationScope: z.enum(["auto_choose", "image_only", "video_only", "carousel_only", "mixed_campaign", "research_only"]).optional(),
   autonomy: z.enum(["manual", "semi_automatic", "fully_automatic"]).optional(),
   maxSpendUsd: z.number().finite().nonnegative().max(1000).optional(),

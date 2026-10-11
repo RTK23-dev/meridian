@@ -12,11 +12,10 @@ const costs: Record<string, ProviderCost> = {
   google_omni: perSecond("google_omni", 0.15),
   hypit: perSecond("hypit", 0.05),
   higgsfield: perSecond("higgsfield", 0.15),
-  veo: perSecond("veo", 0.2),
   manual_cloud: perSecond("manual_cloud", 0, true),
 };
 
-const PREFERENCE = ["google_omni", "hypit", "higgsfield", "manual_cloud", "veo"];
+const PREFERENCE = ["google_omni", "hypit", "higgsfield", "manual_cloud"];
 
 function candidates(modelIds: string[]) {
   return modelIds.map((modelId) => {
@@ -26,7 +25,10 @@ function candidates(modelIds: string[]) {
   });
 }
 
-const ALL = ["gemini-omni-1.1-flash", "higgsfield-video-v1", "hypit-hyperframes", "veo-3.1-generate-preview", "manual-cloud"];
+const ALL = ["gemini-omni-1.1-flash", "higgsfield-video-v1", "hypit-hyperframes", "manual-cloud"];
+
+// A deprecated preview model, registered only for this file, so the lifecycle rejection stays covered.
+const DEPRECATED_FIXTURE = "fixture-deprecated-video";
 
 function requirement(overrides: Partial<SelectionRequirement> = {}): SelectionRequirement {
   const durationSeconds = overrides.durationSeconds ?? 8;
@@ -66,9 +68,30 @@ test("a zero-spend manual workflow is never selected for automatic generation, e
 });
 
 test("a deprecated model is rejected with its lifecycle state", () => {
-  const choice = selectOffer({ candidates: candidates(ALL), requirement: requirement(), registry: modelCapabilityRegistry, mode: "PREFERENCE", preference: PREFERENCE });
-  const veo = choice.rejected.find((item) => item.modelId === "veo-3.1-generate-preview");
-  assert.ok(veo?.reasons.some((reason) => reason.includes("DEPRECATED")), veo?.reasons.join("; "));
+  modelCapabilityRegistry.register({
+    model_id: DEPRECATED_FIXTURE,
+    provider_id: "higgsfield",
+    api_family: "interactions",
+    release_channel: "preview",
+    supported_modalities: ["text"],
+    supported_tasks: ["text-to-video"],
+    durations: [5, 8],
+    aspect_ratios: ["9:16", "16:9"],
+    resolutions: ["720p"],
+    input_reference_types: [],
+    native_audio: false,
+    editing_support: false,
+    region_constraints: ["global"],
+    pricing_basis: "per_job",
+    availability_state: "DEPRECATED",
+    announced_shutdown_at: "2026-10-22T00:00:00Z",
+    replacement_model_id: "gemini-omni-1.1-flash",
+    last_verified_at: "2026-10-09",
+    source_url: "https://example.test/deprecations",
+  });
+  const choice = selectOffer({ candidates: candidates([...ALL, DEPRECATED_FIXTURE]), requirement: requirement(), registry: modelCapabilityRegistry, mode: "PREFERENCE", preference: PREFERENCE });
+  const fixture = choice.rejected.find((item) => item.modelId === DEPRECATED_FIXTURE);
+  assert.ok(fixture?.reasons.some((reason) => reason.includes("DEPRECATED")), fixture?.reasons.join("; "));
 });
 
 test("when nothing satisfies the requirement, nothing is chosen and every rejection is recorded: no guessing", () => {

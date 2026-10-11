@@ -4,7 +4,7 @@ import { OpenRouterJevClient, computeJevInputHash } from "../jev/client.ts";
 import { recordTelemetry } from "../learning/telemetry-engine.ts";
 import { upsertModelParameter } from "../learning/parameters.ts";
 import { extractOrganicMetrics } from "../organic/learning-bridge.ts";
-import { VeoProvider } from "../production/providers/veo.ts";
+import { GeminiOmniVideoProvider } from "../production/providers/omni.ts";
 import { HiggsfieldProvider } from "../production/providers/higgsfield.ts";
 import { accountProviderState } from "../providers/boundaries.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
@@ -288,15 +288,15 @@ test("10. Regression: unconfigured providers never invent job IDs", async () => 
   delete process.env.GOOGLE_API_KEY;
 
   try {
-    const veo = new VeoProvider();
-    const job = await veo.submitJob({
+    const omni = new GeminiOmniVideoProvider();
+    const job = await omni.submitJob({
       id: "spec-1",
       organizationId: "org-1",
       brandId: "brand-1",
       title: "Spec",
       modality: "video", format: "ugc",
       aspectRatio: "9:16",
-      durationTargetSeconds: 15,
+      durationTargetSeconds: 8,
       hookLine: "Hook",
       script: "Script",
       scenes: [],
@@ -355,28 +355,24 @@ test("11. Regression: studio readiness rejects test:video and production runtime
   }
 });
 
-// 12. Veo polling reads generatedSamples path
-test("12. Regression: Veo polling reads generatedSamples REST response path", async () => {
+// 12. Omni polling reads the video step's URI from the Interactions response
+test("12. Regression: Omni polling reads the video URI from the Interactions REST response", async () => {
   const expectedUri = "https://storage.googleapis.com/test-bucket/sample.mp4";
   const fakeFetch: typeof fetch = async () =>
     new Response(
       JSON.stringify({
-        name: "operations/123",
-        done: true,
-        response: {
-          generateVideoResponse: {
-            generatedSamples: [{ video: { uri: expectedUri } }],
-          },
-        },
+        id: "interactions/123",
+        status: "completed",
+        steps: [{ type: "model_output", content: [{ type: "video", mime_type: "video/mp4", uri: expectedUri }] }],
       }),
       { status: 200 },
     );
 
   // The poll uses the key of the workspace that owns the job, which the poller passes in the job's metadata.
   const { fixedLookup } = await import("../credentials/fixtures.ts");
-  const veo = new VeoProvider({ fetchImpl: fakeFetch, lookup: fixedLookup("test-gemini-key") });
-  const status = await veo.checkJobStatus("operations/123", { organizationId: "org-1" });
-  assert.equal(status.status, "RENDERED");
+  const omni = new GeminiOmniVideoProvider({ fetchImpl: fakeFetch, lookup: fixedLookup("test-gemini-key") });
+  const status = await omni.checkJobStatus("interactions/123", { organizationId: "org-1" });
+  assert.equal(status.status, "COMPLETED");
   assert.equal(status.outputArtifactId, expectedUri);
 });
 
@@ -639,7 +635,7 @@ test("23. Regression: production jobs retain complete serialization schema", () 
       script: "Script",
       scenes: [],
     },
-    providerId: "veo",
+    providerId: "google_omni",
     status: "RUNNING" as const,
     costEstimateUsd: 3.0,
     createdAt: new Date().toISOString(),
@@ -649,7 +645,7 @@ test("23. Regression: production jobs retain complete serialization schema", () 
   const serialized = JSON.stringify(job);
   const parsed = JSON.parse(serialized);
   assert.equal(parsed.jobId, "job-101");
-  assert.equal(parsed.providerId, "veo");
+  assert.equal(parsed.providerId, "google_omni");
   assert.equal(parsed.status, "RUNNING");
 });
 
@@ -923,16 +919,14 @@ test("32. Regression: GeminiOmniVideoProvider uses Interactions API contract", a
   assert.equal(job.outputArtifactId, "https://storage.googleapis.com/omni.mp4");
 });
 
-// 33. Model capability registry tracks Veo 3.1 deprecation
-test("33. Regression: ModelCapabilityRegistry flags Veo 3.1 preview shutdown warning", async () => {
+// 33. Veo is not a registered model: Gemini Omni is the Google video model
+test("33. Regression: the model registry lists no Veo model and keeps Gemini Omni active", async () => {
   const { modelCapabilityRegistry } = await import("../production/registry.ts");
-  const lifecycle = modelCapabilityRegistry.checkModelLifecycle(
-    "veo-3.1-generate-preview",
-    new Date("2026-10-09")
-  );
-  assert.equal(lifecycle.state, "DEPRECATED");
-  assert.ok(lifecycle.warning?.includes("2026-10-22"));
-  assert.equal(lifecycle.replacement, "gemini-omni-1.1-flash");
+  assert.equal(modelCapabilityRegistry.getModel("veo-3.1-generate-preview"), undefined);
+  assert.equal(modelCapabilityRegistry.getModel("veo-2.0-generate-001"), undefined);
+  const omni = modelCapabilityRegistry.checkModelLifecycle("gemini-omni-1.1-flash", new Date("2026-10-09"));
+  assert.equal(omni.state, "ACTIVE");
+  assert.equal(omni.usable, true);
 });
 
 // 34. Decomposed opportunity rating keeps business potential null when telemetry is unobserved
