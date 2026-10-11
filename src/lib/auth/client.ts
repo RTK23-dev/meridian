@@ -1,7 +1,8 @@
+import { useEffect, useState } from "react";
 import { genericOAuthClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { runPreSignInSignOut, runSignOut } from "../../../scripts/sign-out-plan.mjs";
-import { GROK_PROVIDERS } from "./providers";
+import { GROK_PROVIDERS, isBrokerUnreachableHost } from "./providers";
 
 /**
  * Better Auth client for this React SPA (browser-side).
@@ -233,4 +234,16 @@ export async function signOut(redirectTo = "/"): Promise<void> {
       window.location.href = redirectTo;
     },
   });
+}
+
+/**
+ * True when this page is served from a loopback host, where federated sign-in cannot complete. It is false on the server and
+ * on the first render, and becomes true after mount, so the server markup and the first client render agree.
+ */
+export function useLoopbackHost(): boolean {
+  const [loopback, setLoopback] = useState(false);
+  useEffect(() => {
+    setLoopback(isBrokerUnreachableHost(window.location.hostname));
+  }, []);
+  return loopback;
 }
