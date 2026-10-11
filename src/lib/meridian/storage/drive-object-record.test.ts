@@ -214,11 +214,13 @@ test("a different file under a key that already has a row is refused, and the ex
     const drive = stubDrive();
     try {
       const path = `production/inputs/prod_mc_${randomUUID()}/manifest.json`;
+      // Per run, so a row left in a shared database by an earlier run cannot collide with this one.
+      const earlierFileId = `file-earlier-${randomUUID()}`;
       await recordDriveObject(sql, {
         organizationId: orgId,
         brandId,
         key: path,
-        fileId: "file-earlier",
+        fileId: earlierFileId,
         mimeType: "application/json",
         sizeBytes: 3,
         sha256: "0".repeat(64),
@@ -231,7 +233,7 @@ test("a different file under a key that already has a row is refused, and the ex
       );
       const rows = await rowsFor(sql, orgId, brandId, path);
       assert.equal(rows.length, 1);
-      assert.equal(rows[0]!.provider_file_id, "file-earlier", "the existing row still points at its own file");
+      assert.equal(rows[0]!.provider_file_id, earlierFileId, "the existing row still points at its own file");
     } finally {
       drive.restore();
     }

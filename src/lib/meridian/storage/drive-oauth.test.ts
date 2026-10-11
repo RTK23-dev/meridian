@@ -108,15 +108,17 @@ test("an admin's connection records a hashed, expiring state bound to that admin
   const sql = await getSql();
   const workspace = await seedWorkspace(sql);
   const now = Date.now();
-  const { started, state } = await startAs(sql, workspace, workspace.adminId, now, "state-plain-VALUE-admin-1");
+  // Per run, so a row left in a shared database by an earlier run cannot collide with this one.
+  const fixedState = `state-plain-VALUE-${randomUUID()}`;
+  const { started, state } = await startAs(sql, workspace, workspace.adminId, now, fixedState);
   assert.equal(started.ok, true);
-  assert.equal(state, "state-plain-VALUE-admin-1");
+  assert.equal(state, fixedState);
   const rows = await sql<{ state_hash: string; user_id: string; organization_id: string; expires_at: unknown }>`
     select state_hash, user_id, organization_id, expires_at from drive_oauth_states where state_hash = ${hashDriveOauthState(state)}`;
   assert.equal(rows.length, 1);
   assert.equal(rows[0]!.user_id, workspace.adminId);
   assert.equal(rows[0]!.organization_id, workspace.orgId);
-  assert.equal(JSON.stringify(rows[0]).includes("state-plain-VALUE-admin-1"), false, "the database holds the hash, not the state");
+  assert.equal(JSON.stringify(rows[0]).includes(fixedState), false, "the database holds the hash, not the state");
   const expiresIn = Date.parse(String(rows[0]!.expires_at)) - now;
   assert.ok(expiresIn > 9 * 60 * 1000 && expiresIn <= 10 * 60 * 1000 + 5000, "the state expires in about ten minutes");
 });
