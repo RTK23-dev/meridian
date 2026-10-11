@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — fixes from the static review of 01307e8
+
+Operators should read these before deploying. Migration `0060_webhook_tenant_scope.sql` is new.
+
+- **Webhooks**: a body over 256 KB is refused with 413, and a body that is not `application/json` with 415. An account connected to
+  several organizations is refused with 409 and stores nothing; before, the first organization was picked. Deduplication is per
+  organization. Confirm that the relay sends `application/json` and that each account maps to one organization.
+- **Calibration**: a saved threshold version no longer enables automatic approval or rejection. Numeric scores go to review until a real
+  calibration exists, so workspaces that relied on threshold rows will see more review items.
+- **Image QC**: visual checks read the generated image bytes, and attach goes through the shared decision gate. A durable image job is
+  judged on its own copy, not on the generation prompt. A plan with an image that has no copy is refused before anything is sent.
+- **Providers**: Higgsfield status and cancel requests go only to its fixed origin, and redirects are refused. Provider artifacts are
+  downloaded only from public https hosts, with a 200 MB cap and a 30-second deadline. Polling stops at once on permanent errors
+  (401, 403, 404) and after 240 polls or 24 hours, moving the job to `SUBMISSION_UNKNOWN`. Its reservation stays held.
+
 ## 0.1.0-beta.11 — not yet tagged
 
 Verified on a freshly migrated PostgreSQL database: the full test suite, typecheck, lint, build, and the browser checks (UI baseline,
