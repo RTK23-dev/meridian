@@ -5,6 +5,17 @@
 
 export const CHORD_WINDOW_MS = 900;
 
+/**
+ * Shortcuts must not fire while the user types: in a text field, a select or a content-editable region. Checked by shape,
+ * not by `instanceof HTMLElement`, so the rule runs outside the browser too.
+ */
+export function isTypingTarget(target: unknown): boolean {
+  if (typeof target !== "object" || target === null) return false;
+  const element = target as { isContentEditable?: unknown; tagName?: unknown };
+  if (element.isContentEditable === true) return true;
+  return typeof element.tagName === "string" && ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName.toUpperCase());
+}
+
 export type ChordTarget = "overview" | "studio" | "reviews" | "intelligence" | "learning" | "factory" | "accounts";
 
 const CHORDS: Record<string, ChordTarget> = {

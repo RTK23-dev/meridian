@@ -105,7 +105,8 @@ export function isCurrentPath(pathname: string, to: string): boolean {
 /** Document title: page first, then brand, then the app name. Empty parts are dropped. */
 export function documentTitle({ page, brandName }: { page?: string; brandName?: string }): string {
   return [page, brandName, APP_NAME]
-    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter((part) => part.length > 0)
     .join(" · ");
 }
 

@@ -13,7 +13,7 @@ import { Button, Dialog, DialogClose, DialogContent, DialogDescription, DialogTi
 import { CommandPalette } from "@/components/command-palette";
 import { PageCommandProvider, usePageCommandRegistry } from "@/components/page-commands";
 import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, resolveLastBrand, sidebarGroups, unreadAlertLabel, type NavGroup } from "@/lib/navigation/model";
-import { chordPath, INITIAL_SHORTCUT_STATE, nextShortcutState, type ShortcutState } from "@/lib/navigation/shortcuts";
+import { chordPath, INITIAL_SHORTCUT_STATE, isTypingTarget, nextShortcutState, type ShortcutState } from "@/lib/navigation/shortcuts";
 import { readLocal, writeLocal } from "@/lib/navigation/local-storage";
 import { routePageTitle } from "@/lib/navigation/route-data";
 
@@ -275,12 +275,6 @@ function ShellChrome({ children }: { children: ReactNode }) {
       </DialogContent>
     </Dialog>
   </div>;
-}
-
-/** Shortcuts must not fire while the user types. Content-editable counts as typing. */
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
 function readCollapsed() {
