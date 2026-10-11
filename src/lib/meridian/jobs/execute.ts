@@ -193,7 +193,8 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   if (job.job_type === "webhook.received") {
     const eventId = typeof payload.eventId === "string" ? payload.eventId : "";
     if (!eventId) throw new Error("Webhook job has no event id.");
-    return `stored:${eventId}`;
+    // Recording is the whole of this job. Nothing downstream reads webhook_events yet, so the result says no processing ran.
+    return `recorded:${eventId}:no-downstream-processing`;
   }
   if (job.job_type === "alert.deliver") {
     const alertId = typeof payload.alertId === "string" ? payload.alertId : "";

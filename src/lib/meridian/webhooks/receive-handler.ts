@@ -111,5 +111,5 @@ export async function handleWebhookReceive(request: Request, deps: WebhookReceiv
     )
     on conflict (organization_id, idempotency_key) do nothing
   `;
-  return new Response("queued", { status: 202 });
+  return new Response("recorded", { status: 202 });
 }

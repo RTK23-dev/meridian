@@ -116,7 +116,7 @@ test("an account connected to one organization stores the event for that organiz
   ]);
   const response = await handleWebhookReceive(delivery(), depsFor(db));
   assert.equal(response.status, 202);
-  assert.equal(await response.text(), "queued");
+  assert.equal(await response.text(), "recorded");
   assert.deepEqual(db.events, [{ organizationId: "org-a", provider: "meta", eventId: "evt-1" }]);
   assert.deepEqual(db.jobs.map((job) => job.organizationId), ["org-a"]);
 });
