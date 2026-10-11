@@ -8,7 +8,6 @@ import { describeQuestion } from "@/components/studio/jev-question-text";
 import { Badge, Button, Field, Kbd, Card, SelectInput, Input } from "@/components/ui";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { decisionOutcome, percentOrUnknown } from "@/lib/copy";
-import { REVIEW_REASON_CODES } from "@/lib/meridian/machine";
 import { ageBadge, confidenceBadge, formatOpened, reviewNoteFieldId, reviewPriority, reviewReasonFieldId, type ReviewDraft, type ReviewRow } from "./review-model";
 
 /** The note is optional and stored with the decision. The server takes at most 500 characters. */
@@ -32,6 +31,7 @@ export function ReviewDetail({
   pending,
   draft,
   reasonError,
+  reasonOptions,
   onDraftChange,
   onApprove,
   onReject,
@@ -43,6 +43,8 @@ export function ReviewDetail({
   draft: ReviewDraft;
   /** Show the "choose a reason" message. It is set after a reject was attempted without a reason. */
   reasonError: boolean;
+  /** The reason codes and labels the server sends with the review list. */
+  reasonOptions: readonly { code: string; label: string }[];
   onDraftChange: (patch: Partial<ReviewDraft>) => void;
   onApprove: () => void;
   onReject: () => void;
@@ -89,7 +91,7 @@ export function ReviewDetail({
           >
             <SelectInput {...register("reason")} id={reasonId}>
               <option value="">Choose a reason</option>
-              {REVIEW_REASON_CODES.map((code) => <option key={code} value={code}>{code.replaceAll("_", " ")}</option>)}
+              {reasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
             </SelectInput>
           </Field>
           <Field id={noteId} label="Note" hint="Optional. Stored with the decision." error={errors.note?.message}>

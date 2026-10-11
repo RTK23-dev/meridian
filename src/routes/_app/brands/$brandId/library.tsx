@@ -22,7 +22,6 @@ import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { buildTraceTimeline } from "@/components/library/trace-model";
-import { REVIEW_LIST_LIMIT } from "@/components/reviews/review-model";
 import { hasRole } from "@/lib/meridian/access";
 import { attachCreativeImage, recordObservation, recordPerformance } from "@/lib/meridian/machine";
 import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
@@ -154,7 +153,7 @@ function Library({ brandId }: { brandId: string }) {
         media: traceMedia,
         reviewsLoad: reviewsQuery.isError ? "unavailable" : reviewsQuery.data ? "ready" : "loading",
         reviews: reviewsQuery.data?.reviews ?? [],
-        reviewsTruncated: (reviewsQuery.data?.reviews.length ?? 0) >= REVIEW_LIST_LIMIT,
+        reviewsTruncated: reviewsQuery.data?.hasMore ?? false,
       })
     : null;
 
