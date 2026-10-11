@@ -9,6 +9,7 @@ import { hasRole, isRole } from "../access.ts";
 import { withTransaction } from "../learning/store.ts";
 import type { OpportunityDirectionInput } from "../studio/brief-service.contract.ts";
 import { directionReasonProblem } from "./direction-reason.ts";
+import { storedProbability } from "../decisions/probability.ts";
 import {
   id,
   asText,
@@ -26,10 +27,11 @@ export type OpportunityView = OpportunityDraft & {
   id: string;
   status: string;
   decision: string;
-  probability: number;
+  /** The JEV probability, or null when no decision stored one. Null is unknown, never 0. */
+  probability: number | null;
 };
 
-export function opportunityView(row: Record<string, unknown>, decision: string, probability: number): OpportunityView {
+export function opportunityView(row: Record<string, unknown>, decision: string, probability: number | null): OpportunityView {
   const evidence = asJson<{ id: string; source: string; summary: string }[]>(row.evidence, []);
   return {
     id: asText(row.id),
@@ -85,7 +87,7 @@ export const listOpportunities = createServerFn({ method: "POST" })
     `;
     return {
       role: access.role,
-      opportunities: rows.map((row) => opportunityView(row, asText(row.decision), asNumber(row.probability))),
+      opportunities: rows.map((row) => opportunityView(row, asText(row.decision), storedProbability(row.probability))),
     };
   });
 

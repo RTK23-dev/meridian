@@ -17,8 +17,8 @@ export type OpportunityRow = {
   category: string;
   status: string;
   decision: string;
-  /** The server returns 0 when no JEV decision is joined. Read it through `jevProbability`, never directly. */
-  probability: number;
+  /** The server returns null when no JEV decision stored a probability. Read it through `jevProbability`, never directly. */
+  probability: number | null;
   confidence: number;
   expectedValue: number;
   risk: number;
@@ -54,7 +54,7 @@ export function finiteOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** JEV probability is known only when a JEV decision is stored. Without one the server's 0 means "none joined". */
+/** JEV probability is known only when a JEV decision is stored. Without one the server returns null, which reads as Unknown. */
 export function jevProbability(item: Pick<OpportunityRow, "decision" | "probability">): number | null {
   return item.decision ? finiteOrNull(item.probability) : null;
 }

@@ -39,7 +39,7 @@ export async function createBriefFromOpportunityFor(
   `;
   if (existing[0]) return { id: existing[0].id };
   const loaded = await loadContext(sql, access.organizationId, data.brandId);
-  const draft = opportunityView(row, "", 0);
+  const draft = opportunityView(row, "", null);
   const sameAngle = loaded.creatives
     .filter((creative) => creative.origin === "competitor" && creative.angle === draft.angle && creative.text)
     .slice(0, 4)

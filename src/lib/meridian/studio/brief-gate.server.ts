@@ -129,17 +129,17 @@ export async function judgeBriefFit(input: BriefGateInput): Promise<BriefGateRes
   return { ...gate, deterministicRejections };
 }
 
-/** The lowest predicate probability the engine returned for this brief, or 0 when it returned none. */
-function lowestProbability(gate: GateResult): number {
+/** The lowest predicate probability the engine returned for this brief, or null when it returned none. Null is unknown, not 0. */
+function lowestProbability(gate: GateResult): number | null {
   const probabilities = Object.values(gate.answers)
     .filter((answer) => answer.status === "answered" && typeof answer.probability === "number")
     .map((answer) => answer.probability as number);
-  return probabilities.length > 0 ? Math.min(...probabilities) : 0;
+  return probabilities.length > 0 ? Math.min(...probabilities) : null;
 }
 
 /**
  * Writes the brief's decision row from the gate outcome. `probability` and `confidence` hold the lowest predicate probability
- * among the engine's brief answers (0 when none), and the full gate record is linked through `evidence`.
+ * among the engine's brief answers (null when none), and the full gate record is linked through `evidence`.
  */
 export async function writeBriefDecision(
   sql: Sql,

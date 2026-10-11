@@ -5,6 +5,7 @@ import { countRejections } from "@/lib/meridian/learning/engine";
 import { applyLearnedPatterns } from "@/lib/meridian/learning/store";
 import { designExperiment } from "@/lib/meridian/experiments/design";
 import { manualPerformanceSchema } from "@/lib/meridian/schemas/performance";
+import { storedProbability } from "../decisions/probability.ts";
 import {
   id,
   asText,
@@ -16,6 +17,20 @@ import {
   audit,
   notify,
 } from "../machine-shared";
+
+/** One recorded decision for the learning screen. A probability or confidence that was never stored reads back as null. */
+export function learningDecisionView(row: Record<string, unknown>) {
+  return {
+    id: asText(row.id),
+    question: `${asText(row.question_id)}.${asText(row.question_version)}`,
+    subject: asText(row.subject_type),
+    decision: asText(row.decision),
+    probability: storedProbability(row.probability),
+    confidence: storedProbability(row.confidence),
+    reasons: asJson<string[]>(row.reasons, []),
+    createdAt: asText(row.created_at),
+  };
+}
 
 export async function persistLearnedPatterns(sql: Sql, organizationId: string, brandId: string, actorId: string): Promise<number> {
   const patterns = await applyLearnedPatterns(sql, organizationId, brandId);
@@ -191,16 +206,7 @@ export const getLearning = createServerFn({ method: "POST" })
         scope: asText(row.scope) || "brand",
       })),
       rejections: countRejections(rejections.flatMap((row) => Array.from({ length: asNumber(row.count) }, () => row.reason_code))),
-      decisions: decisions.map((row) => ({
-        id: asText(row.id),
-        question: `${asText(row.question_id)}.${asText(row.question_version)}`,
-        subject: asText(row.subject_type),
-        decision: asText(row.decision),
-        probability: asNumber(row.probability),
-        confidence: asNumber(row.confidence),
-        reasons: asJson<string[]>(row.reasons, []),
-        createdAt: asText(row.created_at),
-      })),
+      decisions: decisions.map(learningDecisionView),
     };
   });
 
