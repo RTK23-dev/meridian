@@ -76,8 +76,9 @@ now uses `PausedExplainer` to say so in three steps. If an automatic switch-on i
 
 ## Not done, and why
 
-- **The `e2e` failure on `main`** at the brain save (see the `e2e` job) is not fixed here. It needs its own investigation of
-  the autosave queue, and the revamp does not change that code.
+- **The `e2e` failure on `main`** at the brain save is fixed in this PR, in three commits. `7f4fd33` and `00a099c` pre-bundle the
+  dev server, which removes a reload and a start-up race. `6a4808c` removes the autosave condition from the Save brain button,
+  which disabled the click the product loop made. CI on `6a4808c` passes `check`, `ui-smoke` and `e2e`.
 - **Google Drive video notes.** The owner's screen recording could not be read: the Drive connector returns only its title for
   video. Requirements in this document come from the owner's written message.
 - **Live sourcing against real sites** was not run from this environment. The robots and bot-check rules are tested with fixtures.
@@ -108,10 +109,10 @@ before image. The phone images are at 390 px.
   connection), which this environment does not have.
 - `npm run build`: passes. `db:migrate` skips without `DATABASE_URL`, and PGlite migrates itself.
 - A browser pass over sign-up, workspace, brand, overview, library, settings and setup at 1280 px and 390 px. No page errors.
-- Not run here: `npm run ui:baseline` and `npm run e2e`. The `e2e` job already fails on `main` at the brain save, before this
-  change. CI runs both on the pull request.
+- `npm run ui:baseline`: passes locally, 28 routes and 280 captures, after the setup layout and contrast fixes. CI `ui-smoke` runs it on `6a4808c` and passes.
+- `npm run e2e`: passes locally with the Save brain fix, unthrottled and with the page CPU throttled 4x (three of three runs). CI `e2e` on `6a4808c` passes.
 
 ## Still open after this change
 
 - `.env.example` still lists the S3 variables. NORTH_STAR work item 1 retires S3 in code, settings and docs, so it is a separate change.
-- The `e2e` brain-save failure on `main` is unchanged.
+- `main` still has the brain-save failure until this PR merges. The fix is in this PR, not in `main`.
