@@ -1,19 +1,22 @@
 /**
  * Preflight Quality Control Gate
  *
- * Evaluates creative specs before committing to production spend.
- * Gated by JEV policy: unresolved claims, prohibited words, or missing brief elements
- * halt execution and prevent wasted production cost.
+ * Checks a creative spec's structure before production spend: the hook, the script or storyboard, and the duration.
+ *
+ * Claims are not judged here. The spec carries no brand claims, so a claim check run on it would be a check that never looked at
+ * the copy. Claims are judged by the copy check (production/assess.ts) and by the shared gate (decisions/gate.ts). This result
+ * reports `claimsJudged: false`, so nothing reads it as a claim check that passed.
  */
 
 import type { CreativeSpec } from "./types.ts";
-import { claimSafety } from "../jev/questions.ts";
 
 export type PreflightResult = {
   passed: boolean;
   decision: "PROCEED" | "BLOCK" | "HUMAN_REVIEW";
   reasons: string[];
   evaluatedAt: string;
+  /** Always false: preflight checks structure, and claims are judged elsewhere. */
+  claimsJudged: false;
 };
 
 export function evaluateProductionPreflight(spec: CreativeSpec): PreflightResult {
@@ -30,23 +33,13 @@ export function evaluateProductionPreflight(spec: CreativeSpec): PreflightResult
     reasons.push(`Target duration ${spec.durationTargetSeconds}s is outside allowed limits (1-300s).`);
   }
 
-  // 2. Claim safety check using JEV claim question
-  const claimEvaluation = claimSafety.evaluate({
-    prohibitedHits: [],
-    unsupportedClaimHits: [],
-    missingDisclaimers: [],
-  });
-
-  if (claimEvaluation.probability < 0.5) {
-    reasons.push(...claimEvaluation.reasons);
-  }
-
   if (reasons.length > 0) {
     return {
       passed: false,
       decision: "BLOCK",
       reasons,
       evaluatedAt: new Date().toISOString(),
+      claimsJudged: false,
     };
   }
 
@@ -55,5 +48,6 @@ export function evaluateProductionPreflight(spec: CreativeSpec): PreflightResult
     decision: "PROCEED",
     reasons: ["Preflight verified: script, hook, and storyboard structure complete."],
     evaluatedAt: new Date().toISOString(),
+    claimsJudged: false,
   };
 }
