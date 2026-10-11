@@ -93,9 +93,9 @@ export function WebhookEventsScreen() {
       ) : null}
       {data && span ? (
         <div className="flex items-center justify-between gap-3">
-          <Button type="button" variant="secondary" size="md" disabled={page === 0 || query.isFetching} onClick={() => setPage(page - 1)}>Previous page</Button>
-          <p className="text-sm text-fg-muted">Page {page + 1} of {span.pageCount}</p>
-          <Button type="button" variant="secondary" size="md" disabled={page + 1 >= span.pageCount || query.isFetching} onClick={() => setPage(page + 1)}>Next page</Button>
+          <Button type="button" variant="secondary" size="md" disabled={page === 0 || query.isFetching} aria-describedby={page === 0 ? "events-page-status" : undefined} onClick={() => setPage(page - 1)}>Previous page</Button>
+          <p id="events-page-status" className="text-sm text-fg-muted">Page {page + 1} of {span.pageCount}{page === 0 ? ". You are on the first page." : page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
+          <Button type="button" variant="secondary" size="md" disabled={page + 1 >= span.pageCount || query.isFetching} aria-describedby={page + 1 >= span.pageCount ? "events-page-status" : undefined} onClick={() => setPage(page + 1)}>Next page</Button>
         </div>
       ) : null}
     </div>

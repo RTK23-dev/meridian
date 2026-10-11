@@ -123,13 +123,14 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
               onDiscard={dismiss.discard}
             />
 
-            <p role="status" aria-live="polite" className={cn("text-sm", check.ok ? "text-fg-muted" : "text-danger")}>
+            {/* The status line is the reason the send is off, so the button points at it. */}
+            <p id="review-check-status" role="status" aria-live="polite" className={cn("text-sm", check.ok ? "text-fg-muted" : "text-danger")}>
               {check.ok ? "Ready to send." : check.message}
             </p>
 
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="quiet" disabled={pending} onClick={() => dismiss.requestOpenChange(false)}>Cancel</Button>
-              <Button type="submit" variant={action === "reject" ? "danger" : "primary"} disabled={!check.ok || pending}>
+              <Button type="submit" variant={action === "reject" ? "danger" : "primary"} disabled={!check.ok || pending} aria-describedby={!check.ok ? "review-check-status" : undefined}>
                 {pending ? "Sending…" : reviewConfirmLabel(action)}
               </Button>
             </div>

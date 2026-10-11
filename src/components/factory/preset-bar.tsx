@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui";
+import { Button, DisabledReason } from "@/components/ui";
 import { PRESET_KEYS, PRESET_LABEL, presetSettingLines, type PresetKey } from "./pipeline-model";
 
 /**
@@ -25,6 +25,7 @@ export function PresetBar({
         <p className="max-w-3xl text-sm text-fg-muted">
           &quot;Fill draft&quot; only changes the editor. &quot;Save preset&quot; stores the preset for this brand and replaces the saved copy and any unsaved edits. Neither one changes a run.
         </p>
+        {canEdit ? null : <DisabledReason id="factory-preset-reason">Only members can change presets.</DisabledReason>}
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -49,6 +50,7 @@ export function PresetBar({
                 variant="secondary"
                 size="sm"
                 disabled={!canEdit || busy !== null}
+                aria-describedby={!canEdit ? "factory-preset-reason" : undefined}
                 onClick={() => onFill(key)}
               >
                 Fill draft
@@ -58,6 +60,7 @@ export function PresetBar({
                 variant="quiet"
                 size="sm"
                 disabled={!canEdit || busy !== null}
+                aria-describedby={!canEdit ? "factory-preset-reason" : undefined}
                 onClick={() => onSave(key)}
               >
                 {busy === `preset:${key}` ? "Saving preset" : "Save preset"}

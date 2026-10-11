@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Card, EmptyState, ErrorState, Field, SelectInput, Skeleton, Stat, Input } from "@/components/ui";
+import { Button, Card, DisabledReason, EmptyState, ErrorState, Field, SelectInput, Skeleton, Stat, Input } from "@/components/ui";
 import { PlainErrorMessage, PlainErrorNotice } from "@/components/plain-error";
 import { copy, plainError, type PlainError } from "@/lib/copy";
 import { downloadCsv } from "@/lib/csv";
@@ -126,9 +126,10 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
           <Button type="button" variant="secondary" aria-expanded={showForm} aria-controls={showForm ? "telemetry-form" : undefined} onClick={() => setShowForm((open) => !open)}>
             {showForm ? "Close telemetry form" : "Add telemetry row"}
           </Button>
-          <Button type="button" disabled={syncTelemetry.isPending || records.length === 0} onClick={() => void handleSync()}>
+          <Button type="button" disabled={syncTelemetry.isPending || records.length === 0} aria-describedby={records.length === 0 ? "telemetry-sync-reason" : undefined} onClick={() => void handleSync()}>
             {syncTelemetry.isPending ? "Syncing to JEV Brain…" : "Sync to JEV Brain"}
           </Button>
+          {records.length === 0 ? <DisabledReason id="telemetry-sync-reason" className="basis-full">Add a telemetry row first. There is nothing to sync yet.</DisabledReason> : null}
         </div>
       ) : null}
     </div>

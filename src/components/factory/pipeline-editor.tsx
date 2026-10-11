@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { Button, DisabledReason, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { plainError } from "@/lib/copy";
 import {
   DEFAULT_GRADING_THRESHOLDS,
@@ -156,6 +156,12 @@ export function PipelineEditor({
 
   const statusText = saveStatusText({ savedState, dirty, problemCount: problems.length });
   const saveBlocked = busy !== null || !dirty || problems.length > 0;
+  // The reason Save pipeline is off, in the order the checks run. A running save states its own progress instead.
+  const saveBlockedReason = savedState === "loading" ? "The saved copy is still loading, so there is nothing to compare against yet."
+    : savedState === "error" ? "The saved copy could not be loaded, so saving is off. Reload the page to try again."
+    : problems.length > 0 ? "A prompt is empty. Add text or restore the default before saving."
+    : !dirty ? "Nothing has changed. Change a setting to enable Save pipeline."
+    : null;
 
   return (
     <section aria-labelledby="factory-pipeline-settings" className="space-y-6">
@@ -182,9 +188,12 @@ export function PipelineEditor({
             </Button>
           ) : null}
           {canEdit ? (
-            <Button type="button" onClick={() => void save()} disabled={saveBlocked}>
-              {busy === "save" ? "Saving" : "Save pipeline"}
-            </Button>
+            <>
+              <Button type="button" onClick={() => void save()} disabled={saveBlocked} aria-describedby={saveBlockedReason && busy === null ? "pipeline-save-reason" : undefined}>
+                {busy === "save" ? "Saving" : "Save pipeline"}
+              </Button>
+              {saveBlockedReason && busy === null ? <DisabledReason id="pipeline-save-reason" className="basis-full text-right">{saveBlockedReason}</DisabledReason> : null}
+            </>
           ) : (
             <p className="text-sm text-fg-muted">Only members can change these settings.</p>
           )}

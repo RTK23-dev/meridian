@@ -1,6 +1,6 @@
 import { useId } from "react";
 import type { PipelinePrompts } from "@/lib/meridian/factory/pipeline-config";
-import { Button, Textarea } from "@/components/ui";
+import { Button, DisabledReason, Textarea } from "@/components/ui";
 import { NotAppliedNote } from "./pipeline-controls";
 import {
   NOT_READ_REASON,
@@ -61,9 +61,12 @@ export function PromptsPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-fg-muted">Restoring default text only fills the draft. Nothing is saved until you save the pipeline.</p>
-        <Button type="button" variant="secondary" size="sm" disabled={!canEdit} onClick={onRestoreDefaults}>
-          Restore default prompt text
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button type="button" variant="secondary" size="sm" disabled={!canEdit} aria-describedby={canEdit ? undefined : "prompts-restore-reason"} onClick={onRestoreDefaults}>
+            Restore default prompt text
+          </Button>
+          {canEdit ? null : <DisabledReason id="prompts-restore-reason">Only members can change these settings.</DisabledReason>}
+        </div>
       </div>
     </div>
   );

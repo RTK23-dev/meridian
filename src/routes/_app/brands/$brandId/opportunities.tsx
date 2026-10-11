@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button, ErrorState, Field, Card, ScreenSkeleton, SelectInput } from "@/components/ui";
+import { Button, DisabledReason, ErrorState, Field, Card, ScreenSkeleton, SelectInput } from "@/components/ui";
 import { PlainErrorNotice } from "@/components/plain-error";
 import { copy, plainError } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
@@ -167,7 +167,8 @@ function Opportunities({ brandId }: { brandId: string }) {
             <Button type="button" variant="secondary" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")}>
               Direction: {sortDirection === "asc" ? "ascending" : "descending"}
             </Button>
-            <Button type="button" variant="quiet" disabled={!visibleRows.length} onClick={exportVisible}>Export visible opportunities</Button>
+            <Button type="button" variant="quiet" disabled={!visibleRows.length} aria-describedby={visibleRows.length ? undefined : "opportunity-export-reason"} onClick={exportVisible}>Export visible opportunities</Button>
+            {visibleRows.length ? null : <DisabledReason id="opportunity-export-reason" className="basis-full">No opportunities match these filters, so there is nothing to export. Clear the filters to export them.</DisabledReason>}
             {canEdit && selectedEligible.length ? <Button disabled={dismiss.isPending} variant="secondary" onClick={() => void dismiss.mutateAsync(selectedEligible).then(() => setSelectedIds([]), () => undefined)}>Dismiss selected ({selectedEligible.length})</Button> : null}
             <p className="text-sm text-muted" aria-live="polite">{visibleRows.length} of {rows.length} opportunities</p>
           </div>

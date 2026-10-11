@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { CheckCircle2, CircleAlert, Clock3, AlertTriangle } from "lucide-react";
-import { Button, Card, DataTable, Field, PageHeader, SelectInput, Skeleton, StatusBadge, Input } from "@/components/ui";
+import { Button, Card, DataTable, DisabledReason, Field, PageHeader, SelectInput, Skeleton, StatusBadge, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
@@ -167,7 +167,8 @@ export function JobsScreen() {
           </Field>
           <div className="flex flex-wrap items-end gap-2">
             <Button type="submit">Apply filters</Button>
-            <Button type="button" variant="quiet" disabled={!filtered && !draftFiltered} onClick={clearFilters}>Clear</Button>
+            <Button type="button" variant="quiet" disabled={!filtered && !draftFiltered} aria-describedby={!filtered && !draftFiltered ? "jobs-clear-reason" : undefined} onClick={clearFilters}>Clear</Button>
+            {!filtered && !draftFiltered ? <DisabledReason id="jobs-clear-reason" className="basis-full">No filters are set.</DisabledReason> : null}
           </div>
         </form>
 
@@ -190,9 +191,9 @@ export function JobsScreen() {
         ) : null}
         {page && span ? (
           <div className="flex items-center justify-between gap-3">
-            <Button type="button" variant="secondary" size="md" disabled={filters.page === 0 || jobs.isFetching} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Previous page</Button>
-            <p className="text-sm text-fg-muted">Page {filters.page + 1} of {span.pageCount}</p>
-            <Button type="button" variant="secondary" size="md" disabled={filters.page + 1 >= span.pageCount || jobs.isFetching} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next page</Button>
+            <Button type="button" variant="secondary" size="md" disabled={filters.page === 0 || jobs.isFetching} aria-describedby={filters.page === 0 ? "jobs-page-status" : undefined} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Previous page</Button>
+            <p id="jobs-page-status" className="text-sm text-fg-muted">Page {filters.page + 1} of {span.pageCount}{filters.page === 0 ? ". You are on the first page." : filters.page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
+            <Button type="button" variant="secondary" size="md" disabled={filters.page + 1 >= span.pageCount || jobs.isFetching} aria-describedby={filters.page + 1 >= span.pageCount ? "jobs-page-status" : undefined} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next page</Button>
           </div>
         ) : null}
       </section>

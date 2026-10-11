@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { BriefReviewPanel } from "@/components/brief-review-panel";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, DisabledReason } from "@/components/ui";
 import { briefChanges, BRIEF_FIELD_LABELS, type BriefChange } from "./brief-diff.ts";
 import { DIRECTION_REASON_MIN, DirectionReasonField, directionReasonSchema, type DirectionReasonInput } from "./direction-step.tsx";
 import type { StudioBrief, StudioData } from "./types.ts";
@@ -116,6 +116,7 @@ export function BriefStep({ brandId, session, brief, previous, canEdit, changed,
                   type="button"
                   variant="quiet"
                   disabled={pending || (reason ?? "").trim().length < DIRECTION_REASON_MIN}
+                  aria-describedby={(reason ?? "").trim().length < DIRECTION_REASON_MIN && !pending ? "next-brief-reason-hint" : undefined}
                   onClick={() => {
                     void reasonForm.handleSubmit(async (values) => {
                       await onWriteNext(values.reason).then(() => reasonForm.reset({ reason: "" }), () => undefined);
@@ -124,6 +125,11 @@ export function BriefStep({ brandId, session, brief, previous, canEdit, changed,
                 >
                   Write the next brief
                 </Button>
+                {(reason ?? "").trim().length < DIRECTION_REASON_MIN && !pending ? (
+                  <DisabledReason id="next-brief-reason-hint" className="basis-full">
+                    Write at least {DIRECTION_REASON_MIN} characters of reason to write the next brief.
+                  </DisabledReason>
+                ) : null}
               </div>
             ) : null}
           </Card>

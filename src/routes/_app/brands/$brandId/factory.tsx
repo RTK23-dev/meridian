@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Field, Card, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, Input } from "@/components/ui";
+import { Button, DisabledReason, Field, Card, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, Input } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
@@ -146,7 +146,8 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 <Field label="Niche" required error={nicheForm.formState.errors.niche?.message}>
                   <Input {...nicheForm.register("niche")} maxLength={80} required placeholder="skincare" />
                 </Field>
-                <Button type="submit" disabled={startRun.isPending || nicheForm.formState.isSubmitting || !niche.trim()}>{startRun.isPending || nicheForm.formState.isSubmitting ? "Queueing…" : "Queue factory run"}</Button>
+                <Button type="submit" disabled={startRun.isPending || nicheForm.formState.isSubmitting || !niche.trim()} aria-describedby={niche.trim() ? undefined : "factory-run-reason"}>{startRun.isPending || nicheForm.formState.isSubmitting ? "Queueing…" : "Queue factory run"}</Button>
+                {niche.trim() || startRun.isPending ? null : <DisabledReason id="factory-run-reason" className="basis-full">Type a niche, such as skincare, to queue a run.</DisabledReason>}
                 <FormDiscardBar dirty={nicheForm.formState.isDirty} subject="niche" onDiscard={() => nicheForm.reset({ niche: "" })} className="basis-full" />
               </form>
             ) : <p className="text-sm text-muted">Viewers cannot queue runs.</p>}
