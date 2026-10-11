@@ -7,7 +7,7 @@ test("concurrent duplicate webhook insert is reported as already stored", async 
   let existing = false;
   const sql = (async (strings: TemplateStringsArray) => {
     const query = strings.join(" ").toLowerCase();
-    assert.match(query, /on conflict \(provider, event_id\) do nothing/);
+    assert.match(query, /on conflict \(organization_id, provider, event_id\) do nothing/);
     assert.match(query, /returning id/);
     if (existing) return [];
     existing = true;
