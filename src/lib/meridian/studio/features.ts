@@ -385,8 +385,13 @@ export function judgeMedia(facts: MediaFacts, policies?: ReadonlyMap<string, App
   });
 }
 
+/**
+ * The approved policy a media judgment is made under. Whenever the policy exists, its thresholds and version are recorded, even
+ * when it has no calibration. Uncalibrated, a judgment can go to review but never approve, so the audit keeps the policy that
+ * was applied and the outcome stays fail-closed.
+ */
 function policyOptions(policy?: AppliedPolicy): JudgeOptions | undefined {
-  if (!policy?.calibration) return undefined;
+  if (!policy) return undefined;
   return {
     thresholds: policy.thresholds,
     policyVersion: policy.policyVersion,
