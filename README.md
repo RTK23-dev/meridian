@@ -3,7 +3,7 @@
 Meridian is a multi-tenant advertising operating system. It holds a brand's own facts, turns evidence into creatives, decides which
 creatives may go out, exports them for posting, and records what happened afterwards.
 
-**Status: prerelease.** The package is still `0.1.0-beta.10`. The next beta tag has not been cut. See [CHANGELOG.md](CHANGELOG.md).
+**Status: prerelease.** The package is `0.1.0-beta.11`, and the tag `v0.1.0-beta.11` is not cut yet. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What works in this release
 
