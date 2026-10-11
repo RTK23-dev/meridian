@@ -8,6 +8,7 @@
  * - Missing evidence or low confidence CANNOT auto-approve (must route to HUMAN_REVIEW).
  * - Severe policy violation or rights copy risk forces REJECT.
  * - Thresholds are explicit, versioned, and evaluated deterministically.
+ * - A saved threshold version sets thresholds and policyVersion. It is not calibration.
  */
 
 import type {
@@ -24,6 +25,11 @@ import type { Sql } from "../learning/store.ts";
 export type AppliedPolicy = {
   thresholds: ThresholdConfig;
   policyVersion: string;
+  /**
+   * Only a stored calibration report that passes the held-out gate (learning/calibration-gate.ts) may set this. A threshold
+   * version never does. No code path builds one from a question's stored data yet, so it is null for every question, and
+   * numeric scores route to review (engine.ts decide).
+   */
   calibration: CalibrationStep | null;
 };
 
@@ -73,27 +79,15 @@ function policyFromRow(
       calibration: null,
     };
   }
+  // A threshold version changes the thresholds and the policy version only. It sets no calibration, so an uncalibrated score
+  // cannot be auto-decided because a row exists. Any stored offset in the row is ignored.
   const thresholds = approvedThresholds(fallback, { thresholds: row.thresholds });
-  const offset = probabilityOffset(row.thresholds);
   const version = Number(row.version);
   return {
     thresholds,
     policyVersion: `approved:${questionId}.${version}`,
-    calibration: {
-      version: `threshold-version:${version}`,
-      apply: (probability) => probability + offset,
-    },
+    calibration: null,
   };
-}
-
-function probabilityOffset(raw: string): number {
-  try {
-    const parsed = JSON.parse(raw) as { probabilityOffset?: unknown };
-    if (typeof parsed.probabilityOffset !== "number" || !Number.isFinite(parsed.probabilityOffset)) return 0;
-    return Math.max(-0.5, Math.min(0.5, parsed.probabilityOffset));
-  } catch {
-    return 0;
-  }
 }
 
 export const DEFAULT_POLICY_VERSION = "meridian-policy-v1.0" as const;
