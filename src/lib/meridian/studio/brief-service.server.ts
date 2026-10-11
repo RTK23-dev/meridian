@@ -9,6 +9,7 @@ import type { EngineSelection } from "../decisions/selection.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { judgeBriefFit, writeBriefDecision, type BriefBrain, type BriefForGate, type BriefGateResult } from "./brief-gate.server.ts";
 import { briefStatusFor } from "./brief-review.server.ts";
+import { reopenDirectionAfterRejectedBrief } from "./brief-direction.server.ts";
 import type { CreateGatedBriefInput, CreateGatedBriefResult } from "./brief-service.contract.ts";
 
 /** Engine selection for the gate. Production leaves it unset, so the workspace or deployment engine is used. Tests inject one. */
@@ -56,8 +57,9 @@ export { directionReasonProblem } from "../opportunity/direction-reason.ts";
  * Creates a brief through the gate, in the fixed order of contract section 3:
  *   1. reserve the brief id,
  *   2. judge the brief with the shared gate (the engine call; no transaction is open),
- *   3. in one transaction, write the decision and its gate record, insert the brief with the status its outcome gives,
- *      and mark the opportunity briefed unless the brief was rejected.
+ *   3. in one transaction, write the decision and its gate record, insert the brief with the status its outcome gives, and
+ *      then either mark the opportunity briefed or, when the brief was rejected, reopen its direction unless another brief of
+ *      it is still live (studio/brief-direction.server.ts).
  * Only an AUTO_APPROVE outcome can produce a `ready` brief. Every other outcome is stored as `awaiting_review` or `rejected`.
  */
 export async function createGatedBrief(sql: Sql, input: CreateGatedBriefInput): Promise<CreateGatedBriefResult> {
@@ -86,7 +88,22 @@ export async function createGatedBrief(sql: Sql, input: CreateGatedBriefInput): 
         ${JSON.stringify(brief.failureNotes)}, ${status}, ${decisionId}, ${input.createdBy}
       )
     `;
-    if (status !== "rejected" && brief.opportunityId) {
+    if (input.supersedeReady && status !== "rejected" && brief.opportunityId) {
+      await tx`
+        update briefs set status = 'used'
+        where opportunity_id = ${brief.opportunityId} and status = 'ready' and organization_id = ${input.organizationId}
+          and id <> ${briefId}
+      `;
+    }
+    if (brief.opportunityId && status === "rejected") {
+      await reopenDirectionAfterRejectedBrief(tx, {
+        organizationId: input.organizationId,
+        brandId: input.brandId,
+        opportunityId: brief.opportunityId,
+        briefId,
+        actorId: input.createdBy,
+      });
+    } else if (brief.opportunityId) {
       await tx`
         update opportunities set status = 'briefed'
         where id = ${brief.opportunityId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}

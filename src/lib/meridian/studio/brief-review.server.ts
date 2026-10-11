@@ -15,6 +15,7 @@ import { withTransaction, type Sql } from "../learning/store.ts";
 import { hasRole, isRole, type Role } from "../access.ts";
 import type { BriefStatus } from "./brief-status.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
+import { reopenDirectionAfterRejectedBrief } from "./brief-direction.server.ts";
 
 /** A review can release a brief the engine could not judge, so it needs a role that can change production. */
 export const BRIEF_REVIEW_MINIMUM_ROLE: Role = "admin";
@@ -145,8 +146,9 @@ export type ReviewBriefInput = {
 };
 
 /**
- * Records one explicit review. The claim, the brief move, the append-only review and the audit record are one transaction,
- * so a failure at any step leaves the brief waiting and the decision unreviewed. A brief with no engine record is refused.
+ * Records one explicit review. The disclosure read, the claim, the brief move, the reopen of a rejected brief's direction, the
+ * append-only review and the audit record are one transaction, so a failure at any step leaves the brief waiting and the
+ * decision unreviewed. A brief with no engine record is refused.
  */
 export async function reviewBrief(sql: Sql, input: ReviewBriefInput): Promise<{ briefStatus: BriefStatus; reviewId: string }> {
   if (!isRole(input.reviewerRole) || !hasRole(input.reviewerRole, BRIEF_REVIEW_MINIMUM_ROLE)) {
@@ -161,23 +163,25 @@ export async function reviewBrief(sql: Sql, input: ReviewBriefInput): Promise<{ 
     throw new Error(`Write the reason for this decision (at least ${MIN_REVIEW_REASON_LENGTH} characters).`);
   }
 
-  const disclosure = await loadBriefReviewDisclosure(sql, input);
-  if (disclosure.briefStatus === "awaiting_review" && disclosure.gateRecordId === null) {
-    throw new Error("The engine's record for this brief is missing, so it cannot be reviewed. Create the brief again.");
-  }
-  if (!disclosure.reviewable) {
-    throw new Error(`This brief is not awaiting review (status: ${disclosure.briefStatus}, decision: ${disclosure.decision}).`);
-  }
-  const [creator] = await sql<{ created_by: string }>`
-    select created_by from briefs where id = ${input.briefId} and organization_id = ${input.organizationId}
-  `;
-  const reviewerIsCreator = creator?.created_by === input.reviewerId;
   const briefStatus: BriefStatus = input.action === "approve" ? "ready" : "rejected";
   const reviewId = globalThis.crypto.randomUUID();
 
-  // Every write below runs in one transaction. A failure at any step rolls back all of them, so the brief stays awaiting
-  // review and the decision stays unreviewed. Nothing is reverted by hand, because a hand revert can fail too.
+  // Every read and write below runs in one transaction. The disclosure and the creator are read inside it, so the checks judge
+  // the rows the claim then changes. A failure at any step rolls back all of them, so the brief stays awaiting review and the
+  // decision stays unreviewed. Nothing is reverted by hand, because a hand revert can fail too.
   await withTransaction(sql, async (tx) => {
+    const disclosure = await loadBriefReviewDisclosure(tx, input);
+    if (disclosure.briefStatus === "awaiting_review" && disclosure.gateRecordId === null) {
+      throw new Error("The engine's record for this brief is missing, so it cannot be reviewed. Create the brief again.");
+    }
+    if (!disclosure.reviewable) {
+      throw new Error(`This brief is not awaiting review (status: ${disclosure.briefStatus}, decision: ${disclosure.decision}).`);
+    }
+    const [creator] = await tx<{ created_by: string; opportunity_id: string | null }>`
+      select created_by, opportunity_id from briefs where id = ${input.briefId} and organization_id = ${input.organizationId}
+    `;
+    const reviewerIsCreator = creator?.created_by === input.reviewerId;
+
     // 1. Claim the decision. Only a row with no review can be claimed, so two reviews cannot both succeed.
     const claimed = await tx<{ id: string }>`
       update jev_decisions
@@ -195,6 +199,17 @@ export async function reviewBrief(sql: Sql, input: ReviewBriefInput): Promise<{ 
       returning id
     `;
     if (moved.length === 0) throw new Error("The brief is no longer awaiting review.");
+
+    // 2b. A rejected brief must not leave its direction accepted or briefed. It is reopened unless another brief is still live.
+    if (briefStatus === "rejected" && creator?.opportunity_id) {
+      await reopenDirectionAfterRejectedBrief(tx, {
+        organizationId: input.organizationId,
+        brandId: input.brandId,
+        opportunityId: creator.opportunity_id,
+        briefId: input.briefId,
+        actorId: input.reviewerId,
+      });
+    }
 
     // 3. The append-only review, with the original engine outcome exactly as the reviewer was shown it.
     await tx`

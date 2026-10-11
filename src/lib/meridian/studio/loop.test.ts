@@ -74,6 +74,7 @@ test("one brand moves from observations through media, review, publish, and a di
     creative("c5", "lather-proof", "demonstration", "lather proof demonstration in one take", "competitor"),
   ];
   const losers = [0, 1, 2].map((index) => creative(`lose-${index}`, "offer", "offer", "discount", "generated"));
+  // The product question checks the copy only, so the run supplies copy that names the product. The prompt alone does not.
   const result = runCoreLoop({
     organizationId: org,
     brandId: brand,
@@ -84,6 +85,7 @@ test("one brand moves from observations through media, review, publish, and a di
     allowTestProviders: true,
     logoMatch: 0.92,
     paletteMatch: 0.7,
+    copyPhrase: "North bar lathers in one take",
   });
 
   assert.equal(emptyWhitespace().length, 0);

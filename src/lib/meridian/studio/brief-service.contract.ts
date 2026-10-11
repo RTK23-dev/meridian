@@ -35,6 +35,11 @@ export type CreateGatedBriefInput = {
   createdBy: string;
   brief: BriefRecord;
   /**
+   * When true and the new brief is not rejected, the older ready briefs of the same opportunity become `used` in the same
+   * transaction as the new brief. A failure in either write leaves both as they were.
+   */
+  supersedeReady?: boolean;
+  /**
    * Runs the shared brief gate for this brief. The service calls it with the brief id it has reserved, so the decision row
    * and the brief row can be linked. It is called before any database write, so no transaction is held during the engine call.
    */

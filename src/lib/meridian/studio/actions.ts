@@ -2,6 +2,7 @@ import type { HeldReservationResolution } from "../security/held-reservations.ts
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
+import { parseVariantReview } from "./variant-review-input.ts";
 
 function clip(value: unknown): string {
   return typeof value === "string" ? value.trim().slice(0, 80) : "";
@@ -21,17 +22,24 @@ export const getStudioSession = createServerFn({ method: "POST" })
 
 export const openStudioBrief = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
-    const body = input && typeof input === "object" ? (input as { brandId?: unknown; forceNew?: unknown; reason?: unknown }) : {};
+    const body = input && typeof input === "object" ? (input as { brandId?: unknown; forceNew?: unknown; reason?: unknown; opportunityId?: unknown }) : {};
     const brandId = clip(body.brandId);
     if (!brandId) throw new Error("Choose a brand.");
-    // The reason for accepting the direction is required. The session function checks its length.
+    // The reason for accepting the direction is required. The brief-open module checks its length.
     const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 4000) : "";
-    return { brandId, forceNew: body.forceNew === true, reason };
+    // An optional opportunity to brief. Its tenancy is checked in brief-open.server.ts, never trusted from here.
+    const opportunityId = typeof body.opportunityId === "string" ? body.opportunityId.trim().slice(0, 80) : "";
+    return { brandId, forceNew: body.forceNew === true, reason, opportunityId: opportunityId || undefined };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const api = await import("./session.server");
-    return api.openStudioBrief(context.userId, data);
+    const [{ getSql }, api, session] = await Promise.all([
+      import("../../db.ts"),
+      import("./brief-open.server.ts"),
+      import("./session.server.ts"),
+    ]);
+    await api.openStudioBriefFor(await getSql(), context.userId, data);
+    return session.getStudioSession(context.userId, { brandId: data.brandId });
   });
 
 import { serverStudioGenerationSchema } from "@/lib/meridian/schemas/studio-generation";
@@ -128,17 +136,8 @@ export const rejectCreativePlan = createServerFn({ method: "POST" })
   });
 
 export const reviewStudioVariant = createServerFn({ method: "POST" })
-  .validator((input: unknown) => {
-    const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
-    const action = clip(body.action);
-    if (action !== "approve" && action !== "reject" && action !== "revision") throw new Error("Choose approve, reject, or revision.");
-    const reasonCode = typeof body.reasonCode === "string" ? body.reasonCode.trim().slice(0, 40) : "";
-    if (action === "reject" && !reasonCode) throw new Error("Choose a rejection reason.");
-    const brandId = clip(body.brandId);
-    const creativeId = clip(body.creativeId);
-    if (!brandId || !creativeId) throw new Error("Choose a variant.");
-    return { brandId, creativeId, action, reasonCode, note: typeof body.note === "string" ? body.note.trim().slice(0, 400) : "" };
-  })
+  // A rejection must name a reason code from the server list. The check is in variant-review-input.ts, with its test.
+  .validator((input: unknown) => parseVariantReview(input && typeof input === "object" ? (input as Record<string, unknown>) : {}))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const api = await import("./session.server");

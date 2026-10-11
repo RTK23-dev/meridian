@@ -32,9 +32,18 @@ import { judgeBriefFit } from "./brief-gate.server.ts";
 enableAppAliases();
 const { createBriefFromOpportunityFor } = await import("./opportunity-brief.server.ts");
 const { generateCreativeFor } = await import("./creative-generation.server.ts");
-const { openStudioBrief } = await import("./session.server.ts");
+const { openStudioBriefFor } = await import("./brief-open.server.ts");
 const { reviewBriefForUser } = await import("./brief-review-access.server.ts");
 const { recordOpportunityDirection } = await import("../opportunity/actions.ts");
+
+/** The studio's open-brief action, run against the test database. */
+async function openStudioBrief(
+  userId: string,
+  data: { brandId: string; forceNew: boolean; reason: string; opportunityId?: string },
+  gate: BriefGateOptions = {},
+): Promise<void> {
+  await openStudioBriefFor(await getSql(), userId, data, gate);
+}
 
 const OUTCOMES = ["AUTO_APPROVE", "HUMAN_REVIEW", "REJECT"] as const;
 type Outcome = (typeof OUTCOMES)[number];
