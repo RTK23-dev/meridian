@@ -1,6 +1,6 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { AuthShell, ProviderSignIn } from "@/components/settings/auth-shell";
+import { AuthShell } from "@/components/settings/auth-shell";
 import { EmailAuthForm } from "@/components/settings/email-auth-form";
 
 export const Route = createFileRoute("/login")({
@@ -17,10 +17,9 @@ function Login() {
   return (
     <AuthShell
       title="Sign in"
-      description="Sign in with your email, or continue with a provider you already use."
+      description="Sign in with your email and password."
     >
-      <EmailAuthForm />
-      <ProviderSignIn />
+      <EmailAuthForm initialMode="in" />
     </AuthShell>
   );
 }

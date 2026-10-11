@@ -25,7 +25,6 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppUsageRouteImport } from './routes/_app/usage'
 import { Route as AppWebhooksRouteImport } from './routes/_app/webhooks'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
-import { Route as ApiSignInOptionsRouteImport } from './routes/api/sign-in-options'
 import { Route as AppBrandsNewRouteImport } from './routes/_app/brands/new'
 import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$assetId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -124,11 +123,6 @@ const AppWebhooksRoute = AppWebhooksRouteImport.update({
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiSignInOptionsRoute = ApiSignInOptionsRouteImport.update({
-  id: '/api/sign-in-options',
-  path: '/api/sign-in-options',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppBrandsNewRoute = AppBrandsNewRouteImport.update({
@@ -254,7 +248,6 @@ export interface FileRoutesByFullPath {
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
   '/api/health': typeof ApiHealthRoute
-  '/api/sign-in-options': typeof ApiSignInOptionsRoute
   '/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -291,7 +284,6 @@ export interface FileRoutesByTo {
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
   '/api/health': typeof ApiHealthRoute
-  '/api/sign-in-options': typeof ApiSignInOptionsRoute
   '/': typeof AppIndexRoute
   '/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -331,7 +323,6 @@ export interface FileRoutesById {
   '/_app/usage': typeof AppUsageRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/api/health': typeof ApiHealthRoute
-  '/api/sign-in-options': typeof ApiSignInOptionsRoute
   '/_app/': typeof AppIndexRoute
   '/_app/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -372,7 +363,6 @@ export interface FileRouteTypes {
     | '/usage'
     | '/webhooks'
     | '/api/health'
-    | '/api/sign-in-options'
     | '/brands/new'
     | '/api/assets/$assetId'
     | '/api/auth/$'
@@ -409,7 +399,6 @@ export interface FileRouteTypes {
     | '/usage'
     | '/webhooks'
     | '/api/health'
-    | '/api/sign-in-options'
     | '/'
     | '/brands/new'
     | '/api/assets/$assetId'
@@ -448,7 +437,6 @@ export interface FileRouteTypes {
     | '/_app/usage'
     | '/_app/webhooks'
     | '/api/health'
-    | '/api/sign-in-options'
     | '/_app/'
     | '/_app/brands/new'
     | '/api/assets/$assetId'
@@ -477,7 +465,6 @@ export interface RootRouteChildren {
   Char91_designChar93Route: typeof Char91_designChar93Route
   LoginRoute: typeof LoginRoute
   ApiHealthRoute: typeof ApiHealthRoute
-  ApiSignInOptionsRoute: typeof ApiSignInOptionsRoute
   ApiAssetsAssetIdRoute: typeof ApiAssetsAssetIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDriveCallbackRoute: typeof ApiDriveCallbackRoute
@@ -598,13 +585,6 @@ declare module '@tanstack/react-router' {
       path: '/api/health'
       fullPath: '/api/health'
       preLoaderRoute: typeof ApiHealthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/sign-in-options': {
-      id: '/api/sign-in-options'
-      path: '/api/sign-in-options'
-      fullPath: '/api/sign-in-options'
-      preLoaderRoute: typeof ApiSignInOptionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/brands/new': {
@@ -815,7 +795,6 @@ const rootRouteChildren: RootRouteChildren = {
   Char91_designChar93Route: Char91_designChar93Route,
   LoginRoute: LoginRoute,
   ApiHealthRoute: ApiHealthRoute,
-  ApiSignInOptionsRoute: ApiSignInOptionsRoute,
   ApiAssetsAssetIdRoute: ApiAssetsAssetIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDriveCallbackRoute: ApiDriveCallbackRoute,

@@ -1,7 +1,4 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui";
-import { useState } from "react";
-import { SIGN_IN_PROVIDERS, signIn, useSignInOptions } from "@/lib/auth/client";
 
 /** The Meridian mark. It uses the same geometry as the favicon, drawn with theme tokens so it reads in light and dark. */
 export function MeridianMark({ className = "size-9" }: { className?: string }) {
@@ -35,38 +32,5 @@ export function AuthShell({ title, description, children, footer }: {
       <div className="space-y-6 rounded-lg border border-border bg-surface p-6 shadow-sm">{children}</div>
       {footer ? <div className="text-sm text-fg-muted">{footer}</div> : null}
     </main>
-  );
-}
-
-/** Sign-in with the configured providers. Each button starts the provider's own flow and returns to the workspace. */
-export function ProviderSignIn({ heading = "Or continue with" }: { heading?: string }) {
-  const { loaded, options } = useSignInOptions();
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="space-y-3">
-      <p className="text-sm font-semibold text-fg">{heading}</p>
-      <div className="grid gap-3">
-        {SIGN_IN_PROVIDERS.map((provider) => (
-          <Button
-            key={provider.id}
-            type="button"
-            variant="secondary"
-            size="lg"
-            className="w-full justify-start"
-            disabled={!loaded || !options[provider.id]}
-            onClick={() => {
-              setError(null);
-              signIn(provider.id, { callbackURL: "/" }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Sign-in failed"));
-            }}
-          >
-            Continue with {provider.label}
-          </Button>
-        ))}
-      </div>
-      {loaded && SIGN_IN_PROVIDERS.some((provider) => !options[provider.id]) ? (
-        <p className="text-sm text-fg-muted">Google sign-in is not set up on this deployment. Use email and password.</p>
-      ) : null}
-      {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
-    </div>
   );
 }

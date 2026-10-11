@@ -3,7 +3,7 @@ import { useWorkspace } from "@/components/workspace";
 import { documentTitle } from "@/lib/navigation/model";
 import { ErrorState, ScreenSkeleton } from "@/components/ui";
 import { ForbiddenPage } from "@/components/status-pages";
-import { MeridianMark, ProviderSignIn } from "@/components/settings/auth-shell";
+import { MeridianMark } from "@/components/settings/auth-shell";
 import { EmailAuthForm } from "@/components/settings/email-auth-form";
 
 /** Waits for the workspace bootstrap. Rendered inside the shell, so the navigation stays usable while it loads or fails. */
@@ -37,16 +37,10 @@ export function Welcome() {
           The next recommendation has to cite that record.
         </p>
       </div>
-      <div className="grid gap-6 md:grid-cols-2 md:gap-8">
-        <section aria-labelledby="welcome-email-title" className="space-y-5 rounded-lg border border-border bg-surface p-6 shadow-sm">
-          <h2 id="welcome-email-title" className="text-section font-semibold text-fg">Sign in or create an account</h2>
-          <EmailAuthForm />
-        </section>
-        <section aria-labelledby="welcome-provider-title" className="space-y-5 rounded-lg border border-border bg-surface p-6 shadow-sm">
-          <h2 id="welcome-provider-title" className="text-section font-semibold text-fg">Use a provider</h2>
-          <ProviderSignIn heading="Continue with" />
-        </section>
-      </div>
+      <section aria-labelledby="welcome-email-title" className="mx-auto w-full max-w-md space-y-5 rounded-lg border border-border bg-surface p-6 shadow-sm">
+        <h2 id="welcome-email-title" className="text-section font-semibold text-fg">Sign in or create an account</h2>
+        <EmailAuthForm initialMode="in" />
+      </section>
     </main>
   );
 }

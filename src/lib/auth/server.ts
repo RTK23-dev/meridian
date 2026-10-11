@@ -2,11 +2,7 @@
  * Better Auth for this app (server-only).
  *
  * The app runs its own Better Auth at same-origin `/api/auth/*`, so the session cookie stays on this app's origin.
- * Sign-in methods:
- *   - Email and password, always on (`./email-password`).
- *   - Google, direct, when `GOOGLE_SIGN_IN_CLIENT_ID` and `GOOGLE_SIGN_IN_CLIENT_SECRET` are set and `BETTER_AUTH_URL` names the public
- *     origin. The redirect URI is then `${BETTER_AUTH_URL}/api/auth/callback/google`, and it must be registered in the
- *     Google Cloud console for that client.
+ * Sign-in is email and password (`./email-password`). No provider is configured.
  *
  * Users and sessions persist in Postgres when `DATABASE_URL` is set, otherwise in the embedded PGLite database used by
  * development. Both use the Better Auth schema from `migrations/auth/0001_auth.sql`.
@@ -21,7 +17,6 @@ import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
 import { emailAndPasswordEnabled } from "./email-password";
 import { pgliteDialect } from "./pglite-dialect";
-import type { SignInProviderId } from "./providers";
 
 // Kick off the embedded database as soon as the auth server module loads.
 void ensureDbReady();
@@ -38,19 +33,9 @@ const authDisabled = env("VITE_AUTH_ENABLED") === "false";
 /** True when real sign-in is enforced. */
 export const authConfigured = !authDisabled;
 
-/** The public origin of this app. Required for Google, because it fixes the redirect URI. */
+/** The public origin of this app. Used for the cookie domain checks and for links in email. */
 const explicitBaseURL = env("BETTER_AUTH_URL");
 const baseURL = explicitBaseURL ?? "http://localhost:8080";
-
-// Separate from the Google Drive client (`GOOGLE_CLIENT_ID`), so setting up Drive never turns sign-in on or shares a client.
-const googleClientId = env("GOOGLE_SIGN_IN_CLIENT_ID");
-const googleClientSecret = env("GOOGLE_SIGN_IN_CLIENT_SECRET");
-const googleEnabled = authConfigured && Boolean(googleClientId && googleClientSecret && explicitBaseURL);
-
-/** Which optional sign-in providers are usable on this deployment. Read by the sign-in buttons. */
-export function signInOptions(): Record<SignInProviderId, boolean> {
-  return { google: googleEnabled };
-}
 
 /** Local development origins. They are trusted only outside production. */
 const LOCAL_DEV_ORIGINS: string[] = [
@@ -62,7 +47,7 @@ const LOCAL_DEV_ORIGINS: string[] = [
 const isProduction = process.env.NODE_ENV === "production";
 if (isProduction && !explicitBaseURL) {
   console.error(
-    "[auth] BETTER_AUTH_URL is not set. Email links and OAuth redirects fall back to localhost, so set it to the public origin.",
+    "[auth] BETTER_AUTH_URL is not set. Password-reset links would point at localhost, so set it to the public origin.",
   );
 }
 
@@ -104,24 +89,6 @@ export const auth = betterAuth({
   database,
 
   trustedOrigins,
-
-  // Direct Google sign-in. Registered only when fully configured, so an unconfigured Google never shows as a button.
-  ...(googleEnabled
-    ? {
-        socialProviders: {
-          google: { clientId: googleClientId as string, clientSecret: googleClientSecret as string },
-        },
-      }
-    : {}),
-
-  // Google accounts carry verified emails, so they may link to an existing email/password account with the same address.
-  account: {
-    encryptOAuthTokens: true,
-    accountLinking: {
-      enabled: true,
-      trustedProviders: ["google"],
-    },
-  },
 
   // Cache the session in a short-lived signed cookie so reads skip the database.
   session: { cookieCache: { enabled: true, maxAge: 300 } },

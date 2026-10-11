@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link, Navigate } from "@tanstack/react-router";
-import { SIGN_IN_PROVIDERS, authEnabled, signIn, signOut, useSignInOptions } from "./client";
+import { authEnabled, signOut } from "./client";
 import { resolveSignInGateState } from "./sign-in-gate";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, useTheme } from "@/components/ui";
@@ -61,29 +61,10 @@ export function SignInGate({
 }
 
 export function SignInButtons() {
-  const { loaded, options } = useSignInOptions();
-  const [error, setError] = useState<string | null>(null);
   return (
-    <div className="flex w-full max-w-sm flex-col gap-2">
-      {SIGN_IN_PROVIDERS.map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          disabled={!loaded || !options[p.id]}
-          onClick={() => {
-            setError(null);
-            signIn(p.id, { callbackURL: "/" }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Sign-in failed"));
-          }}
-          className="w-full cursor-pointer rounded-md border border-neutral-300 px-4 py-2 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
-          Continue with {p.label}
-        </button>
-      ))}
-      {loaded && SIGN_IN_PROVIDERS.some((p) => !options[p.id]) ? (
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">Google sign-in is not set up on this deployment. Use email and password.</p>
-      ) : null}
-      {error ? <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p> : null}
-    </div>
+    <Link to="/login" className="rounded-md border border-neutral-300 px-4 py-2 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+      Sign in with email
+    </Link>
   );
 }
 

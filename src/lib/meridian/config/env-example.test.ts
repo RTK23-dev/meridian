@@ -108,7 +108,7 @@ const listedNames = listed.map((item) => item.name);
 const KINDS = /\b(infrastructure|deployment configuration|per-workspace key|developer tooling)\b/;
 
 test("the scan finds the reads it must find, including the helper calls and the run-time names", () => {
-  for (const name of ["DATABASE_URL", "TOKEN_ENCRYPTION_KEY", "GOOGLE_SIGN_IN_CLIENT_ID", "VITE_AUTH_ENABLED", "OPENROUTER_MODEL", "META_AD_LIBRARY_TOKEN", "X_API_KEY", "PERCEPTION_SHARED_DEFAULT"]) {
+  for (const name of ["DATABASE_URL", "TOKEN_ENCRYPTION_KEY", "BETTER_AUTH_URL", "VITE_AUTH_ENABLED", "OPENROUTER_MODEL", "META_AD_LIBRARY_TOKEN", "X_API_KEY", "PERCEPTION_SHARED_DEFAULT"]) {
     assert.ok(reads.has(name), `${name} is found`);
   }
   assert.ok(reads.size > 100, `the scan covers the whole source (${reads.size} names)`);
