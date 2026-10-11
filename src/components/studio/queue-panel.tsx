@@ -74,6 +74,8 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
     publishedAt: string;
     externalUrl?: string;
   }>) ?? [];
+  // Scheduling is per creative, and a creative can have several media variants, so each creative is offered once.
+  const creativeOptions = variants.filter((variant, index) => variants.findIndex((other) => other.creativeId === variant.creativeId) === index);
   // The first missing requirement is the reason, so the person sees one thing to fix at a time.
   const enqueueBlockedReason = !canEdit ? "Only members can schedule publishing."
     : !queueCreativeId ? "Choose a creative to schedule."
@@ -100,7 +102,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
           <Field label="Choose Creative Variant" error={errors.creativeId?.message}>
             <SelectInput {...register("creativeId")}>
               <option value="">Select a variant…</option>
-              {variants.map((v) => (
+              {creativeOptions.map((v) => (
                 <option key={v.creativeId} value={v.creativeId}>
                   {v.title || v.kind} ({v.creativeStatus})
                 </option>
