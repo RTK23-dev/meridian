@@ -94,7 +94,33 @@ export default defineConfig(({ command, isPreview }) => ({
   // Pre-bundled at startup. A client module discovered after the first load makes Vite re-optimize and reload the page. A
   // reload mid-load can leave the sign-in form without its script, and then a submit falls back to a native page refresh.
   optimizeDeps: {
-    include: ["better-auth/react", "react-hook-form", "@hookform/resolvers/zod", "zod"],
+    include: [
+      "better-auth/react",
+      "react-hook-form",
+      "@hookform/resolvers/zod",
+      "zod",
+      // Nested packages that better-auth/react loads at run time. Vite found them only after the first load, and each late
+      // find re-optimized the dependencies and reloaded the page mid-flow, so pending saves were lost.
+      "@better-auth/core",
+      "@better-auth/core/api",
+      "@better-auth/core/context",
+      "@better-auth/core/db",
+      "@better-auth/core/db/adapter",
+      "@better-auth/core/env",
+      "@better-auth/core/error",
+      "@better-auth/core/instrumentation",
+      "@better-auth/core/oauth2",
+      "@better-auth/core/social-providers",
+      "@better-auth/core/utils/db",
+      "@better-auth/core/utils/deprecate",
+      "@better-auth/core/utils/error-codes",
+      "@better-auth/core/utils/host",
+      "@better-auth/core/utils/string",
+      "@better-auth/core/utils/url",
+      "@better-fetch/fetch",
+      "defu",
+      "nanostores",
+    ],
   },
   plugins: [
     pgliteBootstrapPlugin(),
