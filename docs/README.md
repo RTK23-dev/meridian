@@ -15,4 +15,3 @@ Start with the [README](../README.md) for what Meridian is and what runs today. 
 | [TESTING.md](TESTING.md) | Test commands, the CI jobs and the browser checks |
 | [ROADMAP.md](ROADMAP.md) | What is not built yet, stated plainly |
 
-`legacy/GROK_AGENTS.md` is kept as it was. A plugin test reads it. It is not product documentation.
