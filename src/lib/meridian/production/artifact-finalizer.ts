@@ -106,7 +106,24 @@ export type ArtifactDownloadOptions = {
   resolver?: ArtifactResolver;
   timeoutMs?: number;
   maxBytes?: number;
+  /** Domains an artifact may be fetched from, subdomains included. Omitted, MERIDIAN_ARTIFACT_HOST_ALLOWLIST applies. Empty means any public host. */
+  allowedHosts?: string[];
 };
+
+/** Parses MERIDIAN_ARTIFACT_HOST_ALLOWLIST: comma-separated domains. Unset or blank means no allowlist. */
+export function parseHostAllowlist(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase().replace(/^\*\./, "").replace(/\.$/, ""))
+    .filter(Boolean);
+}
+
+/** True when the host is one of the allowed domains or a subdomain of one. With no allowlist, every public host passes. */
+export function hostAllowed(hostname: string, allowedHosts: readonly string[] | undefined): boolean {
+  if (!allowedHosts || allowedHosts.length === 0) return true;
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  return allowedHosts.some((domain) => host === domain || host.endsWith(`.${domain}`));
+}
 
 export type ArtifactDownload =
   | { ok: true; bytes: Uint8Array }
@@ -137,6 +154,7 @@ class OversizedArtifact extends Error {
 export async function downloadProviderArtifact(rawUri: string, options: ArtifactDownloadOptions = {}): Promise<ArtifactDownload> {
   const timeoutMs = options.timeoutMs ?? ARTIFACT_DOWNLOAD_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? MAX_ARTIFACT_BYTES;
+  const allowedHosts = options.allowedHosts ?? parseHostAllowlist(process.env.MERIDIAN_ARTIFACT_HOST_ALLOWLIST);
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
@@ -150,7 +168,7 @@ export async function downloadProviderArtifact(rawUri: string, options: Artifact
   deadline.catch(() => undefined);
 
   try {
-    const bytes = await Promise.race([readArtifact(rawUri, { ...options, maxBytes }, controller.signal), deadline]);
+    const bytes = await Promise.race([readArtifact(rawUri, { ...options, allowedHosts, maxBytes }, controller.signal), deadline]);
     return { ok: true, bytes };
   } catch (err) {
     controller.abort(err);
@@ -182,6 +200,10 @@ async function readArtifact(
     if (url.protocol !== "https:") throw new RefusedArtifactUrl("Artifact URLs must use https.");
     const issue = publicUrlIssue(url.toString());
     if (issue) throw new RefusedArtifactUrl(`The artifact host is refused. ${issue}`);
+    // Checked on every hop: a redirect from an allowed host to an unlisted one is refused like a direct request.
+    if (!hostAllowed(url.hostname, options.allowedHosts)) {
+      throw new RefusedArtifactUrl("The artifact host is not on this deployment's artifact host allowlist (MERIDIAN_ARTIFACT_HOST_ALLOWLIST).");
+    }
 
     const response = options.fetchImpl
       ? await options.fetchImpl(url.toString(), { method: "GET", redirect: "manual", headers: { accept: ARTIFACT_ACCEPT }, signal })

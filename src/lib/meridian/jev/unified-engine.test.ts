@@ -71,8 +71,41 @@ test("evaluatePolicy auto-approves when all criteria pass with high probability 
     },
   };
 
-  const evalResult = evaluatePolicy(answers, DEFAULT_POLICY_THRESHOLDS);
+  const evalResult = evaluatePolicy(answers, DEFAULT_POLICY_THRESHOLDS, undefined, true);
   assert.equal(evalResult.decision, "AUTO_APPROVE");
+});
+
+test("evaluatePolicy never auto-approves on probability alone without a calibration report", () => {
+  const answers: Record<string, JevAnswer> = {
+    q1: {
+      questionId: "q1",
+      questionVersion: "v1",
+      model: "test-model",
+      provider: "test-provider",
+      status: "answered",
+      answer: true,
+      probability: 0.95,
+      confidence: 0.90,
+      evidenceRefs: [],
+      evaluatedAt: new Date().toISOString(),
+    },
+    q2: {
+      questionId: "q2",
+      questionVersion: "v1",
+      model: "test-model",
+      provider: "test-provider",
+      status: "answered",
+      answer: true,
+      probability: 0.92,
+      confidence: 0.88,
+      evidenceRefs: [],
+      evaluatedAt: new Date().toISOString(),
+    },
+  };
+
+  const evalResult = evaluatePolicy(answers, DEFAULT_POLICY_THRESHOLDS);
+  assert.equal(evalResult.decision, "HUMAN_REVIEW");
+  assert.match(evalResult.reason, /no calibration report/);
 });
 
 test("calibration metrics compute correct Brier score and log loss", () => {

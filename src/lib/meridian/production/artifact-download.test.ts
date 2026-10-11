@@ -6,6 +6,8 @@ import {
   MAX_ARTIFACT_BYTES,
   downloadProviderArtifact,
   finalizeProductionArtifact,
+  hostAllowed,
+  parseHostAllowlist,
 } from "./artifact-finalizer.ts";
 import type { Sql } from "../learning/store.ts";
 import type { GoogleDriveClient } from "../storage/drive.ts";
@@ -241,4 +243,39 @@ test("finalizeProductionArtifact: a refused artifact URL fails the job with the 
   assert.equal(result.errorCode, "ARTIFACT_URL_REFUSED");
   assert.equal(result.error?.includes("10.0.0.5"), false, "the refusal does not echo the URL");
   assert.equal(drivePuts, 0);
+});
+
+test("the artifact host allowlist parses domains and matches them and their subdomains only", () => {
+  assert.deepEqual(parseHostAllowlist(undefined), []);
+  assert.deepEqual(parseHostAllowlist(" CDN.Example.com., *.render.example ,"), ["cdn.example.com", "render.example"]);
+  assert.equal(hostAllowed("anything.example.org", []), true, "no allowlist: any public host passes");
+  assert.equal(hostAllowed("cdn.example.com", ["cdn.example.com"]), true);
+  assert.equal(hostAllowed("eu.cdn.example.com", ["cdn.example.com"]), true, "a subdomain of an allowed domain");
+  assert.equal(hostAllowed("evilcdn.example.com", ["cdn.example.com"]), false, "a suffix that is not a subdomain");
+  assert.equal(hostAllowed("cdn.example.com.attacker.net", ["cdn.example.com"]), false);
+});
+
+test("an artifact host that is not on the allowlist is refused before any request", async () => {
+  const { calls, fetchImpl } = spyFetch(() => new Response(VALID_MP4, { status: 200 }));
+  const result = await downloadProviderArtifact(PUBLIC_URL, { fetchImpl, allowedHosts: ["renders.example.net"] });
+  assert.equal("errorCode" in result ? result.errorCode : undefined, "ARTIFACT_URL_REFUSED");
+  assert.equal(calls.length, 0, "the unlisted host was never requested");
+});
+
+test("an allowlisted host is downloaded", async () => {
+  const { calls, fetchImpl } = spyFetch(() => new Response(VALID_MP4, { status: 200, headers: { "content-type": "video/mp4" } }));
+  const result = await downloadProviderArtifact(PUBLIC_URL, { fetchImpl, allowedHosts: ["example.com"] });
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 1);
+});
+
+test("a redirect from an allowed host to an unlisted host is refused on that hop", async () => {
+  const { calls, fetchImpl } = spyFetch((url) =>
+    url === PUBLIC_URL
+      ? new Response(null, { status: 302, headers: { Location: "https://elsewhere.example.org/out.mp4" } })
+      : new Response(VALID_MP4, { status: 200 }),
+  );
+  const result = await downloadProviderArtifact(PUBLIC_URL, { fetchImpl, allowedHosts: ["example.com"] });
+  assert.equal("errorCode" in result ? result.errorCode : undefined, "ARTIFACT_URL_REFUSED");
+  assert.deepEqual(calls.map((call) => call.url), [PUBLIC_URL], "the unlisted hop was never requested");
 });

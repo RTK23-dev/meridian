@@ -28,6 +28,12 @@ function asNumber(value: unknown): number {
   return Number.isFinite(number) ? number : 0;
 }
 
+function optionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 /**
  * Recompute brand-scoped patterns from stored rows.
  * Does not mark jobs succeeded. The process that claimed the job records its own result.
@@ -83,12 +89,6 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
       from organic_observations
       where brand_id = ${brandId} and organization_id = ${organizationId} and creative_id is not null
     `;
-function optionalNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
     organicObservations = organicRows.map((row) => ({
       creativeId: asText(row.creative_id),
       organizationId: asText(row.organization_id),
@@ -104,19 +104,25 @@ function optionalNumber(value: unknown): number | null {
     organicObservations = [];
   }
   const patterns = learnPatterns({ organizationId, brandId, creatives, observations, organicObservations });
-  await sql`delete from learned_patterns where brand_id = ${brandId} and organization_id = ${organizationId} and scope = 'brand'`;
-  for (const pattern of patterns) {
-    await sql`
-      insert into learned_patterns (
-        id, organization_id, brand_id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary,
-        state, clicks, conversions, spend_cents, revenue_cents, scope, p_beat, ci_low, ci_high, q_value
-      ) values (
-        ${globalThis.crypto.randomUUID()}, ${organizationId}, ${brandId}, ${pattern.attribute}, ${pattern.value}, ${pattern.metric},
-        ${pattern.lift}, ${pattern.sampleSize}, ${pattern.baseline}, ${pattern.observed}, ${pattern.impressions}, ${pattern.summary},
-        ${pattern.state ?? "INFERRED"}, ${pattern.clicks ?? 0}, ${pattern.conversions ?? 0}, ${pattern.spendCents ?? 0}, ${pattern.revenueCents ?? 0},
-        ${pattern.scope ?? "brand"}, ${pattern.pBeat ?? null}, ${pattern.ciLow ?? null}, ${pattern.ciHigh ?? null}, ${pattern.qValue ?? null}
-      )
-    `;
-  }
+  // Read, compute, then replace in one transaction. A failed insert rolls the delete back, so readers never see an empty
+  // or half-written set. The advisory lock serializes two replacements for the same brand: without it, both would delete
+  // the old rows and both would insert, leaving duplicates.
+  await withTransaction(sql, async (tx) => {
+    await tx`select pg_advisory_xact_lock(hashtext(${`learned_patterns:${organizationId}:${brandId}`}))`;
+    await tx`delete from learned_patterns where brand_id = ${brandId} and organization_id = ${organizationId} and scope = 'brand'`;
+    for (const pattern of patterns) {
+      await tx`
+        insert into learned_patterns (
+          id, organization_id, brand_id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary,
+          state, clicks, conversions, spend_cents, revenue_cents, scope, p_beat, ci_low, ci_high, q_value
+        ) values (
+          ${globalThis.crypto.randomUUID()}, ${organizationId}, ${brandId}, ${pattern.attribute}, ${pattern.value}, ${pattern.metric},
+          ${pattern.lift}, ${pattern.sampleSize}, ${pattern.baseline}, ${pattern.observed}, ${pattern.impressions}, ${pattern.summary},
+          ${pattern.state ?? "INFERRED"}, ${pattern.clicks ?? 0}, ${pattern.conversions ?? 0}, ${pattern.spendCents ?? 0}, ${pattern.revenueCents ?? 0},
+          ${pattern.scope ?? "brand"}, ${pattern.pBeat ?? null}, ${pattern.ciLow ?? null}, ${pattern.ciHigh ?? null}, ${pattern.qValue ?? null}
+        )
+      `;
+    }
+  });
   return patterns.length;
 }

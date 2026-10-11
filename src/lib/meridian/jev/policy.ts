@@ -98,10 +98,15 @@ export const DEFAULT_POLICY_THRESHOLDS: JevPolicyThresholds = {
   minConfidenceForAuto: 0.75,
 };
 
+/**
+ * `calibrated` says the thresholds and the probabilities behind them have a calibration report. Until one exists, a
+ * probability is an explanation, not a decision: it can route to review or reject, but it never auto-approves.
+ */
 export function evaluatePolicy(
   answers: Record<string, JevAnswer>,
   thresholds: JevPolicyThresholds = DEFAULT_POLICY_THRESHOLDS,
   policyVersion = DEFAULT_POLICY_VERSION,
+  calibrated = false,
 ): JevPolicyEvaluation {
   let supportingCount = 0;
   let violationCount = 0;
@@ -209,6 +214,19 @@ export function evaluatePolicy(
     };
   }
   const avgProbability = totalProb / probCount;
+
+  if (avgProbability >= thresholds.autoApprove && !calibrated) {
+    return {
+      decision: "HUMAN_REVIEW",
+      reason: `Probability ${avgProbability.toFixed(2)} clears the approval threshold, but the threshold has no calibration report, so it cannot approve on its own.`,
+      policyVersion,
+      thresholds,
+      supportingCount,
+      violationCount,
+      uncertainCount,
+      evidenceRefs: collectedEvidence,
+    };
+  }
 
   if (avgProbability >= thresholds.autoApprove) {
     return {

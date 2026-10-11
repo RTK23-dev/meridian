@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — production readiness batch 1
+
+Operators must read these before deploying. Migration `0061_oauth_state_redirect_origin.sql` is new.
+
+- **JEV approval needs calibration**: a probability that clears the approval threshold routes to HUMAN_REVIEW until the threshold has a
+  calibration report. A probability alone never approves.
+- **Learned patterns replace atomically**: the brand's patterns are read, computed, then swapped in one transaction. A failed write keeps
+  the previous set, and two replacements for one brand are serialized.
+- **OAuth state is single use per origin**: the start origin is stored with the state. The callback claims the state in one statement that
+  also checks provider, origin and expiry, then exchanges the code with the stored redirect URI. States started before this release cannot
+  be claimed; their users connect again.
+- **Artifact host allowlist (optional)**: `MERIDIAN_ARTIFACT_HOST_ALLOWLIST` limits provider artifact downloads to the listed domains and
+  their subdomains, checked on every redirect hop. Blank keeps the public-host policy. Set it in production once the provider CDN hosts are
+  confirmed.
+
 ## Unreleased — fixes from the review of 2b0a119
 
 Operators must read these before deploying. Senders of webhooks must change how they sign.

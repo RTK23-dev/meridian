@@ -1,0 +1,83 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { PGlite } from "@electric-sql/pglite";
+import type { Sql } from "../learning/store.ts";
+import { claimOauthState } from "./state.ts";
+
+// The state table as migrations 0009 and 0061 leave it, without the organizations foreign key this test does not need.
+async function freshDatabase() {
+  const pg = new PGlite();
+  await pg.waitReady;
+  await pg.exec(`
+    create table oauth_states (
+      state_hash text primary key,
+      organization_id text not null,
+      provider text not null,
+      expires_at timestamptz not null,
+      used_at timestamptz,
+      redirect_origin text
+    );
+  `);
+  const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+    let text = strings[0];
+    for (let i = 0; i < values.length; i += 1) text += `$${i + 1}${strings[i + 1]}`;
+    return pg.query(text, values).then((result) => result.rows);
+  }) as unknown as Sql;
+  return { pg, sql };
+}
+
+async function startAttempt(
+  pg: PGlite,
+  row: { stateHash: string; provider?: string; origin?: string | null; expiresIn?: string },
+) {
+  await pg.query(
+    `insert into oauth_states (state_hash, organization_id, provider, expires_at, redirect_origin)
+     values ($1, 'org-oauth', $2, now() + $3::interval, $4)`,
+    [row.stateHash, row.provider ?? "meta", row.expiresIn ?? "10 minutes", row.origin === undefined ? "https://meridian.example" : row.origin],
+  );
+}
+
+test("a state is claimed once: the second presentation of the same state gets nothing", async () => {
+  const { pg, sql } = await freshDatabase();
+  await startAttempt(pg, { stateHash: "hash-once" });
+  const first = await claimOauthState(sql, { stateHash: "hash-once", provider: "meta", origin: "https://meridian.example" });
+  const second = await claimOauthState(sql, { stateHash: "hash-once", provider: "meta", origin: "https://meridian.example" });
+  assert.deepEqual(first, { organizationId: "org-oauth", redirectOrigin: "https://meridian.example" });
+  assert.equal(second, null);
+});
+
+test("a callback from another origin cannot consume the state, and the state still works from its own origin", async () => {
+  const { pg, sql } = await freshDatabase();
+  await startAttempt(pg, { stateHash: "hash-origin" });
+  const wrong = await claimOauthState(sql, { stateHash: "hash-origin", provider: "meta", origin: "https://attacker.example" });
+  assert.equal(wrong, null);
+  const right = await claimOauthState(sql, { stateHash: "hash-origin", provider: "meta", origin: "https://meridian.example" });
+  assert.equal(right?.redirectOrigin, "https://meridian.example", "the failed attempt did not mark the state used");
+});
+
+test("a state presented for another provider is not claimed", async () => {
+  const { pg, sql } = await freshDatabase();
+  await startAttempt(pg, { stateHash: "hash-provider", provider: "meta" });
+  const claimed = await claimOauthState(sql, { stateHash: "hash-provider", provider: "tiktok", origin: "https://meridian.example" });
+  assert.equal(claimed, null);
+});
+
+test("an expired state is not claimed", async () => {
+  const { pg, sql } = await freshDatabase();
+  await startAttempt(pg, { stateHash: "hash-expired", expiresIn: "-1 minute" });
+  const claimed = await claimOauthState(sql, { stateHash: "hash-expired", provider: "meta", origin: "https://meridian.example" });
+  assert.equal(claimed, null);
+});
+
+test("a state begun before the origin was stored has no origin, so it cannot be claimed", async () => {
+  const { pg, sql } = await freshDatabase();
+  await startAttempt(pg, { stateHash: "hash-legacy", origin: null });
+  const claimed = await claimOauthState(sql, { stateHash: "hash-legacy", provider: "meta", origin: "https://meridian.example" });
+  assert.equal(claimed, null);
+});
+
+test("a state that was never issued is not claimed", async () => {
+  const { sql } = await freshDatabase();
+  const claimed = await claimOauthState(sql, { stateHash: "hash-unknown", provider: "meta", origin: "https://meridian.example" });
+  assert.equal(claimed, null);
+});
