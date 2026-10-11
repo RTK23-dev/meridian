@@ -30,6 +30,110 @@ export function storageRetryAction(previousAttempts: number): { action: "retry" 
   return { action: attempts < MAX_STORAGE_PERSISTENCE_ATTEMPTS ? "retry" : "fail", attempts };
 }
 
+/**
+ * Polls one job may receive before a transient status-check failure is terminal. attempt_count counts every poll of the job,
+ * including healthy ones, and a render is polled about every 30 seconds. So 240 polls is about two hours, longer than any render
+ * this worker is expected to wait for, and a job that cannot be read for that long is reconciled rather than polled forever.
+ */
+export const MAX_PROVIDER_POLL_ATTEMPTS = 240;
+
+/** A job still unreadable this long after submission is terminal, whatever its attempt count. Twenty-four hours is past any render. */
+export const MAX_PROVIDER_POLL_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** A transient retry waits least(attempts, 6) * 30 seconds, so it backs off to three minutes. */
+const PROVIDER_RETRY_STEP_SECONDS = 30;
+
+export type ProviderPollFailure = {
+  /** A permanent failure cannot succeed on retry, so the job leaves the queue at once. */
+  permanent: boolean;
+  errorCode: string;
+  reason: string;
+};
+
+const CONTRACT_FAILURES: Record<string, ProviderPollFailure> = {
+  INVALID_JOB_ID: {
+    permanent: true,
+    errorCode: "PROVIDER_JOB_ID_INVALID",
+    reason: "The stored provider job id is not one the provider can be asked about, so no status check was made.",
+  },
+  MALFORMED_RESPONSE: {
+    permanent: true,
+    errorCode: "PROVIDER_CONTRACT_MISMATCH",
+    reason: "The provider's status response did not match the expected contract.",
+  },
+  REDIRECT_REFUSED: {
+    permanent: true,
+    errorCode: "PROVIDER_REDIRECT_REFUSED",
+    reason: "The provider redirected a status check. The workspace key was not sent to the redirect target.",
+  },
+};
+
+/**
+ * Classifies a failed status check. The class comes from the adapter's contract code or HTTP status, never from message text.
+ * 401, 403, 404, other 4xx except 408 and 429, redirects and contract failures are permanent. 408, 429, 5xx, and any error with
+ * no status (a network failure, a timeout, or another adapter's error) are transient, and transient failures are still bounded.
+ */
+export function classifyProviderPollError(error: unknown): ProviderPollFailure {
+  const fields = typeof error === "object" && error !== null ? (error as { code?: unknown; status?: unknown }) : {};
+  if (typeof fields.code === "string" && Object.hasOwn(CONTRACT_FAILURES, fields.code)) {
+    return CONTRACT_FAILURES[fields.code]!;
+  }
+  const status = fields.status;
+  if (typeof status === "number" && Number.isInteger(status)) {
+    if (status === 401 || status === 403) {
+      return {
+        permanent: true,
+        errorCode: "PROVIDER_AUTH_REJECTED",
+        reason: `The provider rejected the workspace's key for this status check (HTTP ${status}). Restore a valid key for this workspace.`,
+      };
+    }
+    if (status === 404) {
+      return { permanent: true, errorCode: "PROVIDER_JOB_NOT_FOUND", reason: "The provider does not recognise this request (HTTP 404)." };
+    }
+    if (status === 429) {
+      return { permanent: false, errorCode: "PROVIDER_RATE_LIMITED", reason: "The provider rate-limited the status check (HTTP 429)." };
+    }
+    if (status === 408 || (status >= 500 && status <= 599)) {
+      return { permanent: false, errorCode: "PROVIDER_UNAVAILABLE", reason: `The provider did not answer the status check (HTTP ${status}).` };
+    }
+    if (status >= 300 && status <= 499) {
+      return { permanent: true, errorCode: "PROVIDER_REQUEST_REJECTED", reason: `The provider rejected the status check (HTTP ${status}).` };
+    }
+  }
+  return { permanent: false, errorCode: "PROVIDER_POLL_FAILED", reason: "The status check failed without an HTTP answer." };
+}
+
+export type ProviderPollDecision =
+  | { action: "retry"; delaySeconds: number }
+  | { action: "reconcile"; errorCode: string; reason: string };
+
+/**
+ * Decides what a failed status check does to its job. A permanent failure reconciles at once. A transient one retries until the
+ * attempt bound or the age bound is reached, then reconciles. Reconciliation is terminal for the poller and never releases money.
+ */
+export function providerPollDecision(input: { failure: ProviderPollFailure; attempts: number; ageMs: number }): ProviderPollDecision {
+  const { failure, attempts, ageMs } = input;
+  const outcome = " The render's outcome is unknown, so its reservation is held. Resolve the cause, then reconcile the held reservation.";
+  if (failure.permanent) {
+    return { action: "reconcile", errorCode: failure.errorCode, reason: `${failure.reason}${outcome}` };
+  }
+  if (attempts >= MAX_PROVIDER_POLL_ATTEMPTS) {
+    return {
+      action: "reconcile",
+      errorCode: "POLL_RETRY_EXHAUSTED",
+      reason: `Status checks failed on ${attempts} polls. Last: ${failure.reason}${outcome}`,
+    };
+  }
+  if (ageMs >= MAX_PROVIDER_POLL_AGE_MS) {
+    return {
+      action: "reconcile",
+      errorCode: "POLL_RETRY_EXHAUSTED",
+      reason: `The job has not been readable for 24 hours. Last: ${failure.reason}${outcome}`,
+    };
+  }
+  return { action: "retry", delaySeconds: Math.min(attempts, 6) * PROVIDER_RETRY_STEP_SECONDS };
+}
+
 async function recordMaterializationRetry(
   sql: Sql,
   row: { id: string; organization_id: string; brand_id: string; attempt_count: number },
@@ -64,6 +168,7 @@ export type PollOptions = {
   limit?: number;
   /** Claim only this organization's jobs. Omitted, the worker claims across every tenant, as it does in production. */
   organizationId?: string;
+  /** A test transport for artifact downloads. Omitted, as in production, downloads connect to their validated addresses. */
   fetchImpl?: typeof fetch;
   driveClient?: ArtifactDrive;
   router?: ProductionRouter;
@@ -81,7 +186,6 @@ export async function pollProductionJobs(
   options: PollOptions = {},
 ): Promise<PollResult> {
   const limit = Math.max(1, Math.min(options.limit ?? 10, 50));
-  const fetchImpl = options.fetchImpl || globalThis.fetch;
   const drive = options.driveClient || defaultArtifactDrive();
   const router = options.router || productionRouter;
   const scope = options.organizationId ?? null;
@@ -107,6 +211,8 @@ export async function pollProductionJobs(
     materialized_at: unknown;
     modality: string;
     created_at: unknown;
+    /** Milliseconds since submission, on the database clock. The age bound uses it, so the worker's clock is not trusted. */
+    age_ms: string | number | null;
   }>`
     with candidates as (
       select id
@@ -127,7 +233,8 @@ export async function pollProductionJobs(
     where jobs.id = candidates.id
     returning jobs.id, jobs.organization_id, jobs.brand_id, jobs.provider, jobs.provider_job_id,
               jobs.request_id, jobs.status_url, jobs.cancel_url, jobs.status, jobs.attempt_count, jobs.input,
-              jobs.artifact_id, jobs.creative_plan_id, jobs.materialized_at, jobs.modality, jobs.created_at
+              jobs.artifact_id, jobs.creative_plan_id, jobs.materialized_at, jobs.modality, jobs.created_at,
+              extract(epoch from (now() - jobs.created_at)) * 1000 as age_ms
   `;
 
   const result: PollResult = {
@@ -250,17 +357,39 @@ export async function pollProductionJobs(
 
     try {
       polledJob = await provider.checkJobStatus(externalJobId, metadata);
-    } catch {
-      const newAttempts = (row.attempt_count || 0) + 1;
-      await sql`
-        update production_jobs
-        set attempt_count = ${newAttempts},
-            last_polled_at = now(),
-            next_poll_at = now() + (least(${newAttempts}, 6) * interval '5 seconds'),
-            updated_at = now()
-        where id = ${row.id}
-      `;
-      result.polled++;
+    } catch (error) {
+      const failure = classifyProviderPollError(error);
+      const attempts = (row.attempt_count || 0) + 1;
+      const decision = providerPollDecision({ failure, attempts, ageMs: Number(row.age_ms ?? 0) });
+      if (decision.action === "retry") {
+        await sql`
+          update production_jobs
+          set attempt_count = ${attempts},
+              error_code = ${failure.errorCode},
+              error_message = ${failure.reason},
+              last_polled_at = now(),
+              next_poll_at = now() + (${decision.delaySeconds} * interval '1 second'),
+              updated_at = now()
+          where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id}
+        `;
+        result.polled++;
+      } else {
+        // Reconciliation leaves the job out of the poller's queue (SUBMISSION_UNKNOWN is never claimed), and the job is listed
+        // for an admin to resolve. Its reservation is not released or settled here: the provider's outcome is unknown, and
+        // releasing could hide a real charge. The plan is not settled either, because its job is not terminal.
+        await sql`
+          update production_jobs
+          set status = 'SUBMISSION_UNKNOWN',
+              error_code = ${decision.errorCode},
+              error_message = ${decision.reason},
+              attempt_count = ${attempts},
+              last_polled_at = now(),
+              next_poll_at = null,
+              updated_at = now()
+          where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id}
+        `;
+        result.failed++;
+      }
       continue;
     }
 
@@ -282,7 +411,7 @@ export async function pollProductionJobs(
         },
         options: {
           driveClient: drive,
-          fetchImpl,
+          fetchImpl: options.fetchImpl,
           durationMs,
           // The durable input is authoritative for the spec; a provider need not echo it back.
           job: { ...polledJob, creativeSpec: polledJob.creativeSpec ?? (parsedInput.creativeSpec as ProductionJob["creativeSpec"]) },
@@ -328,6 +457,20 @@ export async function pollProductionJobs(
           await settlePlanOf(sql, row);
           result.failed++;
         }
+      } else if (finalized.status === "FAILED") {
+        // The provider reported the render complete, so it may be billed. Its artifact URL was refused or was too large, and
+        // retrying the same URL cannot help. The job fails with that reason, and its reservation stays held for reconciliation.
+        await sql`
+          update production_jobs
+          set status = 'FAILED',
+              error_code = ${finalized.errorCode ?? "ARTIFACT_NOT_STORED"},
+              error_message = ${finalized.error ?? "The provider's artifact could not be stored."},
+              last_polled_at = now(),
+              updated_at = now()
+          where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id}
+        `;
+        await settlePlanOf(sql, row);
+        result.failed++;
       } else if (finalized.status === "STORAGE_PERSISTENCE_FAILED") {
         // The render exists but was not stored durably. Retry with backoff, and fail the job once retries are exhausted,
         // so the plan can settle. The provider accepted the render and may have billed it, so the reservation is held.
@@ -375,10 +518,13 @@ export async function pollProductionJobs(
     } else {
       // In progress
       const newAttempts = (row.attempt_count || 0) + 1;
+      // A successful answer clears the error recorded by an earlier transient failure.
       await sql`
         update production_jobs
         set status = ${polledJob.status},
             attempt_count = ${newAttempts},
+            error_code = null,
+            error_message = null,
             last_polled_at = now(),
             next_poll_at = now() + (least(${newAttempts}, 6) * interval '5 seconds'),
             updated_at = now()
