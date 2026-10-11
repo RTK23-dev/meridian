@@ -72,11 +72,19 @@ Operators can monitor real-time worker operations at `/jobs`:
 
 ## 4. Health & Observability Endpoint (`/api/health`)
 
-For production monitoring (Kubernetes, AWS ECS, Datadog, Uptime Robot), Meridian exposes an unauthenticated health check endpoint at `/api/health`:
+For production monitoring (Kubernetes, AWS ECS, Datadog, Uptime Robot), Meridian exposes a health check endpoint at `/api/health`. Without a query string it is liveness only, and it is unauthenticated:
+
+```json
+{ "status": "ok" }
+```
+
+It reads no database and returns no counts.
+
+`/api/health?detail=1` returns the operational detail. It needs a signed-in workspace admin, and it covers only that admin's active workspace. A signed-out caller gets `401`, and a member gets `403`. Job and queue counts are never summed across workspaces. When the database cannot be read, the affected values are `unknown` or `null`, not zero:
 
 ```json
 {
-  "application": "up",
+  "status": "ok",
   "database": "up",
   "worker": "running",
   "scheduler": "running",
