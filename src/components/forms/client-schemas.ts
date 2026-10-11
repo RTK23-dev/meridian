@@ -4,7 +4,8 @@
  * the server's limits and messages, and the server validator it repeats is named beside it.
  */
 import { z } from "zod";
-import { deliveryUrlAllowed } from "@/lib/meridian/alerts/lifecycle";
+// Relative, not @/, so the schemas also load under plain Node for the tests.
+import { deliveryUrlAllowed } from "../../lib/meridian/alerts/lifecycle.ts";
 
 /** saveDeliveryTarget: the URL is trimmed. A blank URL clears the target. Anything else must pass deliveryUrlAllowed. */
 export const deliveryTargetSchema = z.object({
