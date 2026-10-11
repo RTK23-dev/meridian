@@ -14,7 +14,7 @@
  * here (`{ providerId: "grok-github", idp: "github", label: "GitHub" }`). The
  * `providerId` is this app's local id and the OAuth callback path segment
  * (`/api/auth/oauth2/callback/<providerId>`); `idp` is the hint the broker reads
- * to pick the upstream (Better Auth's id for X is still `twitter`).
+ * to pick the upstream. X sign-in was removed on purpose: it is not offered.
  */
 export type GrokProvider = {
   /** This app's local provider id; also the callback path segment. */
@@ -27,5 +27,12 @@ export type GrokProvider = {
 
 export const GROK_PROVIDERS: readonly GrokProvider[] = [
   { providerId: "grok-google", idp: "google", label: "Google" },
-  { providerId: "grok-x", idp: "twitter", label: "X" },
 ];
+
+/**
+ * Hosts the shared live-preview broker client cannot return to. The broker accepts only `*.grok-sandbox.com` callbacks for
+ * that client (see `preview.ts`), so federated sign-in ends at the broker and fails on the way back. Email sign-in works here.
+ */
+export function isBrokerUnreachableHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
+}

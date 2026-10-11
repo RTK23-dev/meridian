@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui";
-import { GROK_PROVIDERS, signIn } from "@/lib/auth/client";
+import { GROK_PROVIDERS, signIn, useLoopbackHost } from "@/lib/auth/client";
 
 /** The Meridian mark. It uses the same geometry as the favicon, drawn with theme tokens so it reads in light and dark. */
 export function MeridianMark({ className = "size-9" }: { className?: string }) {
@@ -39,6 +39,7 @@ export function AuthShell({ title, description, children, footer }: {
 
 /** Sign-in with the upstream providers. Each button starts the provider's own flow and returns to the workspace. */
 export function ProviderSignIn({ heading = "Or continue with" }: { heading?: string }) {
+  const loopback = useLoopbackHost();
   return (
     <div className="space-y-3">
       <p className="text-sm font-semibold text-fg">{heading}</p>
@@ -50,12 +51,14 @@ export function ProviderSignIn({ heading = "Or continue with" }: { heading?: str
             variant="secondary"
             size="lg"
             className="w-full justify-start"
+            disabled={loopback}
             onClick={() => { void signIn(provider.providerId, { callbackURL: "/" }); }}
           >
             Continue with {provider.label}
           </Button>
         ))}
       </div>
+      {loopback ? <p className="text-sm text-fg-muted">Google sign-in runs on the live preview or a deployed app. On localhost, use email sign-in.</p> : null}
     </div>
   );
 }
