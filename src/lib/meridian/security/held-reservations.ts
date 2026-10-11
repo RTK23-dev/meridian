@@ -127,7 +127,7 @@ export async function resolveHeldReservation(
     reservation_status: string;
     job_status: string;
     creative_plan_id: string | null;
-  }` 
+  }>`
     select r.production_job_id, p.provider, r.status as reservation_status, p.status as job_status, p.creative_plan_id
     from budget_reservations r
     join production_jobs p
