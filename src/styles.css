@@ -89,14 +89,20 @@
   html { color-scheme: light; }
   html.dark { color-scheme: dark; }
   body {
-    background:
-      radial-gradient(1100px 520px at 12% -12%, color-mix(in srgb, var(--color-accent-soft) 85%, transparent), transparent 70%),
-      var(--color-bg);
-    background-attachment: fixed;
+    background: var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.5;
+  }
+  /* The warm light behind the page is its own layer, so text contrast is measured against the plain page background. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(1100px 520px at 12% -12%, color-mix(in srgb, var(--color-accent-soft) 85%, transparent), transparent 70%);
   }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
   /* One focus ring for every theme: 2px, 2px offset. */
@@ -153,7 +159,7 @@
   to { opacity: 1; }
 }
 .surface-rise { animation: rise 460ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.stagger-in { animation: rise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.stagger-in { animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .page-enter { animation: fade 280ms ease-out both; }
 
 /* Reduced motion: every CSS transition and animation, including the ones in new components, is cut to 0.01ms. JS-driven

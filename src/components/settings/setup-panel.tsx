@@ -220,7 +220,7 @@ export function KeyForm({ row, organizationId, canAdmin, category }: { row: Pick
           void save.mutateAsync(trimmed).catch(() => undefined);
         }}
       >
-        <div className="min-w-[16rem] flex-1">
+        <div className="min-w-0 flex-1 basis-full sm:min-w-[16rem] sm:basis-auto">
           <Field label={`${row.label} API key`} hint="Leave blank to keep the saved key. Only an admin can save a key.">
             <Input
               type="password"

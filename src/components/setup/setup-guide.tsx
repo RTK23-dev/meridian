@@ -19,6 +19,8 @@ const PRIMARY_SOURCES: ReadonlyArray<{ id: string; what: string }> = [
 
 const MORE_SOURCES = ["twitter", "linkedin", "pinterest", "tiktok", "instagram", "licensed"];
 const MEDIA_IDS = ["perception", "production", "hypit"];
+// The shared button does not shrink, so a long label would widen a phone-width column. This lets it wrap inside the column.
+const ACTION = "max-w-full shrink whitespace-normal text-left";
 
 const STATUS_LABEL: Record<SetupStatus, { text: string; className: string }> = {
   usable: { text: "In use", className: "bg-success-soft text-success" },
@@ -51,7 +53,7 @@ export function SetupGuide() {
     return (
       <div className="space-y-3">
         <p className="text-fg-muted">Create a workspace first, then come back here.</p>
-        <Button asChild variant="secondary"><Link to="/">Back to the overview</Link></Button>
+        <Button asChild variant="secondary" className={ACTION}><Link to="/">Back to the overview</Link></Button>
       </div>
     );
   }
@@ -117,7 +119,7 @@ export function SetupGuide() {
             <p className="text-sm text-fg-muted">{summary.headline}</p>
           </div>
           {next ? (
-            <a href={`#step-${next.id}`} className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-fg transition hover:brightness-110">
+            <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-md bg-accent px-4 text-center text-sm font-semibold text-accent-fg transition hover:brightness-110">
               Go to: {next.title}
             </a>
           ) : null}
@@ -145,7 +147,7 @@ export function SetupGuide() {
               <article
                 aria-labelledby={`step-title-${step.id}`}
                 className={`stagger-in rounded-xl border bg-surface p-5 shadow-sm transition-shadow duration-300 md:p-6 ${isCurrent ? "border-accent shadow-md" : "border-border"}`}
-                style={{ animationDelay: `${index * 60}ms` }}
+                style={{ animationDelay: `${Math.min(index, 2) * 40}ms` }}
               >
                 <div className="flex items-start gap-4">
                   <span className={`grid size-9 shrink-0 place-items-center rounded-full ${mark.className}`} aria-hidden="true">
@@ -162,7 +164,7 @@ export function SetupGuide() {
                     </div>
                     <p className="text-sm text-fg">{step.what}</p>
                     <p className="text-sm text-fg-muted"><span className="font-semibold text-fg">Why: </span>{step.why}</p>
-                    <p className="rounded-lg bg-surface-2 px-3 py-2 text-sm text-fg" aria-live="polite">{step.detail}</p>
+                    <p className="rounded-lg bg-surface-2 px-3 py-2 text-sm text-fg [overflow-wrap:anywhere]" aria-live="polite">{step.detail}</p>
                     <div className="pt-1">{body(step)}</div>
                   </div>
                 </div>
@@ -185,15 +187,15 @@ function BrandAction({ brandCount, canCreate, firstBrandId, firstBrandName }: { 
   if (brandCount === 0) {
     return canCreate ? (
       <div className="space-y-2">
-        <Button asChild><Link to="/brands/new">Create your first brand</Link></Button>
+        <Button asChild className={ACTION}><Link to="/brands/new">Create your first brand</Link></Button>
         <p className="text-sm text-fg-muted">You only need a name and what you sell. The website and the rest of the brand brain can be added later.</p>
       </div>
     ) : <p className="text-sm text-fg-muted">Only a workspace member can create a brand.</p>;
   }
   return (
     <div className="flex flex-wrap gap-2">
-      {firstBrandId ? <Button asChild variant="secondary"><Link to={`/brands/${firstBrandId}/brain` as never}>Fill in {firstBrandName ?? "the brand"}&apos;s brain</Link></Button> : null}
-      {canCreate ? <Button asChild variant="quiet"><Link to="/brands/new">Add another brand</Link></Button> : null}
+      {firstBrandId ? <Button asChild variant="secondary" className={ACTION}><Link to={`/brands/${firstBrandId}/brain` as never}>Fill in {firstBrandName ?? "the brand"}&apos;s brain</Link></Button> : null}
+      {canCreate ? <Button asChild variant="quiet" className={ACTION}><Link to="/brands/new">Add another brand</Link></Button> : null}
     </div>
   );
 }
@@ -201,16 +203,16 @@ function BrandAction({ brandCount, canCreate, firstBrandId, firstBrandName }: { 
 function SourcesAction({ rowById, loaded, canAdmin, organizationId, brandId }: { rowById: (id: string) => SetupRow | undefined; loaded: boolean; canAdmin: boolean; organizationId: string; brandId?: string }) {
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-4">
           <p className="font-semibold text-fg">Public web pages</p>
           <p className="text-sm text-fg-muted">No key. Meridian reads a page you name and stores its text as evidence. It reads the site&apos;s robots.txt first, and it reports a bot check instead of getting past it.</p>
-          {brandId ? <Button asChild variant="quiet"><Link to={`/brands/${brandId}/market` as never}>Read a public page on Market</Link></Button> : null}
+          {brandId ? <Button asChild variant="quiet" className={ACTION}><Link to={`/brands/${brandId}/market` as never}>Read a public page on Market</Link></Button> : null}
         </div>
         <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-4">
           <p className="font-semibold text-fg">Your own files and links</p>
           <p className="text-sm text-fg-muted">No key. Add the files and links you have the right to use: brand source material in the brand brain, and your own creatives in the Library.</p>
-          {brandId ? <Button asChild variant="quiet"><Link to={`/brands/${brandId}/library` as never}>Open Library</Link></Button> : null}
+          {brandId ? <Button asChild variant="quiet" className={ACTION}><Link to={`/brands/${brandId}/library` as never}>Open Library</Link></Button> : null}
         </div>
       </div>
       <RowList ids={PRIMARY_SOURCES.map((source) => source.id)} rowById={rowById} loaded={loaded} canAdmin={canAdmin} organizationId={organizationId} descriptions={Object.fromEntries(PRIMARY_SOURCES.map((source) => [source.id, source.what]))} />
@@ -262,7 +264,7 @@ function RowList({
             </div>
             {row.save.kind === "form" ? (
               <details className="group rounded-md border border-border p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-accent">{row.fingerprint ? "Replace or remove the key" : "Add the key"}</summary>
+                <summary className="cursor-pointer text-sm font-semibold text-fg underline decoration-accent underline-offset-4">{row.fingerprint ? "Replace or remove the key" : "Add the key"}</summary>
                 <div className="mt-3">
                   <KeyForm row={row} organizationId={organizationId} canAdmin={canAdmin} category={row.save.category} />
                 </div>
@@ -282,7 +284,7 @@ function StorageAction({ row, loaded }: { row: SetupRow | undefined; loaded: boo
     <div className="space-y-2 rounded-lg border border-border p-4">
       <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.reason}</p>
       {row.save.kind === "deployment" ? (
-        <p className="text-sm text-fg-muted">
+        <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">
           Set on the server, not here: {row.save.variables.map((name, index) => (
             <span key={name}>{index > 0 ? ", " : ""}<code className="font-mono text-xs text-fg">{name}</code></span>
           ))}. No key is shown on this page.

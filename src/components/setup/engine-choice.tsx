@@ -69,7 +69,7 @@ export function EngineChoice({
     <div className="space-y-4">
       {error ? <PlainErrorMessage message={error.message} raw={error.raw} /> : null}
       {message ? <p className="text-sm font-medium text-success" role="status">{message}</p> : null}
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {engines.engines.map((engine) => {
           const copy = ENGINE_COPY[engine.id];
           const ready = engine.health.status === "READY";
@@ -101,12 +101,12 @@ export function EngineChoice({
                     {copy ? <span className="block text-sm text-fg-muted">{copy.summary}</span> : null}
                   </label>
                 </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ready ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
+                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ready ? "bg-success-soft text-success" : "bg-warning-soft text-fg ring-1 ring-warning/50"}`}>
                   {isActive ? "Active" : ready ? "Ready" : "Not ready"}
                 </span>
               </div>
               {copy ? <p className="text-sm text-fg-muted"><span className="font-semibold text-fg">Needs: </span>{copy.needs}</p> : null}
-              {!ready && engine.health.message ? <p className="text-sm text-warning">{engine.health.message}</p> : null}
+              {!ready && engine.health.message ? <p className="text-sm text-fg [overflow-wrap:anywhere]">{engine.health.message}</p> : null}
               {/* A card that is not ready carries its key form, so the key is saved where the choice is made. */}
               {!ready && key && canAdmin ? (
                 <KeyForm row={{ label: engine.label, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
