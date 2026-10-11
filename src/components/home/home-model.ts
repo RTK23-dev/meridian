@@ -5,9 +5,6 @@
 import { formatDistanceToNow } from "date-fns";
 import type { BrandSummary } from "@/lib/meridian/workspace/actions";
 
-/** A brand is thin until every required brain field has content. The completeness here is the required-field ratio. */
-export const REQUIRED_BRAIN_RATIO = 1;
-
 export type OverviewMetrics = {
   failedJobs: number;
   livePublications: number;
@@ -100,7 +97,7 @@ export function attentionItems(input: {
       id: `brain:${brand.brandId}`,
       tone: "neutral",
       title: `${brand.brandName}’s brand brain is thin`,
-      detail: `${Math.round(brand.ratio * 100)}% of brain fields are filled`,
+      detail: `${Math.round(brand.ratio * 100)}% of required brain fields are filled`,
       to: "/brands/$brandId/brain",
       brandId: brand.brandId,
     });
@@ -130,8 +127,9 @@ export function activityTime(value: string): number {
   return Number.isFinite(time) ? time : 0;
 }
 
-export function isThinBrand(brand: Pick<BrandSummary, "completeness">): boolean {
-  return brand.completeness < REQUIRED_BRAIN_RATIO;
+/** A brand is thin until every required brain field has content. The gate is the stored requiredComplete flag, not the ratio. */
+export function isThinBrand(brand: Pick<BrandSummary, "requiredComplete">): boolean {
+  return !brand.requiredComplete;
 }
 
 /** A readable relative time, or a plain fallback when the stored value is not a date. */

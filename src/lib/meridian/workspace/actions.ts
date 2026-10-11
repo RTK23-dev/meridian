@@ -32,7 +32,10 @@ export type BrandSummary = {
   industry: string;
   sells: string;
   country: string;
+  /** The share of required brain fields with content, from 0 to 1. For display only. */
   completeness: number;
+  /** True only when every required brain field has content. The gate for setup, thin-brand attention and the brand switcher. */
+  requiredComplete: boolean;
   updatedAt: string;
   /** The id /api/assets/<id> serves for the brand's logo. Null when no logo is stored. */
   logoAssetId: string | null;

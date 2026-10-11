@@ -4,8 +4,10 @@
  */
 export type OnboardingBrand = {
   id: string;
-  /** The share of required brain fields with content, from 0 to 1 (requiredRatio in workspace/brands-listing.ts). */
+  /** The share of required brain fields with content, from 0 to 1. Display only; the step reads requiredComplete. */
   completeness: number;
+  /** True only when every required brain field has content (requiredState in workspace/brands-listing.ts). */
+  requiredComplete: boolean;
   /** Null when the brand's counts have not loaded. */
   competitors: number | null;
   opportunities: number | null;
@@ -16,14 +18,6 @@ export type OnboardingStep = { label: string; state: StepState; done: boolean; t
 
 /** The stored review list holds at most this many rows (listReviews in publishing/actions.ts). */
 export const REVIEW_LIST_LIMIT = 40;
-
-/**
- * A brand's brain is complete when every required field has content, which is a completeness of 1. Optional fields do not
- * count here. The required set is defined once, in the brain's field list (REQUIRED_BRAIN_KEYS in lib/meridian/brain.ts).
- */
-export function requiredBrainComplete(brand: Pick<OnboardingBrand, "completeness">): boolean {
-  return brand.completeness >= 1;
-}
 
 /** Done wins. Otherwise the step is to do when everything it depends on is known, and unknown when something is missing. */
 function stateOf(done: boolean, known: boolean): StepState {
@@ -49,7 +43,9 @@ export function getOnboardingSteps(input: {
   };
   return [
     step("Create a brand", input.brands.length > 0, true, "/brands/new", ""),
-    step("Complete a brand brain", input.brands.some(requiredBrainComplete), true, target("brain"), brandId),
+    // A brain is complete when every required field has content. Optional fields do not count. The required set is defined once,
+    // in the brain's field list (REQUIRED_BRAIN_KEYS in lib/meridian/brain.ts), and reaches here as requiredComplete.
+    step("Complete a brand brain", input.brands.some((brand) => brand.requiredComplete), true, target("brain"), brandId),
     step("Connect a provider", input.providerConnected === true, input.providerConnected !== null, "/integrations", ""),
     step("Add a competitor", input.brands.some((brand) => (brand.competitors ?? 0) > 0), countKnown((brand) => brand.competitors), target("market"), brandId),
     step("Rank opportunities", input.brands.some((brand) => (brand.opportunities ?? 0) > 0), countKnown((brand) => brand.opportunities), target("opportunities"), brandId),
