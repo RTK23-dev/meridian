@@ -59,7 +59,7 @@ export function DriveConnectionPanel({ organizationId, canAdmin }: { organizatio
             ) : null}
 
             {data.steps.length > 0 ? (
-              <ol className="list-decimal space-y-2 pl-5 text-sm text-fg-muted">
+              <ol className="list-decimal space-y-2 pl-5 text-sm text-fg-muted [overflow-wrap:anywhere]">
                 {data.steps.map((step) => (
                   <li key={step}>{step}</li>
                 ))}
