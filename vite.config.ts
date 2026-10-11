@@ -91,6 +91,11 @@ export default defineConfig(({ command, isPreview }) => ({
     strictPort: true,
   },
   resolve: { tsconfigPaths: true },
+  // Pre-bundled at startup. A client module discovered after the first load makes Vite re-optimize and reload the page. A
+  // reload mid-load can leave the sign-in form without its script, and then a submit falls back to a native page refresh.
+  optimizeDeps: {
+    include: ["better-auth/react", "react-hook-form", "@hookform/resolvers/zod", "zod"],
+  },
   plugins: [
     pgliteBootstrapPlugin(),
     // Dev-only /__app-env, read by scripts/check-auth-invariant.mjs.
