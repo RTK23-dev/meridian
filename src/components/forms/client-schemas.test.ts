@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { auditFilterSchema, connectAccountSchema, deliveryTargetSchema, providerFieldsSchema, queueScheduleSchema, webhookFilterSchema } from "./client-schemas.ts";
+import { PAGE_LIMIT_MESSAGE } from "../../lib/meridian/settings/page-limit.ts";
 
 const messageOf = (result: { success: boolean; error?: { issues: Array<{ message: string }> } }) =>
   result.success ? null : result.error?.issues[0]?.message ?? null;
@@ -57,9 +58,9 @@ test("the provider panel accepts a known cost mode and a whole page limit", () =
 
 test("a blank or non-numeric page limit is refused instead of being stored as 0 or NaN", () => {
   const base = { jevKey: "", productionKey: "", perceptionKey: "", gatewayUrl: "", costPreference: "BALANCED", maxPages: "" };
-  assert.equal(messageOf(providerFieldsSchema.safeParse(base)), "Enter the number of pages, as a number.");
-  assert.equal(messageOf(providerFieldsSchema.safeParse({ ...base, maxPages: "ten" })), "Enter the number of pages, as a number.");
-  assert.equal(messageOf(providerFieldsSchema.safeParse({ ...base, maxPages: "   " })), "Enter the number of pages, as a number.");
+  assert.equal(messageOf(providerFieldsSchema.safeParse(base)), PAGE_LIMIT_MESSAGE);
+  assert.equal(messageOf(providerFieldsSchema.safeParse({ ...base, maxPages: "ten" })), PAGE_LIMIT_MESSAGE);
+  assert.equal(messageOf(providerFieldsSchema.safeParse({ ...base, maxPages: "   " })), PAGE_LIMIT_MESSAGE);
 });
 
 test("a queue schedule needs a creative and at least one account, and a blank time means publish now", () => {
