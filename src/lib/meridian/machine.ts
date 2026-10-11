@@ -4,6 +4,7 @@ import { getSql } from "@/lib/db";
 import { type Role } from "@/lib/meridian/access";
 import { SOURCE_ADAPTERS } from "@/lib/meridian/sources/adapters";
 import { summarizeUsage } from "@/lib/meridian/observability/usage";
+import { loadMachineCounts, type MachineCounts } from "./machine-counts.ts";
 import {
   asText,
   asNumber,
@@ -17,16 +18,7 @@ export type MachineSnapshot = {
   providerConfigured: boolean;
   provider: string;
   adapters: { id: string; label: string; implemented: boolean; note: string }[];
-  counts: {
-    competitors: number;
-    documents: number;
-    observations: number;
-    creatives: number;
-    openOpportunities: number;
-    reviews: number;
-    patterns: number;
-    performanceRows: number;
-  };
+  counts: MachineCounts;
   usage: {
     tokens: number;
     costCents: number | null;
@@ -48,10 +40,6 @@ export const getMachine = createServerFn({ method: "POST" })
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
     const { providerStatus } = await import("@/lib/meridian/providers/chat.server");
     const provider = providerStatus();
-    const count = async (query: string) => {
-      const rows = await sql.query<{ count: number }>(query, [data.brandId, access.organizationId]);
-      return asNumber(rows[0]?.count);
-    };
     const usageRows = (await sql<Record<string, unknown>>`
           select operation, tokens, cost_cents from model_runs
           where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
@@ -81,22 +69,14 @@ export const getMachine = createServerFn({ method: "POST" })
       select count(*) as count from provider_objects
       where brand_id = ${data.brandId} and organization_id = ${access.organizationId} and object_type = 'ad'
     `;
+    const counts = await loadMachineCounts(sql, access.organizationId, data.brandId);
     const recommendation = top[0];
     return {
       role: access.role,
       providerConfigured: provider.configured,
       provider: provider.provider,
       adapters: SOURCE_ADAPTERS.map((adapter) => ({ ...adapter })),
-      counts: {
-        competitors: await count(`select count(*) as count from competitors where brand_id = $1 and organization_id = $2 and status = 'confirmed'`),
-        documents: await count(`select count(*) as count from source_documents where brand_id = $1 and organization_id = $2 and status = 'stored'`),
-        observations: await count(`select count(*) as count from creative_records where brand_id = $1 and organization_id = $2 and origin = 'competitor'`),
-        creatives: await count(`select count(*) as count from creative_records where brand_id = $1 and organization_id = $2 and origin <> 'competitor'`),
-        openOpportunities: await count(`select count(*) as count from opportunities where brand_id = $1 and organization_id = $2 and status = 'open'`),
-        reviews: await count(`select count(*) as count from reviews where brand_id = $1 and organization_id = $2 and status = 'open'`),
-        patterns: await count(`select count(*) as count from learned_patterns where brand_id = $1 and organization_id = $2`),
-        performanceRows: await count(`select count(*) as count from performance_observations where brand_id = $1 and organization_id = $2`),
-      },
+      counts,
       usage: summarizeUsage(usageRows),
       operating: {
         recommendation: recommendation

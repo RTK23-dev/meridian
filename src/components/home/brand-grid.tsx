@@ -8,7 +8,7 @@ import { doneCount, pipelineStages, type PipelineStage } from "@/components/bran
 import { relativeTime, visibleBrands, type BrandSort } from "./home-model";
 
 export type MachineState = { status: "loading" } | { status: "error" } | { status: "ready"; snapshot: MachineSnapshot };
-export type BrandLookup = { machine: MachineState; decided: number | null };
+export type BrandLookup = { machine: MachineState };
 
 export function BrandGrid({ brands, lookup, canCreate, newBrandLink }: {
   brands: BrandSummary[];
@@ -75,7 +75,7 @@ function BrandCard({ brand, lookup }: { brand: BrandSummary; lookup: BrandLookup
           </div>
         </div>
         <div className="mt-4 space-y-2 border-t border-border pt-3">
-          <PipelineProgress machine={machine} decided={lookup?.decided ?? null} />
+          <PipelineProgress machine={machine} />
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-fg-muted">
             <ReviewBadge machine={machine} />
             <span>{brand.updatedAt ? `Updated ${relativeTime(brand.updatedAt)}` : "No recorded update time"}</span>
@@ -104,14 +104,14 @@ export function CompletenessRing({ value }: { value: number }) {
   );
 }
 
-function PipelineProgress({ machine, decided }: { machine: MachineState; decided: number | null }) {
+function PipelineProgress({ machine }: { machine: MachineState }) {
   if (machine.status === "loading") {
     return <div role="status" aria-label="Loading pipeline"><Skeleton className="h-2 w-full" /></div>;
   }
   if (machine.status === "error") {
     return <p className="text-xs text-fg-muted">Pipeline could not be loaded.</p>;
   }
-  const stages = pipelineStages({ counts: machine.snapshot.counts, operating: machine.snapshot.operating, decidedReviews: decided });
+  const stages = pipelineStages({ counts: machine.snapshot.counts, operating: machine.snapshot.operating });
   return (
     <div className="space-y-1.5">
       <p className="text-xs text-fg-muted">{summary(stages)}</p>

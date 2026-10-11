@@ -44,7 +44,7 @@ export function PipelineStepper({ brandId, stages }: { brandId: string; stages: 
           );
         })}
       </ol>
-      <p className="text-xs text-fg-muted">Decision and Brief have no count in the stored data, so they show status only.</p>
+      <p className="text-xs text-fg-muted">Counts are stored records. A stage with a count of 0 has no stored record yet.</p>
     </section>
   );
 }
