@@ -1,6 +1,9 @@
 /**
  * The Postgres store for resumable artifact uploads. Postgres is the system of record for the upload session. Every
  * statement filters by organization_id and brand_id, so a session in one workspace cannot be read or changed from another.
+ *
+ * The session URI is stored sealed with TOKEN_ENCRYPTION_KEY (session-seal.ts). The store seals it on the way in and opens
+ * it on the way out, so the upload loop receives the plain URI and the database never holds it.
  */
 import type { Sql } from "../learning/store.ts";
 import { isoTimestamp } from "../observability/timestamps.ts";
@@ -11,6 +14,12 @@ import type {
   NewArtifactUploadSession,
   StorageObjectRecordInput,
 } from "./artifact-upload.ts";
+import { openSessionUri, SessionSealError, sealSessionUri } from "./session-seal.ts";
+
+export type ArtifactUploadStoreOptions = {
+  /** The key that seals session URIs. Default: TOKEN_ENCRYPTION_KEY, read at each call. */
+  masterKey?: () => string;
+};
 
 const COLUMNS = `id, organization_id, brand_id, storage_key, mime_type, total_bytes, sha256, session_uri, confirmed_offset,
   status, attempts, last_error, provider_file_id, storage_object_id, updated_at`;
@@ -33,7 +42,7 @@ type SessionRow = {
   updated_at: unknown;
 };
 
-function toSession(row: SessionRow): ArtifactUploadSession {
+function toSession(row: SessionRow, masterKey: string): ArtifactUploadSession {
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -42,7 +51,7 @@ function toSession(row: SessionRow): ArtifactUploadSession {
     mimeType: row.mime_type,
     totalBytes: Number(row.total_bytes),
     sha256: row.sha256,
-    sessionUri: row.session_uri,
+    sessionUri: openSessionUri(row.session_uri, masterKey),
     confirmedOffset: Number(row.confirmed_offset),
     status: row.status,
     attempts: Number(row.attempts),
@@ -53,7 +62,8 @@ function toSession(row: SessionRow): ArtifactUploadSession {
   };
 }
 
-export function createSqlArtifactUploadStore(sql: Sql): ArtifactUploadStore {
+export function createSqlArtifactUploadStore(sql: Sql, options: ArtifactUploadStoreOptions = {}): ArtifactUploadStore {
+  const masterKey = options.masterKey ?? (() => process.env.TOKEN_ENCRYPTION_KEY ?? "");
   return {
     async findActive(scope: ArtifactUploadScope, storageKey: string) {
       const rows = await sql.query<SessionRow>(
@@ -62,10 +72,15 @@ export function createSqlArtifactUploadStore(sql: Sql): ArtifactUploadStore {
          limit 1`,
         [scope.organizationId, scope.brandId, storageKey],
       );
-      return rows[0] ? toSession(rows[0]) : null;
+      return rows[0] ? toSession(rows[0], masterKey()) : null;
     },
 
     async insertActive(row: NewArtifactUploadSession) {
+      // The Drive session URI is sealed as soon as Drive starts the session. Without a key, refuse here, before any request
+      // reaches Drive, so no session is started that cannot be recorded.
+      if (!masterKey().trim()) {
+        throw new SessionSealError("TOKEN_ENCRYPTION_KEY is not configured. The upload session was not stored, so no Drive upload was started.");
+      }
       const inserted = await sql.query<{ id: string }>(
         `insert into artifact_upload_sessions (id, organization_id, brand_id, storage_key, mime_type, total_bytes, sha256, updated_at)
          values ($1, $2, $3, $4, $5, $6, $7, now())
@@ -81,19 +96,23 @@ export function createSqlArtifactUploadStore(sql: Sql): ArtifactUploadStore {
         `select ${COLUMNS} from artifact_upload_sessions where organization_id = $1 and brand_id = $2 and id = $3 limit 1`,
         [scope.organizationId, scope.brandId, sessionId],
       );
-      return rows[0] ? toSession(rows[0]) : null;
+      return rows[0] ? toSession(rows[0], masterKey()) : null;
     },
 
     async setSessionUri(scope: ArtifactUploadScope, sessionId: string, sessionUri: string) {
-      // Keeps a URI that another process stored first. Its Drive session is then the one this upload continues.
+      // Keeps a URI that another process stored first. Its Drive session is then the one this upload continues. Only the
+      // sealed form is written, and the value returned is opened again, so the caller always gets the plain URI.
+      const key = masterKey();
+      const sealed = sealSessionUri(sessionUri, key);
       const rows = await sql.query<{ session_uri: string }>(
         `update artifact_upload_sessions
          set session_uri = case when session_uri = '' then $4 else session_uri end, updated_at = now()
          where organization_id = $1 and brand_id = $2 and id = $3 and status = 'uploading'
          returning session_uri`,
-        [scope.organizationId, scope.brandId, sessionId, sessionUri],
+        [scope.organizationId, scope.brandId, sessionId, sealed],
       );
-      return rows[0]?.session_uri || null;
+      const stored = rows[0]?.session_uri;
+      return stored ? openSessionUri(stored, key) : null;
     },
 
     async recordProgress(scope, sessionId, progress) {
