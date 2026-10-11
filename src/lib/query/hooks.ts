@@ -28,11 +28,8 @@ import { getDecisionEngines, getProviderSettings } from "@/lib/meridian/settings
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";
-
-/** Screens refresh every 5 seconds while a job they show is queued, retrying, or running. */
-export const ACTIVE_POLL_MS = 5_000;
-
-const ACTIVE_JOB_STATUSES = new Set(["queued", "running", "retry"]);
+import { ACTIVE_POLL_MS, jobDetailRefetchInterval, jobsRefetchInterval } from "./polling";
+import { markAlertAcknowledged, markOpportunitiesDismissed, markReviewResolved } from "./optimistic";
 
 /** The user and whether the session has resolved. Queries stay disabled until both are known. */
 function useSession() {
@@ -110,7 +107,7 @@ export const organicQueryOptions = (userId: string | null | undefined, brandId: 
   queryFn: () => getOrganicDistribution({ data: { brandId } }),
 });
 export const accountsQueryOptions = (userId: string | null | undefined, brandId: string, platform?: string) => queryOptions({
-  queryKey: userScopedQueryKey(userId, platform ? [...qk.accounts(brandId), platform] : qk.accounts(brandId)),
+  queryKey: userScopedQueryKey(userId, qk.accounts(brandId, platform)),
   queryFn: () => getPlatformAccountsAction({ data: { brandId, platform } }),
 });
 export const accountIntelligenceQueryOptions = (userId: string | null | undefined, brandId: string, platform: string) => queryOptions({
@@ -348,7 +345,7 @@ export const useJobsQuery = (organizationId: string, enabled = true, filters: Jo
   return useQuery({
     ...jobsQueryOptions(userId, organizationId, filters),
     enabled: ready && enabled && !!organizationId,
-    refetchInterval: (query) => query.state.data?.jobs.some((job) => ACTIVE_JOB_STATUSES.has(job.status)) ? ACTIVE_POLL_MS : false,
+    refetchInterval: (query) => jobsRefetchInterval(query.state.data),
   });
 };
 
@@ -368,7 +365,7 @@ export const useJobDetailQuery = (organizationId: string, jobId: string | null) 
   return useQuery({
     ...jobDetailQueryOptions(userId, organizationId, jobId ?? ""),
     enabled: ready && !!organizationId && !!jobId,
-    refetchInterval: (query) => query.state.data && ACTIVE_JOB_STATUSES.has(query.state.data.status) ? ACTIVE_POLL_MS : false,
+    refetchInterval: (query) => jobDetailRefetchInterval(query.state.data),
   });
 };
 
@@ -454,12 +451,7 @@ export function useResolveReview(brandId: string) {
     onMutate: async (vars) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<ReviewsData>(key);
-      queryClient.setQueryData<ReviewsData>(key, (current) => current && {
-        ...current,
-        reviews: current.reviews.map((item) => item.id === vars.reviewId
-          ? { ...item, status: vars.action === "approve" ? "approved" : "rejected" }
-          : item),
-      });
+      queryClient.setQueryData<ReviewsData>(key, (current) => markReviewResolved(current, vars.reviewId, vars.action));
       return { previous };
     },
     onError: (error, _vars, context) => {
@@ -493,11 +485,7 @@ export function useDismissOpportunities(brandId: string) {
     onMutate: async (opportunityIds) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<OpportunitiesData>(key);
-      const ids = new Set(opportunityIds);
-      queryClient.setQueryData<OpportunitiesData>(key, (current) => current && {
-        ...current,
-        opportunities: current.opportunities.map((item) => ids.has(item.id) ? { ...item, status: "dismissed" } : item),
-      });
+      queryClient.setQueryData<OpportunitiesData>(key, (current) => markOpportunitiesDismissed(current, opportunityIds));
       return { previous };
     },
     onError: (error, _vars, context) => {
@@ -526,10 +514,7 @@ export function useAcknowledgeAlert(organizationId: string) {
     onMutate: async (alertId) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<AlertsData>(key);
-      queryClient.setQueryData<AlertsData>(key, (current) => current && {
-        ...current,
-        alerts: current.alerts.map((alert) => alert.id === alertId ? { ...alert, acknowledged: true } : alert),
-      });
+      queryClient.setQueryData<AlertsData>(key, (current) => markAlertAcknowledged(current, alertId));
       return { previous };
     },
     onError: (error, _vars, context) => {

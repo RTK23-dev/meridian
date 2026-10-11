@@ -25,7 +25,8 @@ export const qk = {
   notifications: (organizationId: string) => ["notification-preferences", organizationId] as const,
   channels: (brandId: string) => ["channels", brandId] as const,
   organic: (brandId: string) => ["organic", brandId] as const,
-  accounts: (brandId: string) => ["accounts", brandId] as const,
+  /** Brand-level accounts, or one platform within the brand. Invalidating the brand key refreshes every platform. */
+  accounts: (brandId: string, platform?: string) => platform ? ["accounts", brandId, platform] as const : ["accounts", brandId] as const,
   accountIntelligence: (brandId: string, platform?: string) => platform ? ["account-intelligence", brandId, platform] as const : ["account-intelligence", brandId] as const,
   publishingQueue: (brandId: string, status?: string) => status ? ["publishing-queue", brandId, status] as const : ["publishing-queue", brandId] as const,
   telemetry: (brandId: string, platform?: string) => platform ? ["telemetry", brandId, platform] as const : ["telemetry", brandId] as const,
@@ -36,6 +37,10 @@ export const qk = {
   decisionEngines: (organizationId: string) => ["decision-engines", organizationId] as const,
 };
 
+/**
+ * Prefixes a key with the user it belongs to, so one user's cached data never shows for another. An empty id counts as
+ * signed out: it gets the shared sentinel, never a key of its own.
+ */
 export function userScopedQueryKey(userId: string | null | undefined, key: readonly unknown[]) {
-  return ["user", userId ?? "signed-out", ...key] as const;
+  return ["user", userId || "signed-out", ...key] as const;
 }
