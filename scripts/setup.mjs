@@ -3,7 +3,7 @@
  * The one setup command: `npm run setup`.
  *
  * It checks the Node.js version, installs dependencies only when node_modules is missing, creates .env from .env.example only
- * when .env does not exist, generates TOKEN_ENCRYPTION_KEY only when that line is empty, applies migrations when DATABASE_URL
+ * when .env does not exist, generates TOKEN_ENCRYPTION_KEY and BETTER_AUTH_SECRET only when those lines are empty, applies migrations when DATABASE_URL
  * is set (and says plainly when it is not, because the embedded PGlite database applies instead), and prints the next steps.
  *
  * It never prints a secret value. Running it again is safe: an existing .env is never overwritten, and a key that is already
@@ -88,6 +88,7 @@ export function setupSummary(facts) {
     `  Dependencies:         ${facts.dependencies}`,
     `  .env:                 ${facts.envFile}`,
     `  TOKEN_ENCRYPTION_KEY: ${facts.tokenKey} (the value is never printed)`,
+    `  BETTER_AUTH_SECRET:   ${facts.authSecret} (the value is never printed)`,
     `  Database:             ${database}`,
     "",
     "Next steps",
@@ -141,13 +142,14 @@ function main() {
   }
   const env = envFileFor(existing, existing === null ? readFileSync(examplePath, "utf8") : "");
   const token = fillBlankEnvValue(env.text, "TOKEN_ENCRYPTION_KEY", () => generateTokenEncryptionKey());
-  if (env.created || token.filled) {
-    writeFileSync(envPath, token.text, { encoding: "utf8", mode: 0o600 });
+  const auth = fillBlankEnvValue(token.text, "BETTER_AUTH_SECRET", () => generateTokenEncryptionKey());
+  if (env.created || token.filled || auth.filled) {
+    writeFileSync(envPath, auth.text, { encoding: "utf8", mode: 0o600 });
   }
 
   // The migrator reads DATABASE_URL from the environment, so the .env values are applied to this process first. A variable
   // already set in the shell wins, as it does for every other command.
-  applyEnv(token.text);
+  applyEnv(auth.text);
   const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
   let database = "notSet";
   if (databaseUrl) {
@@ -162,6 +164,7 @@ function main() {
     dependencies,
     envFile: env.created ? "created from .env.example" : "kept as it was",
     tokenKey: token.filled ? "generated" : "already set",
+    authSecret: auth.filled ? "generated" : "already set",
     database,
     baseUrl: process.env.BETTER_AUTH_URL?.trim() || DEFAULT_BASE_URL,
   });

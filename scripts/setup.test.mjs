@@ -23,6 +23,7 @@ function summaryFacts(overrides = {}) {
     dependencies: "already present",
     envFile: "kept as it was",
     tokenKey: "already set",
+    authSecret: "already set",
     database: "notSet",
     baseUrl: DEFAULT_BASE_URL,
     ...overrides,
@@ -82,8 +83,9 @@ test("the generated key is 32 random bytes, hex encoded, and differs between cal
   assert.equal(generateTokenEncryptionKey((size) => Buffer.alloc(size, 0xab)), "ab".repeat(32));
 });
 
-test("the example leaves TOKEN_ENCRYPTION_KEY and DATABASE_URL blank, so setup fills the first and leaves the second to PGlite", () => {
+test("the example leaves both secrets and DATABASE_URL blank, so setup fills the secrets and leaves the database to PGlite", () => {
   assert.equal(fillBlankEnvValue(EXAMPLE, "TOKEN_ENCRYPTION_KEY", () => "filled").filled, true);
+  assert.equal(fillBlankEnvValue(EXAMPLE, "BETTER_AUTH_SECRET", () => "filled").filled, true);
   assert.match(EXAMPLE, /^DATABASE_URL=$/m, "DATABASE_URL is blank in the example");
 });
 
@@ -94,6 +96,7 @@ test("the summary names the sign-in page, the Setup view and the start command, 
   assert.match(lines, /Settings, General, Setup/);
   assert.match(lines, /Only a workspace admin can save a key/);
   assert.match(lines, /TOKEN_ENCRYPTION_KEY: generated \(the value is never printed\)|TOKEN_ENCRYPTION_KEY: already set \(the value is never printed\)/);
+  assert.match(lines, /BETTER_AUTH_SECRET: {3}already set \(the value is never printed\)/);
 });
 
 test("without DATABASE_URL the summary says plainly that PGlite applies, and with it the summary says the migrations ran", () => {
