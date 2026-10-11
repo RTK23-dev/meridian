@@ -14,6 +14,7 @@ import type { Sql } from "../learning/store.ts";
 import { sourceRegistry, SourceRegistry } from "../sources/registry.ts";
 import { pageUrlForSeed } from "../sources/public-url.ts";
 import type { SourceReference } from "../sources/types.ts";
+import { SourceCallError } from "../sources/live-api.ts";
 import { crawlLadderPage, type PageCrawlResult } from "./crawler.ts";
 import { ResearchPlanner, type PlannedSourceExecution } from "./planner.ts";
 import { DiscoveryFrontierService } from "./frontier.ts";
@@ -107,12 +108,14 @@ function caveatFor(sources: SourceRunState[], seenBefore: number, frontierRemain
     parts.push(`Crawl paused with ${frontierRemaining} durable frontier item(s) remaining.`);
   }
   const { ran, failed, gated } = summarize(sources);
+  if (ran === 0) {
+    parts.push("No source ran, so this run has no results. Each source's reason is listed.");
+  }
   if (gated > 0) {
-    parts.push(
-      ran === 0 && failed === 0
-        ? `No source ran. ${gated} planned source check(s) are not configured or not supported; each reason is listed.`
-        : `${gated} planned source check(s) did not run because they are not configured or not supported; each reason is listed.`,
-    );
+    parts.push(`${gated} planned source check(s) did not run because they are not configured or not supported; each reason is listed.`);
+  }
+  if (failed > 0) {
+    parts.push(`${failed} source call(s) failed; each reason is listed.`);
   }
   if (seenBefore > 0) {
     parts.push(`${seenBefore} record(s) matched what this brand already stores and were not stored again.`);
@@ -132,7 +135,7 @@ function parseJson<T>(value: unknown, fallback: T): T {
 }
 
 /** Reads the progress column and splits the caveat out of it. */
-function progressFromRow(value: unknown): { progress: DiscoveryRun["progress"]; caveat?: string } {
+export function progressFromRow(value: unknown): { progress: DiscoveryRun["progress"]; caveat?: string } {
   const { caveat, ...stored } = parseJson<StoredProgress>(value, { pagesCrawled: 0, discoveredCards: 0, discoveredUrls: 0 });
   return {
     progress: {
@@ -156,7 +159,7 @@ function itemFromReference(runId: string, ref: SourceReference, seed: string): D
     canonicalUrl: url,
     source: ref.platform,
     cardType: "post",
-    title: (ref.metadata?.handle as string) || (ref.metadata?.caption as string) || url,
+    title: (ref.metadata?.title as string) || (ref.metadata?.handle as string) || (ref.metadata?.caption as string) || url,
     text: (ref.metadata?.caption as string) || undefined,
     metrics: unavailableMetrics(),
     contentHash,
@@ -470,8 +473,10 @@ export class DiscoveryService {
         recordSourceState(run, { adapterId: adapter.id, seed: exec.seed, status: "ran", itemsFound, seenBefore, sourceStatus });
       } catch (error) {
         const reason = errorMessage(error);
+        // A provider that gave no usable answer records its health (AUTH_FAILED, RATE_LIMITED or UNAVAILABLE) with the run.
+        const sourceStatus = error instanceof SourceCallError ? error.failure : undefined;
         run.perSourceErrors[exec.adapterId] = reason;
-        recordSourceState(run, { adapterId: adapter.id, seed: exec.seed, status: "failed", reason });
+        recordSourceState(run, { adapterId: adapter.id, seed: exec.seed, status: "failed", reason, sourceStatus });
         // Non-fatal for optional adapters (e.g. Cyclone): mission continues
       }
     }
@@ -578,9 +583,13 @@ export class DiscoveryService {
   }
 
   /**
-   * Sets the run's status and caveat from its source states. A run that paused, or whose pages failed terminally, is partial.
-   * A run where every source that was called failed is failed. A run where no source was called (every source gated) is
-   * completed, with a caveat that says no source ran, so the status alone is never the only signal.
+   * Sets the run's status and caveat from its source states.
+   *
+   * - failed: the run itself raised an error.
+   * - blocked: no source ran. Every source was not configured, not supported, unavailable or failed, so there is no result
+   *   to show. Each source's reason is listed.
+   * - completed: at least one source ran and nothing failed or was left paused.
+   * - partial: at least one source ran, and something paused, failed or was not stored.
    */
   private settle(ctx: RunContext, frontier: FrontierOutcome | undefined, fatal: boolean): void {
     const { run } = ctx;
@@ -588,10 +597,10 @@ export class DiscoveryService {
     const { ran, failed } = summarize(sources);
     if (fatal) {
       run.status = "failed";
+    } else if (ran === 0) {
+      run.status = "blocked";
     } else if (frontier && frontier.remaining > 0) {
       run.status = "partial";
-    } else if (failed > 0 && ran === 0) {
-      run.status = "failed";
     } else if (failed > 0 || (frontier?.terminalFailures ?? 0) > 0 || hasPersistenceFailure(run.perSourceErrors)) {
       run.status = "partial";
     } else {

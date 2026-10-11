@@ -135,6 +135,8 @@ export type SourceRunState =
       status: "failed";
       /** The error the call raised. */
       reason: string;
+      /** The source's health for this call when the provider gave no usable answer: AUTH_FAILED, RATE_LIMITED or UNAVAILABLE. */
+      sourceStatus?: string;
     };
 
 export interface DiscoveryRun {

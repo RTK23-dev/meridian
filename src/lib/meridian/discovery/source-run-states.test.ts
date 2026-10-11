@@ -179,7 +179,7 @@ test("a keyed source whose discovery throws is reported as failed with the error
   });
 
   assert.equal(items.length, 0);
-  assert.equal(run.status, "failed", "no source ran successfully in this run");
+  assert.equal(run.status, "blocked", "no source ran successfully in this run, so the run is blocked, not failed");
   const tiktok = run.progress.sources?.find((state) => state.adapterId === "tiktok");
   assert.ok(tiktok && tiktok.status === "failed" && tiktok.reason === "tiktok search timed out");
   assert.equal(run.perSourceErrors.tiktok, "tiktok search timed out");

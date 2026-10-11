@@ -20,11 +20,14 @@ import {
   startResearchCollection,
 } from "@/lib/meridian/machine";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
+import { startDiscovery } from "@/lib/meridian/research/actions";
 import { useMarketQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { competitorFieldsSchema, publicPageSchema, researchCollectionSchema, type CompetitorFields, type CompetitorFieldsOutput, type PublicPageFields, type ResearchCollection, type ResearchCollectionFields } from "@/lib/meridian/schemas/market";
 import { observationFieldsSchema, type ObservationFields, type ObservationFieldsOutput } from "@/lib/meridian/schemas/observation";
 import { CompetitorCandidates } from "@/components/market/competitor-candidates";
+import { DiscoveryStart } from "@/components/market/discovery-start";
+import { DiscoveryRunList } from "@/components/research/discovery-runs";
 import { ResearchDetailSheet } from "@/components/market/research-detail-sheet";
 import { ResearchFilterBar } from "@/components/market/research-filter-bar";
 import { ResearchList } from "@/components/market/research-list";
@@ -78,6 +81,16 @@ function MarketPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.market(brandId)],
     onSuccess: (result) => {
       setNote(result.status === "NOT_CONNECTED" ? result.error : `Retry ${result.reused ? "returned the existing run" : "queued"}. This page updates while the run is queued or running.`);
+    },
+  });
+  const startDiscoveryMutation = useScopedMutation({
+    mutationKey: marketKey("discovery"),
+    mutationFn: (seed: string) => startDiscovery({ data: { brandId, seed } }),
+    invalidate: () => [qk.market(brandId)],
+    onSuccess: (result) => {
+      setNote(result.status === "blocked"
+        ? "Discovery ran no source, so it has no results. The run is listed below with each source's reason."
+        : `Discovery run ${result.status}: ${result.itemsStored} item(s) stored. Each source's state is listed below.`);
     },
   });
   const addCompetitorMutation = useScopedMutation({
@@ -142,7 +155,7 @@ function MarketPage({ brandId }: { brandId: string }) {
   const suggestingDocuments = usePendingVariables<string>(marketKey("suggest"));
   const resolvingSuggestions = usePendingVariables<{ suggestionId: string }>(marketKey("suggestion")).map((vars) => vars.suggestionId);
   const retryingRunIds = usePendingVariables<{ runId: string }>(marketKey("research-retry")).map((vars) => vars.runId);
-  const marketActions = [startResearch, retryResearch, addCompetitorMutation, reviewCompetitorMutation, proposeCandidates, fetchPageMutation, storeObservationMutation, suggestBrainEdits, resolveSuggestionMutation];
+  const marketActions = [startResearch, retryResearch, startDiscoveryMutation, addCompetitorMutation, reviewCompetitorMutation, proposeCandidates, fetchPageMutation, storeObservationMutation, suggestBrainEdits, resolveSuggestionMutation];
   const failures = marketActions.map((action) => action.error).filter((error): error is Error => Boolean(error));
 
   const hasUnsavedChanges = researchForm.formState.isDirty || competitorForm.formState.isDirty || pageForm.formState.isDirty || observationForm.formState.isDirty;
@@ -199,6 +212,25 @@ function MarketPage({ brandId }: { brandId: string }) {
       </ul>
       {note ? <ErrorNotice>{note}</ErrorNotice> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
+      <Card>
+        <div className="max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-widest text-brass">Discovery</p>
+          <h2 className="mt-2 font-display text-2xl">Find public pages and posts</h2>
+          <p className="mt-2 text-sm text-muted">A public page is read as untrusted text and stored as evidence. A search phrase is searched only by a keyed source with a key saved for this workspace. A run where no source ran is reported as blocked, not completed.</p>
+        </div>
+        <div className="mt-4">
+          <DiscoveryStart
+            canEdit={canEdit}
+            sources={market.discoverySources}
+            pending={startDiscoveryMutation.isPending}
+            onStart={(seed) => void startDiscoveryMutation.mutateAsync(seed).catch(() => undefined)}
+          />
+        </div>
+        <div className="mt-6">
+          <h3 className="font-display text-xl">Recent discovery runs</h3>
+          <div className="mt-3"><DiscoveryRunList runs={market.discoveryRuns} /></div>
+        </div>
+      </Card>
       <Card>
         <div className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-widest text-brass">JEV Research</p>
