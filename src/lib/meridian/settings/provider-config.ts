@@ -27,6 +27,7 @@ import { credentialStateOf, type CredentialCategory, type CredentialState } from
 import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
+import { PAGE_LIMIT_MESSAGE, parsePageLimit } from "./page-limit.ts";
 
 export type ProviderCategory = "jev" | "perception" | "sources" | "production" | "storage" | "cyclone";
 
@@ -279,6 +280,13 @@ export async function saveWorkspaceProviderConfig(
     settings?: Record<string, unknown>;
   }
 ): Promise<{ success: boolean; category: ProviderCategory }> {
+  // A page limit is a whole number of pages, 1 or more. It is stored as that number, so a fraction, a negative or text never lands.
+  if (input.settings && "maxPages" in input.settings) {
+    const pages = parsePageLimit(input.settings.maxPages);
+    if (pages === null) throw new Error(PAGE_LIMIT_MESSAGE);
+    input = { ...input, settings: { ...input.settings, maxPages: pages } };
+  }
+
   // Validate URLs in settings to prevent SSRF
   if (input.settings) {
     for (const [key, val] of Object.entries(input.settings)) {
