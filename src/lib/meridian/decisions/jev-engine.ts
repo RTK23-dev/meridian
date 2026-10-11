@@ -27,10 +27,6 @@ import {
 
 export const JEV_ADAPTER_VERSION = "jev-adapter.v1";
 
-export function decisionShadowEnabled(): boolean {
-  return process.env.MERIDIAN_DECISION_SHADOW_ENABLED?.trim().toLowerCase() === "true";
-}
-
 export class JevDecisionEngine implements DecisionEngine {
   readonly id = "jev" as const;
   readonly adapterVersion = JEV_ADAPTER_VERSION;

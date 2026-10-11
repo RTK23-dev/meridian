@@ -388,7 +388,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               </Field>
 
               <div className="sm:col-span-2 rounded border border-line bg-panel p-3 text-xs text-muted">
-                🔒 <strong>Read-Only Scout Enforcement</strong>: Cyclone observations are strictly read-only. Meridian
+                <strong>Read-only observation</strong>: Cyclone observations are read-only. Meridian
                 never automates likes, follows, comments, DMs, or competitor interactions.
               </div>
             </div>

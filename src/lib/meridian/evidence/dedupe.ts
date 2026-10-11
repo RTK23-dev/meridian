@@ -10,23 +10,6 @@
  */
 
 
-export type DedupeCandidate = {
-  id: string;
-  canonicalUrl?: string | null;
-  externalId?: string | null;
-  platform?: string | null;
-  sha256?: string | null;
-  pHash?: string | null;
-  embedding?: number[] | null;
-};
-
-export type DedupeMatchResult = {
-  isDuplicate: boolean;
-  matchLayer?: "canonical_url" | "external_id" | "media_sha256" | "perceptual_hash" | "embedding_similarity";
-  matchedId?: string;
-  confidence: number;
-};
-
 export function hammingDistance(a: string, b: string): number {
   if (a.length !== b.length) return Math.max(a.length, b.length);
   let distance = 0;
@@ -90,84 +73,3 @@ function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-export function findDuplicateEvidence(
-  incoming: DedupeCandidate,
-  existingCorpus: DedupeCandidate[],
-  options: {
-    maxHammingDistance?: number; // Default: 8
-    minCosineSimilarity?: number; // Default: 0.94
-  } = {},
-): DedupeMatchResult {
-  const maxHamming = options.maxHammingDistance ?? 8;
-  const minCosine = options.minCosineSimilarity ?? 0.94;
-
-  const normalizedIncomingUrl = normalizeCanonicalUrl(incoming.canonicalUrl);
-
-  for (const existing of existingCorpus) {
-    // Layer 1: Canonical URL
-    if (normalizedIncomingUrl && existing.canonicalUrl) {
-      const normalizedExistingUrl = normalizeCanonicalUrl(existing.canonicalUrl);
-      if (normalizedIncomingUrl === normalizedExistingUrl) {
-        return {
-          isDuplicate: true,
-          matchLayer: "canonical_url",
-          matchedId: existing.id,
-          confidence: 1.0,
-        };
-      }
-    }
-
-    // Layer 2: Platform External ID
-    if (
-      incoming.externalId &&
-      existing.externalId &&
-      incoming.platform === existing.platform &&
-      incoming.externalId === existing.externalId
-    ) {
-      return {
-        isDuplicate: true,
-        matchLayer: "external_id",
-        matchedId: existing.id,
-        confidence: 1.0,
-      };
-    }
-
-    // Layer 3: SHA-256 Media Hash
-    if (incoming.sha256 && existing.sha256 && incoming.sha256 === existing.sha256) {
-      return {
-        isDuplicate: true,
-        matchLayer: "media_sha256",
-        matchedId: existing.id,
-        confidence: 1.0,
-      };
-    }
-
-    // Layer 4: Perceptual Hash (pHash)
-    if (incoming.pHash && existing.pHash) {
-      const dist = hammingDistance(incoming.pHash, existing.pHash);
-      if (dist <= maxHamming) {
-        return {
-          isDuplicate: true,
-          matchLayer: "perceptual_hash",
-          matchedId: existing.id,
-          confidence: Number((1.0 - dist / 64).toFixed(3)),
-        };
-      }
-    }
-
-    // Layer 5: Semantic Embedding Similarity
-    if (incoming.embedding && existing.embedding) {
-      const sim = cosineSimilarity(incoming.embedding, existing.embedding);
-      if (sim >= minCosine) {
-        return {
-          isDuplicate: true,
-          matchLayer: "embedding_similarity",
-          matchedId: existing.id,
-          confidence: Number(sim.toFixed(3)),
-        };
-      }
-    }
-  }
-
-  return { isDuplicate: false, confidence: 0 };
-}

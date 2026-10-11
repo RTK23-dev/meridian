@@ -162,7 +162,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
   // Brand switcher: shown in the sidebar on brand-scoped pages only (the caller checks brandId).
   const brandSwitcher = (className: string) => data?.brands.length ? (
     <select aria-label="Brand" className={className} value={brandId ?? ""} onChange={(event) => { if (event.target.value) go(`/brands/${event.target.value}`); }}>
-      {data.brands.map((item) => <option key={item.id} value={item.id}>{item.name} · {Math.round(item.completeness * 100)}%</option>)}
+      {data.brands.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.completeness >= 1 ? "brain complete" : "brain incomplete"}</option>)}
     </select>
   ) : null;
   // Workspace switcher: shown at the top of the sidebar on every page.

@@ -23,8 +23,6 @@ const ENV_EXAMPLE = join(ROOT, ".env.example");
  */
 const ALLOWED_UNLISTED: Record<string, string> = {
   MERIDIAN_PG_TEST_URL: "read only by credentials/test-databases.ts, a test helper. It is set on the command line for npm test.",
-  MERIDIAN_DECISION_SHADOW_ENABLED:
-    "read only by decisionShadowEnabled() in decisions/jev-engine.ts, which no code calls. It has no effect. Remove it with that helper.",
 };
 
 /** Vite's own build-time values. They are set by Vite, not by a deployment, so they are not listed. */

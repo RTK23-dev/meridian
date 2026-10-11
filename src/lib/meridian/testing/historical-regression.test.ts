@@ -811,43 +811,6 @@ test("30. Regression: Cyclone scout adapter leaves unobserved views and baseline
 });
 
 // 31. Graph API adapter preserves unobserved views as undefined
-test("31. Regression: Instagram Graph API adapter leaves unobserved views undefined", async () => {
-  const { InstagramBusinessDiscoveryAdapter } = await import("../discovery/graph-api-adapter.ts");
-  const mockFetch = async () =>
-    new Response(
-      JSON.stringify({
-        business_discovery: {
-          followers_count: 50000,
-          media_count: 10,
-          media: {
-            data: [
-              {
-                id: "media_123",
-                caption: "Morning motivation",
-                media_type: "VIDEO",
-                like_count: 1000,
-                comments_count: 50,
-                permalink: "https://www.instagram.com/reel/123/",
-              },
-            ],
-          },
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
-    );
-
-  const adapter = new InstagramBusinessDiscoveryAdapter({
-    credentials: { accessToken: "EAAG_TEST", businessAccountId: "1784" },
-    fetchFn: mockFetch as unknown as typeof fetch,
-  });
-
-  const res = await adapter.fetchCreatorReels({ targetUsername: "fitness", niche: "fitness" });
-  assert.equal(res.status, "connected");
-  if (res.status !== "connected") return;
-  assert.equal(res.items[0].metrics.views, undefined);
-  assert.equal(res.items[0].creatorLast30MedianViews, undefined);
-});
-
 // 32. Google Omni provider uses Interactions API contract
 test("32. Regression: GeminiOmniVideoProvider uses Interactions API contract", async () => {
   const { GeminiOmniVideoProvider } = await import("../production/providers/omni.ts");

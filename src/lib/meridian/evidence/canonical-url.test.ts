@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findDuplicateEvidence, normalizeCanonicalUrl } from "./dedupe.ts";
+import { normalizeCanonicalUrl } from "./dedupe.ts";
 
 test("distinct products on one path keep distinct canonical URLs", () => {
   // The resource is named by its query. Dropping it merged every product on the page into one.
@@ -54,10 +54,3 @@ test("empty and whitespace input yield no canonical URL, and non-URL text is com
   assert.equal(normalizeCanonicalUrl("  Kitchen Sponge "), "kitchen sponge");
 });
 
-test("the duplicate check does not report two distinct products as one", () => {
-  const match = findDuplicateEvidence(
-    { id: "new", canonicalUrl: "https://shop.example/product?id=2" },
-    [{ id: "old", canonicalUrl: "https://shop.example/product?id=1" }],
-  );
-  assert.equal(match.isDuplicate, false);
-});
