@@ -8,6 +8,7 @@ import { externalObjectStorageStatus } from "@/lib/meridian/storage/object-store
 import { accountProviderState } from "@/lib/meridian/providers/boundaries";
 import { videoGenerationStatus } from "@/lib/meridian/video/provider";
 import { pickActiveOrganization } from "@/lib/meridian/storage/media-access";
+import { openRouterChatCredential } from "@/lib/meridian/providers/chat.server";
 import { healthResult, loadHealthDetail } from "@/lib/meridian/observability/health";
 
 /** Which integrations this deployment has configured. It carries no key, and no count. Shown only to a workspace admin. */
@@ -20,7 +21,8 @@ function deploymentStatus() {
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
     }),
     localSemantic: localSemanticModel().kind,
-    externalEmbeddings: embeddingProviderState({ openRouterKey: process.env.OPENROUTER_API_KEY }).status,
+    // Only the presence of a resolved key is passed. The key itself never reaches the status function.
+    externalEmbeddings: embeddingProviderState({ openRouterKey: openRouterChatCredential().status === "ready" ? "resolved" : undefined }).status,
     providers: (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => accountProviderState(provider).status),
     video: videoGenerationStatus({ baseUrl: process.env.HYPIT_BASE_URL }).status,
   };
