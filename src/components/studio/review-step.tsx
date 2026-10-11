@@ -114,8 +114,9 @@ export function ReviewStep(props: ReviewStepProps) {
         onRecordOrganic={props.onRecordOrganic}
       />
 
+      {/* Each dialog is remounted per opening by its counter. The prefixes keep the three keys distinct among siblings. */}
       <ReviewDialog
-        key={reviewKey}
+        key={`review-${reviewKey}`}
         target={reviewTarget}
         allowedCodes={props.allowedReasonCodes}
         pending={props.reviewPending}
@@ -126,7 +127,7 @@ export function ReviewStep(props: ReviewStepProps) {
       />
 
       <PublishDialog
-        key={publishKey}
+        key={`publish-${publishKey}`}
         target={publishTarget}
         channels={props.channels}
         pending={props.publishPending}
@@ -137,7 +138,7 @@ export function ReviewStep(props: ReviewStepProps) {
         }}
       />
 
-      <ImageLightbox key={lightboxKey} target={lightboxTarget} onClose={() => setLightboxTarget(null)} />
+      <ImageLightbox key={`lightbox-${lightboxKey}`} target={lightboxTarget} onClose={() => setLightboxTarget(null)} />
       <EvidenceDrawer variant={inspectVariant} onClose={() => setInspectId(null)} />
     </div>
   );
