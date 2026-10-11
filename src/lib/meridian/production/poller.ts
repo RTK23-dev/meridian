@@ -518,13 +518,15 @@ export async function pollProductionJobs(
     } else {
       // In progress
       const newAttempts = (row.attempt_count || 0) + 1;
-      // A successful answer clears the error recorded by an earlier transient failure.
+      // A successful answer replaces the error recorded by an earlier transient failure. A non-terminal answer that carries an
+      // error, such as a Drive scan that could not run, is recorded here, so operators see why the job is still waiting.
+      const pendingError = polledJob.error ? String(polledJob.error) : "";
       await sql`
         update production_jobs
         set status = ${polledJob.status},
             attempt_count = ${newAttempts},
-            error_code = null,
-            error_message = null,
+            error_code = ${pendingError ? pendingError.split(":")[0] : null},
+            error_message = ${pendingError ? pendingError.slice(0, 500) : null},
             last_polled_at = now(),
             next_poll_at = now() + (least(${newAttempts}, 6) * interval '5 seconds'),
             updated_at = now()

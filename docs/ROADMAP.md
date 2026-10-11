@@ -19,25 +19,15 @@ What is still open in this release. Each item says whether it is built and verif
 - **Drive folder visibility.** Under `drive.file`, a workspace connected by OAuth sees only folders the app created. A `MERIDIAN_DRIVE_FOLDER_ID` created elsewhere will refuse uploads from that token. Decide whether the app creates the folder at connect time.
 - **Drive export packages.** No code writes export packages to Drive, so no export row exists for them.
 - **Canonical-URL dedupe.** Not indexed. Link-less cards share their page's URL, so a unique index would refuse distinct records. Page evidence is keyed by content hash only. Brand-scoped content-hash indexes are in migration 0059.
-- **JEV request timeout.** The TypeSafe transport has no request timeout, so a hung call is unbounded.
+- **JEV/provider transport hardening (implemented on this branch, pending CI verification).** The shared TypeSafe transport now aborts requests after 30 seconds, refuses redirects, and caps response bodies at 2 MiB. OAuth redirects are checked against `MERIDIAN_ALLOWED_OAUTH_ORIGINS` (or `APP_URL`/`PUBLIC_APP_URL`), and OAuth state is atomically claimed before exchanging the code. Drive folder listing and manual-cloud scans now distinguish API failures from an empty folder. Held-reservation reconciliation now asks the authoritative plan settlement path to settle its associated plan. Rate limiting no longer trusts forwarding headers unless `MERIDIAN_TRUST_PROXY_HEADERS=true`; deployments behind a trusted proxy must set this explicitly and restrict direct origin access.
 - **Calibration threshold.** `calibration/propose.ts` needs 30 rows, while the report uses 200. Pick one.
 - **Fixed defaults in scoring.** `opportunity/engine.ts` uses fixed reproducibility values (0.9, 0.62, 0.35), `grading/engine.ts` defaults a missing score to 0.5, `calibration/report.ts` returns 0 for a missing score, and `jev/policy.ts` fallback thresholds differ from its defaults. Scoring is out of scope for this release, so these are listed rather than changed.
 - **Environment reads outside the contract.** `GOOGLE_ADS_DEVELOPER_TOKEN` has no entry in `credentials/contract.ts`. Other reads sit outside it in `discovery/cyclone-scout-adapter.ts`, `settings/provider-config.ts`, `notifications/email.ts`, `factory/sources.ts`, `embeddings/external.ts`, `system.ts`, `routes/api/webhooks/receive.ts` and `storage/google-auth.ts`.
 - **Cyclone console field.** The Cyclone gateway is configured by the deployment's environment only.
 - **Lint warnings.** Six `react-refresh/only-export-components` warnings remain in existing files. They are not errors.
-- **Static review, P2 items still open** (from the review of `01307e8`): the OAuth redirect origin comes from the caller and is only
-  checked for an https prefix, and the OAuth state is claimed after the code exchange rather than before; Drive listing treats API
-  errors as an empty folder, which can create duplicate folders; a failed organic-observation query erases learned patterns, and the
-  replacement is not transactional; the generic HTTP transport has no timeout or response cap; rate limiting trusts forwarded headers
-  and is process-local; video-DNA frame labelling bypasses the perception provider; manual-cloud polling reports Drive errors as
-  "waiting"; `minConfidence` is skipped when confidence is absent.
-- **Review P1 follow-ups.** `SUBMISSION_UNKNOWN` plans stay `executing`, because `resolveHeldReservation` does not settle the plan.
-  `jev/policy.ts` `evaluatePolicy` still auto-approves on probability alone; it has no production callers, only tests. The attach path
-  can return a gate-record id as `decisionId`, which `reviews.decision_id` cannot store; attach cannot reach this today, but a live
-  publisher on the materialization path might. The Higgsfield status path `/v1/requests/<id>/status` is derived from the existing mocks
-  and must be confirmed against Higgsfield's documentation. No host allowlist exists for provider artifact hosts. The webhook edge
-  rate limit and the body cap in front of the function are not verified. The product-name rule now judges the job's copy, so the
-  rejection rate on creatives whose copy does not name the product should be checked on real data.
+- **Static review, P2 items still open** (from the review of `01307e8`): a failed organic-observation query can erase learned patterns, and replacement is not transactional; rate limiting remains process-local; video-DNA frame labelling bypasses the perception provider; `minConfidence` is skipped when confidence is absent. The generic provider transport now has a timeout and response cap on this branch, pending CI verification.
+- **Production decision evidence.** Selected video frames are not yet consumed by production decisions. Frame selection exists, but feeding frames into grounded perception and decision evidence still needs a design and implementation.
+- **Review P1 follow-ups still open.** `jev/policy.ts` `evaluatePolicy` still auto-approves on probability alone; it has no production callers, only tests. The attach path can return a gate-record id as `decisionId`, which `reviews.decision_id` cannot store; attach cannot reach this today, but a live publisher on the materialization path might. The Higgsfield status path `/v1/requests/<id>/status` is derived from mocks and must be confirmed against provider documentation. Provider artifact host allowlisting and verification of the webhook edge rate limit/body cap remain open. The product-name rule judges the job's own copy; its rejection rate on real data still needs measurement.
 
 ## Not verified
 

@@ -13,18 +13,58 @@ export type TransportResponse = {
 
 export type Transport = (request: TransportRequest) => Promise<TransportResponse>;
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_RESPONSE_LIMIT_BYTES = 2 * 1024 * 1024;
+
+async function readBoundedBody(response: Response, maxBytes: number): Promise<string> {
+  const declared = Number(response.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await response.body?.cancel().catch(() => {});
+    throw new Error(`Provider response exceeds the ${maxBytes}-byte limit.`);
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      total += part.value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error(`Provider response exceeds the ${maxBytes}-byte limit.`);
+      }
+      chunks.push(part.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder().decode(bytes);
+}
+
 export function liveTransport(fetchImpl: typeof fetch = fetch): Transport {
   return async (request) => {
-    const response = await fetchImpl(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body as BodyInit | undefined,
-    });
-    const headers: Record<string, string> = {};
-    response.headers.forEach((value, key) => {
-      headers[key.toLowerCase()] = value;
-    });
-    return { status: response.status, body: await response.text(), headers };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error("Provider request timed out after 30 seconds.")), DEFAULT_REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetchImpl(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body as BodyInit | undefined,
+        signal: controller.signal,
+        redirect: "error",
+      });
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, key) => { headers[key.toLowerCase()] = value; });
+      const body = await readBoundedBody(response, DEFAULT_RESPONSE_LIMIT_BYTES);
+      return { status: response.status, body, headers };
+    } finally {
+      clearTimeout(timer);
+    }
   };
 }
 

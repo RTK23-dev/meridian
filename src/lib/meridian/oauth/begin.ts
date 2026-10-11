@@ -14,7 +14,7 @@ export const beginOauth = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { authorizationUrl, hashOauthState, newOauthState } = await import("./flow.server.ts");
+    const { authorizationUrl, hashOauthState, newOauthState, isAllowedOauthOrigin } = await import("./flow.server.ts");
     const sql = await getSql();
     const members = await sql<{ role: string }>`
       select role from memberships where user_id = ${context.userId} and organization_id = ${data.organizationId} limit 1
@@ -22,6 +22,7 @@ export const beginOauth = createServerFn({ method: "POST" })
     const role = members[0]?.role;
     if (!role || !isRole(role)) throw new Error("That workspace is not available to you.");
     assertRole(role, "admin");
+    if (!isAllowedOauthOrigin(data.origin, process.env)) throw new Error("This site origin is not allowed to start OAuth. Configure MERIDIAN_ALLOWED_OAUTH_ORIGINS.");
     const state = newOauthState();
     const redirectUri = `${data.origin}/api/oauth/callback?provider=${data.provider}`;
     const provider = data.provider === "meta" || data.provider === "tiktok" || data.provider === "google" ? data.provider : null;

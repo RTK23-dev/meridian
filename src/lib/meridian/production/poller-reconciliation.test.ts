@@ -233,4 +233,22 @@ for (const { name, sql } of backends) {
     assert.equal(row.error_code, "ARTIFACT_URL_REFUSED");
     assert.equal(await reservationStatus(fixture.reservationId), "RESERVED", "a render that may be billed keeps its spend held");
   });
+
+  test(`[${name}] a waiting answer that carries an error records it on the job, and the job keeps its status`, async () => {
+    const fixture = await fixtureJob("waiting-with-error");
+    const provider = {
+      checkJobStatus: async () => ({
+        status: "RUNNING",
+        error: "MANUAL_DRIVE_SCAN_UNAVAILABLE: Google Drive output listing failed (503).",
+      }),
+    };
+    const router = { get: (id: string) => (id === "higgsfield" ? provider : undefined) };
+
+    await pollOnce(fixture, router);
+
+    const row = await jobRow(fixture.jobId);
+    assert.equal(row.status, "RUNNING", "the job is still waiting, not failed");
+    assert.equal(row.error_code, "MANUAL_DRIVE_SCAN_UNAVAILABLE", "the error code is the message's prefix");
+    assert.match(row.error_message ?? "", /503/, "the operator sees the reason");
+  });
 }

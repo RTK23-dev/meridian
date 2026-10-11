@@ -198,18 +198,23 @@ export class ManualCloudProvider implements ProductionProvider {
       error = "MANUAL_HANDOFF_EXPIRED: no finished file was placed in the output folder within the handoff window.";
     } else if (orgId && brandId) {
       try {
-        const outputs = await this.drive.syncDropFolder({ organizationId: orgId, brandId, jobId });
-        const videos = outputs.filter((f) => (f.mimeType.includes("video") || f.name.endsWith(".mp4")) && f.size > 0);
-        // A file still being uploaded is not an artifact yet. Only a file that has stopped changing is taken.
-        const settled = videos.find((f) => isUploadSettled(f.modifiedTime, now));
-        if (settled) {
-          status = "RENDERED";
-          outputArtifactId = settled.fileId;
-        } else if (videos.length > 0) {
-          uploadInProgress = true;
+        const scan = await this.drive.syncDropFolder({ organizationId: orgId, brandId, jobId });
+        if (!scan.ok) {
+          // A failed API call is not an empty folder. Keep the handoff retryable and expose the failure to operators.
+          error = `MANUAL_DRIVE_SCAN_UNAVAILABLE: ${scan.error}`;
+        } else {
+          const videos = scan.files.filter((f) => (f.mimeType.includes("video") || f.name.endsWith(".mp4")) && f.size > 0);
+          // A file still being uploaded is not an artifact yet. Only a file that has stopped changing is taken.
+          const settled = videos.find((f) => isUploadSettled(f.modifiedTime, now));
+          if (settled) {
+            status = "RENDERED";
+            outputArtifactId = settled.fileId;
+          } else if (videos.length > 0) {
+            uploadInProgress = true;
+          }
         }
-      } catch {
-        // Keep waiting if the folder cannot be read; the handoff window still applies.
+      } catch (err) {
+        error = `MANUAL_DRIVE_SCAN_UNAVAILABLE: ${err instanceof Error ? err.message : String(err)}`;
       }
     }
 

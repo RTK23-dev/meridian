@@ -176,7 +176,7 @@ test("ManualCloudProvider returns PREFLIGHT_FAILED when Google Drive is disconne
       throw new Error("Should not be called");
     },
     async syncDropFolder() {
-      return [];
+      return { ok: true, files: [] };
     },
   } as any;
 
