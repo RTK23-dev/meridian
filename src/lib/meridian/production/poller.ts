@@ -12,6 +12,14 @@ import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-dr
 import type { ProductionJob } from "./types.ts";
 import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
 import { completeProductionJob, settleCarouselParent, settleCreativePlanIfComplete } from "./materialization.ts";
+import {
+  SUBMISSION_EXPIRED_CODE,
+  SUBMISSION_REVIEW_CODE,
+  classifySubmissionEvidence,
+  evidenceFromProviderStatus,
+  submissionEvidenceDue,
+  type SubmissionEvidence,
+} from "./submission-reconciliation.ts";
 
 const POLLER_ACTOR_ID = "production-poller";
 
@@ -164,6 +172,203 @@ async function settlePlanOf(
   });
 }
 
+function parseJobInput(value: string | Record<string, unknown>): Record<string, unknown> {
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return typeof value === "object" && value !== null ? value : {};
+}
+
+/** The fields a provider status check receives for one stored job. */
+function pollMetadataOf(
+  row: {
+    organization_id: string;
+    brand_id: string;
+    status_url: string | null;
+    cancel_url: string | null;
+    request_id: string | null;
+    provider_job_id: string | null;
+    created_at: unknown;
+  },
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    organizationId: row.organization_id,
+    brandId: row.brand_id,
+    statusUrl: row.status_url,
+    cancelUrl: row.cancel_url,
+    requestId: row.request_id,
+    providerJobId: row.provider_job_id,
+    creativeSpec: input.creativeSpec,
+    dropFolderUrl: input.dropFolderUrl,
+    // When the job was submitted. A manual handoff expires from this time.
+    createdAt: toIsoOrNull(row.created_at),
+  };
+}
+
+/** How long a job whose submission is still unknown waits before the pass asks the provider again. */
+const SUBMISSION_RECHECK_SECONDS = 15 * 60;
+
+type UnknownSubmissionRow = {
+  id: string;
+  organization_id: string;
+  brand_id: string;
+  provider: string;
+  provider_job_id: string | null;
+  request_id: string | null;
+  status_url: string | null;
+  cancel_url: string | null;
+  modality: string;
+  creative_plan_id: string | null;
+  input: string | Record<string, unknown>;
+  created_at: unknown;
+  /** Milliseconds since submission, on the database clock. */
+  age_ms: string | number | null;
+};
+
+function evidenceDetail(evidence: SubmissionEvidence): { errorCode: string; reason: string } {
+  if (evidence.kind === "accepted") return { errorCode: "", reason: "" };
+  return { errorCode: evidence.errorCode ?? "", reason: evidence.reason ?? "" };
+}
+
+/**
+ * The provider's answer about one unknown submission. Only a video job with a stored provider id can be asked: the Meridian job
+ * id is not the provider's id, and no provider looks a job up by it. A job without one has no evidence, and waits for the bound.
+ */
+async function gatherSubmissionEvidence(
+  row: UnknownSubmissionRow,
+  input: Record<string, unknown>,
+  router: ProductionRouter,
+): Promise<SubmissionEvidence> {
+  if (row.modality !== "video" || !row.provider_job_id) return { kind: "none" };
+  let provider;
+  try {
+    provider = router.get(row.provider);
+  } catch {
+    provider = undefined;
+  }
+  if (!provider) return { kind: "none" };
+  try {
+    const answer = await provider.checkJobStatus(row.provider_job_id, pollMetadataOf(row, input));
+    return evidenceFromProviderStatus({
+      status: answer.status,
+      providerJobId: row.provider_job_id,
+      errorCode: answer.errorCode,
+      error: answer.error,
+    });
+  } catch (error) {
+    const failure = classifyProviderPollError(error);
+    // A permanent refusal cannot show whether the job was accepted, so a person looks. A transient one is retried until the bound.
+    return failure.permanent
+      ? { kind: "ambiguous", errorCode: failure.errorCode, reason: failure.reason }
+      : { kind: "none", errorCode: failure.errorCode, reason: failure.reason };
+  }
+}
+
+/**
+ * The submission reconciliation pass. It claims the jobs whose submission outcome is unknown, gathers the evidence for each, and
+ * applies the outcome:
+ * - CONFIRMED: the job returns to the queue with its provider job id.
+ * - FAILED: the job is failed with the provider's error. Its reservation stays held.
+ * - EXPIRED or REVIEW: the job is marked for a person, and the pass never claims it again.
+ * This pass never touches a budget reservation. Whatever the outcome, the spend is released or settled only by an operator.
+ */
+async function reconcileSubmissions(
+  sql: Sql,
+  options: { scope: string | null; router: ProductionRouter; limit: number },
+): Promise<{ claimed: number; polled: number; failed: number }> {
+  const rows = await sql<UnknownSubmissionRow>`
+    with candidates as (
+      select id
+      from production_jobs
+      where status = 'SUBMISSION_UNKNOWN'
+        and (error_code is null or error_code not in (${SUBMISSION_REVIEW_CODE}, ${SUBMISSION_EXPIRED_CODE}))
+        and (next_poll_at is null or next_poll_at <= now())
+        and (${options.scope}::text is null or organization_id = ${options.scope})
+      order by created_at asc
+      limit ${options.limit}
+      for update skip locked
+    )
+    update production_jobs as jobs
+    set next_poll_at = now() + interval '2 minutes', updated_at = now()
+    from candidates
+    where jobs.id = candidates.id
+    returning jobs.id, jobs.organization_id, jobs.brand_id, jobs.provider, jobs.provider_job_id, jobs.request_id,
+              jobs.status_url, jobs.cancel_url, jobs.modality, jobs.creative_plan_id, jobs.input, jobs.created_at,
+              extract(epoch from (now() - jobs.created_at)) * 1000 as age_ms
+  `;
+
+  const result = { claimed: rows.length, polled: 0, failed: 0 };
+  for (const row of rows) {
+    const ageMs = Number(row.age_ms ?? 0);
+    const input = parseJobInput(row.input);
+    const evidence = await gatherSubmissionEvidence(row, input, options.router);
+
+    if (!submissionEvidenceDue({ evidence, ageMs })) {
+      // No evidence yet, inside the bound. The job keeps its status and is checked again later. A transient failure's reason is
+      // recorded, so an operator can see why the job is still waiting.
+      if (evidence.kind === "none" && evidence.reason) {
+        await sql`
+          update production_jobs
+          set error_code = ${evidence.errorCode ?? null}, error_message = ${evidence.reason.slice(0, 500)},
+              next_poll_at = now() + (${SUBMISSION_RECHECK_SECONDS} * interval '1 second'), updated_at = now()
+          where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id} and status = 'SUBMISSION_UNKNOWN'
+        `;
+      } else {
+        await sql`
+          update production_jobs
+          set next_poll_at = now() + (${SUBMISSION_RECHECK_SECONDS} * interval '1 second'), updated_at = now()
+          where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id} and status = 'SUBMISSION_UNKNOWN'
+        `;
+      }
+      result.polled++;
+      continue;
+    }
+
+    const outcome = classifySubmissionEvidence({ evidence, ageMs });
+    const { errorCode, reason } = evidenceDetail(evidence);
+    if (outcome === "CONFIRMED") {
+      // The provider holds the job under the stored id, so it goes back to the normal queue, to be polled on its next turn.
+      await sql`
+        update production_jobs
+        set status = 'QUEUED', error_code = null, error_message = null, next_poll_at = now() + interval '1 minute', updated_at = now()
+        where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id} and status = 'SUBMISSION_UNKNOWN'
+      `;
+      result.polled++;
+    } else if (outcome === "FAILED") {
+      // The job was accepted before it failed, so it may have been billed. Its reservation is held, not released.
+      await sql`
+        update production_jobs
+        set status = 'FAILED', error_code = ${errorCode || "PROVIDER_FAILED"},
+            error_message = ${`${reason} The reservation is held for an operator: the job was accepted before it failed, so it may have been billed.`.slice(0, 500)},
+            last_polled_at = now(), next_poll_at = null, updated_at = now()
+        where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id} and status = 'SUBMISSION_UNKNOWN'
+      `;
+      await settlePlanOf(sql, row);
+      result.failed++;
+    } else {
+      // EXPIRED or REVIEW. The job stays SUBMISSION_UNKNOWN, which is the operator's queue, with the reason. Its reservation is not
+      // touched: the provider's outcome is unknown, and only an operator may release or settle it. The plan is not settled, because
+      // the job is not terminal.
+      const lead = outcome === "EXPIRED" ? "No provider evidence arrived within 24 hours." : "The provider's answer does not settle this submission.";
+      const detail = reason || "No provider job id was stored, so the provider cannot be asked about this submission.";
+      await sql`
+        update production_jobs
+        set error_code = ${outcome === "EXPIRED" ? SUBMISSION_EXPIRED_CODE : SUBMISSION_REVIEW_CODE},
+            error_message = ${`${lead} ${detail} The reservation is held for an operator to resolve; automation has not released or settled it.`.slice(0, 500)},
+            last_polled_at = now(), next_poll_at = null, updated_at = now()
+        where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id} and status = 'SUBMISSION_UNKNOWN'
+      `;
+      result.failed++;
+    }
+  }
+  return result;
+}
+
 export type PollOptions = {
   limit?: number;
   /** Claim only this organization's jobs. Omitted, the worker claims across every tenant, as it does in production. */
@@ -189,6 +394,9 @@ export async function pollProductionJobs(
   const drive = options.driveClient || defaultArtifactDrive();
   const router = options.router || productionRouter;
   const scope = options.organizationId ?? null;
+
+  // Jobs whose submission outcome is unknown run first. A job they confirm is queued for a later turn, so it is not polled twice in one pass.
+  const submissions = await reconcileSubmissions(sql, { scope, router, limit });
 
   // Claim pending jobs atomically. A plain SELECT ... FOR UPDATE outside an explicit
   // transaction releases its row locks as soon as the statement ends, allowing two
@@ -238,23 +446,14 @@ export async function pollProductionJobs(
   `;
 
   const result: PollResult = {
-    claimed: activeJobs.length,
-    polled: 0,
+    claimed: activeJobs.length + submissions.claimed,
+    polled: submissions.polled,
     rendered: 0,
-    failed: 0,
+    failed: submissions.failed,
   };
 
   for (const row of activeJobs) {
-    let parsedInput: Record<string, unknown> = {};
-    if (typeof row.input === "string") {
-      try {
-        parsedInput = JSON.parse(row.input) as Record<string, unknown>;
-      } catch {
-        parsedInput = {};
-      }
-    } else if (typeof row.input === "object" && row.input !== null) {
-      parsedInput = row.input as Record<string, unknown>;
-    }
+    const parsedInput = parseJobInput(row.input);
 
     if (row.status === "COMPLETED") {
       // Finalized on an earlier pass but not yet materialized. Finish it without contacting the provider.
@@ -339,18 +538,7 @@ export async function pollProductionJobs(
       continue;
     }
 
-    const metadata: Record<string, unknown> = {
-      organizationId: row.organization_id,
-      brandId: row.brand_id,
-      statusUrl: row.status_url,
-      cancelUrl: row.cancel_url,
-      requestId: row.request_id,
-      providerJobId: row.provider_job_id,
-      creativeSpec: parsedInput.creativeSpec,
-      dropFolderUrl: parsedInput.dropFolderUrl,
-      // When the job was submitted. A manual handoff expires from this time.
-      createdAt: toIsoOrNull(row.created_at),
-    };
+    const metadata = pollMetadataOf(row, parsedInput);
 
     const externalJobId = row.provider_job_id || row.id;
     let polledJob: ProductionJob;
@@ -374,8 +562,8 @@ export async function pollProductionJobs(
         `;
         result.polled++;
       } else {
-        // Reconciliation leaves the job out of the poller's queue (SUBMISSION_UNKNOWN is never claimed), and the job is listed
-        // for an admin to resolve. Its reservation is not released or settled here: the provider's outcome is unknown, and
+        // The job becomes SUBMISSION_UNKNOWN. The submission reconciliation pass checks its provider id once more on its next run, and a
+        // refusal then marks it for a person. Its reservation is not released or settled here: the provider's outcome is unknown, and
         // releasing could hide a real charge. The plan is not settled either, because its job is not terminal.
         await sql`
           update production_jobs

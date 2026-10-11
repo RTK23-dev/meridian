@@ -161,9 +161,19 @@ for (const { name, sql } of backends) {
     assert.match(row.error_message ?? "", /reservation is held/);
     assert.equal(await reservationStatus(fixture.reservationId), "RESERVED", "the spend stays held");
 
+    // The submission reconciliation pass checks the stored provider id once more. The same refusal cannot show whether the job was
+    // accepted, so the job is marked for a person, and no later pass claims it.
     const second = await pollOnce(fixture, router);
-    assert.equal(second.claimed, 0, "the job is not claimed again");
-    assert.equal(requests.length, 1, "the provider is not contacted again");
+    assert.equal(second.claimed, 1, "the reconciliation pass checks the job once");
+    assert.equal(requests.length, 2);
+    const reviewed = await jobRow(fixture.jobId);
+    assert.equal(reviewed.status, "SUBMISSION_UNKNOWN");
+    assert.equal(reviewed.error_code, "SUBMISSION_REVIEW_REQUIRED");
+    assert.equal(await reservationStatus(fixture.reservationId), "RESERVED", "the review leaves the spend held");
+
+    const third = await pollOnce(fixture, router);
+    assert.equal(third.claimed, 0, "a job marked for review is not claimed again");
+    assert.equal(requests.length, 2, "the provider is not contacted again");
   });
 
   test(`[${name}] a transient failure below the bound is retried with a delay, and records why`, async () => {
@@ -186,13 +196,13 @@ for (const { name, sql } of backends) {
     const fixture = await fixtureJob("transient-bound");
     const { requests, router } = providerAnswering(503, "busy");
 
-    // Each pass is made due again, so the test is not waiting on the retry delay. The bound must end the loop by itself.
+    // Each pass is made due again, so the test is not waiting on the retry delay. The bound must end the polling by itself.
+    // Once reconciled, the job waits for the submission pass, which is not part of this loop.
     let passes = 0;
-    while (passes < MAX_PROVIDER_POLL_ATTEMPTS + 10) {
+    while (passes < MAX_PROVIDER_POLL_ATTEMPTS + 10 && (await jobRow(fixture.jobId)).status === "RUNNING") {
       await sql`update production_jobs set next_poll_at = null where id = ${fixture.jobId}`;
-      const claimed = await pollOnce(fixture, router);
+      await pollOnce(fixture, router);
       passes += 1;
-      if (claimed.claimed === 0) break;
     }
 
     assert.equal(requests.length, MAX_PROVIDER_POLL_ATTEMPTS, "exactly the bound's worth of status checks were made");
