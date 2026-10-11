@@ -61,16 +61,26 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
       label: "Create",
       items: [
         { id: "studio", label: "Studio", to: `${base}/studio` },
+        { id: "factory", label: "Factory", to: `${base}/factory` },
         { id: "library", label: "Library", to: `${base}/library` },
       ],
     },
-    { id: "learn", label: "Learn", items: [{ id: "learning", label: "Learning", to: `${base}/learning` }] },
+    {
+      id: "learn",
+      label: "Learn",
+      items: [
+        { id: "learning", label: "Learning", to: `${base}/learning` },
+        { id: "calibration", label: "Calibration", to: `${base}/calibration` },
+      ],
+    },
     {
       id: "brand",
       label: "Brand",
       items: [
         { id: "brain", label: "Brand brain", to: `${base}/brain` },
         { id: "products", label: "Products", to: `${base}/products` },
+        // Brand-scoped, so it sits here rather than in the workspace-level account menu.
+        { id: "accounts", label: "Connected accounts", to: `${base}/accounts` },
       ],
     },
     workspace,
@@ -94,6 +104,14 @@ export function bottomTabs(brandId?: string): NavItem[] {
     { id: "studio", label: "Studio", to: `${base}/studio` },
     { id: "reviews", label: "Reviews", to: `${base}/reviews` },
   ];
+}
+
+/**
+ * How the workspace and brand switchers show. The expanded sidebar and the mobile sheet show two selects. The collapsed rail is
+ * too narrow for a select, so it shows one button instead, which opens the command palette. The palette switches both.
+ */
+export function switcherMode({ collapsed, mobile }: { collapsed: boolean; mobile: boolean }): "selects" | "rail-button" {
+  return collapsed && !mobile ? "rail-button" : "selects";
 }
 
 /** Trailing slashes do not change the page. `/brands/x/` and `/brands/x` are the same screen. */

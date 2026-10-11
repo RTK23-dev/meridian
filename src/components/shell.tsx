@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, BarChart3, Bell, BellRing, Brain, ChevronDown, ClipboardCheck, Download, FileClock, FlaskConical, GraduationCap, House, Layers3, Library, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
+import { Activity, ArrowLeftRight, BarChart3, Bell, BellRing, Brain, Cable, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { hasRole } from "@/lib/meridian/access";
@@ -12,7 +12,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button, Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, Kbd, Sheet, SheetContent, SheetTitle, useTheme } from "@/components/ui";
 import { CommandPalette } from "@/components/command-palette";
 import { PageCommandProvider, usePageCommandRegistry } from "@/components/page-commands";
-import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, resolveLastBrand, sidebarGroups, unreadAlertLabel, type NavGroup } from "@/lib/navigation/model";
+import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, resolveLastBrand, sidebarGroups, switcherMode, unreadAlertLabel, type NavGroup } from "@/lib/navigation/model";
 import { chordPath, INITIAL_SHORTCUT_STATE, nextShortcutState, type ShortcutState } from "@/lib/navigation/shortcuts";
 import { readLocal, writeLocal } from "@/lib/navigation/local-storage";
 import { routePageTitle } from "@/lib/navigation/route-data";
@@ -29,10 +29,13 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   opportunities: Layers3,
   reviews: ClipboardCheck,
   studio: WandSparkles,
+  factory: Factory,
   library: Library,
   learning: GraduationCap,
+  calibration: Gauge,
   brain: Brain,
   products: Package,
+  accounts: Cable,
   jobs: Activity,
   usage: BarChart3,
   alerts: Bell,
@@ -176,10 +179,15 @@ function ShellChrome({ children }: { children: ReactNode }) {
         <Link to="/" onClick={() => setMobileNavOpen(false)} className="font-display text-lg font-semibold tracking-tight text-fg">Meridian</Link>
         {mobile ? <button className="grid size-11 place-items-center rounded-md text-fg-muted hover:bg-surface-2" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation"><X aria-hidden="true" className="size-5" /></button> : null}
       </div>
-      {/* Workspace first, brand directly below it on brand-scoped pages. Hidden in the collapsed rail, which is too narrow for a select; the command palette still switches both. */}
-      {(mobile || !collapsed) && data ? <div className="space-y-3 border-b border-border p-4">
+      {/* Workspace first, brand directly below it on brand-scoped pages. The collapsed rail keeps one switcher button, which opens the command palette, so a workspace or brand can still be changed there. */}
+      {data && switcherMode({ collapsed, mobile }) === "selects" ? <div className="space-y-3 border-b border-border p-4">
         {workspaceSwitcher(SWITCHER_CLASS)}
         {brandId ? brandSwitcher(SWITCHER_CLASS) : null}
+      </div> : null}
+      {data && switcherMode({ collapsed, mobile }) === "rail-button" ? <div className="border-b border-border p-2">
+        <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Switch workspace or brand" title="Switch workspace or brand" className="grid min-h-11 w-full place-items-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg">
+          <ArrowLeftRight aria-hidden="true" className="size-4" />
+        </button>
       </div> : null}
       <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         {groups.map((group: NavGroup) => <section key={group.id} className="mb-5">
