@@ -4,8 +4,12 @@
  * a provider key from the vault or from the environment. The rules are in docs/ARCHITECTURE_CONTRACTS.md, section 1.
  */
 
-/** The provider categories that hold a saved key. */
-export type CredentialCategory = "perception" | "jev" | "production";
+/**
+ * The provider categories that hold a saved key. Each one resolves its workspace's own entry first, and the deployment's key
+ * only when its shared-default variable is opted in. `openai` is the OpenAI Decisions engine. `hypit` is the Hypit
+ * production runtime.
+ */
+export type CredentialCategory = "perception" | "jev" | "production" | "openai" | "hypit";
 
 /** Where a usable key came from. */
 export type CredentialSource = "workspace" | "deployment_shared_default";
@@ -32,6 +36,8 @@ export const CREDENTIAL_VAULT_TYPE: Record<CredentialCategory, string> = {
   perception: "provider_config:perception",
   jev: "provider_config:jev",
   production: "provider_config:production",
+  openai: "provider_config:openai",
+  hypit: "provider_config:hypit",
 };
 
 /**
@@ -42,7 +48,20 @@ export const SHARED_DEFAULT_ENV: Record<CredentialCategory, { variable: string; 
   perception: { variable: "PERCEPTION_SHARED_DEFAULT", accepts: "gemini" },
   jev: { variable: "JEV_SHARED_DEFAULT", accepts: "deployment" },
   production: { variable: "PRODUCTION_SHARED_DEFAULT", accepts: "deployment" },
+  openai: { variable: "OPENAI_SHARED_DEFAULT", accepts: "deployment" },
+  hypit: { variable: "HYPIT_SHARED_DEFAULT", accepts: "deployment" },
 };
+
+/**
+ * A deployment key with no workspace entry. Its callers run for the whole deployment, with no workspace in scope, so the
+ * key is used only when its opt-in variable is set to `accepts`. It is read by the same resolver, and it is not a saved
+ * category. The OpenRouter chat path (providers/chat.server.ts) is the one such key.
+ */
+export const DEPLOYMENT_ONLY_KEY_ENV = {
+  openrouter_chat: { keyVariable: "OPENROUTER_API_KEY", variable: "OPENROUTER_SHARED_DEFAULT", accepts: "deployment" },
+} as const;
+
+export type DeploymentOnlyKey = keyof typeof DEPLOYMENT_ONLY_KEY_ENV;
 
 /** The masked fingerprint shown in settings. Four characters are shown only when at least half the key stays hidden. */
 export function credentialFingerprint(secret: string): string | null {
