@@ -8,10 +8,17 @@
  * their stored counts (decision records and briefs) beside the status.
  */
 
-/** Minimum filled brain fields before the pipeline is treated as started. Matches the gate the overview always used. */
 import type { MachineCounts } from "@/lib/meridian/machine-counts";
+// Relative, not "@/", so the node test can load this module. The brain's own list supplies the labels.
+import { brainFieldLabel, type BrainCompleteness } from "../../lib/meridian/brain.ts";
 
-export const MIN_BRAIN_FIELDS_FOR_PIPELINE = 4;
+/**
+ * The brain gate. The pipeline starts only when every required brain field has content. Until then the first action and the
+ * first missing item say which required fields are still empty.
+ */
+export function requiredMissingLabels(brain: Pick<BrainCompleteness, "missingRequired">): string[] {
+  return brain.missingRequired.map((key) => brainFieldLabel(key) ?? key);
+}
 
 export type StageKey =
   | "market"
@@ -121,15 +128,14 @@ export type Recommendation = { label: string; reason: string };
  * stored recommendation replaces the generic Opportunity copy when one exists.
  */
 export function nextBestAction(input: {
-  brainFilled: number;
-  brainTotal: number;
+  brain: BrainCompleteness;
   stages: PipelineStage[];
   recommendation: Recommendation | null;
 }): NextAction {
-  if (input.brainFilled < MIN_BRAIN_FIELDS_FOR_PIPELINE) {
+  if (!input.brain.requiredComplete) {
     return {
       title: "Complete the brand brain",
-      body: `${input.brainFilled} of ${input.brainTotal} brain fields are filled. Recommendations cite these fields, so add the ones you can confirm.`,
+      body: `${input.brain.requiredFilled} of ${input.brain.requiredTotal} required fields have content. Still needed: ${requiredMissingLabels(input.brain).join(", ")}. Recommendations cite these fields, so add only what you can confirm.`,
       cta: "Open brand brain",
       to: "/brands/$brandId/brain",
       usesRecommendation: false,
@@ -178,9 +184,11 @@ export function nextBestAction(input: {
 export type MissingItem = { text: string; to: "/brands/$brandId/brain" | StageTo };
 
 /** What is absent from the stored data, in the order a person would fix it. Empty when nothing is missing. */
-export function missingItems(input: { brainFilled: number; counts: PipelineCounts; operating: { generationRuns: number } }): MissingItem[] {
+export function missingItems(input: { brain: BrainCompleteness; counts: PipelineCounts; operating: { generationRuns: number } }): MissingItem[] {
   const items: MissingItem[] = [];
-  if (input.brainFilled < MIN_BRAIN_FIELDS_FOR_PIPELINE) items.push({ text: "Complete the brand brain", to: "/brands/$brandId/brain" });
+  if (!input.brain.requiredComplete) {
+    items.push({ text: `Complete the brand brain. Still needed: ${requiredMissingLabels(input.brain).join(", ")}`, to: "/brands/$brandId/brain" });
+  }
   if (input.counts.observations === 0) items.push({ text: "Collect competitor evidence", to: MARKET });
   if (input.counts.openOpportunities === 0) items.push({ text: "Rank opportunities from stored evidence", to: OPPORTUNITIES });
   if (input.operating.generationRuns === 0) items.push({ text: "Generate a first creative", to: STUDIO });
