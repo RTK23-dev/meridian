@@ -241,8 +241,10 @@ test("Gate 7: Multi-Source Discovery with Cyclone Optional (P1.3, P1.4)", async 
     seeds: ["vintage denim"],
     sql: mockSql,
   });
-  // Mission completes successfully without Cyclone
-  assert.equal(result.run.status, "completed");
+  // No source ran: the phrase names no page, and no keyed source has a saved key. The run is blocked, not completed, so a
+  // run with no results is never shown as a finished one. Cyclone is still listed with its reason.
+  assert.equal(result.run.status, "blocked");
+  assert.match(result.run.caveat ?? "", /No source ran/);
   assert.ok(result.run.perSourceErrors["cyclone_scout"]?.includes("not connected or configured"));
 });
 
