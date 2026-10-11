@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
@@ -7,7 +8,7 @@ import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { connectAccountSchema, type ConnectAccountInput } from "@/components/forms/client-schemas";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, ErrorNotice, Card, SelectInput, ScreenSkeleton, Input } from "@/components/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, DisabledReason, Field, ErrorNotice, Card, SelectInput, ScreenSkeleton, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { usePendingVariables, usePlatformAccountsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
@@ -15,6 +16,9 @@ import {
   connectPlatformAccountAction,
   disconnectPlatformAccountAction,
 } from "@/lib/meridian/accounts/actions";
+import { beginOauth } from "@/lib/meridian/oauth/begin";
+import { oauthClientReadinessAction } from "@/lib/meridian/oauth/readiness";
+import { signInProviderForPlatform, signInState, type AccountSignInProvider } from "@/components/accounts/oauth-connect";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 
@@ -50,6 +54,32 @@ function BrandAccounts({ brandId }: { brandId: string }) {
   const blankAccount: ConnectAccountInput = { platform: "instagram", name: "", handle: "", externalAccountId: "", token: "" };
   const form = useForm<ConnectAccountInput>({ resolver: zodResolver(connectAccountSchema), defaultValues: blankAccount, mode: "onBlur" });
   const platform = form.watch("platform");
+
+  // Meta and Google ad accounts can start the existing sign-in flow. The flow returns to Integrations, where the account is confirmed.
+  const organizationId = workspace?.active?.id ?? "";
+  const signInProvider = signInProviderForPlatform(platform);
+  const readinessQuery = useQuery({
+    queryKey: ["oauth", "readiness", organizationId],
+    queryFn: () => oauthClientReadinessAction({ data: { organizationId } }),
+    enabled: Boolean(organizationId) && canAdmin && signInProvider !== null,
+    staleTime: 60_000,
+  });
+  const [signingIn, setSigningIn] = useState<AccountSignInProvider | null>(null);
+  const signIn = signInProvider ? signInState({ provider: signInProvider, canAdmin, readiness: readinessQuery.data?.[signInProvider] }) : null;
+  const signInReason = readinessQuery.isError ? "The sign-in settings could not be checked. Reload the page to try again." : signIn?.reason ?? null;
+  const signInEnabled = Boolean(signIn?.enabled) && !readinessQuery.isError && signingIn === null;
+  const startSignIn = async (provider: AccountSignInProvider) => {
+    setErrorMessage(null);
+    setSigningIn(provider);
+    try {
+      const started = await beginOauth({ data: { organizationId, provider, origin: window.location.origin } });
+      window.location.assign(started.url);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Sign-in could not start.");
+      setSigningIn(null);
+    }
+  };
+
   const dismiss = useDirtyDismiss({
     dirty: form.formState.isDirty,
     onOpenChange: (open) => setAddModalOpen(open),
@@ -163,7 +193,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
                     ID: {account.externalAccountId}
                   </p>
                   <p className="text-xs text-muted">
-                    Credential: {account.credentialId ? "Encrypted in Vault" : "Environment / Open"}
+                    Token: {account.credentialId ? "Encrypted in the vault" : "None stored. This account cannot publish."}
                   </p>
                 </div>
 
@@ -209,6 +239,24 @@ function BrandAccounts({ brandId }: { brandId: string }) {
               </SelectInput>
             </Field>
 
+            {signInProvider ? (
+              <div className="space-y-2 rounded-md border border-line p-3">
+                <p className="text-sm font-semibold">Sign in with {signInProvider === "meta" ? "Meta" : "Google Ads"}</p>
+                <p className="text-sm text-muted">
+                  Sign-in stores the token for this workspace, then returns you to Integrations to confirm the ad account.
+                </p>
+                <Button
+                  type="button"
+                  disabled={!signInEnabled}
+                  aria-describedby={signInEnabled || !signInReason ? undefined : "accounts-signin-reason"}
+                  onClick={() => void startSignIn(signInProvider)}
+                >
+                  {signingIn === signInProvider ? "Opening sign-in…" : `Sign in with ${signInProvider === "meta" ? "Meta" : "Google Ads"}`}
+                </Button>
+                {!signInEnabled && signInReason ? <DisabledReason id="accounts-signin-reason">{signInReason}</DisabledReason> : null}
+              </div>
+            ) : null}
+
             <Field label="Account Display Name" error={form.formState.errors.name?.message} required>
               <Input
                 {...form.register("name")}
@@ -235,11 +283,11 @@ function BrandAccounts({ brandId }: { brandId: string }) {
               />
             </Field>
 
-            <Field label="Access Token / API Key (Optional, Encrypted in Vault)" error={form.formState.errors.token?.message}>
+            <Field label="Access Token (Encrypted in the Vault)" hint="Publishing needs this token. Without it the account is listed but cannot publish or sync." error={form.formState.errors.token?.message}>
               <Input
                 {...form.register("token")}
                 type="password"
-                placeholder="Paste token or leave blank to rely on environment default"
+                placeholder="Paste the access token for this account"
               />
             </Field>
 

@@ -1,5 +1,5 @@
 export type TransportRequest = {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT";
   url: string;
   headers: Record<string, string>;
   body?: string | FormData | Uint8Array;

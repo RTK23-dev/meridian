@@ -3,7 +3,7 @@ import { liveTransport, type Transport } from "../providers/http.ts";
 import { startOperation } from "../observability/redact.ts";
 import { loadProviderInsights } from "./fetch.ts";
 import { ingestPerformanceRows } from "./sync.ts";
-import { loadTenantMetaToken, validatePerformanceOwnership } from "./ownership.ts";
+import { loadTenantProviderToken, validatePerformanceOwnership } from "./ownership.ts";
 import { verifyMetaAdAccountAccess } from "../providers/meta.ts";
 
 type Job = { id: string; organization_id: string; brand_id: string | null };
@@ -40,22 +40,24 @@ export async function runPerformanceSync(
     provider,
   });
   if (!ownership.ok) throw new Error(ownership.error);
-  let env: NodeJS.ProcessEnv;
+  if (provider !== "meta" && provider !== "tiktok" && provider !== "google") {
+    operation.finish(false, 1, `${provider} performance sync is not implemented.`);
+    throw new Error(`${provider} performance sync is not implemented. No observations were stored.`);
+  }
+  // Metrics are read only through the workspace's own connected account. The token is its sealed OAuth token. Without one, the
+  // job records NOT_CONNECTED and makes no provider request. No environment token is used.
+  const credential = await loadTenantProviderToken(sql, job.organization_id, provider, process.env.TOKEN_ENCRYPTION_KEY ?? "");
+  if (credential.status === "NOT_CONNECTED") {
+    await markNotConnected(sql, job.organization_id, provider, credential.error);
+    operation.finish(false, 0, credential.error);
+    throw new Error(`NOT_CONNECTED: ${credential.error}`);
+  }
   if (provider === "meta") {
-    const credential = await loadTenantMetaToken(sql, job.organization_id, process.env.TOKEN_ENCRYPTION_KEY ?? "");
-    if (credential.status === "NOT_CONNECTED") {
-      await markMetaNotConnected(sql, job.organization_id, credential.error);
-      operation.finish(false, 0, credential.error);
-      throw new Error(`NOT_CONNECTED: ${credential.error}`);
-    }
     const account = await verifyMetaAdAccountAccess(credential.accessToken, externalAdId, transport);
     if (!account.ok) {
       operation.finish(false, 1, account.error);
       throw new Error(account.error);
     }
-    env = { META_ACCESS_TOKEN: credential.accessToken };
-  } else {
-    env = process.env;
   }
   const loaded = await loadProviderInsights(
     {
@@ -66,7 +68,12 @@ export async function runPerformanceSync(
       timezone,
       startDate: typeof payload.startDate === "string" ? payload.startDate : "",
       endDate: typeof payload.endDate === "string" ? payload.endDate : "",
-      env,
+      accessToken: credential.accessToken,
+      // The Google Ads developer token identifies the deployment's API client. It is not an account token, and the job reads it
+      // from the deployment, the same as the customer and advertiser ids.
+      developerToken: provider === "google" ? (process.env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "") : undefined,
+      advertiserId: process.env.TIKTOK_ADVERTISER_ID,
+      customerId: process.env.GOOGLE_ADS_CUSTOMER_ID,
     },
     transport,
   );
@@ -132,9 +139,9 @@ export async function runPerformanceSync(
   return `stored:${ingested.stored.length};correlation:${record.correlationId}`;
 }
 
-async function markMetaNotConnected(sql: Sql, organizationId: string, detail: string): Promise<void> {
+async function markNotConnected(sql: Sql, organizationId: string, provider: string, detail: string): Promise<void> {
   await sql`
     update provider_connections set status = 'NOT_CONNECTED', last_error = ${detail}, updated_at = now()
-    where organization_id = ${organizationId} and provider = 'meta'
+    where organization_id = ${organizationId} and provider = ${provider}
   `;
 }

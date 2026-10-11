@@ -14,7 +14,12 @@ export type InsightRequest = {
   timezone: string;
   startDate: string;
   endDate: string;
-  env: NodeJS.ProcessEnv;
+  /** The access token of the workspace's connected account. It is the only token a metric request uses. */
+  accessToken: string;
+  /** Deployment identifiers, not account tokens. Google Ads needs the developer token, TikTok the advertiser, Google the customer. */
+  developerToken?: string;
+  advertiserId?: string;
+  customerId?: string;
 };
 
 /** Fetches one provider's insights. A missing credential or a failed response stores nothing. */
@@ -38,7 +43,7 @@ export async function loadProviderInsights(
 }
 
 async function metaEvents(input: InsightRequest, transport: Transport): Promise<{ events: PerformanceEvent[] } | { error: string }> {
-  const token = input.env.META_ACCESS_TOKEN?.trim() ?? "";
+  const token = input.accessToken.trim();
   if (!token) return { error: "Meta performance sync has no access token. No observations were stored." };
   const fetched = await fetchMetaInsights({ accessToken: token }, input.externalAdId, transport);
   if (!fetched.ok) return { error: redactSecrets(fetched.error || "Meta insights failed. No observations were stored.") };
@@ -56,8 +61,8 @@ async function metaEvents(input: InsightRequest, transport: Transport): Promise<
 }
 
 async function tiktokEvents(input: InsightRequest, transport: Transport): Promise<{ events: PerformanceEvent[] } | { error: string }> {
-  const token = input.env.TIKTOK_ACCESS_TOKEN?.trim() ?? "";
-  const advertiserId = input.env.TIKTOK_ADVERTISER_ID?.trim() ?? "";
+  const token = input.accessToken.trim();
+  const advertiserId = input.advertiserId?.trim() ?? "";
   if (!token || !advertiserId) return { error: "TikTok performance sync has no access token or advertiser id. No observations were stored." };
   const fetched = await fetchTikTokInsights(
     { accessToken: token, advertiserId },
@@ -79,9 +84,9 @@ async function tiktokEvents(input: InsightRequest, transport: Transport): Promis
 }
 
 async function googleEvents(input: InsightRequest, transport: Transport): Promise<{ events: PerformanceEvent[] } | { error: string }> {
-  const token = input.env.GOOGLE_ADS_ACCESS_TOKEN?.trim() ?? "";
-  const developerToken = input.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim() ?? "";
-  const customerId = input.env.GOOGLE_ADS_CUSTOMER_ID?.trim() ?? "";
+  const token = input.accessToken.trim();
+  const developerToken = input.developerToken?.trim() ?? "";
+  const customerId = input.customerId?.trim() ?? "";
   if (!token || !developerToken || !customerId) {
     return { error: "Google Ads performance sync is missing a token, developer token, or customer id. No observations were stored." };
   }

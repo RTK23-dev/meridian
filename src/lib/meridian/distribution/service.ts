@@ -4,6 +4,8 @@ import { getDistributionChannel } from "./registry.ts";
 import { applyLearnedPatterns } from "../learning/store.ts";
 import { publishThrough } from "../providers/boundaries.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
+import { isOrganicPlatform, resolveOrganicConnection, resolveOrganicConnections } from "./connection.ts";
+import type { OrganicPlatform } from "./types.ts";
 
 export async function requireBrandAccess(
   sql: Sql,
@@ -34,6 +36,8 @@ export type ChannelDefinition = {
   description: string;
   connected: boolean;
   accountName?: string;
+  /** Why the destination is not connected. Undefined when it is connected. Never a secret. */
+  reason?: string;
 };
 
 export type PublishMultiChannelInput = {
@@ -94,27 +98,28 @@ export async function listAvailableChannels(
   organizationId: string,
   brandId: string,
 ): Promise<ChannelDefinition[]> {
-  const connectionRows = await sql<Record<string, unknown>>`
-    select platform, account_name, status, target_type
-    from channel_connections
-    where brand_id = ${brandId} and organization_id = ${organizationId} and status = 'connected'
-  `;
-
-  const connectionsByPlatform = new Map<string, string>();
-  for (const row of connectionRows) {
-    connectionsByPlatform.set(asText(row.platform), asText(row.account_name));
-  }
-
-  // Also check paid ad provider connections. The table is provider_connections, and its healthy status is stored as CONNECTED.
-  // Querying a table that does not exist failed the whole channel list, so the publish dialog showed no destinations.
+  // Paid ad connections are provider_connections rows. A healthy connection is stored as HEALTHY or CONNECTED, the two states
+  // readiness.ts counts as connected. Any other status is not connected.
   const adAccounts = await sql<Record<string, unknown>>`
     select provider, account_name, status
     from provider_connections
-    where organization_id = ${organizationId} and status = 'CONNECTED'
+    where organization_id = ${organizationId} and status in ('CONNECTED', 'HEALTHY')
   `;
+  const paidByProvider = new Map<string, string>();
   for (const row of adAccounts) {
-    connectionsByPlatform.set(asText(row.provider), asText(row.account_name));
+    paidByProvider.set(asText(row.provider), asText(row.account_name));
   }
+
+  // Organic connections are platform_accounts rows whose token is in the vault. The publisher resolves the same way, so the
+  // list and a publish cannot disagree about whether an account is connected.
+  const organic = await resolveOrganicConnections(sql, { organizationId, brandId });
+  const organicState = (platform: OrganicPlatform): Pick<ChannelDefinition, "connected" | "accountName" | "reason"> => {
+    const state = organic[platform];
+    return state.connected
+      ? { connected: true, accountName: state.accountName, reason: undefined }
+      : { connected: false, accountName: undefined, reason: state.reason };
+  };
+  const paidReason = (label: string) => `No ${label} account is connected for this workspace. Connect it on the Integrations screen.`;
 
   return [
     // Paid Ad Channels
@@ -126,6 +131,7 @@ export async function listAvailableChannels(
       description: "Deterministic sandbox publisher for automated tests and safe preview validation.",
       connected: isTestingRuntimeNow(),
       accountName: isTestingRuntimeNow() ? "Test Sandbox Ad Account" : "Not available outside the testing runtime",
+      reason: isTestingRuntimeNow() ? undefined : "The test publisher runs only in the testing runtime.",
     },
     {
       id: "meta-ads",
@@ -133,8 +139,9 @@ export async function listAvailableChannels(
       type: "paid",
       platform: "meta",
       description: "Direct-response paid advertising campaigns across Facebook & Instagram Feeds and Stories.",
-      connected: connectionsByPlatform.has("meta"),
-      accountName: connectionsByPlatform.get("meta"),
+      connected: paidByProvider.has("meta"),
+      accountName: paidByProvider.get("meta"),
+      reason: paidByProvider.has("meta") ? undefined : paidReason("Meta ad"),
     },
     {
       id: "tiktok-ads",
@@ -142,8 +149,9 @@ export async function listAvailableChannels(
       type: "paid",
       platform: "tiktok",
       description: "Paid direct-response in-feed video ads with Spark Ads and objective tracking.",
-      connected: connectionsByPlatform.has("tiktok"),
-      accountName: connectionsByPlatform.get("tiktok"),
+      connected: paidByProvider.has("tiktok"),
+      accountName: paidByProvider.get("tiktok"),
+      reason: paidByProvider.has("tiktok") ? undefined : paidReason("TikTok ad"),
     },
     {
       id: "google-ads",
@@ -151,8 +159,9 @@ export async function listAvailableChannels(
       type: "paid",
       platform: "google",
       description: "Targeted video action and Performance Max placements.",
-      connected: connectionsByPlatform.has("google"),
-      accountName: connectionsByPlatform.get("google"),
+      connected: paidByProvider.has("google"),
+      accountName: paidByProvider.get("google"),
+      reason: paidByProvider.has("google") ? undefined : paidReason("Google Ads"),
     },
     // Organic Social Channels
     {
@@ -161,8 +170,7 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "instagram",
       description: "Full-screen vertical short-form organic video (9:16) with captions and hashtag targeting.",
-      connected: connectionsByPlatform.has("instagram"),
-      accountName: connectionsByPlatform.get("instagram"),
+      ...organicState("instagram"),
     },
     {
       id: "facebook-pages",
@@ -170,8 +178,7 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "facebook",
       description: "Organic feed videos and Reels distributed to page followers and algorithmic recommendations.",
-      connected: connectionsByPlatform.has("facebook"),
-      accountName: connectionsByPlatform.get("facebook"),
+      ...organicState("facebook"),
     },
     {
       id: "youtube-shorts",
@@ -179,8 +186,7 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "youtube",
       description: "Organic short-form vertical video (<=60s) published to the brand's official YouTube channel.",
-      connected: connectionsByPlatform.has("youtube"),
-      accountName: connectionsByPlatform.get("youtube"),
+      ...organicState("youtube"),
     },
   ];
 }
@@ -317,6 +323,11 @@ export async function publishCreativeToChannels(
     }
 
     try {
+      // The connection is resolved here, for this brand, and handed to the channel. A missing or unusable token is a
+      // NOT_CONNECTED receipt with its reason, and no request is sent.
+      const connection = isOrganicPlatform(organicChannel.platform)
+        ? await resolveOrganicConnection(sql, { organizationId: access.organizationId, brandId: input.brandId, platform: organicChannel.platform })
+        : undefined;
       const publishReceipt = await organicChannel.publish({
         brandId: input.brandId,
         organizationId: access.organizationId,
@@ -329,6 +340,7 @@ export async function publishCreativeToChannels(
         scheduledFor: scheduledDate ? scheduledDate.toISOString() : undefined,
         aspectRatio: "9:16",
         allowTestProvider: false,
+        connection,
       });
 
       const postId = globalThis.crypto.randomUUID();
