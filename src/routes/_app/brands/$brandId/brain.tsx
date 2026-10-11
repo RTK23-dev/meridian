@@ -304,8 +304,9 @@ function BrainEditor({ brandId }: { brandId: string }) {
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <AutosaveIndicator status={autosave.status} canEdit={canEdit} />
+            {/* Not disabled while an autosave runs: leaving a field starts one, and a disabled button would swallow the click. The manual save waits behind it. */}
             {canEdit ? (
-              <Button type="submit" disabled={pending || isSubmitting || autosave.status.kind === "saving"}>{pending || isSubmitting ? "Saving…" : "Save brain"}</Button>
+              <Button type="submit" disabled={pending || isSubmitting}>{pending || isSubmitting ? "Saving…" : "Save brain"}</Button>
             ) : null}
           </div>
           {!canEdit ? <p className="text-sm text-fg-muted">You can read this brain. Changing it needs a member role.</p> : null}
