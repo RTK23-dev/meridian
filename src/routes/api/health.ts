@@ -21,7 +21,7 @@ export const Route = createFileRoute("/api/health")({
             secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
           }),
           localSemantic: localSemanticModel().kind,
-          externalEmbeddings: embeddingProviderState({ openRouterKey: process.env.OPENROUTER_API_KEY }).status,
+          externalEmbeddings: embeddingProviderState({ url: process.env.EXTERNAL_SEMANTIC_URL, key: process.env.EXTERNAL_SEMANTIC_KEY }).status,
           providers: (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => accountProviderState(provider).status),
           video: videoGenerationStatus({ baseUrl: process.env.HYPIT_BASE_URL }).status,
           jobs: null,

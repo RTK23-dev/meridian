@@ -4,6 +4,7 @@ import { getSql } from "@/lib/db";
 import { localSemanticModel, embeddingProviderState } from "@/lib/meridian/embeddings/provider";
 import { INTEGRATIONS } from "@/lib/meridian/providers/integrations";
 import { externalObjectStorageStatus } from "@/lib/meridian/storage/object-store";
+import { emailDeliveryState, isoOrNull } from "@/lib/meridian/notifications/email-state";
 import { publishingProviderStatus } from "@/lib/meridian/publishing/provider";
 import { accountProviderState } from "@/lib/meridian/providers/boundaries";
 import { isLiveProvider, phaseForProbe, providerConfigured, type LiveProvider } from "@/lib/meridian/providers/live";
@@ -21,7 +22,7 @@ export const getSystemStatus = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const embeddings = embeddingProviderState({ openRouterKey: process.env.OPENROUTER_API_KEY });
+    const embeddings = embeddingProviderState({ url: process.env.EXTERNAL_SEMANTIC_URL, key: process.env.EXTERNAL_SEMANTIC_KEY });
     const publishing = publishingProviderStatus();
     const objectStorage = externalObjectStorageStatus({
       bucket: process.env.S3_BUCKET,
@@ -50,7 +51,7 @@ export const getSystemStatus = createServerFn({ method: "POST" })
       database = "down";
     }
     const providers = (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => accountProviderState(provider));
-    let connections: { provider: LiveProvider; phase: string; detail: string; accountId: string; accountName: string; lastError: string }[] = [];
+    let connections: { provider: LiveProvider; phase: string; detail: string; accountId: string; accountName: string; lastError: string; lastSuccessAt: string | null }[] = [];
     if (database === "up" && data.organizationId) {
       try {
         const sql = await getSql();
@@ -71,7 +72,7 @@ export const getSystemStatus = createServerFn({ method: "POST" })
               disconnected: Boolean(row?.disconnected_at),
             });
             if (!row && providerConfigured(provider)) {
-              return { provider, phase: phase.phase, detail: phase.detail, accountId: "", accountName: "", lastError: "" };
+              return { provider, phase: phase.phase, detail: phase.detail, accountId: "", accountName: "", lastError: "", lastSuccessAt: null };
             }
             return {
               provider,
@@ -80,6 +81,8 @@ export const getSystemStatus = createServerFn({ method: "POST" })
               accountId: row?.account_id ?? "",
               accountName: row?.account_name ?? "",
               lastError: row?.last_error ?? "",
+              // The last request that succeeded, from the stored connection. Null when none has succeeded.
+              lastSuccessAt: isoOrNull(row?.last_success_at),
             };
           });
         }
@@ -90,7 +93,7 @@ export const getSystemStatus = createServerFn({ method: "POST" })
     if (connections.length === 0) {
       connections = (["meta", "tiktok", "google", "ad_library"] as const).filter(isLiveProvider).map((provider) => {
         const phase = phaseForProbe({ provider, ok: null, error: "", disconnected: false });
-        return { provider, phase: phase.phase, detail: phase.detail, accountId: "", accountName: "", lastError: "" };
+        return { provider, phase: phase.phase, detail: phase.detail, accountId: "", accountName: "", lastError: "", lastSuccessAt: null };
       });
     }
     return {
@@ -104,6 +107,8 @@ export const getSystemStatus = createServerFn({ method: "POST" })
         detail: objectStorage.detail,
       },
       embeddings,
+      // Only the state is returned. The values of the email variables never leave the server.
+      email: emailDeliveryState({ url: process.env.EMAIL_API_URL, key: process.env.EMAIL_API_KEY }),
       localSemantic: localSemanticModel(),
       publishing,
       providers,

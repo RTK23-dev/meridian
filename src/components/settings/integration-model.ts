@@ -72,7 +72,7 @@ const ACCOUNT_MISSING: Record<keyof typeof ACCOUNT_LABEL, string> = {
 /** Phases for an account row. The server phase is used as the badge status, so the badge says exactly what it reports. */
 export function accountCard(
   provider: keyof typeof ACCOUNT_LABEL,
-  connection: { phase: string; detail: string; accountName: string; accountId: string } | undefined,
+  connection: { phase: string; detail: string; accountName: string; accountId: string; lastSuccessAt?: string | null } | undefined,
 ): CardModel {
   const phase = connection?.phase ?? "NOT_CONFIGURED";
   const detail = connection?.detail ?? "No connection state was reported for this provider.";
@@ -89,9 +89,11 @@ export function accountCard(
   } else if (phase === "DEGRADED") {
     missing = "The last successful request is stale. Test the connection to refresh it.";
   }
-  const facts = connection && (connection.accountName || connection.accountId)
-    ? [`Account ${connection.accountName || "unnamed"}${connection.accountId ? ` · ${connection.accountId}` : ""}`]
-    : [];
+  const facts: string[] = [];
+  if (connection && (connection.accountName || connection.accountId)) {
+    facts.push(`Account ${connection.accountName || "unnamed"}${connection.accountId ? ` · ${connection.accountId}` : ""}`);
+  }
+  facts.push(lastSuccessFact(connection?.lastSuccessAt ?? null));
   return {
     id: provider,
     label: ACCOUNT_LABEL[provider],
@@ -102,6 +104,13 @@ export function accountCard(
     missing,
     facts,
   };
+}
+
+/** The stored time of the last successful request, or a plain statement that none is recorded. Never a guessed time. */
+export function lastSuccessFact(lastSuccessAt: string | null): string {
+  if (!lastSuccessAt) return "No successful request is recorded yet.";
+  const time = Date.parse(lastSuccessAt);
+  return Number.isNaN(time) ? "Last successful request: time not readable." : `Last successful request: ${new Date(time).toLocaleString()}.`;
 }
 
 /** One card per provider, grouped by where it sits in the product. A status that the server does not report is shown as such. */
@@ -119,7 +128,7 @@ export function integrationCards(input: { status: SystemStatus; summaries: Summa
     ready ? openRouterCard(ready.jev) : unavailableCard("openrouter", "OpenRouter", "generation", "deployment", summaries.state),
     ready ? hypitCard(ready.production) : unavailableCard("hypit", "Hypit video", "generation", "deployment", summaries.state),
     s3Card(status),
-    emailCard(),
+    emailCard(status),
   ];
 }
 
@@ -175,7 +184,7 @@ function embeddingsCard(status: SystemStatus): CardModel {
     id: "embeddings", label: "Embeddings", group: "research", kind: "deployment",
     status: external ? "AVAILABLE" : "NOT_CONFIGURED",
     summary: status.embeddings.detail,
-    missing: external ? null : "Set OPENROUTER_API_KEY on the server to use the external embeddings API. The local model needs no key.",
+    missing: external ? null : "Set EXTERNAL_SEMANTIC_URL and EXTERNAL_SEMANTIC_KEY on the server to use the external embeddings API. The local model needs no key.",
     facts: [status.localSemantic.status === "AVAILABLE" ? `Local model ${status.localSemantic.model} is available in process.` : "Local model is not available."],
   };
 }
@@ -234,13 +243,14 @@ function s3Card(status: SystemStatus): CardModel {
   };
 }
 
-/** The status endpoint does not report email delivery settings, so this card says so instead of guessing. */
-function emailCard(): CardModel {
+/** Email delivery is read from the server's state only. The state says whether EMAIL_API_URL and EMAIL_API_KEY are set. */
+function emailCard(status: SystemStatus): CardModel {
+  const configured = status.email.status === "CONFIGURED";
   return {
     id: "email", label: "Email", group: "infrastructure", kind: "deployment",
-    status: "NOT_REPORTED",
-    summary: "The status endpoint does not report email delivery. This page cannot confirm it.",
-    missing: "Set EMAIL_API_URL and EMAIL_API_KEY on the server. Without them, no invitation email is sent.",
+    status: configured ? "AVAILABLE" : "NOT_CONFIGURED",
+    summary: status.email.detail,
+    missing: configured ? null : "Set EMAIL_API_URL and EMAIL_API_KEY on the server. Without them, no invitation email is sent.",
     facts: [],
   };
 }
