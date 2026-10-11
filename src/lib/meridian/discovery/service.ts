@@ -14,6 +14,7 @@ import type { Sql } from "../learning/store.ts";
 import { sourceRegistry, SourceRegistry } from "../sources/registry.ts";
 import { pageUrlForSeed } from "../sources/public-url.ts";
 import type { SourceReference } from "../sources/types.ts";
+import { SourceCallError } from "../sources/live-api.ts";
 import { crawlLadderPage, type PageCrawlResult } from "./crawler.ts";
 import { ResearchPlanner, type PlannedSourceExecution } from "./planner.ts";
 import { DiscoveryFrontierService } from "./frontier.ts";
@@ -156,7 +157,7 @@ function itemFromReference(runId: string, ref: SourceReference, seed: string): D
     canonicalUrl: url,
     source: ref.platform,
     cardType: "post",
-    title: (ref.metadata?.handle as string) || (ref.metadata?.caption as string) || url,
+    title: (ref.metadata?.title as string) || (ref.metadata?.handle as string) || (ref.metadata?.caption as string) || url,
     text: (ref.metadata?.caption as string) || undefined,
     metrics: unavailableMetrics(),
     contentHash,
@@ -470,8 +471,10 @@ export class DiscoveryService {
         recordSourceState(run, { adapterId: adapter.id, seed: exec.seed, status: "ran", itemsFound, seenBefore, sourceStatus });
       } catch (error) {
         const reason = errorMessage(error);
+        // A provider that gave no usable answer records its health (AUTH_FAILED, RATE_LIMITED or UNAVAILABLE) with the run.
+        const sourceStatus = error instanceof SourceCallError ? error.failure : undefined;
         run.perSourceErrors[exec.adapterId] = reason;
-        recordSourceState(run, { adapterId: adapter.id, seed: exec.seed, status: "failed", reason });
+        recordSourceState(run, { adapterId: adapter.id, seed: exec.seed, status: "failed", reason, sourceStatus });
         // Non-fatal for optional adapters (e.g. Cyclone): mission continues
       }
     }

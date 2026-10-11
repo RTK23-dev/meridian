@@ -15,6 +15,7 @@
  */
 
 import type { SourceRegistry } from "../sources/registry.ts";
+import { pageUrlForSeed } from "../sources/public-url.ts";
 import type { SourceHealth } from "../sources/types.ts";
 import type { DiscoveryScope, CrawlBudget } from "./types.ts";
 
@@ -125,18 +126,33 @@ export class ResearchPlanner {
         }
 
         // 2. Keyed and public-platform adapters. Each health check is scoped to the workspace.
+        const namesPage = pageUrlForSeed(seed) !== null;
         for (const adapterId of MULTI_SOURCE_ADAPTERS) {
           const adapter = registry.get(adapterId);
           if (!adapter) continue;
           const health = await adapter.health(request.organizationId).catch((error: unknown) => ({
             error: error instanceof Error ? error.message : String(error),
           }));
+          const planned = planFromHealth(health, adapter.id);
+          // A seed that names a page is read directly. A phrase search for it would store results that do not belong to it.
+          if (planned.status === "eligible" && namesPage) {
+            executions.push({
+              adapterId: adapter.id,
+              sourceKind: adapter.platform,
+              seed,
+              isOptional: true,
+              status: "not_supported",
+              reason: `"${seed}" names a page, which is read directly. ${adapter.id} searches by phrase, so no search is run for it.`,
+              healthStatus: planned.healthStatus,
+            });
+            continue;
+          }
           executions.push({
             adapterId: adapter.id,
             sourceKind: adapter.platform,
             seed,
             isOptional: true,
-            ...planFromHealth(health, adapter.id),
+            ...planned,
           });
         }
 
