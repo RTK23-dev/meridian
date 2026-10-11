@@ -14,6 +14,7 @@ import {
 import { brandIdentitySchema } from "@/lib/meridian/schemas/brand";
 import { brainValuesSchema } from "@/lib/meridian/schemas/brain";
 import { type Role } from "@/lib/meridian/access";
+import { writeBrainVersion } from "./version-write.ts";
 import {
   id,
   asText,
@@ -268,7 +269,8 @@ export const getBrand = createServerFn({ method: "POST" })
 export const saveBrain = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    return { brandId: clip(body.brandId, 80, "Brand", true), brain: readBrain(body) };
+    // autosave is true only for the editor's background save. The Save button sends no flag, so it always appends a version.
+    return { brandId: clip(body.brandId, 80, "Brand", true), brain: readBrain(body), autosave: body.autosave === true };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -328,15 +330,13 @@ export const saveBrain = createServerFn({ method: "POST" })
         ],
       );
     }
-    await sql`
-      insert into brand_brain_versions (id, brand_id, version, snapshot, note, created_by)
-      values (
-        ${id()}, ${data.brandId}, ${nextVersion},
-        ${JSON.stringify({ brain: b, provenance })},
-        ${"Saved by a person"},
-        ${context.userId}
-      )
-    `;
+    await writeBrainVersion(sql, {
+      brandId: data.brandId,
+      editorId: context.userId,
+      autosave: data.autosave,
+      version: nextVersion,
+      snapshot: JSON.stringify({ brain: b, provenance }),
+    });
     await sql`update brands set updated_at = now() where id = ${data.brandId}`;
     await writeAudit(sql, {
       organizationId: located.organizationId,
