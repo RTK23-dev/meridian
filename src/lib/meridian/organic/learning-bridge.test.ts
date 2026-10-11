@@ -105,6 +105,8 @@ function createMockSql() {
     return [];
   }) as unknown as Sql;
 
+  // The learning replacement runs in one transaction, so the fake offers `begin` as a passthrough to the same statements.
+  (sql as Sql).begin = <T>(fn: (tx: Sql) => Promise<T>): Promise<T> => fn(sql as Sql);
   return { sql, store };
 }
 

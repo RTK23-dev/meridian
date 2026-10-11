@@ -192,7 +192,8 @@ test("published Hypit test performance is learned into the next brief once", asy
       }
       return [];
     },
-    { query: async () => [] },
+    // The learning replacement runs in one transaction, so the fake offers `begin` as a passthrough to the same statements.
+    { query: async () => [], begin: <T>(fn: (tx: Sql) => Promise<T>): Promise<T> => fn(sql as Sql) },
   ) as Sql;
   const existing = priorRows.map((item) => ({
     externalId: item.external_id,
