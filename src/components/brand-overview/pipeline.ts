@@ -200,8 +200,3 @@ export function missingItems(input: { brain: BrainCompleteness; counts: Pipeline
 export function doneCount(stages: PipelineStage[]): number {
   return stages.filter((stage) => stage.state === "done").length;
 }
-
-/** Approved and rejected reviews in a stored review list. An open review is waiting, not decided. */
-export function countDecidedReviews(reviews: ReadonlyArray<{ status: string }>): number {
-  return reviews.filter((review) => review.status === "approved" || review.status === "rejected").length;
-}

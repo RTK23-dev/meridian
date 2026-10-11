@@ -3,6 +3,7 @@ import { request as httpRequest, type IncomingMessage, type RequestOptions } fro
 import { request as httpsRequest } from "node:https";
 import { Readable } from "node:stream";
 import { ipIsBlocked, publicUrlIssue } from "./public-url.ts";
+import { BOT_CHECK_MESSAGE, CRAWLER_USER_AGENT, isBotChallenge, ROBOTS_MESSAGE, robotsAllows } from "./crawl-policy.ts";
 
 const MAX_BYTES = 200_000;
 const MAX_MEDIA_BYTES = 80_000_000;
@@ -74,7 +75,9 @@ export async function fetchPublicText(rawUrl: string, hops = 0): Promise<{ url: 
   if (issue) throw new Error(issue);
   const url = new URL(rawUrl);
   const pinnedLookup = await resolveAndPinHost(url.hostname);
+  await enforceRobots(url, pinnedLookup);
   const response = await requestPage(url, pinnedLookup, "text/html,text/plain;q=0.9");
+  await refuseBotChallenge(response);
   const statusCode = response.statusCode;
   if (statusCode != null && statusCode >= 300 && statusCode < 400) {
     const location = response.headers.location;
@@ -113,7 +116,9 @@ export async function fetchPublicMedia(rawUrl: string, hops = 0, maxBytes = MAX_
   if (issue) throw new Error(issue);
   const url = new URL(rawUrl);
   const pinnedLookup = await resolveAndPinHost(url.hostname);
+  await enforceRobots(url, pinnedLookup);
   const response = await requestPage(url, pinnedLookup, "video/*,application/octet-stream;q=0.9", 120_000);
+  await refuseBotChallenge(response);
   const statusCode = response.statusCode;
   if (statusCode != null && statusCode >= 300 && statusCode < 400) {
     const location = response.headers.location;
@@ -150,7 +155,9 @@ export async function fetchPublicHtml(rawUrl: string, hops = 0): Promise<{ url: 
   if (issue) throw new Error(issue);
   const url = new URL(rawUrl);
   const pinnedLookup = await resolveAndPinHost(url.hostname);
+  await enforceRobots(url, pinnedLookup);
   const response = await requestPage(url, pinnedLookup, "text/html;q=0.9");
+  await refuseBotChallenge(response);
   const statusCode = response.statusCode;
   if (statusCode != null && statusCode >= 300 && statusCode < 400) {
     const location = response.headers.location;
@@ -182,7 +189,7 @@ function requestPage(url: URL, pinnedLookup: NonNullable<RequestOptions["lookup"
       {
         method: "GET",
         signal: AbortSignal.timeout(timeoutMs),
-        headers: { accept },
+        headers: { accept, "user-agent": CRAWLER_USER_AGENT },
         lookup: pinnedLookup,
       },
       resolve,
@@ -201,4 +208,77 @@ function concat(chunks: Uint8Array[]): Uint8Array {
     offset += chunk.byteLength;
   }
   return out;
+}
+
+const ROBOTS_TTL_MS = 60 * 60 * 1000;
+const ROBOTS_CACHE_LIMIT = 200;
+const ROBOTS_MAX_BYTES = 64_000;
+const CHALLENGE_SAMPLE_BYTES = 4_096;
+
+/** What robots.txt says for one origin. `text` is null when the file is missing, which allows every path. */
+type RobotsEntry = { text: string | null; unavailable: boolean; checkedAt: number };
+const robotsCache = new Map<string, RobotsEntry>();
+
+/**
+ * Enforces robots.txt for the crawler before a page or media file is read. A missing file allows the read. A file that cannot be
+ * read at all refuses it for now, as RFC 9309 asks for a server error. The answer is cached per origin for an hour.
+ */
+async function enforceRobots(url: URL, pinnedLookup: NonNullable<RequestOptions["lookup"]>): Promise<void> {
+  let entry = robotsCache.get(url.origin);
+  if (!entry || Date.now() - entry.checkedAt >= ROBOTS_TTL_MS) {
+    entry = await readRobots(url.origin, pinnedLookup);
+    if (robotsCache.size >= ROBOTS_CACHE_LIMIT) robotsCache.delete(robotsCache.keys().next().value as string);
+    robotsCache.set(url.origin, entry);
+  }
+  if (entry.unavailable) throw new Error("The site's robots.txt could not be read, so the page was not read. Try again later.");
+  if (entry.text !== null && !robotsAllows(entry.text, `${url.pathname}${url.search}`)) throw new Error(ROBOTS_MESSAGE);
+}
+
+async function readRobots(origin: string, pinnedLookup: NonNullable<RequestOptions["lookup"]>): Promise<RobotsEntry> {
+  const checkedAt = Date.now();
+  try {
+    const response = await requestPage(new URL("/robots.txt", origin), pinnedLookup, "text/plain");
+    const status = response.statusCode ?? 0;
+    if (status >= 400 && status < 500 && status !== 429) {
+      response.resume();
+      return { text: null, unavailable: false, checkedAt };
+    }
+    if (status < 200 || status >= 300) {
+      response.resume();
+      return { text: null, unavailable: true, checkedAt };
+    }
+    const body = await readSample(response, ROBOTS_MAX_BYTES);
+    return { text: body, unavailable: false, checkedAt };
+  } catch {
+    return { text: null, unavailable: true, checkedAt };
+  }
+}
+
+/** Reads at most `limit` bytes of a response and stops. The rest is never read. */
+async function readSample(response: IncomingMessage, limit: number): Promise<string> {
+  const reader = Readable.toWeb(response).getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (received < limit) {
+    const step = await reader.read();
+    if (step.done) break;
+    received += step.value.byteLength;
+    chunks.push(step.value);
+  }
+  await reader.cancel().catch(() => undefined);
+  return new TextDecoder().decode(concat(chunks)).slice(0, limit);
+}
+
+/**
+ * Turns a bot check into a plain refusal. Meridian reads a small sample of the blocked response so it can tell a CAPTCHA or a
+ * challenge page from an ordinary refusal. It never tries to get past the check.
+ */
+async function refuseBotChallenge(response: IncomingMessage): Promise<void> {
+  const status = response.statusCode ?? 0;
+  if (![403, 429, 503].includes(status)) return;
+  const headers = Object.fromEntries(
+    Object.entries(response.headers).map(([name, value]) => [name, Array.isArray(value) ? value.join(",") : value]),
+  );
+  const body = await readSample(response, CHALLENGE_SAMPLE_BYTES);
+  if (isBotChallenge({ status, headers, body })) throw new Error(BOT_CHECK_MESSAGE);
 }

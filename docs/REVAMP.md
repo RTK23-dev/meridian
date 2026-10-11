@@ -1,0 +1,117 @@
+# Revamp: the setup guide, sourcing and the new look
+
+This records what the revamp changed, the decisions made without the owner (so they can be reversed), and what is still open.
+It sits beside NORTH_STAR.md. Where the two disagree on direction, NORTH_STAR.md still wins.
+
+## What a new person now sees
+
+1. **Sign in.** A split screen: the loop Meridian runs (Gather, Grade, Make, Publish, Learn), where keys live, and that new paid
+   ads start paused. The form sits on the right and stacks first on a phone.
+2. **Overview.** One callout names the next setup step and why. It disappears once the two required steps are done.
+3. **Setup guide (`/setup`, first item in the sidebar).** Six steps in order. Each one says what it is, why it matters, and what
+   the saved records show now. Only the first two are required.
+   - **Create your first brand.** A name and what you sell. Everything else is folded under "Add more detail".
+   - **Choose a decision engine.** Two cards: TypeSafe JEV and OpenAI Decisions, with what each does and what key it needs. A
+     card that is not ready carries its own key form, so the key is saved where the choice is made. Only the chosen engine
+     receives decisions, and nothing falls back to the other one.
+   - **Pick where examples come from.** Public web pages and your own files need no key. Meta Ad Library, YouTube and search
+     take a key each. The rest sit under "More connectors".
+   - **Make images and video.** Optional. Gemini and Hypit rows, with a note that uploads cover the gap.
+   - **Send work to Meta.** Optional. Says plainly that ads are created paused and that Meridian has no switch to turn them on.
+   - **Connect Google Drive.** Optional. A server setting, so it names the variables rather than offering a form.
+4. **Settings → General** still shows every provider row with its reason. The guide links there.
+
+The guide reads the same server states as Settings, through `src/lib/setup/facts.ts` and `src/lib/setup/guide.ts`. It never
+reads a key and never calls a live provider. An unknown state is shown as "could not be checked", not as "to do".
+
+## Sourcing: what the reader does and does not do
+
+Public page reads (the crawler, the Market "public page" run and the research snapshots) now:
+
+- read the site's `robots.txt` first, for the crawler's own name (`MeridianBot`) and then for `*`, using the longest-match
+  rule of RFC 9309. A missing file allows the read. A file that cannot be read at all refuses it for now. The answer is cached
+  per origin for an hour (`src/lib/meridian/sources/crawl-policy.ts`, `fetch-page.server.ts`);
+- send a truthful User-Agent, `MeridianBot/1.0`, instead of none;
+- report a bot check (a CAPTCHA, or a Cloudflare or other challenge page served with 403, 429 or 503) as a plain refusal that says
+  what to do instead: upload the page or use a connected source.
+
+Meridian does not try to solve CAPTCHAs, pass Cloudflare challenges, rotate identities or otherwise get past a bot check. That
+is a line in this product, not a gap to fill later. Where a source offers an API or a licence, use that. Where it does not, the
+person uploads what they have the right to use.
+
+## Paused Meta ads
+
+Meridian creates Meta campaigns, ad sets and ads with the status `PAUSED` (`providers/meta.ts`). The only status-changing
+function in the codebase, `setMetaStatus`, has no caller, so nothing in Meridian switches an ad on. The Library's publishing card
+now uses `PausedExplainer` to say so in three steps. If an automatic switch-on is added later, this text must change with it.
+
+## Design
+
+- The palette, type (Fraunces for headings, Inter for text) and the reduced-motion rule are unchanged. The body has a soft warm
+  light behind the page.
+- Motion is limited to three entrances: a short rise for cards and steps, a fade for page changes, and a staggered loop on the
+  sign-in screen. Progress bars and hover lifts use a transition. `prefers-reduced-motion` shortens every one of them to 0.01ms,
+  which lands on the final state.
+- Light and dark themes keep the existing token pairs.
+
+## Removed
+
+- The Grok platform tooling: the PWA head plugin, its install page and assets, the server middleware, the og.grok.me brand check,
+  the write-atomic staging helper, the preview process manager, the og-skill fixtures and `docs/legacy/GROK_AGENTS.md`.
+- Variables that only fed the Grok plugin: `VITE_GROK_EXTENSIONS`, `VITE_PROJECT_ID`, `VITE_PUBLIC_HOSTNAME`, `X_CREATOR`.
+- The local env override moved from `.grok/app-env.json` to `.meridian/app-env.json`. The mechanism is unchanged.
+- The home page's seven-step checklist and its model (`src/lib/onboarding.ts`). Its review and competitor steps are on their own
+  screens, so nothing is lost; the overview now points at setup.
+- The prompt registry's `grok-4.5` model names are now `provider-default`, because no prompt is bound to a model yet.
+- SQL migrations were not edited. Old Grok comments inside them stay as history.
+
+## Decisions made without the owner
+
+1. **One branch and one draft PR** for this revamp, on the designated branch, reset to `main` because its only extra commit was
+   already in `main`.
+2. **The overview callout replaces the checklist** rather than sitting beside it.
+3. **The brand form keeps all its fields,** folding the optional ones, so no saved data is lost.
+4. **Google Drive stays a server setting** in the guide, not a form, because the server shares one Drive across workspaces.
+5. **The Meta publish step is optional,** because the export package works without it.
+
+## Not done, and why
+
+- **The `e2e` failure on `main`** at the brain save (see the `e2e` job) is not fixed here. It needs its own investigation of
+  the autosave queue, and the revamp does not change that code.
+- **Google Drive video notes.** The owner's screen recording could not be read: the Drive connector returns only its title for
+  video. Requirements in this document come from the owner's written message.
+- **Live sourcing against real sites** was not run from this environment. The robots and bot-check rules are tested with fixtures.
+- **Setup against a live Meta, YouTube, TikTok or Google account** was not run. Each key is the owner's to verify (NORTH_STAR
+  section 7).
+
+## Open questions for the owner
+
+- Should a site that answers with a bot check be retried later, or kept as a permanent "blocked by site" note?
+- Which decision engine should be the default for new workspaces: TypeSafe JEV, OpenAI Decisions, or no default at all?
+- Should the paused-ad explainer link to Meta Ads Manager directly, or stay as text?
+
+## Screenshots
+
+Captured at 1280 px wide from one fixture account, with the same steps before and after. The setup guide is new, so it has no
+before image. The phone images are at 390 px.
+
+- Sign in: `docs/revamp-screens/before-login-desktop.png` → `after-login-desktop.png`, and `after-login-phone.png`
+- Overview with a brand: `before-overview.png` → `after-overview.png`
+- Library, publishing as paused ads: `before-library-paused.png` → `after-library-paused.png`
+- Setup guide: `after-setup-desktop.png`, and `after-setup-phone.png`
+
+## What was run for this change
+
+- `npm run typecheck`: passes.
+- `npm run lint`: 0 errors. The 6 warnings are in files this change does not touch.
+- `npm test`: 1,952 tests, 1,911 pass, 0 fail, 41 skipped. The skipped tests need `MERIDIAN_PG_TEST_URL` (a Postgres admin
+  connection), which this environment does not have.
+- `npm run build`: passes. `db:migrate` skips without `DATABASE_URL`, and PGlite migrates itself.
+- A browser pass over sign-up, workspace, brand, overview, library, settings and setup at 1280 px and 390 px. No page errors.
+- Not run here: `npm run ui:baseline` and `npm run e2e`. The `e2e` job already fails on `main` at the brain save, before this
+  change. CI runs both on the pull request.
+
+## Still open after this change
+
+- `.env.example` still lists the S3 variables. NORTH_STAR work item 1 retires S3 in code, settings and docs, so it is a separate change.
+- The `e2e` brain-save failure on `main` is unchanged.

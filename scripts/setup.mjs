@@ -94,7 +94,7 @@ export function setupSummary(facts) {
     "Next steps",
     "  1. Start the app:          npm run dev   (port 8080)",
     `  2. Sign in:                open ${baseUrl}/login`,
-    "  3. Save provider keys:     Settings, General, Setup. Only a workspace admin can save a key.",
+    "  3. Save provider keys:     the Setup guide (sidebar), or Settings, General, Setup. Only a workspace admin can save a key.",
     "                             Keys are encrypted, never shown again, and nothing is connected until a key is saved or set on the server.",
     "  4. Background jobs:        npm run worker and npm run scheduler. Both need DATABASE_URL.",
     "  5. Check the code:         npm test",

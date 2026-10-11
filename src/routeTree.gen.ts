@@ -22,6 +22,7 @@ import { Route as AppInviteRouteImport } from './routes/_app/invite'
 import { Route as AppJobsRouteImport } from './routes/_app/jobs'
 import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppSetupRouteImport } from './routes/_app/setup'
 import { Route as AppUsageRouteImport } from './routes/_app/usage'
 import { Route as AppWebhooksRouteImport } from './routes/_app/webhooks'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
@@ -108,6 +109,11 @@ const AppNotificationsRoute = AppNotificationsRouteImport.update({
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSetupRoute = AppSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
   getParentRoute: () => AppRoute,
 } as any)
 const AppUsageRoute = AppUsageRouteImport.update({
@@ -245,6 +251,7 @@ export interface FileRoutesByFullPath {
   '/jobs': typeof AppJobsRoute
   '/notifications': typeof AppNotificationsRoute
   '/settings': typeof AppSettingsRoute
+  '/setup': typeof AppSetupRoute
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
   '/api/health': typeof ApiHealthRoute
@@ -281,6 +288,7 @@ export interface FileRoutesByTo {
   '/jobs': typeof AppJobsRoute
   '/notifications': typeof AppNotificationsRoute
   '/settings': typeof AppSettingsRoute
+  '/setup': typeof AppSetupRoute
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
   '/api/health': typeof ApiHealthRoute
@@ -320,6 +328,7 @@ export interface FileRoutesById {
   '/_app/jobs': typeof AppJobsRoute
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/setup': typeof AppSetupRoute
   '/_app/usage': typeof AppUsageRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/api/health': typeof ApiHealthRoute
@@ -360,6 +369,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/notifications'
     | '/settings'
+    | '/setup'
     | '/usage'
     | '/webhooks'
     | '/api/health'
@@ -396,6 +406,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/notifications'
     | '/settings'
+    | '/setup'
     | '/usage'
     | '/webhooks'
     | '/api/health'
@@ -434,6 +445,7 @@ export interface FileRouteTypes {
     | '/_app/jobs'
     | '/_app/notifications'
     | '/_app/settings'
+    | '/_app/setup'
     | '/_app/usage'
     | '/_app/webhooks'
     | '/api/health'
@@ -564,6 +576,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/setup': {
+      id: '/_app/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof AppSetupRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/usage': {
@@ -740,6 +759,7 @@ interface AppRouteChildren {
   AppJobsRoute: typeof AppJobsRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppSetupRoute: typeof AppSetupRoute
   AppUsageRoute: typeof AppUsageRoute
   AppWebhooksRoute: typeof AppWebhooksRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -769,6 +789,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppJobsRoute: AppJobsRoute,
   AppNotificationsRoute: AppNotificationsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppSetupRoute: AppSetupRoute,
   AppUsageRoute: AppUsageRoute,
   AppWebhooksRoute: AppWebhooksRoute,
   AppIndexRoute: AppIndexRoute,

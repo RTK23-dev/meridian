@@ -89,7 +89,10 @@
   html { color-scheme: light; }
   html.dark { color-scheme: dark; }
   body {
-    background: var(--color-bg);
+    background:
+      radial-gradient(1100px 520px at 12% -12%, color-mix(in srgb, var(--color-accent-soft) 85%, transparent), transparent 70%),
+      var(--color-bg);
+    background-attachment: fixed;
     color: var(--color-fg);
     font-family: var(--font-sans);
     font-size: 14px;
@@ -138,6 +141,20 @@
     }
   }
 }
+
+/* Motion. An entrance rises a few pixels and fades in, then rests on the element's own styles. Reduced motion below shortens these to
+   0.01ms, which still lands on the final state. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.surface-rise { animation: rise 460ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.stagger-in { animation: rise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.page-enter { animation: fade 280ms ease-out both; }
 
 /* Reduced motion: every CSS transition and animation, including the ones in new components, is cut to 0.01ms. JS-driven
    chart animation is turned off in the chart components, which read the same media query. */

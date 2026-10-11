@@ -24,6 +24,7 @@ import { submitOnShortcut } from "@/components/forms/shortcut";
 import { buildTraceTimeline } from "@/components/library/trace-model";
 import { hasRole } from "@/lib/meridian/access";
 import { attachCreativeImage, recordObservation, recordPerformance } from "@/lib/meridian/machine";
+import { PausedExplainer } from "@/components/publishing/paused-explainer";
 import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { useLibraryQuery, useReviewsQuery, useScopedMutation, useStudioQuery, useTraceQuery } from "@/lib/query/hooks";
@@ -178,7 +179,7 @@ function Library({ brandId }: { brandId: string }) {
       <div className="max-w-2xl space-y-3">
         <p className="text-sm font-semibold uppercase tracking-widest text-brass">Library</p>
         <h1 className="font-display text-4xl">Creatives this brand owns</h1>
-        <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing stays paused and runs only when you submit the form below.</p>
+        <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing creates paused Meta objects when you submit the form below. Nothing runs until you switch it on in Meta Ads Manager.</p>
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
@@ -196,10 +197,11 @@ function Library({ brandId }: { brandId: string }) {
         )}
       </div>
       <Card>
-        <h2 className="font-display text-2xl">Paused publishing</h2>
+        <h2 className="font-display text-2xl">Publish to Meta as paused ads</h2>
         <p className="mt-2 text-sm text-muted">
-          This creates paused objects and stores an id only when the provider returns one. Auto-publish stays off. A missing token, page, location, or uploaded asset stops the chain. Nothing is marked published from this form’s click alone.
+          Meridian creates the campaign, ad set and ad in Meta with the status paused. Auto-publish stays off. It stores a Meta id only when Meta returns one. A missing token, Page, location or uploaded image stops the chain, and nothing is marked published from this click alone.
         </p>
+        <PausedExplainer />
         {hasRole(data.role, "admin") ? (
           <form
             className="mt-4 grid gap-3"

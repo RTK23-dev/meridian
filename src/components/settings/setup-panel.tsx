@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button, ErrorState, Field, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
@@ -60,7 +61,10 @@ export function SetupPanel({ organizationId, canAdmin }: SetupPanelProps) {
   return (
     <section aria-labelledby="setup-title" className="space-y-6 rounded-lg border border-border bg-surface p-5">
       <div className="space-y-2">
-        <h2 id="setup-title" className="text-section font-semibold text-fg">Setup</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="setup-title" className="text-section font-semibold text-fg">Setup</h2>
+          <Button asChild variant="secondary"><Link to="/setup">Open the guided setup</Link></Button>
+        </div>
         <p className="text-sm text-fg-muted">
           Each row is the server&apos;s own state for that provider, with the reason. A key is saved here, encrypted, and is never
           shown again. Saving a key needs TOKEN_ENCRYPTION_KEY on the server; <code className="font-mono text-xs">npm run setup</code>{" "}
@@ -172,7 +176,7 @@ function RowAction({ row, organizationId, canAdmin }: { row: SetupRow; organizat
  * The key form for one provider. The key is sent once and cleared. The field is never filled from the server, because a key
  * is never sent back. A save without a key is not offered, so the stored key is never replaced by an empty one.
  */
-function KeyForm({ row, organizationId, canAdmin, category }: { row: SetupRow; organizationId: string; canAdmin: boolean; category: string }) {
+export function KeyForm({ row, organizationId, canAdmin, category }: { row: Pick<SetupRow, "label" | "fingerprint" | "removable">; organizationId: string; canAdmin: boolean; category: string }) {
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 

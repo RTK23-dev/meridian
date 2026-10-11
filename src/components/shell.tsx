@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowLeftRight, BarChart3, Bell, BellRing, Brain, Cable, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
+import { Activity, ArrowLeftRight, BarChart3, Bell, BellRing, Brain, Cable, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, ListChecks, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { hasRole } from "@/lib/meridian/access";
@@ -23,6 +23,7 @@ const SWITCHER_CLASS = "min-h-11 w-full rounded-md border border-border-strong b
 /** One icon per sidebar and tab item. Items without an entry fall back to the overview icon. */
 const NAV_ICONS: Record<string, LucideIcon> = {
   overview: House,
+  setup: ListChecks,
   "brand-overview": House,
   market: FlaskConical,
   intelligence: Sparkles,
@@ -238,7 +239,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
         </div>
       </header>
       <div className="border-b border-border bg-surface px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
-      <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-8">{children}</main>
+      <main id="main" tabIndex={-1} className="page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-8">{children}</main>
       <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {tabs.map((tab) => {
           const Icon = NAV_ICONS[tab.id] ?? House;
