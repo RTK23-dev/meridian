@@ -193,7 +193,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             <p className="text-xs font-semibold uppercase tracking-widest text-brass">{adapter.status}</p>
             <h2 className="mt-2 font-display text-xl">{adapter.label}</h2>
             <p className="mt-2 text-sm text-muted">{adapter.note}</p>
-            {adapter.connectionError ? <p className="mt-2 text-xs text-muted">{adapter.connectionError}</p> : null}
+            {adapter.connectionError ? <p className="mt-2 text-xs text-muted [overflow-wrap:anywhere]">{adapter.connectionError}</p> : null}
           </li>
         ))}
       </ul>
