@@ -22,6 +22,7 @@ import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
 import { accountSnapshots, competitorCopy, factsFor, generatedImageVisual, visualFacts, writeJudgment, type QcBrandContext } from "../studio/image-qc.server.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
+import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { CreativeSpec, ProductionModality } from "./types.ts";
 
 export const ESTIMATOR_VERSION = "creative-plan-estimate-v1";
@@ -268,7 +269,7 @@ export async function materializeVideoArtifact(sql: Sql, ref: ProductionJobRef):
 export async function materializeImageArtifact(
   sql: Sql,
   ref: ProductionJobRef,
-  options: { driveClient?: ArtifactDrive } = {},
+  options: { driveClient?: ArtifactDrive; engines?: DecisionEngineRegistry } = {},
 ): Promise<MaterializedArtifact> {
   const job = await loadCompletedJob(sql, ref, "image");
   const input = parseJson(job.input);
@@ -326,7 +327,9 @@ export async function materializeImageArtifact(
   // Quality judgment, made from the stored bytes and the brand's data as it is now. Judgments are written with deterministic
   // ids, so a retry after a crash does not duplicate them.
   const product = productName || manifest.brand?.product || "";
-  const copyWithProduct = `${product}. ${prompt}`;
+  // The judgment reads the job's copy, the same text the creative row is persisted with, and nothing else as copy. The generation
+  // prompt travels separately, and no rule reads it as copy. The submitter chooses that copy: a job whose submitter builds it
+  // from the prompt is judged on that text, so the submitter must pass the creative's own copy.
   // The brand data the judgment compares against was captured when the image was submitted. It is never reloaded here.
   const qcBrand = input.qcBrand as QcBrandContext | undefined;
   if (!qcBrand || !qcBrand.brain || !Array.isArray(qcBrand.creatives)) {
@@ -335,7 +338,7 @@ export async function materializeImageArtifact(
   const loaded = qcBrand;
   const visual = await visualFacts(sql, ref.organizationId, ref.brandId, stored.bytes);
   const ownSemantic = await semanticNearest(
-    copyWithProduct,
+    copy,
     loaded.creatives.filter((item) => item.origin !== "competitor").map((item) => item.text),
   ).catch(() => null);
   const accounts = await accountSnapshots(sql, ref.organizationId);
@@ -353,7 +356,7 @@ export async function materializeImageArtifact(
     kind: "image",
     productName: product,
     angle: text(manifest.concept?.mechanism),
-    copy: copyWithProduct,
+    copy,
     prompt,
     mime: artifact.mimeType,
     byteSize: artifact.sizeBytes,
@@ -369,7 +372,7 @@ export async function materializeImageArtifact(
     paletteDistance: visual.measuredPalette.distance,
     paletteOutcome: visual.measuredPalette.outcome,
     paletteEvidence: visual.measuredPalette.evidence,
-    semanticSimilarity: await semanticNearest(copyWithProduct, competitorCopy(loaded)).catch(() => null),
+    semanticSimilarity: await semanticNearest(copy, competitorCopy(loaded)).catch(() => null),
     ownSemanticSimilarity: ownSemantic,
     publishing,
   });
@@ -379,6 +382,7 @@ export async function materializeImageArtifact(
     creativeId,
     facts,
     visual: generatedImageVisual(stored.bytes, artifact.sha256),
+    engines: options.engines,
   });
   const status = judged.rollup === "REJECT" ? "rejected" : judged.rollup === "AUTO_APPROVE" ? "approved" : "in_review";
 
@@ -486,6 +490,8 @@ export async function completeProductionJob(
   ref: ProductionJobRef,
   options: {
     driveClient?: ArtifactDrive;
+    /** The decision engines the image judgment may call. Absent means the registry the deployment selects. */
+    engines?: DecisionEngineRegistry;
     /** False when the caller judges the creative itself and opens its review with that judgment. */
     openReview?: boolean;
   } = {},
