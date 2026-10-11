@@ -119,7 +119,7 @@ export function ProductSheet({ brandId, open, product, onOpenChange }: {
           </Field>
           <div className="md:col-span-2">
             <Field label="Product URL" error={errors.url?.message}>
-              <Input {...register("url")} maxLength={500} placeholder="https://example.test" />
+              <Input {...register("url")} maxLength={500} placeholder="https://" />
             </Field>
           </div>
           {saveError ? <div className="md:col-span-2"><PlainErrorMessage message={saveError.message} raw={saveError.raw} /></div> : null}

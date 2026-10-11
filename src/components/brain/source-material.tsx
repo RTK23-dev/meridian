@@ -26,8 +26,8 @@ type PastedTextInput = z.input<typeof pastedTextSchema>;
 type StoreVars = { filename: string; mime: string; text: string; base64: string };
 
 /**
- * "Suggest from document": a dropped or chosen file is stored as untrusted text, then the text model
- * proposes brain edits from it. Proposals wait in the suggestion list until someone accepts them.
+ * "Suggest from document": a dropped or chosen file is stored as untrusted text, then
+ * brain edits are proposed from it. Proposals wait in the suggestion list until someone accepts them.
  */
 export function SourceMaterial({ brandId, canEdit, saved, formDirty, onPasteDirtyChange }: {
   brandId: string;
@@ -69,7 +69,7 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty, onPasteDirt
         setStatus(summariseUpload({ status: "failed", detail: stored.detail }, null));
         return false;
       }
-      setStage("Asking the text model for suggestions…");
+      setStage("Reading the document for suggestions…");
       const suggested = await suggestMutation.mutateAsync(stored.id).catch((error: unknown) => ({ status: "failed" as const, message: plainError(error).message }));
       const summary = summariseUpload({ status: "stored", detail: stored.detail, droppedLines: stored.droppedLines }, suggested);
       setStatus(notice ? { ...summary, message: `${notice} ${summary.message}` } : summary);

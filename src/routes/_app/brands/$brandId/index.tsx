@@ -48,8 +48,12 @@ function BrandHome({ brandId }: { brandId: string }) {
       <PageHeader
         breadcrumbs={[{ label: "All brands", to: "/" }]}
         title={detail.identity.name}
-        description={<>{known.filled} of {known.total} brand brain fields · Version {detail.version || 1}</>}
-        actions={<Button asChild><Link to="/brands/$brandId/brain" params={{ brandId }}>Complete brand brain</Link></Button>}
+        description={known.requiredComplete ? (
+          <>Complete brand brain · {known.requiredFilled} of {known.requiredTotal} required fields · {known.filled} of {known.total} fields · Version {detail.version || 1}</>
+        ) : (
+          <>Brand brain not complete · {known.requiredFilled} of {known.requiredTotal} required fields · Version {detail.version || 1}</>
+        )}
+        actions={<Button asChild><Link to="/brands/$brandId/brain" params={{ brandId }}>Open brand brain</Link></Button>}
       />
 
       {stages ? <PipelineStepper brandId={brandId} stages={stages} /> : <Skeleton variant="card" />}

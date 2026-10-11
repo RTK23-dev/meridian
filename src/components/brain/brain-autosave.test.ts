@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { emptyBrain } from "../../lib/meridian/brain.ts";
-import { brainChanged, readBrain } from "./brain-autosave.ts";
+import { brainChanged, changesFrom, readBrain } from "./brain-autosave.ts";
 
 const saved = { ...emptyBrain(), targetCustomers: "Busy parents", automationLevel: "assisted" as const };
+
+test("the send holds only the fields the person changed, trimmed", () => {
+  assert.deepEqual(changesFrom({ ...saved, tone: "  dry  " }, saved), { tone: "dry" });
+  assert.deepEqual(changesFrom({ ...saved, targetCustomers: "Busy parents " }, saved), {}, "a stray space is not an edit");
+});
+
+test("the send is unknown when the form is invalid or nothing has been saved yet", () => {
+  assert.equal(changesFrom({ ...saved, automationLevel: "reckless" }, saved), null);
+  assert.equal(changesFrom({ ...saved }, null), null);
+});
 
 test("the brain is read with trimmed text", () => {
   const read = readBrain({ ...saved, targetCustomers: "  Busy parents  " });

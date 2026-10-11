@@ -1,10 +1,9 @@
 /**
  * Pure parts of the brain autosave. The brain is read with the same schema the Save button uses, so autosave cannot
- * accept a value the button would refuse. A brain has changes when its trimmed values differ from the saved brain, so a
- * stray trailing space does not count as an edit.
+ * accept a value the button would refuse. A brain has changes when a trimmed field differs from the saved brain, so a
+ * stray trailing space does not count as an edit. Only the fields that differ are sent to the server.
  */
-import { sameFormValues } from "../forms/form-rules.ts";
-import type { BrainValues } from "../../lib/meridian/brain.ts";
+import { brainChanges, type BrainValues } from "../../lib/meridian/brain.ts";
 import { brainValuesSchema } from "../../lib/meridian/schemas/brain.ts";
 
 export type BrainRead = { ok: true; values: BrainValues } | { ok: false; message: string };
@@ -17,14 +16,19 @@ export function readBrain(raw: unknown): BrainRead {
 }
 
 /**
- * True when the form would save something different from the saved brain. Both sides go through the same read, so a stray
- * space in either one is not an edit. An invalid form, or a missing baseline, counts as changed.
+ * The fields the form would send, measured against the saved brain. An invalid form, or a missing baseline, has no list of
+ * changes that can be trusted, so it returns null.
  */
-export function brainChanged(raw: unknown, saved: BrainValues | null): boolean {
+export function changesFrom(raw: unknown, saved: BrainValues | null): Partial<BrainValues> | null {
   const read = readBrain(raw);
-  const baseline = saved ? readBrain(saved) : null;
-  if (!read.ok || !baseline?.ok) return true;
-  return !sameFormValues(read.values, baseline.values);
+  if (!read.ok || !saved) return null;
+  return brainChanges(read.values, saved);
+}
+
+/** True when the form would save something different from the saved brain. An invalid form, or no baseline, counts as changed. */
+export function brainChanged(raw: unknown, saved: BrainValues | null): boolean {
+  const changes = changesFrom(raw, saved);
+  return changes === null || Object.keys(changes).length > 0;
 }
 
 export type AutosaveStatus =
