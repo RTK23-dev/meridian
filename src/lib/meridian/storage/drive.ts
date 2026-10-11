@@ -4,14 +4,19 @@
  * Google Drive holds the bytes of artifacts and exports (rendered media, export packages, uploaded source files) and nothing
  * else. Postgres is the system of record for every row: storage_objects describes each stored file, and
  * artifact_upload_sessions records each resumable upload. Files are organized by tenant and brand folder.
+ *
+ * Every call that names a workspace uses that workspace's Drive connection when it has one, and otherwise the deployment's
+ * credentials (google-auth.ts). A call that names no workspace uses only the deployment's credentials.
  * Never fabricates file states when disconnected.
  */
 
 import { createHash } from "node:crypto";
+import type { AssetLifecycle } from "./object-store.ts";
 import { uploadArtifactToDrive, type ArtifactUploadPolicy, type ArtifactUploadStore } from "./artifact-upload.ts";
 import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
 import { DriveUploadError, type ResumableTransport } from "./drive-resumable.ts";
-import { getGoogleDriveAccessToken, getGoogleDriveAuthStatus, invalidateGoogleDriveAccessToken } from "./google-auth.ts";
+import type { DriveObjectRecord } from "./drive-object-record.ts";
+import { invalidateGoogleDriveAccessToken, resolveDriveAccess } from "./google-auth.ts";
 
 export type DriveFileMetadata = {
   fileId: string;
@@ -44,19 +49,41 @@ export type GoogleDriveClientOptions = {
   uploadStore?: () => Promise<ArtifactUploadStore>;
   /** Upload overrides: chunk size, retry cap, backoff and sleep. Defaults are 8 MiB chunks and six failures in a row. */
   upload?: ArtifactUploadPolicy;
+  /** Writes the storage_objects row for a file put with `storageRecord`. Default: the shared database connection. */
+  recordObject?: (record: DriveObjectRecord) => Promise<void>;
 };
 
-/** Access tokens come from the process cache. A token is never written to Postgres. */
-const driveTransport: ResumableTransport = {
-  fetch: (input, init) => globalThis.fetch(input, init),
-  accessToken: async () => {
-    const token = await getGoogleDriveAccessToken();
-    if (!token) {
-      throw new DriveUploadError("Google Drive access is unavailable. Check the Drive connection, then try again.", null, false);
-    }
-    return token;
-  },
+/**
+ * A write to Drive. With `storageRecord`, the storage_objects row is recorded after Drive accepts the bytes, in the same call.
+ * Without it, put writes no row, and the caller that owns the record writes it (the artifact finalizer does).
+ */
+export type DriveWriteInput = {
+  organizationId: string;
+  brandId: string;
+  path: string;
+  mimeType: string;
+  bytes: Uint8Array;
+  metadata?: Record<string, unknown>;
+  storageRecord?: { lifecycle: AssetLifecycle };
 };
+
+/** Access tokens come from the auth resolver's in-process cache. A token is never written to Postgres. */
+function driveTransportFor(organizationId: string): ResumableTransport {
+  return {
+    fetch: (input, init) => globalThis.fetch(input, init),
+    accessToken: async () => {
+      const access = await resolveDriveAccess(organizationId);
+      if (!access.ok) throw new DriveUploadError(access.reason, null, false);
+      return access.token;
+    },
+  };
+}
+
+async function defaultRecordObject(record: DriveObjectRecord): Promise<void> {
+  const { getSql } = await import("../../db.ts");
+  const { recordDriveObject } = await import("./drive-object-record.ts");
+  await recordDriveObject(await getSql(), record);
+}
 
 /** The shared Postgres connection, loaded on first use so importing this module stays light. */
 async function defaultUploadStore(): Promise<ArtifactUploadStore> {
@@ -76,21 +103,25 @@ export class GoogleDriveClient {
     return process.env.MERIDIAN_DRIVE_FOLDER_ID?.trim();
   }
 
-  async health(): Promise<DriveHealth> {
-    const authStatus = getGoogleDriveAuthStatus();
-    if (!authStatus.configured) {
-      return {
-        status: "NOT_CONFIGURED",
-        detail: authStatus.detail,
-        latencyMs: 0,
-      };
-    }
+  /** The access token for a call, or an error that says why there is none. */
+  private async requireToken(organizationId?: string): Promise<string> {
+    const access = await resolveDriveAccess(organizationId);
+    if (!access.ok) throw new Error(access.reason);
+    return access.token;
+  }
 
-    const token = await getGoogleDriveAccessToken();
-    if (!token) {
+  private async tokenOrNull(organizationId?: string): Promise<string | null> {
+    const access = await resolveDriveAccess(organizationId);
+    return access.ok ? access.token : null;
+  }
+
+  /** Drive's reachability for this workspace's credential, or for the deployment's when no workspace is named. */
+  async health(organizationId?: string): Promise<DriveHealth> {
+    const access = await resolveDriveAccess(organizationId);
+    if (!access.ok) {
       return {
-        status: "UNAVAILABLE",
-        detail: "Failed to acquire Google Drive access token.",
+        status: access.source === "failed" ? "UNAVAILABLE" : "NOT_CONFIGURED",
+        detail: access.reason,
         latencyMs: 0,
       };
     }
@@ -98,7 +129,7 @@ export class GoogleDriveClient {
     const started = Date.now();
     try {
       const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=user,storageQuota", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${access.token}` },
       });
       if (!res.ok) {
         return {
@@ -126,13 +157,14 @@ export class GoogleDriveClient {
    * several folders share a name (possible when two processes create one at the same time), every caller settles on the
    * earliest-created one, so they converge without a lock in Drive.
    */
-  async findOrCreateFolder(name: string, parentId?: string): Promise<string> {
-    const cacheKey = `${parentId || "root"}:${name}`;
+  async findOrCreateFolder(name: string, parentId?: string, organizationId?: string): Promise<string> {
+    // Folder ids are visible to one credential, so the cache is keyed by workspace as well as by parent and name.
+    const cacheKey = `${organizationId ?? "-"}:${parentId || "root"}:${name}`;
     const cached = this.folderCache.get(cacheKey);
     if (cached) return cached;
     const pending = this.folderInflight.get(cacheKey);
     if (pending) return pending;
-    const work = this.resolveFolder(name, parentId, cacheKey).finally(() => {
+    const work = this.resolveFolder(name, parentId, cacheKey, organizationId).finally(() => {
       this.folderInflight.delete(cacheKey);
     });
     this.folderInflight.set(cacheKey, work);
@@ -159,9 +191,8 @@ export class GoogleDriveClient {
     return data.files ?? [];
   }
 
-  private async resolveFolder(name: string, parentId: string | undefined, cacheKey: string): Promise<string> {
-    const token = await getGoogleDriveAccessToken();
-    if (!token) throw new Error("Google Drive is not configured. Access token unavailable.");
+  private async resolveFolder(name: string, parentId: string | undefined, cacheKey: string, organizationId?: string): Promise<string> {
+    const token = await this.requireToken(organizationId);
 
     const existing = await this.listFolders(token, name, parentId);
     if (existing.length > 0) {
@@ -206,33 +237,50 @@ export class GoogleDriveClient {
     subpath: string;
   }): Promise<string> {
     const rootId = this.getRootFolderId();
-    const tenantsFolder = await this.findOrCreateFolder("tenants", rootId);
-    const orgFolder = await this.findOrCreateFolder(input.organizationId, tenantsFolder);
-    const brandsFolder = await this.findOrCreateFolder("brands", orgFolder);
-    const brandFolder = await this.findOrCreateFolder(input.brandId, brandsFolder);
+    const org = input.organizationId;
+    const tenantsFolder = await this.findOrCreateFolder("tenants", rootId, org);
+    const orgFolder = await this.findOrCreateFolder(input.organizationId, tenantsFolder, org);
+    const brandsFolder = await this.findOrCreateFolder("brands", orgFolder, org);
+    const brandFolder = await this.findOrCreateFolder(input.brandId, brandsFolder, org);
 
     const segments = input.subpath.split("/").filter(Boolean);
     let currentFolderId = brandFolder;
     for (const segment of segments) {
-      currentFolderId = await this.findOrCreateFolder(segment, currentFolderId);
+      currentFolderId = await this.findOrCreateFolder(segment, currentFolderId, org);
     }
     return currentFolderId;
   }
 
   /**
-   * Stores artifact bytes in Drive and returns Drive's file metadata. Drive keeps the bytes only. The caller records the
-   * storage_objects row in Postgres. Files over 5 MB go through a resumable upload whose session is recorded in Postgres.
+   * Stores artifact bytes in Drive and returns Drive's file metadata. Files over 5 MB go through a resumable upload whose
+   * session is recorded in Postgres. With `storageRecord`, the storage_objects row is recorded once Drive has accepted the
+   * bytes. A Drive failure throws before that, so no row is written for a file that is not there.
    */
-  async put(input: {
-    organizationId: string;
-    brandId: string;
-    path: string;
-    mimeType: string;
-    bytes: Uint8Array;
-    metadata?: Record<string, unknown>;
-  }): Promise<DriveFileMetadata> {
-    const token = await getGoogleDriveAccessToken();
-    if (!token) throw new Error("Google Drive is not configured. Binary upload cannot proceed.");
+  async put(input: DriveWriteInput): Promise<DriveFileMetadata> {
+    const metadata = await this.putBytes(input);
+    if (input.storageRecord) {
+      try {
+        await (this.options.recordObject ?? defaultRecordObject)({
+          organizationId: input.organizationId,
+          brandId: input.brandId,
+          key: input.path,
+          fileId: metadata.fileId,
+          mimeType: input.mimeType,
+          sizeBytes: input.bytes.byteLength,
+          sha256: metadata.checksum,
+          lifecycle: input.storageRecord.lifecycle,
+        });
+      } catch (err) {
+        // The file is in Drive, and a retry finds it and records it again. The caller is told the row is missing.
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`Google Drive accepted the file, but its storage record was not saved: ${reason}`);
+      }
+    }
+    return metadata;
+  }
+
+  private async putBytes(input: DriveWriteInput): Promise<DriveFileMetadata> {
+    const token = await this.requireToken(input.organizationId);
 
     const pathParts = input.path.split("/").filter(Boolean);
     const fileName = pathParts.pop() || "unnamed_artifact";
@@ -278,7 +326,7 @@ export class GoogleDriveClient {
       ) {
         throw new Error("Google Drive storage key already exists with different tenant ownership or content.");
       }
-      const stored = await this.get(existing.id);
+      const stored = await this.get(existing.id, input.organizationId);
       const storedSha256 = createHash("sha256").update(stored.bytes).digest("hex");
       if (storedSha256 !== sha256 || stored.bytes.byteLength !== input.bytes.byteLength) {
         throw new Error("Google Drive existing object failed idempotent upload verification.");
@@ -314,7 +362,12 @@ export class GoogleDriveClient {
     if (isLarge) {
       const store = await (this.options.uploadStore ?? defaultUploadStore)();
       const outcome = await uploadArtifactToDrive(
-        { ...this.options.upload, store, transport: driveTransport, onUnauthorized: invalidateGoogleDriveAccessToken },
+        {
+          ...this.options.upload,
+          store,
+          transport: driveTransportFor(input.organizationId),
+          onUnauthorized: () => invalidateGoogleDriveAccessToken(),
+        },
         {
           organizationId: input.organizationId,
           brandId: input.brandId,
@@ -377,8 +430,8 @@ export class GoogleDriveClient {
     };
   }
 
-  async findFileByName(folderId: string, name: string): Promise<string | null> {
-    const token = await getGoogleDriveAccessToken();
+  async findFileByName(folderId: string, name: string, organizationId?: string): Promise<string | null> {
+    const token = await this.tokenOrNull(organizationId);
     if (!token) return null;
     const q = `'${folderId}' in parents and name = '${name.replace(/'/g, "\\'")}' and trashed = false`;
     const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`, {
@@ -389,9 +442,8 @@ export class GoogleDriveClient {
     return data.files?.[0]?.id || null;
   }
 
-  async get(fileId: string): Promise<{ bytes: Uint8Array; mimeType: string; name: string }> {
-    const token = await getGoogleDriveAccessToken();
-    if (!token) throw new Error("Google Drive is not configured. Cannot download file.");
+  async get(fileId: string, organizationId?: string): Promise<{ bytes: Uint8Array; mimeType: string; name: string }> {
+    const token = await this.requireToken(organizationId);
 
     // First get metadata
     const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType`, {
@@ -418,9 +470,8 @@ export class GoogleDriveClient {
     };
   }
 
-  async delete(fileId: string): Promise<void> {
-    const token = await getGoogleDriveAccessToken();
-    if (!token) throw new Error("Google Drive is not configured.");
+  async delete(fileId: string, organizationId?: string): Promise<void> {
+    const token = await this.requireToken(organizationId);
 
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
       method: "DELETE",
@@ -431,8 +482,8 @@ export class GoogleDriveClient {
     }
   }
 
-  async exists(fileId: string): Promise<boolean> {
-    const token = await getGoogleDriveAccessToken();
+  async exists(fileId: string, organizationId?: string): Promise<boolean> {
+    const token = await this.tokenOrNull(organizationId);
     if (!token) return false;
 
     try {
@@ -466,7 +517,7 @@ export class GoogleDriveClient {
     brandId: string;
     jobId: string;
   }): Promise<Array<{ fileId: string; name: string; mimeType: string; size: number; modifiedTime: string | null }>> {
-    const token = await getGoogleDriveAccessToken();
+    const token = await this.tokenOrNull(input.organizationId);
     if (!token) return [];
 
     try {
