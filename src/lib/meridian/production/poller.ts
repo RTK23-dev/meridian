@@ -64,6 +64,7 @@ export type PollOptions = {
   limit?: number;
   /** Claim only this organization's jobs. Omitted, the worker claims across every tenant, as it does in production. */
   organizationId?: string;
+  /** A test transport for artifact downloads. Omitted, as in production, downloads connect to their validated addresses. */
   fetchImpl?: typeof fetch;
   driveClient?: ArtifactDrive;
   router?: ProductionRouter;
@@ -81,7 +82,6 @@ export async function pollProductionJobs(
   options: PollOptions = {},
 ): Promise<PollResult> {
   const limit = Math.max(1, Math.min(options.limit ?? 10, 50));
-  const fetchImpl = options.fetchImpl || globalThis.fetch;
   const drive = options.driveClient || defaultArtifactDrive();
   const router = options.router || productionRouter;
   const scope = options.organizationId ?? null;
@@ -282,7 +282,7 @@ export async function pollProductionJobs(
         },
         options: {
           driveClient: drive,
-          fetchImpl,
+          fetchImpl: options.fetchImpl,
           durationMs,
           // The durable input is authoritative for the spec; a provider need not echo it back.
           job: { ...polledJob, creativeSpec: polledJob.creativeSpec ?? (parsedInput.creativeSpec as ProductionJob["creativeSpec"]) },
@@ -328,6 +328,20 @@ export async function pollProductionJobs(
           await settlePlanOf(sql, row);
           result.failed++;
         }
+      } else if (finalized.status === "FAILED") {
+        // The provider reported the render complete, so it may be billed. Its artifact URL was refused or was too large, and
+        // retrying the same URL cannot help. The job fails with that reason, and its reservation stays held for reconciliation.
+        await sql`
+          update production_jobs
+          set status = 'FAILED',
+              error_code = ${finalized.errorCode ?? "ARTIFACT_NOT_STORED"},
+              error_message = ${finalized.error ?? "The provider's artifact could not be stored."},
+              last_polled_at = now(),
+              updated_at = now()
+          where id = ${row.id} and organization_id = ${row.organization_id} and brand_id = ${row.brand_id}
+        `;
+        await settlePlanOf(sql, row);
+        result.failed++;
       } else if (finalized.status === "STORAGE_PERSISTENCE_FAILED") {
         // The render exists but was not stored durably. Retry with backoff, and fail the job once retries are exhausted,
         // so the plan can settle. The provider accepted the render and may have billed it, so the reservation is held.
