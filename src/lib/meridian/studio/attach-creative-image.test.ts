@@ -16,7 +16,8 @@ process.env.MERIDIAN_TESTING_RUNTIME = "true";
 
 // The server module uses the "@/" alias, so the alias hook is registered before the module is loaded.
 enableAppAliases();
-const { attachCreativeImageFor, attachStatesFor, recordAttachOutcome } = await import("./creative-image.server.ts");
+const { attachCreativeImageFor, attachStatesFor, completeStoredAttach, recordAttachOutcome } = await import("./creative-image.server.ts");
+const { pollProductionJobs } = await import("../production/poller.ts");
 
 const NANO_BANANA_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 const ALPHA = { name: "Alpha soap", prohibited: "guaranteed results" };
@@ -561,6 +562,107 @@ test("an attach records its outcome and a second attach after it finishes is all
     const attempts = first.status === "rejected" ? 1 : 2;
     assert.equal(provider.requests.length, attempts, "the attaches that are allowed reach the provider");
     assert.equal((await jobsFor(sql, tenant.organizationId, creativeId)).length, attempts);
+  } finally {
+    provider.restore();
+  }
+});
+
+test("a stored image whose outcome was never recorded is finished by the next attach, once, and a second resume changes nothing", async () => {
+  const { sql, tenant, creativeId } = await creativeFor("attach-resume");
+  await storeProductionKey(sql, tenant.organizationId, "attach-workspace-key-12121");
+  const provider = imageProvider();
+  try {
+    // The process stops after the image is stored and before its outcome is recorded. Settlement is the step cut off here.
+    const stop = mock.method(BudgetLedgerService, "reconcile", async () => {
+      throw new Error("process stopped");
+    });
+    try {
+      await assert.rejects(attach(tenant, creativeId), /process stopped/);
+    } finally {
+      stop.mock.restore();
+    }
+
+    const [stored] = await jobsFor(sql, tenant.organizationId, creativeId);
+    assert.ok(stored, "the attach recorded its job");
+    assert.equal(stored.status, "COMPLETED", "the image is stored, and the job says so");
+    assert.ok(stored.artifact_id, "the job is linked to the stored image");
+    assert.equal(stored.materialized_at, null, "the outcome was never recorded");
+    assert.equal((await creativeRow(sql, creativeId)).status, "generated", "the creative has not changed");
+    assert.equal((await assetsOf(sql, creativeId)).length, 0, "no asset exists yet");
+    assert.equal((await reservationsFor(sql, tenant.organizationId))[0]?.status, "RESERVED", "the spend is still held");
+    const [object] = await sql<{ name: string }>`select name from storage_objects where id = ${stored.artifact_id!}`;
+
+    // The poller leaves the gap alone: it cannot materialize a creative attach, so it neither claims nor fails the job.
+    const polled = await pollProductionJobs(sql, {
+      organizationId: tenant.organizationId,
+      driveClient: {} as never,
+      router: { get: () => undefined } as never,
+    });
+    assert.equal(polled.claimed, 0, "the poller does not claim a creative attach");
+    assert.equal(provider.requests.length, 1, "no provider call is made for the gap");
+
+    // While the stored image is recent, another attach is refused, as an attach in flight is.
+    await assert.rejects(attach(tenant, creativeId), /already being attached/);
+    assert.equal(provider.requests.length, 1);
+
+    // Once the recording window has passed, the next attach finishes the stored image before it judges a new one.
+    await sql`update production_jobs set created_at = now() - interval '20 minutes' where id = ${stored.id}`;
+    const result = await attach(tenant, creativeId);
+    assert.equal(provider.requests.length, 2, "the new attach reaches the provider once; finishing the stored image does not");
+
+    const jobs = await jobsFor(sql, tenant.organizationId, creativeId);
+    assert.equal(jobs.length, 2);
+    const recovered = jobs.find((job) => job.id === stored.id)!;
+    assert.equal(recovered.materialized_creative_id, creativeId, "the stored image is recorded on its creative");
+    assert.ok(recovered.materialized_at, "its outcome is recorded");
+    const reservations = await reservationsFor(sql, tenant.organizationId);
+    const held = reservations.find((row) => row.production_job_id === stored.id)!;
+    assert.equal(held.status, "RECONCILED", "the spend settles once, when the image is finished");
+    assert.equal(BigInt(held.settled_spend_micros ?? 0), 1_000_000n, "it settles at the attach ceiling");
+    // Creating the reservation writes RESERVATION_CREATED. Only a settlement writes RESERVATION_RECONCILED or RESERVATION_OVERAGE.
+    const ledgerEntries = () =>
+      countOf(sql`
+        select count(*) as count from budget_ledger_entries
+        where reservation_id = ${held.id} and entry_type in ('RESERVATION_RECONCILED', 'RESERVATION_OVERAGE')
+      `);
+    const assetsForStored = () =>
+      countOf(sql`select count(*) as count from assets where creative_id = ${creativeId} and storage_key = ${object!.name}`);
+    assert.equal(await ledgerEntries(), 1, "one ledger entry settles the reservation");
+    assert.equal(await assetsForStored(), 1, "the stored image is one asset");
+    assert.equal((await creativeRow(sql, creativeId)).status, result.status, "the creative carries the newest judgment");
+
+    // Running the resume again changes nothing: no second asset, no second settlement.
+    const assetsBefore = (await assetsOf(sql, creativeId)).length;
+    const again = await completeStoredAttach(sql, { organizationId: tenant.organizationId, brandId: tenant.brandId, productionJobId: stored.id });
+    assert.equal(again, "already_materialized");
+    assert.equal(await assetsForStored(), 1, "the artifact is not duplicated");
+    assert.equal((await assetsOf(sql, creativeId)).length, assetsBefore);
+    assert.equal(await ledgerEntries(), 1, "the budget is not settled twice");
+
+    // A second, conflicting write for the same job (a concurrent resume that judged differently) is refused by the job's lock.
+    const creativeBefore = await creativeRow(sql, creativeId);
+    await recordAttachOutcome(sql, {
+      organizationId: tenant.organizationId,
+      brandId: tenant.brandId,
+      creativeId,
+      jobId: stored.id,
+      assetId: `asset-${randomUUID()}`,
+      storageKey: object!.name,
+      sha256: "c".repeat(64),
+      mimeType: "image/png",
+      byteSize: PNG.byteLength,
+      width: 1,
+      height: 1,
+      provider: "google:nano-banana",
+      model: "gemini-nano-banana-2.1",
+      promptVersion: "creative-image-v1",
+      provenance: "test",
+      decisionId: tenant.decisionId,
+      rollup: "REJECT",
+      reason: "A conflicting late judgment.",
+    });
+    assert.deepEqual(await creativeRow(sql, creativeId), creativeBefore, "the recorded creative state is not overwritten");
+    assert.equal((await assetsOf(sql, creativeId)).length, assetsBefore, "and no second asset is written");
   } finally {
     provider.restore();
   }

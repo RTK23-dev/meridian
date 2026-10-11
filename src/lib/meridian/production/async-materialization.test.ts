@@ -23,6 +23,8 @@ import { pollProductionJobs } from "./poller.ts";
 
 const MP4_BASE64 = Buffer.from(fakeMp4()).toString("base64");
 const MODEL = "gemini-omni-1.1-flash";
+/** Suffixes every provider job id this file invents, so a rerun against a database that kept earlier rows cannot collide. */
+const RUN = randomUUID().slice(0, 8);
 
 /** Deterministic in-memory Drive, installed on the production singleton for the duration of one test. */
 function installDrive() {
@@ -55,7 +57,8 @@ function completedWithBytes(providerJobId: string): ProductionJob {
 }
 
 function queued(index: number): ProductionJob {
-  return { jobId: `pj-${index}`, providerJobId: `pj-${index}`, status: "QUEUED" } as unknown as ProductionJob;
+  const id = `pj-${RUN}-${index}`;
+  return { jobId: id, providerJobId: id, status: "QUEUED" } as unknown as ProductionJob;
 }
 
 async function artifactCounts(sql: Sql, tenant: Tenant) {
@@ -252,7 +255,7 @@ test("multiple jobs in one plan: the plan completes only after every job is mate
   const drive = installDrive();
   const tenant = await createTenantFixture(sql, "multi", 50, "google_omni", MODEL, 2);
   const injected = injectProvider("google_omni", async (_spec, index) => queued(index), async (id) =>
-    id === "pj-1" ? completedWithBytes(id) : ({ jobId: id, providerJobId: id, status: "RUNNING" } as unknown as ProductionJob),
+    id === `pj-${RUN}-1` ? completedWithBytes(id) : ({ jobId: id, providerJobId: id, status: "RUNNING" } as unknown as ProductionJob),
   );
   try {
     await execute(sql, tenant, tenant.plan);

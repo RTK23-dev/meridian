@@ -83,14 +83,33 @@ function retryAfterMs(headers: Record<string, string>): number {
   return Math.min(seconds * 1000, 2000);
 }
 
+const SECRET_QUERY_VALUE = /\b(app_secret|client_secret|access_token|refresh_token|secret|token)=[^&\s"'<>]*/gi;
+
+/**
+ * Removes credentials from text that may reach an error message, a result or a log: the exact request URL
+ * (its query string can carry a secret), each caller-named secret in raw and URL-encoded form, and any
+ * secret-looking query parameter left over.
+ */
+export function redactProviderText(text: string, options: { url?: string; secrets?: readonly string[] } = {}): string {
+  let out = text;
+  if (options.url) out = out.split(options.url).join("[provider request]");
+  for (const secret of options.secrets ?? []) {
+    if (!secret) continue;
+    for (const form of new Set([secret, encodeURIComponent(secret)])) out = out.split(form).join("[redacted]");
+  }
+  return out.replace(SECRET_QUERY_VALUE, "$1=[redacted]");
+}
+
 /** Retries 429 and 5xx. A 4xx other than 429 is the provider's answer and is not retried. */
 export async function sendWithRetry(
   transport: Transport,
   request: TransportRequest,
-  options?: { attempts?: number; sleep?: (ms: number) => Promise<void> },
+  options?: { attempts?: number; sleep?: (ms: number) => Promise<void>; redact?: readonly string[] },
 ): Promise<HttpResult> {
   const attempts = options?.attempts ?? 3;
   const sleep = options?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  // Error text is built from transport and provider messages, which can echo the request URL or its query.
+  const scrub = (text: string) => redactProviderText(text, { url: request.url, secrets: options?.redact });
   let last: HttpResult = { ok: false, status: 0, json: null, error: "No request was sent.", attempts: 0 };
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     let response: TransportResponse;
@@ -101,7 +120,7 @@ export async function sendWithRetry(
         ok: false,
         status: 0,
         json: null,
-        error: error instanceof Error ? error.message : "The provider request failed.",
+        error: scrub(error instanceof Error ? error.message : "The provider request failed."),
         attempts: attempt,
       };
       if (attempt < attempts) await sleep(200 * attempt);
@@ -118,7 +137,7 @@ export async function sendWithRetry(
       ok: response.status >= 200 && response.status < 300,
       status: response.status,
       json,
-      error: retry ? `Provider returned ${response.status}.` : response.status >= 400 ? providerMessage(json) || `Provider returned ${response.status}.` : "",
+      error: retry ? `Provider returned ${response.status}.` : response.status >= 400 ? scrub(providerMessage(json) || `Provider returned ${response.status}.`) : "",
       attempts: attempt,
     };
     if (!retry) return last;

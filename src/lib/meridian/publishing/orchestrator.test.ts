@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import type { Sql } from "../learning/store.ts";
 import {
@@ -110,24 +111,30 @@ test("Publishing Orchestrator: multi-account scheduling, atomic claiming, receip
     return res.rows;
   }) as any;
 
-  const orgA = "org_alpha";
-  const brandA = "brand_alpha";
-  const orgB = "org_beta";
-  const brandB = "brand_beta";
+  // Every id carries a per-run suffix, so a rerun against a database that kept earlier rows cannot collide with them.
+  const run = randomUUID().slice(0, 8);
+  const orgA = `org_alpha_${run}`;
+  const brandA = `brand_alpha_${run}`;
+  const orgB = `org_beta_${run}`;
+  const brandB = `brand_beta_${run}`;
+  const acctIg = `acct_ig_1_${run}`;
+  const acctTt = `acct_tt_1_${run}`;
+  const creativeId = `variant_xyz_${run}`;
+  const externalPostId = `ext_ig_post_${run}`;
 
   // Insert 2 connected platform accounts for Brand A
   await sql`
     insert into platform_accounts (id, organization_id, brand_id, platform, external_account_id, name, handle)
-    values ('acct_ig_1', ${orgA}, ${brandA}, 'instagram', 'ext_ig_1', 'Main IG', '@main_brand'),
-           ('acct_tt_1', ${orgA}, ${brandA}, 'tiktok', 'ext_tt_1', 'Main TikTok', '@main_tiktok')
+    values (${acctIg}, ${orgA}, ${brandA}, 'instagram', 'ext_ig_1', 'Main IG', '@main_brand'),
+           (${acctTt}, ${orgA}, ${brandA}, 'tiktok', 'ext_tt_1', 'Main TikTok', '@main_tiktok')
   `;
 
   // 1. Schedule across both accounts simultaneously
   const scheduled = await scheduleMultiAccountPublish(sql, {
     organizationId: orgA,
     brandId: brandA,
-    creativeId: "variant_xyz",
-    targetAccountIds: ["acct_ig_1", "acct_tt_1"],
+    creativeId,
+    targetAccountIds: [acctIg, acctTt],
     targetType: "organic",
   });
 
@@ -139,8 +146,8 @@ test("Publishing Orchestrator: multi-account scheduling, atomic claiming, receip
   const reScheduled = await scheduleMultiAccountPublish(sql, {
     organizationId: orgA,
     brandId: brandA,
-    creativeId: "variant_xyz",
-    targetAccountIds: ["acct_ig_1", "acct_tt_1"],
+    creativeId,
+    targetAccountIds: [acctIg, acctTt],
     targetType: "organic",
   });
 
@@ -163,17 +170,17 @@ test("Publishing Orchestrator: multi-account scheduling, atomic claiming, receip
     brandId: brandA,
     platform: claimed[0].platform,
     accountId: claimed[0].targetAccountId,
-    externalPostId: "ext_ig_post_999",
-    externalUrl: "https://instagram.com/p/ext_ig_post_999",
+    externalPostId,
+    externalUrl: `https://instagram.com/p/${externalPostId}`,
   });
 
   assert.ok(receipt.id);
-  assert.equal(receipt.externalPostId, "ext_ig_post_999");
+  assert.equal(receipt.externalPostId, externalPostId);
   assert.equal(receipt.status, "live");
 
   const receipts = await listBrandPublishingReceipts(sql, orgA, brandA);
   assert.equal(receipts.length, 1);
-  assert.equal(receipts[0].externalPostId, "ext_ig_post_999");
+  assert.equal(receipts[0].externalPostId, externalPostId);
 
   // 5. Record failure for second job (attempt 1) -> exponential backoff
   const failResult = await recordPublishFailure(sql, claimed[1].id, "API timeout on video upload");

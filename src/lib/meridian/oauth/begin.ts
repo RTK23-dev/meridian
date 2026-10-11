@@ -30,8 +30,8 @@ export const beginOauth = createServerFn({ method: "POST" })
     const built = authorizationUrl(provider, { state, redirectUri, env: process.env });
     if ("error" in built) throw new Error(built.error);
     await sql`
-      insert into oauth_states (state_hash, organization_id, provider, expires_at)
-      values (${hashOauthState(state)}, ${data.organizationId}, ${data.provider}, now() + interval '10 minutes')
+      insert into oauth_states (state_hash, organization_id, provider, expires_at, redirect_origin)
+      values (${hashOauthState(state)}, ${data.organizationId}, ${data.provider}, now() + interval '10 minutes', ${data.origin})
     `;
     return { url: built.url };
   });

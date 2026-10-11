@@ -10,10 +10,12 @@ async function observationQuery(testingRuntime: boolean) {
   if (testingRuntime) process.env.MERIDIAN_TESTING_RUNTIME = "true";
   else delete process.env.MERIDIAN_TESTING_RUNTIME;
   const captured: Array<{ text: string; values: unknown[] }> = [];
-  const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+  const run = (strings: TemplateStringsArray, ...values: unknown[]) => {
     captured.push({ text: strings.join("?"), values });
     return Promise.resolve([]);
-  }) as unknown as Sql;
+  };
+  // The replacement runs in one transaction, so the fake offers `begin`: the block runs against the same fake.
+  const sql = Object.assign(run, { begin: (fn: (tx: Sql) => Promise<unknown>) => fn(sql as unknown as Sql) }) as unknown as Sql;
   try {
     await applyLearnedPatterns(sql, "org-learning", "brand-learning");
   } finally {

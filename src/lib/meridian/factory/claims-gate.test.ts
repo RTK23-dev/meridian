@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { claimsGate } from "./gates.ts";
+import { claimsGate, policyGate } from "./gates.ts";
 import { recordedClaimsOf } from "./template.ts";
 import { executeFactoryJob, variantGateVerdicts } from "./worker.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
@@ -68,6 +68,19 @@ test("the claims verdict follows the recorded claim text: block for a banned or 
   assert.equal(claimsOf(JSON.stringify({ schema: "meridian.storyboard.v1", beats: [] }))?.result, "review");
   assert.equal(claimsOf(null)?.result, "review");
   assert.equal(claimsOf(JSON.stringify({ claims: ["Washes hands daily"] }))?.result, "pass");
+});
+
+test("a policy flag that was never checked is review, never pass, and a flag that was found still blocks", () => {
+  const unchecked = { beforeAfter: null, personalAttribute: null, healthClaim: null, financeClaim: null };
+  assert.equal(policyGate(unchecked).result, "review");
+  assert.equal(policyGate({ ...unchecked, beforeAfter: false }).result, "review", "one unchecked flag keeps the gate in review");
+  assert.equal(policyGate({ beforeAfter: false, personalAttribute: false, healthClaim: false, financeClaim: false }).result, "pass");
+  assert.equal(policyGate({ ...unchecked, beforeAfter: true }).result, "block", "a found flag blocks even when others are unchecked");
+  assert.equal(policyGate({ beforeAfter: false, personalAttribute: false, healthClaim: true, financeClaim: false }).result, "review");
+  // This job runs no policy check, so a variant's policy verdict is review, not the pass it used to record.
+  const policy = variantGateVerdicts({ storyboard: JSON.stringify({ claims: ["Washes hands daily"] }), rules: { approved: ["Washes hands daily"], banned: [] } })
+    .find((verdict) => verdict.gate === "policy");
+  assert.equal(policy?.result, "review");
 });
 
 test("the gate job blocks a variant with a banned recorded claim and never passes a variant without claim text", async () => {

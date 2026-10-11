@@ -7,6 +7,7 @@
 
 import type { ProductionJob } from "./types.ts";
 import { isMp4 } from "../research/media.ts";
+import { isWebmWithVideoTrack } from "./webm-video.ts";
 
 export type PostflightResult = {
   passed: boolean;
@@ -32,9 +33,9 @@ export function evaluateProductionPostflight(input: {
     };
   }
 
-  // 2. Validate format
-  if (!isMp4(input.videoBytes)) {
-    reasons.push("Artifact is not a valid MP4 container.");
+  // 2. Validate format: an MP4 container, or a WebM container that declares a video track. Anything else is rejected.
+  if (!isMp4(input.videoBytes) && !isWebmWithVideoTrack(input.videoBytes)) {
+    reasons.push("Artifact is not a valid MP4 or WebM video container.");
   }
 
   // 3. Duration verification if available
