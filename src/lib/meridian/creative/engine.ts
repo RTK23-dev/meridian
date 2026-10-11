@@ -78,6 +78,16 @@ export interface CreativeDecisionInput {
   availableAssets?: AssetPlanItem[];
 }
 
+/**
+ * The copy an image carries names its product. When the brief's own words do not name it, the product leads the copy, so the
+ * copy the product rule judges is the copy a person reads. The rule itself does not change; this writes the name into the copy.
+ */
+function namedCopy(text: string, productName: string | undefined): string {
+  const product = productName?.trim() ?? "";
+  if (!product || !text.trim()) return text;
+  return text.toLowerCase().includes(product.toLowerCase()) ? text : `${product}. ${text}`;
+}
+
 export class CreativeDecisionEngine {
   static createPlan(input: CreativeDecisionInput): CreativePlan {
     const lineage = validatePlanLineage(input.lineage);
@@ -234,7 +244,7 @@ export class CreativeDecisionEngine {
           sequenceIndex: i,
           format: "single_image",
           title: `${input.brief.title} - Variant ${i + 1}`,
-          copy: `${input.brief.hook}\n${input.brief.message}\n${input.brief.cta}`,
+          copy: namedCopy(`${input.brief.hook}\n${input.brief.message}\n${input.brief.cta}`, input.brief.productName),
           aspectRatio: input.brief.aspectRatio || "1:1",
           provider: imgProvider as any,
           model: imgModel,
@@ -290,7 +300,7 @@ export class CreativeDecisionEngine {
           sequenceIndex: i,
           format: `carousel_slide_${i + 1}`,
           title: `${input.brief.title} - ${slides[i]}`,
-          copy: i === 0 ? input.brief.hook : i === 3 ? input.brief.cta : input.brief.message,
+          copy: namedCopy(i === 0 ? input.brief.hook : i === 3 ? input.brief.cta : input.brief.message, input.brief.productName),
           altText: slides[i],
           aspectRatio: "1:1",
           provider: imgProvider as any,
@@ -338,7 +348,7 @@ export class CreativeDecisionEngine {
           sequenceIndex: i + 1,
           format: `carousel_slide_${i + 1}`,
           title: `${input.brief.title} - Slide ${i + 1}`,
-          copy: input.brief.message,
+          copy: namedCopy(input.brief.message, input.brief.productName),
           aspectRatio: "1:1",
           provider: imgProvider as any,
           model: imgModel,
@@ -361,7 +371,7 @@ export class CreativeDecisionEngine {
           sequenceIndex: i + 4,
           format: "single_image",
           title: `${input.brief.title} - Image Ad ${i + 1}`,
-          copy: input.brief.cta,
+          copy: namedCopy(input.brief.cta, input.brief.productName),
           aspectRatio: "1:1",
           provider: imgProvider as any,
           model: imgModel,
