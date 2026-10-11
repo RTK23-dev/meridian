@@ -1,4 +1,5 @@
 import type { FlowContext, FlowNode, NodeExecutionResult } from "./connector.ts";
+import { secretForCategory } from "../credentials/resolve.ts";
 import type { SourceAdapter, SourceAdItem } from "../factory/sources.ts";
 import type { GradingEngine, GradingInput, GradingResult } from "../grading/engine.ts";
 import type { PlannerEngine, VariantPlanningInput, VariantPlanningResult } from "../planner/engine.ts";
@@ -83,7 +84,7 @@ export function createProductionNode(engine: VideoEngine, id = "production-node"
     id,
     name: `Production (${engine.id})`,
     type: "produce",
-    async execute(contract, _context): Promise<NodeExecutionResult<{ artifactBytes: Uint8Array; mime: string; durationMs: number }>> {
+    async execute(contract, context): Promise<NodeExecutionResult<{ artifactBytes: Uint8Array; mime: string; durationMs: number }>> {
       const status = engine.status();
       if (status.status !== "CONFIGURED") {
         return {
@@ -93,7 +94,15 @@ export function createProductionNode(engine: VideoEngine, id = "production-node"
         };
       }
 
-      const submit = await engine.submit(contract, {} as any);
+      const token = await secretForCategory("hypit", context.organizationId);
+      if (!token.secret) {
+        return {
+          ok: false,
+          data: { artifactBytes: new Uint8Array(), mime: "", durationMs: 0 },
+          error: `Video engine "${engine.id}" has no workspace key: ${token.reason}`,
+        };
+      }
+      const submit = await engine.submit(contract, {} as any, token.secret);
       if (!submit.ok || !submit.job?.providerJobId) {
         const errorMsg = "error" in submit ? String(submit.error) : "No job ID returned";
         return {
@@ -103,7 +112,7 @@ export function createProductionNode(engine: VideoEngine, id = "production-node"
         };
       }
 
-      const poll = await engine.poll(submit.job.providerJobId, {} as any);
+      const poll = await engine.poll(submit.job.providerJobId, {} as any, token.secret);
       if (!poll.ok || poll.job?.status !== "succeeded") {
         return {
           ok: false,
@@ -112,7 +121,7 @@ export function createProductionNode(engine: VideoEngine, id = "production-node"
         };
       }
 
-      const artifact = await engine.collect(submit.job.providerJobId, {} as any);
+      const artifact = await engine.collect(submit.job.providerJobId, {} as any, token.secret);
       if (!artifact.ok || !artifact.artifact) {
         const errorMsg = "error" in artifact ? String(artifact.error) : "Artifact missing";
         return {

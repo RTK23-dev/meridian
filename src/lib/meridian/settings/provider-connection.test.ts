@@ -59,12 +59,22 @@ for (const { name, sql } of backends) {
     });
   });
 
-  test(`[${name}] a deployment META_AD_LIBRARY_TOKEN alone does not make sources READY, and the message says the check did not use it`, async () => {
+  test(`[${name}] a deployment META_AD_LIBRARY_TOKEN alone does not make sources READY, and the message names the opt-in`, async () => {
     const tenant = await studioTenant(sql, `sources-env-${name}`);
     await withEnv({ META_AD_LIBRARY_TOKEN: "deployment-meta-token-9999" }, async () => {
       const result = await testWorkspaceProviderConnection(sql, { organizationId: tenant.organizationId, category: "sources" });
       assert.notEqual(result.status, "READY");
-      assert.match(result.message, /does not use it/);
+      assert.match(result.message, /META_AD_LIBRARY_SHARED_DEFAULT=deployment/, "the deployment key needs its opt-in");
+      assert.equal(result.message.includes("deployment-meta-token-9999"), false);
+    });
+  });
+
+  test(`[${name}] a deployment META_AD_LIBRARY_TOKEN is READY only with its opt-in, and the message says it is the shared default`, async () => {
+    const tenant = await studioTenant(sql, `sources-shared-${name}`);
+    await withEnv({ META_AD_LIBRARY_TOKEN: "deployment-meta-token-9999", META_AD_LIBRARY_SHARED_DEFAULT: "deployment" }, async () => {
+      const result = await testWorkspaceProviderConnection(sql, { organizationId: tenant.organizationId, category: "sources" });
+      assert.equal(result.status, "READY");
+      assert.match(result.message, /shared/);
       assert.equal(result.message.includes("deployment-meta-token-9999"), false);
     });
   });

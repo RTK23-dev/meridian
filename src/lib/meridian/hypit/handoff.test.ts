@@ -126,7 +126,7 @@ test("an unconfigured Hypit runtime is not connected and creates no video", asyn
 test("a Hypit failure stays a failed job", async () => {
   const transport = scripted(() => ({ status: 503, body: "down" }));
   const result = await handoffToHypit(input(), {
-    env: { baseUrl: "http://hypit.internal" },
+    env: { baseUrl: "http://hypit.internal" }, token: "workspace-hypit-key",
     transport,
     ledger: memoryHypitLedger(),
   });
@@ -139,7 +139,7 @@ test("a Hypit failure stays a failed job", async () => {
 test("a malformed Hypit response is a failure", async () => {
   const transport = scripted(() => ({ status: 200, body: "{\"status\":\"done\"}" }));
   const result = await handoffToHypit(input(), {
-    env: { baseUrl: "http://hypit.internal" },
+    env: { baseUrl: "http://hypit.internal" }, token: "workspace-hypit-key",
     transport,
     ledger: memoryHypitLedger(),
   });
@@ -155,7 +155,7 @@ test("completion without video bytes is not success", async () => {
     return { status: 200, body: JSON.stringify({ providerJobId: "h1", status: "succeeded" }) };
   });
   const result = await handoffToHypit(input(), {
-    env: { baseUrl: "http://hypit.internal" },
+    env: { baseUrl: "http://hypit.internal" }, token: "workspace-hypit-key",
     transport,
     ledger: memoryHypitLedger(),
   });
@@ -175,7 +175,7 @@ test("a real Hypit artifact is returned and can be stored with the JEV decision"
   });
   const stored: { key: string; bytes: Uint8Array }[] = [];
   const result = await handoffToHypit(input(), {
-    env: { baseUrl: "http://hypit.internal" },
+    env: { baseUrl: "http://hypit.internal" }, token: "workspace-hypit-key",
     transport,
     ledger: memoryHypitLedger(),
     onArtifact: async (artifact) => {
@@ -221,7 +221,7 @@ test("a queued Hypit job is polled before the artifact is collected", async () =
     return { status: 200, body: JSON.stringify({ providerJobId: "h1", status: "succeeded" }) };
   });
   const result = await handoffToHypit(input({ briefId: "brief-poll" }), {
-    env: { baseUrl: "http://hypit.internal" },
+    env: { baseUrl: "http://hypit.internal" }, token: "workspace-hypit-key",
     transport,
     ledger: memoryHypitLedger(),
   });
@@ -239,9 +239,9 @@ test("retrying the same decision does not create a second Meridian job", async (
     if (url.endsWith("/v1/jobs")) return { status: 200, body: JSON.stringify({ providerJobId: "h1", status: "queued" }) };
     return { status: 200, body: JSON.stringify({ providerJobId: "h1", status: "running" }) };
   });
-  const first = await handoffToHypit(input(), { env: { baseUrl: "http://hypit.internal" }, transport, ledger });
+  const first = await handoffToHypit(input(), { env: { baseUrl: "http://hypit.internal" }, token: "workspace-hypit-key", transport, ledger });
   const calls = transport.calls;
-  const second = await handoffToHypit(input(), { env: { baseUrl: "http://hypit.internal" }, transport, ledger });
+  const second = await handoffToHypit(input(), { env: { baseUrl: "http://hypit.internal" }, token: "workspace-hypit-key", transport, ledger });
   assert.equal(second.job.meridianJobId, first.job.meridianJobId);
   assert.equal(transport.calls, calls);
   const rows: HypitJobRecord[] = [];

@@ -25,15 +25,15 @@ test("Production Step 5: second VideoEngine adapter (timeline) is available and 
     prompt: "A fresh serum drops onto skin",
   } as any;
 
-  const submit = await engine.submit(contract, {} as any);
+  const submit = await engine.submit(contract, {} as any, "workspace-test-token");
   assert.equal(submit.ok, true);
   assert.equal(submit.job?.providerJobId, "timeline_job-1");
 
-  const poll = await engine.poll(submit.job!.providerJobId, {} as any);
+  const poll = await engine.poll(submit.job!.providerJobId, {} as any, "workspace-test-token");
   assert.equal(poll.ok, true);
   assert.equal(poll.job?.status, "succeeded");
 
-  const artifact = await engine.collect(submit.job!.providerJobId, {} as any);
+  const artifact = await engine.collect(submit.job!.providerJobId, {} as any, "workspace-test-token");
   assert.equal(artifact.ok, true);
   assert.equal(artifact.artifact?.mime, "video/mp4");
   assert.ok(artifact.artifact!.bytes.byteLength > 0);

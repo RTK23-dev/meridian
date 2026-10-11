@@ -5,6 +5,7 @@
  * Never fabricates ad records when disconnected.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -29,18 +30,15 @@ export class MetaAdLibrarySourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  private getToken(): string | undefined {
-    return process.env.META_AD_LIBRARY_TOKEN?.trim() || process.env.META_ACCESS_TOKEN?.trim();
-  }
-
-  async health(): Promise<SourceHealth> {
-    const token = this.getToken();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("meta_ad_library", organizationId);
+    const token = resolved.secret;
     if (!token) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "META_AD_LIBRARY_TOKEN is required for official Meta Ad Library queries.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }
@@ -54,7 +52,8 @@ export class MetaAdLibrarySourceAdapter implements SourceAdapter {
   }
 
   async discover(query: DiscoveryQuery): Promise<SourceReference[]> {
-    const token = this.getToken();
+    const resolved = await sourceKeyFor("meta_ad_library", query.organizationId);
+    const token = resolved.secret;
     if (!token) return [];
 
     const references: SourceReference[] = [];

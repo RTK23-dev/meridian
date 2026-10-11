@@ -4,6 +4,7 @@
  * Discovers and ingests public LinkedIn company and creator posts.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -30,18 +31,15 @@ export class LinkedInSourceAdapter implements SourceAdapter {
     search: false,
   };
 
-  private getAccessToken(): string | undefined {
-    return process.env.LINKEDIN_ACCESS_TOKEN?.trim();
-  }
-
-  async health(): Promise<SourceHealth> {
-    const token = this.getAccessToken();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("linkedin", organizationId);
+    const token = resolved.secret;
     if (!token) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "LINKEDIN_ACCESS_TOKEN is unset. Public metadata scraping available for direct post URLs.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }

@@ -9,7 +9,41 @@
  * only when its shared-default variable is opted in. `openai` is the OpenAI Decisions engine. `hypit` is the Hypit
  * production runtime.
  */
-export type CredentialCategory = "perception" | "jev" | "production" | "openai" | "hypit";
+export type CredentialCategory = "perception" | "jev" | "production" | "openai" | "hypit" | SourceCredentialCategory;
+
+/**
+ * The source connectors that hold a saved key. Each is its own vault entry, so a workspace connects one source without
+ * another. A deployment's key (the variables in SOURCE_KEY_ENV, the first one set wins) is used only when the category's
+ * shared default is opted in, the same rule as every other category.
+ */
+export const SOURCE_CREDENTIAL_CATEGORIES = [
+  "meta_ad_library",
+  "meta_graph",
+  "instagram",
+  "youtube",
+  "search",
+  "twitter",
+  "linkedin",
+  "pinterest",
+  "tiktok",
+  "licensed",
+] as const;
+
+export type SourceCredentialCategory = (typeof SOURCE_CREDENTIAL_CATEGORIES)[number];
+
+/** The deployment variables a source category reads, in order. The first one that is set is the key. */
+export const SOURCE_KEY_ENV: Record<SourceCredentialCategory, readonly string[]> = {
+  meta_ad_library: ["META_AD_LIBRARY_TOKEN"],
+  meta_graph: ["META_ACCESS_TOKEN", "FACEBOOK_ACCESS_TOKEN"],
+  instagram: ["INSTAGRAM_ACCESS_TOKEN"],
+  youtube: ["YOUTUBE_API_KEY"],
+  search: ["SERPAPI_API_KEY", "GOOGLE_SEARCH_API_KEY"],
+  twitter: ["TWITTER_BEARER_TOKEN", "X_API_KEY"],
+  linkedin: ["LINKEDIN_ACCESS_TOKEN"],
+  pinterest: ["PINTEREST_ACCESS_TOKEN"],
+  tiktok: ["TIKTOK_ACCESS_TOKEN"],
+  licensed: ["LICENSED_DATA_API_KEY", "SENSOR_TOWER_API_KEY"],
+};
 
 /** Where a usable key came from. */
 export type CredentialSource = "workspace" | "deployment_shared_default";
@@ -38,6 +72,16 @@ export const CREDENTIAL_VAULT_TYPE: Record<CredentialCategory, string> = {
   production: "provider_config:production",
   openai: "provider_config:openai",
   hypit: "provider_config:hypit",
+  meta_ad_library: "provider_config:source:meta_ad_library",
+  meta_graph: "provider_config:source:meta_graph",
+  instagram: "provider_config:source:instagram",
+  youtube: "provider_config:source:youtube",
+  search: "provider_config:source:search",
+  twitter: "provider_config:source:twitter",
+  linkedin: "provider_config:source:linkedin",
+  pinterest: "provider_config:source:pinterest",
+  tiktok: "provider_config:source:tiktok",
+  licensed: "provider_config:source:licensed",
 };
 
 /**
@@ -50,6 +94,16 @@ export const SHARED_DEFAULT_ENV: Record<CredentialCategory, { variable: string; 
   production: { variable: "PRODUCTION_SHARED_DEFAULT", accepts: "deployment" },
   openai: { variable: "OPENAI_SHARED_DEFAULT", accepts: "deployment" },
   hypit: { variable: "HYPIT_SHARED_DEFAULT", accepts: "deployment" },
+  meta_ad_library: { variable: "META_AD_LIBRARY_SHARED_DEFAULT", accepts: "deployment" },
+  meta_graph: { variable: "META_GRAPH_SHARED_DEFAULT", accepts: "deployment" },
+  instagram: { variable: "INSTAGRAM_SHARED_DEFAULT", accepts: "deployment" },
+  youtube: { variable: "YOUTUBE_SHARED_DEFAULT", accepts: "deployment" },
+  search: { variable: "SEARCH_SHARED_DEFAULT", accepts: "deployment" },
+  twitter: { variable: "TWITTER_SHARED_DEFAULT", accepts: "deployment" },
+  linkedin: { variable: "LINKEDIN_SHARED_DEFAULT", accepts: "deployment" },
+  pinterest: { variable: "PINTEREST_SHARED_DEFAULT", accepts: "deployment" },
+  tiktok: { variable: "TIKTOK_SHARED_DEFAULT", accepts: "deployment" },
+  licensed: { variable: "LICENSED_SHARED_DEFAULT", accepts: "deployment" },
 };
 
 /**

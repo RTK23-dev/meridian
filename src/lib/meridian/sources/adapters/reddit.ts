@@ -30,26 +30,16 @@ export class RedditSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  private getClientId(): string | undefined {
-    return process.env.REDDIT_CLIENT_ID?.trim();
-  }
-
+  /**
+   * The Reddit API is not connected in this release: no OAuth client is held, so the API reports NOT_CONFIGURED. Direct post
+   * URLs are still read from their public pages, and the message says so instead of claiming an API connection.
+   */
   async health(): Promise<SourceHealth> {
-    const clientId = this.getClientId();
-    if (!clientId) {
-      return {
-        adapterId: this.id,
-        status: "NOT_CONFIGURED",
-        latencyMs: 0,
-        message: "REDDIT_CLIENT_ID is unset. Public .json and oEmbed scraping available for direct post URLs.",
-        lastCheckedAt: new Date().toISOString(),
-      };
-    }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
-      latencyMs: 18,
-      message: "Connected to Reddit OAuth API.",
+      status: "NOT_CONFIGURED",
+      latencyMs: 0,
+      message: "The Reddit API is not connected. Direct post URLs can still be read from their public pages.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

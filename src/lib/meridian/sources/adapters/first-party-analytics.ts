@@ -5,6 +5,7 @@
  * into the source fabric for calibration and outlier comparison.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -30,19 +31,16 @@ export class FirstPartyAnalyticsSourceAdapter implements SourceAdapter {
     search: false,
   };
 
-  async health(): Promise<SourceHealth> {
-    const hasAnyCred = Boolean(
-      process.env.META_ACCESS_TOKEN ||
-      process.env.TIKTOK_ACCESS_TOKEN ||
-      process.env.SHOPIFY_ACCESS_TOKEN
-    );
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const meta = await sourceKeyFor("meta_graph", organizationId);
+    const tiktok = await sourceKeyFor("tiktok", organizationId);
 
-    if (!hasAnyCred) {
+    if (!meta.secret && !tiktok.secret) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "No first-party advertising or store connectors configured.",
+        message: meta.reason || tiktok.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }

@@ -23,7 +23,7 @@ import { storeVaultCredential, retrieveVaultCredential, deleteVaultCredential, t
 import { resolveJevConfig } from "../jev/config.ts";
 import { resolveCredential, sharedDefaultOptedIn } from "../credentials/resolve.ts";
 import { isCostMode, resolveCostMode } from "../production/cost-mode.ts";
-import { credentialStateOf, type CredentialCategory, type CredentialState } from "../credentials/contract.ts";
+import { CREDENTIAL_VAULT_TYPE, credentialStateOf, type CredentialCategory, type CredentialState, type SourceCredentialCategory } from "../credentials/contract.ts";
 import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
@@ -174,7 +174,7 @@ export async function getWorkspaceProviderSettings(
   // 3. Sources & Crawling Category
   const sourcesEntryId = vaultMap.get(vaultTypeForCategory("sources"))?.id;
   const sourcesCustom = await savedSettings(sql, organizationId, sourcesEntryId);
-  const metaAdToken = sourcesCustom.metaAdLibraryToken as string || process.env.META_AD_LIBRARY_TOKEN;
+  const metaAdState = await credentialStateFor(sql, organizationId, "meta_ad_library");
 
   const sourcesSummary: ProviderConfigSummary = {
     category: "sources",
@@ -184,8 +184,8 @@ export async function getWorkspaceProviderSettings(
       maxPagesPerRun: Number(sourcesCustom.maxPages || 50),
       maxDepth: Number(sourcesCustom.maxDepth || 2),
       concurrency: Number(sourcesCustom.concurrency || 4),
-      metaAdLibraryConfigured: Boolean(metaAdToken),
-      metaAdLibraryFingerprint: fingerprint(metaAdToken),
+      metaAdLibraryConfigured: metaAdState.state === "usable",
+      metaAdLibraryFingerprint: metaAdState.fingerprint,
       allowedSources: ["website", "instagram", "tiktok", "youtube", "meta_ad_library"],
     },
     capabilities: ["public_page_scrape", "meta_ad_library", "open_graph", "json_ld", "repeated_card_discovery"],
@@ -300,6 +300,14 @@ export async function saveWorkspaceProviderConfig(
     }
   }
 
+  // The Meta Ad Library key is a credential, so it is saved in its own entry and never in the sources settings.
+  let metaAdLibraryKey = "";
+  if (input.category === "sources" && input.settings && "metaAdLibraryToken" in input.settings) {
+    const { metaAdLibraryToken, ...rest } = input.settings;
+    metaAdLibraryKey = typeof metaAdLibraryToken === "string" ? metaAdLibraryToken.trim() : "";
+    input = { ...input, settings: rest };
+  }
+
   const credentialType = vaultTypeForCategory(input.category);
   const newKey = input.credentials?.apiKey?.trim() ?? "";
   const isCredentialCategory = (CREDENTIAL_CATEGORIES as readonly string[]).includes(input.category);
@@ -354,7 +362,34 @@ export async function saveWorkspaceProviderConfig(
     `;
   });
 
+  if (metaAdLibraryKey) {
+    await saveSourceCredential(sql, input.organizationId, input.actorId, "meta_ad_library", metaAdLibraryKey);
+  }
+
   return { success: true, category: input.category };
+}
+
+/** Saves one source connector's key in its own vault entry, replacing the previous one. The save is audited, without the key. */
+async function saveSourceCredential(
+  sql: Sql,
+  organizationId: string,
+  actorId: string,
+  category: SourceCredentialCategory,
+  apiKey: string,
+): Promise<void> {
+  const credentialType = CREDENTIAL_VAULT_TYPE[category];
+  await withTransaction(sql, async (tx) => {
+    const prior = await tx<{ id: string }>`
+      select id from credential_vault where organization_id = ${organizationId} and credential_type = ${credentialType} limit 1
+    `;
+    if (prior[0]) await deleteVaultCredential(tx, organizationId, prior[0].id);
+    await storeVaultCredential(tx, organizationId, credentialType, { accessToken: "", apiKey, refreshToken: "", customFields: {} });
+    await tx`
+      insert into audit_log (id, organization_id, actor_id, action, object_type, object_id, metadata)
+      values (${randomUUID()}, ${organizationId}, ${actorId}, ${"provider_config.update"}, ${"sources"}, ${credentialType},
+        ${JSON.stringify({ updatedKeys: ["metaAdLibraryToken"], hasApiKey: true, keptStoredKey: false })})
+    `;
+  });
 }
 
 function toDate(value: unknown): Date | undefined {
@@ -400,7 +435,7 @@ export async function removeWorkspaceProviderConfig(
 /**
  * Sources has no required key. Public page sources run without one. Meta Ad Library needs a token, and this check looks only
  * at the workspace's own saved token. READY means that token is saved and readable. It never means the live Meta Ad Library
- * answered, because no request is made here. A deployment META_AD_LIBRARY_TOKEN is not read by this check.
+ * answered, because no request is made here. The deployment key is read only when its shared default is opted in.
  */
 async function testSourcesConnection(
   sql: Sql,
@@ -409,45 +444,14 @@ async function testSourcesConnection(
 ): Promise<{ status: "READY" | "ERROR" | "NOT_CONFIGURED"; message: string; latencyMs: number }> {
   const latencyMs = () => Date.now() - started;
   const live = "The live Meta Ad Library was not called by this check.";
-  const deploymentNote = process.env.META_AD_LIBRARY_TOKEN?.trim()
-    ? " The deployment has META_AD_LIBRARY_TOKEN set, but this check does not use it."
-    : "";
-
-  const rows = await sql<{ id: string }>`
-    select id from credential_vault
-    where organization_id = ${organizationId} and credential_type = ${vaultTypeForCategory("sources")}
-    limit 1
-  `;
-  if (!rows[0]) {
-    return {
-      status: "NOT_CONFIGURED",
-      message: `No sources settings are saved for this workspace. Public page sources need no key, and Meta Ad Library is not connected.${deploymentNote} ${live}`,
-      latencyMs: latencyMs(),
-    };
-  }
-
-  let token = "";
-  try {
-    const saved = await retrieveVaultCredential(sql, organizationId, rows[0].id);
-    const raw: unknown = saved?.customFields?.metaAdLibraryToken;
-    token = typeof raw === "string" ? raw.trim() : "";
-  } catch {
-    return {
-      status: "ERROR",
-      message: `The workspace's saved sources settings could not be read, so no Meta Ad Library token can be used. Save the settings again. ${live}`,
-      latencyMs: latencyMs(),
-    };
-  }
-  if (!token) {
-    return {
-      status: "NOT_CONFIGURED",
-      message: `No Meta Ad Library token is saved for this workspace. Public page sources need no key.${deploymentNote} ${live}`,
-      latencyMs: latencyMs(),
-    };
+  const resolution = await resolveCredential(sql, organizationId, "meta_ad_library");
+  if (resolution.status === "ready") {
+    const owner = resolution.source === "workspace" ? "This workspace's saved" : "The deployment's shared";
+    return { status: "READY", message: `${owner} Meta Ad Library key can be read. ${live}`, latencyMs: latencyMs() };
   }
   return {
-    status: "READY",
-    message: `This workspace's saved Meta Ad Library token can be read. ${live}`,
+    status: resolution.status === "unusable" ? "ERROR" : "NOT_CONFIGURED",
+    message: `${resolution.reason} Public page sources need no key. ${live}`,
     latencyMs: latencyMs(),
   };
 }

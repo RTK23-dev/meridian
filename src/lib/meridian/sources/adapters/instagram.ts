@@ -5,6 +5,7 @@
  * with public embed scraping for direct post/reel URLs.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -31,18 +32,15 @@ export class InstagramSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  private getAccessToken(): string | undefined {
-    return process.env.INSTAGRAM_ACCESS_TOKEN?.trim() || process.env.META_ACCESS_TOKEN?.trim();
-  }
-
-  async health(): Promise<SourceHealth> {
-    const token = this.getAccessToken();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("instagram", organizationId);
+    const token = resolved.secret;
     if (!token) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "INSTAGRAM_ACCESS_TOKEN is unset. Public embed scraping available for direct Reel/post URLs.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }

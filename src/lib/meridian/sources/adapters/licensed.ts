@@ -5,6 +5,7 @@
  * Reports explicit NOT_CONFIGURED when API credentials are absent.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -29,18 +30,15 @@ export class LicensedSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  private getApiKey(): string | undefined {
-    return process.env.LICENSED_DATA_API_KEY?.trim() || process.env.SENSOR_TOWER_API_KEY?.trim();
-  }
-
-  async health(): Promise<SourceHealth> {
-    const key = this.getApiKey();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("licensed", organizationId);
+    const key = resolved.secret;
     if (!key) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "LICENSED_DATA_API_KEY is not configured.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }
@@ -54,7 +52,8 @@ export class LicensedSourceAdapter implements SourceAdapter {
   }
 
   async discover(query: DiscoveryQuery): Promise<SourceReference[]> {
-    const key = this.getApiKey();
+    const resolved = await sourceKeyFor("licensed", query.organizationId);
+    const key = resolved.secret;
     if (!key) return [];
 
     return [

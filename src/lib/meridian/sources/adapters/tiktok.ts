@@ -5,6 +5,7 @@
  * Supports both official TikTok API and public oEmbed metadata scraping.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -31,14 +32,15 @@ export class TikTokSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  async health(): Promise<SourceHealth> {
-    const token = process.env.TIKTOK_ACCESS_TOKEN?.trim();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("tiktok", organizationId);
+    const token = resolved.secret;
     if (!token) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "TIKTOK_ACCESS_TOKEN is unset. Public oEmbed scraping available for direct URLs.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }

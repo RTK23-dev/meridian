@@ -16,6 +16,8 @@ import type { SourceRegistry } from "../sources/registry.ts";
 import type { DiscoveryScope, CrawlBudget } from "./types.ts";
 
 export interface ResearchPlanRequest {
+  /** The workspace whose saved source keys the planned sources may use. */
+  organizationId?: string;
   scope: DiscoveryScope;
   seeds: string[];
   enabledSources?: string[];
@@ -87,7 +89,7 @@ export class ResearchPlanner {
         // 2. Meta Ad Library adapter
         const metaAdapter = registry.get("meta_ad_library");
         if (metaAdapter) {
-          const health = await metaAdapter.health().catch(() => ({ status: "UNAVAILABLE" as const }));
+          const health = await metaAdapter.health(request.organizationId).catch(() => ({ status: "UNAVAILABLE" as const }));
           const isEligible = health.status === "HEALTHY" || health.status === "CONFIGURED";
           executions.push({
             adapterId: "meta_ad_library",
@@ -103,7 +105,7 @@ export class ResearchPlanner {
         for (const platform of ["tiktok", "youtube"] as const) {
           const adapter = registry.get(platform);
           if (adapter) {
-            const health = await adapter.health().catch(() => ({ status: "UNAVAILABLE" as const }));
+            const health = await adapter.health(request.organizationId).catch(() => ({ status: "UNAVAILABLE" as const }));
             const isEligible = health.status === "HEALTHY" || health.status === "CONFIGURED";
             executions.push({
               adapterId: adapter.id,

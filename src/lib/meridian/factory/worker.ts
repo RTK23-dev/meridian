@@ -1,4 +1,5 @@
 import type { Sql } from "../learning/store.ts";
+import { sourceKeyFor } from "../sources/credentials.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import { CREATIVE_DNA_VERSION, dnaFromTranscript, type AdFormat, type CreativeDna } from "./creative-dna.ts";
 import { decodeVideoDna } from "./decode.ts";
@@ -51,8 +52,8 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   `;
 
   if (job.job_type === "factory.discover") {
-    const token = process.env.META_AD_LIBRARY_TOKEN?.trim();
-    return token ? "sources:meta_ad_library" : "NOT_CONNECTED:meta_ad_library";
+    const metaKey = await sourceKeyFor("meta_ad_library", job.organization_id);
+    return metaKey.secret ? "sources:meta_ad_library" : "NOT_CONNECTED:meta_ad_library";
   }
   if (job.job_type === "factory.ingest") {
     const allowed = snapshotMediaAllowed();

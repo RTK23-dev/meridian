@@ -120,5 +120,5 @@ export interface ProductionProvider {
   health(): Promise<ProviderHealth>;
   submitJob(spec: CreativeSpec): Promise<ProductionJob>;
   checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob>;
-  cancelJob?(jobId: string): Promise<void>;
+  cancelJob?(jobId: string, metadata?: Record<string, unknown>): Promise<void>;
 }

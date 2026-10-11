@@ -191,6 +191,7 @@ test("external advertising evidence flows through JEV Research, opportunity, dec
     },
   }, {
     env: { baseUrl: "https://hypit.example" },
+    token: "workspace-hypit-key",
     ledger: memoryHypitLedger(),
     transport: async (request) => request.url.endsWith("/artifact")
       ? { status: 200, headers: {}, body: JSON.stringify({ mime: "video/mp4", base64: Buffer.from(buildFixtureClip({ durationMs: 2500, width: 64, height: 64, frames: [] })).toString("base64"), durationMs: 2500, width: 64, height: 64 }) }

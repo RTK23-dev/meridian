@@ -246,7 +246,7 @@ test("HypitProvider returns NOT_CONFIGURED without URL and executes real HTTP wh
       return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
     };
 
-    const configuredProvider = new HypitProvider({ fetchImpl: fakeFetch });
+    const configuredProvider = new HypitProvider({ fetchImpl: fakeFetch, apiKey: "workspace-hypit-key" });
     const configuredHealth = await configuredProvider.health();
     assert.equal(configuredHealth.state, "HEALTHY");
     assert.ok(calledEndpoints.some((ep) => ep.includes("/health")));
@@ -278,7 +278,7 @@ test("Hypit submission transport failure is explicitly unknown, not safely retry
   process.env.HYPIT_BASE_URL = "https://hypit.internal";
   try {
     const { HypitProvider } = await import("./providers/hypit.ts");
-    const provider = new HypitProvider({ fetchImpl: async () => { throw new Error("connection reset after request write"); } });
+    const provider = new HypitProvider({ fetchImpl: async () => { throw new Error("connection reset after request write"); }, apiKey: "workspace-hypit-key" });
     const result = await provider.submitJob({
       id: "spec-unknown", idempotencyKey: "durable-job-key", organizationId: "org-1", brandId: "brand-1",
       title: "Unknown outcome", modality: "video", format: "ugc", aspectRatio: "9:16", durationTargetSeconds: 8,

@@ -31,7 +31,11 @@ export type HypitArtifactPayload = {
 
 const STATUSES = new Set<HypitRemoteStatus>(["queued", "running", "succeeded", "failed", "cancelled"]);
 
-export function hypitConnection(env: { baseUrl?: string; token?: string } = {}): HypitConnection {
+/**
+ * The Hypit connection. The base URL is deployment configuration. The token is the workspace's, passed in by the caller that
+ * resolved it through the credential resolver, so this function never reads a token from the environment.
+ */
+export function hypitConnection(env: { baseUrl?: string; token?: string | null } = {}): HypitConnection {
   const raw = (env.baseUrl ?? process.env.HYPIT_BASE_URL ?? "").trim();
   if (!raw) {
     return {
@@ -58,7 +62,7 @@ export function hypitConnection(env: { baseUrl?: string; token?: string } = {}):
     };
   }
   const baseUrl = `${url.origin}${url.pathname}`.replace(/\/$/, "");
-  const token = (env.token ?? process.env.HYPIT_API_TOKEN ?? "").trim();
+  const token = (env.token ?? "").trim();
   return { status: "CONFIGURED", baseUrl, token };
 }
 

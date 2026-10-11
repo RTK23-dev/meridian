@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { sourceKeyFor } from "../sources/credentials.ts";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { BRAIN_FIELDS, type BrainKey, type ProvenanceMap } from "@/lib/meridian/brain";
@@ -78,12 +79,13 @@ export const getMarket = createServerFn({ method: "POST" })
       where organization_id = ${access.organizationId} and brand_id = ${data.brandId} and source = 'ad_library' limit 1
     `;
     const libraryConnection = libraryConnectionRows[0];
+    const metaKey = await sourceKeyFor("meta_ad_library", access.organizationId);
     return {
       role: access.role,
       adapters: SOURCE_ADAPTERS.map((adapter) => ({
         ...adapter,
         status: adapter.id === "ad_library"
-          ? asText(libraryConnection?.status) || (process.env.META_AD_LIBRARY_TOKEN?.trim() ? "AVAILABLE" : "NOT_CONNECTED")
+          ? asText(libraryConnection?.status) || (metaKey.secret ? "AVAILABLE" : "NOT_CONNECTED")
           : adapter.implemented ? "AVAILABLE" : "NOT_CONNECTED",
         connectionError: adapter.id === "ad_library" ? asText(libraryConnection?.last_error) : "",
       })),
@@ -143,8 +145,9 @@ export const startResearchCollection = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    if (!process.env.META_AD_LIBRARY_TOKEN?.trim()) {
-      return { status: "NOT_CONNECTED" as const, error: "META_AD_LIBRARY_TOKEN is not configured. No ads were collected." };
+    const metaKey = await sourceKeyFor("meta_ad_library", access.organizationId);
+    if (!metaKey.secret) {
+      return { status: "NOT_CONNECTED" as const, error: `${metaKey.reason} No ads were collected.` };
     }
     const runId = id();
     const queryKey = contentHash(`${data.searchTerms.toLowerCase()}|${data.country}|${data.limit}|${new Date().toISOString().slice(0, 10)}`);

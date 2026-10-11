@@ -1,4 +1,5 @@
 import type { Transport } from "../providers/http.ts";
+import { secretForCategory } from "../credentials/resolve.ts";
 import { collectHypitArtifact, hypitConnection, pollHypitJob, startHypitJob, type HypitArtifactPayload } from "./client.ts";
 import { buildHypitJob, type HypitHandoffInput, type HypitJobContract } from "./contract.ts";
 
@@ -47,7 +48,12 @@ export function memoryHypitLedger(): HypitLedger {
 }
 
 export type HypitHandoffOptions = {
-  env?: { baseUrl?: string; token?: string };
+  env?: { baseUrl?: string };
+  /**
+   * The workspace's Hypit key, when the caller already holds it. Without it, the handoff resolves the workspace's key through
+   * the credential resolver. A key is never taken from the environment.
+   */
+  token?: string;
   transport: Transport;
   ledger: HypitLedger;
   /** When true, a failed or not-connected row may be submitted again. The Meridian job id does not change. */
@@ -93,9 +99,17 @@ export async function handoffToHypit(input: HypitHandoffInput, options: HypitHan
   if (existing && (terminal(existing) || !options.retry)) {
     return { ok: existing.status === "succeeded", job: existing, artifactBytes: null };
   }
-  const connection = hypitConnection(options.env ?? {});
+  const token = options.token
+    ? { secret: options.token, reason: "" }
+    : await secretForCategory("hypit", input.organizationId);
+  const connection = hypitConnection({ ...(options.env ?? {}), token: token.secret });
   if (connection.status !== "CONFIGURED") {
     const job = openRecord(built.contract, "not_connected", connection.code, connection.detail);
+    await options.ledger.save(job);
+    return { ok: false, job, artifactBytes: null };
+  }
+  if (!token.secret) {
+    const job = openRecord(built.contract, "not_connected", "HYPIT_NOT_CONNECTED", token.reason);
     await options.ledger.save(job);
     return { ok: false, job, artifactBytes: null };
   }

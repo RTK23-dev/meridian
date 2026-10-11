@@ -207,6 +207,7 @@ export class DiscoveryService {
       } else {
         // Niche, Profile, or URL List - leverage ResearchPlanner across registered adapters
         const plan = await ResearchPlanner.planResearch(this.registry, {
+          organizationId: input.organizationId,
           scope: input.scope,
           seeds: input.seeds,
           budget,
@@ -226,6 +227,7 @@ export class DiscoveryService {
 
           try {
             const refs = await adapter.discover({
+              organizationId: input.organizationId,
               query: exec.seed,
               niche: exec.seed,
               limit: budget.maxPages,

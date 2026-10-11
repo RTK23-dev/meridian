@@ -89,6 +89,8 @@ export type SourceHealth = {
 };
 
 export type DiscoveryQuery = {
+  /** The workspace whose saved source keys this discovery may use. Without it, no keyed source runs. */
+  organizationId?: string;
   niche?: string;
   query?: string;
   creatorHandle?: string;
@@ -105,5 +107,5 @@ export interface SourceAdapter {
   discover(query: DiscoveryQuery): Promise<SourceReference[]>;
   fetch(reference: SourceReference): Promise<RawArtifact>;
   snapshot?(reference: SourceReference): Promise<SourceSnapshot>;
-  health(): Promise<SourceHealth>;
+  health(organizationId?: string): Promise<SourceHealth>;
 }

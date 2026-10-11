@@ -19,10 +19,13 @@ import {
   CREDENTIAL_VAULT_TYPE,
   DEPLOYMENT_ONLY_KEY_ENV,
   SHARED_DEFAULT_ENV,
+  SOURCE_CREDENTIAL_CATEGORIES,
+  SOURCE_KEY_ENV,
   credentialFingerprint,
   type CredentialCategory,
   type CredentialResolution,
   type DeploymentOnlyKey,
+  type SourceCredentialCategory,
 } from "./contract.ts";
 
 /** The environment a resolution reads. Injected by tests; production passes `process.env`. */
@@ -44,6 +47,16 @@ const CATEGORY_LABEL: Record<CredentialCategory, string> = {
   production: "Gemini",
   openai: "OpenAI",
   hypit: "Hypit",
+  meta_ad_library: "Meta Ad Library",
+  meta_graph: "Meta",
+  instagram: "Instagram",
+  youtube: "YouTube",
+  search: "search",
+  twitter: "X (Twitter)",
+  linkedin: "LinkedIn",
+  pinterest: "Pinterest",
+  tiktok: "TikTok",
+  licensed: "licensed data",
 };
 
 /**
@@ -58,7 +71,18 @@ function deploymentKeyFor(category: CredentialCategory, env: CredentialEnv): str
   }
   if (category === "openai") return env.OPENAI_API_KEY?.trim() ?? "";
   if (category === "hypit") return env.HYPIT_API_TOKEN?.trim() || env.HYPIT_API_KEY?.trim() || "";
+  if (isSourceCategory(category)) {
+    for (const name of SOURCE_KEY_ENV[category]) {
+      const value = env[name]?.trim();
+      if (value) return value;
+    }
+    return "";
+  }
   return ProviderConfigResolver.resolveGoogle({ env }).apiKey?.trim() ?? "";
+}
+
+function isSourceCategory(category: CredentialCategory): category is SourceCredentialCategory {
+  return (SOURCE_CREDENTIAL_CATEGORIES as readonly string[]).includes(category);
 }
 
 /** The expiry as milliseconds, null when the entry does not expire, or "invalid" when the stored value cannot be read. */
@@ -168,6 +192,26 @@ export async function resolveCredential(
   const row = rows[0];
   if (row) return resolveSavedEntry(sql, scope, category, row);
   return resolveSharedDefault(category, env);
+}
+
+/**
+ * The secret one category uses in one workspace, or the reason there is none. Callers that make a provider request use this,
+ * so the key is read at the moment of the request and never cached in a module. A database failure is "no key", not a throw.
+ */
+export async function secretForCategory(
+  category: CredentialCategory,
+  organizationId: string | undefined,
+): Promise<{ secret: string | null; reason: string }> {
+  const scope = organizationId?.trim() ?? "";
+  if (!scope) return { secret: null, reason: `No workspace is in scope, so no ${CATEGORY_LABEL[category]} key can be used.` };
+  try {
+    const sql = await loadDefaultSql();
+    const resolution = await resolveCredential(sql, scope, category);
+    if (resolution.status === "ready") return { secret: resolution.secret, reason: "" };
+    return { secret: null, reason: resolution.reason };
+  } catch {
+    return { secret: null, reason: `The saved ${CATEGORY_LABEL[category]} credential could not be checked, so no request is made.` };
+  }
 }
 
 /**

@@ -5,6 +5,7 @@
  * Supports both YouTube Data API v3 and public oEmbed / metadata scraping.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -31,14 +32,15 @@ export class YouTubeSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  async health(): Promise<SourceHealth> {
-    const key = process.env.YOUTUBE_API_KEY?.trim();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("youtube", organizationId);
+    const key = resolved.secret;
     if (!key) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "YOUTUBE_API_KEY is unset. Public oEmbed scraping available for Shorts and watch URLs.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }

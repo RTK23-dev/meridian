@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { sourceKeyFor } from "../sources/credentials.ts";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
@@ -218,7 +219,7 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
     const level = (settings[0]?.level ?? 0) as FactoryLevel;
     const ceiling = (settings[0]?.ceiling ?? 1) as FactoryLevel;
     const video = hypitVideoEngine().status();
-    const libraryToken = Boolean(process.env.META_AD_LIBRARY_TOKEN?.trim());
+    const libraryToken = (await sourceKeyFor("meta_ad_library", organizationId)).secret !== null;
     return {
       role,
       organizationId,

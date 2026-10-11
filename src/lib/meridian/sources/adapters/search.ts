@@ -5,6 +5,7 @@
  * Returns NOT_CONFIGURED when API keys are unset.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -29,18 +30,15 @@ export class SearchSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  private getApiKey(): string | undefined {
-    return process.env.SERPAPI_API_KEY?.trim() || process.env.GOOGLE_SEARCH_API_KEY?.trim();
-  }
-
-  async health(): Promise<SourceHealth> {
-    const key = this.getApiKey();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("search", organizationId);
+    const key = resolved.secret;
     if (!key) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "SERPAPI_API_KEY or GOOGLE_SEARCH_API_KEY is not configured.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }
@@ -54,7 +52,8 @@ export class SearchSourceAdapter implements SourceAdapter {
   }
 
   async discover(query: DiscoveryQuery): Promise<SourceReference[]> {
-    const key = this.getApiKey();
+    const resolved = await sourceKeyFor("search", query.organizationId);
+    const key = resolved.secret;
     if (!key || !query.query) return [];
 
     // When configured, search adapter maps results to SourceReference items
