@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { estimateBase64DecodedBytes, finalizeProductionArtifact, type ArtifactFinalizeInput } from "./artifact-finalizer.ts";
 import type { Sql } from "../learning/store.ts";
 import type { GoogleDriveClient } from "../storage/drive.ts";
+import { WEBM_TRACK_AUDIO, WEBM_TRACK_VIDEO, webmFixture } from "../testing/webm-fixture.ts";
 
 /** A small cap, so the one-byte-over tests stay small. The default cap is tested in artifact-download.test.ts. */
 const CAP = 512;
@@ -366,14 +367,16 @@ const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const JPEG = [0xff, 0xd8, 0xff, 0xe0];
 const WEBP = [0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50];
 const GIF89A = "GIF89a";
-const WEBM = [0x1a, 0x45, 0xdf, 0xa3];
 const PDF = "%PDF-1.7";
+/** A WebM whose Tracks hold one video track, so postflight accepts it as a video container. */
+const WEBM_VIDEO = webmFixture({ tracks: [WEBM_TRACK_VIDEO] });
+/** A WebM whose only track is audio. It is detected as video, and postflight refuses it for lacking a video track. */
+const WEBM_AUDIO_ONLY = webmFixture({ tracks: [WEBM_TRACK_AUDIO] });
 
 test("finalizeProductionArtifact: each format a job's modality produces is stored under its canonical extension", async () => {
   const cases = [
     { modality: "video", bytes: mp4Of(64), ext: "mp4", mimeType: "video/mp4", skipPostflight: false },
-    // Postflight validates MP4 containers only, so a WebM video is passed over it here. The extension is what this checks.
-    { modality: "video", bytes: withHead(WEBM), ext: "webm", mimeType: "video/webm", skipPostflight: true },
+    { modality: "video", bytes: WEBM_VIDEO, ext: "webm", mimeType: "video/webm", skipPostflight: false },
     // An animated GIF is video for production matching, so it completes a video job and is stored as a GIF.
     { modality: "video", bytes: withHead(GIF89A), ext: "gif", mimeType: "image/gif", skipPostflight: false },
     { modality: "image", bytes: withHead(PNG), ext: "png", mimeType: "image/png", skipPostflight: false },
@@ -403,6 +406,7 @@ test("finalizeProductionArtifact: an artifact of the wrong kind for the job's mo
     { modality: "image", bytes: withHead(PDF), label: "a PDF in an image job" },
     { modality: "image", bytes: withHead(GIF89A), label: "a GIF in an image job" },
     { modality: "image", bytes: mp4Of(64), label: "a video in an image job" },
+    { modality: "image", bytes: WEBM_VIDEO, label: "a WebM video in an image job" },
     { modality: "video", bytes: withHead(PNG), label: "a PNG in a video job" },
     { modality: "video", bytes: withHead(JPEG), label: "a JPEG in a video job" },
     { modality: "video", bytes: withHead(PDF), label: "a PDF in a video job" },
@@ -427,4 +431,37 @@ test("finalizeProductionArtifact: an artifact of the wrong kind for the job's mo
     assert.ok(failedRow, `${c.label}: the job row is failed with the code`);
     assert.match(failedRow.query, /organization_id = .*brand_id = /s, `${c.label}: the failure is tenant scoped`);
   }
+});
+
+test("finalizeProductionArtifact: a WebM with no video track fails postflight in a video job and is never stored", async () => {
+  const fixture = storageFixture("video");
+  const result = await finalizeProductionArtifact(fixture.sql, {
+    jobId: "job-webm-audio-1",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    provider: "google_omni",
+    rawArtifact: { bytes: WEBM_AUDIO_ONLY },
+    options: { driveClient: fixture.drive },
+  });
+  assert.equal(result.success, false);
+  assert.equal(result.status, "POSTFLIGHT_FAILED");
+  assert.equal(result.errorCode, "POSTFLIGHT_DEFECTIVE");
+  assert.equal(fixture.drivePuts.length, 0, "nothing is stored");
+  assert.ok(!fixture.statements.some((s) => s.query.includes("status = 'COMPLETED'")), "never COMPLETED");
+});
+
+test("finalizeProductionArtifact: a WebM with a video track completes a video job through postflight", async () => {
+  const fixture = storageFixture("video");
+  const result = await finalizeProductionArtifact(fixture.sql, {
+    jobId: "job-webm-video-1",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    provider: "google_omni",
+    rawArtifact: { bytes: WEBM_VIDEO },
+    options: { driveClient: fixture.drive },
+  });
+  assert.equal(result.success, true, JSON.stringify(result));
+  assert.equal(result.status, "COMPLETED");
+  assert.equal(result.mimeType, "video/webm");
+  assert.equal(fixture.drivePuts[0]?.path, "org-1/brand-1/production/job-webm-video-1/artifact.webm");
 });
