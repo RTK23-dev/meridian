@@ -96,7 +96,7 @@ test("the remembered brand is kept only while it belongs to the active workspace
   assert.equal(resolveLastBrand("b1", []), null);
   assert.equal(resolveLastBrand("", ["b1"]), null);
   assert.equal(resolveLastBrand(null, ["b1"]), null);
-
+});
 
 function itemIds(groups: ReturnType<typeof sidebarGroups>, groupId: string): string[] {
   return groups.find((group) => group.id === groupId)?.items.map((item) => item.id) ?? [];
