@@ -4,6 +4,7 @@ Start with the [README](../README.md) for what Meridian is and what runs today. 
 
 | Document | Read it for |
 | --- | --- |
+| [NORTH_STAR.md](NORTH_STAR.md) | Read first: the goal, the owner's decisions, the Content Factory plan and the work queue |
 | [SETUP.md](SETUP.md) | Installing, the first run, saving keys, connecting Drive, deploying |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | How the pieces fit: screens, server functions, storage, workers |
 | [ARCHITECTURE_CONTRACTS.md](ARCHITECTURE_CONTRACTS.md) | The numbered rules the code refers to in its comments |

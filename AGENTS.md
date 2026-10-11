@@ -2,6 +2,10 @@
 
 Meridian is a multi-tenant advertising operating system: TanStack Start + React 19 + Tailwind v4 + Postgres (PGlite when `DATABASE_URL` is unset), with a separate worker and scheduler.
 
+**Read [docs/NORTH_STAR.md](docs/NORTH_STAR.md) first.** It holds the owner's goal, the decisions that are already made
+(no live keys for agents, Postgres and Drive storage with S3 retired, ads and organic content, JEV grading, choice of
+provider and automation mode) and the ordered work queue. Pick work from its section 8.
+
 ## Commands
 
 - Install: `npm ci`
