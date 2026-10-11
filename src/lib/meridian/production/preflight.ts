@@ -1,11 +1,15 @@
 /**
  * Preflight Quality Control Gate
  *
- * Checks a creative spec's structure before production spend: the hook, the script or storyboard, and the duration.
+ * Checks a creative spec's structure: the hook, the script or storyboard, and the duration.
+ *
+ * Status: no production submit path calls this function yet. Only tests do. Connecting it changes which submissions are
+ * refused before spend, so that choice needs a decision first.
  *
  * Claims are not judged here. The spec carries no brand claims, so a claim check run on it would be a check that never looked at
- * the copy. Claims are judged by the copy check (production/assess.ts) and by the shared gate (decisions/gate.ts). This result
- * reports `claimsJudged: false`, so nothing reads it as a claim check that passed.
+ * the copy. Claims are judged by the copy check (production/assess.ts), which the job and studio paths call. The shared engine
+ * gate (decisions/gate.ts) is not called from the production path yet. This result reports `claimsJudged: false`, so nothing
+ * reads it as a claim check that passed.
  */
 
 import type { CreativeSpec } from "./types.ts";
