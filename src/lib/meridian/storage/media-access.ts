@@ -71,6 +71,17 @@ export function isPreviewableMime(mimeType: string): boolean {
 }
 
 /**
+ * AVIF is an ISO base media file whose major brand is `avif` or `avis`. The shared sniffer reads any `ftyp` box as MP4,
+ * so AVIF is checked first. Without this, AVIF images would never verify.
+ */
+function sniffAvif(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 12) return false;
+  const boxType = String.fromCharCode(...bytes.subarray(4, 8));
+  const majorBrand = String.fromCharCode(...bytes.subarray(8, 12));
+  return boxType === "ftyp" && (majorBrand === "avif" || majorBrand === "avis");
+}
+
+/**
  * The MIME type to serve, or null. The stored type must be previewable, and the bytes must sniff as that same type from
  * their magic numbers. HTML, JSON error payloads and unknown formats sniff as nothing, so they are never served as media.
  */
@@ -79,7 +90,8 @@ export function verifiedMediaMime(bytes: Uint8Array, storedMimeType: string): st
   const stored = declared === "image/jpg" ? "image/jpeg" : declared;
   if (!isPreviewableMime(stored)) return null;
   try {
-    return detectArtifactType(bytes).mimeType === stored ? stored : null;
+    const sniffed = sniffAvif(bytes) ? "image/avif" : detectArtifactType(bytes).mimeType;
+    return sniffed === stored ? stored : null;
   } catch {
     return null;
   }
