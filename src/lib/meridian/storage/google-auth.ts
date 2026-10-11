@@ -1,7 +1,12 @@
 /**
  * Google Drive Authentication Service
  *
- * Handles OAuth 2.0 refresh flow and Service Account JWT for Google Drive API.
+ * Handles OAuth 2.0 refresh flow and Service Account JWT for the Google Drive API. Drive is the artifact store only: it
+ * holds artifact and export bytes. Postgres holds every record about them. The access token is kept in memory for this
+ * process and is never written to the database.
+ *
+ * This is separate from the Google sign-in on the Integrations screen (oauth/flow.server.ts). That flow requests the
+ * Google Ads scope with GOOGLE_ADS_CLIENT_ID and stores its token in provider_secrets, so it does not authorize Drive.
  * Never fabricates tokens when credentials are unset.
  */
 
@@ -16,10 +21,18 @@ type CachedToken = {
   expiresAt: number;
 };
 
+/** The environment the auth status reads. process.env satisfies it; tests pass a plain object. */
+type AuthEnv = { [key: string]: string | undefined };
+
 let cachedAuthToken: CachedToken | null = null;
 
-export function getGoogleDriveAuthStatus(): GoogleAuthStatus {
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY?.trim()) {
+/** Drops the cached access token, so the next request mints one. Used after Drive answers 401. */
+export function invalidateGoogleDriveAccessToken(): void {
+  cachedAuthToken = null;
+}
+
+export function getGoogleDriveAuthStatus(env: AuthEnv = process.env): GoogleAuthStatus {
+  if (env.GOOGLE_SERVICE_ACCOUNT_KEY?.trim()) {
     return {
       configured: true,
       type: "service_account",
@@ -27,9 +40,9 @@ export function getGoogleDriveAuthStatus(): GoogleAuthStatus {
     };
   }
 
-  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
-  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN?.trim();
+  const clientId = env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = env.GOOGLE_CLIENT_SECRET?.trim();
+  const refreshToken = env.GOOGLE_REFRESH_TOKEN?.trim();
 
   if (clientId && clientSecret && refreshToken) {
     return {
