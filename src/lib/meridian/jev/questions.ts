@@ -199,8 +199,9 @@ export const visualQa: DecisionQuestion<VisionQaInput> = {
     if (!input.available) {
       const summary = "No vision evidence. Visual QA was not run, so this cannot be auto-approved.";
       return {
-        probability: 0.5,
-        confidence: 0.15,
+        // Missing evidence has no reading. The zero is a placeholder that decide() never uses for the decision.
+        probability: 0,
+        confidence: 0,
         reasons: [summary],
         evidence: evidence("vision_absent", "vision", summary),
         evidenceState: "missing",
@@ -239,7 +240,17 @@ export const visualQa: DecisionQuestion<VisionQaInput> = {
     const parts = [input.logoMatchProbability, input.paletteMatch, input.toneFit].filter(
       (part): part is number => typeof part === "number",
     );
-    const probability = parts.length === 0 ? 0.7 : parts.reduce((sum, part) => sum + part, 0) / parts.length;
+    if (parts.length === 0) {
+      const summary = "Vision evidence was present but held no numeric measure, so no probability was derived.";
+      return {
+        probability: 0,
+        confidence: 0,
+        reasons: [summary],
+        evidence: evidence("vision_unmeasured", "vision", summary),
+        evidenceState: "missing",
+      };
+    }
+    const probability = parts.reduce((sum, part) => sum + part, 0) / parts.length;
     return {
       probability,
       confidence: 0.82,
@@ -292,7 +303,7 @@ export const competitiveStrength: DecisionQuestion<CompetitiveStrengthInput> = {
   evaluate(input): Evaluation {
     if (input.competitorCount <= 0) {
       const summary = "No competitor observations. Competitive strength is not estimated.";
-      return { probability: 0.3, confidence: 0.2, reasons: [summary], evidence: evidence("competitive_strength", "market", summary) };
+      return { probability: 0, confidence: 0, reasons: [summary], evidence: evidence("competitive_strength", "market", summary), evidenceState: "missing" };
     }
     const usage = input.matchingCompetitors / input.competitorCount;
     const ownUsage = input.ownCount <= 0 ? 0 : input.matchingOwn / input.ownCount;
@@ -317,7 +328,7 @@ export const brandFitQuestion: DecisionQuestion<BrandFitQuestionInput> = {
   evaluate(input): Evaluation {
     if (input.brainFilled < 0.15 || input.keywordTotal <= 0) {
       const summary = "The brand brain is too thin to confirm fit.";
-      return { probability: 0.18, confidence: 0.28, reasons: [summary], evidence: evidence("brand_fit", "brand_brain", summary) };
+      return { probability: 0, confidence: 0, reasons: [summary], evidence: evidence("brand_fit", "brand_brain", summary), evidenceState: "missing" };
     }
     const overlap = input.keywordHits / input.keywordTotal;
     const probability = unit(overlap * 0.85 + (input.formatPreferred ? 0.15 : 0));
@@ -335,7 +346,7 @@ export const historicalSupport: DecisionQuestion<HistoricalSupportInput> = {
   evaluate(input): Evaluation {
     if (input.lift === null || input.sampleSize < 3) {
       const summary = "No learned pattern meets the sample policy for this angle or hook.";
-      return { probability: 0.4, confidence: 0.22, reasons: [summary], evidence: evidence("historical_support", "performance", summary) };
+      return { probability: 0, confidence: 0, reasons: [summary], evidence: evidence("historical_support", "performance", summary), evidenceState: "missing" };
     }
     const confidence = unit(0.58 + Math.min(input.sampleSize, 8) * 0.04);
     if (input.lift >= 0) {
@@ -388,13 +399,21 @@ export const positioningFit: DecisionQuestion<PositioningFitInput> = {
       reasons.push(`Avoided words present: ${input.avoidedWordHits.join(", ")}`);
     }
     if (!input.brainHasPositioning) {
-      reasons.push("Positioning is blank, so fit cannot be confirmed.");
-    } else if (reasons.length === 0) {
+      const summary = "Positioning is blank, so fit cannot be confirmed.";
+      return {
+        probability: 0,
+        confidence: 0,
+        reasons: [summary],
+        evidence: evidence("positioning", "brand_brain", summary),
+        evidenceState: "missing",
+      };
+    }
+    if (reasons.length === 0) {
       reasons.push(`Token overlap with positioning is ${probability.toFixed(2)}.`);
     }
     return {
       probability,
-      confidence: input.brainHasPositioning ? 0.8 : 0.3,
+      confidence: 0.8,
       reasons,
       evidence: evidence("positioning", "brand_brain", reasons[0] ?? "Positioning fit."),
     };
@@ -451,16 +470,17 @@ export const opportunityGate: DecisionQuestion<OpportunityGateInput> = {
     const repro = reproducibility.evaluate(input.reproducibility);
     const safety = riskSafety.evaluate(input.risk);
     const parts = [
-      { weight: GATE_WEIGHTS.brand, evaluation: brand },
-      { weight: GATE_WEIGHTS.historical, evaluation: historical },
-      { weight: GATE_WEIGHTS.competitive, evaluation: competitive },
-      { weight: GATE_WEIGHTS.reproducibility, evaluation: repro },
-      { weight: GATE_WEIGHTS.safety, evaluation: safety },
+      { name: "brand_fit", weight: GATE_WEIGHTS.brand, evaluation: brand },
+      { name: "historical_support", weight: GATE_WEIGHTS.historical, evaluation: historical },
+      { name: "competitive_strength", weight: GATE_WEIGHTS.competitive, evaluation: competitive },
+      { name: "reproducibility", weight: GATE_WEIGHTS.reproducibility, evaluation: repro },
+      { name: "risk_safety", weight: GATE_WEIGHTS.safety, evaluation: safety },
     ];
     let probability = parts.reduce((sum, part) => sum + part.weight * part.evaluation.probability, 0);
-    const confidence = parts.reduce((sum, part) => sum + part.weight * part.evaluation.confidence, 0);
+    let confidence = parts.reduce((sum, part) => sum + part.weight * part.evaluation.confidence, 0);
     const reasons = parts.map((part) => part.evaluation.reasons[0] ?? "").filter(Boolean);
     let evidenceState: Evaluation["evidenceState"];
+    const missingParts = parts.filter((part) => part.evaluation.evidenceState === "missing").map((part) => part.name);
     if (input.reproducibility.copiesProtectedPhrasing || repro.probability < 0.15) {
       probability = Math.min(probability, 0.12);
       reasons.unshift("Protected phrasing blocks this candidate.");
@@ -469,6 +489,12 @@ export const opportunityGate: DecisionQuestion<OpportunityGateInput> = {
       probability = Math.min(probability, 0.2);
       reasons.unshift("Risk evidence caps this candidate below the reject line.");
       evidenceState = "violation";
+    } else if (missingParts.length > 0) {
+      // A component with no evidence is not a zero. The composite is unresolved, so it goes to review, never to a rejection.
+      probability = 0;
+      confidence = 0;
+      reasons.unshift(`Missing evidence for ${missingParts.join(", ")}. The composite is not scored.`);
+      evidenceState = "missing";
     }
     const refs = parts.flatMap((part) => part.evaluation.evidence);
     return { probability, confidence, reasons, evidence: refs, evidenceState };

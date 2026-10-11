@@ -200,8 +200,21 @@ export function evaluatePolicy(
     };
   }
 
-  // Evaluate aggregate probability
-  const avgProbability = probCount > 0 ? totalProb / probCount : supportingCount > 0 ? 0.9 : 0.5;
+  // A boolean answer alone is not a probability. Without one, the answers cannot be scored against a threshold, so nothing
+  // is approved on them. No probability is invented in its place.
+  if (probCount === 0) {
+    return {
+      decision: "HUMAN_REVIEW",
+      reason: "No probability was returned, so the answers cannot be scored against the approval threshold.",
+      policyVersion,
+      thresholds,
+      supportingCount,
+      violationCount,
+      uncertainCount,
+      evidenceRefs: collectedEvidence,
+    };
+  }
+  const avgProbability = totalProb / probCount;
 
   if (avgProbability >= thresholds.autoApprove) {
     return {
