@@ -51,7 +51,7 @@ export interface ResearchPlan {
 }
 
 /** Adapters planned for niche, profile and URL-list scopes. Each reports its own gate; none is assumed connected. */
-const MULTI_SOURCE_ADAPTERS = [
+export const MULTI_SOURCE_ADAPTERS = [
   "meta_ad_library",
   "tiktok",
   "youtube",
@@ -80,6 +80,57 @@ function planFromHealth(health: SourceHealth | { error: string }, adapterId: str
     return { status: "not_supported", reason: health.message || `${adapterId} is not supported in this release.`, healthStatus: health.status };
   }
   return { status: "failed", reason: health.message || `${adapterId} status: ${health.status}`, healthStatus: health.status };
+}
+
+/** The names shown for the keyed sources on the Market screen. */
+export const DISCOVERY_SOURCE_LABELS: Record<string, string> = {
+  youtube: "YouTube",
+  search: "Google search (SerpAPI)",
+  meta_ad_library: "Meta Ad Library",
+  tiktok: "TikTok",
+  instagram: "Instagram",
+  twitter: "X (Twitter)",
+  facebook: "Facebook",
+  pinterest: "Pinterest",
+  linkedin: "LinkedIn",
+  reddit: "Reddit",
+  licensed: "Licensed data",
+};
+
+export interface DiscoverySourceStatus {
+  adapterId: string;
+  label: string;
+  /** The health the adapter reports for this workspace. `failed` means the health check itself threw. */
+  status: SourceHealth["status"] | "failed";
+  /** The resolver's reason, or the adapter's own explanation. Empty when the source is connected. */
+  reason: string;
+  /** True when a key is saved for the workspace and the adapter runs discovery with it. */
+  connected: boolean;
+}
+
+/**
+ * Each keyed source's health for one workspace, for the Market screen. A source is connected only when its health is
+ * CONFIGURED or HEALTHY, which is key presence. Nothing here makes a provider request.
+ */
+export async function discoverySourceStatuses(registry: SourceRegistry, organizationId: string): Promise<DiscoverySourceStatus[]> {
+  const statuses: DiscoverySourceStatus[] = [];
+  for (const adapterId of MULTI_SOURCE_ADAPTERS) {
+    const adapter = registry.get(adapterId);
+    if (!adapter) continue;
+    const health = await adapter.health(organizationId).catch((error: unknown) => ({
+      error: error instanceof Error ? error.message : String(error),
+    }));
+    const planned = planFromHealth(health, adapter.id);
+    const connected = !("error" in health) && (health.status === "CONFIGURED" || health.status === "HEALTHY");
+    statuses.push({
+      adapterId: adapter.id,
+      label: DISCOVERY_SOURCE_LABELS[adapter.id] ?? adapter.id,
+      status: "error" in health ? "failed" : health.status,
+      reason: connected ? "" : (planned.reason ?? ""),
+      connected,
+    });
+  }
+  return statuses;
 }
 
 export class ResearchPlanner {
