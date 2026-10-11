@@ -18,7 +18,7 @@ function mp4Of(size: number): Uint8Array<ArrayBuffer> {
 }
 
 /** A storage fake. It records every statement and every Drive write, and reads back what was written. */
-function storageFixture() {
+function storageFixture(modality = "video") {
   const statements: Array<{ query: string; values: unknown[] }> = [];
   const drivePuts: Array<{ path: string; mimeType: string; bytes: Uint8Array }> = [];
   const driveFiles = new Map<string, Uint8Array>();
@@ -26,7 +26,7 @@ function storageFixture() {
   const sql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
     statements.push({ query, values });
-    if (query.includes("select id from production_jobs")) return [{ id: String(values[0]) }];
+    if (query.includes("select id, modality from production_jobs")) return [{ id: String(values[0]), modality }];
     if (query.includes("insert into storage_objects")) {
       storedRow = { id: values[0], provider_file_id: values[3], mime_type: values[5], size_bytes: values[6], sha256: values[7] };
       return [];
@@ -110,7 +110,7 @@ test("finalizeProductionArtifact: persists valid media bytes to Drive and commit
   const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
     const query = strings.join("?");
     queries.push(query);
-    if (query.includes("select id from production_jobs")) return [{ id: "job-sync-101" }];
+    if (query.includes("select id, modality from production_jobs")) return [{ id: "job-sync-101", modality: "video" }];
     if (query.includes("insert into storage_objects")) {
       const values = _values as unknown[];
       stored = { id: String(values[0]), provider_file_id: String(values[3]), mime_type: String(values[5]), size_bytes: Number(values[6]), sha256: String(values[7]) };
@@ -151,7 +151,7 @@ test("finalizeProductionArtifact: persists valid media bytes to Drive and commit
 test("finalizeProductionArtifact: refuses a job outside the supplied tenant before storage", async () => {
   let drivePuts = 0;
   const sql = (async (strings: TemplateStringsArray) => {
-    if (strings.join("?").includes("select id from production_jobs")) return [];
+    if (strings.join("?").includes("select id, modality from production_jobs")) return [];
     return [];
   }) as unknown as Sql;
   const drive = {
@@ -186,7 +186,7 @@ test("finalizeProductionArtifact: Drive storage failure fails closed with STORAG
   const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
     const query = strings.join("?");
     queries.push(query);
-    if (query.includes("select id from production_jobs")) return [{ id: "job-fail-storage-1" }];
+    if (query.includes("select id, modality from production_jobs")) return [{ id: "job-fail-storage-1", modality: "video" }];
     return [];
   }) as unknown as Sql;
 
@@ -224,7 +224,7 @@ test("finalizeProductionArtifact: missing bytes returns WAITING_FOR_ARTIFACT", a
   const mockSql = (async (strings: TemplateStringsArray, ..._values: unknown[]) => {
     const query = strings.join("?");
     queries.push(query);
-    if (query.includes("select id from production_jobs")) return [{ id: "job-waiting-1" }];
+    if (query.includes("select id, modality from production_jobs")) return [{ id: "job-waiting-1", modality: "video" }];
     return [];
   }) as unknown as Sql;
 
@@ -260,7 +260,7 @@ test("finalizeProductionArtifact: verified retry reuses the stored artifact", as
   };
   const sql = (async (strings: TemplateStringsArray) => {
     const query = strings.join("?");
-    if (query.includes("select id from production_jobs")) return [{ id: "job-retry" }];
+    if (query.includes("select id, modality from production_jobs")) return [{ id: "job-retry", modality: "video" }];
     if (query.includes("from storage_objects")) {
       return [{ id: "artifact-existing", provider_file_id: "drive-existing", sha256, size_bytes: bytes.byteLength, mime_type: "video/mp4" }];
     }
@@ -351,5 +351,80 @@ test("finalizeProductionArtifact: an HTTP artifact over the cap is refused with 
 test("estimateBase64DecodedBytes is exact for canonical base64 at every padding length", () => {
   for (let size = 0; size <= 64; size += 1) {
     assert.equal(estimateBase64DecodedBytes(Buffer.from(new Uint8Array(size).fill(7)).toString("base64")), size, `size ${size}`);
+  }
+});
+
+/** Bytes that begin with the signature `head` and are zero-padded to `size`. The detector reads only the signature. */
+function withHead(head: string | number[], size = 64): Uint8Array<ArrayBuffer> {
+  const bytes = typeof head === "string" ? [...head].map((c) => c.charCodeAt(0)) : head;
+  const out = new Uint8Array(size);
+  out.set(bytes);
+  return out;
+}
+
+const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const JPEG = [0xff, 0xd8, 0xff, 0xe0];
+const WEBP = [0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50];
+const GIF89A = "GIF89a";
+const WEBM = [0x1a, 0x45, 0xdf, 0xa3];
+const PDF = "%PDF-1.7";
+
+test("finalizeProductionArtifact: each format a job's modality produces is stored under its canonical extension", async () => {
+  const cases = [
+    { modality: "video", bytes: mp4Of(64), ext: "mp4", mimeType: "video/mp4", skipPostflight: false },
+    // Postflight validates MP4 containers only, so a WebM video is passed over it here. The extension is what this checks.
+    { modality: "video", bytes: withHead(WEBM), ext: "webm", mimeType: "video/webm", skipPostflight: true },
+    // An animated GIF is video for production matching, so it completes a video job and is stored as a GIF.
+    { modality: "video", bytes: withHead(GIF89A), ext: "gif", mimeType: "image/gif", skipPostflight: false },
+    { modality: "image", bytes: withHead(PNG), ext: "png", mimeType: "image/png", skipPostflight: false },
+    { modality: "image", bytes: withHead(JPEG), ext: "jpg", mimeType: "image/jpeg", skipPostflight: false },
+    { modality: "image", bytes: withHead(WEBP), ext: "webp", mimeType: "image/webp", skipPostflight: false },
+  ];
+  for (const c of cases) {
+    const fixture = storageFixture(c.modality);
+    const result = await finalizeProductionArtifact(fixture.sql, {
+      jobId: "job-format-1",
+      organizationId: "org-1",
+      brandId: "brand-1",
+      provider: "google_omni",
+      rawArtifact: { bytes: c.bytes },
+      options: { driveClient: fixture.drive, skipPostflight: c.skipPostflight },
+    });
+    assert.ok(result.success, `${c.ext}: ${JSON.stringify(result)}`);
+    assert.equal(result.status, "COMPLETED", c.ext);
+    assert.equal(result.mimeType, c.mimeType, c.ext);
+    assert.equal(fixture.drivePuts[0]?.path, `org-1/brand-1/production/job-format-1/artifact.${c.ext}`, c.ext);
+    assert.ok(fixture.statements.some((s) => s.query.includes("status = 'COMPLETED'")), `${c.ext} marks the job COMPLETED`);
+  }
+});
+
+test("finalizeProductionArtifact: an artifact of the wrong kind for the job's modality fails the job and never completes", async () => {
+  const cases = [
+    { modality: "image", bytes: withHead(PDF), label: "a PDF in an image job" },
+    { modality: "image", bytes: withHead(GIF89A), label: "a GIF in an image job" },
+    { modality: "image", bytes: mp4Of(64), label: "a video in an image job" },
+    { modality: "video", bytes: withHead(PNG), label: "a PNG in a video job" },
+    { modality: "video", bytes: withHead(JPEG), label: "a JPEG in a video job" },
+    { modality: "video", bytes: withHead(PDF), label: "a PDF in a video job" },
+    { modality: "audio", bytes: mp4Of(64), label: "any artifact in an audio job, which has no detector yet" },
+  ];
+  for (const c of cases) {
+    const fixture = storageFixture(c.modality);
+    const result = await finalizeProductionArtifact(fixture.sql, {
+      jobId: "job-mismatch-1",
+      organizationId: "org-1",
+      brandId: "brand-1",
+      provider: "google_omni",
+      rawArtifact: { bytes: c.bytes },
+      options: { driveClient: fixture.drive },
+    });
+    assert.equal(result.success, false, c.label);
+    assert.equal(result.status, "FAILED", c.label);
+    assert.equal(result.errorCode, "ARTIFACT_MODALITY_MISMATCH", c.label);
+    assert.equal(fixture.drivePuts.length, 0, `${c.label}: nothing is stored`);
+    assert.ok(!fixture.statements.some((s) => s.query.includes("status = 'COMPLETED'")), `${c.label}: never COMPLETED`);
+    const failedRow = fixture.statements.find((s) => s.query.includes("error_code = 'ARTIFACT_MODALITY_MISMATCH'"));
+    assert.ok(failedRow, `${c.label}: the job row is failed with the code`);
+    assert.match(failedRow.query, /organization_id = .*brand_id = /s, `${c.label}: the failure is tenant scoped`);
   }
 });

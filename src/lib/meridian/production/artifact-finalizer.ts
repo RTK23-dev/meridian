@@ -21,7 +21,7 @@ import { resolveAndPinHost } from "../sources/fetch-page.server.ts";
 import { ipIsBlocked, publicUrlIssue } from "../sources/public-url.ts";
 import { evaluateProductionPostflight } from "./postflight.ts";
 import type { ProductionJob } from "./types.ts";
-import { detectArtifactType } from "./mime-detector.ts";
+import { detectArtifactType, type ArtifactCategory } from "./mime-detector.ts";
 
 export class ArtifactIntegrityError extends Error {
   constructor(message: string) {
@@ -327,6 +327,20 @@ function decodeBase64WithinCap(encoded: string, maxBytes: number): Uint8Array | 
   return decoded.byteLength > 0 ? new Uint8Array(decoded) : null;
 }
 
+/**
+ * The detected categories each production modality stores. A modality with no entry stores nothing, so an unknown modality
+ * fails closed. A carousel has no artifact of its own, and audio and mixed media have no detector yet.
+ */
+const CATEGORIES_BY_MODALITY: ReadonlyMap<string, readonly ArtifactCategory[]> = new Map([
+  ["video", ["video"]],
+  ["image", ["image"]],
+]);
+
+/** True when a detected artifact is the kind the job's modality produces. A PDF fits no modality. */
+function artifactFitsModality(modality: string | null, category: ArtifactCategory): boolean {
+  return modality !== null && (CATEGORIES_BY_MODALITY.get(modality) ?? []).includes(category);
+}
+
 /** The base64 payload of a `data:<type>;base64,<payload>` URI, or null. The payload is sliced, not copied. */
 function base64PayloadOfDataUri(uri: string): string | null {
   const comma = uri.indexOf(",");
@@ -340,8 +354,9 @@ export async function finalizeProductionArtifact(
 ): Promise<ArtifactFinalizeResult> {
   const drive = input.options?.driveClient || defaultArtifactDrive();
 
-  const ownedJob = await sql<{ id: string }>`
-    select id from production_jobs
+  // The modality comes from the owned job row, not from the caller, so the artifact is judged against what was ordered.
+  const ownedJob = await sql<{ id: string; modality: string | null }>`
+    select id, modality from production_jobs
     where id = ${input.jobId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
     limit 1
   `;
@@ -353,6 +368,7 @@ export async function finalizeProductionArtifact(
       error: "Production job was not found in the requested tenant scope.",
     };
   }
+  const modality = ownedJob[0].modality ?? null;
 
   // 1. Normalize and extract complete bytes. Every input form is held to the same cap, and an encoded form is measured
   // before it is decoded.
@@ -435,6 +451,22 @@ export async function finalizeProductionArtifact(
 
   const mimeType = detected.mimeType;
 
+  // 2c. The artifact must be the kind the job produces. A PDF or a still image never completes a video job, and a video or a
+  // PDF never completes an image job. The job fails, and it is not marked COMPLETED.
+  if (!artifactFitsModality(modality, detected.category)) {
+    const error = `The artifact is ${mimeType}, which a ${modality ?? "unknown"} job does not produce.`;
+    await sql`
+      update production_jobs
+      set status = 'FAILED',
+          error_code = 'ARTIFACT_MODALITY_MISMATCH',
+          error_message = ${error},
+          last_polled_at = now(),
+          updated_at = now()
+      where id = ${input.jobId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
+    `;
+    return { success: false, status: "FAILED", errorCode: "ARTIFACT_MODALITY_MISMATCH", error };
+  }
+
   // 3. Postflight QC for video media
   if (!input.options?.skipPostflight && mimeType.startsWith("video/")) {
     const postflightJob: ProductionJob = input.options?.job || {
@@ -488,9 +520,7 @@ export async function finalizeProductionArtifact(
   // 4. Compute SHA-256 and metadata
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const byteSize = bytes.byteLength;
-  const isVideo = mimeType.startsWith("video/");
-  const ext = isVideo ? "mp4" : mimeType === "image/jpeg" ? "jpg" : mimeType === "image/webp" ? "webp" : "png";
-  const storageKey = `${input.organizationId}/${input.brandId}/production/${input.jobId}/artifact.${ext}`;
+  const storageKey = `${input.organizationId}/${input.brandId}/production/${input.jobId}/artifact.${detected.extension}`;
 
   // Recover a prior verified write rather than creating another Drive object on retry.
   const existingObjects = await sql<{

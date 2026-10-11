@@ -223,7 +223,7 @@ test("finalizeProductionArtifact: a refused artifact URL fails the job with the 
     health: async () => ({ status: "CONFIGURED" as const, configured: true }),
   };
   const sql = (async (strings: TemplateStringsArray) => {
-    if (strings.join("?").includes("select id from production_jobs")) return [{ id: "job-refused-1" }];
+    if (strings.join("?").includes("select id, modality from production_jobs")) return [{ id: "job-refused-1", modality: "video" }];
     return [];
   }) as unknown as Sql;
 
