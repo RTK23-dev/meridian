@@ -128,11 +128,11 @@ function SetupRowItem({ row, organizationId, canAdmin }: { row: SetupRow; organi
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1">
           <p className="font-semibold text-fg">{row.label}</p>
-          <p className="text-sm text-fg-muted">{row.reason}</p>
+          <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.reason}</p>
           {row.fingerprint ? (
             <p className="font-mono text-xs text-fg-muted">Stored key: {row.fingerprint}</p>
           ) : null}
-          {row.note ? <p className="text-sm text-fg-muted">{row.note}</p> : null}
+          {row.note ? <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.note}</p> : null}
         </div>
         <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${presentation.className}`} aria-label={`${row.label}: ${presentation.label}`}>
           {presentation.label}

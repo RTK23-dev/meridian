@@ -146,12 +146,14 @@ function decisionEngineRow(engines: SetupEngines): SetupRow {
         ? "The deployment sets it with DECISION_ENGINE."
         : "No engine is chosen, so the default is used.";
   const invalid = engines.active.invalidDeploymentValue;
+  // A ready engine receives the decisions. Any other state says that it cannot answer yet, so the row never implies it does.
+  const lead = status === "usable" ? `${label} receives this workspace's decisions.` : `${label} is the active engine, and it cannot answer decisions yet.`;
   return {
     id: "decision_engine",
     label: "Decision engine",
     group: "decisions",
     status,
-    reason: `${label} receives this workspace's decisions. ${chosen} ${health.message ?? ""}`.trim(),
+    reason: `${lead} ${chosen} ${health.message ?? ""}`.trim(),
     fingerprint: null,
     note: invalid ? `DECISION_ENGINE is set to "${invalid}", which is not an engine. The default is in use.` : null,
     save: { kind: "engine" },

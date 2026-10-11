@@ -176,6 +176,8 @@ test("the decision engine row reports the active engine's health, the source of 
   );
   assert.equal(openai.status, "not_configured");
   assert.match(openai.reason, /chosen for this workspace/);
+  assert.match(openai.reason, /cannot answer decisions yet/);
+  assert.doesNotMatch(openai.reason, /receives this workspace's decisions/, "a not-ready engine is never described as receiving decisions");
 
   const degraded = rowOf(
     setupRows({
