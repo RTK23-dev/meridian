@@ -1,59 +1,61 @@
-# Providers
+# Providers and keys
 
-A provider client builds a real HTTP request and reads ids only from the response. If the response has no id, Meridian stores no external id.
+Provider keys belong to a workspace. A key is saved in Settings, encrypted, and used only for that workspace. A deployment may
+also supply a key for everyone, but only when an operator opts in with the variable named below. See ARCHITECTURE_CONTRACTS.md,
+section 1, for the rules.
 
-Connection phases, in order of what the screen may show:
+## Per-workspace provider keys
 
-`NOT_CONFIGURED`, `CONNECTING`, `CONNECTED`, `SYNCING`, `HEALTHY`, `DEGRADED`, `FAILED`, `DISCONNECTED`.
+| Provider | Used for | Saved in Settings | Deployment key (opt-in) | Without a key |
+| --- | --- | --- | --- | --- |
+| TypeSafe JEV | Decisions (the JEV engine) | JEV | `TYPESAFE_JEV_API_KEY` or `TYPESAFE_API_KEY`, with `JEV_SHARED_DEFAULT=deployment` | Not configured. No decision is made |
+| OpenAI | Decisions (the OpenAI engine) | OpenAI | `OPENAI_API_KEY`, with `OPENAI_SHARED_DEFAULT=deployment` | Not configured. No decision is made |
+| Gemini perception | Reading images and video | Perception | Google key aliases in `config/resolver.ts`, with `PERCEPTION_SHARED_DEFAULT=gemini` | Not configured |
+| Gemini production | Omni video and image generation | Production | `MERIDIAN_GEMINI_API_KEY` or the Google aliases, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured. Nothing is generated |
+| Higgsfield | Video generation | Production | `HIGGSFIELD_API_KEY`, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured |
+| Hypit | Video runtime | Hypit | `HYPIT_API_TOKEN` or `HYPIT_API_KEY`, with `HYPIT_SHARED_DEFAULT=deployment` | Not connected. Set `HYPIT_BASE_URL` for the runtime itself |
 
-Credentials without a successful request stay `NOT_CONFIGURED`. `HEALTHY` means the last probe succeeded. `DISCONNECTED` is a local stop; stored external ids are kept and no further request is sent until reconnect.
+Sources keep one key per connector. Each has its own opt-in, named `<CATEGORY>_SHARED_DEFAULT`:
 
-## Live clients
-
-### TypeSafe JEV (Decisions API)
-JEV uses OpenRouter's native Decisions API at `POST https://openrouter.ai/api/alpha/decisions` with model `typesafe/jev-1.13`. It provides typed probabilistic judgments (`choice`, `noul`, `score`). Generic chat completion endpoints (`/chat/completions`) are never used as a fallback for JEV judgments.
-
-**Decision engines.** One engine is active per workspace: TypeSafe JEV (above) or the OpenAI Decisions API (`POST /v1/decisions`, public beta, model `gpt-6-luna` by default). Only the active engine receives decisions, and nothing falls back to the other engine. See [DECISION_ENGINES.md](DECISION_ENGINES.md) for configuration, image transport, and the status of each part.
-
-### Binary Storage (Google Drive Primary)
-Google Drive is the primary binary artifact store for Meridian. Assets are organized by tenant, brand, and lifecycle hierarchy:
-- Key lookup resolves provider file IDs via Postgres `storage_objects`.
-- Direct binary downloads use `alt=media` on Google Drive file IDs.
-- Uploads `<= 5MB` use multipart uploads; files `> 5MB` use resumable upload sessions.
-
-### Multimodal Perception (Gemini)
-Gemini Multimodal Perception (`gemini-2.5-flash`) extracts factual visual observations (shot types, face presence, product presence, OCR, setting) from keyframe images and video media. Perception produces factual observations only; it does not make policy or ranking decisions.
-
-### Production Video Engines (`ProductionRouter`)
-Meridian executes creative specs through `ProductionRouter`:
-- **Runtime Isolation**: `ProductionRouter` enforces strict runtime boundaries (`ProductionRuntime` vs `TestingRuntime`). In `ProductionRuntime`, `test:video` cannot be resolved and throws immediately. In `TestingRuntime`, `test:video` is injected via dependency injection for unit tests.
-- **Model Capability & Lifecycle Registry**: All models and API families are tracked in `ModelCapabilityRegistry`. Deprecated preview endpoints (such as `veo-3.1-generate-preview` shutting down 2026-10-22) are flagged with warnings and pointed to active replacements (`gemini-omni-1.1-flash`). Expired models return `UNAVAILABLE`.
-- **Durable PostgreSQL Persistence & Poller Worker**: Job metadata (`meridian_job_id`, `provider`, `provider_job_id`, `request_id`, `operation_name`, `status_url`, `cancel_url`, `spec_hash`, `attempt_count`, `submitted_at`, `last_polled_at`, `next_poll_at`, `error_code`, `artifact_id`) is stored in `production_jobs` (migration `0028`). The durable poller worker (`pollProductionJobs`) claims active jobs via `SELECT ... FOR UPDATE SKIP LOCKED`, polls provider status, downloads completed video bytes, executes postflight QC, and registers storage objects in Google Drive.
-- **Provider Implementations**:
-  1. **ManualCloudProvider (Zero Spend)**: Generates structured creative manifests and Google Drive drop folders (`production/inputs/{jobId}/manifest.json`). Job state is reconstructed directly from database metadata and drop folder scanning (zero in-memory Map authority). Fails closed with `PREFLIGHT_FAILED` if Drive is not configured.
-  2. **Google Gemini Omni Provider**: Primary Google video generation engine using `gemini-omni-1.1-flash` via the official Gemini Interactions API (`POST https://generativelanguage.googleapis.com/v1beta/interactions`). Supports text-to-video, image-to-video, editing, and stateful multi-step interactions.
-  3. **Google Veo Provider**: Specialist adapter for supported Veo models (`veo-2.0-generate-001` GA). Evaluates exact model-specific `VideoCapability` descriptions and polls `predictLongRunning` operations.
-  4. **Higgsfield Provider**: Generates video via model registry (`HiggsfieldModelRegistry`) with model-specific paths and schemas (`higgsfield-video-v1`, `dop-v1`, `genjutsu-v1`, `seedance-v1`). Uses official `Authorization: Key <api_key>` headers, maps 401/403 to `AUTH_FAILED` and 429 to `RATE_LIMITED`, and preserves verbatim upstream `request_id`, `status_url`, and `cancel_url`.
-  5. **Hypit Provider**: Assembles multi-segment UGC video timelines via `HypitProvider.submitJob()`. Studio executes strictly via the unified provider job lifecycle.
-
-| Provider | Probe / Health | Publish / Execution |
+| Source | Environment names (first one set wins) | Opt-in |
 | --- | --- | --- |
-| TypeSafe JEV | POST `/decisions` with test question | Semantic decisions (`choice`, `noul`, `score`) via dual router |
-| Google Drive | `GET /drive/v3/about` | Primary binary object store (`<= 5MB` multipart, `> 5MB` resumable) |
-| Gemini Perception | `POST /models/{model}:generateContent` | Factual multimodal feature extraction |
-| Google Gemini Omni | `POST /v1beta/interactions` | Primary generative video & editing via Interactions API |
-| Google Veo | `POST /models/{model}:predictLongRunning` | Capability-specific video generation (`veo-2.0-generate-001`) |
-| Higgsfield | `POST /v1/requests` | Model-specific camera & video generation (`Key` auth) |
-| ManualCloud | Google Drive health check | Manifest generation & drop folder sync (zero spend) |
-| Hypit | `HYPIT_BASE_URL` health | UGC video assembly timeline |
-| Meta | `GET /me`, ad accounts, granted permissions | Paused campaign, ad set, creative, and ad on Graph API v21.0 |
-| TikTok | `GET /user/info/` and advertiser list | Paused campaign, ad group, then ad |
-| Google Ads | `customers:listAccessibleCustomers` | Budget, paused search campaign, responsive search ad |
+| Meta Ad Library | `META_AD_LIBRARY_TOKEN` | `META_AD_LIBRARY_SHARED_DEFAULT` |
+| Meta Graph | `META_ACCESS_TOKEN`, `FACEBOOK_ACCESS_TOKEN` | `META_GRAPH_SHARED_DEFAULT` |
+| Instagram | `INSTAGRAM_ACCESS_TOKEN` | `INSTAGRAM_SHARED_DEFAULT` |
+| YouTube | `YOUTUBE_API_KEY` | `YOUTUBE_SHARED_DEFAULT` |
+| Search | `SERPAPI_API_KEY`, `GOOGLE_SEARCH_API_KEY` | `SEARCH_SHARED_DEFAULT` |
+| X (Twitter) | `TWITTER_BEARER_TOKEN`, `X_API_KEY` | `TWITTER_SHARED_DEFAULT` |
+| LinkedIn | `LINKEDIN_ACCESS_TOKEN` | `LINKEDIN_SHARED_DEFAULT` |
+| Pinterest | `PINTEREST_ACCESS_TOKEN` | `PINTEREST_SHARED_DEFAULT` |
+| TikTok | `TIKTOK_ACCESS_TOKEN` | `TIKTOK_SHARED_DEFAULT` |
+| Licensed data | `LICENSED_DATA_API_KEY`, `SENSOR_TOWER_API_KEY` | `LICENSED_SHARED_DEFAULT` |
 
-Publishing is idempotent on a stored external id: a retry returns that id and does not call the create endpoint again. Placeholder or unverified media artifacts are rejected before publication dispatch.
+A source with no usable key is listed as not configured, with the reason. Public web pages need no key.
+Reddit's API is not connected in this release; direct post URLs are still read from their public pages.
 
-## What is still external
+OpenRouter is used only for copy generation, and only from the deployment: `OPENROUTER_API_KEY`, with
+`OPENROUTER_SHARED_DEFAULT=deployment`. It is never a decision engine.
 
-- OAuth starts at `/api/oauth/callback`. The server checks state, exchanges the code, and seals the access token and any refresh token. `META_APP_ID`, `META_APP_SECRET`, `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, and `TOKEN_ENCRYPTION_KEY` have to exist or nothing is stored.
-- Webhooks at `POST /api/webhooks/receive` verify signatures, payload hashes, and tenant scopes.
-- Studio video uses a separate Hypit process or ManualCloud / Veo / Higgsfield. Unconfigured providers return `NOT_CONFIGURED`. No fake job IDs or simulated completions are produced.
+## Infrastructure (environment only)
+
+These are read by the code that owns them. They are not saved per workspace.
+
+- `TOKEN_ENCRYPTION_KEY`: encrypts saved keys and connection tokens. Losing it makes saved keys unreadable.
+- `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`: sign-in.
+- `DATABASE_URL`: PostgreSQL.
+- `S3_*`: optional object storage for artifacts.
+- `EMAIL_API_URL`, `EMAIL_API_KEY`: optional email delivery.
+- `WEBHOOK_SECRET`: the secret that inbound webhooks are checked against.
+- `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY`: optional external embeddings. Without them, the local semantic store is used.
+- `GOOGLE_SERVICE_ACCOUNT_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `MERIDIAN_DRIVE_FOLDER_ID`: Google Drive.
+
+## Deployment configuration
+
+Non-secret settings: `HYPIT_BASE_URL`, the model names (`MERIDIAN_OMNI_MODEL`, `MERIDIAN_IMAGE_MODEL`, `OPENAI_DECISIONS_MODEL`,
+`TYPESAFE_JEV_MODEL`), timeouts, and the Cyclone device gateway (`CYCLONE_GATEWAY_URL`, `CYCLONE_DEVICE_ID`, `CYCLONE_API_KEY`).
+Cyclone is one device owned by the deployment, so its key is read from the environment by design.
+
+## Engine choice
+
+Decisions use one engine per workspace (DECISIONS.md). `DECISION_ENGINE` sets the deployment default. A workspace's own choice,
+made in Settings, takes precedence.

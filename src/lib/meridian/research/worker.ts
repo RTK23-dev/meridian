@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sourceKeyFor } from "../sources/credentials.ts";
 import { analyzeResearchTranscript } from "./analyzer.ts";
 import { metaSnapshotVideoUrl, isMp4 } from "./media.ts";
 import { loadReusableResearchAnalysis, persistMetaAd, persistResearchVideo, persistTranscript, rebuildOrganizationResearchPatterns, rebuildResearchPatterns, saveResearchAnalysis, sha256, upsertResearchCreative } from "./store.ts";
@@ -66,7 +67,8 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
   `;
   if (!runs[0] || !job.brand_id) throw new Error("Research collection run is not owned by this organization and brand.");
   await sql`update research_collection_runs set status = 'collecting', error = '', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
-  const collected = await collectMetaAdLibrary({ token: process.env.META_AD_LIBRARY_TOKEN, searchTerms, country, limit: maxAds, transport: liveTransport() });
+  const metaKey = await sourceKeyFor("meta_ad_library", job.organization_id);
+  const collected = await collectMetaAdLibrary({ token: metaKey.secret ?? undefined, searchTerms, country, limit: maxAds, transport: liveTransport() });
   if (collected.status === "NOT_CONNECTED") {
     await sql`update research_collection_runs set status = 'NOT_CONNECTED', error = ${collected.error}, updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
     await sql`

@@ -7,6 +7,8 @@ import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useWorkspace } from "@/components/workspace";
 import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
+import { DriveConnectionPanel } from "@/components/settings/drive-connection";
+import { SetupPanel } from "./setup-panel";
 import { createOrganization, renameOrganization } from "@/lib/meridian/api";
 import { workspaceNameSchema, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
 import { useScopedMutation } from "@/lib/query/hooks";
@@ -96,6 +98,8 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         {createRaw ? <FormError message={plainServerError(createRaw, "workspace")} raw={createRaw} /> : null}
       </section>
 
+      <SetupPanel organizationId={organizationId} canAdmin={canAdmin} />
+
       <section aria-labelledby="provider-settings-title" className="space-y-3">
         <div>
           <h2 id="provider-settings-title" className="text-section font-semibold text-fg">Provider keys and settings</h2>
@@ -103,6 +107,8 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         </div>
         <ProviderSettingsPanel organizationId={organizationId} canAdmin={canAdmin} />
       </section>
+
+      <DriveConnectionPanel organizationId={organizationId} canAdmin={canAdmin} />
 
       <section aria-labelledby="connected-title" className="space-y-3 rounded-lg border border-border bg-surface p-5">
         <h2 id="connected-title" className="text-section font-semibold text-fg">What is and is not connected</h2>

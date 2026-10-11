@@ -2,7 +2,7 @@
  * Pure helpers for the Library screen. No React and no server imports, so every rule here can be tested directly.
  */
 
-/** One creative from listLibrary. */
+/** One creative from listLibrary. assetId is the stored asset's id, or null when no stored asset exists. */
 export type LibraryCreative = {
   id: string;
   title: string;
@@ -11,6 +11,9 @@ export type LibraryCreative = {
   hook: string;
   status: string;
   createdAt: string;
+  assetId: string | null;
+  assetKind: string;
+  assetMediaStatus: string;
 };
 
 /**
@@ -53,6 +56,32 @@ export function groupMediaByCreative(variants: readonly LibraryMediaVariant[]): 
     groups.set(variant.creativeId, group);
   }
   for (const group of groups.values()) group.sort((left, right) => left.index - right.index);
+  return groups;
+}
+
+/**
+ * The media each creative shows. Studio variants give the full set with their facts, and they win for a creative they
+ * cover. A creative the studio does not list falls back to the asset id the library listing returns, so its thumbnail still
+ * loads. The fallback carries no dimensions, so its box stays a layout hint.
+ */
+export function mediaByCreative(creatives: readonly LibraryCreative[], studioVariants: readonly LibraryMediaVariant[]): Map<string, LibraryMediaVariant[]> {
+  const groups = groupMediaByCreative(studioVariants);
+  for (const creative of creatives) {
+    if (groups.has(creative.id) || !creative.assetId) continue;
+    groups.set(creative.id, [{
+      creativeId: creative.id,
+      assetId: creative.assetId,
+      kind: creative.assetKind,
+      index: 0,
+      provider: "",
+      model: "",
+      mediaStatus: creative.assetMediaStatus,
+      qaDecision: "",
+      width: null,
+      height: null,
+      durationMs: null,
+    }]);
+  }
   return groups;
 }
 

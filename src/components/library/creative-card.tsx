@@ -14,7 +14,7 @@ function MediaPlaceholder({ load, variants }: { load: MediaLoad; variants: reado
     : load === "unavailable"
       ? "Media status is unavailable right now. Try again shortly."
       : variants.length === 0
-        ? "No stored media for this creative yet."
+        ? "No video or image is stored for this creative yet. Generate one in Studio step 3. A video is stored only after its engine returns the file."
         : `Media ${variants[0]?.mediaStatus || "not recorded"}. No stored file to preview yet.`;
   return (
     <div className="grid aspect-video place-items-center rounded-md border border-dashed border-border-strong bg-surface-2 p-4 text-center text-sm text-fg-muted">

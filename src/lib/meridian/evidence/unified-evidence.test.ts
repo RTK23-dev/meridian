@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { compressEvidenceForJev, createEvidenceBundle } from "./bundle.ts";
-import { findDuplicateEvidence, type DedupeCandidate } from "./dedupe.ts";
+
 
 test("compressEvidenceForJev creates compact summary and tags available evidence", () => {
   const bundle = createEvidenceBundle({
@@ -42,42 +42,3 @@ test("compressEvidenceForJev creates compact summary and tags available evidence
   assert.match(compressed.sceneSummary!, /Total scenes: 2/);
 });
 
-test("deduplication detects identical byte and perceptual hashes", () => {
-  const existingCorpus: DedupeCandidate[] = [
-    {
-      id: "ev-1",
-      sha256: "aabbcc112233",
-      canonicalUrl: "https://example.com/ad1",
-    },
-  ];
-
-  const exactDup = findDuplicateEvidence(
-    {
-      id: "ev-incoming-1",
-      sha256: "aabbcc112233",
-    },
-    existingCorpus,
-  );
-  assert.equal(exactDup.isDuplicate, true);
-  assert.equal(exactDup.matchLayer, "media_sha256");
-
-  const urlDup = findDuplicateEvidence(
-    {
-      id: "ev-incoming-2",
-      canonicalUrl: "https://example.com/ad1",
-    },
-    existingCorpus,
-  );
-  assert.equal(urlDup.isDuplicate, true);
-  assert.equal(urlDup.matchLayer, "canonical_url");
-
-  const unique = findDuplicateEvidence(
-    {
-      id: "ev-incoming-3",
-      sha256: "different_hash",
-      canonicalUrl: "https://example.com/ad2",
-    },
-    existingCorpus,
-  );
-  assert.equal(unique.isDuplicate, false);
-});

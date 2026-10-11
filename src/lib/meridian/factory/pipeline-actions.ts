@@ -9,9 +9,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
+import { loadFactoryPipelineConfig } from "./pipeline-config-store.ts";
 import {
   type FactoryPipelineConfig,
-  getDefaultPipelineConfig,
   validatePipelineConfig,
   PIPELINE_PRESETS,
 } from "./pipeline-config.ts";
@@ -53,39 +53,8 @@ export const getPipelineConfig = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
-    try {
-      const rows = await sql<{
-        preset_name: string;
-        stages: unknown;
-        prompts: unknown;
-        generation_params: unknown;
-        grading_thresholds: unknown;
-        updated_at: string;
-        updated_by: string;
-      }>`
-        select preset_name, stages, prompts, generation_params, grading_thresholds, updated_at, updated_by
-        from factory_pipeline_configs
-        where brand_id = ${data.brandId} and organization_id = ${organizationId}
-        limit 1
-      `;
-
-      if (rows.length > 0 && rows[0]) {
-        const row = rows[0];
-        return validatePipelineConfig({
-          presetName: row.preset_name as FactoryPipelineConfig["presetName"],
-          stages: row.stages as FactoryPipelineConfig["stages"],
-          prompts: row.prompts as FactoryPipelineConfig["prompts"],
-          generationParams: row.generation_params as FactoryPipelineConfig["generationParams"],
-          gradingThresholds: row.grading_thresholds as FactoryPipelineConfig["gradingThresholds"],
-          updatedAt: row.updated_at,
-          updatedBy: row.updated_by,
-        });
-      }
-    } catch {
-      // Return defaults if table is empty or migration pending
-    }
-
-    return getDefaultPipelineConfig();
+    // The saved row, or the documented defaults when no row exists. A database error is not caught here: it refuses.
+    return loadFactoryPipelineConfig(sql, organizationId, data.brandId);
   });
 
 export const savePipelineConfig = createServerFn({ method: "POST" })

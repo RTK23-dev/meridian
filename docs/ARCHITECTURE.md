@@ -1,79 +1,56 @@
 # Architecture
 
-TanStack Start application. Postgres (Neon when deployed, embedded Postgres in preview) is the system of record. Server functions are the API. The browser never sends a user id the server trusts.
+Meridian is one TanStack Start application (React 19, Tailwind v4) on PostgreSQL, with a separate worker process and a scheduler
+process. Every piece of data belongs to one workspace (organization), and most rows also belong to one brand.
 
-## Loop
+## Layers
 
-```
-organization → brand → brand brain / products
-        → observations and public-page documents
-        → Meta Ad Library collection job
-        → verified source MP4 → timestamped transcript → typed JEV Research analysis
-        → durable ad evidence and observed corpus patterns
-        → external pattern opportunity
-        → opportunity ranker
-        → JEV opportunity gate
-        → brief
-        → human script or text provider
-        → text guardian → JEV creative QA
-        → library, review, or rejection
-        → approved stored Hypit MP4 → verified tenant/JEV lineage → confirmed Meta video upload
-        → paused Meta campaign / ad set / video creative / ad
-        → manual performance or a provider sync that passed the normalizer
-        → learning job on the worker
-        → learned patterns
-        → next rank and next brief
-```
+- `src/routes/` holds the screens (file-based routes) and the server route handlers under `api/`. `routeTree.gen.ts` is generated
+  by the router and is never edited by hand.
+- `src/components/` holds the UI. The design system is in `components/ui/`.
+- `src/lib/meridian/` holds the domain logic and the server functions (`createServerFn`). The main modules:
+  - `credentials/` resolves every provider key for a workspace (see PROVIDERS.md).
+  - `decisions/` and `jev/` hold the decision engines, the policy gate and the evidence scopes (see DECISIONS.md).
+  - `studio/` builds briefs and variants, and records reviews and publishing.
+  - `production/` routes a creative to a production provider (Gemini Omni, Hypit, Higgsfield, manual cloud, image providers).
+  - `sources/`, `discovery/`, `research/` and `evidence/` collect public sources and store evidence with its provenance.
+  - `brand/` stores the brand brain, its versions and its onboarding progress.
+  - `settings/` holds the provider settings summary and the save and test actions.
+  - `storage/` writes artifacts and exports, and serves media.
+  - `measurement/`, `learning/` and `publishing/` record what happened after publishing and feed it back.
+- `src/lib/db.ts` picks the database. A `DATABASE_URL` selects PostgreSQL. Without one, development and tests use an embedded
+  PostgreSQL (PGlite). Any other environment refuses to start (OPERATIONS.md).
 
-The web process does not execute the worker loop. `scripts/worker-entry.ts` claims jobs. `scripts/scheduler-entry.ts` only enqueues. Both need `DATABASE_URL`. Meta video uploads persist a per-organization idempotency reservation and reconcile ambiguous outcomes before retrying; Meta's confirmed video id and artifact lineage are persisted before the paused campaign chain continues. Meta performance jobs revalidate tenant/brand ownership and the tenant credential's access to the selected ad account.
+## Data
 
-## Modules
+- PostgreSQL is the system of record. The schema is in `migrations/`, applied in filename order by `npm run db:migrate`
+  (and by `npm run build`). A migration is never edited after it has been applied.
+- Every query that reads or writes workspace data filters by `organization_id`, and brand data also by `brand_id`. The server
+  functions check the caller's role and tenancy before they read.
+- Money is recorded in micro-units in the budget ledger. Generation reserves budget before a provider call (ARCHITECTURE_CONTRACTS.md, section 5).
 
-| Module | Where | Role |
-| --- | --- | --- |
-| Tenancy | `src/lib/meridian/access.ts`, `api.ts` | Roles and membership |
-| Brand brain | `brain.ts`, `api.ts` | Structured brand record |
-| Knowledge | `knowledge/` | Attribute query, graph edges, retrieval scope |
-| Opportunity | `opportunity/` | Hypothesis catalog, ranker, refresh |
-| JEV | `jev/` | Threshold gate |
-| Guardian | `guardian/text.ts`, `vision/logo.ts` | Text evidence and PNG logo search |
-| Brief and workflow | `brief/`, `workflow/` | Context pack and templates |
-| Learning | `learning/` | CTR, CVR, ROAS, pairs, positive and negative lift |
-| Jobs | `jobs/sql-worker.ts`, `scripts/worker-entry.ts` | Lease, retry, dead letter. Not inside the page render |
-| Scheduler | `scripts/scheduler-entry.ts` | Inserts due schedules and heartbeats |
-| Semantic | `embeddings/semantic.ts`, `semantic/lexical.ts` | Local MiniLM, plus a labeled lexical hash |
-| Assets | `storage/`, `assets/` | Filesystem and S3-compatible clients. Database blobs are a migration source |
-| Experiments | `experiments/` | Allocation and sample floor. Not sent to an ad account by themselves |
-| Providers | `providers/meta.ts`, `tiktok.ts`, `google-ads.ts`, `connect.ts` | Live HTTP. Test provider is explicit |
-| Sources | `sources/` | Manual adapter, public-page fetch, SSRF checks |
-| JEV Research | `research/`, `providers/meta-research.ts` | Tenant-scoped Ad Library collection, verified media, transcript, evidence-grounded analysis, and corpus summaries |
-| Content Factory | `factory/` | Creative DNA v2, pgvector embeddings, trends clustering, multi-aspect rendering, autopilot levels |
-| Flow Connectors | `flow/` | Standardized n8n-style node connectors (`FlowNode`, `FlowPipeline`, `createFlow`) |
-| Grading Engine | `grading/engine.ts` | Swappable grading: `WinnerScoreGradingEngine`, `HeuristicGradingEngine` |
-| Planner Engine | `planner/engine.ts` | Swappable planning: `MatrixPlannerEngine` (permutational variant matrices) |
-| Video Engine | `video/engine.ts` | Swappable rendering: `HypitVideoEngine`, `TimelineVideoEngine` |
-| Publish Engine | `publishing/engine.ts` | Swappable publishing: `MetaPublishEngine`, `TestPublishEngine` |
-| Distribution | `distribution/` | Multi-channel selective delivery: Meta, TikTok, Google, IG Reels, FB Pages, YouTube Shorts |
-| Credential Vault | `vault/` | AES-256-GCM encrypted database vault, random 96-bit IVs, GCM authentication tags |
-| Platform Accounts | `accounts/` | Multi-account platform management across Instagram, TikTok, YouTube, Meta, Google |
-| JEV Account Intelligence | `jev/account-engine.ts` | 6-beat short-form decomposition, decile trait separation, whitespace radar |
-| Publishing Orchestrator | `publishing/orchestrator.ts` | Idempotent multi-account scheduling, atomic job claims, backoff, receipts |
-| Telemetry & Flywheel | `learning/telemetry-engine.ts`| Unified multi-channel telemetry, 14-day exponential decay, closed-loop Bayesian priors |
-| Creative Decision Engine | `creative/engine.ts` | Versioned CreativePlan translating JEV judgments & constraints to exact deliverables |
-| Artifact Finalizer | `production/artifact-finalizer.ts` | Idempotent persistence to Google Drive; fail-closed on storage errors |
-| Budget Ledger | `security/budget-ledger.ts` | Micro-unit integer spend tracking, atomic conditional reservations, two-phase reconcile/release |
-| Discovery Frontier | `discovery/frontier.ts` | Durable PostgreSQL crawl queue, atomic `SKIP LOCKED` leases, heartbeat renewal & recovery |
-| Multi-Source Discovery | `discovery/planner.ts` | Multi-source discovery across web/social/search; Cyclone optional |
-| API | `machine.ts` | Persistence and tenant checks |
+## Workers and scheduling
 
-AI output is parsed into fields and then checked by deterministic code. Retrieved page text is wrapped as `untrusted_source` and is not allowed to act as instructions.
+- The web process does not run jobs. `npm run worker` runs the durable job loop (`scripts/worker-entry.ts`). Jobs are claimed
+  under a lease, so a crashed worker's job is picked up again.
+- `npm run scheduler` enqueues the periodic work (`scripts/scheduler-entry.ts`), such as discovery runs and performance syncs.
+- Both processes need the same `DATABASE_URL` as the web process.
 
-Creative production uses original workflow stages. It does not embed another product's runtime.
+## Storage and media
 
-JEV Research analyzes external advertising evidence; it is not an approval gate. It uses OpenRouter for structured analysis and local WhisperX for transcript extraction. Missing media, transcription, or model configuration is recorded explicitly. Research frequency is not an effectiveness claim. Organization summaries are used only for brands with the existing organization-learning opt-in and contain aggregate counts without examples or source ids.
+- Postgres holds every row. Google Drive and S3 hold only artifacts and exports (rendered media, export packages, uploaded
+  source files). An upload is resumable: its session is recorded in Postgres, and an interrupted upload continues from the
+  last confirmed byte.
+- Media is served from `/api/assets/:assetId`. The route checks tenancy and supports byte ranges and cache validators.
 
-## Request path
+## Authentication and health
 
-1. Session middleware resolves `userId`.
-2. The brand id is resolved to an organization. Membership is required.
-3. Mutations write the row, a JEV decision when a gate runs, and an audit row.
+- Sign-in uses better-auth. `BETTER_AUTH_URL` and `BETTER_AUTH_SECRET` configure it. Sign-up is open to the people the
+  deployment invites; the deployment decides how.
+- `GET /api/health` is a liveness check: `{ "status": "ok" }`, with no database read. `?detail=1` returns operational detail
+  to a signed-in workspace admin only.
+
+## Frontend data
+
+- Reads and writes go through React Query. A write reports pending, success and failure through one hook.
+- Forms use one zod schema shared by the browser and the server, so the field errors match what the server would refuse.

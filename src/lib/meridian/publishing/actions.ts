@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { mayAutoPublish, publishCreative } from "@/lib/meridian/providers/contracts";
+import { isReviewReasonCode, reviewReasonOptions } from "../reviews/reasons.ts";
+import { loadReviewPage, reviewPage } from "../reviews/listing.ts";
 import {
   id,
   asText,
@@ -15,39 +17,21 @@ import {
   notify,
 } from "../machine-shared";
 
-export const REVIEW_REASON_CODES = [
-  "wrong_logo",
-  "wrong_product",
-  "unsupported_claim",
-  "too_generic",
-  "tone_mismatch",
-  "bad_audience",
-  "visual_mismatch",
-  "duplicate",
-  "too_similar",
-  "policy_violation",
-  "poor_brief",
-  "too_aggressive",
-  "other",
-] as const;
+export { REVIEW_REASON_CODES } from "../reviews/reasons.ts";
 
 export const listReviews = createServerFn({ method: "POST" })
-  .validator((input: unknown) => ({ brandId: clip(objectInput(input).brandId, 80, "Brand", true) }))
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return { brandId: clip(body.brandId, 80, "Brand", true), ...reviewPage({ offset: body.offset, limit: body.limit }) };
+  })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
-    const rows = await sql<Record<string, unknown>>`
-      select r.id, r.subject_label, r.status, r.creative_id, r.opportunity_id, r.created_at,
-             d.decision, d.probability, d.confidence, d.reasons, d.question_id, d.question_version, d.answer, d.policy_version
-      from reviews r
-      join jev_decisions d on d.id = r.decision_id
-      where r.brand_id = ${data.brandId} and r.organization_id = ${access.organizationId}
-      order by r.created_at desc limit 40
-    `;
+    const page = await loadReviewPage(sql, access.organizationId, data.brandId, { offset: data.offset, limit: data.limit });
     return {
       role: access.role,
-      reviews: rows.map((row) => ({
+      reviews: page.rows.map((row) => ({
         id: asText(row.id),
         label: asText(row.subject_label),
         status: asText(row.status),
@@ -62,6 +46,14 @@ export const listReviews = createServerFn({ method: "POST" })
         policyVersion: asText(row.policy_version),
         createdAt: asText(row.created_at),
       })),
+      // The window the list holds, and the totals over every review. hasMore says a further window has rows.
+      offset: data.offset,
+      limit: data.limit,
+      total: page.total,
+      openTotal: page.openTotal,
+      decidedTotal: page.decidedTotal,
+      hasMore: page.hasMore,
+      reasonCodes: reviewReasonOptions(),
     };
   });
 
@@ -71,7 +63,7 @@ export const resolveReview = createServerFn({ method: "POST" })
     const action = clip(body.action, 20, "Action", true);
     if (action !== "approve" && action !== "reject") throw new Error("Choose approve or reject.");
     const reasonCode = clip(body.reasonCode, 40, "Reason");
-    if (action === "reject" && !REVIEW_REASON_CODES.includes(reasonCode as (typeof REVIEW_REASON_CODES)[number])) {
+    if (action === "reject" && !isReviewReasonCode(reasonCode)) {
       throw new Error("Choose a rejection reason.");
     }
     return {

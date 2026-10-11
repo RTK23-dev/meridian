@@ -1,3 +1,4 @@
+import { secretForCategory } from "../../credentials/resolve.ts";
 import type {
   CreativeSpec,
   ProductionCapabilities,
@@ -19,20 +20,33 @@ export class HypitProvider implements ProductionProvider {
   };
 
   private fetchImpl: typeof fetch;
+  private readonly apiKey?: string;
 
-  constructor(options?: { fetchImpl?: typeof fetch }) {
+  /**
+   * `apiKey` is the workspace's key when the caller already holds it (explicit wiring and tests). Without it, each request
+   * resolves the workspace's key through the credential resolver.
+   */
+  constructor(options?: { fetchImpl?: typeof fetch; apiKey?: string }) {
     this.fetchImpl = options?.fetchImpl || globalThis.fetch;
+    this.apiKey = options?.apiKey;
   }
 
   private getBaseUrl(): string | undefined {
     return process.env.HYPIT_BASE_URL?.trim();
   }
 
-  private getToken(): string | undefined {
-    return process.env.HYPIT_API_TOKEN?.trim() || process.env.HYPIT_API_KEY?.trim();
+  /** The workspace's Hypit key, through the credential resolver. With no workspace in scope there is no key. */
+  private async tokenFor(organizationId: string | undefined): Promise<{ token: string | null; reason: string }> {
+    if (this.apiKey) return { token: this.apiKey, reason: "" };
+    const resolved = await secretForCategory("hypit", organizationId);
+    return { token: resolved.secret, reason: resolved.reason };
   }
 
-  async health(): Promise<ProviderHealth> {
+  healthFor(organizationId: string): Promise<ProviderHealth> {
+    return this.health(organizationId);
+  }
+
+  async health(organizationId?: string): Promise<ProviderHealth> {
     const baseUrl = this.getBaseUrl();
     if (!baseUrl) {
       return {
@@ -44,9 +58,10 @@ export class HypitProvider implements ProductionProvider {
       };
     }
 
+    const { token } = await this.tokenFor(organizationId);
     try {
       const res = await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/health`, {
-        headers: this.getToken() ? { Authorization: `Bearer ${this.getToken()}` } : {},
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
         return {
@@ -94,13 +109,29 @@ export class HypitProvider implements ProductionProvider {
       };
     }
 
+    const { token, reason } = await this.tokenFor(spec.organizationId);
+    if (!token) {
+      return {
+        jobId: "",
+        organizationId: spec.organizationId,
+        brandId: spec.brandId,
+        creativeSpec: spec,
+        providerId: this.id,
+        status: "NOT_CONFIGURED",
+        costEstimateUsd: costEstimate,
+        error: `${reason} No job was sent.`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
     try {
       const res = await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/v1/jobs`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(spec.idempotencyKey ? { "idempotency-key": spec.idempotencyKey } : {}),
-          ...(this.getToken() ? { Authorization: `Bearer ${this.getToken()}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           meridianJobId: spec.idempotencyKey ? `prod_hypit_${spec.idempotencyKey}` : `prod_hypit_${globalThis.crypto.randomUUID()}`,
@@ -169,14 +200,16 @@ export class HypitProvider implements ProductionProvider {
     }
   }
 
-  async checkJobStatus(jobId: string): Promise<ProductionJob> {
+  async checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob> {
     const baseUrl = this.getBaseUrl();
     if (!baseUrl) {
       throw new Error("Cannot check Hypit job status: HYPIT_BASE_URL is not configured.");
     }
+    const { token, reason } = await this.tokenFor(typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined);
+    if (!token) throw new Error(`Cannot check Hypit job status: ${reason}`);
 
     const res = await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/v1/jobs/${encodeURIComponent(jobId)}`, {
-      headers: this.getToken() ? { Authorization: `Bearer ${this.getToken()}` } : {},
+      headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!res.ok) {
@@ -210,13 +243,15 @@ export class HypitProvider implements ProductionProvider {
     };
   }
 
-  async cancelJob(jobId: string): Promise<void> {
+  async cancelJob(jobId: string, metadata?: Record<string, unknown>): Promise<void> {
     const baseUrl = this.getBaseUrl();
     if (!baseUrl) return;
+    const { token } = await this.tokenFor(typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined);
+    if (!token) return;
     try {
       await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/v1/jobs/${encodeURIComponent(jobId)}/cancel`, {
         method: "POST",
-        headers: this.getToken() ? { Authorization: `Bearer ${this.getToken()}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       });
     } catch {
       // Best-effort cancellation

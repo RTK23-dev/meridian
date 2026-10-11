@@ -1,41 +1,31 @@
 # Product
 
-Meridian is a multi-tenant advertising operating system. A customer creates a workspace, adds a brand, and builds a Brand Brain the rest of the system has to use.
+Meridian turns a brand's own facts and evidence into creatives, decides which ones may go out, delivers them, and learns from what
+happened. Each step is a screen, and each screen says what it has and what it is missing.
 
-This repository is original software under the MIT License. It is not a fork of Hypit or of any decision-engine product. Structured creative workflows were a design reference only. None of that source is included.
+## The workflow
 
-## What this version does
+1. **Brand brain.** The facts the system must not contradict: positioning, audience, voice, rules and assets. Four fields are required
+   for generation: positioning, target customers, tone and prohibited claims. Saving never replaces a field the person did not change.
+   Empty fields stay empty; nothing is inferred.
+2. **Products.** The products the brand sells. A brief names one.
+3. **Market and research.** Public pages and the connected sources the deployment has configured. Each item keeps where it came from. A
+   source that is not configured is listed as such, with the reason.
+4. **Opportunities.** Angles drawn from the evidence, each listing the evidence it cites.
+5. **Studio.** A brief is judged by the brief gate. A ready brief generates variants; a brief that needs review waits for a person. Each
+   variant has its evidence, its decision and its review. Video generation uses Gemini Omni by default; a video that does not exist is
+   shown as missing, with what would produce it.
+6. **Library.** The creatives that exist, with their media and their lineage. An export package for manual posting is made here.
+7. **Publishing.** Live posting is not available in this release for any channel. A channel with no connection says so. The export
+   package is the way to deliver.
+8. **Learning and calibration.** What was measured after a creative went out. A number is shown only when it was observed.
 
-- Sign-in with email and password, or with Google or X.
-- Workspaces with roles. Checks run on the server. One sidebar holds the workspace picker and, on brand pages, the brand picker. Mobile navigation has both.
-- Brands, Brand Brain, provenance, versions, and products.
-- Manual competitor observations, candidate discovery from stored names, and a guarded public-page fetch.
-- JEV Research can collect bounded Meta Ad Library video records, store verified public source MP4s and timestamped transcripts, and save confidence-rated transcript analysis with provenance. Missing media remains unavailable; transcript-only analysis does not make visual claims.
-- Observed cross-ad patterns can inform existing opportunities. Pattern summaries report frequency rather than advertising effectiveness; organization summaries are aggregate-only and require the existing brand opt-in.
-- Opportunity scoring from that evidence, with JEV gates.
-- Briefs that carry learned patterns and past rejections.
-- Approved JEV briefs compile to a canonical `CreativeSpec` and execute across configured video engines (`veo`, `higgsfield`, `hypit`, `manual_cloud`) via `ProductionRouter`.
-- Durable PostgreSQL job tracking (`production_jobs`) with an asynchronous poller worker (`pollProductionJobs`) using `SELECT ... FOR UPDATE SKIP LOCKED` for atomic status polling, video download, postflight QC, and Google Drive primary storage registration.
-- Google Drive authoritative binary storage with resumable chunked uploads for media > 5MB.
-- Dynamic Creative Structure classification across 13 canonical formats (`organic_short`, `pov`, `skit`, `storytime`, etc.) with `AdNarrative` as an optional projection for paid ads.
-- Human-written scripts, plus text generation when a provider key is configured.
-- Text guardian, PNG logo comparison, and a review queue.
-- Manual performance, and a normalizer that a live feed must pass before learning.
-- Closed-loop Bayesian learning flywheel with 14-day exponential recency decay, Benjamini-Hochberg FDR filtering, and cold-start priors.
-- A worker process and a scheduler process when `DATABASE_URL` is set on a long-lived host.
-- Provider clients that can probe and create paused campaigns when credentials exist and a request succeeds. Meta video upload retries reconcile the prior upload; no success is recorded before Meta confirms an id.
-- Tenant-scoped Meta performance sync that validates creative/ad ownership and the selected ad account before storing observations for learning.
-- Operations screens for jobs, usage, audit, alerts, calibration, exports, and webhook events.
-- Generated images and videos play and download from an authenticated route that checks tenancy and supports byte ranges.
+## Roles
 
-## What this version does not do
+Owners and admins can change settings, keys and brands. Members can create and review. Viewers can read. Every mutation checks the
+role on the server, not only in the screen.
 
-- Invent competitor ads, metrics, or publish receipts.
-- Treat credentials as a connection before a provider request succeeds.
-- Bundle an embedded generative video renderer; Studio delegates to external engines (Veo, Higgsfield, Hypit, ManualCloud).
-- Automatically activate Meta campaigns, ad sets, or ads; video publishing leaves them paused.
-- Keep the worker alive on a serverless host.
-- Claim WCAG certification. The accessibility notes are in [ACCESSIBILITY.md](ACCESSIBILITY.md).
+## What a person sees when something is missing
 
-Empty states say so. Connection states are on the Integrations screen.
-
+Nothing is hidden and nothing is invented. A missing key, connection or piece of evidence is named on the screen where the work would
+happen, with the step that fixes it. A button that cannot act says why, next to it.

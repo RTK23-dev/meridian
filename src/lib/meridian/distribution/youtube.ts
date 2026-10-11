@@ -8,18 +8,15 @@ export class YouTubeShortsChannel implements DistributionChannel {
   public readonly targetType = "organic_post" as const;
   public readonly displayName = "YouTube Shorts & Video";
 
+  /**
+   * No per-workspace YouTube account is connected in this release, and no token from the environment is treated as a connected
+   * account. Live posting is not available, so the honest state is not connected, with the manual export as the way out.
+   */
   async checkConnection(brandId: string): Promise<{ connected: boolean; accountName?: string; reason?: string }> {
-    const apiKey = process.env.YOUTUBE_API_KEY || process.env.GOOGLE_API_KEY;
-    const channelId = process.env.YOUTUBE_CHANNEL_ID;
-    if (!apiKey || !channelId) {
-      return {
-        connected: false,
-        reason: "Missing YOUTUBE_API_KEY or YOUTUBE_CHANNEL_ID in environment.",
-      };
-    }
+    void brandId;
     return {
-      connected: true,
-      accountName: `YouTube Channel ${brandId.slice(0, 8)}`,
+      connected: false,
+      reason: "Live YouTube posting is not available in this release. Export the package and post it manually.",
     };
   }
 
@@ -56,31 +53,12 @@ export class YouTubeShortsChannel implements DistributionChannel {
       };
     }
 
-    if (!connection.connected) {
-      return {
-        externalId: "",
-        platform: "youtube",
-        status: "failed",
-        error: connection.reason || "YouTube Channel is not connected.",
-      };
-    }
-
-    try {
-      // Live YouTube publishing is not implemented in this build. Nothing is reported as published.
-      return {
-        externalId: "",
-        platform: "youtube",
-        status: "failed",
-        error: "Live YouTube publishing is not implemented in this build. Nothing was published.",
-      };
-    } catch (caught) {
-      return {
-        externalId: "",
-        platform: "youtube",
-        status: "failed",
-        error: caught instanceof Error ? caught.message : String(caught),
-      };
-    }
+    return {
+      externalId: "",
+      platform: "youtube",
+      status: "failed",
+      error: connection.reason || "YouTube is not connected. Nothing was published.",
+    };
   }
 
   async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {

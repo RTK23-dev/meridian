@@ -1,13 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Button, Card, Field, PageHeader, SelectInput } from "@/components/ui";
+import { Button, Card, DisabledReason, Field, PageHeader, SelectInput } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { downloadCsvText } from "@/lib/csv";
 import { hasRole } from "@/lib/meridian/access";
-import { libraryCsv, opportunitiesCsv } from "@/lib/meridian/exports/csv";
+import { libraryCsv, opportunitiesCsv, performanceCsv } from "@/lib/meridian/exports/csv";
 import { listLibrary, listOpportunities } from "@/lib/meridian/machine";
 import { exportAuditCsv } from "@/lib/meridian/observability/actions";
+import { getPerformanceRowsForExport } from "@/lib/meridian/performance/actions";
 import { auditExportNote } from "./audit-model";
 import { exportFilename } from "./format";
 import { RefusalNotice } from "./ops-shared";
@@ -36,6 +37,13 @@ export function ExportsScreen() {
       const result = await listLibrary({ data: { brandId } });
       const rows = libraryExportRows(result.creatives);
       downloadCsvText(exportFilename("meridian-library", new Date()), libraryCsv(rows));
+      return rows.length;
+    },
+  });
+  const performanceExport = useMutation({
+    mutationFn: async () => {
+      const rows = await getPerformanceRowsForExport({ data: { brandId } });
+      downloadCsvText(exportFilename("meridian-performance", new Date()), performanceCsv(rows));
       return rows.length;
     },
   });
@@ -68,15 +76,15 @@ export function ExportsScreen() {
           id="opportunities-export"
           title="Opportunities"
           description="One row per opportunity for the selected brand, with its rank score, JEV decision, probability, evidence confidence, risk and reason. An empty cell means the value is not stored."
-          action={<Button type="button" variant="secondary" size="md" disabled={!brandId} loading={opportunityExport.isPending} onClick={() => opportunityExport.mutate()}>Export opportunities</Button>}
-          result={opportunityExport.data !== undefined ? rowsNote(opportunityExport.data, "opportunity") : null}
+          action={<BrandExportAction brandId={brandId} hasBrands={brands.length > 0} id="opportunities-export-reason" label="Export opportunities" loading={opportunityExport.isPending} onClick={() => opportunityExport.mutate()} />}
+          result={opportunityExport.data !== undefined ? rowsNote(opportunityExport.data, "opportunity", "opportunities") : null}
           error={opportunityExport.error}
         />
         <ExportPanel
           id="library-export"
           title="Library"
           description="The newest 50 creative records for the selected brand: ID, title, hook, angle, status, origin and creation time. Media files are not included."
-          action={<Button type="button" variant="secondary" size="md" disabled={!brandId} loading={libraryExport.isPending} onClick={() => libraryExport.mutate()}>Export library</Button>}
+          action={<BrandExportAction brandId={brandId} hasBrands={brands.length > 0} id="library-export-reason" label="Export library" loading={libraryExport.isPending} onClick={() => libraryExport.mutate()} />}
           result={libraryExport.data !== undefined ? rowsNote(libraryExport.data, "creative record") : null}
           error={libraryExport.error}
         />
@@ -99,7 +107,10 @@ export function ExportsScreen() {
         <ExportPanel
           id="performance-export"
           title="Performance rows"
-          description="Not exported from this screen yet. The performance query writes a spend or impression count that was never recorded as 0, so a file from it would state values that were not recorded. The export is held until that is fixed."
+          description="One row per stored performance observation for the selected brand. A spend, impression, reach, click, conversion or revenue value that was never recorded is an empty cell, not 0."
+          action={<BrandExportAction brandId={brandId} hasBrands={brands.length > 0} id="performance-export-reason" label="Export performance rows" loading={performanceExport.isPending} onClick={() => performanceExport.mutate()} />}
+          result={performanceExport.data !== undefined ? rowsNote(performanceExport.data, "performance row") : null}
+          error={performanceExport.error}
         />
       </div>
     </div>
@@ -122,5 +133,27 @@ function ExportPanel({ id, title, description, action, result, error }: {
       {error ? <RefusalNotice error={error} /> : null}
       {result ? <p role="status" className="text-sm">{result}</p> : null}
     </Card>
+  );
+}
+
+/** An export that needs a brand. With no brand, the button is off and the reason says what to do first. */
+function BrandExportAction({ brandId, hasBrands, id, label, loading, onClick }: {
+  brandId: string;
+  hasBrands: boolean;
+  id: string;
+  label: string;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  const blocked = !brandId;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <Button type="button" variant="secondary" size="md" disabled={blocked} loading={loading} aria-describedby={blocked ? id : undefined} onClick={onClick}>{label}</Button>
+      {blocked ? (
+        <DisabledReason id={id} className="basis-full">
+          {hasBrands ? "Choose a brand above. Exports are made one brand at a time." : "Create a brand first. Exports are made one brand at a time."}
+        </DisabledReason>
+      ) : null}
+    </div>
   );
 }

@@ -16,7 +16,7 @@ Meridian is a multi-tenant advertising operating system: TanStack Start + React 
 - `src/lib/meridian/`: domain logic and server functions (`createServerFn`)
 - `src/lib/meridian/factory/`: content factory pipeline (discover → produce → gate → learn)
 - `migrations/`: SQL, applied in filename order
-- `docs/`: product and architecture docs. UI plan: `docs/UI_OVERHAUL.md`. Factory: `docs/FACTORY.md`
+- `docs/`: setup, architecture, the numbered contracts the code cites, providers, decisions, product, operations, testing and roadmap. Start at `docs/README.md`.
 
 ## Rules
 

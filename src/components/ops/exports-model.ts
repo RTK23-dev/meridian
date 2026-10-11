@@ -54,8 +54,11 @@ export function libraryExportRows(items: readonly LibraryLike[]): LibraryExportR
   }));
 }
 
-/** What a finished export holds. A file with no rows still has its header row. */
-export function rowsNote(count: number, noun: string): string {
-  if (count === 0) return `No ${noun}s were found for this brand, so the file has only its header row.`;
-  return `The file has ${count.toLocaleString()} ${count === 1 ? noun : `${noun}s`}.`;
+/**
+ * What a finished export holds. A file with no rows still has its header row. The plural is given where it is not the
+ * singular with an "s" ("opportunity" is "opportunities").
+ */
+export function rowsNote(count: number, noun: string, plural: string = `${noun}s`): string {
+  if (count === 0) return `No ${plural} were found for this brand, so the file has only its header row.`;
+  return `The file has ${count.toLocaleString()} ${count === 1 ? noun : plural}.`;
 }

@@ -15,7 +15,6 @@ import type {
   JevDecisionRequest,
   JevDecisionResponse,
   JevQuestionType,
-  JevRoutingPolicy,
 } from "../jev/types.ts";
 
 export const DECISION_ENGINE_IDS = ["jev", "openai-decisions"] as const;
@@ -57,7 +56,6 @@ export type DecisionRequest = JevDecisionRequest & {
   images?: DecisionImageInput[];
   imagePolicy?: "required" | "optional";
   /** Transport routing chosen by the caller, used by the JEV engine. Other engines ignore it. */
-  routingPolicy?: JevRoutingPolicy;
 };
 
 export type DecisionInputModality = "text" | "text+image";

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  crawlLadderPage,
   extractMetaTags,
   extractJsonLd,
   extractRepeatedCards,
   extractOutboundLinks,
 } from "./crawler.ts";
+import type { PageCrawler } from "./service.ts";
 import { DiscoveryService } from "./service.ts";
 import { getSql } from "../../db.ts";
 
@@ -103,15 +105,18 @@ test("Crawl Ladder: filters outbound links to same origin and strips hashes", ()
 });
 
 test("DiscoveryService: coordinates discovery run with honest caveat on budget limit", async () => {
-  const service = new DiscoveryService();
   const sql = await getSql();
   const orgId = `org-discovery-${Date.now()}`;
   const brandId = `brand-discovery-${Date.now()}`;
   await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Discovery Org', ${orgId}, 'test-user')`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Discovery Brand', 'test-user')`;
 
-  // Test url_list / seed discovery
-  const result = await service.startDiscoveryRun({
+  // The page is served by an injected fetch, so the run makes no network request.
+  const fetchHtml = async (url: string) => ({ url, html: sampleHtml });
+  const crawl: PageCrawler = ((url: string, runId: string, allowedHosts?: string[]) =>
+    crawlLadderPage(url, runId, allowedHosts, { fetchHtml })) as PageCrawler;
+  const offline = new DiscoveryService(undefined, crawl);
+  const result = await offline.startDiscoveryRun({
     organizationId: orgId,
     brandId,
     scope: "url_list",
@@ -122,7 +127,10 @@ test("DiscoveryService: coordinates discovery run with honest caveat on budget l
 
   assert.ok(result.run.id.startsWith("crawll_"));
   assert.equal(result.run.status, "completed");
-  assert.ok(result.items.length >= 0);
+  const website = result.run.progress.sources?.find((source) => source.adapterId === "website");
+  assert.ok(website && website.status === "ran", "the public page ran");
+  assert.ok(result.items.length >= 1, "the page and its cards are stored");
+  assert.match(result.run.caveat ?? "", /did not run/, "gated sources are named, not hidden behind the item count");
 });
 
 test("DiscoveryService: refuses SQL-less execution instead of falling back to process memory", async () => {

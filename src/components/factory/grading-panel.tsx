@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { DEFAULT_GRADING_THRESHOLDS, type PipelineGradingThresholds } from "@/lib/meridian/factory/pipeline-config";
-import { Button } from "@/components/ui";
+import { Button, DisabledReason } from "@/components/ui";
 import { NotAppliedNote, SettingSlider, SettingSwitch } from "./pipeline-controls";
 import {
   GRADING_META,
@@ -104,9 +104,12 @@ export function GradingPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-fg-muted">Restoring defaults only fills the draft. Nothing is saved until you save the pipeline.</p>
-        <Button type="button" variant="secondary" size="sm" disabled={!canEdit} onClick={onRestoreDefaults}>
-          Restore default grading values
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button type="button" variant="secondary" size="sm" disabled={!canEdit} aria-describedby={canEdit ? undefined : "grading-restore-reason"} onClick={onRestoreDefaults}>
+            Restore default grading values
+          </Button>
+          {canEdit ? null : <DisabledReason id="grading-restore-reason">Only members can change these settings.</DisabledReason>}
+        </div>
       </div>
     </div>
   );

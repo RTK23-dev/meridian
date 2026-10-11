@@ -9,6 +9,8 @@ import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { assessCopy } from "@/lib/meridian/production/assess";
 import { promptById } from "@/lib/meridian/prompts/registry";
 import { contentHash } from "@/lib/meridian/assets/lifecycle";
+import { loadLibraryCreatives } from "@/lib/meridian/library/listing";
+import { persistBrandLogo } from "@/lib/meridian/brand/logo-store";
 import { deriveMetrics } from "@/lib/meridian/performance/metrics";
 import { summarizeIntelligence } from "@/lib/meridian/intelligence/summary";
 import { inspectImage } from "@/lib/meridian/assets/images";
@@ -292,12 +294,7 @@ export const listLibrary = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
-    const rows = await sql<Record<string, unknown>>`
-      select id, title, origin, angle, hook, status, asset_url, brief_id, opportunity_id, created_at
-      from creative_records
-      where brand_id = ${data.brandId} and organization_id = ${access.organizationId} and origin <> 'competitor'
-      order by created_at desc limit 50
-    `;
+    const creatives = await loadLibraryCreatives(sql, access.organizationId, data.brandId);
     const briefs = await sql<Record<string, unknown>>`
       select id, title, angle, status, opportunity_id, why, learning_notes, failure_notes, constraints, hook
       from briefs where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
@@ -305,18 +302,7 @@ export const listLibrary = createServerFn({ method: "POST" })
     `;
     return {
       role: access.role,
-      creatives: rows.map((row) => ({
-        id: asText(row.id),
-        title: asText(row.title),
-        origin: asText(row.origin),
-        angle: asText(row.angle),
-        hook: asText(row.hook),
-        status: asText(row.status),
-        assetUrl: asText(row.asset_url),
-        briefId: asText(row.brief_id),
-        opportunityId: asText(row.opportunity_id),
-        createdAt: asText(row.created_at),
-      })),
+      creatives,
       briefs: briefs.map((row) => ({
         id: asText(row.id),
         title: asText(row.title),
@@ -551,13 +537,15 @@ export const uploadLogo = createServerFn({ method: "POST" })
     if (!inspected.ok) return { status: "failed" as const, detail: inspected.detail };
     const assetId = id();
     const hash = contentHash(data.base64);
-    await sql`
-      insert into assets (id, organization_id, brand_id, version, storage_key, content_hash, mime_type, source, status, body, byte_size, label)
-      values (
-        ${assetId}, ${access.organizationId}, ${data.brandId}, 1, ${`brand/${data.brandId}/logo/${hash}`},
-        ${hash}, ${inspected.mime}, 'logo_upload', 'stored', ${data.base64}, ${inspected.bytes}, 'logo'
-      )
-    `;
+    await persistBrandLogo(sql, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      assetId,
+      base64: data.base64,
+      bytes,
+      mime: inspected.mime,
+      contentHashValue: hash,
+    });
     await audit(sql, {
       organizationId: access.organizationId,
       brandId: data.brandId,

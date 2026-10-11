@@ -41,7 +41,7 @@ export type PipelineGenerationParams = {
   aspectRatio: "9:16" | "1:1" | "16:9" | "4:5";
   durationSeconds: number; // 15, 30, 45, 60
   dailyGenerationCap: number;
-  provider: "manual_cloud" | "hypit" | "veo" | "higgsfield";
+  provider: "manual_cloud" | "hypit" | "higgsfield";
   renderPacing: "hyper_fast" | "cinematic" | "steady" | "dynamic";
 };
 
@@ -328,7 +328,7 @@ export function validatePipelineConfig(input: Partial<FactoryPipelineConfig>): F
     aspectRatio: ["9:16", "1:1", "16:9", "4:5"].includes(gen.aspectRatio) ? gen.aspectRatio : "9:16",
     durationSeconds: Math.min(120, Math.max(10, Math.round(Number(gen.durationSeconds) || 30))),
     dailyGenerationCap: Math.min(100, Math.max(1, Math.round(Number(gen.dailyGenerationCap) || 12))),
-    provider: ["manual_cloud", "hypit", "veo", "higgsfield"].includes(gen.provider) ? gen.provider : "manual_cloud",
+    provider: ["manual_cloud", "hypit", "higgsfield"].includes(gen.provider) ? gen.provider : "manual_cloud",
     renderPacing: ["hyper_fast", "cinematic", "steady", "dynamic"].includes(gen.renderPacing) ? gen.renderPacing : "dynamic",
   };
 

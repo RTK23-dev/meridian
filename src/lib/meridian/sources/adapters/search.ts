@@ -2,9 +2,11 @@
  * Search Engine Source Adapter
  *
  * Discovers market insights and competitor pages via configured search APIs (SerpApi / Google Custom Search).
- * Returns NOT_CONFIGURED when API keys are unset.
+ * Returns NOT_CONFIGURED when no key is saved, with the resolver's reason. A saved key is NOT_SUPPORTED in this release:
+ * no search request is made, so no result is produced and none is invented.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -29,48 +31,30 @@ export class SearchSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  private getApiKey(): string | undefined {
-    return process.env.SERPAPI_API_KEY?.trim() || process.env.GOOGLE_SEARCH_API_KEY?.trim();
-  }
-
-  async health(): Promise<SourceHealth> {
-    const key = this.getApiKey();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("search", organizationId);
+    const key = resolved.secret;
     if (!key) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "SERPAPI_API_KEY or GOOGLE_SEARCH_API_KEY is not configured.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
-      latencyMs: 15,
-      message: "Search API configured.",
+      status: "NOT_SUPPORTED",
+      latencyMs: 0,
+      message: "A search key is saved, but this release does not run search queries. No results are produced from it.",
       lastCheckedAt: new Date().toISOString(),
     };
   }
 
-  async discover(query: DiscoveryQuery): Promise<SourceReference[]> {
-    const key = this.getApiKey();
-    if (!key || !query.query) return [];
-
-    // When configured, search adapter maps results to SourceReference items
-    return [
-      {
-        sourceId: `search_${encodeURIComponent(query.query)}`,
-        platform: "search",
-        canonicalUrl: undefined,
-        sourceAdapter: this.id,
-        discoveredAt: new Date().toISOString(),
-        metadata: {
-          searchQuery: query.query,
-          niche: query.niche,
-        },
-      },
-    ];
+  /** No search request is made in this release, so there are no results. The adapter never invents a reference. */
+  async discover(_query: DiscoveryQuery): Promise<SourceReference[]> {
+    return [];
   }
 
   async fetch(reference: SourceReference): Promise<RawArtifact> {

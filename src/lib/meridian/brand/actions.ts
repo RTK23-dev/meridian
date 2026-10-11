@@ -3,17 +3,23 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import {
   AUTOMATION_LEVELS,
-  BRAIN_FIELDS,
   emptyBrain,
   type AutomationLevel,
   type BrainKey,
+  type BrainSectionId,
   type BrainValues,
-  type Provenance,
   type ProvenanceMap,
 } from "@/lib/meridian/brain";
 import { brandIdentitySchema } from "@/lib/meridian/schemas/brand";
-import { brainValuesSchema } from "@/lib/meridian/schemas/brain";
 import { type Role } from "@/lib/meridian/access";
+import {
+  parseBrainChanges,
+  parseBrainSection,
+  readBrainProgress,
+  recordBrainSection,
+  saveBrainChanges,
+  type BrainProgress,
+} from "./brain-store.ts";
 import {
   id,
   asText,
@@ -53,10 +59,12 @@ export type BrandDetail = {
   version: number;
   versions: BrainVersion[];
   products: ProductRow[];
+  /** Where the person left off in the brain. The brain screen opens at this section. */
+  progress: BrainProgress;
 };
 
 export const AUTOMATION_CHOICES = AUTOMATION_LEVELS;
-export type { AutomationLevel, BrainKey };
+export type { AutomationLevel, BrainKey, BrainProgress, BrainSectionId };
 
 function identityInput(body: Record<string, unknown>, requireName: boolean) {
   const candidate = { ...body };
@@ -66,15 +74,6 @@ function identityInput(body: Record<string, unknown>, requireName: boolean) {
   const parsed = brandIdentitySchema.parse(candidate);
   if (requireName && !parsed.name) throw new Error("Brand name is required.");
   return parsed;
-}
-
-function readBrain(body: Record<string, unknown>): BrainValues {
-  const candidate = { ...emptyBrain(), ...body };
-  for (const field of BRAIN_FIELDS) {
-    if (candidate[field.key] == null) candidate[field.key] = "";
-  }
-  if (candidate.automationLevel == null) candidate.automationLevel = "manual";
-  return brainValuesSchema.parse(candidate);
 }
 
 export const createBrand = createServerFn({ method: "POST" })
@@ -262,90 +261,56 @@ export const getBrand = createServerFn({ method: "POST" })
         allowedClaims: asText(item.allowed_claims),
         prohibitedClaims: asText(item.prohibited_claims),
       })),
+      progress: await readBrainProgress(sql, data.brandId),
     };
   });
 
+/**
+ * Saves the brain. `changes` holds only the fields the person edited, and the server writes only those. A field that is not
+ * sent is never written, so an open form cannot replace a value someone else saved in the meantime.
+ * autosave is true only for the editor's background save. The Save button sends no flag, so it always appends a version.
+ */
 export const saveBrain = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    return { brandId: clip(body.brandId, 80, "Brand", true), brain: readBrain(body) };
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      changes: parseBrainChanges(body.changes),
+      autosave: body.autosave === true,
+      section: parseBrainSection(body.section),
+    };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const located = await brandOrg(sql, data.brandId);
-    if (!located) throw new Error("Brand not found.");
-    await requireMembership(sql, context.userId, located.organizationId, "member");
-    const currentRows = await sql.query<Record<string, unknown>>(
-      `select ${BRAIN_FIELDS.map((field) => field.column).join(", ")}, automation_level, provenance, version
-       from brand_brains where brand_id = $1 limit 1`,
-      [data.brandId],
-    );
-    const current = brainFromRow(currentRows[0]);
-    const provenance: ProvenanceMap = { ...current.provenance };
-    for (const field of BRAIN_FIELDS) {
-      if (data.brain[field.key] !== current.brain[field.key]) {
-        provenance[field.key] = "user_defined" satisfies Provenance;
-      }
-    }
-    const nextVersion = Math.max(current.version, 0) + 1;
-    const b = data.brain;
-    if (currentRows.length === 0) {
-      await sql.query(
-        `insert into brand_brains (
-           brand_id, ${BRAIN_FIELDS.map((field) => field.column).join(", ")},
-           automation_level, provenance, version, updated_by
-         ) values (
-           $1, ${BRAIN_FIELDS.map((_, index) => `$${index + 2}`).join(", ")},
-           $${BRAIN_FIELDS.length + 2}, $${BRAIN_FIELDS.length + 3}, $${BRAIN_FIELDS.length + 4}, $${BRAIN_FIELDS.length + 5}
-         )`,
-        [
-          data.brandId,
-          ...BRAIN_FIELDS.map((field) => b[field.key]),
-          b.automationLevel,
-          JSON.stringify(provenance),
-          nextVersion,
-          context.userId,
-        ],
-      );
-    } else {
-      const assignments = BRAIN_FIELDS.map((field, index) => `${field.column} = $${index + 1}`);
-      await sql.query(
-        `update brand_brains set ${assignments.join(", ")},
-           automation_level = $${BRAIN_FIELDS.length + 1},
-           provenance = $${BRAIN_FIELDS.length + 2},
-           version = $${BRAIN_FIELDS.length + 3},
-           updated_by = $${BRAIN_FIELDS.length + 4},
-           updated_at = now()
-         where brand_id = $${BRAIN_FIELDS.length + 5}`,
-        [
-          ...BRAIN_FIELDS.map((field) => b[field.key]),
-          b.automationLevel,
-          JSON.stringify(provenance),
-          nextVersion,
-          context.userId,
-          data.brandId,
-        ],
-      );
-    }
-    await sql`
-      insert into brand_brain_versions (id, brand_id, version, snapshot, note, created_by)
-      values (
-        ${id()}, ${data.brandId}, ${nextVersion},
-        ${JSON.stringify({ brain: b, provenance })},
-        ${"Saved by a person"},
-        ${context.userId}
-      )
-    `;
-    await sql`update brands set updated_at = now() where id = ${data.brandId}`;
+    const saved = await saveBrainChanges(sql, {
+      brandId: data.brandId,
+      actorId: context.userId,
+      changes: data.changes,
+      autosave: data.autosave,
+      section: data.section,
+    });
     await writeAudit(sql, {
-      organizationId: located.organizationId,
+      organizationId: saved.organizationId,
       brandId: data.brandId,
       actorId: context.userId,
       action: "brand_brain.updated",
       objectType: "brand_brain",
       objectId: data.brandId,
-      metadata: { version: String(nextVersion) },
+      metadata: { version: String(saved.version) },
     });
-    return { version: nextVersion };
+    return { version: saved.version, brain: saved.brain };
+  });
+
+/** Records the section the person opened, so the brain opens there next time. A viewer is refused, as on every brain write. */
+export const recordBrainProgress = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return { brandId: clip(body.brandId, 80, "Brand", true), section: parseBrainSection(body.section) };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const progress = await recordBrainSection(sql, { brandId: data.brandId, actorId: context.userId, section: data.section });
+    return { section: progress.section };
   });

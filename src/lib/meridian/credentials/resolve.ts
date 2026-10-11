@@ -17,10 +17,15 @@ import type { Sql } from "../learning/store.ts";
 import { retrieveVaultCredential } from "../vault/service.ts";
 import {
   CREDENTIAL_VAULT_TYPE,
+  DEPLOYMENT_ONLY_KEY_ENV,
   SHARED_DEFAULT_ENV,
+  SOURCE_CREDENTIAL_CATEGORIES,
+  SOURCE_KEY_ENV,
   credentialFingerprint,
   type CredentialCategory,
   type CredentialResolution,
+  type DeploymentOnlyKey,
+  type SourceCredentialCategory,
 } from "./contract.ts";
 
 /** The environment a resolution reads. Injected by tests; production passes `process.env`. */
@@ -40,18 +45,44 @@ const CATEGORY_LABEL: Record<CredentialCategory, string> = {
   perception: "Gemini",
   jev: "TypeSafe JEV",
   production: "Gemini",
+  openai: "OpenAI",
+  hypit: "Hypit",
+  meta_ad_library: "Meta Ad Library",
+  meta_graph: "Meta",
+  instagram: "Instagram",
+  youtube: "YouTube",
+  search: "search",
+  twitter: "X (Twitter)",
+  linkedin: "LinkedIn",
+  pinterest: "Pinterest",
+  tiktok: "TikTok",
+  licensed: "licensed data",
 };
 
 /**
  * The deployment's own key for a category. It is read here, and it is used only when the category's shared default is
  * opted in. The Google key follows the documented aliases in config/resolver.ts. The TypeSafe key follows the canonical and
- * legacy names used by jev/config.ts.
+ * legacy names used by jev/config.ts. The OpenAI and Hypit keys each have one name, and Hypit also accepts its legacy name.
+ * Every category has an explicit branch, so no category can fall through to another provider's key.
  */
 function deploymentKeyFor(category: CredentialCategory, env: CredentialEnv): string {
   if (category === "jev") {
     return env.TYPESAFE_JEV_API_KEY?.trim() || env.TYPESAFE_API_KEY?.trim() || "";
   }
+  if (category === "openai") return env.OPENAI_API_KEY?.trim() ?? "";
+  if (category === "hypit") return env.HYPIT_API_TOKEN?.trim() || env.HYPIT_API_KEY?.trim() || "";
+  if (isSourceCategory(category)) {
+    for (const name of SOURCE_KEY_ENV[category]) {
+      const value = env[name]?.trim();
+      if (value) return value;
+    }
+    return "";
+  }
   return ProviderConfigResolver.resolveGoogle({ env }).apiKey?.trim() ?? "";
+}
+
+function isSourceCategory(category: CredentialCategory): category is SourceCredentialCategory {
+  return (SOURCE_CREDENTIAL_CATEGORIES as readonly string[]).includes(category);
 }
 
 /** The expiry as milliseconds, null when the entry does not expire, or "invalid" when the stored value cannot be read. */
@@ -117,6 +148,25 @@ function resolveSharedDefault(category: CredentialCategory, env: CredentialEnv):
 }
 
 /**
+ * Resolves a deployment-only key (DEPLOYMENT_ONLY_KEY_ENV). It has no workspace entry, so it is synchronous and needs no
+ * database. It is used only when its opt-in variable is set to its accepted value, the same rule as a shared default.
+ */
+export function resolveDeploymentOnlyKey(key: DeploymentOnlyKey, env: CredentialEnv = process.env): CredentialResolution {
+  const rule = DEPLOYMENT_ONLY_KEY_ENV[key];
+  if ((env[rule.variable] ?? "").trim().toLowerCase() !== rule.accepts) {
+    return {
+      status: "not_configured",
+      reason: `This deployment has not opted in. Set ${rule.variable}=${rule.accepts} to use the deployment's ${rule.keyVariable}.`,
+    };
+  }
+  const secret = (env[rule.keyVariable] ?? "").trim();
+  if (!secret) {
+    return { status: "not_configured", reason: `${rule.variable}=${rule.accepts}, but ${rule.keyVariable} is not set on the deployment.` };
+  }
+  return { status: "ready", source: "deployment_shared_default", secret, fingerprint: credentialFingerprint(secret) ?? "" };
+}
+
+/**
  * Resolves the credential a category uses for one workspace. It throws only when the database cannot be read. Callers that
  * make a provider request treat a throw as "no call". Callers that report state treat it as "could not be checked".
  */
@@ -142,6 +192,26 @@ export async function resolveCredential(
   const row = rows[0];
   if (row) return resolveSavedEntry(sql, scope, category, row);
   return resolveSharedDefault(category, env);
+}
+
+/**
+ * The secret one category uses in one workspace, or the reason there is none. Callers that make a provider request use this,
+ * so the key is read at the moment of the request and never cached in a module. A database failure is "no key", not a throw.
+ */
+export async function secretForCategory(
+  category: CredentialCategory,
+  organizationId: string | undefined,
+): Promise<{ secret: string | null; reason: string }> {
+  const scope = organizationId?.trim() ?? "";
+  if (!scope) return { secret: null, reason: `No workspace is in scope, so no ${CATEGORY_LABEL[category]} key can be used.` };
+  try {
+    const sql = await loadDefaultSql();
+    const resolution = await resolveCredential(sql, scope, category);
+    if (resolution.status === "ready") return { secret: resolution.secret, reason: "" };
+    return { secret: null, reason: resolution.reason };
+  } catch {
+    return { secret: null, reason: `The saved ${CATEGORY_LABEL[category]} credential could not be checked, so no request is made.` };
+  }
 }
 
 /**

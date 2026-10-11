@@ -4,6 +4,7 @@
  * Discovers and ingests public pins, idea pins, and video pins.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -30,26 +31,23 @@ export class PinterestSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  private getAccessToken(): string | undefined {
-    return process.env.PINTEREST_ACCESS_TOKEN?.trim();
-  }
-
-  async health(): Promise<SourceHealth> {
-    const token = this.getAccessToken();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("pinterest", organizationId);
+    const token = resolved.secret;
     if (!token) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "PINTEREST_ACCESS_TOKEN is unset. Public oEmbed scraping available for direct Pin URLs.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 16,
-      message: "Connected to Pinterest API v5.",
+      message: "A key is saved for Pinterest. Discovery reads public pages for this source and does not call the Pinterest API in this release.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

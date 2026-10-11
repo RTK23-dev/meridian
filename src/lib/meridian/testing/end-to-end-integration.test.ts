@@ -12,7 +12,7 @@ import { buildCanonicalCreativeStructure } from "../factory/creative-dna.ts";
 
 // 2. Production & Routing
 import { ProductionRouter } from "../production/router.ts";
-import { VeoProvider } from "../production/providers/veo.ts";
+import { GeminiOmniVideoProvider } from "../production/providers/omni.ts";
 import { HiggsfieldProvider } from "../production/providers/higgsfield.ts";
 import { evaluateProductionPreflight } from "../production/preflight.ts";
 import { evaluateProductionPostflight } from "../production/postflight.ts";
@@ -27,7 +27,7 @@ import { recordTelemetry, calculateTelemetryFeaturePosteriors, type TelemetryRec
 import { upsertModelParameter } from "../learning/parameters.ts";
 
 // 5. JEV Decision Engine
-import { OpenRouterJevClient } from "../jev/client.ts";
+import { TypeSafeDirectJevProvider } from "../jev/router.ts";
 import { fixedLookup } from "../credentials/fixtures.ts";
 import type { JevQuestionSpec } from "../jev/types.ts";
 
@@ -168,8 +168,8 @@ test("E2E Path 1: Organic Discovery -> Evidence -> Perception -> JEV -> Creative
     );
   };
 
-  const jevClient = new OpenRouterJevClient({
-    apiKey: "test-key-mock",
+  const jevClient = new TypeSafeDirectJevProvider({
+    lookup: fixedLookup("test-key-mock"),
     fetchImpl: fakeJevFetch,
   });
 
@@ -187,7 +187,7 @@ test("E2E Path 1: Organic Discovery -> Evidence -> Perception -> JEV -> Creative
   assert.equal(jevAns.type, "noul");
   assert.equal(jevAns.probability, 0.84);
   assert.equal(jevAns.confidence, undefined); // Native noul has NO fabricated confidence
-  assert.equal(jevAns.answer, true);
+  assert.equal(jevAns.answer, jevAns.probability, "a noul's answer is its probability");
 
   // 6. Synthesize final CreativeSpec
   const creativeSpec: CreativeSpec = {
@@ -210,7 +210,7 @@ test("E2E Path 1: Organic Discovery -> Evidence -> Perception -> JEV -> Creative
   assert.equal(creativeSpec.durationTargetSeconds, 8);
 });
 
-test("E2E Path 2: CreativeSpec -> ProductionRouter -> Veo/Higgsfield/Hypit -> Postflight QC", async () => {
+test("E2E Path 2: CreativeSpec -> ProductionRouter -> Gemini Omni/Higgsfield/Hypit -> Postflight QC", async () => {
   const spec: CreativeSpec = {
     id: "spec-prod-1",
     organizationId: "org-test",
@@ -237,30 +237,26 @@ test("E2E Path 2: CreativeSpec -> ProductionRouter -> Veo/Higgsfield/Hypit -> Po
   assert.equal(prodRouter.get("test:video"), undefined);
   assert.throws(() => prodRouter.register({ id: "test:video" } as any), /Cannot register test provider/);
 
-  // Veo capability validation: rejects unsupported duration
+  // Gemini Omni capability validation: rejects a duration outside its 3 to 10 second range
   const invalidDurationSpec = { ...spec, durationTargetSeconds: 15 };
-  const fakeVeoFetch: typeof fetch = async () => new Response("{}", { status: 200 });
-  const veoProvider = new VeoProvider({ fetchImpl: fakeVeoFetch, lookup: fixedLookup("mock-gemini-key") });
+  const fakeOmniFetch: typeof fetch = async () => new Response("{}", { status: 200 });
+  const omniProvider = new GeminiOmniVideoProvider({ fetchImpl: fakeOmniFetch, lookup: fixedLookup("mock-gemini-key") });
 
-  const invalidVeoJob = await veoProvider.submitJob(invalidDurationSpec);
-  assert.equal(invalidVeoJob.status, "FAILED");
-  assert.ok(invalidVeoJob.error?.includes("Unsupported duration"));
+  const invalidOmniJob = await omniProvider.submitJob(invalidDurationSpec);
+  assert.equal(invalidOmniJob.status, "FAILED");
+  assert.ok(invalidOmniJob.error?.includes("between 3 and 10 seconds"));
 
-  // Veo capability validation: valid duration in supported set [5..10]
-  const validVeoFetch: typeof fetch = async (url, _init) => {
-    if (String(url).includes("predictLongRunning")) {
-      return new Response(JSON.stringify({ name: "operations/veo-op-12345", done: false }), { status: 200 });
+  // A valid duration is submitted to the Interactions endpoint, and the poll reads the video step's URI
+  const validOmniFetch: typeof fetch = async (url, init) => {
+    if (String(url).endsWith("/v1beta/interactions") && init?.method === "POST") {
+      return new Response(JSON.stringify({ interaction_id: "interactions/omni-op-12345", status: "in_progress", steps: [] }), { status: 200 });
     }
-    if (String(url).includes("operations/veo-op-12345")) {
+    if (String(url).includes("interactions/omni-op-12345")) {
       return new Response(
         JSON.stringify({
-          name: "operations/veo-op-12345",
-          done: true,
-          response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: "https://storage.googleapis.com/veo-sample.mp4" } }],
-            },
-          },
+          id: "interactions/omni-op-12345",
+          status: "completed",
+          steps: [{ type: "model_output", content: [{ type: "video", mime_type: "video/mp4", uri: "https://storage.googleapis.com/omni-sample.mp4" }] }],
         }),
         { status: 200 },
       );
@@ -268,14 +264,17 @@ test("E2E Path 2: CreativeSpec -> ProductionRouter -> Veo/Higgsfield/Hypit -> Po
     return new Response("Not found", { status: 404 });
   };
 
-  const validVeoProvider = new VeoProvider({ fetchImpl: validVeoFetch, lookup: fixedLookup("mock-gemini-key") });
-  const submittedVeo = await validVeoProvider.submitJob(spec);
-  assert.equal(submittedVeo.status, "RUNNING");
-  assert.equal(submittedVeo.jobId, "operations/veo-op-12345");
+  const validOmniProvider = new GeminiOmniVideoProvider({ fetchImpl: validOmniFetch, lookup: fixedLookup("mock-gemini-key") });
+  const submittedOmni = await validOmniProvider.submitJob(spec);
+  assert.equal(submittedOmni.status, "RUNNING");
+  assert.equal(submittedOmni.providerJobId, "interactions/omni-op-12345");
 
-  const polledVeo = await validVeoProvider.checkJobStatus(submittedVeo.jobId, { organizationId: spec.organizationId });
-  assert.equal(polledVeo.status, "RENDERED");
-  assert.equal(polledVeo.outputArtifactId, "https://storage.googleapis.com/veo-sample.mp4");
+  const polledOmni = await validOmniProvider.checkJobStatus(submittedOmni.jobId, {
+    organizationId: spec.organizationId,
+    interactionId: submittedOmni.providerJobId,
+  });
+  assert.equal(polledOmni.status, "COMPLETED");
+  assert.equal(polledOmni.outputArtifactId, "https://storage.googleapis.com/omni-sample.mp4");
 
   // Higgsfield contract test with exact model endpoint, request_id, status_url, and cancel_url. Its key comes from the
   // workspace lookup for this test, not from the environment.

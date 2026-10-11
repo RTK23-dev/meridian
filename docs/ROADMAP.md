@@ -1,28 +1,28 @@
 # Roadmap
 
-In this tree:
+This is what is not built, or not verified, in this release. It is stated plainly so that nothing here looks finished.
 
-1. Accounts, workspaces, roles, brands, Brand Brain, products, audit.
-2. Manual observations, public-page fetch, competitor candidates that stay candidates until confirmed.
-3. JEV questions, thresholds, persisted decisions, review.
-4. Opportunities and briefs from stored evidence, including learned patterns.
-5. Text production when a model key exists, otherwise a human script.
-6. Text guardian. Logo search on PNG bytes. Missing vision stays in human review.
-7. Manual performance and a provider performance gate that rejects bad rows.
-8. A separate worker and a scheduler that only enqueues.
-9. Provider clients for Meta, TikTok, Google Ads, and Ad Library. They publish or list only after a real response. Approved Hypit MP4s use the Meta client to create a paused video-ad chain with upload reconciliation. See [PROVIDERS.md](PROVIDERS.md).
-10. Filesystem and S3-compatible object storage clients.
-11. Local semantic embeddings. An external embedding vendor stays not connected without a key.
+## Not built
 
-12. Content factory foundation: fail-closed production database, honest scores, beta-binomial learning, factory job graph, Winner Score, timelines, Creative DNA, gates, kill switch, and the Factory screen. See [FACTORY.md](FACTORY.md).
+- **Live posting** to Facebook, Instagram and YouTube. The channels report not connected, and the manual export package is the way to deliver.
+- **Google Drive connect from the app.** The Drive panel shows the real state and the setup steps. Connecting needs a Drive scope and a token
+  store that the app does not have yet.
+- **Live source calls.** The keyed connectors check that a key is present and say so; they do not yet call their APIs. Public web pages
+  are read end to end.
+- **Discovery runs in the interface.** Runs are recorded with per-source states, but no screen lists them yet, and discovery does not
+  write evidence bundles (which would call the decision engine).
+- **Video frame selection.** Choosing four relevant frames from the scene timeline is not built.
+- **Calibration.** No calibration report exists yet, so every probability and score is uncalibrated and cannot approve or reject on its own.
+- **A console field for Cyclone.** The Cyclone gateway is configured by the deployment's environment.
 
-External launch dependencies:
+## Not verified
 
-- A customer ad account and the permission to spend.
-- A verified S3 bucket in this environment.
-- The separate Hypit video runtime and a reachable `HYPIT_BASE_URL`.
-- An always-on worker on serverless hosting.
-- A hosted OAuth consent screen. Tokens are supplied by the host.
-- A full WCAG 2.2 AA certification. See [ACCESSIBILITY.md](ACCESSIBILITY.md).
+- The OpenAI Decisions default model name in code must be checked against the account before release. Set `OPENAI_DECISIONS_MODEL`
+  explicitly until then.
+- The brand onboarding resume and reload were not exercised in a browser in this release. The server logic is tested.
+- Two concurrent discovery runs for one brand can store the same item twice. A unique index needs existing duplicates cleaned first.
 
-Learning updates knowledge. It does not rewrite application source.
+## Known gaps
+
+- A discovery run whose sources all fail reports `completed` in one test. The honest status is `blocked`.
+- The Higgsfield status row still shows in the factory, and the server schema still accepts `higgsfield` and `auto` as video providers.

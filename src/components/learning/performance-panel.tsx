@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Card, EmptyState, ErrorState, Field, SelectInput, Skeleton, Stat, Input } from "@/components/ui";
+import { Button, Card, DisabledReason, EmptyState, ErrorState, Field, SelectInput, Skeleton, Stat, Input } from "@/components/ui";
 import { PlainErrorMessage, PlainErrorNotice } from "@/components/plain-error";
 import { copy, plainError, type PlainError } from "@/lib/copy";
 import { downloadCsv } from "@/lib/csv";
@@ -68,6 +68,17 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
   const records = telemetryQuery.data?.records ?? [];
   const telemetryLoaded = telemetryQuery.isSuccess;
   const rows = rowsQuery.data ?? [];
+  // The chart sums take numbers. A value that was never recorded adds nothing, so it is passed as 0 to these sums only. The
+  // export reads the rows as they are, so an unrecorded value stays an empty cell there.
+  const chartRows = rows.map((row) => ({
+    ...row,
+    impressions: row.impressions ?? 0,
+    reach: row.reach ?? 0,
+    clicks: row.clicks ?? 0,
+    conversions: row.conversions ?? 0,
+    spendCents: row.spendCents ?? 0,
+    revenueCents: row.revenueCents ?? 0,
+  }));
   const metricName = PERFORMANCE_METRICS.find((entry) => entry.key === metric)?.label ?? "Metric";
   const metricShort = metric === "ctr" ? "CTR" : metric === "conversion_rate" ? "Conversion rate" : "ROAS";
 
@@ -89,9 +100,9 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
   const kpiPlatforms = !telemetryLoaded ? loadingText : platforms.length > 0 ? platforms.map(humanize).join(", ") : NOT_ENOUGH_RESULTS;
 
   // Performance charts, from stored rows.
-  const creativePoints = groupByCreative(rows, metric).slice(0, 12);
-  const dayPoints = groupByDay(rows, metric);
-  const rowTotals = sumRows(rows);
+  const creativePoints = groupByCreative(chartRows, metric).slice(0, 12);
+  const dayPoints = groupByDay(chartRows, metric);
+  const rowTotals = sumRows(chartRows);
   const creativeSummary = `${metricName} by creative, for the ${creativePoints.length} creatives with the most impressions: ${creativePoints.map((point) => `${point.label} ${formatMetric(metric, point.value)}`).join("; ")}.`;
   const daySummary = `${metricName} by day, oldest first: ${dayPoints.map((point) => `${point.label} ${formatMetric(metric, point.value)}`).join("; ")}.`;
 
@@ -115,9 +126,10 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
           <Button type="button" variant="secondary" aria-expanded={showForm} aria-controls={showForm ? "telemetry-form" : undefined} onClick={() => setShowForm((open) => !open)}>
             {showForm ? "Close telemetry form" : "Add telemetry row"}
           </Button>
-          <Button type="button" disabled={syncTelemetry.isPending || records.length === 0} onClick={() => void handleSync()}>
+          <Button type="button" disabled={syncTelemetry.isPending || records.length === 0} aria-describedby={records.length === 0 ? "telemetry-sync-reason" : undefined} onClick={() => void handleSync()}>
             {syncTelemetry.isPending ? "Syncing to JEV Brain…" : "Sync to JEV Brain"}
           </Button>
+          {records.length === 0 ? <DisabledReason id="telemetry-sync-reason" className="basis-full">Add a telemetry row first. There is nothing to sync yet.</DisabledReason> : null}
         </div>
       ) : null}
     </div>

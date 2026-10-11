@@ -27,7 +27,8 @@ const DEPLOYMENT_TYPESAFE = "deployment-typesafe-key-5432";
 const WORKSPACE_GEMINI = "workspace-gemini-key-1234";
 const WORKSPACE_JEV = "workspace-jev-key-4321";
 
-const CREDENTIAL_CATEGORIES: CredentialCategory[] = ["perception", "jev", "production"];
+// The settings summary holds these three categories. OpenAI and Hypit have no settings entry, so they are not listed here.
+const CREDENTIAL_CATEGORIES: Array<Extract<CredentialCategory, "perception" | "jev" | "production">> = ["perception", "jev", "production"];
 
 /** The summary's source name for a resolver state. The panel and the summary use the same mapping. */
 function expectedSourceOf(state: CredentialState): string {
@@ -128,21 +129,6 @@ for (const { name, sql } of backends) {
       assert.equal(jev.source, "deployment", "the deployment shared default is named as the source");
       assert.equal(jev.keyFingerprint, "...5432");
       assert.equal(JSON.stringify(jev).includes(DEPLOYMENT_TYPESAFE), false);
-    });
-  });
-
-  test(`[${name}] OpenRouter is deployment-only, and is in use only when JEV_SHARED_DEFAULT=deployment is set`, async () => {
-    const tenant = await studioTenant(sql, "openrouter-summary");
-    await withEnv({ OPENROUTER_API_KEY: "openrouter-deployment-key-6543" }, async () => {
-      const settings = (await getWorkspaceProviderSettings(sql, tenant.organizationId)).jev.settings;
-      assert.equal(settings.openrouterDeploymentOnly, true);
-      assert.equal(settings.openrouterConfigured, true);
-      assert.equal(settings.openrouterUsable, false, "not opted in, so not in use");
-      assert.equal(settings.openrouterFingerprint, "...6543");
-      assert.equal(JSON.stringify(settings).includes("openrouter-deployment-key-6543"), false);
-    });
-    await withEnv({ JEV_SHARED_DEFAULT: "deployment", OPENROUTER_API_KEY: "openrouter-deployment-key-6543" }, async () => {
-      assert.equal((await getWorkspaceProviderSettings(sql, tenant.organizationId)).jev.settings.openrouterUsable, true);
     });
   });
 

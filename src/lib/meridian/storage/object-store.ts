@@ -189,8 +189,8 @@ export function createSqlStorageMetadataRepository(sql: any): StorageMetadataRep
 }
 
 /**
- * Creates Google Drive backed object store.
- * Drive is the primary binary storage target for Meridian.
+ * Creates the Google Drive backed object store. Drive holds the bytes. The storage_objects row in Postgres is the record of
+ * each object, and it is written here after Drive accepts the bytes.
  */
 export function createGoogleDriveObjectStore(
   client?: import("./drive.ts").GoogleDriveClient,
@@ -286,7 +286,8 @@ export function createGoogleDriveObjectStore(
         fileId = (await options.lookupFileId(organizationId, brandId, cleanKey)) || undefined;
       }
 
-      // Step 2: Fallback search within Drive folder hierarchy
+      // Step 2: Recovery only. When Postgres has no row for this key, the file is looked up by name under its folder. Postgres
+      // is the index; this path exists for bytes whose row was never recorded.
       if (!fileId) {
         try {
           const pathParts = cleanKey.split("/").filter(Boolean);

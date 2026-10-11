@@ -4,7 +4,7 @@
  * Tracks provider models, API families, lifecycle dates, and capability matrices.
  * In accordance with Section 20.3:
  * - Model availability is mutable external state.
- * - Deprecated preview endpoints (e.g. veo-3.1-generate-preview with 2026-10-22 shutdown)
+ * - Deprecated preview endpoints with a dated shutdown are flagged or blocked once the date passes
  *   are flagged with warnings or blocked when expired.
  * - Recommends active replacements (e.g. gemini-omni-1.1-flash).
  */
@@ -149,52 +149,6 @@ export class ModelCapabilityRegistry {
       availability_state: "ACTIVE",
       last_verified_at: "2026-10-09",
       source_url: "https://ai.google.dev/gemini-api/docs/image-generation",
-    });
-
-    // 2. Veo 3.1 Preview (deprecated, shutting down 2026-10-22)
-    this.register({
-      model_id: "veo-3.1-generate-preview",
-      provider_id: "veo",
-      api_family: "predictLongRunning",
-      release_channel: "preview",
-      supported_modalities: ["text", "image"],
-      supported_tasks: ["text-to-video", "image-to-video"],
-      durations: [5, 8],
-      aspect_ratios: ["9:16", "16:9"],
-      resolutions: ["720p", "1080p"],
-      input_reference_types: ["image_uri"],
-      native_audio: false,
-      editing_support: false,
-      region_constraints: ["us-central1"],
-      pricing_basis: "per_job",
-      availability_state: "DEPRECATED",
-      announced_shutdown_at: "2026-10-22T00:00:00Z",
-      replacement_model_id: "gemini-omni-1.1-flash",
-      last_verified_at: "2026-10-09",
-      source_url: "https://ai.google.dev/gemini-api/docs/deprecations/",
-    });
-
-    // 3. Veo 2.0 (Shut down on 2026-06-30 per Google deprecations schedule)
-    this.register({
-      model_id: "veo-2.0-generate-001",
-      provider_id: "veo",
-      api_family: "predictLongRunning",
-      release_channel: "ga",
-      supported_modalities: ["text", "image"],
-      supported_tasks: ["text-to-video", "image-to-video"],
-      durations: [5, 8],
-      aspect_ratios: ["9:16", "16:9"],
-      resolutions: ["720p", "1080p"],
-      input_reference_types: ["image_uri"],
-      native_audio: false,
-      editing_support: false,
-      region_constraints: ["us-central1"],
-      pricing_basis: "per_job",
-      availability_state: "SHUTDOWN",
-      announced_shutdown_at: "2026-06-30T00:00:00Z",
-      replacement_model_id: "gemini-omni-1.1-flash",
-      last_verified_at: "2026-10-09",
-      source_url: "https://ai.google.dev/gemini-api/docs/deprecations/",
     });
 
     // 4. Higgsfield

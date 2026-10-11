@@ -8,6 +8,12 @@ import { activeBaseline, calibrationProposalView, parseThresholds, type Threshol
 import { isoTimestamp } from "@/lib/meridian/observability/timestamps";
 import { OPPORTUNITY_THRESHOLDS } from "@/lib/meridian/jev/questions";
 
+/**
+ * The opportunity gate's code default. It is the pair the production gate uses when no threshold version is saved
+ * (jev/questions.ts, read through loadQuestionPolicy), so a proposal's baseline matches the thresholds that actually run.
+ */
+const CODE_DEFAULT: ThresholdPair = { autoApprove: OPPORTUNITY_THRESHOLDS.autoApprove, humanReview: OPPORTUNITY_THRESHOLDS.humanReview };
+
 async function brandRole(userId: string, brandId: string) {
   const sql = await getSql();
   const rows = await sql<{ organization_id: string; role: string }>`
@@ -146,13 +152,13 @@ export const proposeCalibration = createServerFn({ method: "POST" })
       where organization_id = ${organizationId} and question_id = 'opportunity_gate'
       order by version desc limit 1
     `;
-    let current = { autoApprove: 0.8, humanReview: 0.4 };
+    let current: ThresholdPair = { ...CODE_DEFAULT };
     if (versions[0]?.thresholds) {
       try {
         const parsed = JSON.parse(versions[0].thresholds) as { autoApprove?: number; humanReview?: number };
         if (typeof parsed.autoApprove === "number" && typeof parsed.humanReview === "number") current = { autoApprove: parsed.autoApprove, humanReview: parsed.humanReview };
       } catch {
-        current = { autoApprove: 0.8, humanReview: 0.4 };
+        current = { ...CODE_DEFAULT };
       }
     }
     const proposed = proposeThresholdChange({ questionId: "opportunity_gate", current, rows });
@@ -192,7 +198,7 @@ export const listCalibrationVersions = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { sql, organizationId, role } = await brandRole(context.userId, data.brandId);
     assertRole(role, "admin");
-    const codeDefault: ThresholdPair = { autoApprove: OPPORTUNITY_THRESHOLDS.autoApprove, humanReview: OPPORTUNITY_THRESHOLDS.humanReview };
+    const codeDefault: ThresholdPair = { ...CODE_DEFAULT };
     const [versions, proposals, totals] = await Promise.all([
       sql<{ id: string; version: number; thresholds: string; approved_by: string; created_at: unknown }>`
         select id, version, thresholds, approved_by, created_at from jev_threshold_versions

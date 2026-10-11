@@ -1,15 +1,16 @@
 /**
  * Workspace Provider Configuration Service
  *
- * Provides typed, secure, organization-scoped credential and operational configuration for JEV, Perception, Sources &
- * Crawling, Production, Storage, and Cyclone Scout.
+ * Provides typed, secure, organization-scoped credential and operational configuration for JEV, OpenAI Decisions, Perception,
+ * Production, Hypit, each Sources connector, Storage, and Cyclone Scout.
  *
  * Rules:
- * - Every credential category (perception, jev, production) is read through the one resolver, credentials/resolve.ts. The
- *   summary, Test Connection and runtime readiness all show that resolver's state, so they cannot disagree with a call.
+ * - Every credential category is read through the one resolver, credentials/resolve.ts. The summary, Test Connection, the
+ *   setup view and runtime readiness all show that resolver's state, so they cannot disagree with a call.
  * - A saved workspace key is used first. An unusable saved key is shown as unusable, and the deployment key is never shown
  *   in its place. The deployment key is shown only when its category's shared default is opted in.
- * - The OpenRouter JEV transport is deployment-only, and the summary says so.
+ * - A keyed category saves its key in its own vault entry (CREDENTIAL_VAULT_TYPE) through one path. A save that supplies no
+ *   key keeps the stored one, and a removal deletes only that entry.
  * - Server-only encryption at rest via the vault. Raw secrets never leave the server; only masked fingerprints do.
  * - Saves and removals run in one real transaction. A save that supplies no new key keeps the stored key.
  * - Enforces SSRF prevention via publicUrlIssue before testing any configurable endpoint.
@@ -21,17 +22,52 @@ import type { Sql } from "../learning/store.ts";
 import { withTransaction } from "../learning/store.ts";
 import { storeVaultCredential, retrieveVaultCredential, deleteVaultCredential, type VaultCredentialPayload } from "../vault/service.ts";
 import { resolveJevConfig } from "../jev/config.ts";
-import { resolveCredential, sharedDefaultOptedIn } from "../credentials/resolve.ts";
+import { resolveCredential } from "../credentials/resolve.ts";
 import { isCostMode, resolveCostMode } from "../production/cost-mode.ts";
-import { credentialStateOf, type CredentialCategory, type CredentialState } from "../credentials/contract.ts";
+import { CREDENTIAL_VAULT_TYPE, credentialStateOf, type CredentialCategory, type CredentialState } from "../credentials/contract.ts";
 import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
+import { PAGE_LIMIT_MESSAGE, parsePageLimit } from "./page-limit.ts";
 
-export type ProviderCategory = "jev" | "perception" | "sources" | "production" | "storage" | "cyclone";
+/**
+ * Every provider category the settings summary and the save path know. The keyed categories are the resolver's categories:
+ * each saves one key in its own vault entry. `sources`, `storage` and `cyclone` hold settings, not a resolver key.
+ */
+export type ProviderCategory = "sources" | "storage" | "cyclone" | CredentialCategory;
 
-/** The categories whose key the resolver governs. Their saves cannot store an empty key, because an empty entry is unusable. */
-const CREDENTIAL_CATEGORIES: readonly CredentialCategory[] = ["jev", "perception", "production"];
+/** The categories that save a key in their own vault entry, read through the resolver. */
+export const KEYED_PROVIDER_CATEGORIES = Object.keys(CREDENTIAL_VAULT_TYPE) as CredentialCategory[];
+
+const SETTINGS_ONLY_CATEGORIES = ["sources", "storage", "cyclone"] as const;
+
+export function isProviderCategory(value: unknown): value is ProviderCategory {
+  if (typeof value !== "string") return false;
+  return (SETTINGS_ONLY_CATEGORIES as readonly string[]).includes(value) || (KEYED_PROVIDER_CATEGORIES as readonly string[]).includes(value);
+}
+
+function isKeyedCategory(category: ProviderCategory): category is CredentialCategory {
+  return (KEYED_PROVIDER_CATEGORIES as readonly string[]).includes(category);
+}
+
+/** The name a reviewer sees in a message. It contains no secret. */
+const KEY_LABEL: Record<CredentialCategory, string> = {
+  jev: "TypeSafe JEV",
+  openai: "OpenAI",
+  perception: "Gemini",
+  production: "Gemini production",
+  hypit: "Hypit",
+  meta_ad_library: "Meta Ad Library",
+  meta_graph: "Meta Graph",
+  instagram: "Instagram",
+  youtube: "YouTube",
+  search: "search",
+  twitter: "X (Twitter)",
+  linkedin: "LinkedIn",
+  pinterest: "Pinterest",
+  tiktok: "TikTok",
+  licensed: "licensed data",
+};
 
 /** Readiness as the resolver reports it. "usable" means a call would use the credential shown. */
 export type CredentialReadiness = CredentialState["state"];
@@ -61,9 +97,9 @@ function fingerprint(secret?: string): string | undefined {
   return `...${clean.slice(-4)}`;
 }
 
-/** The vault entry type for a category. */
+/** The vault entry type for a category: its resolver entry for a keyed category, its settings entry otherwise. */
 function vaultTypeForCategory(category: ProviderCategory): string {
-  return `provider_config:${category}`;
+  return isKeyedCategory(category) ? CREDENTIAL_VAULT_TYPE[category] : `provider_config:${category}`;
 }
 
 /** The resolver's state for a credential category, and the reason it is not usable when it is not. */
@@ -106,6 +142,11 @@ function credentialFields(state: CredentialState) {
   };
 }
 
+/** The summary of a keyed category with no settings of its own: its state and fingerprint, never its key. */
+function keyedSummary(category: CredentialCategory, state: CredentialState, settings: Record<string, any> = {}): ProviderConfigSummary {
+  return { category, ...credentialFields(state), settings, capabilities: [] };
+}
+
 /** The stored settings of a vault entry. An entry that cannot be decrypted contributes no settings, and no key. */
 async function savedSettings(sql: Sql, organizationId: string, entryId: string | undefined): Promise<Record<string, any>> {
   if (!entryId) return {};
@@ -115,6 +156,9 @@ async function savedSettings(sql: Sql, organizationId: string, entryId: string |
     return {};
   }
 }
+
+/** The keyed categories that have a summary of their own above. Every other keyed category gets the generic keyed summary. */
+const SPECIFIC_KEYED: ReadonlySet<CredentialCategory> = new Set<CredentialCategory>(["jev", "perception", "production"]);
 
 /**
  * Retrieves safe summarized configuration across all provider categories for an organization.
@@ -133,26 +177,14 @@ export async function getWorkspaceProviderSettings(
   const vaultMap = new Map<string, { id: string }>();
   for (const r of rows) vaultMap.set(r.credential_type, { id: r.id });
 
-  // 1. JEV: the TypeSafe key is the workspace's own, through the resolver. OpenRouter is deployment-only.
+  // 1. JEV: the TypeSafe key is the workspace's own, through the resolver. It is the only JEV transport.
   const jevState = await credentialStateFor(sql, organizationId, "jev");
-  // OpenRouter's deployment key is used only when JEV_SHARED_DEFAULT=deployment, the same flag that opts in TypeSafe's.
-  const openrouterKey = resolveJevConfig().openrouter.apiKey;
-  const openrouterOptedIn = sharedDefaultOptedIn("jev");
   const jevSummary: ProviderConfigSummary = {
     category: "jev",
     ...credentialFields(jevState),
     settings: {
-      mode: resolveJevConfig().mode,
-      preferredProvider: resolveJevConfig().preferredProvider,
-      fallbackEnabled: resolveJevConfig().fallbackEnabled,
       timeoutMs: resolveJevConfig().timeoutMs,
       typesafeModel: resolveJevConfig().typesafe.model,
-      openrouterModel: resolveJevConfig().openrouter.model,
-      // OpenRouter is deployment-only: the key is OPENROUTER_API_KEY on this deployment, and no workspace key is used.
-      openrouterDeploymentOnly: true,
-      openrouterConfigured: Boolean(openrouterKey),
-      openrouterUsable: Boolean(openrouterKey) && openrouterOptedIn,
-      openrouterFingerprint: fingerprint(openrouterKey),
     },
     capabilities: ["choice_decisions", "score_decisions", "noul_probabilities", "evidence_audit_trail"],
   };
@@ -170,10 +202,17 @@ export async function getWorkspaceProviderSettings(
     capabilities: ["video_transcription", "scene_detection", "ocr_extraction", "multimodal_pacing"],
   };
 
-  // 3. Sources & Crawling Category
+  // 3. Every other keyed category (OpenAI, Hypit, each source connector) is read through the same resolver, in parallel.
+  const genericCategories = KEYED_PROVIDER_CATEGORIES.filter((category) => !SPECIFIC_KEYED.has(category));
+  const genericStates = await Promise.all(genericCategories.map((category) => credentialStateFor(sql, organizationId, category)));
+  const genericSummaries = genericCategories.map((category, index) =>
+    keyedSummary(category, genericStates[index], category === "hypit" ? { baseUrlConfigured: Boolean(process.env.HYPIT_BASE_URL?.trim()) } : {}),
+  );
+  const metaAdState = genericStates[genericCategories.indexOf("meta_ad_library")];
+
+  // 4. Sources & Crawling Category: the crawl settings. The Meta Ad Library key is its own entry, read above.
   const sourcesEntryId = vaultMap.get(vaultTypeForCategory("sources"))?.id;
   const sourcesCustom = await savedSettings(sql, organizationId, sourcesEntryId);
-  const metaAdToken = sourcesCustom.metaAdLibraryToken as string || process.env.META_AD_LIBRARY_TOKEN;
 
   const sourcesSummary: ProviderConfigSummary = {
     category: "sources",
@@ -183,14 +222,14 @@ export async function getWorkspaceProviderSettings(
       maxPagesPerRun: Number(sourcesCustom.maxPages || 50),
       maxDepth: Number(sourcesCustom.maxDepth || 2),
       concurrency: Number(sourcesCustom.concurrency || 4),
-      metaAdLibraryConfigured: Boolean(metaAdToken),
-      metaAdLibraryFingerprint: fingerprint(metaAdToken),
+      metaAdLibraryConfigured: metaAdState.state === "usable",
+      metaAdLibraryFingerprint: metaAdState.fingerprint,
       allowedSources: ["website", "instagram", "tiktok", "youtube", "meta_ad_library"],
     },
     capabilities: ["public_page_scrape", "meta_ad_library", "open_graph", "json_ld", "repeated_card_discovery"],
   };
 
-  // 4. Production: the Omni video and Google image key is the workspace's own, through the resolver.
+  // 5. Production: the Omni video and Google image key is the workspace's own, through the resolver.
   const productionState = await credentialStateFor(sql, organizationId, "production");
   const productionSettings = await savedSettings(sql, organizationId, vaultMap.get(vaultTypeForCategory("production"))?.id);
   const prodSummary: ProviderConfigSummary = {
@@ -204,7 +243,7 @@ export async function getWorkspaceProviderSettings(
     capabilities: ["gemini_omni_video", "image_to_video", "manual_cloud_handoff", "durable_job_polling"],
   };
 
-  // 5. Storage Category
+  // 6. Storage Category: Google Drive is configured on the deployment, not per workspace.
   const driveStatus = getGoogleDriveAuthStatus();
   const storageSummary: ProviderConfigSummary = {
     category: "storage",
@@ -214,11 +253,12 @@ export async function getWorkspaceProviderSettings(
       primaryProvider: "google_drive",
       fallbackProvider: "filesystem",
       s3Configured: Boolean(process.env.S3_BUCKET),
+      driveDetail: driveStatus.detail,
     },
     capabilities: ["oauth_google_drive", "checksum_verification", "zero_fake_completion"],
   };
 
-  // 6. Cyclone Scout Category
+  // 7. Cyclone Scout Category
   const cycloneEntryId = vaultMap.get(vaultTypeForCategory("cyclone"));
   const cycloneCreds = cycloneEntryId ? await savedCycloneCredentials(sql, organizationId, cycloneEntryId.id) : null;
   const cycloneGatewayUrl = (cycloneCreds?.customFields?.gatewayUrl as string) || process.env.CYCLONE_GATEWAY_URL;
@@ -239,14 +279,16 @@ export async function getWorkspaceProviderSettings(
     capabilities: ["device_discovery", "page_card_observation", "session_binding", "zero_mutation_research"],
   };
 
-  return {
+  const summaries = {
     jev: jevSummary,
     perception: perceptionSummary,
     sources: sourcesSummary,
     production: prodSummary,
     storage: storageSummary,
     cyclone: cycloneSummary,
-  };
+  } as Record<ProviderCategory, ProviderConfigSummary>;
+  for (const summary of genericSummaries) summaries[summary.category] = summary;
+  return summaries;
 }
 
 /** The Cyclone entry's payload, or null when it cannot be read. Cyclone is not a resolver category. */
@@ -258,27 +300,46 @@ async function savedCycloneCredentials(sql: Sql, organizationId: string, entryId
   }
 }
 
+/** One save as the service receives it. */
+type SaveInput = {
+  organizationId: string;
+  actorId: string;
+  category: ProviderCategory;
+  credentials?: {
+    apiKey?: string;
+    accessToken?: string;
+    refreshToken?: string;
+  };
+  settings?: Record<string, unknown>;
+};
+
 /**
  * Saves or updates workspace credentials and operational settings for a category.
  *
- * The replacement runs in one transaction: the old entry is removed and the new one written, or neither happens. A save
- * that supplies no new key keeps the stored key and its expiry. A save for a credential category with no key, and no stored
- * key to keep, is refused, so an empty entry is never created.
+ * A keyed category saves its key in its own vault entry, read through the resolver. That covers the TypeSafe, Gemini and
+ * Hypit keys, OpenAI, and each source connector (Meta Ad Library included). The replacement runs in one transaction: the old
+ * entry is removed and the new one written, or neither happens. A save that supplies no new key keeps the stored key and its
+ * expiry. A save for a keyed category with no key, and no stored key to keep, is refused, so an empty entry is never created.
+ * A new key keeps the stored settings of the entry, unless the save supplies settings of its own.
+ *
+ * The legacy sources form may still carry a Meta Ad Library token. That token is saved in its own entry, and a save that carries
+ * only the token writes no sources setting.
  */
 export async function saveWorkspaceProviderConfig(
   sql: Sql,
-  input: {
-    organizationId: string;
-    actorId: string;
-    category: ProviderCategory;
-    credentials?: {
-      apiKey?: string;
-      accessToken?: string;
-      refreshToken?: string;
-    };
-    settings?: Record<string, unknown>;
-  }
+  input: SaveInput
 ): Promise<{ success: boolean; category: ProviderCategory }> {
+  if (!isProviderCategory(input.category)) {
+    throw new Error(`Unknown provider category: ${String(input.category)}.`);
+  }
+
+  // A page limit is a whole number of pages, 1 or more. It is stored as that number, so a fraction, a negative or text never lands.
+  if (input.settings && "maxPages" in input.settings) {
+    const pages = parsePageLimit(input.settings.maxPages);
+    if (pages === null) throw new Error(PAGE_LIMIT_MESSAGE);
+    input = { ...input, settings: { ...input.settings, maxPages: pages } };
+  }
+
   // Validate URLs in settings to prevent SSRF
   if (input.settings) {
     for (const [key, val] of Object.entries(input.settings)) {
@@ -292,9 +353,35 @@ export async function saveWorkspaceProviderConfig(
     }
   }
 
+  // The Meta Ad Library key is a credential, so it is saved in its own entry and never in the sources settings.
+  let metaAdLibraryKey = "";
+  if (input.category === "sources" && input.settings && "metaAdLibraryToken" in input.settings) {
+    const { metaAdLibraryToken, ...rest } = input.settings;
+    metaAdLibraryKey = typeof metaAdLibraryToken === "string" ? metaAdLibraryToken.trim() : "";
+    input = { ...input, settings: rest };
+  }
+
+  // A save that carries only the Meta token changes no sources setting, so it writes no sources entry.
+  const onlyMetaToken = Boolean(metaAdLibraryKey) && Object.keys(input.settings ?? {}).length === 0;
+  if (!onlyMetaToken) await saveEntry(sql, input);
+
+  if (metaAdLibraryKey) {
+    await saveWorkspaceProviderConfig(sql, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      category: "meta_ad_library",
+      credentials: { apiKey: metaAdLibraryKey },
+    });
+  }
+
+  return { success: true, category: input.category };
+}
+
+/** Writes one category's entry, replacing the previous one, in one transaction with its audit record. */
+async function saveEntry(sql: Sql, input: SaveInput): Promise<void> {
   const credentialType = vaultTypeForCategory(input.category);
   const newKey = input.credentials?.apiKey?.trim() ?? "";
-  const isCredentialCategory = (CREDENTIAL_CATEGORIES as readonly string[]).includes(input.category);
+  const keyed = isKeyedCategory(input.category);
 
   await withTransaction(sql, async (tx) => {
     const existing = await tx<{ id: string; expires_at: unknown }>`
@@ -304,18 +391,21 @@ export async function saveWorkspaceProviderConfig(
     `;
     const prior = existing[0];
 
-    // Without a new key, the stored payload is read so its key is kept. If it cannot be read, nothing is replaced.
+    // The stored payload is read so its key is kept when no new key is given, and its settings are kept when none are given.
+    // A new key does not need the old payload, so an unreadable old entry never blocks its replacement.
     let kept: VaultCredentialPayload | null = null;
-    if (!newKey && prior) {
+    if (prior) {
       try {
         kept = await retrieveVaultCredential(tx, input.organizationId, prior.id);
       } catch {
-        throw new Error("The stored key for this workspace cannot be read, so it cannot be kept. Enter the key again to save.");
+        if (!newKey) {
+          throw new Error("The stored key for this workspace cannot be read, so it cannot be kept. Enter the key again to save.");
+        }
       }
     }
     const keptKey = kept?.apiKey?.trim() ?? "";
-    if (isCredentialCategory && !newKey && !keptKey) {
-      throw new Error(`Enter a ${input.category === "perception" ? "Gemini" : input.category === "jev" ? "TypeSafe JEV" : "Gemini production"} API key to save this configuration.`);
+    if (keyed && !newKey && !keptKey) {
+      throw new Error(`Enter an API key for ${KEY_LABEL[input.category as CredentialCategory]} to save this configuration.`);
     }
 
     if (input.category === "production" && input.settings && "costPreference" in input.settings && !isCostMode(input.settings.costPreference)) {
@@ -323,9 +413,9 @@ export async function saveWorkspaceProviderConfig(
     }
 
     const payload: VaultCredentialPayload = {
-      accessToken: input.credentials?.accessToken || kept?.accessToken || "",
+      accessToken: input.credentials?.accessToken || (newKey ? "" : kept?.accessToken) || "",
       apiKey: newKey || keptKey,
-      refreshToken: input.credentials?.refreshToken || kept?.refreshToken || "",
+      refreshToken: input.credentials?.refreshToken || (newKey ? "" : kept?.refreshToken) || "",
       customFields: input.category === "jev" ? {} : input.settings ?? kept?.customFields ?? {},
     };
     // A new key starts a new entry with no expiry. Keeping the stored key keeps its expiry too.
@@ -345,8 +435,6 @@ export async function saveWorkspaceProviderConfig(
       )
     `;
   });
-
-  return { success: true, category: input.category };
 }
 
 function toDate(value: unknown): Date | undefined {
@@ -356,7 +444,7 @@ function toDate(value: unknown): Date | undefined {
 
 /**
  * Removes workspace-level credential for a category, reverting to deployment/default. The removal and its audit record
- * run in one transaction.
+ * run in one transaction. A keyed category removes only its own entry.
  */
 export async function removeWorkspaceProviderConfig(
   sql: Sql,
@@ -366,6 +454,9 @@ export async function removeWorkspaceProviderConfig(
     category: ProviderCategory;
   }
 ): Promise<{ success: boolean }> {
+  if (!isProviderCategory(input.category)) {
+    throw new Error(`Unknown provider category: ${String(input.category)}.`);
+  }
   const credentialType = vaultTypeForCategory(input.category);
 
   await withTransaction(sql, async (tx) => {
@@ -390,10 +481,34 @@ export async function removeWorkspaceProviderConfig(
 }
 
 /**
+ * Sources has no required key. Public page sources run without one. Meta Ad Library needs a token, and this check looks only
+ * at the workspace's own saved token. READY means that token is saved and readable. It never means the live Meta Ad Library
+ * answered, because no request is made here. The deployment key is read only when its shared default is opted in.
+ */
+async function testSourcesConnection(
+  sql: Sql,
+  organizationId: string,
+  started: number,
+): Promise<{ status: "READY" | "ERROR" | "NOT_CONFIGURED"; message: string; latencyMs: number }> {
+  const latencyMs = () => Date.now() - started;
+  const live = "The live Meta Ad Library was not called by this check.";
+  const resolution = await resolveCredential(sql, organizationId, "meta_ad_library");
+  if (resolution.status === "ready") {
+    const owner = resolution.source === "workspace" ? "This workspace's saved" : "The deployment's shared";
+    return { status: "READY", message: `${owner} Meta Ad Library key can be read. ${live}`, latencyMs: latencyMs() };
+  }
+  return {
+    status: resolution.status === "unusable" ? "ERROR" : "NOT_CONFIGURED",
+    message: `${resolution.reason} Public page sources need no key. ${live}`,
+    latencyMs: latencyMs(),
+  };
+}
+
+/**
  * Tests connection for a specific provider category with SSRF protection and live health checks.
  *
- * READY is reported only for a usable credential, by the same resolver the runtime uses. The credential categories do
- * not call their live provider here, and the message says so.
+ * READY is reported only for a usable credential, by the same resolver the runtime uses. The keyed categories do not call
+ * their live provider here, and the message says so. Sources reports READY only for a saved token that can be read.
  */
 export async function testWorkspaceProviderConnection(
   sql: Sql,
@@ -401,22 +516,21 @@ export async function testWorkspaceProviderConnection(
     organizationId: string;
     category: ProviderCategory;
   }
-): Promise<{ status: "READY" | "ERROR"; message: string; latencyMs: number }> {
+): Promise<{ status: "READY" | "ERROR" | "NOT_CONFIGURED"; message: string; latencyMs: number }> {
   const started = Date.now();
 
   try {
-    if (input.category === "jev" || input.category === "production" || input.category === "perception") {
+    if (isKeyedCategory(input.category)) {
       const state = input.category === "perception"
         ? await perceptionStateFor(sql, input.organizationId)
         : await credentialStateFor(sql, input.organizationId, input.category);
       const latencyMs = Date.now() - started;
       if (state.state === "usable") {
         const source = state.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
-        const label = input.category === "jev" ? "TypeSafe JEV" : "Gemini";
         const extra = input.category === "jev" ? " OpenRouter is deployment-only and was not checked." : "";
         return {
           status: "READY",
-          message: `${label} credential is usable (${source}). The live provider was not called by this check.${extra}`,
+          message: `${KEY_LABEL[input.category]} credential is usable (${source}). The live provider was not called by this check.${extra}`,
           latencyMs,
         };
       }
@@ -450,12 +564,12 @@ export async function testWorkspaceProviderConnection(
       return { status: "ERROR", message: `Cyclone gateway returned HTTP ${res.status}.`, latencyMs };
     }
 
-    // Default readiness check
-    return {
-      status: "READY",
-      message: `${input.category} configuration test verified.`,
-      latencyMs: Date.now() - started,
-    };
+    if (input.category === "sources") {
+      return testSourcesConnection(sql, input.organizationId, started);
+    }
+
+    // No category reaches here without a check above. An unknown category is an error, never a READY.
+    return { status: "ERROR", message: `Unknown provider category: ${String(input.category)}.`, latencyMs: Date.now() - started };
   } catch (err) {
     return {
       status: "ERROR",

@@ -5,8 +5,8 @@
 import { formatDistanceToNow } from "date-fns";
 import type { BrandSummary } from "@/lib/meridian/workspace/actions";
 
-/** A brand below this completeness is listed as thin. Matches the threshold the home always used. */
-export const THIN_BRAIN_RATIO = 0.35;
+/** A brand is thin until every required brain field has content. The completeness here is the required-field ratio. */
+export const REQUIRED_BRAIN_RATIO = 1;
 
 export type OverviewMetrics = {
   failedJobs: number;
@@ -131,7 +131,7 @@ export function activityTime(value: string): number {
 }
 
 export function isThinBrand(brand: Pick<BrandSummary, "completeness">): boolean {
-  return brand.completeness < THIN_BRAIN_RATIO;
+  return brand.completeness < REQUIRED_BRAIN_RATIO;
 }
 
 /** A readable relative time, or a plain fallback when the stored value is not a date. */

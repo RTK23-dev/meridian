@@ -8,18 +8,15 @@ export class InstagramReelsChannel implements DistributionChannel {
   public readonly targetType = "organic_post" as const;
   public readonly displayName = "Instagram Reels & Feed";
 
+  /**
+   * No per-workspace Instagram account is connected in this release, and no token from the environment is treated as a connected
+   * account. Live posting is not available, so the honest state is not connected, with the manual export as the way out.
+   */
   async checkConnection(brandId: string): Promise<{ connected: boolean; accountName?: string; reason?: string }> {
-    const token = process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN;
-    const accountId = process.env.INSTAGRAM_ACCOUNT_ID;
-    if (!token || !accountId) {
-      return {
-        connected: false,
-        reason: "Missing INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_ACCOUNT_ID in environment.",
-      };
-    }
+    void brandId;
     return {
-      connected: true,
-      accountName: `@brand_${brandId.slice(0, 8)}`,
+      connected: false,
+      reason: "Live Instagram posting is not available in this release. Export the package and post it manually.",
     };
   }
 
@@ -57,32 +54,12 @@ export class InstagramReelsChannel implements DistributionChannel {
       };
     }
 
-    if (!connection.connected) {
-      return {
-        externalId: "",
-        platform: "instagram",
-        status: "failed",
-        error: connection.reason || "Instagram account is not connected.",
-      };
-    }
-
-    // Live Instagram Content Publishing API flow
-    try {
-      // Live Instagram publishing is not implemented in this build. Nothing is reported as published.
-      return {
-        externalId: "",
-        platform: "instagram",
-        status: "failed",
-        error: "Live Instagram publishing is not implemented in this build. Nothing was published.",
-      };
-    } catch (caught) {
-      return {
-        externalId: "",
-        platform: "instagram",
-        status: "failed",
-        error: caught instanceof Error ? caught.message : String(caught),
-      };
-    }
+    return {
+      externalId: "",
+      platform: "instagram",
+      status: "failed",
+      error: connection.reason || "Instagram is not connected. Nothing was published.",
+    };
   }
 
   async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {

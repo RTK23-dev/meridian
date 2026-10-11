@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { randomUUID } from "node:crypto";
-import { JevRouter, OpenRouterJevProvider, TypeSafeDirectJevProvider } from "../jev/router.ts";
-import { OpenRouterJevClient } from "../jev/client.ts";
+import { JevRouter, TypeSafeDirectJevProvider } from "../jev/router.ts";
 import type { JevDecisionRequest } from "../jev/types.ts";
 import { GeminiOmniVideoProvider } from "../production/providers/omni.ts";
-import { VeoProvider } from "../production/providers/veo.ts";
 import { GoogleNanoBananaImageProvider } from "../production/image-providers.ts";
 import { ProductionRouter } from "../production/router.ts";
 import { JevDecisionEngine } from "../decisions/jev-engine.ts";
@@ -40,7 +38,6 @@ function recorder(respond: () => Response) {
 
 const jevResponse = () => new Response(JSON.stringify({ model: "typesafe/jev-1.13", answers: {} }), { status: 200 });
 const omniResponse = () => new Response(JSON.stringify({ interaction_id: "interactions/acceptance-1", status: "in_progress", steps: [] }), { status: 200 });
-const veoResponse = () => new Response(JSON.stringify({ name: "operations/acceptance-1", done: false }), { status: 200 });
 const imageRefused = () => new Response("refused", { status: 403 });
 
 function jevRequest(organizationId: string): JevDecisionRequest {
@@ -87,12 +84,12 @@ for (const { name, sql } of backends) {
     await withEnv({}, async () => {
       const rec = recorder(jevResponse);
       const router = new JevRouter({ typesafeProvider: new TypeSafeDirectJevProvider({ sql, fetchImpl: rec.fetchImpl }) });
-      await router.decide(jevRequest(a.organizationId), { mode: "auto", preferredProvider: "typesafe_direct", fallbackEnabled: false });
+      await router.decide(jevRequest(a.organizationId));
       assert.equal(rec.calls(), 1);
       assert.equal(rec.requests[0].get("authorization"), "Bearer jev-workspace-key-1111");
 
       // Workspace B has no saved key and no shared default. Its request is answered not_configured, and no request is sent.
-      const answered = await router.decide(jevRequest(b.organizationId), { mode: "auto", preferredProvider: "typesafe_direct", fallbackEnabled: false });
+      const answered = await router.decide(jevRequest(b.organizationId));
       assert.equal(rec.calls(), 1, "no request for a workspace with no usable key");
       assert.equal(answered.answers["acceptance.hook"].status, "not_configured");
     });
@@ -147,28 +144,6 @@ for (const { name, sql } of backends) {
     });
   });
 
-  test(`[${name}] OpenRouter: deployment-only, and it sends nothing unless JEV_SHARED_DEFAULT=deployment is set`, async () => {
-    const rec = recorder(jevResponse);
-    const client = new OpenRouterJevClient({ apiKey: "openrouter-deployment-key-4444", fetchImpl: rec.fetchImpl });
-    const provider = new OpenRouterJevProvider(client);
-
-    await withEnv({ OPENROUTER_API_KEY: "openrouter-deployment-key-4444" }, async () => {
-      const health = await provider.health();
-      assert.equal(health.status, "NOT_CONFIGURED");
-      assert.match(health.status === "NOT_CONFIGURED" ? health.message : "", /JEV_SHARED_DEFAULT=deployment/);
-      const res = await provider.decide(jevRequest("org-openrouter"));
-      assert.equal(rec.calls(), 0, "not opted in: no request");
-      assert.equal(res.answers["acceptance.hook"].status, "not_configured");
-    });
-
-    await withEnv({ JEV_SHARED_DEFAULT: "deployment", OPENROUTER_API_KEY: "openrouter-deployment-key-4444" }, async () => {
-      assert.equal((await provider.health()).status, "READY");
-      await provider.decide(jevRequest("org-openrouter"));
-      assert.equal(rec.calls(), 1, "opted in: the deployment key is used");
-      assert.equal(rec.requests[0].get("authorization"), "Bearer openrouter-deployment-key-4444");
-    });
-  });
-
   test(`[${name}] Omni: the submit and the poll send the owning workspace's key, and another workspace's job sends nothing`, async () => {
     const a = await studioTenant(sql, "omni-a");
     const b = await studioTenant(sql, "omni-b");
@@ -218,29 +193,6 @@ for (const { name, sql } of backends) {
       assert.equal((await provider.health()).state, "NOT_CONFIGURED");
       assert.equal((await provider.healthFor(a.organizationId)).state, "CONFIGURED");
       assert.equal((await provider.healthFor(b.organizationId)).state, "NOT_CONFIGURED");
-    });
-  });
-
-  test(`[${name}] Veo: reads its key through the resolver, and refuses without a workspace key`, async () => {
-    const a = await studioTenant(sql, "veo-a");
-    const b = await studioTenant(sql, "veo-b");
-    await storeVaultCredential(sql, a.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: "veo-workspace-key-1111" });
-
-    await withEnv({ GEMINI_API_KEY: "veo-env-key-must-not-be-used" }, async () => {
-      const rec = recorder(veoResponse);
-      const provider = new VeoProvider({ sql, fetchImpl: rec.fetchImpl });
-
-      const submitted = await provider.submitJob(specFor(a));
-      assert.equal(submitted.status, "RUNNING");
-      assert.equal(rec.requests[0].get("x-goog-api-key"), "veo-workspace-key-1111", "the workspace key, not the environment key");
-
-      const refused = await provider.submitJob(specFor(b));
-      assert.equal(refused.status, "NOT_CONFIGURED");
-      assert.equal(rec.calls(), 1, "workspace B sends no request");
-
-      await assert.rejects(provider.checkJobStatus("operations/acceptance-1"), /Cannot check Veo job status/, "a poll with no owning workspace is refused");
-      assert.equal(rec.calls(), 1);
-      assert.equal((await provider.health()).state, "NOT_CONFIGURED");
     });
   });
 

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Field, Card, ScreenSkeleton, SelectInput, StatusBadge, Textarea, Input } from "@/components/ui";
+import { Button, DisabledReason, Field, Card, ScreenSkeleton, SelectInput, StatusBadge, Textarea, Input } from "@/components/ui";
 import { PlainErrorMessage, PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { CreativeCard } from "@/components/library/creative-card";
@@ -11,7 +11,7 @@ import {
   NO_LIBRARY_FILTERS,
   distinctValues,
   filterLibraryCreatives,
-  groupMediaByCreative,
+  mediaByCreative,
   mediaKindFor,
   primaryMedia,
   type LibraryFilters,
@@ -22,7 +22,6 @@ import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { buildTraceTimeline } from "@/components/library/trace-model";
-import { REVIEW_LIST_LIMIT } from "@/components/reviews/review-model";
 import { hasRole } from "@/lib/meridian/access";
 import { attachCreativeImage, recordObservation, recordPerformance } from "@/lib/meridian/machine";
 import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
@@ -50,7 +49,8 @@ function Library({ brandId }: { brandId: string }) {
   const data = query.data ?? null;
   // Media for the cards and the trace comes from the studio session. It is the only read that links an asset id to a creative.
   const studio = useStudioQuery(brandId);
-  const variantsByCreative = useMemo(() => groupMediaByCreative(studio.data?.variants ?? []), [studio.data?.variants]);
+  // Each card's media comes from the studio variants where they exist, and from the asset id in the library list otherwise.
+  const variantsByCreative = useMemo(() => mediaByCreative(data?.creatives ?? [], studio.data?.variants ?? []), [data?.creatives, studio.data?.variants]);
   // The trace stays mounted after the drawer closes, so its content does not blank out during the exit animation.
   const [traceCreativeId, setTraceCreativeId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -134,7 +134,9 @@ function Library({ brandId }: { brandId: string }) {
   if (!data) return <ScreenSkeleton label="Loading library" shape="rows" />;
   const canEdit = hasRole(data.role, "member");
 
-  const mediaLoad: MediaLoad = studio.isError ? "unavailable" : studio.data ? "ready" : "loading";
+  // The cards read media from the library list, which always answers with the asset ids. The studio read adds detail only.
+  const mediaLoad: MediaLoad = "ready";
+  const studioLoad: MediaLoad = studio.isError ? "unavailable" : studio.data ? "ready" : "loading";
   const kindOf = (creativeId: string) => mediaKindFor(mediaLoad, variantsByCreative.get(creativeId) ?? []);
   const visibleCreatives = filterLibraryCreatives(data.creatives, filters, kindOf);
   const traceMedia = traceCreativeId ? variantsByCreative.get(traceCreativeId) ?? [] : [];
@@ -147,11 +149,11 @@ function Library({ brandId }: { brandId: string }) {
         decisions: trace.decisions,
         brief: trace.brief,
         observations: trace.observations,
-        mediaLoad,
+        mediaLoad: studioLoad,
         media: traceMedia,
         reviewsLoad: reviewsQuery.isError ? "unavailable" : reviewsQuery.data ? "ready" : "loading",
         reviews: reviewsQuery.data?.reviews ?? [],
-        reviewsTruncated: (reviewsQuery.data?.reviews.length ?? 0) >= REVIEW_LIST_LIMIT,
+        reviewsTruncated: reviewsQuery.data?.hasMore ?? false,
       })
     : null;
 
@@ -180,10 +182,19 @@ function Library({ brandId }: { brandId: string }) {
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
-      <Button type="button" variant="quiet" disabled={!visibleCreatives.length} onClick={() => downloadCsv("meridian-library.csv", [
-        { key: "id", label: "Creative ID" }, { key: "title", label: "Title" }, { key: "hook", label: "Hook" },
-        { key: "angle", label: "Angle" }, { key: "status", label: "Status" }, { key: "origin", label: "Origin" }, { key: "createdAt", label: "Created at" },
-      ], visibleCreatives)}>Export visible library</Button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button type="button" variant="quiet" disabled={!visibleCreatives.length} aria-describedby={visibleCreatives.length ? undefined : "library-export-reason"} onClick={() => downloadCsv("meridian-library.csv", [
+          { key: "id", label: "Creative ID" }, { key: "title", label: "Title" }, { key: "hook", label: "Hook" },
+          { key: "angle", label: "Angle" }, { key: "status", label: "Status" }, { key: "origin", label: "Origin" }, { key: "createdAt", label: "Created at" },
+        ], visibleCreatives)}>Export visible library</Button>
+        {visibleCreatives.length ? null : (
+          <DisabledReason id="library-export-reason" className="basis-full">
+            {data.creatives.length === 0
+              ? "There are no creatives to export yet. Record or generate one first."
+              : "No creatives match the filters, so there is nothing to export. Clear the filters to export the library."}
+          </DisabledReason>
+        )}
+      </div>
       <Card>
         <h2 className="font-display text-2xl">Paused publishing</h2>
         <p className="mt-2 text-sm text-muted">
@@ -257,7 +268,10 @@ function Library({ brandId }: { brandId: string }) {
               onConfirmingChange={setPublishDiscard}
               onDiscard={() => { publishForm.reset(); setPublishDiscard(false); }}
             />
-            <Button type="submit" disabled={pausedObjects.isPending || publishForm.formState.isSubmitting || data.creatives.length === 0}>{pausedObjects.isPending || publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <Button type="submit" disabled={pausedObjects.isPending || publishForm.formState.isSubmitting || data.creatives.length === 0} aria-describedby={data.creatives.length === 0 ? "paused-publish-reason" : undefined}>{pausedObjects.isPending || publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
+              {data.creatives.length === 0 ? <DisabledReason id="paused-publish-reason" className="basis-full">Create or record a creative first. A paused object needs a creative to point at.</DisabledReason> : null}
+            </div>
           </form>
         ) : (
           <p className="mt-2 text-sm text-muted">An admin can send a paused publish.</p>
@@ -279,7 +293,7 @@ function Library({ brandId }: { brandId: string }) {
       {data.creatives.length === 0 ? <Card>No brand creatives yet. Rank an opportunity, brief it, and save a script. Or record one you already ran.</Card> : (
         <section aria-labelledby="library-creatives-title" className="space-y-4">
           <div><h2 id="library-creatives-title" className="font-display text-2xl">Creative library</h2><p className="text-sm text-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
-          {studio.isError ? <PlainErrorMessage message="Media previews could not be loaded. Open Details for the exact message." raw={plainError(studio.error).raw} /> : null}
+          {studio.isError ? <PlainErrorMessage message="Media details could not be loaded. Thumbnails still come from the library list. Open Details for the exact message." raw={plainError(studio.error).raw} /> : null}
           <LibraryFilterBar
             filters={filters}
             onChange={setFilters}

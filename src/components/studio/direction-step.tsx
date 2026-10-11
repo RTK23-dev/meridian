@@ -2,7 +2,7 @@ import type { UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, Field, Card, Textarea } from "@/components/ui";
+import { Button, DisabledReason, Field, Card, Textarea } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { IdeaToTestBadge, Term } from "@/components/glossary";
@@ -89,17 +89,25 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
               <UnsavedChangesGuard dirty={reasonDirty} />
               <DirectionReasonField id="direction-reason" registration={reasonForm.register("reason")} error={reasonForm.formState.errors.reason?.message} />
               <FormDiscardBar dirty={reasonDirty} subject="direction reason" onDiscard={() => reasonForm.reset({ reason: "" })} />
-              <Button
-                type="button"
-                disabled={pending || (reason ?? "").trim().length < DIRECTION_REASON_MIN}
-                onClick={() => {
-                  void reasonForm.handleSubmit(async (values) => {
-                    await onAccept(values.reason).then(() => reasonForm.reset({ reason: "" }), () => undefined);
-                  })();
-                }}
-              >
-                Accept direction and write the brief
-              </Button>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Button
+                  type="button"
+                  disabled={pending || (reason ?? "").trim().length < DIRECTION_REASON_MIN}
+                  aria-describedby={(reason ?? "").trim().length < DIRECTION_REASON_MIN && !pending ? "accept-direction-hint" : undefined}
+                  onClick={() => {
+                    void reasonForm.handleSubmit(async (values) => {
+                      await onAccept(values.reason).then(() => reasonForm.reset({ reason: "" }), () => undefined);
+                    })();
+                  }}
+                >
+                  Accept direction and write the brief
+                </Button>
+                {(reason ?? "").trim().length < DIRECTION_REASON_MIN && !pending ? (
+                  <DisabledReason id="accept-direction-hint" className="basis-full">
+                    Write at least {DIRECTION_REASON_MIN} characters of reason to accept this direction.
+                  </DisabledReason>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </Card>

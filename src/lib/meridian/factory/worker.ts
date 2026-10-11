@@ -1,13 +1,14 @@
 import type { Sql } from "../learning/store.ts";
+import { sourceKeyFor } from "../sources/credentials.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import { CREATIVE_DNA_VERSION, dnaFromTranscript, type AdFormat, type CreativeDna } from "./creative-dna.ts";
 import { decodeVideoDna } from "./decode.ts";
 import type { ResearchSegment } from "../research/schema.ts";
-import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate } from "./gates.ts";
+import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate, type GateVerdict } from "./gates.ts";
 import { adsMustPause } from "./kill-switch.ts";
 import { factoryStageAllowed, isFactoryStage } from "./pipeline.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
-import { templateFromDna, variantMatrix } from "./template.ts";
+import { recordedClaimsOf, templateFromDna, variantMatrix } from "./template.ts";
 import { buildAdTimeline } from "./timeline.ts";
 import { winnerScore } from "./winner-score.ts";
 
@@ -51,8 +52,8 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   `;
 
   if (job.job_type === "factory.discover") {
-    const token = process.env.META_AD_LIBRARY_TOKEN?.trim();
-    return token ? "sources:meta_ad_library" : "NOT_CONNECTED:meta_ad_library";
+    const metaKey = await sourceKeyFor("meta_ad_library", job.organization_id);
+    return metaKey.secret ? "sources:meta_ad_library" : "NOT_CONNECTED:meta_ad_library";
   }
   if (job.job_type === "factory.ingest") {
     const allowed = snapshotMediaAllowed();
@@ -315,22 +316,60 @@ async function persistVariants(sql: Sql, organizationId: string, brandId: string
   return count;
 }
 
+/** Claim text is one claim per line or per semicolon. */
+function splitClaimText(value: string): string[] {
+  return value.split(/[\n;]/).map((item) => item.trim()).filter(Boolean);
+}
+
+/** The brand's approved claims and prohibited claims, from its product records. Empty when none are recorded. */
+async function brandClaimRules(sql: Sql, organizationId: string, brandId: string): Promise<{ approved: string[]; banned: string[] }> {
+  const rows = await sql<{ allowed_claims: unknown; prohibited_claims: unknown }>`
+    select p.allowed_claims, p.prohibited_claims
+    from products p
+    join brands b on b.id = p.brand_id
+    where b.id = ${brandId} and b.organization_id = ${organizationId} and b.deleted_at is null
+  `;
+  const approved: string[] = [];
+  const banned: string[] = [];
+  for (const row of rows) {
+    approved.push(...splitClaimText(text(row.allowed_claims)));
+    banned.push(...splitClaimText(text(row.prohibited_claims)));
+  }
+  return { approved, banned };
+}
+
+/**
+ * The gate verdicts for one variant. Each check gets only the evidence this job has. The claims check gets the brand's
+ * approved and prohibited claims and the claim text the variant's storyboard records, so a variant with no recorded claim
+ * text is reviewed, not passed.
+ */
+export function variantGateVerdicts(input: {
+  storyboard: string | null;
+  rules: { approved: string[]; banned: string[] };
+}): GateVerdict[] {
+  return [
+    originalityGate({ frameHashDistance: null, embeddingDistance: null, textSimilarity: null }),
+    brandGate({ logoPresent: null, paletteMatch: null, productLooksRight: null }),
+    claimsGate({ claims: recordedClaimsOf(input.storyboard ?? ""), approvedClaims: input.rules.approved, bannedWords: input.rules.banned }),
+    policyGate({ beforeAfter: false, personalAttribute: false, healthClaim: false, financeClaim: false }),
+    rightsGate({ musicLicensed: false, footageLicensed: false, aiLabeled: false }),
+  ];
+}
+
+/** Gates each recent variant with variantGateVerdicts and records the combined result. */
 async function gateVariants(sql: Sql, organizationId: string, brandId: string): Promise<number> {
-  const variants = await sql<{ id: string }>`
-    select id from factory_variants
-    where organization_id = ${organizationId} and brand_id = ${brandId}
-    order by created_at desc
+  const rules = await brandClaimRules(sql, organizationId, brandId);
+  const variants = await sql<{ id: string; storyboard: string | null }>`
+    select v.id, t.storyboard
+    from factory_variants v
+    left join factory_templates t on t.id = v.template_id and t.organization_id = v.organization_id
+    where v.organization_id = ${organizationId} and v.brand_id = ${brandId}
+    order by v.created_at desc
     limit 40
   `;
   let count = 0;
   for (const variant of variants) {
-    const combined = combineGates([
-      originalityGate({ frameHashDistance: null, embeddingDistance: null, textSimilarity: null }),
-      brandGate({ logoPresent: null, paletteMatch: null, productLooksRight: null }),
-      claimsGate({ claims: [], approvedClaims: [], bannedWords: [] }),
-      policyGate({ beforeAfter: false, personalAttribute: false, healthClaim: false, financeClaim: false }),
-      rightsGate({ musicLicensed: false, footageLicensed: false, aiLabeled: false }),
-    ]);
+    const combined = combineGates(variantGateVerdicts({ storyboard: variant.storyboard, rules }));
     await sql`
       update factory_variants set gate_result = ${combined.result}
       where id = ${variant.id} and organization_id = ${organizationId} and brand_id = ${brandId}

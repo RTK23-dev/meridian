@@ -19,7 +19,7 @@ import {
   type SceneDna,
 } from "./creative-dna.ts";
 import { semanticEmbed } from "../embeddings/semantic.ts";
-import { completeWithImage, extractJson } from "../providers/chat.server.ts";
+import { completeWithImage, extractJson, openRouterChatCredential } from "../providers/chat.server.ts";
 
 const execFile = promisify(execFileCallback);
 
@@ -212,8 +212,8 @@ async function defaultVisionLabeller(
   sceneIndex: number,
   second: number,
 ): Promise<SceneVisionLabels | null> {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) return null;
+  // The vision call reads its key through the credential resolver. Without the deployment opt-in there is no call.
+  if (openRouterChatCredential().status !== "ready") return null;
 
   try {
     const base64 = Buffer.from(keyframeBytes).toString("base64");

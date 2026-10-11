@@ -65,7 +65,8 @@ try {
   await page.getByLabel("Tone").fill("Plain, specific, and calm.");
   await page.getByLabel("Preferred formats").fill("short ugc");
   await page.getByRole("button", { name: "Save brain" }).click();
-  await page.getByText("Version 2").waitFor();
+  // Autosave writes its own versions as the fields change, so the manual save is not always "Version 2". Wait for the version the person saved.
+  await page.getByText(/Version \d+ · Saved by a person/).waitFor();
 
   await page.goto(`${brandUrl}/market`, { waitUntil: "networkidle" });
   await page.getByLabel("Name").fill("North Foam");

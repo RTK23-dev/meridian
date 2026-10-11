@@ -78,7 +78,7 @@ function isKeyCategory(category: ProviderCategory): category is KeyCategory {
 }
 
 /** The fields each category's Save checks and sends. A key field belongs to its own category only. */
-const FIELDS_SAVED_BY: Record<ProviderCategory, Array<FieldPath<ProviderFieldsInput>>> = {
+const FIELDS_SAVED_BY: Partial<Record<ProviderCategory, Array<FieldPath<ProviderFieldsInput>>>> = {
   jev: ["jevKey"],
   production: ["productionKey", "costPreference"],
   cyclone: ["gatewayUrl"],
@@ -107,7 +107,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   const providerDirty = providerForm.formState.isDirty;
   const fieldErrors = providerForm.formState.errors;
   // The discard bar looks at the active category's fields only, so another category's unsaved key is not counted here.
-  const activeDirty = FIELDS_SAVED_BY[activeTab].some((name) => Boolean(providerForm.formState.dirtyFields[name]));
+  const activeDirty = (FIELDS_SAVED_BY[activeTab] ?? []).some((name) => Boolean(providerForm.formState.dirtyFields[name]));
   const [discardRequested, setDiscardRequested] = useState(false);
   useEffect(() => {
     const stored = storedFieldsOf(summaries);
@@ -166,7 +166,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   async function handleSave(category: ProviderCategory) {
     setMessage(null);
     // Only the fields this category saves are checked, so a bad draft for another category does not block this save.
-    const valid = await providerForm.trigger(FIELDS_SAVED_BY[category]);
+    const valid = await providerForm.trigger(FIELDS_SAVED_BY[category] ?? []);
     if (!valid) return;
     const values = providerForm.getValues();
     // Only this category's own key field is sent, and only a category that takes a key sends one. A key typed for another
@@ -199,7 +199,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   // Discard clears only the active category's unsaved edits, so it cannot clear another category's draft.
   function discardActiveCategory() {
     const stored = storedFieldsOf(summaries);
-    for (const name of FIELDS_SAVED_BY[activeTab]) providerForm.resetField(name, { defaultValue: stored[name] });
+    for (const name of FIELDS_SAVED_BY[activeTab] ?? []) providerForm.resetField(name, { defaultValue: stored[name] });
     setDiscardRequested(false);
   }
 
@@ -324,37 +324,9 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               <DecisionEngineSelector organizationId={organizationId} canAdmin={canAdmin} />
               <p className="text-xs font-semibold uppercase tracking-widest text-brass">TypeSafe JEV transport</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="JEV Routing Mode">
-                <Input value={String(activeSummary.settings.mode)} readOnly />
-              </Field>
-
-              <Field label="Preferred Provider">
-                <Input value={String(activeSummary.settings.preferredProvider)} readOnly />
-              </Field>
-
               <p className="sm:col-span-2 text-xs text-muted">
-                The TypeSafe key is saved per workspace. A deployment TypeSafe key is used only when JEV_SHARED_DEFAULT=deployment
-                is set, and it is shown as the deployment shared default.
-              </p>
-              <div className="sm:col-span-2 rounded border border-line bg-panel p-3 text-xs text-muted">
-                <strong>OpenRouter is deployment-only.</strong>{" "}
-                {summaries?.jev?.settings?.openrouterConfigured
-                  ? `This deployment has an OPENROUTER_API_KEY (${summaries.jev.settings.openrouterFingerprint ?? "no fingerprint"}).`
-                  : "This deployment has no OPENROUTER_API_KEY."}{" "}
-                {summaries?.jev?.settings?.openrouterUsable
-                  ? "It is in use, because JEV_SHARED_DEFAULT=deployment is set."
-                  : "It is not used. It needs OPENROUTER_API_KEY on this deployment and JEV_SHARED_DEFAULT=deployment. It is never saved per workspace."}
-              </div>
-
-              {activeSummary.settings.mode === "compare" ? (
-                <div className="sm:col-span-2 rounded border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
-                  ⚠️ <strong>Compare Mode Active</strong>: Runs both TypeSafe and OpenRouter in parallel to evaluate
-                  decision agreement. Incurs dual API provider fees.
-                </div>
-              ) : null}
-
-              <p className="sm:col-span-2 text-xs text-muted">
-                Routing is set on the deployment (MERIDIAN_JEV_PROVIDER_MODE, MERIDIAN_JEV_PREFERRED_PROVIDER). A routing choice saved in this workspace is not used, so it is not offered.
+                TypeSafe is the decision transport. Its key is saved per workspace, and a deployment key is used only when
+                JEV_SHARED_DEFAULT=deployment is set. A decision never calls a second provider.
               </p>
               <div className="sm:col-span-2">
                 <Field label="TypeSafe JEV API key (saved per workspace)" error={fieldErrors.jevKey?.message}>
@@ -385,7 +357,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               </Field>
 
               <div className="sm:col-span-2">
-                <Field label="Gemini production API key (Omni video, Veo, image)" error={fieldErrors.productionKey?.message}>
+                <Field label="Gemini production API key (Omni video, image)" error={fieldErrors.productionKey?.message}>
                   <Input
                     type="password"
                     placeholder="Enter a Gemini API key to save or replace it..."
@@ -416,7 +388,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               </Field>
 
               <div className="sm:col-span-2 rounded border border-line bg-panel p-3 text-xs text-muted">
-                🔒 <strong>Read-Only Scout Enforcement</strong>: Cyclone observations are strictly read-only. Meridian
+                <strong>Read-only observation</strong>: Cyclone observations are read-only. Meridian
                 never automates likes, follows, comments, DMs, or competitor interactions.
               </div>
             </div>

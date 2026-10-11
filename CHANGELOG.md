@@ -1,8 +1,39 @@
 # Changelog
 
+## Prerelease — not yet tagged
+
+The next beta tag will be cut after this work is verified on a fresh migrated database. Migrations 0054 to 0057 are new.
+
+**Action for deployments that used environment keys:** provider keys from the environment are now used only when the deployment
+opts in with the category's `*_SHARED_DEFAULT` variable (see `docs/PROVIDERS.md`). Set the opt-in, or save the key in Settings.
+
+- **Keys**: every workspace provider key resolves through one resolver. Source connectors each have a key and an opt-in. The Meta Ad
+  Library key moved into its own encrypted entry. A deployment key alone no longer makes a source ready.
+- **Decisions**: one engine per workspace (TypeSafe JEV or OpenAI Decisions). Compare mode, automatic fallback between engines and the
+  OpenRouter decision transport are removed. A malformed engine answer is a provider error, never a coerced value.
+- **Video**: Google Veo is removed. Gemini Omni is the only Google video engine and the default. Stored videos play in Studio review and
+  the Library, with byte-range support.
+- **Storage**: Postgres is the system of record. Drive and S3 hold artifacts and exports. Drive uploads resume from the last confirmed byte,
+  and the session is kept in Postgres (migration 0056).
+- **Sourcing**: public-page discovery runs end to end with per-source states, provenance on every evidence row, and deduplication by
+  canonical URL and content hash (migration 0057).
+- **Brand brain**: the 26 fields come from one list. Four are required, and "Complete brand brain" depends only on those. Onboarding
+  resumes at the section the person left (migration 0055).
+- **Setup**: `npm run setup` is the one command. Settings → General has a setup view and a Drive panel. `.env.example` lists every variable
+  the code reads.
+- **Honesty**: Facebook, Instagram and YouTube report not connected instead of connected from environment tokens. The Reddit API reports
+  not connected. Live posting is not implemented; the manual export package is the delivery path.
+- **Controls**: every button acts or shows why it cannot (`npm run ui:button-audit`). The settings screen and the brand switcher state what is
+  missing instead of showing a percentage.
+- **Cleanup**: removed dead modules (the Instagram graph adapter, the Meta outcome ingestion, the duplicate-evidence helper, the shadow-decision
+  flag and others), a stray emoji, and stale comments.
+- **Docs**: rewritten. Start at `docs/README.md`. The legacy plugin brief is kept as it was.
+
+Not yet done: see `docs/ROADMAP.md`.
+
 ## Unreleased — UI overhaul
 
-The interface was rebuilt in phases (plan in `docs/UI_OVERHAUL.md`). Server-side role checks, tenancy checks, auth and provider logic did not change.
+The interface was rebuilt in phases. Server-side role checks, tenancy checks, auth and provider logic did not change.
 
 - **Shell and navigation**: the workspace picker sits at the top of the sidebar and the brand picker sits below it on brand pages. The header is one row. Both pickers are in the mobile navigation.
 - **Data layer**: reads and writes go through React Query. Writes report pending, success and failure through one hook.
@@ -11,7 +42,7 @@ The interface was rebuilt in phases (plan in `docs/UI_OVERHAUL.md`). Server-side
 - **Operations**: Jobs, Usage, Audit, Alerts, Calibration, Exports and Webhook events have their own screens.
 - **Forms**: typed validation shares one schema between browser and server. Field errors and unsaved-change guards appear before submit.
 - **Provider keys**: a key typed for one provider category is no longer sent when another category is saved.
-- **Accessibility**: one visible focus outline, 44px touch targets on touch screens, one `main` landmark per screen, and tables become cards below the `md` breakpoint. See `docs/ACCESSIBILITY.md`. The repository is not certified.
+- **Accessibility**: one visible focus outline, 44px touch targets on touch screens, one `main` landmark per screen, and tables become cards below the `md` breakpoint. See the design system's accessibility checks. The repository is not certified.
 - **Cleanup**: removed the legacy `components/ui.tsx` shim, `components/status.tsx`, and the unused `email-auth`, `audit` and `why-this-drawer` components. Removed the unused `--color-ink` token and the unused `zustand` dependency.
 
 Not verified yet: the unit test suite, the production build, the browser end-to-end suite and axe audits of the redesigned screens. Those run in the testing pass.

@@ -17,17 +17,9 @@ import { disconnectProvider, probeProviderConnection, reconnectProvider } from "
 import { removeProviderConfig, testProviderConnection } from "@/lib/meridian/settings/server-actions";
 import { useIntegrationsQuery, usePendingVariables, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
+import { isOAuthProvider, type AccountProvider, type OAuthProvider } from "@/components/settings/oauth-providers";
 
 export const Route = createFileRoute("/_app/integrations")({ staticData: { pageTitle: "Integrations" }, component: Page });
-
-type AccountProvider = "meta" | "tiktok" | "google" | "ad_library";
-type OAuthProvider = Extract<AccountProvider, "meta" | "tiktok" | "google">;
-
-const OAUTH: ReadonlySet<string> = new Set<OAuthProvider>(["meta", "tiktok", "google"]);
-
-function isOAuthProvider(provider: string): provider is OAuthProvider {
-  return OAUTH.has(provider);
-}
 
 function Page() {
   return <Integrations />;

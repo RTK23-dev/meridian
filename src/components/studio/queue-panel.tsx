@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Badge, Button, Field, Card, SelectInput } from "@/components/ui";
+import { Badge, Button, DisabledReason, Field, Card, SelectInput } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { queueScheduleSchema, type QueueScheduleInput } from "@/components/forms/client-schemas";
@@ -13,6 +13,7 @@ import {
   useRetryPublishJob,
 } from "@/lib/query/hooks";
 import type { StudioVariant } from "./types.ts";
+import { queueTone } from "./queue-tone.ts";
 
 type QueuePanelProps = {
   brandId: string;
@@ -73,6 +74,13 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
     publishedAt: string;
     externalUrl?: string;
   }>) ?? [];
+  // Scheduling is per creative, and a creative can have several media variants, so each creative is offered once.
+  const creativeOptions = variants.filter((variant, index) => variants.findIndex((other) => other.creativeId === variant.creativeId) === index);
+  // The first missing requirement is the reason, so the person sees one thing to fix at a time.
+  const enqueueBlockedReason = !canEdit ? "Only members can schedule publishing."
+    : !queueCreativeId ? "Choose a creative to schedule."
+    : queueAccountIds.length === 0 ? "Choose at least one connected account to schedule to."
+    : null;
 
   return (
     <div className="space-y-6">
@@ -94,7 +102,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
           <Field label="Choose Creative Variant" error={errors.creativeId?.message}>
             <SelectInput {...register("creativeId")}>
               <option value="">Select a variant…</option>
-              {variants.map((v) => (
+              {creativeOptions.map((v) => (
                 <option key={v.creativeId} value={v.creativeId}>
                   {v.title || v.kind} ({v.creativeStatus})
                 </option>
@@ -152,10 +160,12 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
         </div>
 
         <FormDiscardBar dirty={isDirty} subject="publishing schedule" onDiscard={() => queueForm.reset(blankSchedule)} />
-        <div className="flex justify-end pt-2">
+        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pt-2">
+          {enqueueBlockedReason && !schedulePublishMutation.isPending ? <DisabledReason id="enqueue-reason" className="basis-full text-right">{enqueueBlockedReason}</DisabledReason> : null}
           <Button
             variant="primary"
             disabled={!canEdit || !queueCreativeId || queueAccountIds.length === 0 || schedulePublishMutation.isPending}
+            aria-describedby={enqueueBlockedReason && !schedulePublishMutation.isPending ? "enqueue-reason" : undefined}
             onClick={enqueue}
           >
             <Send className="mr-1.5 h-4 w-4" aria-hidden="true" />
@@ -170,7 +180,8 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
             <Clock className="h-4 w-4 text-accent" aria-hidden="true" />
             Live Publishing Queue ({queueItems.length})
           </h3>
-          <Button size="sm" variant="secondary" aria-label="Refresh the publishing queue" onClick={() => void queueQuery.refetch()} disabled={queueQuery.isFetching}>
+          {/* Not disabled while it loads: a second refresh is harmless, and the spinning icon shows the fetch is running. */}
+          <Button size="sm" variant="secondary" aria-label="Refresh the publishing queue" onClick={() => void queueQuery.refetch()}>
             <RefreshCw className={`h-3.5 w-3.5 ${queueQuery.isFetching ? "animate-spin" : ""}`} aria-hidden="true" />
           </Button>
         </div>
@@ -265,15 +276,6 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
       ) : null}
     </div>
   );
-}
-
-/** The table and the phone cards share one tone mapping, so a status reads the same at every width. */
-function queueTone(status: string): "success" | "info" | "danger" | "neutral" | "warning" {
-  if (status === "published") return "success";
-  if (status === "processing") return "info";
-  if (status === "failed") return "danger";
-  if (status === "cancelled") return "neutral";
-  return "warning";
 }
 
 /** Retry and cancel for one queue row. The role check stays here, so both layouts keep it. */

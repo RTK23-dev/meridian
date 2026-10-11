@@ -6,6 +6,7 @@
  */
 
 import { fetchPublicText } from "../fetch-page.server.ts";
+import { pageUrlForSeed } from "../public-url.ts";
 import { quarantineExternalText } from "../../ingestion/quarantine.ts";
 import type {
   SourceAdapter,
@@ -41,63 +42,58 @@ export class WebsiteSourceAdapter implements SourceAdapter {
     };
   }
 
+  /**
+   * References for one public page: the page itself, its repeated-card destinations, and its same-host links. A free-text
+   * query names no page and yields none. A crawl failure throws, so the caller reports the error instead of an empty result.
+   */
   async discover(query: DiscoveryQuery): Promise<SourceReference[]> {
-    const rawTarget = query.query || "";
-    if (!rawTarget) return [];
+    const targetUrl = pageUrlForSeed(query.query || "");
+    if (!targetUrl) return [];
 
-    let targetUrl = rawTarget.trim();
-    if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
-      targetUrl = `https://${targetUrl}`;
+    const { crawlLadderPage } = await import("../../discovery/crawler.ts");
+    const result = await crawlLadderPage(targetUrl, `disc_${Date.now()}`);
+    const limit = query.limit || 20;
+
+    const refs: SourceReference[] = [];
+
+    // Add top-level page reference
+    refs.push({
+      sourceId: `web_${Buffer.from(result.canonicalUrl).toString("base64url").slice(0, 32)}`,
+      platform: "website",
+      sourceAdapter: this.id,
+      canonicalUrl: result.canonicalUrl,
+      discoveredAt: result.fetchedAt,
+    });
+
+    // Add discovered repeated cards
+    for (const card of result.cards) {
+      if (refs.length >= limit) break;
+      if (card.destinationUrl) {
+        refs.push({
+          sourceId: `web_${Buffer.from(card.destinationUrl).toString("base64url").slice(0, 32)}`,
+          platform: "website",
+          sourceAdapter: this.id,
+          canonicalUrl: card.destinationUrl,
+          discoveredAt: card.discoveredAt,
+        });
+      }
     }
 
-    try {
-      const { crawlLadderPage } = await import("../../discovery/crawler.ts");
-      const result = await crawlLadderPage(targetUrl, `disc_${Date.now()}`);
-      const limit = query.limit || 20;
-
-      const refs: SourceReference[] = [];
-
-      // Add top-level page reference
-      refs.push({
-        sourceId: `web_${Buffer.from(result.canonicalUrl).toString("base64url").slice(0, 32)}`,
-        platform: "website",
-        sourceAdapter: this.id,
-        canonicalUrl: result.canonicalUrl,
-        discoveredAt: new Date().toISOString(),
-      });
-
-      // Add discovered repeated cards
-      for (const card of result.cards) {
-        if (refs.length >= limit) break;
-        if (card.destinationUrl) {
-          refs.push({
-            sourceId: `web_${Buffer.from(card.destinationUrl).toString("base64url").slice(0, 32)}`,
-            platform: "website",
-            sourceAdapter: this.id,
-            canonicalUrl: card.destinationUrl,
-            discoveredAt: card.discoveredAt,
-          });
-        }
+    // Add outbound discovered links
+    for (const link of result.outboundLinks) {
+      if (refs.length >= limit) break;
+      if (!refs.some((r) => r.canonicalUrl === link)) {
+        refs.push({
+          sourceId: `web_${Buffer.from(link).toString("base64url").slice(0, 32)}`,
+          platform: "website",
+          sourceAdapter: this.id,
+          canonicalUrl: link,
+          discoveredAt: result.fetchedAt,
+        });
       }
-
-      // Add outbound discovered links
-      for (const link of result.outboundLinks) {
-        if (refs.length >= limit) break;
-        if (!refs.some((r) => r.canonicalUrl === link)) {
-          refs.push({
-            sourceId: `web_${Buffer.from(link).toString("base64url").slice(0, 32)}`,
-            platform: "website",
-            sourceAdapter: this.id,
-            canonicalUrl: link,
-            discoveredAt: new Date().toISOString(),
-          });
-        }
-      }
-
-      return refs;
-    } catch {
-      return [];
     }
+
+    return refs;
   }
 
   async fetch(reference: SourceReference): Promise<RawArtifact> {

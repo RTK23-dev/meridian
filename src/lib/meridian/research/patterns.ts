@@ -18,7 +18,7 @@ export type ResearchPattern = {
   sampleCount: number;
   corpusSize: number;
   prevalence: number;
-  /** The model's self-reported confidence, averaged. It is not a calibrated probability (docs/INTELLIGENCE_ROADMAP.md). */
+  /** The model's self-reported confidence, averaged. It is not a calibrated probability (docs/ROADMAP.md). */
   confidence: number;
   confidenceSource: typeof CONFIDENCE_SOURCE;
   exampleAdIds: string[];

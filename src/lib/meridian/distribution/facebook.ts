@@ -8,18 +8,15 @@ export class FacebookPagesChannel implements DistributionChannel {
   public readonly targetType = "organic_post" as const;
   public readonly displayName = "Facebook Page Video & Reels";
 
+  /**
+   * No per-workspace Facebook account is connected in this release, and no token from the environment is treated as a connected
+   * account. Live posting is not available, so the honest state is not connected, with the manual export as the way out.
+   */
   async checkConnection(brandId: string): Promise<{ connected: boolean; accountName?: string; reason?: string }> {
-    const token = process.env.FACEBOOK_PAGE_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN;
-    const pageId = process.env.FACEBOOK_PAGE_ID;
-    if (!token || !pageId) {
-      return {
-        connected: false,
-        reason: "Missing FACEBOOK_PAGE_ACCESS_TOKEN or FACEBOOK_PAGE_ID in environment.",
-      };
-    }
+    void brandId;
     return {
-      connected: true,
-      accountName: `Facebook Page ${brandId.slice(0, 8)}`,
+      connected: false,
+      reason: "Live Facebook posting is not available in this release. Export the package and post it manually.",
     };
   }
 
@@ -47,31 +44,12 @@ export class FacebookPagesChannel implements DistributionChannel {
       };
     }
 
-    if (!connection.connected) {
-      return {
-        externalId: "",
-        platform: "facebook",
-        status: "failed",
-        error: connection.reason || "Facebook Page is not connected.",
-      };
-    }
-
-    try {
-      // Live Facebook publishing is not implemented in this build. Nothing is reported as published.
-      return {
-        externalId: "",
-        platform: "facebook",
-        status: "failed",
-        error: "Live Facebook publishing is not implemented in this build. Nothing was published.",
-      };
-    } catch (caught) {
-      return {
-        externalId: "",
-        platform: "facebook",
-        status: "failed",
-        error: caught instanceof Error ? caught.message : String(caught),
-      };
-    }
+    return {
+      externalId: "",
+      platform: "facebook",
+      status: "failed",
+      error: connection.reason || "Facebook is not connected. Nothing was published.",
+    };
   }
 
   async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {

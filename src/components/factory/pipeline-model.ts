@@ -186,14 +186,12 @@ export type EngineId = PipelineGenerationParams["provider"];
 export const ENGINE_LABEL: Record<EngineId, string> = {
   manual_cloud: "Manual Cloud",
   hypit: "Hypit",
-  veo: "Google Veo",
   higgsfield: "Higgsfield",
 };
 
 const ENGINE_DESCRIPTION: Record<EngineId, string> = {
   manual_cloud: "You render outside Meridian and drop the files in Google Drive.",
   hypit: "Hypit timeline video engine.",
-  veo: "Google video model, run with the workspace Gemini key.",
   higgsfield: "Video model run through the Higgsfield API.",
 };
 
@@ -264,23 +262,9 @@ export function engineRows(sources: EngineSources): EngineRow[] {
     manualCloud = engineRow("manual_cloud", "not_connected", "Google Drive is not connected, so manual drops have nowhere to go.");
   }
 
-  let veo: EngineRow;
-  const production = settings.production;
-  if (settings.state === "loading") {
-    veo = engineRow("veo", "checking", "Checking the workspace Gemini key.");
-  } else if (settings.state === "error" || !production) {
-    veo = engineRow("veo", "not_verified", "The production key status could not be read on this screen.");
-  } else if (production.credentialState === "usable") {
-    veo = engineRow("veo", "not_verified", "The Gemini key is usable for this workspace. This screen cannot check the Veo model, so Veo is not shown as connected.");
-  } else if (production.credentialState === undefined) {
-    veo = engineRow("veo", "not_verified", "The production key status is not reported on this screen.");
-  } else {
-    veo = engineRow("veo", "not_connected", production.credentialReason || "No usable Gemini production key is saved for this workspace.");
-  }
-
   const higgsfield = engineRow("higgsfield", "not_verified", "No server status for Higgsfield is available on this screen, so it is not shown as connected.");
 
-  return [manualCloud, hypitRow, veo, higgsfield];
+  return [manualCloud, hypitRow, higgsfield];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -351,7 +335,7 @@ export const NOT_READ_REASON = {
   retention3sMin: "No factory job checks 3 s retention against this value yet.",
   confidenceMin: "No factory job reads this value yet.",
   autoApproveEnabled: "No job reads this switch. JEV's own approval rules run separately.",
-  strictClaimGate: "The gate job passes no claim text to the claims check, so this switch cannot block a variant today.",
+  strictClaimGate: "The claims check runs on every variant with the brand's own claims. No job reads this switch yet, so it does not change that check.",
   prompt: "No model call reads this text yet.",
 } as const;
 

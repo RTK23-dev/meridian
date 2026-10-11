@@ -92,7 +92,6 @@ test("JevDecisionService: dispatches typed evidence to TypeSafe provider via int
     brandId: "brand-1",
     bundle: sampleCompleteBundle,
     questionIds: ["organic.hook_mechanism.v1", "organic.format_structure.v1"],
-    policy: { mode: "typesafe_direct" },
   });
 
   // One call per evidence scope. The two questions declare different scopes, so there are two calls, each with one question.
@@ -156,7 +155,6 @@ test("JevDecisionService: abstains with typed reason and skips network dispatch 
     brandId: "brand-1",
     bundle: deficientBundle,
     questionIds: ["organic.hook_mechanism.v1"],
-    policy: { mode: "typesafe_direct" },
   });
 
   assert.equal(callCount, 0, "Network fetch must not be dispatched when evidence is deficient");
@@ -206,7 +204,6 @@ test("JevDecisionService: persists decisions and answers to SQL ledger when SQL 
     brandId: "brand-1",
     bundle: sampleCompleteBundle,
     questionIds: ["organic.hook_mechanism.v1"],
-    policy: { mode: "typesafe_direct" },
     sql: mockSql,
   });
 

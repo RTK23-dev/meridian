@@ -23,7 +23,6 @@ import type {
   JevDecisionRequest,
   JevDecisionResponse,
   JevProviderRouter,
-  JevRoutingPolicy,
   JevQuestionSpec,
   JevAnswer,
 } from "./types.ts";
@@ -106,7 +105,6 @@ export class JevDecisionService {
   async decideSemantic(
     request: JevDecisionRequest,
     options?: {
-      policy?: JevRoutingPolicy;
       sql?: Sql;
       recordId?: string;
     }
@@ -115,7 +113,7 @@ export class JevDecisionService {
     // service's router. Lineage is recorded by the dispatcher, in the same tables.
     const dispatched = await decideWithActiveEngine({
       sql: options?.sql,
-      request: { ...request, routingPolicy: options?.policy } as DecisionRequest,
+      request: { ...request } as DecisionRequest,
       engines: createDecisionEngines({ jevRouter: this.router }),
       recordId: options?.recordId,
     });
@@ -137,7 +135,6 @@ export class JevDecisionService {
     brandId: string;
     bundle: EvidenceBundle;
     questionIds?: string[];
-    policy?: JevRoutingPolicy;
     sql?: Sql;
   }): Promise<{
     bundleId: string;
@@ -195,7 +192,6 @@ export class JevDecisionService {
       description: compressed.description,
       questions,
       evidence: researchEvidence(input.bundle, compressed, availableEvidence),
-      routingPolicy: input.policy,
       engines: createDecisionEngines({ jevRouter: this.router }),
     });
 

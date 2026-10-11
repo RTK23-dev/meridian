@@ -4,8 +4,8 @@
  */
 import { formatDistanceToNowStrict } from "date-fns";
 
-/** listReviews returns at most this many rows, newest first, of any status (publishing/actions.ts). */
-export const REVIEW_LIST_LIMIT = 40;
+/** Each Load more asks for this many more reviews. listReviews returns the newest rows first, with exact totals. */
+export const REVIEW_WINDOW_STEP = 40;
 
 /** A review younger than this is "New". */
 export const NEW_UNDER_HOURS = 24;
@@ -68,11 +68,15 @@ export function confidenceBadge(confidence: number): { label: "High confidence" 
 }
 
 /**
- * True only when the list was not cut off and holds no open review. A full 40-row window with no open review does not
- * prove the queue is empty, because an older review could be open outside it.
+ * The count line above the inbox. The totals come from the server over every review, so they are exact. The loaded window
+ * is named when there are older reviews that are not loaded yet.
  */
-export function isQueueConfirmedEmpty(input: { loaded: number; open: number; limit: number }): boolean {
-  return input.open === 0 && input.loaded < input.limit;
+export function reviewCountLine(input: { openTotal: number; total: number; loaded: number; hasMore: boolean }): string {
+  const open = input.openTotal === 1 ? "1 open review" : `${input.openTotal} open reviews`;
+  const span = input.hasMore
+    ? `Showing the newest ${input.loaded} of ${input.total} reviews.`
+    : `${input.total} ${input.total === 1 ? "review" : "reviews"} in total.`;
+  return `${open}. ${span}`;
 }
 
 export type TriageAction = "next" | "previous" | "approve" | "reject";
@@ -93,13 +97,6 @@ export function isTypingTarget(target: { tagName?: string; isContentEditable?: b
   if (!target) return false;
   const tag = (target.tagName ?? "").toUpperCase();
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable === true;
-}
-
-/** Plain words for how many reviews the list holds, with the window stated when it is cut off. */
-export function openCountLabel(open: number, loaded: number, limit: number): string {
-  const noun = open === 1 ? "review" : "reviews";
-  if (loaded >= limit) return `${open} open ${noun} in the ${limit} most recent`;
-  return `${open} open ${noun}`;
 }
 
 /** The id of the reject-reason field for one review. The triage keys focus it when a reject has no reason yet. */

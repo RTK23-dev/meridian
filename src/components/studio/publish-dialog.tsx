@@ -2,7 +2,7 @@ import { useId } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Textarea } from "@/components/ui";
+import { Button, DisabledReason, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Textarea } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { PlainErrorMessage } from "@/components/plain-error";
@@ -179,9 +179,10 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
             </div>
           ) : null}
 
-          <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+            {selected.length === 0 && !pending ? <DisabledReason id="publish-destination-reason" className="basis-full text-right">Choose at least one destination to publish to.</DisabledReason> : null}
             <Button type="button" variant="quiet" disabled={pending} onClick={() => dismiss.requestOpenChange(false)}>Close</Button>
-            <Button type="submit" disabled={pending || selected.length === 0}>
+            <Button type="submit" disabled={pending || selected.length === 0} aria-describedby={selected.length === 0 && !pending ? "publish-destination-reason" : undefined}>
               {pending ? "Publishing…" : `Publish to ${selected.length} destination${selected.length === 1 ? "" : "s"}`}
             </Button>
           </div>

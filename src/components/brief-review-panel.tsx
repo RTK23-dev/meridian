@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, ErrorState, Field, ErrorNotice, Card, Skeleton, Textarea } from "@/components/ui";
+import { Button, DisabledReason, ErrorState, Field, ErrorNotice, Card, Skeleton, Textarea } from "@/components/ui";
 import { PlainErrorNotice } from "@/components/plain-error";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -123,13 +123,18 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
               </Field>
               <FormDiscardBar dirty={isDirty} subject="brief review" onDiscard={() => form.reset(blankReview)} />
               {decision.error ? <PlainErrorNotice error={decision.error} /> : null}
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" disabled={!canDecide} onClick={() => void decide("approve")}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" disabled={!canDecide} aria-describedby={canDecide ? undefined : "brief-decision-reason"} onClick={() => void decide("approve")}>
                   {decision.isPending ? "Sending…" : "Approve for production"}
                 </Button>
-                <Button type="button" variant="quiet" disabled={!canDecide} onClick={() => void decide("reject")}>
+                <Button type="button" variant="quiet" disabled={!canDecide} aria-describedby={canDecide ? undefined : "brief-decision-reason"} onClick={() => void decide("reject")}>
                   Reject brief
                 </Button>
+                {canDecide || decision.isPending ? null : (
+                  <DisabledReason id="brief-decision-reason" className="basis-full">
+                    To enable these decisions, tick the acknowledgement above and write a reason of at least {MIN_REASON} characters.
+                  </DisabledReason>
+                )}
               </div>
             </div>
           ) : data.reviewable ? (

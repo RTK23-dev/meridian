@@ -32,9 +32,18 @@ import { judgeBriefFit } from "./brief-gate.server.ts";
 enableAppAliases();
 const { createBriefFromOpportunityFor } = await import("./opportunity-brief.server.ts");
 const { generateCreativeFor } = await import("./creative-generation.server.ts");
-const { openStudioBrief } = await import("./session.server.ts");
+const { openStudioBriefFor } = await import("./brief-open.server.ts");
 const { reviewBriefForUser } = await import("./brief-review-access.server.ts");
 const { recordOpportunityDirection } = await import("../opportunity/actions.ts");
+
+/** The studio's open-brief action, run against the test database. */
+async function openStudioBrief(
+  userId: string,
+  data: { brandId: string; forceNew: boolean; reason: string; opportunityId?: string },
+  gate: BriefGateOptions = {},
+): Promise<void> {
+  await openStudioBriefFor(await getSql(), userId, data, gate);
+}
 
 const OUTCOMES = ["AUTO_APPROVE", "HUMAN_REVIEW", "REJECT"] as const;
 type Outcome = (typeof OUTCOMES)[number];
@@ -415,10 +424,17 @@ const COPY = { hook: "Dinner in ten minutes", script: "A calm dinner plan that n
  * sends to it. The environment and fetch are restored afterwards.
  */
 async function withTextModel<T>(run: (calls: { count: number }) => Promise<T>): Promise<T> {
-  const saved = { fetch: globalThis.fetch, key: process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_MODEL };
+  const saved = {
+    fetch: globalThis.fetch,
+    key: process.env.OPENROUTER_API_KEY,
+    model: process.env.OPENROUTER_MODEL,
+    shared: process.env.OPENROUTER_SHARED_DEFAULT,
+  };
   const calls = { count: 0 };
   process.env.OPENROUTER_API_KEY = "test-key";
   process.env.OPENROUTER_MODEL = "test-model";
+  // The deployment key is used only when the deployment opts in, the same as in production.
+  process.env.OPENROUTER_SHARED_DEFAULT = "deployment";
   globalThis.fetch = (async () => {
     calls.count += 1;
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(COPY) } }], usage: { total_tokens: 12 } }), {
@@ -434,6 +450,8 @@ async function withTextModel<T>(run: (calls: { count: number }) => Promise<T>): 
     else process.env.OPENROUTER_API_KEY = saved.key;
     if (saved.model === undefined) delete process.env.OPENROUTER_MODEL;
     else process.env.OPENROUTER_MODEL = saved.model;
+    if (saved.shared === undefined) delete process.env.OPENROUTER_SHARED_DEFAULT;
+    else process.env.OPENROUTER_SHARED_DEFAULT = saved.shared;
   }
 }
 

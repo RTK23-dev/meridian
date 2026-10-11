@@ -12,19 +12,25 @@ export type VideoEngineStatus =
   | { status: "NOT_CONNECTED"; provider: string; detail: string }
   | { status: "CONFIGURED"; provider: string; detail: string };
 
+/**
+ * A video engine. Each Hypit call receives the workspace's token, which the caller resolved through the credential resolver.
+ * A null token means the workspace has no usable key, and the call makes no request.
+ */
 export type VideoEngine = {
   id: string;
   status(): VideoEngineStatus;
   submit: typeof startHypitJob extends (...args: infer _A) => infer R
-    ? (contract: HypitJobContract, transport: Transport) => R
+    ? (contract: HypitJobContract, transport: Transport, token: string | null) => R
     : never;
   poll: typeof pollHypitJob extends (...args: infer _A) => infer R
-    ? (providerJobId: string, transport: Transport) => R
+    ? (providerJobId: string, transport: Transport, token: string | null) => R
     : never;
   collect: typeof collectHypitArtifact extends (...args: infer _A) => infer R
-    ? (providerJobId: string, transport: Transport) => R
+    ? (providerJobId: string, transport: Transport, token: string | null) => R
     : never;
 };
+
+const NO_TOKEN = "No Hypit key is saved for this workspace, so no request was sent.";
 
 export function hypitVideoEngine(): VideoEngine {
   return {
@@ -35,22 +41,25 @@ export function hypitVideoEngine(): VideoEngine {
         ? { status: "CONFIGURED", provider: "hypit", detail: snapshot.detail }
         : { status: "NOT_CONNECTED", provider: "hypit", detail: snapshot.detail };
     },
-    submit(contract, transport) {
-      const connection = hypitConnection();
+    submit(contract, transport, token) {
+      if (!token) return Promise.resolve({ ok: false as const, code: "HYPIT_FAILED" as const, error: NO_TOKEN });
+      const connection = hypitConnection({ token });
       if (connection.status !== "CONFIGURED") {
         return Promise.resolve({ ok: false as const, code: "HYPIT_FAILED" as const, error: connection.detail });
       }
       return startHypitJob(connection, contract, transport);
     },
-    poll(providerJobId, transport) {
-      const connection = hypitConnection();
+    poll(providerJobId, transport, token) {
+      if (!token) return Promise.resolve({ ok: false as const, code: "HYPIT_FAILED" as const, error: NO_TOKEN });
+      const connection = hypitConnection({ token });
       if (connection.status !== "CONFIGURED") {
         return Promise.resolve({ ok: false as const, code: "HYPIT_FAILED" as const, error: connection.detail });
       }
       return pollHypitJob(connection, providerJobId, transport);
     },
-    collect(providerJobId, transport) {
-      const connection = hypitConnection();
+    collect(providerJobId, transport, token) {
+      if (!token) return Promise.resolve({ ok: false as const, code: "HYPIT_FAILED" as const, error: NO_TOKEN });
+      const connection = hypitConnection({ token });
       if (connection.status !== "CONFIGURED") {
         return Promise.resolve({ ok: false as const, code: "HYPIT_FAILED" as const, error: connection.detail });
       }

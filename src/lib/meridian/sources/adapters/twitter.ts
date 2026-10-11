@@ -5,6 +5,7 @@
  * or via public oEmbed / scraping for direct URLs.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -31,26 +32,23 @@ export class TwitterSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  private getBearerToken(): string | undefined {
-    return process.env.TWITTER_BEARER_TOKEN?.trim() || process.env.X_API_KEY?.trim();
-  }
-
-  async health(): Promise<SourceHealth> {
-    const token = this.getBearerToken();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("twitter", organizationId);
+    const token = resolved.secret;
     if (!token) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "TWITTER_BEARER_TOKEN is unset. Public oEmbed scraping available for direct post URLs.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 15,
-      message: "Connected to Twitter API v2.",
+      message: "A key is saved for X (Twitter). Discovery reads public pages for this source and does not call the X API in this release.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

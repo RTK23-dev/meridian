@@ -24,6 +24,7 @@
  */
 import { createHash } from "node:crypto";
 import { ACCEPTED_IMAGE_MIME_TYPES, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES, checkImageBytes } from "../media/image-input.ts";
+import { secretForCategory } from "../credentials/resolve.ts";
 import { checkEvidenceSufficiency, minimizeJevState } from "../jev/client.ts";
 import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 import {
@@ -62,7 +63,8 @@ export function resolveOpenAiDecisionsConfig(overrides: Partial<OpenAiDecisionsC
   const timeout = Number(env.OPENAI_DECISIONS_TIMEOUT_MS);
   const retries = Number(env.OPENAI_DECISIONS_MAX_RETRIES);
   return {
-    apiKey: overrides.apiKey ?? env.OPENAI_API_KEY?.trim() ?? "",
+    // The key is never read from the environment here. A request resolves the workspace's key (see keyFor).
+    apiKey: overrides.apiKey ?? "",
     baseUrl: (overrides.baseUrl ?? env.OPENAI_BASE_URL?.trim() ?? "https://api.openai.com/v1").replace(/\/+$/, ""),
     model: overrides.model ?? env.OPENAI_DECISIONS_MODEL?.trim() ?? OPENAI_DECISIONS_DEFAULT_MODEL,
     timeoutMs: overrides.timeoutMs ?? (Number.isFinite(timeout) && timeout > 0 ? timeout : 60_000),
@@ -308,8 +310,18 @@ export class OpenAiDecisionsEngine implements DecisionEngine {
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
-  private config(): OpenAiDecisionsConfig {
-    return resolveOpenAiDecisionsConfig(this.overrides);
+  private config(apiKey = ""): OpenAiDecisionsConfig {
+    return { ...resolveOpenAiDecisionsConfig(this.overrides), apiKey };
+  }
+
+  /**
+   * The key for one workspace. A key given to the constructor is used as given (explicit wiring and tests). Otherwise the
+   * workspace's saved OpenAI key is read through the resolver, and the deployment key only when OPENAI_SHARED_DEFAULT opts in.
+   */
+  private async keyFor(organizationId: string | undefined): Promise<{ key: string; reason: string }> {
+    if (this.overrides.apiKey) return { key: this.overrides.apiKey, reason: "" };
+    const resolved = await secretForCategory("openai", organizationId);
+    return { key: resolved.secret ?? "", reason: resolved.reason };
   }
 
   capabilities(): DecisionCapabilities {
@@ -330,16 +342,22 @@ export class OpenAiDecisionsEngine implements DecisionEngine {
     };
   }
 
-  async health(): Promise<DecisionEngineHealth> {
-    const config = this.config();
-    if (!config.apiKey) return { status: "NOT_CONFIGURED", message: "OPENAI_API_KEY is not configured for OpenAI Decisions." };
+  async health(organizationId?: string): Promise<DecisionEngineHealth> {
+    const { key, reason } = await this.keyFor(organizationId);
+    const config = this.config(key);
+    if (!config.apiKey) return { status: "NOT_CONFIGURED", message: reason || "No OpenAI key is saved for this workspace." };
     if (!config.model) return { status: "NOT_CONFIGURED", message: "OPENAI_DECISIONS_MODEL is empty." };
     return { status: "READY", message: `Credentials present for ${config.model}. No live request has been made.` };
   }
 
+  healthFor(organizationId: string): Promise<DecisionEngineHealth> {
+    return this.health(organizationId);
+  }
+
   async decide(request: DecisionRequest): Promise<DecisionResult> {
     const started = Date.now();
-    const config = this.config();
+    const { key } = await this.keyFor(request.organizationId);
+    const config = this.config(key);
     const runId = globalThis.crypto.randomUUID();
     const imageCount = request.images?.length ?? 0;
     const result = (fields: Partial<DecisionResult> & Pick<DecisionResult, "answers">): DecisionResult => ({
@@ -359,7 +377,7 @@ export class OpenAiDecisionsEngine implements DecisionEngine {
       ...fields,
     });
 
-    const health = await this.health();
+    const health = await this.health(request.organizationId);
     if (health.status !== "READY") {
       return result({
         answers: abstainAll(request, { status: "not_configured", reason: health.message, model: config.model, provider: PROVIDER }),

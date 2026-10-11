@@ -78,7 +78,7 @@ export function attemptsLabel(attempts: number, maxAttempts: number): string {
   return `${attempts} of ${maxAttempts > 0 ? maxAttempts : "unknown"}`;
 }
 
-export { pageSpan, timestampLabel } from "./format";
+export { pageSpan, timestampLabel } from "./format.ts";
 
 /**
  * Which row actions show. The server flags say whether the job is in a state that allows the action. Admin is the screen's

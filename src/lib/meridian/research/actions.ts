@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { sourceKeyFor } from "../sources/credentials.ts";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { BRAIN_FIELDS, type BrainKey, type ProvenanceMap } from "@/lib/meridian/brain";
@@ -11,6 +12,9 @@ import { discoverCompetitorCandidates } from "@/lib/meridian/competitors/discove
 import { publicUrlIssue } from "@/lib/meridian/sources/public-url";
 import { competitorFieldsSchema, publicPageSchema, researchCollectionSchema } from "@/lib/meridian/schemas/market";
 import { observationFieldsSchema } from "@/lib/meridian/schemas/observation";
+import { loadResearchAds } from "./ad-listing.ts";
+import { libraryStateFor } from "./library-state.ts";
+import { storedPageWithText } from "./source-documents.ts";
 import {
   id,
   asText,
@@ -58,17 +62,6 @@ export const getMarket = createServerFn({ method: "POST" })
       from research_collection_runs where organization_id = ${access.organizationId} and brand_id = ${data.brandId}
       order by created_at desc limit 12
     `;
-    const researchRows = await sql<Record<string, unknown>>`
-      select a.id, a.external_id, a.advertiser, a.original_url, a.captured_at, a.published_at, a.copy, a.headline,
-        a.description, a.media_type, a.media_status, a.media_storage_key, a.media_bytes, a.media_duration_ms,
-        a.transcript_status, a.analysis_status, a.last_error, a.creative_id, t.transcript, t.segments,
-        r.result as analysis, r.confidence, r.review_required, r.provider, r.model, r.schema_version
-      from research_ads a
-      left join research_transcript_cache t on t.id = a.transcript_cache_id and t.organization_id = a.organization_id and t.brand_id = a.brand_id
-      left join research_analysis_runs r on r.id = a.analysis_id and r.organization_id = a.organization_id and r.brand_id = a.brand_id
-      where a.organization_id = ${access.organizationId} and a.brand_id = ${data.brandId}
-      order by a.captured_at desc limit 100
-    `;
     const organizationResearchOptIn = await sql<{ use_organization_learning: boolean }>`
       select bb.use_organization_learning
       from brand_brains bb
@@ -88,15 +81,18 @@ export const getMarket = createServerFn({ method: "POST" })
       where organization_id = ${access.organizationId} and brand_id = ${data.brandId} and source = 'ad_library' limit 1
     `;
     const libraryConnection = libraryConnectionRows[0];
+    const metaKey = await sourceKeyFor("meta_ad_library", access.organizationId);
+    const libraryState = libraryStateFor({
+      keySecret: metaKey.secret,
+      keyReason: metaKey.reason,
+      storedStatus: asText(libraryConnection?.status),
+      storedError: asText(libraryConnection?.last_error),
+    });
     return {
       role: access.role,
-      adapters: SOURCE_ADAPTERS.map((adapter) => ({
-        ...adapter,
-        status: adapter.id === "ad_library"
-          ? asText(libraryConnection?.status) || (process.env.META_AD_LIBRARY_TOKEN?.trim() ? "AVAILABLE" : "NOT_CONNECTED")
-          : adapter.implemented ? "AVAILABLE" : "NOT_CONNECTED",
-        connectionError: adapter.id === "ad_library" ? asText(libraryConnection?.last_error) : "",
-      })),
+      adapters: SOURCE_ADAPTERS.map((adapter) => adapter.id === "ad_library"
+        ? { ...adapter, ...libraryState }
+        : { ...adapter, status: adapter.implemented ? "AVAILABLE" : "NOT_CONNECTED", connectionError: "" }),
       competitors: competitors.map((row) => ({
         id: asText(row.id),
         name: asText(row.name),
@@ -132,18 +128,7 @@ export const getMarket = createServerFn({ method: "POST" })
         id: asText(row.id), searchTerms: asText(row.search_terms), country: asText(row.country), status: asText(row.status),
         collectedCount: asNumber(row.collected_count), analyzedCount: asNumber(row.analyzed_count), error: asText(row.error), createdAt: asText(row.created_at),
       })),
-      researchAds: researchRows.map((row) => ({
-        id: asText(row.id), externalId: asText(row.external_id), advertiser: asText(row.advertiser), url: asText(row.original_url),
-        capturedAt: asText(row.captured_at), publishedAt: asText(row.published_at) || null, copy: asText(row.copy), headline: asText(row.headline),
-        description: asText(row.description), mediaType: asText(row.media_type), mediaStatus: asText(row.media_status),
-        mediaStorageKey: asText(row.media_storage_key), mediaBytes: asNumber(row.media_bytes), durationMs: asNumber(row.media_duration_ms),
-        transcriptStatus: asText(row.transcript_status), transcript: asText(row.transcript).slice(0, 12000),
-        segments: asText(row.segments),
-        analysisStatus: asText(row.analysis_status), analysis: asText(row.analysis),
-        confidence: asNumber(row.confidence), reviewRequired: row.review_required === true || row.review_required === "t" || row.review_required === "true",
-        provider: asText(row.provider), model: asText(row.model), schemaVersion: asText(row.schema_version), error: asText(row.last_error),
-        creativeId: asText(row.creative_id),
-      })),
+      researchAds: await loadResearchAds(sql, access.organizationId, data.brandId),
       researchPatterns: researchPatternRows.map((row) => ({
         dimension: asText(row.dimension), value: asText(row.value), state: asText(row.state), sampleCount: asNumber(row.sample_count),
         corpusSize: asNumber(row.corpus_size), prevalence: asNumber(row.prevalence), confidence: asNumber(row.confidence),
@@ -164,8 +149,9 @@ export const startResearchCollection = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    if (!process.env.META_AD_LIBRARY_TOKEN?.trim()) {
-      return { status: "NOT_CONNECTED" as const, error: "META_AD_LIBRARY_TOKEN is not configured. No ads were collected." };
+    const metaKey = await sourceKeyFor("meta_ad_library", access.organizationId);
+    if (!metaKey.secret) {
+      return { status: "NOT_CONNECTED" as const, error: `${metaKey.reason} No ads were collected.` };
     }
     const runId = id();
     const queryKey = contentHash(`${data.searchTerms.toLowerCase()}|${data.country}|${data.limit}|${new Date().toISOString().slice(0, 10)}`);
@@ -443,11 +429,15 @@ export const fetchSourcePage = createServerFn({ method: "POST" })
       const page = await fetchPublicText(data.url);
       const clean = quarantineExternalText(page.text);
       if (!clean.text) throw new Error("The page had no usable text after instruction-like lines were removed.");
+      const excerpt = clean.text.slice(0, 12000);
+      // Identical stored text for this brand is the same record. It is reported as seen before and not stored again.
+      const seenId = await storedPageWithText(sql, { organizationId: access.organizationId, brandId: data.brandId }, excerpt);
+      if (seenId) return { id: seenId, status: "stored" as const, seenBefore: true };
       await sql`
         insert into source_documents (id, organization_id, brand_id, url, status, excerpt, created_by)
-        values (${documentId}, ${access.organizationId}, ${data.brandId}, ${page.url}, 'stored', ${clean.text.slice(0, 12000)}, ${context.userId})
+        values (${documentId}, ${access.organizationId}, ${data.brandId}, ${page.url}, 'stored', ${excerpt}, ${context.userId})
       `;
-      return { id: documentId, status: "stored" as const };
+      return { id: documentId, status: "stored" as const, seenBefore: false };
     } catch (error) {
       const message = error instanceof Error ? error.message : "The page could not be read.";
       await sql`

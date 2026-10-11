@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OpenRouterJevClient, computeJevInputHash } from "../jev/client.ts";
+import { computeJevInputHash } from "../jev/client.ts";
+import { TypeSafeDirectJevProvider } from "../jev/router.ts";
+import { fixedLookup } from "../credentials/fixtures.ts";
 import { recordTelemetry } from "../learning/telemetry-engine.ts";
 import { upsertModelParameter } from "../learning/parameters.ts";
 import { extractOrganicMetrics } from "../organic/learning-bridge.ts";
-import { VeoProvider } from "../production/providers/veo.ts";
+import { GeminiOmniVideoProvider } from "../production/providers/omni.ts";
 import { HiggsfieldProvider } from "../production/providers/higgsfield.ts";
 import { accountProviderState } from "../providers/boundaries.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
@@ -54,8 +56,8 @@ test("4. Regression: JEV noul has probability but no fabricated confidence", asy
       { status: 200 },
     );
 
-  const client = new OpenRouterJevClient({
-    apiKey: "test-key",
+  const client = new TypeSafeDirectJevProvider({
+    lookup: fixedLookup("test-key"),
     fetchImpl: fakeFetch,
   });
 
@@ -98,8 +100,8 @@ test("5. Regression: malformed JEV answer is rejected with provider_error withou
       { status: 200 },
     );
 
-  const client = new OpenRouterJevClient({
-    apiKey: "test-key",
+  const client = new TypeSafeDirectJevProvider({
+    lookup: fixedLookup("test-key"),
     fetchImpl: fakeFetch,
   });
 
@@ -122,41 +124,6 @@ test("5. Regression: malformed JEV answer is rejected with provider_error withou
   const answer = res.answers["q_bad_noul"]!;
   assert.equal(answer.status, "provider_error");
   assert.notEqual(answer.probability, 0.5);
-});
-
-// 6. JEV never calls /chat/completions fallback
-test("6. Regression: JEV never calls /chat/completions fallback on error", async () => {
-  let calledUrl = "";
-  const failingFetch: typeof fetch = async (url) => {
-    calledUrl = String(url);
-    return new Response(JSON.stringify({ error: "Internal JEV Error" }), { status: 500 });
-  };
-
-  const client = new OpenRouterJevClient({
-    apiKey: "test-key",
-    fetchImpl: failingFetch,
-  });
-
-  const res = await client.decide({
-    organizationId: "org-1",
-    brandId: "brand-1",
-    state: { description: "Some state", availableEvidence: [] },
-    questions: {
-      q_test: {
-        id: "q_test",
-        version: "1.0.0",
-        type: "noul",
-        instructions: "Is this real?",
-        criteria: { true: "real", false: "fake" },
-        evidenceRequirements: [],
-      },
-    },
-  });
-
-  const answer = res.answers["q_test"]!;
-  assert.equal(answer.status, "provider_error");
-  assert.ok(calledUrl.includes("/decisions"));
-  assert.ok(!calledUrl.includes("/chat/completions"));
 });
 
 // 7. JEV receives actual relevant evidence
@@ -213,7 +180,7 @@ test("7. Regression: compressEvidenceForJev packages actual normalized evidence 
   assert.equal(compressed.ocr[0].text, "Order Now");
   assert.ok(compressed.evidenceRefs.length > 0);
 
-  // Boundary verification: verify that client.answer() transmits compressed evidence into fetch payload
+  // Boundary verification: the compressed evidence reaches the TypeSafe request body
   let capturedPayload: any = null;
   const mockFetch: typeof fetch = async (_url, init) => {
     capturedPayload = JSON.parse(init?.body as string);
@@ -227,22 +194,27 @@ test("7. Regression: compressEvidenceForJev packages actual normalized evidence 
     );
   };
 
-  const client = new OpenRouterJevClient({
-    apiKey: "test-api-key",
+  const client = new TypeSafeDirectJevProvider({
+    lookup: fixedLookup("test-api-key"),
     fetchImpl: mockFetch,
   });
 
-  const answer = await client.answer({
-    evidenceBundle: bundle,
-    question: {
-      id: "q_test",
-      version: "1.0.0",
-      type: "noul",
-      instructions: "Is this genuine product demonstration?",
-      criteria: { true: "genuine", false: "misleading" },
-      evidenceRequirements: [],
+  const response = await client.decide({
+    organizationId: "org-1",
+    brandId: "brand-1",
+    state: compressed,
+    questions: {
+      q_test: {
+        id: "q_test",
+        version: "1.0.0",
+        type: "noul",
+        instructions: "Is this genuine product demonstration?",
+        criteria: { true: "genuine", false: "misleading" },
+        evidenceRequirements: [],
+      },
     },
   });
+  const answer = response.answers["q_test"]!;
 
   assert.equal(answer.status, "answered");
   assert.ok(capturedPayload, "Remote JEV request body must be captured");
@@ -288,15 +260,15 @@ test("10. Regression: unconfigured providers never invent job IDs", async () => 
   delete process.env.GOOGLE_API_KEY;
 
   try {
-    const veo = new VeoProvider();
-    const job = await veo.submitJob({
+    const omni = new GeminiOmniVideoProvider();
+    const job = await omni.submitJob({
       id: "spec-1",
       organizationId: "org-1",
       brandId: "brand-1",
       title: "Spec",
       modality: "video", format: "ugc",
       aspectRatio: "9:16",
-      durationTargetSeconds: 15,
+      durationTargetSeconds: 8,
       hookLine: "Hook",
       script: "Script",
       scenes: [],
@@ -355,28 +327,24 @@ test("11. Regression: studio readiness rejects test:video and production runtime
   }
 });
 
-// 12. Veo polling reads generatedSamples path
-test("12. Regression: Veo polling reads generatedSamples REST response path", async () => {
+// 12. Omni polling reads the video step's URI from the Interactions response
+test("12. Regression: Omni polling reads the video URI from the Interactions REST response", async () => {
   const expectedUri = "https://storage.googleapis.com/test-bucket/sample.mp4";
   const fakeFetch: typeof fetch = async () =>
     new Response(
       JSON.stringify({
-        name: "operations/123",
-        done: true,
-        response: {
-          generateVideoResponse: {
-            generatedSamples: [{ video: { uri: expectedUri } }],
-          },
-        },
+        id: "interactions/123",
+        status: "completed",
+        steps: [{ type: "model_output", content: [{ type: "video", mime_type: "video/mp4", uri: expectedUri }] }],
       }),
       { status: 200 },
     );
 
   // The poll uses the key of the workspace that owns the job, which the poller passes in the job's metadata.
   const { fixedLookup } = await import("../credentials/fixtures.ts");
-  const veo = new VeoProvider({ fetchImpl: fakeFetch, lookup: fixedLookup("test-gemini-key") });
-  const status = await veo.checkJobStatus("operations/123", { organizationId: "org-1" });
-  assert.equal(status.status, "RENDERED");
+  const omni = new GeminiOmniVideoProvider({ fetchImpl: fakeFetch, lookup: fixedLookup("test-gemini-key") });
+  const status = await omni.checkJobStatus("interactions/123", { organizationId: "org-1" });
+  assert.equal(status.status, "COMPLETED");
   assert.equal(status.outputArtifactId, expectedUri);
 });
 
@@ -639,7 +607,7 @@ test("23. Regression: production jobs retain complete serialization schema", () 
       script: "Script",
       scenes: [],
     },
-    providerId: "veo",
+    providerId: "google_omni",
     status: "RUNNING" as const,
     costEstimateUsd: 3.0,
     createdAt: new Date().toISOString(),
@@ -649,7 +617,7 @@ test("23. Regression: production jobs retain complete serialization schema", () 
   const serialized = JSON.stringify(job);
   const parsed = JSON.parse(serialized);
   assert.equal(parsed.jobId, "job-101");
-  assert.equal(parsed.providerId, "veo");
+  assert.equal(parsed.providerId, "google_omni");
   assert.equal(parsed.status, "RUNNING");
 });
 
@@ -808,7 +776,7 @@ test("29. Regression: Dual JEV Provider Router supports typesafe_direct and open
         evidenceRequirements: [],
       },
     },
-  }, { mode: "typesafe_direct" });
+  });
 
   assert.equal(res.provider, "typesafe_direct");
   assert.equal(res.answers["q1"].status, "not_configured");
@@ -843,43 +811,6 @@ test("30. Regression: Cyclone scout adapter leaves unobserved views and baseline
 });
 
 // 31. Graph API adapter preserves unobserved views as undefined
-test("31. Regression: Instagram Graph API adapter leaves unobserved views undefined", async () => {
-  const { InstagramBusinessDiscoveryAdapter } = await import("../discovery/graph-api-adapter.ts");
-  const mockFetch = async () =>
-    new Response(
-      JSON.stringify({
-        business_discovery: {
-          followers_count: 50000,
-          media_count: 10,
-          media: {
-            data: [
-              {
-                id: "media_123",
-                caption: "Morning motivation",
-                media_type: "VIDEO",
-                like_count: 1000,
-                comments_count: 50,
-                permalink: "https://www.instagram.com/reel/123/",
-              },
-            ],
-          },
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
-    );
-
-  const adapter = new InstagramBusinessDiscoveryAdapter({
-    credentials: { accessToken: "EAAG_TEST", businessAccountId: "1784" },
-    fetchFn: mockFetch as unknown as typeof fetch,
-  });
-
-  const res = await adapter.fetchCreatorReels({ targetUsername: "fitness", niche: "fitness" });
-  assert.equal(res.status, "connected");
-  if (res.status !== "connected") return;
-  assert.equal(res.items[0].metrics.views, undefined);
-  assert.equal(res.items[0].creatorLast30MedianViews, undefined);
-});
-
 // 32. Google Omni provider uses Interactions API contract
 test("32. Regression: GeminiOmniVideoProvider uses Interactions API contract", async () => {
   const { GeminiOmniVideoProvider } = await import("../production/providers/omni.ts");
@@ -923,16 +854,14 @@ test("32. Regression: GeminiOmniVideoProvider uses Interactions API contract", a
   assert.equal(job.outputArtifactId, "https://storage.googleapis.com/omni.mp4");
 });
 
-// 33. Model capability registry tracks Veo 3.1 deprecation
-test("33. Regression: ModelCapabilityRegistry flags Veo 3.1 preview shutdown warning", async () => {
+// 33. Veo is not a registered model: Gemini Omni is the Google video model
+test("33. Regression: the model registry lists no Veo model and keeps Gemini Omni active", async () => {
   const { modelCapabilityRegistry } = await import("../production/registry.ts");
-  const lifecycle = modelCapabilityRegistry.checkModelLifecycle(
-    "veo-3.1-generate-preview",
-    new Date("2026-10-09")
-  );
-  assert.equal(lifecycle.state, "DEPRECATED");
-  assert.ok(lifecycle.warning?.includes("2026-10-22"));
-  assert.equal(lifecycle.replacement, "gemini-omni-1.1-flash");
+  assert.equal(modelCapabilityRegistry.getModel("veo-3.1-generate-preview"), undefined);
+  assert.equal(modelCapabilityRegistry.getModel("veo-2.0-generate-001"), undefined);
+  const omni = modelCapabilityRegistry.checkModelLifecycle("gemini-omni-1.1-flash", new Date("2026-10-09"));
+  assert.equal(omni.state, "ACTIVE");
+  assert.equal(omni.usable, true);
 });
 
 // 34. Decomposed opportunity rating keeps business potential null when telemetry is unobserved

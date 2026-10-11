@@ -4,12 +4,21 @@
  * It reads only stored counts (the machine snapshot) and the stored review list. It has no React and no server imports,
  * so the rules can be tested directly. A stage is "done" only when a stored record proves it.
  *
- * Two stages have no record of their own in the snapshot. Decision is done once a creative or generation run exists, and
- * Brief is done once a creative record exists. The UI labels both as status only, with no count.
+ * Decision is done once a creative or generation run exists, and Brief is done once a creative record exists. Both show
+ * their stored counts (decision records and briefs) beside the status.
  */
 
-/** Minimum filled brain fields before the pipeline is treated as started. Matches the gate the overview always used. */
-export const MIN_BRAIN_FIELDS_FOR_PIPELINE = 4;
+import type { MachineCounts } from "@/lib/meridian/machine-counts";
+// Relative, not "@/", so the node test can load this module. The brain's own list supplies the labels.
+import { brainFieldLabel, type BrainCompleteness } from "../../lib/meridian/brain.ts";
+
+/**
+ * The brain gate. The pipeline starts only when every required brain field has content. Until then the first action and the
+ * first missing item say which required fields are still empty.
+ */
+export function requiredMissingLabels(brain: Pick<BrainCompleteness, "missingRequired">): string[] {
+  return brain.missingRequired.map((key) => brainFieldLabel(key) ?? key);
+}
 
 export type StageKey =
   | "market"
@@ -33,22 +42,12 @@ export type StageTo =
   | "/brands/$brandId/reviews"
   | "/brands/$brandId/learning";
 
-export type PipelineCounts = {
-  competitors: number;
-  documents: number;
-  observations: number;
-  creatives: number;
-  openOpportunities: number;
-  reviews: number;
-  patterns: number;
-  performanceRows: number;
-};
+/** The stored counts from the machine snapshot. Every count is real: zero means none is stored. */
+export type PipelineCounts = MachineCounts;
 
 export type PipelineInput = {
   counts: PipelineCounts;
   operating: { generationRuns: number; publishedTests: number };
-  /** Approved plus rejected reviews from the stored review list. Null when that list is not loaded. */
-  decidedReviews: number | null;
 };
 
 export type PipelineStage = {
@@ -85,13 +84,13 @@ const LEARNING: StageTo = "/brands/$brandId/learning";
 export function pipelineStages(input: PipelineInput): PipelineStage[] {
   const { counts, operating } = input;
   const research = counts.observations + counts.documents;
-  const decided = input.decidedReviews ?? 0;
+  const decided = counts.decidedReviews;
   const definitions: Definition[] = [
     { key: "market", label: "Market", to: MARKET, count: counts.competitors, unit: "competitors", done: counts.competitors > 0, after: null, waiting: false, started: counts.observations > 0 },
     { key: "research", label: "Research", to: MARKET, count: research, unit: "items", done: research > 0, after: null, waiting: false, started: false },
     { key: "opportunity", label: "Opportunity", to: OPPORTUNITIES, count: counts.openOpportunities, unit: "open", done: counts.openOpportunities > 0, after: "research", waiting: false, started: false },
-    { key: "decision", label: "Decision", to: OPPORTUNITIES, count: null, unit: "", done: counts.creatives > 0 || operating.generationRuns > 0, after: "opportunity", waiting: false, started: counts.openOpportunities > 0 },
-    { key: "brief", label: "Brief", to: STUDIO, count: null, unit: "", done: counts.creatives > 0, after: "decision", waiting: false, started: false },
+    { key: "decision", label: "Decision", to: OPPORTUNITIES, count: counts.decisions, unit: "decisions", done: counts.creatives > 0 || operating.generationRuns > 0, after: "opportunity", waiting: false, started: counts.openOpportunities > 0 },
+    { key: "brief", label: "Brief", to: STUDIO, count: counts.briefs, unit: "briefs", done: counts.creatives > 0, after: "decision", waiting: false, started: false },
     { key: "studio", label: "Studio", to: STUDIO, count: operating.generationRuns, unit: "generations", done: operating.generationRuns > 0, after: "brief", waiting: false, started: false },
     { key: "review", label: "Review", to: REVIEWS, count: counts.reviews, unit: "open", done: decided > 0, after: "studio", waiting: counts.reviews > 0, started: false },
     { key: "publish", label: "Publish", to: STUDIO, count: operating.publishedTests, unit: "ads", done: operating.publishedTests > 0, after: "review", waiting: false, started: false },
@@ -129,15 +128,14 @@ export type Recommendation = { label: string; reason: string };
  * stored recommendation replaces the generic Opportunity copy when one exists.
  */
 export function nextBestAction(input: {
-  brainFilled: number;
-  brainTotal: number;
+  brain: BrainCompleteness;
   stages: PipelineStage[];
   recommendation: Recommendation | null;
 }): NextAction {
-  if (input.brainFilled < MIN_BRAIN_FIELDS_FOR_PIPELINE) {
+  if (!input.brain.requiredComplete) {
     return {
       title: "Complete the brand brain",
-      body: `${input.brainFilled} of ${input.brainTotal} brain fields are filled. Recommendations cite these fields, so add the ones you can confirm.`,
+      body: `${input.brain.requiredFilled} of ${input.brain.requiredTotal} required fields have content. Still needed: ${requiredMissingLabels(input.brain).join(", ")}. Recommendations cite these fields, so add only what you can confirm.`,
       cta: "Open brand brain",
       to: "/brands/$brandId/brain",
       usesRecommendation: false,
@@ -186,9 +184,11 @@ export function nextBestAction(input: {
 export type MissingItem = { text: string; to: "/brands/$brandId/brain" | StageTo };
 
 /** What is absent from the stored data, in the order a person would fix it. Empty when nothing is missing. */
-export function missingItems(input: { brainFilled: number; counts: PipelineCounts; operating: { generationRuns: number } }): MissingItem[] {
+export function missingItems(input: { brain: BrainCompleteness; counts: PipelineCounts; operating: { generationRuns: number } }): MissingItem[] {
   const items: MissingItem[] = [];
-  if (input.brainFilled < MIN_BRAIN_FIELDS_FOR_PIPELINE) items.push({ text: "Complete the brand brain", to: "/brands/$brandId/brain" });
+  if (!input.brain.requiredComplete) {
+    items.push({ text: `Complete the brand brain. Still needed: ${requiredMissingLabels(input.brain).join(", ")}`, to: "/brands/$brandId/brain" });
+  }
   if (input.counts.observations === 0) items.push({ text: "Collect competitor evidence", to: MARKET });
   if (input.counts.openOpportunities === 0) items.push({ text: "Rank opportunities from stored evidence", to: OPPORTUNITIES });
   if (input.operating.generationRuns === 0) items.push({ text: "Generate a first creative", to: STUDIO });

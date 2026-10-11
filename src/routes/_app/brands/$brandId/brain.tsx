@@ -9,7 +9,7 @@ import { PlainErrorMessage, PlainErrorState } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { useWorkspace } from "@/components/workspace";
 import { BrainMiniNav, type MiniNavItem } from "@/components/brain/brain-mini-nav";
-import { BRAIN_SECTIONS, sectionAnchor, sectionProgress, type BrainSectionId } from "@/components/brain/brain-sections";
+import { BRAIN_SECTIONS, sectionAnchor, sectionProgress } from "@/components/brain/brain-sections";
 import { CompletenessRing } from "@/components/brain/completeness-ring";
 import { LogoUploader } from "@/components/brain/logo-uploader";
 import { SourceMaterial } from "@/components/brain/source-material";
@@ -21,14 +21,19 @@ import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { hasRole } from "@/lib/meridian/access";
-import { saveBrain } from "@/lib/meridian/api";
+import { recordBrainProgress, saveBrain } from "@/lib/meridian/api";
 import {
   AUTOMATION_LEVELS,
   BRAIN_FIELDS,
+  BRAIN_SECTION_IDS,
+  BRAIN_VALUE_KEYS,
   brainCompleteness,
+  brainFieldLabel,
   emptyBrain,
   provenanceLabel,
+  reconcileBrain,
   type BrainKey,
+  type BrainSectionId,
   type BrainValues,
   type ProvenanceMap,
 } from "@/lib/meridian/brain";
@@ -53,6 +58,14 @@ type FormShared = {
   canEdit: boolean;
 };
 
+const SECTION_IDS: ReadonlySet<string> = new Set(BRAIN_SECTION_IDS);
+
+/** The section a focused element sits in, from the section frame around it. Null outside any section. */
+function sectionOf(target: EventTarget): BrainSectionId | null {
+  const id = (target as HTMLElement).closest?.("[data-brain-section]")?.getAttribute("data-brain-section") ?? "";
+  return SECTION_IDS.has(id) ? (id as BrainSectionId) : null;
+}
+
 function BrainEditor({ brandId }: { brandId: string }) {
   const query = useBrandQuery(brandId);
   const detail = query.data ?? null;
@@ -61,7 +74,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
   const { user } = useCurrentUserState();
   const [discardRequested, setDiscardRequested] = useState(false);
   const [formReady, setFormReady] = useState(false);
-  const { register, handleSubmit, reset, trigger, getValues, watch, formState: { errors, isSubmitting } } = useForm<BrainFieldsInput>({
+  const { register, handleSubmit, reset, setValue, trigger, getValues, watch, formState: { errors, isSubmitting } } = useForm<BrainFieldsInput>({
     resolver: zodResolver(brainValuesSchema),
     defaultValues: emptyBrain(),
     mode: "onBlur",
@@ -69,49 +82,89 @@ function BrainEditor({ brandId }: { brandId: string }) {
   const brain = watch();
   const { reload } = useWorkspace();
   const serverSaved = detail?.brain ?? null;
+  const serverVersion = detail?.version ?? 0;
+  // The section the person is in. A save carries it, so the brain opens there next time. Null until a section is opened here.
+  const sectionRef = useRef<BrainSectionId | null>(null);
+  // The section last written to the server, so a visit is recorded once rather than on every focus.
+  const recordedSectionRef = useRef<BrainSectionId | null>(null);
+  const resumedRef = useRef(false);
+
+  const saveBrainMutation = useScopedMutation({
+    mutationKey: ["mutation", "brain.save", brandId],
+    mutationFn: (changes: Partial<BrainValues>) => saveBrain({ data: { brandId, changes, autosave: false, section: sectionRef.current } }),
+    invalidate: () => [qk.brand(brandId)],
+    success: "Brain saved.",
+    // Brain completeness is part of the workspace list and the brand switcher, so the workspace reloads.
+    onSuccess: () => reload(),
+  });
+
   const autosave = useBrainAutosave({
     canEdit,
     serverSaved,
+    serverVersion,
     watchKey: JSON.stringify(brain),
     readForm: () => getValues(),
-    // Autosave writes through the same call as the Save button. Only the refresh differs: it does not show a toast.
-    persist: async (values) => {
-      await saveBrain({ data: { brandId, ...values } });
+    // Only the fields that changed are sent. The Save button sends its changes through its own mutation, which shows a message.
+    persist: async (changes, autosaveSave) => {
+      if (!autosaveSave) return saveBrainMutation.mutateAsync(changes);
+      const saved = await saveBrain({ data: { brandId, changes, autosave: true, section: sectionRef.current } });
       await queryClient.invalidateQueries({ queryKey: userScopedQueryKey(user?.id ?? null, qk.brand(brandId)) });
       void reload();
+      return saved;
     },
+    onBaselineChange: applyBaseline,
     onRejected: () => { void trigger(); },
   });
   const saved = autosave.saved;
   const [pasteDirty, setPasteDirty] = useState(false);
   // Compared the way Save reads the fields, so a stray space is not a change. Before the saved brain loads, nothing is dirty.
   const dirty = formReady && saved !== null && brainChanged(brain, saved);
-  // The brain's own fields and the pasted text share one guard, so a person is asked once.
-  const dirtyRef = useRef(dirty);
-  useEffect(() => {
-    dirtyRef.current = dirty;
-  });
-  const saveBrainMutation = useScopedMutation({
-    mutationKey: ["mutation", "brain.save", brandId],
-    mutationFn: (values: BrainValues) => saveBrain({ data: { brandId, ...values } }),
-    invalidate: () => [qk.brand(brandId)],
-    success: "Brain saved.",
-    // Brain completeness is part of the workspace list and the brand switcher, so the workspace reloads.
-    onSuccess: () => reload(),
-  });
   const pending = saveBrainMutation.isPending;
   const saveError = saveBrainMutation.error ? plainError(saveBrainMutation.error) : null;
 
-  // A fresh server copy replaces the form, unless the person has edits in progress. Those are kept.
+  /**
+   * The form takes a saved brain. The first load replaces the form. After that, a field the person has not changed takes the
+   * saved value, and a field they have changed keeps their edit until a save sends it.
+   */
+  function applyBaseline(next: BrainValues, previous: BrainValues | null) {
+    if (previous === null) {
+      reset(next);
+      setFormReady(true);
+      return;
+    }
+    const form = getValues() as BrainValues;
+    const merged = reconcileBrain(form, previous, next);
+    for (const key of BRAIN_VALUE_KEYS) {
+      if (merged[key] !== form[key]) setValue(key, merged[key], { shouldDirty: false, shouldValidate: false });
+    }
+  }
+
+  // Opens the brain at the section the person left off in. An address that names a section (a hash) wins over the stored one.
   useEffect(() => {
-    if (!detail || dirtyRef.current) return;
-    reset(detail.brain);
-    setFormReady(true);
-  }, [detail, reset]);
+    if (!formReady || resumedRef.current) return;
+    resumedRef.current = true;
+    const section = detail?.progress.section ?? null;
+    if (!section) return;
+    recordedSectionRef.current = section;
+    if (window.location.hash) return;
+    document.getElementById(sectionAnchor(section))?.scrollIntoView({ block: "start" });
+  }, [formReady, detail]);
+
+  /** The person opened a section. The next save carries it, and the section is recorded now so the brain reopens there. */
+  function noteSection(section: BrainSectionId) {
+    sectionRef.current = section;
+    if (!canEdit || recordedSectionRef.current === section) return;
+    recordedSectionRef.current = section;
+    recordBrainProgress({ data: { brandId, section } }).catch(() => {
+      // The section is recorded again on the next visit. The brain itself is not affected.
+      if (recordedSectionRef.current === section) recordedSectionRef.current = null;
+    });
+  }
 
   if (query.isError && !detail) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!detail) return <ScreenSkeleton label="Loading brand brain" shape="form" />;
   const completeness = brainCompleteness(brain);
+  const missingLabels = completeness.missingRequired.map((key) => brainFieldLabel(key) ?? key);
   // Ctrl or Cmd + Enter saves only from a brain text field, not from the paste box. Leaving a brain field saves it at once.
   const shared: FormShared = { register, errors, values: brain, provenance: detail.provenance, canEdit };
   const navItems: MiniNavItem[] = BRAIN_SECTIONS.map((section) => ({ id: section.id, label: section.label, ...sectionProgress(section.keys, brain) }));
@@ -120,12 +173,8 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
   async function submit(values: BrainValues) {
     // The manual save waits behind any autosave in progress, so the two never overlap.
-    const ok = await autosave.saveManual(values, async () => { await saveBrainMutation.mutateAsync(values); }).then(() => true, () => false);
-    if (ok) {
-      // Text typed while the save was running stays in the form. Only the saved baseline moves.
-      reset(values, { keepValues: true });
-      setDiscardRequested(false);
-    }
+    const ok = await autosave.saveManual(values).then(() => true, () => false);
+    if (ok) setDiscardRequested(false);
   }
 
   function discardChanges() {
@@ -140,6 +189,10 @@ function BrainEditor({ brandId }: { brandId: string }) {
         onSubmit={handleSubmit(submit)}
         className="space-y-8"
         onKeyDown={(event) => submitOnShortcut(event, "[data-brain-field]")}
+        onFocus={(event) => {
+          const section = sectionOf(event.target);
+          if (section) noteSection(section);
+        }}
         onBlur={(event) => {
           if ((event.target as HTMLElement).closest("[data-brain-field]")) autosave.flush();
         }}
@@ -150,23 +203,36 @@ function BrainEditor({ brandId }: { brandId: string }) {
           </Link>
           <h1 className="font-display text-4xl">Brand brain</h1>
           <p className="max-w-2xl text-fg-muted">
-            This is the record later decisions must use. Saving never silently replaces a field you did not change.
-            Page suggestions, when a model is configured, stay pending until you accept them.
+            This is the record later decisions must use. A save sends only the fields you changed, so a field you did not touch is never
+            overwritten. Suggestions from a stored document wait until you accept them.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-5 rounded-lg border border-border bg-surface p-5">
-          <CompletenessRing filled={completeness.filled} total={completeness.total} />
+          <CompletenessRing filled={completeness.requiredFilled} total={completeness.requiredTotal} />
           <div className="min-w-0 flex-1 space-y-1">
-            <p className="font-semibold">Brand profile completeness</p>
-            <p className="text-sm text-fg-muted">
-              {completeness.filled} of {completeness.total} fields currently have content. Save to store changes; empty fields are not inferred.
-            </p>
+            {completeness.requiredComplete ? (
+              <>
+                <p className="font-semibold">Complete brand brain</p>
+                <p className="text-sm text-fg-muted">
+                  All {completeness.requiredTotal} required fields have content. {completeness.filled} of {completeness.total} fields have content in total.
+                  Empty fields are not inferred.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold">Not complete yet</p>
+                <p className="text-sm text-fg-muted">
+                  {completeness.requiredFilled} of {completeness.requiredTotal} required fields have content. Still needed: {missingLabels.join(", ")}.
+                  {" "}{completeness.filled} of {completeness.total} fields have content in total. Empty fields are not inferred.
+                </p>
+              </>
+            )}
           </div>
         </div>
 
         <div className="grid gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
-          <BrainMiniNav items={navItems} />
+          <BrainMiniNav items={navItems} onSelect={noteSection} />
 
           <div className="min-w-0 space-y-10">
             <SectionFrame id="identity" label="Identity" progress={progressFor("identity")}>
@@ -181,7 +247,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
                 ].map(([term, value]) => (
                   <div key={term} className="min-w-0">
                     <dt className="text-fg-muted">{term}</dt>
-                    <dd className="break-words font-semibold">{value || "Not set"}</dd>
+                    <dd className="break-words font-semibold">{value || "Empty. Not inferred."}</dd>
                   </div>
                 ))}
               </dl>
@@ -204,7 +270,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
             </SectionFrame>
 
             <SectionFrame id="rules" label="Rules" progress={progressFor("rules")}>
-              <p className="text-sm text-fg-muted">Prohibited claims are needed by the claim check, so keep them current.</p>
+              <p className="text-sm text-fg-muted">The brief gate checks every brief against prohibited claims. Keep them current.</p>
               <FieldList keys={sectionFor("rules")?.keys ?? []} shared={shared} />
               <Field
                 label="Automation preference"
@@ -265,7 +331,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
 function SectionFrame({ id, label, progress, children }: { id: BrainSectionId; label: string; progress: MiniNavItem | undefined; children: ReactNode }) {
   const anchor = sectionAnchor(id);
-  return <section id={anchor} aria-labelledby={`${anchor}-title`} className="scroll-mt-6 space-y-4">
+  return <section id={anchor} data-brain-section={id} aria-labelledby={`${anchor}-title`} className="scroll-mt-6 space-y-4">
     <div className="flex flex-wrap items-baseline justify-between gap-2">
       <h2 id={`${anchor}-title`} className="font-display text-2xl">{label}</h2>
       {progress ? <p className="text-sm tabular-nums text-fg-muted">{progress.filled} of {progress.total} filled</p> : null}
@@ -285,9 +351,13 @@ function BrainTextField({ fieldKey, shared }: { fieldKey: BrainKey; shared: Form
   const meta = BRAIN_FIELDS.find((field) => field.key === fieldKey);
   const value = shared.values[fieldKey] ?? "";
   const source = shared.provenance[fieldKey];
+  const hint = value.trim()
+    ? (source ? provenanceLabel(source) : "Saved. No source recorded.")
+    : meta?.required ? "Required. Empty. Not inferred." : "Empty. Not inferred.";
   return <Field
     label={meta?.label ?? fieldKey}
-    hint={value.trim() && source ? provenanceLabel(source) : "Empty. Not inferred."}
+    required={meta?.required}
+    hint={hint}
     error={shared.errors[fieldKey]?.message}
   >
     <Textarea {...shared.register(fieldKey)} data-brain-field="" disabled={!shared.canEdit} maxLength={4000} />

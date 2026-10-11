@@ -19,7 +19,7 @@ import { ReviewStep } from "@/components/studio/review-step.tsx";
 import { QueuePanel } from "@/components/studio/queue-panel.tsx";
 import { PlanDialog } from "@/components/studio/plan-dialog.tsx";
 import { useStudioActions } from "@/components/studio/use-studio-actions.ts";
-import { isImageProviderValue, isVideoProviderValue, productionStatusFrom } from "@/components/studio/provider-options.ts";
+import { DEFAULT_VIDEO_PROVIDER, isImageProviderValue, isVideoProviderValue, productionStatusFrom } from "@/components/studio/provider-options.ts";
 import { studioStepperSteps } from "@/components/studio/stepper-states.ts";
 import type { ReviewPayload } from "@/components/studio/review-rules.ts";
 import type { StudioVariant } from "@/components/studio/types.ts";
@@ -35,7 +35,7 @@ type StepKey = "direction" | "brief" | "generate" | "review" | "queue";
 
 const DEFAULT_GENERATION: StudioGeneration = {
   imageProvider: "none",
-  videoProvider: "auto",
+  videoProvider: DEFAULT_VIDEO_PROVIDER,
   creationScope: "auto_choose",
   autonomy: "semi_automatic",
   maxSpendUsd: 10,
@@ -172,6 +172,7 @@ function Studio({ brandId }: { brandId: string }) {
         <TabsContent value="generate">
           <GenerateStep
             brief={brief}
+            usage={session.usage}
             canEdit={canEdit}
             form={generationForm}
             testImageAllowed={session.testImageAllowed}

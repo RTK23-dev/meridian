@@ -4,10 +4,11 @@ import { activeChatProvider, providerStatus } from "./chat.server.ts";
 import { generateNanoBananaImage } from "./nano-banana.server.ts";
 import { videoGenerationStatus } from "../video/provider.ts";
 
-test("OpenRouter alone is selected even when the legacy xAI key is present", () => {
-  const before = { open: process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_MODEL, xai: process.env.XAI_API_KEY };
+test("OpenRouter alone is selected even when the legacy xAI key is present, once the deployment opts in", () => {
+  const before = { open: process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_MODEL, xai: process.env.XAI_API_KEY, optIn: process.env.OPENROUTER_SHARED_DEFAULT };
   process.env.OPENROUTER_API_KEY = "router-test-key";
   process.env.OPENROUTER_MODEL = "provider/test-model";
+  process.env.OPENROUTER_SHARED_DEFAULT = "deployment";
   process.env.XAI_API_KEY = "legacy-key-must-not-select";
   try {
     assert.equal(activeChatProvider()?.id, "openrouter");
@@ -16,6 +17,7 @@ test("OpenRouter alone is selected even when the legacy xAI key is present", () 
     if (before.open === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = before.open;
     if (before.model === undefined) delete process.env.OPENROUTER_MODEL; else process.env.OPENROUTER_MODEL = before.model;
     if (before.xai === undefined) delete process.env.XAI_API_KEY; else process.env.XAI_API_KEY = before.xai;
+    if (before.optIn === undefined) delete process.env.OPENROUTER_SHARED_DEFAULT; else process.env.OPENROUTER_SHARED_DEFAULT = before.optIn;
   }
 });
 

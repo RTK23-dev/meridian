@@ -22,6 +22,8 @@ export interface PageCrawlResult {
   jsonLd: unknown[];
   cards: DiscoveredItem[];
   outboundLinks: string[];
+  /** When the page was requested. Its declarations and cards are observed at this time. */
+  fetchedAt: string;
 }
 
 /**
@@ -232,17 +234,28 @@ export function extractOutboundLinks(html: string, baseUrl: string, allowedHosts
 }
 
 /**
- * Crawls a single page through the complete crawl ladder.
+ * The network seam for a crawl. Production uses the DNS-pinned public fetcher. A test passes a fake, so the whole ladder runs
+ * with no network. The SSRF check on the requested URL runs before the fetch in either case.
+ */
+export interface CrawlDependencies {
+  fetchHtml?: (url: string) => Promise<{ url: string; html: string }>;
+}
+
+/**
+ * Crawls a single page through the complete crawl ladder. `fetchedAt` is the time the page was requested, recorded as the
+ * observation time of everything extracted from it.
  */
 export async function crawlLadderPage(
   url: string,
   runId: string,
-  allowedHosts?: string[]
+  allowedHosts?: string[],
+  deps: CrawlDependencies = {},
 ): Promise<PageCrawlResult> {
   const issue = publicUrlIssue(url);
   if (issue) throw new Error(`URL rejected by SSRF guard: ${issue}`);
 
-  const snapshot = await fetchPublicHtml(url);
+  const fetchedAt = new Date().toISOString();
+  const snapshot = await (deps.fetchHtml ?? fetchPublicHtml)(url);
   const meta = extractMetaTags(snapshot.html);
   const jsonLd = extractJsonLd(snapshot.html);
   const cards = extractRepeatedCards(snapshot.html, snapshot.url, runId);
@@ -258,5 +271,6 @@ export async function crawlLadderPage(
     jsonLd,
     cards,
     outboundLinks,
+    fetchedAt,
   };
 }

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Badge } from "./badge";
+import { sparklineSummary } from "./sparkline-summary.ts";
 
 export interface BreadcrumbItem { label: string; to?: string }
 export function PageHeader({ title, description, breadcrumbs = [], actions, secondaryActions, className }: { title: string; description?: ReactNode; breadcrumbs?: BreadcrumbItem[]; actions?: ReactNode; secondaryActions?: ReactNode; className?: string }) {
@@ -14,14 +15,6 @@ export function PageHeader({ title, description, breadcrumbs = [], actions, seco
 
 export function Stat({ label, value, delta, description, className }: { label: string; value: ReactNode; delta?: string; description?: string; className?: string }) {
   return <div className={cn("min-w-0", className)}><div className="text-sm text-fg-muted">{label}</div><div className="mt-1 flex flex-wrap items-baseline gap-2"><strong className="font-display text-3xl text-fg">{value}</strong>{delta ? <Badge variant="neutral">{delta}</Badge> : null}</div>{description ? <p className="mt-1 text-xs text-fg-muted">{description}</p> : null}</div>;
-}
-
-/** The text alternative for a sparkline: the point count, first and last value, and the range. It only restates stored values. */
-export function sparklineSummary(label: string, values: number[]): string {
-  if (values.length === 0) return `${label} trend: no points stored.`;
-  const format = (value: number) => value.toLocaleString("en", { maximumFractionDigits: 2 });
-  const noun = values.length === 1 ? "point" : "points";
-  return `${label} trend over ${values.length} ${noun}: first ${format(values[0])}, last ${format(values[values.length - 1])}, lowest ${format(Math.min(...values))}, highest ${format(Math.max(...values))}.`;
 }
 
 export function KpiCard(props: Parameters<typeof Stat>[0] & { icon?: ReactNode; sparkline?: number[] }) {

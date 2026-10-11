@@ -1,7 +1,8 @@
 /**
- * The binary store that artifacts are written to. Google Drive is the real backend. In the testing runtime, and only there,
- * an in-memory store stands in for it, so the artifact path runs end to end without Google credentials. Production never
- * selects the in-memory store.
+ * The binary store that artifacts are written to. Google Drive holds the bytes of artifacts and exports. Postgres holds the
+ * record of each one (storage_objects, and artifact_upload_sessions for resumable uploads). In the testing runtime, and only
+ * there, an in-memory store stands in for Drive, so the artifact path runs end to end without Google credentials. Production
+ * never selects the in-memory store.
  */
 import { createHash } from "node:crypto";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";

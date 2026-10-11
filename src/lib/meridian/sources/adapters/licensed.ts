@@ -5,6 +5,7 @@
  * Reports explicit NOT_CONFIGURED when API credentials are absent.
  */
 
+import { sourceKeyFor } from "../credentials.ts";
 import type {
   SourceAdapter,
   SourceCapabilities,
@@ -29,46 +30,31 @@ export class LicensedSourceAdapter implements SourceAdapter {
     search: true,
   };
 
-  private getApiKey(): string | undefined {
-    return process.env.LICENSED_DATA_API_KEY?.trim() || process.env.SENSOR_TOWER_API_KEY?.trim();
-  }
-
-  async health(): Promise<SourceHealth> {
-    const key = this.getApiKey();
+  async health(organizationId?: string): Promise<SourceHealth> {
+    const resolved = await sourceKeyFor("licensed", organizationId);
+    const key = resolved.secret;
     if (!key) {
       return {
         adapterId: this.id,
         status: "NOT_CONFIGURED",
         latencyMs: 0,
-        message: "LICENSED_DATA_API_KEY is not configured.",
+        message: resolved.reason,
         lastCheckedAt: new Date().toISOString(),
       };
     }
+    // A key is saved, but no licensed-provider client exists in this release, so the source cannot run.
     return {
       adapterId: this.id,
-      status: "HEALTHY",
-      latencyMs: 20,
-      message: "Licensed data provider configured.",
+      status: "NOT_SUPPORTED",
+      latencyMs: 0,
+      message: "A licensed-data key is saved, but this release has no client for that provider. No records are produced from it.",
       lastCheckedAt: new Date().toISOString(),
     };
   }
 
-  async discover(query: DiscoveryQuery): Promise<SourceReference[]> {
-    const key = this.getApiKey();
-    if (!key) return [];
-
-    return [
-      {
-        sourceId: `licensed_${query.advertiser || query.niche || "general"}`,
-        platform: "licensed",
-        sourceAdapter: this.id,
-        discoveredAt: new Date().toISOString(),
-        metadata: {
-          advertiser: query.advertiser,
-          niche: query.niche,
-        },
-      },
-    ];
+  /** No provider request is made in this release, so there are no records. The adapter never invents a reference. */
+  async discover(_query: DiscoveryQuery): Promise<SourceReference[]> {
+    return [];
   }
 
   async fetch(reference: SourceReference): Promise<RawArtifact> {

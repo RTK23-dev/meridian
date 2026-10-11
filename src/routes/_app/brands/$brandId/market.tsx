@@ -104,7 +104,11 @@ function MarketPage({ brandId }: { brandId: string }) {
     mutationFn: (values: { url: string }) => fetchSourcePage({ data: { brandId, url: values.url } }),
     invalidate: () => [qk.market(brandId), qk.machine(brandId)],
     onSuccess: (result) => {
-      setNote(result.status === "stored" ? "Page text stored. It is not part of the brand brain." : result.error);
+      setNote(result.status === "stored"
+        ? result.seenBefore
+          ? "This page's text is already stored for this brand. No duplicate was added. It is not part of the brand brain."
+          : "Page text stored. It is not part of the brand brain."
+        : result.error);
       pageForm.reset({ url: "" });
     },
   });
@@ -189,7 +193,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             <p className="text-xs font-semibold uppercase tracking-widest text-brass">{adapter.status}</p>
             <h2 className="mt-2 font-display text-xl">{adapter.label}</h2>
             <p className="mt-2 text-sm text-muted">{adapter.note}</p>
-            {adapter.connectionError ? <p className="mt-2 text-xs text-muted">{adapter.connectionError}</p> : null}
+            {adapter.connectionError ? <p className="mt-2 text-xs text-muted [overflow-wrap:anywhere]">{adapter.connectionError}</p> : null}
           </li>
         ))}
       </ul>

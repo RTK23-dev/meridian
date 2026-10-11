@@ -2,7 +2,7 @@
  * Provider-Neutral Production Types
  *
  * Contracts for rendering/generating short-form video creatives across multiple engines:
- * ManualCloud (zero spend Drive drop folder), Hypit, Veo, Higgsfield.
+ * ManualCloud (zero spend Drive drop folder), Hypit, Gemini Omni, Higgsfield.
  */
 
 export type CostMode = "ZERO_SPEND" | "LOWEST_COST" | "BALANCED" | "QUALITY_FIRST";
@@ -120,5 +120,5 @@ export interface ProductionProvider {
   health(): Promise<ProviderHealth>;
   submitJob(spec: CreativeSpec): Promise<ProductionJob>;
   checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob>;
-  cancelJob?(jobId: string): Promise<void>;
+  cancelJob?(jobId: string, metadata?: Record<string, unknown>): Promise<void>;
 }

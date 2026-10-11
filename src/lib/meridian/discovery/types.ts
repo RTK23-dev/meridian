@@ -106,6 +106,37 @@ export interface DiscoveredItem {
   discoveredAt: string;
 }
 
+/**
+ * What one source did for one seed in one run. `ran` means the source was called and its results were processed (zero
+ * results is still `ran`). The other states say why nothing was read, so a gated source is never shown as connected.
+ */
+export type SourceRunState =
+  | {
+      adapterId: string;
+      seed: string;
+      status: "ran";
+      /** Items stored by this run from this source. */
+      itemsFound: number;
+      /** Items that matched a record already stored for this brand, so they were not stored again. */
+      seenBefore: number;
+      /** The adapter's health status when this run fetched from it. */
+      sourceStatus: string;
+    }
+  | {
+      adapterId: string;
+      seed: string;
+      status: "not_configured" | "not_supported";
+      /** The resolver's reason, or the adapter's own explanation. Shown to the user. */
+      reason: string;
+    }
+  | {
+      adapterId: string;
+      seed: string;
+      status: "failed";
+      /** The error the call raised. */
+      reason: string;
+    };
+
 export interface DiscoveryRun {
   id: string;
   organizationId: string;
@@ -118,6 +149,10 @@ export interface DiscoveryRun {
     pagesCrawled: number;
     discoveredCards: number;
     discoveredUrls: number;
+    /** Records this run matched to ones already stored for the brand. They are counted here, not stored again. */
+    seenBefore?: number;
+    /** One entry per source and seed. Stored with the run, so a resumed run keeps the states it already recorded. */
+    sources?: SourceRunState[];
   };
   perSourceErrors: Record<string, string>;
   caveat?: string;

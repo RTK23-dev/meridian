@@ -21,6 +21,7 @@ import {
   telemetryQueryOptions,
   usageQueryOptions,
 } from "./hooks";
+import { warmSpecs, type WarmSpec } from "./warm-targets";
 
 export type PrefetchScope = {
   userId: string | null | undefined;
@@ -32,7 +33,7 @@ type Warmer = (queryClient: QueryClient) => Promise<void>;
 
 /**
  * Warms the cache for the screen a link points to, so the click renders from cache. Each entry is built by the same
- * option factory the screen's hook uses. Screens with filter or page state (audit, webhooks) are not warmed.
+ * option factory the screen's hook uses. Which queries a path warms is decided by warm-targets.ts.
  */
 export function prefetchScreen(queryClient: QueryClient, scope: PrefetchScope, to: string): void {
   for (const warm of screenWarmers(scope, to)) void warm(queryClient);
@@ -40,35 +41,30 @@ export function prefetchScreen(queryClient: QueryClient, scope: PrefetchScope, t
 
 export function screenWarmers({ userId, organizationId }: PrefetchScope, to: string): Warmer[] {
   if (!userId) return [];
-  const brand = to.match(/^\/brands\/([^/]+)(?:\/([^/?#]+))?\/?$/);
-  if (brand) {
-    const brandId = brand[1];
-    if (brandId === "new") return [];
-    switch (brand[2] ?? "") {
-      case "": return [(qc) => qc.prefetchQuery(brandQueryOptions(userId, brandId)), (qc) => qc.prefetchQuery(machineQueryOptions(userId, brandId))];
-      case "market": return [(qc) => qc.prefetchQuery(marketQueryOptions(userId, brandId))];
-      case "intelligence": return [(qc) => qc.prefetchQuery(intelligenceQueryOptions(userId, brandId))];
-      case "opportunities": return [(qc) => qc.prefetchQuery(opportunitiesQueryOptions(userId, brandId))];
-      case "reviews": return [(qc) => qc.prefetchQuery(reviewsQueryOptions(userId, brandId))];
-      case "studio": return [(qc) => qc.prefetchQuery(studioQueryOptions(userId, brandId))];
-      case "library": return [(qc) => qc.prefetchQuery(libraryQueryOptions(userId, brandId))];
-      case "learning": return [(qc) => qc.prefetchQuery(learningQueryOptions(userId, brandId)), (qc) => qc.prefetchQuery(telemetryQueryOptions(userId, brandId))];
-      case "calibration": return [(qc) => qc.prefetchQuery(calibrationQueryOptions(userId, brandId))];
-      case "brain": return [(qc) => qc.prefetchQuery(brandQueryOptions(userId, brandId)), (qc) => qc.prefetchQuery(assetsQueryOptions(userId, brandId))];
-      case "products": return [(qc) => qc.prefetchQuery(brandQueryOptions(userId, brandId))];
-      case "accounts": return [(qc) => qc.prefetchQuery(accountsQueryOptions(userId, brandId))];
-      case "factory": return [(qc) => qc.prefetchQuery(factoryQueryOptions(userId, brandId))];
-      default: return [];
-    }
-  }
-  if (!organizationId) return [];
-  switch (to) {
-    case "/integrations": return [(qc) => qc.prefetchQuery(integrationsQueryOptions(userId, organizationId))];
-    case "/jobs": return [(qc) => qc.prefetchQuery(jobsQueryOptions(userId, organizationId))];
-    case "/usage": return [(qc) => qc.prefetchQuery(usageQueryOptions(userId, organizationId))];
-    case "/alerts": return [(qc) => qc.prefetchQuery(alertsQueryOptions(userId, organizationId))];
-    case "/notifications": return [(qc) => qc.prefetchQuery(notificationsQueryOptions(userId, organizationId))];
-    case "/settings": return [(qc) => qc.prefetchQuery(providerSettingsQueryOptions(userId, organizationId))];
-    default: return [];
+  return warmSpecs(to, { signedIn: true, organizationId }).map((spec) => (queryClient: QueryClient) => prefetchSpec(queryClient, userId, spec));
+}
+
+function prefetchSpec(queryClient: QueryClient, userId: string, { query, id }: WarmSpec): Promise<void> {
+  switch (query) {
+    case "brand": return queryClient.prefetchQuery(brandQueryOptions(userId, id));
+    case "machine": return queryClient.prefetchQuery(machineQueryOptions(userId, id));
+    case "market": return queryClient.prefetchQuery(marketQueryOptions(userId, id));
+    case "intelligence": return queryClient.prefetchQuery(intelligenceQueryOptions(userId, id));
+    case "opportunities": return queryClient.prefetchQuery(opportunitiesQueryOptions(userId, id));
+    case "reviews": return queryClient.prefetchQuery(reviewsQueryOptions(userId, id));
+    case "studio": return queryClient.prefetchQuery(studioQueryOptions(userId, id));
+    case "library": return queryClient.prefetchQuery(libraryQueryOptions(userId, id));
+    case "learning": return queryClient.prefetchQuery(learningQueryOptions(userId, id));
+    case "telemetry": return queryClient.prefetchQuery(telemetryQueryOptions(userId, id));
+    case "calibration": return queryClient.prefetchQuery(calibrationQueryOptions(userId, id));
+    case "assets": return queryClient.prefetchQuery(assetsQueryOptions(userId, id));
+    case "accounts": return queryClient.prefetchQuery(accountsQueryOptions(userId, id));
+    case "factory": return queryClient.prefetchQuery(factoryQueryOptions(userId, id));
+    case "integrations": return queryClient.prefetchQuery(integrationsQueryOptions(userId, id));
+    case "jobs": return queryClient.prefetchQuery(jobsQueryOptions(userId, id));
+    case "usage": return queryClient.prefetchQuery(usageQueryOptions(userId, id));
+    case "alerts": return queryClient.prefetchQuery(alertsQueryOptions(userId, id));
+    case "notifications": return queryClient.prefetchQuery(notificationsQueryOptions(userId, id));
+    case "providerSettings": return queryClient.prefetchQuery(providerSettingsQueryOptions(userId, id));
   }
 }
