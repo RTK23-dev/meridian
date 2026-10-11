@@ -49,7 +49,7 @@ export function SuggestionList({ brandId, canEdit, saved, formDirty }: {
     ) : null}
     {marketQuery.isPending && !marketQuery.isError ? <Skeleton variant="card" className="h-24" /> : null}
     {!marketQuery.isPending && state.kind === "empty" ? (
-      <p className="text-sm text-fg-muted">No suggestions are waiting. Suggestions appear here after a stored document is read by the text model.</p>
+      <p className="text-sm text-fg-muted">No suggestions are waiting. Suggestions appear here after a stored document is read.</p>
     ) : null}
 
     {state.kind === "ready" ? (
