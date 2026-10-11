@@ -351,7 +351,8 @@ export function variantGateVerdicts(input: {
     originalityGate({ frameHashDistance: null, embeddingDistance: null, textSimilarity: null }),
     brandGate({ logoPresent: null, paletteMatch: null, productLooksRight: null }),
     claimsGate({ claims: recordedClaimsOf(input.storyboard ?? ""), approvedClaims: input.rules.approved, bannedWords: input.rules.banned }),
-    policyGate({ beforeAfter: false, personalAttribute: false, healthClaim: false, financeClaim: false }),
+    // This job runs no policy check, so no flag is known. Unknown is review; it is never recorded as a pass.
+    policyGate({ beforeAfter: null, personalAttribute: null, healthClaim: null, financeClaim: null }),
     rightsGate({ musicLicensed: false, footageLicensed: false, aiLabeled: false }),
   ];
 }

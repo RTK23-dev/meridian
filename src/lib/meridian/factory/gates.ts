@@ -172,14 +172,21 @@ export function claimsGate(input: {
   return { gate: "claims", result: "pass", reason: "Every claim maps to an approved claim. No banned words." };
 }
 
+/**
+ * Each flag is `true` when found, `false` when checked and not found, and `null` when it was never checked. A flag that was
+ * never checked is review, never a pass: a pass says no policy flag was present, and that cannot be said of an unchecked one.
+ */
 export function policyGate(input: {
-  beforeAfter: boolean;
-  personalAttribute: boolean;
-  healthClaim: boolean;
-  financeClaim: boolean;
+  beforeAfter: boolean | null;
+  personalAttribute: boolean | null;
+  healthClaim: boolean | null;
+  financeClaim: boolean | null;
 }): GateVerdict {
   if (input.beforeAfter) return { gate: "policy", result: "block", reason: "Before/after imagery is blocked by the platform pre-check." };
   if (input.personalAttribute) return { gate: "policy", result: "block", reason: "Personal attributes are blocked by the platform pre-check." };
+  if (input.beforeAfter == null || input.personalAttribute == null || input.healthClaim == null || input.financeClaim == null) {
+    return { gate: "policy", result: "review", reason: "Policy evidence is incomplete. A person must check the variant before launch." };
+  }
   if (input.healthClaim || input.financeClaim) {
     return { gate: "policy", result: "review", reason: "Health or finance language needs a person before launch." };
   }
