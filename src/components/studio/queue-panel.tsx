@@ -13,6 +13,7 @@ import {
   useRetryPublishJob,
 } from "@/lib/query/hooks";
 import type { StudioVariant } from "./types.ts";
+import { queueTone } from "./queue-tone.ts";
 
 type QueuePanelProps = {
   brandId: string;
@@ -265,15 +266,6 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
       ) : null}
     </div>
   );
-}
-
-/** The table and the phone cards share one tone mapping, so a status reads the same at every width. */
-function queueTone(status: string): "success" | "info" | "danger" | "neutral" | "warning" {
-  if (status === "published") return "success";
-  if (status === "processing") return "info";
-  if (status === "failed") return "danger";
-  if (status === "cancelled") return "neutral";
-  return "warning";
 }
 
 /** Retry and cancel for one queue row. The role check stays here, so both layouts keep it. */

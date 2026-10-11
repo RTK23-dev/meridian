@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { aspectRatio, assetSource, durationLabel, posterSource } from "./media-source.ts";
 
 /**
  * A stored asset (by id, served from /api/assets/<id>) or an app-relative media URL. Not wired into a screen by itself.
@@ -30,7 +31,7 @@ const VIDEO_ERROR = "This video could not be played. It may have been removed, y
 const IMAGE_ERROR = "This image could not be loaded. It may have been removed, or you may not have access to this workspace.";
 
 export function MediaPlayer(props: MediaPlayerProps) {
-  const src = props.assetId !== undefined ? `/api/assets/${encodeURIComponent(props.assetId)}` : props.url;
+  const src = props.assetId !== undefined ? assetSource(props.assetId) : props.url;
   // The result is tied to the source it was measured for, so a new source starts in the loading state again.
   const [settled, setSettled] = useState<{ src: string; ok: boolean } | null>(null);
   const state: LoadState = settled?.src === src ? (settled.ok ? "ready" : "error") : "loading";
@@ -64,9 +65,9 @@ export function MediaPlayer(props: MediaPlayerProps) {
     );
   }
 
-  const poster = props.poster !== undefined ? props.poster ?? undefined : props.assetId !== undefined ? `${src}?thumb=1` : undefined;
-  const ratio = props.width && props.height ? `${props.width} / ${props.height}` : "16 / 9";
-  const seconds = props.durationMs ? `${(props.durationMs / 1000).toFixed(1)} seconds` : "duration not stored";
+  const poster = posterSource({ poster: props.poster, assetId: props.assetId });
+  const ratio = aspectRatio(props.width, props.height);
+  const seconds = durationLabel(props.durationMs);
   return (
     <div className={className}>
       <div className="relative w-full max-w-full" style={{ aspectRatio: ratio }}>
