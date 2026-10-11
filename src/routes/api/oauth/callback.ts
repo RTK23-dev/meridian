@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
-import { exchangeOauthCode, hashOauthState, oauthStateMatches, sealSecret } from "@/lib/meridian/oauth/flow.server";
+import { exchangeOauthCode, hashOauthState, isAllowedOauthOrigin, sealSecret } from "@/lib/meridian/oauth/flow.server";
 import { liveTransport } from "@/lib/meridian/providers/http";
 
 export const Route = createFileRoute("/api/oauth/callback")({
@@ -8,6 +8,7 @@ export const Route = createFileRoute("/api/oauth/callback")({
     handlers: {
       GET: async ({ request }) => {
         const url = new URL(request.url);
+        if (!isAllowedOauthOrigin(url.origin, process.env)) return new Response("OAuth callback origin is not allowed.", { status: 400 });
         const provider = url.searchParams.get("provider") ?? "";
         const state = url.searchParams.get("state") ?? "";
         const code = url.searchParams.get("code") ?? "";
@@ -15,10 +16,13 @@ export const Route = createFileRoute("/api/oauth/callback")({
           return new Response("Unknown provider.", { status: 400 });
         }
         const sql = await getSql();
-        const rows = await sql<{ state_hash: string; organization_id: string; expires_at: string; used_at: string | null }>`
-          select state_hash, organization_id, expires_at, used_at from oauth_states where provider = ${provider}
+        const stateHash = hashOauthState(state);
+        const claimed = await sql<{ organization_id: string }>`
+          update oauth_states set used_at = now()
+          where state_hash = ${stateHash} and provider = ${provider} and used_at is null and expires_at > now()
+          returning organization_id
         `;
-        const match = rows.find((row) => oauthStateMatches(row.state_hash, state) && !row.used_at && Date.parse(row.expires_at) > Date.now());
+        const match = claimed[0];
         if (!match) return new Response("The OAuth state is missing, used, or expired.", { status: 400 });
         const exchanged = await exchangeOauthCode(provider, { code, redirectUri: `${url.origin}/api/oauth/callback?provider=${provider}`, env: process.env }, liveTransport());
         if ("error" in exchanged) return new Response(exchanged.error, { status: 502 });
@@ -34,7 +38,6 @@ export const Route = createFileRoute("/api/oauth/callback")({
             sealed_refresh = excluded.sealed_refresh,
             updated_at = now()
         `;
-        await sql`update oauth_states set used_at = now() where state_hash = ${hashOauthState(state)}`;
         return new Response(null, { status: 302, headers: { location: "/integrations" } });
       },
     },

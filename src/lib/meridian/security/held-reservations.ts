@@ -13,6 +13,7 @@
 import { assertRole, isRole } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
 import { BudgetLedgerService, InvalidBudgetCapError, toMicros } from "./budget-ledger.ts";
+import { settleCreativePlanIfComplete } from "../production/materialization.ts";
 
 /** Brand lookup, membership and the admin role check, in the same order as the studio's requireBrand. */
 async function requireBrandAdmin(sql: Sql, userId: string, brandId: string): Promise<{ organizationId: string }> {
@@ -125,8 +126,9 @@ export async function resolveHeldReservation(
     provider: string;
     reservation_status: string;
     job_status: string;
+    creative_plan_id: string | null;
   }>`
-    select r.production_job_id, p.provider, r.status as reservation_status, p.status as job_status
+    select r.production_job_id, p.provider, r.status as reservation_status, p.status as job_status, p.creative_plan_id
     from budget_reservations r
     join production_jobs p
       on p.id = r.production_job_id and p.organization_id = r.organization_id and p.brand_id = r.brand_id
@@ -173,6 +175,15 @@ export async function resolveHeldReservation(
       set status = 'FAILED', error_code = 'OPERATOR_RECONCILED_BILLING', error_message = ${note}, updated_at = now()
       where id = ${row.production_job_id} and organization_id = ${access.organizationId} and brand_id = ${input.brandId}
     `;
+  }
+
+  if (row.creative_plan_id) {
+    await settleCreativePlanIfComplete(sql, {
+      organizationId: access.organizationId,
+      brandId: input.brandId,
+      planId: row.creative_plan_id,
+      actorId: userId,
+    });
   }
 
   await sql`

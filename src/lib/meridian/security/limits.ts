@@ -45,9 +45,12 @@ export function refuseIfLimited(
 }
 
 export function clientKey(request: Request): string {
+  // Forwarding headers are client-controlled unless the deployment explicitly declares a trusted proxy.
+  // Do not let arbitrary callers rotate spoofed IPs to evade the process-local budget.
+  if (process.env.MERIDIAN_TRUST_PROXY_HEADERS !== "true") return "untrusted-client";
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  if (forwarded) return forwarded.slice(0, 80);
+  if (forwarded && forwarded.length <= 80) return forwarded;
   const realIp = request.headers.get("x-real-ip")?.trim();
-  if (realIp) return realIp.slice(0, 80);
+  if (realIp && realIp.length <= 80) return realIp;
   return "unknown";
 }

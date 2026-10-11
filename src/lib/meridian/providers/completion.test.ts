@@ -201,7 +201,7 @@ test("oauth state must match and a token is sealed instead of returned in a URL"
   const hash = hashOauthState(state);
   assert.equal(oauthStateMatches(hash, state), true);
   assert.equal(oauthStateMatches(hash, "other"), false);
-  const url = authorizationUrl("meta", { state, redirectUri: "https://example.com/api/oauth/callback", env: { META_APP_ID: "app" } });
+  const url = authorizationUrl("meta", { state, redirectUri: "https://example.com/api/oauth/callback?provider=meta", env: { META_APP_ID: "app", MERIDIAN_ALLOWED_OAUTH_ORIGINS: "https://example.com" } });
   assert.equal("url" in url, true);
   if ("url" in url) assert.equal(url.url.includes("client_secret"), false);
   const sealed = sealSecret("secret-token", "key");

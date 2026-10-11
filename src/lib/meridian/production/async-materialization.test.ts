@@ -288,7 +288,7 @@ test("failed async job: the reservation is held for reconciliation and the plan 
   );
   try {
     await execute(sql, tenant, tenant.plan);
-    await pollProductionJobs(sql);
+    await pollProductionJobs(sql, { organizationId: tenant.organizationId });
 
     const [row] = await productionJobs(sql, tenant);
     assert.equal(row!.status, "FAILED");
@@ -312,7 +312,7 @@ test("ambiguous financial outcome: a completed render whose artifact never arriv
     await execute(sql, tenant, tenant.plan);
     // The provider reported completion, but no bytes or URL are available. The final attempt gives up.
     await sql`update production_jobs set attempt_count = 4 where organization_id = ${tenant.organizationId}`;
-    await pollProductionJobs(sql);
+    await pollProductionJobs(sql, { organizationId: tenant.organizationId });
 
     const [row] = await productionJobs(sql, tenant);
     assert.equal(row!.status, "FAILED");

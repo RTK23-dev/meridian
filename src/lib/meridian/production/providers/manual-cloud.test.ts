@@ -21,7 +21,7 @@ function driveStub(options: { files?: DriveFile[]; folderFails?: boolean } = {})
       calls.push(`put:${input.path}`);
       return { webViewLink: "https://drive.google.com/file/stub" };
     },
-    syncDropFolder: async () => options.files ?? [],
+    syncDropFolder: async () => ({ ok: true as const, files: options.files ?? [] }),
   };
 }
 
