@@ -59,3 +59,95 @@ Cyclone is one device owned by the deployment, so its key is read from the envir
 
 Decisions use one engine per workspace (DECISIONS.md). `DECISION_ENGINE` sets the deployment default. A workspace's own choice,
 made in Settings, takes precedence.
+
+## Inbound webhooks
+
+A provider (or a relay acting for one) posts each event to `POST /api/webhooks/receive`. Meridian verifies the delivery, then
+records it in the workspace its account is connected to. Recording is all that happens: nothing downstream reads recorded
+events yet. The webhook job's result is `recorded:<eventId>:no-downstream-processing`.
+
+The secret is `WEBHOOK_SECRET` (see Infrastructure above). Senders must sign with it.
+
+### Sender contract
+
+Send `POST` with `Content-Type: application/json` (a charset parameter is accepted) and these headers:
+
+| Header | Value |
+| --- | --- |
+| `x-meridian-provider` | The provider name, for example `meta` |
+| `x-meridian-account` | The account id stored on the provider connection |
+| `x-meridian-event` | The provider's event id. Unique per provider and account |
+| `x-meridian-timestamp` | Unix time in milliseconds when the delivery was signed |
+| `x-meridian-signature` | Lowercase hex HMAC-SHA256, described below |
+
+The signature covers this canonical string. It has six lines, joined with a line feed (`\n`), with no trailing newline:
+
+```
+v2
+<provider>
+<account>
+<eventId>
+<timestamp>
+<lowercase hex SHA-256 of the raw request body>
+```
+
+The signature is the lowercase hex HMAC-SHA256 of that string, keyed with `WEBHOOK_SECRET`. The body is hashed as the UTF-8
+bytes sent, so sign the exact bytes you send. The header values must be the same values used in the canonical string. A
+changed provider, account, event id or timestamp invalidates the signature. The timestamp must be within five minutes of
+Meridian's clock.
+
+A signature in the earlier form, over the timestamp and body only, is refused with 401. Senders must switch to v2.
+
+Example (Node.js 18 or later):
+
+```js
+import { createHash, createHmac } from "node:crypto";
+
+// Returns the value for x-meridian-signature. Pass the same values here and in the headers.
+export function signMeridianWebhook({ secret, provider, account, eventId, timestamp, rawBody }) {
+  const bodyHash = createHash("sha256").update(rawBody, "utf8").digest("hex");
+  const canonical = ["v2", provider, account, eventId, timestamp, bodyHash].join("\n");
+  return createHmac("sha256", secret).update(canonical, "utf8").digest("hex");
+}
+
+const rawBody = JSON.stringify({ type: "ad.updated", id: "123" });
+const timestamp = String(Date.now());
+const signature = signMeridianWebhook({
+  secret: process.env.WEBHOOK_SECRET,
+  provider: "meta",
+  account: "act_42",
+  eventId: "evt_9001",
+  timestamp,
+  rawBody,
+});
+
+await fetch("https://<meridian-host>/api/webhooks/receive", {
+  method: "POST",
+  headers: {
+    "content-type": "application/json",
+    "x-meridian-provider": "meta",
+    "x-meridian-account": "act_42",
+    "x-meridian-event": "evt_9001",
+    "x-meridian-timestamp": timestamp,
+    "x-meridian-signature": signature,
+  },
+  body: rawBody,
+});
+```
+
+### Responses
+
+| Status | Body | Meaning |
+| --- | --- | --- |
+| 202 | `recorded` | A new event was stored and its job queued. Nothing else runs yet |
+| 200 | `already received` | The workspace already holds this event. Nothing new is stored. Its job is ensured |
+| 401 | The reason | The signature, timestamp, JSON, headers or account was refused. Nothing was stored |
+| 400 | The reason | `Content-Length` is not a number |
+| 408 | The reason | The body did not finish arriving within 10 seconds |
+| 409 | The reason | The account is connected to more than one workspace, so the event cannot be routed. Nothing was stored |
+| 413 | The reason | The body is over 256 KB |
+| 415 | The reason | The media type is not `application/json` |
+
+A repeated event id is a duplicate only within one workspace, and it is answered 200. The same event id can be recorded once for
+each workspace it reaches. The 401 and 409 responses are decided before anything is written. A 401 for an unknown account is
+returned only after the signature passes, so an unsigned caller cannot learn how an account is connected.

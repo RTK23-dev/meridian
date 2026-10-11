@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { mayAutoPublish, publishCreative } from "@/lib/meridian/providers/contracts";
+import { withTransaction, type Sql } from "../learning/store.ts";
 import { isReviewReasonCode, reviewReasonOptions } from "../reviews/reasons.ts";
 import { loadReviewPage, reviewPage } from "../reviews/listing.ts";
 import {
@@ -78,53 +79,113 @@ export const resolveReview = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
-    const rows = await sql<{ id: string; decision_id: string; creative_id: string | null; opportunity_id: string | null }>`
+    await applyReviewDecision(sql, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      userId: context.userId,
+      reviewId: data.reviewId,
+      action: data.action,
+      reasonCode: data.reasonCode,
+      note: data.note,
+    });
+    return { ok: true };
+  });
+
+/**
+ * Records a reviewer's approve or reject of one open review. The review, its decision, the creative, the rejection row, the
+ * opportunity and the audit row are written in one transaction, so they all change or none does. Every statement is scoped to
+ * the caller's workspace and brand, and every UPDATE must match exactly one row: a row outside the brand rolls the whole
+ * action back rather than leaving the decision, the creative and the audit trail out of step.
+ */
+export async function applyReviewDecision(
+  sql: Sql,
+  input: {
+    organizationId: string;
+    brandId: string;
+    userId: string;
+    reviewId: string;
+    action: string;
+    reasonCode: string;
+    note: string;
+  },
+): Promise<void> {
+  if (input.action !== "approve" && input.action !== "reject") throw new Error("Choose approve or reject.");
+  const action = input.action === "approve" ? "approve" : "reject";
+  const { organizationId, brandId } = input;
+  await withTransaction(sql, async (tx) => {
+    const rows = await tx<{ id: string; decision_id: string; creative_id: string | null; opportunity_id: string | null }>`
       select id, decision_id, creative_id, opportunity_id from reviews
-      where id = ${data.reviewId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId} and status = 'open'
+      where id = ${input.reviewId} and brand_id = ${brandId} and organization_id = ${organizationId} and status = 'open'
       limit 1
     `;
     const review = rows[0];
     if (!review) throw new Error("That review is not open.");
-    await sql`
-      update reviews set status = ${data.action === "approve" ? "approved" : "rejected"} where id = ${review.id}
-    `;
-    await sql`
-      update jev_decisions set
-        reviewer_id = ${context.userId},
-        reviewer_decision = ${data.action},
-        reviewer_note = ${data.note},
-        reviewed_at = now()
-      where id = ${review.decision_id}
-    `;
+    const nextStatus = action === "approve" ? "approved" : "rejected";
+    expectOneRow(
+      await tx`
+        update reviews set status = ${nextStatus}
+        where id = ${review.id} and brand_id = ${brandId} and organization_id = ${organizationId} and status = 'open'
+        returning id
+      `,
+      "That review is not open.",
+    );
+    expectOneRow(
+      await tx`
+        update jev_decisions set
+          reviewer_id = ${input.userId},
+          reviewer_decision = ${action},
+          reviewer_note = ${input.note},
+          reviewed_at = now()
+        where id = ${review.decision_id} and brand_id = ${brandId} and organization_id = ${organizationId}
+        returning id
+      `,
+      "The review's decision is not in this brand, so nothing was changed.",
+    );
     if (review.creative_id) {
-      await sql`
-        update creative_records set status = ${data.action === "approve" ? "approved" : "rejected"}, updated_at = now()
-        where id = ${review.creative_id}
-      `;
-      if (data.action === "reject") {
-        await sql`
+      expectOneRow(
+        await tx`
+          update creative_records set status = ${nextStatus}, updated_at = now()
+          where id = ${review.creative_id} and brand_id = ${brandId} and organization_id = ${organizationId}
+          returning id
+        `,
+        "The review's creative is not in this brand, so nothing was changed.",
+      );
+      if (action === "reject") {
+        await tx`
           insert into rejections (id, organization_id, brand_id, creative_id, decision_id, reason_code, note, rejected_by)
           values (
-            ${id()}, ${access.organizationId}, ${data.brandId}, ${review.creative_id}, ${review.decision_id},
-            ${data.reasonCode}, ${data.note}, ${context.userId}
+            ${id()}, ${organizationId}, ${brandId}, ${review.creative_id}, ${review.decision_id},
+            ${input.reasonCode}, ${input.note}, ${input.userId}
           )
         `;
       }
     }
-    if (review.opportunity_id && data.action === "reject") {
-      await sql`update opportunities set status = 'dismissed' where id = ${review.opportunity_id}`;
+    if (review.opportunity_id && action === "reject") {
+      expectOneRow(
+        await tx`
+          update opportunities set status = 'dismissed'
+          where id = ${review.opportunity_id} and brand_id = ${brandId} and organization_id = ${organizationId}
+          returning id
+        `,
+        "The review's opportunity is not in this brand, so nothing was changed.",
+      );
     }
-    await audit(sql, {
-      organizationId: access.organizationId,
-      brandId: data.brandId,
-      actorId: context.userId,
-      action: data.action === "approve" ? "review.approved" : "review.rejected",
+    await audit(tx, {
+      organizationId,
+      brandId,
+      actorId: input.userId,
+      action: action === "approve" ? "review.approved" : "review.rejected",
       objectType: "review",
       objectId: review.id,
-      metadata: { reason: data.reasonCode },
+      metadata: { reason: input.reasonCode },
     });
-    return { ok: true };
   });
+}
+
+/** An UPDATE that must reach exactly one row. Any other count throws inside the transaction, so every earlier write rolls back. */
+function expectOneRow(rows: unknown[], message: string): void {
+  if (rows.length !== 1) throw new Error(message);
+}
 
 export const publishToPlatform = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ brandId: clip(objectInput(input).brandId, 80, "Brand", true) }))

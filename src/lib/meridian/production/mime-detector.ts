@@ -14,10 +14,19 @@ export class UnknownArtifactFormatError extends Error {
   }
 }
 
+/**
+ * The kind of artifact a format is, for matching against a production job's modality. An animated GIF is a motion clip for
+ * production purposes, so it is "video" here; its MIME type stays image/gif.
+ */
+export type ArtifactCategory = "video" | "image" | "document";
+
+/** The canonical file extension of each detected format. A stored file name is built from this, never from the MIME type. */
+export type ArtifactExtension = "mp4" | "webm" | "mov" | "gif" | "pdf" | "png" | "jpg" | "webp";
+
 export interface DetectedArtifactFormat {
   mimeType: string;
-  extension: string;
-  category: "video" | "image" | "document";
+  extension: ArtifactExtension;
+  category: ArtifactCategory;
 }
 
 export function detectArtifactType(bytes: Uint8Array): DetectedArtifactFormat {
@@ -94,7 +103,7 @@ export function detectArtifactType(bytes: Uint8Array): DetectedArtifactFormat {
     (bytes[4] === 0x37 || bytes[4] === 0x39) &&
     bytes[5] === 0x61
   ) {
-    return { mimeType: "image/gif", extension: "gif", category: "image" };
+    return { mimeType: "image/gif", extension: "gif", category: "video" };
   }
 
   // 6. MP4: ....ftyp

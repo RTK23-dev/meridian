@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
-import { handleWebhookReceive, WEBHOOK_BODY_LIMIT_BYTES, type WebhookReceiveDeps } from "./receive-handler.ts";
-import { signWebhookBody } from "./verify.ts";
+import {
+  handleWebhookReceive,
+  WEBHOOK_BODY_DEADLINE_MS,
+  WEBHOOK_BODY_LIMIT_BYTES,
+  type WebhookReceiveDeps,
+} from "./receive-handler.ts";
+import { signWebhookDelivery } from "./verify.ts";
 
 const SECRET = "test-webhook-secret";
 const NOW = Date.UTC(2026, 9, 11, 12, 0, 0);
@@ -13,13 +19,15 @@ type StoredEvent = { organizationId: string; provider: string; eventId: string }
 type QueuedJob = { organizationId: string; idempotencyKey: string };
 
 /**
- * An in-memory stand-in for the three statements the receiver runs. The unique rule on webhook_events is the
+ * An in-memory stand-in for the statements the receiver runs, with a transaction that rolls back when it throws. The
+ * jobs insert honours its ON CONFLICT rule. The unique rule on webhook_events is the
  * organization-scoped one from migration 0060, so a second organization can store the same provider event id.
  */
 function fakeWebhookDb(connections: Connection[]) {
   const events: StoredEvent[] = [];
   const jobs: QueuedJob[] = [];
-  const sql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
+  const faults = { jobInsert: false };
+  const statement = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.join("?").replace(/\s+/g, " ").toLowerCase();
     if (text.includes("from provider_connections")) {
       const [provider, accountId] = values as string[];
@@ -41,26 +49,66 @@ function fakeWebhookDb(connections: Connection[]) {
       return [{ id: "event-row" }];
     }
     if (text.includes("insert into jobs")) {
+      assert.match(text, /on conflict \(organization_id, idempotency_key\) do nothing/);
+      if (faults.jobInsert) throw new Error("The job insert failed.");
       const [, organizationId, idempotencyKey] = values as string[];
-      jobs.push({ organizationId, idempotencyKey });
+      if (!jobs.some((row) => row.organizationId === organizationId && row.idempotencyKey === idempotencyKey)) {
+        jobs.push({ organizationId, idempotencyKey });
+      }
       return [];
     }
     throw new Error(`The fake database does not answer this statement: ${text}`);
-  }) as unknown as Sql;
-  return { sql, events, jobs, opens: 0 };
+  };
+  // A transaction that rolls the fake back when its block throws, as the real one does.
+  const sql = Object.assign(statement, {
+    begin: async <T>(fn: (tx: Sql) => Promise<T>): Promise<T> => {
+      const savedEvents = [...events];
+      const savedJobs = [...jobs];
+      try {
+        return await fn(sql as unknown as Sql);
+      } catch (error) {
+        events.splice(0, events.length, ...savedEvents);
+        jobs.splice(0, jobs.length, ...savedJobs);
+        throw error;
+      }
+    },
+  });
+  return { sql: sql as unknown as Sql, events, jobs, faults, opens: 0 };
 }
 
+/**
+ * A delivery with the v2 headers. `signedAs` signs for different routing fields than the headers carry, which is how a
+ * test shows that a re-addressed delivery is refused while its signature is kept.
+ */
 function delivery(
-  input: { account?: string; eventId?: string; signedWith?: string; body?: object; rawBody?: string; contentType?: string | null } = {},
+  input: {
+    account?: string;
+    eventId?: string;
+    signedWith?: string;
+    signedAs?: { provider?: string; account?: string; eventId?: string };
+    body?: object;
+    rawBody?: string;
+    contentType?: string | null;
+  } = {},
 ): Request {
   const rawBody = input.rawBody ?? JSON.stringify(input.body ?? { type: "ad.updated" });
   const timestamp = String(NOW);
+  const provider = "meta";
+  const account = input.account ?? "acct-1";
+  const eventId = input.eventId ?? "evt-1";
   const headers: Record<string, string> = {
-    "x-meridian-provider": "meta",
-    "x-meridian-account": input.account ?? "acct-1",
-    "x-meridian-event": input.eventId ?? "evt-1",
+    "x-meridian-provider": provider,
+    "x-meridian-account": account,
+    "x-meridian-event": eventId,
     "x-meridian-timestamp": timestamp,
-    "x-meridian-signature": signWebhookBody(input.signedWith ?? SECRET, timestamp, rawBody),
+    "x-meridian-signature": signWebhookDelivery({
+      secret: input.signedWith ?? SECRET,
+      provider: input.signedAs?.provider ?? provider,
+      account: input.signedAs?.account ?? account,
+      eventId: input.signedAs?.eventId ?? eventId,
+      timestamp,
+      rawBody,
+    }),
   };
   if (input.contentType !== null) headers["content-type"] = input.contentType ?? "application/json";
   // Bytes, not a string: Node would add a text/plain content type to a string body.
@@ -108,7 +156,7 @@ test("an unsigned delivery to an account connected to two organizations is 401, 
   assert.deepEqual(db.events, []);
 });
 
-test("an account connected to one organization stores the event for that organization and queues it there", async () => {
+test("an account connected to one organization stores the event for that organization and records its job there", async () => {
   // A disconnected connection in another organization does not count as a second destination.
   const db = fakeWebhookDb([
     { provider: "meta", accountId: "acct-1", organizationId: "org-a" },
@@ -116,7 +164,7 @@ test("an account connected to one organization stores the event for that organiz
   ]);
   const response = await handleWebhookReceive(delivery(), depsFor(db));
   assert.equal(response.status, 202);
-  assert.equal(await response.text(), "queued");
+  assert.equal(await response.text(), "recorded");
   assert.deepEqual(db.events, [{ organizationId: "org-a", provider: "meta", eventId: "evt-1" }]);
   assert.deepEqual(db.jobs.map((job) => job.organizationId), ["org-a"]);
 });
@@ -132,11 +180,12 @@ test("the same provider event id delivered to two organizations is stored once p
   assert.equal(second.status, 202, "org-b's copy of the event is not blocked by org-a's");
   assert.deepEqual(db.events.map((row) => row.organizationId), ["org-a", "org-b"]);
 
-  // A redelivery to the same organization is still a duplicate.
+  // A redelivery to the same organization is a duplicate: it is answered 200, stores nothing new, and queues no second job.
   const again = await handleWebhookReceive(delivery({ account: "acct-a", eventId: "evt-shared" }), depsFor(db));
-  assert.equal(again.status, 401);
-  assert.equal(await again.text(), "This event id was already stored.");
+  assert.equal(again.status, 200);
+  assert.equal(await again.text(), "already received");
   assert.equal(db.events.length, 2);
+  assert.deepEqual(db.jobs.map((job) => job.organizationId), ["org-a", "org-b"]);
 });
 
 test("an account with no active connection is still 401 and stores nothing", async () => {
@@ -232,4 +281,191 @@ test("application/json with a charset parameter is accepted", async () => {
   const db = fakeWebhookDb(ONE_ORG);
   const response = await handleWebhookReceive(delivery({ contentType: "application/json; charset=utf-8" }), depsFor(db));
   assert.equal(response.status, 202);
+});
+
+test("the body read deadline is ten seconds", () => {
+  assert.equal(WEBHOOK_BODY_DEADLINE_MS, 10_000);
+});
+
+test("a body that stops arriving is refused with 408 once the read deadline passes, and the database is never opened", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  // Part of a body arrives, then the stream neither delivers more nor closes.
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"type":"ad.'));
+    },
+    pull() {
+      return new Promise<void>(() => {});
+    },
+  });
+  const request = new Request(URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: stream,
+    duplex: "half",
+  } as RequestInit);
+  const started = Date.now();
+  // The deadline is shortened so the test is quick. The default is checked above.
+  const response = await handleWebhookReceive(request, { ...depsFor(db), bodyDeadlineMs: 50 });
+  const elapsed = Date.now() - started;
+  assert.equal(response.status, 408);
+  assert.equal(await response.text(), "The webhook body did not arrive in time.");
+  assert.ok(elapsed < 2000, `the stalled body was refused after ${elapsed} ms`);
+  assert.equal(db.opens, 0);
+  assert.deepEqual(db.events, []);
+});
+
+/**
+ * A database handle that fails the test the moment anything touches it: any property read or call. Paired with a counter
+ * on the opener, it shows that a refused delivery made no database call at all.
+ */
+function untouchableDeps(): { deps: WebhookReceiveDeps; opened: () => number } {
+  let opens = 0;
+  const trap = new Proxy(() => {}, {
+    get() {
+      throw new Error("The database was touched before the webhook was verified.");
+    },
+    apply() {
+      throw new Error("The database was touched before the webhook was verified.");
+    },
+  }) as unknown as Sql;
+  return {
+    deps: {
+      sql: async () => {
+        opens += 1;
+        return trap;
+      },
+      secret: SECRET,
+      nowMs: NOW,
+    },
+    opened: () => opens,
+  };
+}
+
+test("an invalid signature makes zero database calls", async () => {
+  const { deps, opened } = untouchableDeps();
+  const response = await handleWebhookReceive(delivery({ signedWith: "not-the-secret" }), deps);
+  assert.equal(response.status, 401);
+  assert.equal(await response.text(), "The webhook signature does not match.");
+  assert.equal(opened(), 0);
+});
+
+test("a body altered after signing makes zero database calls", async () => {
+  const { deps, opened } = untouchableDeps();
+  const signedBody = JSON.stringify({ type: "ad.updated", amount: 10 });
+  const sentBody = JSON.stringify({ type: "ad.updated", amount: 1000 });
+  const timestamp = String(NOW);
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-meridian-provider": "meta",
+      "x-meridian-account": "acct-1",
+      "x-meridian-event": "evt-1",
+      "x-meridian-timestamp": timestamp,
+      "x-meridian-signature": signWebhookDelivery({
+        secret: SECRET,
+        provider: "meta",
+        account: "acct-1",
+        eventId: "evt-1",
+        timestamp,
+        rawBody: signedBody,
+      }),
+    },
+    body: new TextEncoder().encode(sentBody),
+  });
+  const response = await handleWebhookReceive(request, deps);
+  assert.equal(response.status, 401);
+  assert.equal(opened(), 0);
+});
+
+test("a correctly signed delivery outside the replay window makes zero database calls", async () => {
+  const { deps, opened } = untouchableDeps();
+  const rawBody = JSON.stringify({ type: "ad.updated" });
+  const stale = String(NOW - 10 * 60 * 1000);
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-meridian-provider": "meta",
+      "x-meridian-account": "acct-1",
+      "x-meridian-event": "evt-1",
+      "x-meridian-timestamp": stale,
+      "x-meridian-signature": signWebhookDelivery({
+        secret: SECRET,
+        provider: "meta",
+        account: "acct-1",
+        eventId: "evt-1",
+        timestamp: stale,
+        rawBody,
+      }),
+    },
+    body: new TextEncoder().encode(rawBody),
+  });
+  const response = await handleWebhookReceive(request, deps);
+  assert.equal(response.status, 401);
+  assert.equal(await response.text(), "The webhook timestamp is outside the replay window.");
+  assert.equal(opened(), 0);
+});
+
+test("a repeat of an event that was stored without its job queues the job, and is answered 200", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  // The event row exists but its job does not: the state a failure between the two statements used to leave behind.
+  db.events.push({ organizationId: "org-a", provider: "meta", eventId: "evt-1" });
+  const response = await handleWebhookReceive(delivery(), depsFor(db));
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "already received");
+  assert.deepEqual(db.jobs.map((job) => job.organizationId), ["org-a"]);
+  assert.equal(db.events.length, 1);
+});
+
+test("a job insert that fails stores no event, so the provider's retry is recorded in full", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  db.faults.jobInsert = true;
+  await assert.rejects(handleWebhookReceive(delivery(), depsFor(db)), /The job insert failed/);
+  assert.equal(db.events.length, 0, "the event row was rolled back with the failed job");
+  db.faults.jobInsert = false;
+  const retry = await handleWebhookReceive(delivery(), depsFor(db));
+  assert.equal(retry.status, 202);
+  assert.equal(await retry.text(), "recorded");
+  assert.deepEqual(db.events.map((row) => row.eventId), ["evt-1"]);
+  assert.deepEqual(db.jobs.map((job) => job.organizationId), ["org-a"]);
+});
+
+test("a delivery re-addressed to another account, provider or event id keeps its signature and is refused with zero database calls", async () => {
+  const cases: Array<{ name: string; request: Request }> = [
+    { name: "account", request: delivery({ account: "acct-2", signedAs: { account: "acct-1" } }) },
+    { name: "provider", request: delivery({ signedAs: { provider: "google" } }) },
+    { name: "event id", request: delivery({ eventId: "evt-2", signedAs: { eventId: "evt-1" } }) },
+  ];
+  for (const { name, request } of cases) {
+    const { deps, opened } = untouchableDeps();
+    const response = await handleWebhookReceive(request, deps);
+    assert.equal(response.status, 401, `changing the ${name} while keeping the signature`);
+    assert.equal(await response.text(), "The webhook signature does not match.", `changing the ${name}`);
+    assert.equal(opened(), 0, `changing the ${name}: the database was opened`);
+  }
+});
+
+test("a signature in the old form, over the timestamp and body only, is refused with 401 and zero database calls", async () => {
+  const { deps, opened } = untouchableDeps();
+  const rawBody = JSON.stringify({ type: "ad.updated" });
+  const timestamp = String(NOW);
+  const oldForm = createHmac("sha256", SECRET).update(`${timestamp}.${rawBody}`).digest("hex");
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-meridian-provider": "meta",
+      "x-meridian-account": "acct-1",
+      "x-meridian-event": "evt-1",
+      "x-meridian-timestamp": timestamp,
+      "x-meridian-signature": oldForm,
+    },
+    body: new TextEncoder().encode(rawBody),
+  });
+  const response = await handleWebhookReceive(request, deps);
+  assert.equal(response.status, 401);
+  assert.equal(await response.text(), "The webhook signature does not match.");
+  assert.equal(opened(), 0);
 });
