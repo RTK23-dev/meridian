@@ -80,7 +80,7 @@ function CapturedDateFilter({ from, to, onChange }: { from: Date | null; to: Dat
           {from || to ? dateLabel(from, to) : "Any date"}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="p-3">
+      <PopoverContent align="start" className="p-3" aria-label="Captured dates">
         <DayPicker
           mode="range"
           numberOfMonths={1}
@@ -110,7 +110,7 @@ function CapturedDateFilter({ from, to, onChange }: { from: Date | null; to: Dat
         />
         <div className="mt-3 flex flex-wrap justify-between gap-2">
           <Button type="button" variant="quiet" size="sm" onClick={() => onChange({ from: null, to: null })}>Clear dates</Button>
-          <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>Done</Button>
+          <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>Close</Button>
         </div>
       </PopoverContent>
     </Popover>

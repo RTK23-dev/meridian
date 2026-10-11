@@ -40,6 +40,7 @@ export function SheetContent({ className, ...props }: ComponentProps<typeof Vaul
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverTrigger = PopoverPrimitive.Trigger;
+export const PopoverClose = PopoverPrimitive.Close;
 export function PopoverContent({ className, ...props }: ComponentProps<typeof PopoverPrimitive.Content>) { return <PopoverPrimitive.Portal><PopoverPrimitive.Content {...props} className={cn("z-50 rounded-md border border-border bg-surface p-4 text-fg shadow-md", className)} /></PopoverPrimitive.Portal>; }
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;

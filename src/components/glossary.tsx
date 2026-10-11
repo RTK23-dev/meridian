@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Badge, Popover, PopoverContent, PopoverTrigger, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
+import { Badge, Button, Popover, PopoverClose, PopoverContent, PopoverTrigger, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
 import { IDEA_TO_TEST } from "@/lib/copy";
 
 /**
@@ -37,7 +37,13 @@ export function Term({ id, children }: { id: TermId; children?: ReactNode }) {
   return (
     <Popover>
       <PopoverTrigger className={`cursor-help underline decoration-dotted underline-offset-4 ${FOCUS}`}>{children ?? term.label}</PopoverTrigger>
-      <PopoverContent side="top" className="max-w-xs text-sm">{term.description}</PopoverContent>
+      <PopoverContent side="top" className="max-w-xs text-sm">
+        <h3 className="font-semibold text-fg">{term.label}</h3>
+        <p className="mt-1 text-fg-muted">{term.description}</p>
+        <PopoverClose asChild>
+          <Button type="button" variant="quiet" size="sm" className="mt-2">Close</Button>
+        </PopoverClose>
+      </PopoverContent>
     </Popover>
   );
 }
