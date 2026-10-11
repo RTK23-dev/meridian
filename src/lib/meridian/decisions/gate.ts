@@ -28,9 +28,13 @@ import { decideWithActiveEngine, type DecisionEngineRegistry } from "./dispatche
 import { calibrationStatusOf, evaluateQuestionPolicies, policyForQuestion, policyVersionOf, type CalibrationStatus, type PolicyOutcome } from "./policy.ts";
 import { resolveActiveEngine, type EngineSelection } from "./selection.ts";
 import { abstainAll, type DecisionImageInput, type DecisionRequest, type DecisionUsage } from "./types.ts";
+import { checkImageBytes } from "../media/image-input.ts";
 
 /** The scope name of image evidence. A question scoped to it receives every image item the gate was given. */
 export const IMAGE_SCOPE = "image";
+
+/** The question kinds the engines answer. Any other kind is unsupported, and it is refused before any call. */
+const SUPPORTED_QUESTION_TYPES: readonly string[] = ["noul", "choice", "score"];
 
 export type GateQuestion = {
   /** The key the caller uses for this question. Answers are keyed by it. */
@@ -197,8 +201,37 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
     });
   }
 
-  // 2. One selection. Only the engine it names is ever called.
-  const selection = input.selection ?? (await resolveActiveEngine(input.sql, input.organizationId));
+  // 2. One selection. Only the engine it names is ever called. If the selection cannot be read, the decision cannot name an
+  //    engine, so no engine is called and the subject goes to review. The record is still written.
+  let selection: EngineSelection;
+  try {
+    selection = input.selection ?? (await resolveActiveEngine(input.sql, input.organizationId));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return finish(input, {
+      action: "HUMAN_REVIEW",
+      reason: `The workspace's decision engine could not be read, so no engine was called: ${message}`,
+      engineCalled: false,
+      engineId: null,
+      selectionSource: "deterministic",
+      provider: null,
+      model: null,
+      requestedModel: null,
+      returnedModel: null,
+      policyVersion,
+      questionVersions,
+      lineagePersisted: false,
+      answers: {},
+      votes: [],
+      unresolved: [],
+      calls: [],
+      imagesSent: 0,
+      imagesOmitted: input.images?.length ?? 0,
+      latencyMs: Date.now() - started,
+      runId: null,
+      failureKind: "selection_unavailable",
+    });
+  }
   const engineAcceptsImages = selection.engineId === "openai-decisions";
   const images = engineAcceptsImages ? (input.images ?? []) : [];
 
@@ -213,6 +246,24 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
 
     if (question.localRefusal) {
       localAnswers[question.key] = refusalAnswer(question, selection.engineId, question.localRefusal.status, question.localRefusal.reason);
+      continue;
+    }
+    // Deterministic refusals, before any call. A question that no engine can answer, that maps to no policy, or that has no
+    // evidence scope is never sent. Its answer is unresolved, so it cannot approve.
+    if (!SUPPORTED_QUESTION_TYPES.includes(String(question.spec.type))) {
+      localAnswers[question.key] = refusalAnswer(question, selection.engineId, "unsupported", `'${String(question.spec.type)}' is not a question kind the decision engines answer.`);
+      continue;
+    }
+    if (!policyForQuestion(question.spec)) {
+      localAnswers[question.key] = refusalAnswer(question, selection.engineId, "unsupported", "No policy is mapped for this question, so it is not asked and its answer cannot approve it.");
+      continue;
+    }
+    if (scope.length === 0) {
+      localAnswers[question.key] = refusalAnswer(question, selection.engineId, "abstain_insufficient_evidence", "This question declares no evidence scope, so it receives no evidence and is not asked.");
+      continue;
+    }
+    if (items.length === 0) {
+      localAnswers[question.key] = refusalAnswer(question, selection.engineId, "abstain_insufficient_evidence", `No evidence is in this question's scope (${scope.join(", ")}), so it is not asked.`);
       continue;
     }
     if (question.needsImage) {
@@ -233,6 +284,15 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
           "abstain_insufficient_evidence",
           "This question needs an image in its evidence scope, and none was supplied.",
         );
+        continue;
+      }
+      // An image the engine could not accept is checked here, by its own bytes, before any call.
+      const unusable = images
+        .filter((image) => items.some((item) => item.kind === "image" && item.name === image.evidenceName))
+        .map((image) => checkImageBytes(image.bytes, image.label ?? `Image ${image.evidenceName}`))
+        .find((result) => !result.ok);
+      if (unusable && !unusable.ok) {
+        localAnswers[question.key] = refusalAnswer(question, selection.engineId, "unsupported", `An image in this question's scope cannot be sent: ${unusable.reason}`);
         continue;
       }
     }
