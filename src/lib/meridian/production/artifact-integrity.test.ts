@@ -8,7 +8,7 @@ test("Artifact Integrity: verifies downloaded bytes against uploaded SHA-256 bef
   let storedObject: any;
   const mockSql = (async (strings: TemplateStringsArray, ...values: any[]) => {
     const query = strings.join("?");
-    if (query.includes("select id from production_jobs")) return [{ id: values[0] }];
+    if (query.includes("select id, modality from production_jobs")) return [{ id: values[0], modality: "image" }];
     if (query.includes("insert into storage_objects")) {
       storedObject = { id: values[0], provider_file_id: values[3], mime_type: values[5], size_bytes: values[6], sha256: values[7] };
     }
