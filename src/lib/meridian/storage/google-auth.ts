@@ -58,7 +58,7 @@ function settingValue(env: AuthEnv, name: string): string {
 
 function oauthRefreshReady(env: AuthEnv): boolean {
   return Boolean(
-    settingValue(env, "GOOGLE_CLIENT_ID") && settingValue(env, "GOOGLE_CLIENT_SECRET") && settingValue(env, "GOOGLE_REFRESH_TOKEN"),
+    settingValue(env, "GOOGLE_CLIENT_ID") && settingValue(env, "GOOGLE_CLIENT_SECRET") && (env.GOOGLE_REFRESH_TOKEN?.trim() ?? ""),
   );
 }
 
@@ -68,7 +68,7 @@ function deploymentMissing(env: AuthEnv): string[] {
 
 /** The deployment-level status: the service account or OAuth refresh credentials in the environment. Never a token. */
 export function getGoogleDriveAuthStatus(env: AuthEnv = process.env): GoogleAuthStatus {
-  if (settingValue(env, "GOOGLE_SERVICE_ACCOUNT_KEY")) {
+  if ((env.GOOGLE_SERVICE_ACCOUNT_KEY?.trim() ?? "")) {
     return { configured: true, type: "service_account", detail: "Google Service Account key is configured.", missing: [] };
   }
   if (oauthRefreshReady(env)) {
@@ -208,7 +208,7 @@ export function createGoogleDriveAuth(deps: GoogleDriveAuthDeps) {
       new URLSearchParams({
         client_id: settingValue(env, "GOOGLE_CLIENT_ID"),
         client_secret: settingValue(env, "GOOGLE_CLIENT_SECRET"),
-        refresh_token: settingValue(env, "GOOGLE_REFRESH_TOKEN"),
+        refresh_token: (env.GOOGLE_REFRESH_TOKEN?.trim() ?? ""),
         grant_type: "refresh_token",
       }),
       "Google OAuth refresh",
@@ -232,7 +232,7 @@ export function createGoogleDriveAuth(deps: GoogleDriveAuthDeps) {
       if (lookup.status === "unreadable") return fail("failed", `${lookup.reason} Nothing was written to another account.`);
       if (lookup.status === "found") return fromWorkspace(workspaceId, lookup.refreshToken);
     }
-    const serviceAccount = settingValue(env, "GOOGLE_SERVICE_ACCOUNT_KEY");
+    const serviceAccount = (env.GOOGLE_SERVICE_ACCOUNT_KEY?.trim() ?? "");
     if (serviceAccount) return fromServiceAccount(serviceAccount);
     if (oauthRefreshReady(env)) return fromOauthRefresh(env);
     const missing = deploymentMissing(env);
