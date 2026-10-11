@@ -17,6 +17,7 @@ import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
 import { emailAndPasswordEnabled } from "./email-password";
 import { pgliteDialect } from "./pglite-dialect";
+import { parseTrustedOrigins, trustedOriginsFor } from "./trusted-origins";
 
 // Kick off the embedded database as soon as the auth server module loads.
 void ensureDbReady();
@@ -51,8 +52,7 @@ if (isProduction && !explicitBaseURL) {
   );
 }
 
-// Origins Better Auth accepts on credentialed POSTs. A missing entry surfaces as "Invalid origin".
-const trustedOrigins: string[] = [baseURL, ...(isProduction ? [] : LOCAL_DEV_ORIGINS)];
+const extraTrustedOrigins = parseTrustedOrigins(env("MERIDIAN_TRUSTED_ORIGINS"));
 
 const databaseUrl = env("DATABASE_URL");
 
@@ -88,7 +88,14 @@ export const auth = betterAuth({
   secret: env("BETTER_AUTH_SECRET") ?? devAuthSecret(),
   database,
 
-  trustedOrigins,
+  trustedOrigins: (request) =>
+    trustedOriginsFor({
+      baseURL,
+      extraOrigins: extraTrustedOrigins,
+      localDevOrigins: LOCAL_DEV_ORIGINS,
+      isProduction,
+      requestUrl: request?.url,
+    }),
 
   // Cache the session in a short-lived signed cookie so reads skip the database.
   session: { cookieCache: { enabled: true, maxAge: 300 } },
