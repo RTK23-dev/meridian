@@ -1,5 +1,5 @@
 import type { Sql } from "../learning/store.ts";
-import { activeWebhookOrganizations, findStoredWebhookEventIds, storeWebhookEvent } from "./receive-store.ts";
+import { activeWebhookOrganizations, recordWebhookDelivery } from "./receive-store.ts";
 import { verifyDeliverySignature } from "./verify.ts";
 
 export interface WebhookReceiveDeps {
@@ -95,7 +95,8 @@ async function readBoundedBody(request: Request, deadlineMs: number): Promise<{ 
  *
  * The order is fixed. The media type is checked first (415). The body is read within the cap and the deadline (413, 408).
  * The signature, the timestamp and the JSON are checked over those raw bytes (401) before any database access. Only then
- * is the account resolved.
+ * is the account resolved. The event and its job are recorded in one transaction: 202 "recorded" for a new event, and 200
+ * "already received" for a repeat, whose job is still ensured.
  */
 export async function handleWebhookReceive(request: Request, deps: WebhookReceiveDeps): Promise<Response> {
   if (!isJsonContentType(request.headers.get("content-type"))) {
@@ -128,17 +129,9 @@ export async function handleWebhookReceive(request: Request, deps: WebhookReceiv
   }
   const organizationId = organizations[0];
   if (!organizationId) return refusal("The account on the webhook is not connected to a workspace.", 401);
-  const seen = await findStoredWebhookEventIds(sql, { organizationId, provider, eventId: delivery.eventId });
-  if (seen.length > 0) return refusal("This event id was already stored.", 401);
-  const stored = await storeWebhookEvent(sql, { organizationId, provider, eventId: delivery.eventId });
-  if (!stored) return new Response("This event id was already stored.", { status: 200 });
-  await sql`
-    insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload)
-    values (
-      ${crypto.randomUUID()}, ${organizationId}, null, 'webhook.received',
-      ${`webhook:${provider}:${delivery.eventId}`}, 'queued', ${JSON.stringify({ eventId: delivery.eventId, provider })}
-    )
-    on conflict (organization_id, idempotency_key) do nothing
-  `;
+  // The event and its job commit together. A repeat of a stored event stores nothing new and still ensures its job. It is
+  // answered 200, not refused, because the delivery is already held.
+  const stored = await recordWebhookDelivery(sql, { organizationId, provider, eventId: delivery.eventId });
+  if (!stored) return new Response("already received", { status: 200 });
   return new Response("recorded", { status: 202 });
 }

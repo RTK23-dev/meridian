@@ -18,13 +18,15 @@ type StoredEvent = { organizationId: string; provider: string; eventId: string }
 type QueuedJob = { organizationId: string; idempotencyKey: string };
 
 /**
- * An in-memory stand-in for the three statements the receiver runs. The unique rule on webhook_events is the
+ * An in-memory stand-in for the statements the receiver runs, with a transaction that rolls back when it throws. The
+ * jobs insert honours its ON CONFLICT rule. The unique rule on webhook_events is the
  * organization-scoped one from migration 0060, so a second organization can store the same provider event id.
  */
 function fakeWebhookDb(connections: Connection[]) {
   const events: StoredEvent[] = [];
   const jobs: QueuedJob[] = [];
-  const sql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
+  const faults = { jobInsert: false };
+  const statement = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.join("?").replace(/\s+/g, " ").toLowerCase();
     if (text.includes("from provider_connections")) {
       const [provider, accountId] = values as string[];
@@ -46,13 +48,31 @@ function fakeWebhookDb(connections: Connection[]) {
       return [{ id: "event-row" }];
     }
     if (text.includes("insert into jobs")) {
+      assert.match(text, /on conflict \(organization_id, idempotency_key\) do nothing/);
+      if (faults.jobInsert) throw new Error("The job insert failed.");
       const [, organizationId, idempotencyKey] = values as string[];
-      jobs.push({ organizationId, idempotencyKey });
+      if (!jobs.some((row) => row.organizationId === organizationId && row.idempotencyKey === idempotencyKey)) {
+        jobs.push({ organizationId, idempotencyKey });
+      }
       return [];
     }
     throw new Error(`The fake database does not answer this statement: ${text}`);
-  }) as unknown as Sql;
-  return { sql, events, jobs, opens: 0 };
+  };
+  // A transaction that rolls the fake back when its block throws, as the real one does.
+  const sql = Object.assign(statement, {
+    begin: async <T>(fn: (tx: Sql) => Promise<T>): Promise<T> => {
+      const savedEvents = [...events];
+      const savedJobs = [...jobs];
+      try {
+        return await fn(sql as unknown as Sql);
+      } catch (error) {
+        events.splice(0, events.length, ...savedEvents);
+        jobs.splice(0, jobs.length, ...savedJobs);
+        throw error;
+      }
+    },
+  });
+  return { sql: sql as unknown as Sql, events, jobs, faults, opens: 0 };
 }
 
 function delivery(
@@ -113,7 +133,7 @@ test("an unsigned delivery to an account connected to two organizations is 401, 
   assert.deepEqual(db.events, []);
 });
 
-test("an account connected to one organization stores the event for that organization and queues it there", async () => {
+test("an account connected to one organization stores the event for that organization and records its job there", async () => {
   // A disconnected connection in another organization does not count as a second destination.
   const db = fakeWebhookDb([
     { provider: "meta", accountId: "acct-1", organizationId: "org-a" },
@@ -137,11 +157,12 @@ test("the same provider event id delivered to two organizations is stored once p
   assert.equal(second.status, 202, "org-b's copy of the event is not blocked by org-a's");
   assert.deepEqual(db.events.map((row) => row.organizationId), ["org-a", "org-b"]);
 
-  // A redelivery to the same organization is still a duplicate.
+  // A redelivery to the same organization is a duplicate: it is answered 200, stores nothing new, and queues no second job.
   const again = await handleWebhookReceive(delivery({ account: "acct-a", eventId: "evt-shared" }), depsFor(db));
-  assert.equal(again.status, 401);
-  assert.equal(await again.text(), "This event id was already stored.");
+  assert.equal(again.status, 200);
+  assert.equal(await again.text(), "already received");
   assert.equal(db.events.length, 2);
+  assert.deepEqual(db.jobs.map((job) => job.organizationId), ["org-a", "org-b"]);
 });
 
 test("an account with no active connection is still 401 and stores nothing", async () => {
@@ -348,4 +369,28 @@ test("a correctly signed delivery outside the replay window makes zero database 
   assert.equal(response.status, 401);
   assert.equal(await response.text(), "The webhook timestamp is outside the replay window.");
   assert.equal(opened(), 0);
+});
+
+test("a repeat of an event that was stored without its job queues the job, and is answered 200", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  // The event row exists but its job does not: the state a failure between the two statements used to leave behind.
+  db.events.push({ organizationId: "org-a", provider: "meta", eventId: "evt-1" });
+  const response = await handleWebhookReceive(delivery(), depsFor(db));
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "already received");
+  assert.deepEqual(db.jobs.map((job) => job.organizationId), ["org-a"]);
+  assert.equal(db.events.length, 1);
+});
+
+test("a job insert that fails stores no event, so the provider's retry is recorded in full", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  db.faults.jobInsert = true;
+  await assert.rejects(handleWebhookReceive(delivery(), depsFor(db)), /The job insert failed/);
+  assert.equal(db.events.length, 0, "the event row was rolled back with the failed job");
+  db.faults.jobInsert = false;
+  const retry = await handleWebhookReceive(delivery(), depsFor(db));
+  assert.equal(retry.status, 202);
+  assert.equal(await retry.text(), "recorded");
+  assert.deepEqual(db.events.map((row) => row.eventId), ["evt-1"]);
+  assert.deepEqual(db.jobs.map((job) => job.organizationId), ["org-a"]);
 });
