@@ -29,9 +29,8 @@ function Home() {
   if (!data?.active) return <CreateWorkspace onCreated={reload} />;
 
   const machineByBrand = new Map<string, MachineState>(machines.map((query) => [query.brandId, machineStateOf(query)]));
-  const decidedByBrand = new Map<string, number | null>(reviewLists.map((query) => [query.brandId, query.data ? countDecidedReviews(query.data.reviews) : null]));
   const lookup = (brandId: string): BrandLookup | undefined => machineByBrand.has(brandId)
-    ? { machine: machineByBrand.get(brandId) ?? { status: "loading" }, decided: decidedByBrand.get(brandId) ?? null }
+    ? { machine: machineByBrand.get(brandId) ?? { status: "loading" } }
     : undefined;
   const brandNameById = new Map(data.brands.map((brand) => [brand.id, brand.name]));
 

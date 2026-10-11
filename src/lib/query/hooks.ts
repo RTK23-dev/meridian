@@ -70,9 +70,10 @@ export const marketQueryOptions = (userId: string | null | undefined, brandId: s
   queryKey: userScopedQueryKey(userId, qk.market(brandId)),
   queryFn: () => getMarket({ data: { brandId } }),
 });
-export const reviewsQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
-  queryKey: userScopedQueryKey(userId, qk.reviews(brandId)),
-  queryFn: () => listReviews({ data: { brandId } }),
+/** The newest `limit` reviews of a brand. Each window is its own cache entry under the brand's review key. */
+export const reviewsQueryOptions = (userId: string | null | undefined, brandId: string, limit = 40) => queryOptions({
+  queryKey: userScopedQueryKey(userId, [...qk.reviews(brandId), limit]),
+  queryFn: () => listReviews({ data: { brandId, limit } }),
 });
 export const libraryQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.library(brandId)),
@@ -229,9 +230,14 @@ export const useMarketQuery = (brandId: string, enabled = true) => {
   });
 };
 
-export const useReviewsQuery = (brandId: string, enabled = true) => {
+export const useReviewsQuery = (brandId: string, enabled = true, limit = 40) => {
   const { userId, ready } = useSession();
-  return useQuery({ ...reviewsQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
+  return useQuery({
+    ...reviewsQueryOptions(userId, brandId, limit),
+    enabled: ready && enabled && !!brandId,
+    // A longer window keeps the rows on screen until it arrives. The previous rows are reused only for the same brand.
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[3] === brandId ? previous : undefined),
+  });
 };
 
 export const useLibraryQuery = (brandId: string, enabled = true) => {
@@ -450,12 +456,13 @@ export function useResolveReview(brandId: string) {
       resolveReview({ data: { brandId, ...vars } }),
     onMutate: async (vars) => {
       await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<ReviewsData>(key);
-      queryClient.setQueryData<ReviewsData>(key, (current) => markReviewResolved(current, vars.reviewId, vars.action));
+      // Every cached window of this brand's reviews, so the row shows the same status in each.
+      const previous = queryClient.getQueriesData<ReviewsData>({ queryKey: key });
+      queryClient.setQueriesData<ReviewsData>({ queryKey: key }, (current) => markReviewResolved(current, vars.reviewId, vars.action));
       return { previous };
     },
     onError: (error, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(key, context.previous);
+      for (const [queryKey, data] of context?.previous ?? []) queryClient.setQueryData(queryKey, data);
       toast.error(errorText(error));
     },
     onSuccess: (_data, vars) => {

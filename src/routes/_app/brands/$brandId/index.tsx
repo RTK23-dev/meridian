@@ -5,7 +5,7 @@ import { PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { brainCompleteness } from "@/lib/meridian/brain";
 import { useBrandQuery, useMachineQuery, useOpportunitiesQuery, useReviewsQuery } from "@/lib/query/hooks";
-import { countDecidedReviews, missingItems, nextBestAction, pipelineStages } from "@/components/brand-overview/pipeline";
+import { missingItems, nextBestAction, pipelineStages } from "@/components/brand-overview/pipeline";
 import { PipelineStepper } from "@/components/brand-overview/pipeline-stepper";
 import { NextActionCard } from "@/components/brand-overview/next-action-card";
 import { MissingChecklist } from "@/components/brand-overview/missing-checklist";
@@ -40,13 +40,8 @@ function BrandHome({ brandId }: { brandId: string }) {
   const reviews = reviewsQuery.data?.reviews ?? [];
   const openReviews = reviews.filter((review) => review.status === "open");
   const openOpportunities = (opportunitiesQuery.data?.opportunities ?? []).filter((opportunity) => opportunity.status === "open");
-  const stages = machine
-    ? pipelineStages({
-      counts: machine.counts,
-      operating: machine.operating,
-      decidedReviews: reviewsQuery.data ? countDecidedReviews(reviews) : null,
-    })
-    : null;
+  // The stage counts, including decided reviews, come from the machine snapshot over every review, not from one list page.
+  const stages = machine ? pipelineStages({ counts: machine.counts, operating: machine.operating }) : null;
 
   return (
     <div className="space-y-8">

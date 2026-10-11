@@ -76,7 +76,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
     readForm: () => getValues(),
     // Autosave writes through the same call as the Save button. Only the refresh differs: it does not show a toast.
     persist: async (values) => {
-      await saveBrain({ data: { brandId, ...values } });
+      await saveBrain({ data: { brandId, ...values, autosave: true } });
       await queryClient.invalidateQueries({ queryKey: userScopedQueryKey(user?.id ?? null, qk.brand(brandId)) });
       void reload();
     },

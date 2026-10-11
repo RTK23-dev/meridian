@@ -2,16 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Group, Panel as ResizablePanel, Separator } from "react-resizable-panels";
 import { Inbox } from "lucide-react";
-import { EmptyState, ScreenSkeleton } from "@/components/ui";
+import { Button, EmptyState, ScreenSkeleton } from "@/components/ui";
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { ReviewDetail } from "@/components/reviews/review-detail";
 import { ReviewInbox } from "@/components/reviews/review-inbox";
 import {
   EMPTY_REVIEW_DRAFT,
-  REVIEW_LIST_LIMIT,
-  isQueueConfirmedEmpty,
+  REVIEW_WINDOW_STEP,
   isTypingTarget,
-  openCountLabel,
+  reviewCountLine,
   triageAction,
   type ReviewDraft,
   type ReviewRow,
@@ -30,7 +29,9 @@ function Page() {
 }
 
 function Reviews({ brandId }: { brandId: string }) {
-  const query = useReviewsQuery(brandId);
+  // The list is the newest rows up to this window. Load more widens it by one step; the totals are the server's.
+  const [windowSize, setWindowSize] = useState(REVIEW_WINDOW_STEP);
+  const query = useReviewsQuery(brandId, true, windowSize);
   const data = query.data ?? null;
   // Approve and reject are optimistic: the row leaves the open list at once and returns if the server refuses.
   const resolve = useResolveReview(brandId);
@@ -94,8 +95,12 @@ function Reviews({ brandId }: { brandId: string }) {
 
   const now = new Date();
   const loaded = data.reviews.length;
-  const resolvedInList = loaded - open.length;
-  const confirmedEmpty = isQueueConfirmedEmpty({ loaded, open: open.length, limit: REVIEW_LIST_LIMIT });
+  const countLine = reviewCountLine({ openTotal: data.openTotal, total: data.total, loaded, hasMore: data.hasMore });
+  const loadMore = data.hasMore ? (
+    <Button type="button" variant="secondary" disabled={query.isFetching} onClick={() => setWindowSize((size) => size + REVIEW_WINDOW_STEP)}>
+      {query.isFetching ? "Loading more…" : `Load ${Math.min(REVIEW_WINDOW_STEP, data.total - loaded)} more reviews`}
+    </Button>
+  ) : null;
   const detail = selected ? (
     <ReviewDetail
       key={selected.id}
@@ -106,6 +111,7 @@ function Reviews({ brandId }: { brandId: string }) {
       draft={draftFor(selected.id)}
       reasonError={reasonErrorFor === selected.id}
       onDraftChange={(patch) => patchDraft(selected.id, patch)}
+      reasonOptions={data.reasonCodes}
       onApprove={() => decide(selected, "approve")}
       onReject={() => decide(selected, "reject")}
     />
@@ -119,27 +125,24 @@ function Reviews({ brandId }: { brandId: string }) {
         <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject. A reject needs a reason.</p>
       </div>
       {resolve.error ? <PlainErrorNotice error={resolve.error} /> : null}
-      {open.length === 0 ? (
-        confirmedEmpty ? (
-          <EmptyState
-            icon={<Inbox aria-hidden="true" className="size-5" />}
-            title="Queue clear"
-            reason={loaded === 0
-              ? "0 open reviews. No reviews have been created for this brand yet."
-              : `0 open reviews. ${resolvedInList} resolved in the list. Nothing is waiting for a person.`}
-          />
-        ) : (
-          <EmptyState
-            icon={<Inbox aria-hidden="true" className="size-5" />}
-            title={`No open reviews in the ${REVIEW_LIST_LIMIT} most recent`}
-            reason="Older reviews are not loaded here, so this does not confirm the queue is empty. Reload the page after a while to check again."
-          />
-        )
+      {data.openTotal === 0 ? (
+        <EmptyState
+          icon={<Inbox aria-hidden="true" className="size-5" />}
+          title="Queue clear"
+          reason={data.total === 0
+            ? "0 open reviews. No reviews have been created for this brand yet."
+            : `0 open reviews. ${data.decidedTotal} decided. Nothing is waiting for a person.`}
+        />
+      ) : open.length === 0 ? (
+        <EmptyState
+          icon={<Inbox aria-hidden="true" className="size-5" />}
+          title={`No open reviews in the newest ${loaded}`}
+          reason={`${data.openTotal} open ${data.openTotal === 1 ? "review is" : "reviews are"} older than the rows shown. Load more to reach ${data.openTotal === 1 ? "it" : "them"}.`}
+          action={loadMore}
+        />
       ) : (
         <div className="space-y-3">
-          <p className="text-sm text-muted" aria-live="polite">
-            {openCountLabel(open.length, loaded, REVIEW_LIST_LIMIT)}{resolvedInList > 0 ? `, ${resolvedInList} resolved in the list` : ""}.
-          </p>
+          <p className="text-sm text-muted" aria-live="polite">{countLine}</p>
           {wide ? (
             <Group orientation="horizontal" className="min-h-[32rem] items-stretch gap-2">
               <ResizablePanel defaultSize="36%" minSize="24%" className="min-w-0">
@@ -158,6 +161,7 @@ function Reviews({ brandId }: { brandId: string }) {
               {detail}
             </div>
           )}
+          {loadMore ? <div>{loadMore}</div> : null}
         </div>
       )}
     </div>

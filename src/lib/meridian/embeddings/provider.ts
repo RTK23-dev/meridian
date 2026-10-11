@@ -27,22 +27,26 @@ export function testEmbedding(text: string): EmbeddingVector {
   };
 }
 
-export function embeddingProviderState(env: { openRouterKey?: string }): {
+/**
+ * The external embeddings API is connected when EXTERNAL_SEMANTIC_URL and EXTERNAL_SEMANTIC_KEY are set. Those are the
+ * variables embedExternal reads, so this check and the calls agree. OPENROUTER_API_KEY is not an embeddings setting.
+ */
+export function embeddingProviderState(env: { url?: string; key?: string }): {
   status: "NOT_CONNECTED" | "CONFIGURED";
   provider: string;
   detail: string;
 } {
-  if (!env.openRouterKey?.trim()) {
+  if (!env.url?.trim() || !env.key?.trim()) {
     return {
       status: "NOT_CONNECTED",
       provider: "",
-      detail: "No embedding provider is connected. Lexical hashing remains available and is not a semantic embedding.",
+      detail: "No external embeddings API is connected. Lexical hashing remains available and is not a semantic embedding.",
     };
   }
   return {
     status: "CONFIGURED",
-    provider: "openrouter",
-    detail: "An OpenRouter key is present. Vectors are stored only after the embeddings API returns them. A rejected call stores no vector.",
+    provider: "external:semantic",
+    detail: "EXTERNAL_SEMANTIC_URL and EXTERNAL_SEMANTIC_KEY are set. Vectors are stored only after the embeddings API returns them. A rejected call stores no vector.",
   };
 }
 

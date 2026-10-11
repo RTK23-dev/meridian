@@ -12,6 +12,8 @@ import type { StudioBrief } from "./types.ts";
 
 type GenerateStepProps = {
   brief: StudioBrief | null;
+  /** The workspace counts from the studio session. Null when they did not load, and the meters then say unknown. */
+  usage: { runsToday: number; running: number } | null;
   canEdit: boolean;
   form: UseFormReturn<StudioGeneration>;
   testImageAllowed: boolean;
@@ -26,7 +28,7 @@ type GenerateStepProps = {
  * Step 3. The generation form. Image and video are chosen from provider cards that show their connection state; a card that
  * is not connected is disabled with its reason. Fields and hints are the ones the form has always had.
  */
-export function GenerateStep({ brief, canEdit, form, testImageAllowed, production, pending, retryNotice, onDismissRetry, onGenerate }: GenerateStepProps) {
+export function GenerateStep({ brief, usage, canEdit, form, testImageAllowed, production, pending, retryNotice, onDismissRetry, onGenerate }: GenerateStepProps) {
   const imageCards = imageProviderCards({ testImageAllowed, production });
   const videoCards = videoProviderCards({ production });
   const errors = form.formState.errors;
@@ -50,9 +52,9 @@ export function GenerateStep({ brief, canEdit, form, testImageAllowed, productio
       ) : null}
 
       <div className="mt-4 space-y-3 rounded-md border border-border p-3">
-        <p className="text-sm font-semibold">Generation limits</p>
-        <UsageMeter label="Runs in the last day" used={null} limit={DAILY_GENERATION_LIMIT} unit="runs" />
-        <UsageMeter label="Runs in progress" used={null} limit={GENERATION_CONCURRENCY} unit="runs at once" />
+        <p className="text-sm font-semibold">Generation limits for this workspace</p>
+        <UsageMeter label="Runs in the last day" used={usage?.runsToday ?? null} limit={DAILY_GENERATION_LIMIT} unit="runs" />
+        <UsageMeter label="Runs in progress" used={usage?.running ?? null} limit={GENERATION_CONCURRENCY} unit="runs at once" />
       </div>
 
       {canEdit && brief ? (

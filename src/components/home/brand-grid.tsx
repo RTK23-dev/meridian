@@ -5,10 +5,11 @@ import { Badge, Button, EmptyState, SelectInput, Skeleton, Input } from "@/compo
 import type { BrandSummary } from "@/lib/meridian/workspace/actions";
 import type { MachineSnapshot } from "@/lib/meridian/machine";
 import { doneCount, pipelineStages, type PipelineStage } from "@/components/brand-overview/pipeline";
+import { BrandMark } from "@/components/brand-mark";
 import { relativeTime, visibleBrands, type BrandSort } from "./home-model";
 
 export type MachineState = { status: "loading" } | { status: "error" } | { status: "ready"; snapshot: MachineSnapshot };
-export type BrandLookup = { machine: MachineState; decided: number | null };
+export type BrandLookup = { machine: MachineState };
 
 export function BrandGrid({ brands, lookup, canCreate, newBrandLink }: {
   brands: BrandSummary[];
@@ -63,9 +64,7 @@ function BrandCard({ brand, lookup }: { brand: BrandSummary; lookup: BrandLookup
     <li>
       <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="group block h-full rounded-lg border border-border bg-surface p-5 transition-colors hover:border-accent hover:shadow-sm">
         <div className="flex items-start gap-3">
-          <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-lg bg-accent-soft text-lg font-semibold text-accent">
-            {brand.name.trim().slice(0, 1).toLocaleUpperCase() || "B"}
-          </span>
+          <BrandMark name={brand.name} logoAssetId={brand.logoAssetId} />
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <h3 className="truncate text-section font-semibold text-fg group-hover:text-accent">{brand.name}</h3>
@@ -75,7 +74,7 @@ function BrandCard({ brand, lookup }: { brand: BrandSummary; lookup: BrandLookup
           </div>
         </div>
         <div className="mt-4 space-y-2 border-t border-border pt-3">
-          <PipelineProgress machine={machine} decided={lookup?.decided ?? null} />
+          <PipelineProgress machine={machine} />
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-fg-muted">
             <ReviewBadge machine={machine} />
             <span>{brand.updatedAt ? `Updated ${relativeTime(brand.updatedAt)}` : "No recorded update time"}</span>
@@ -104,14 +103,14 @@ export function CompletenessRing({ value }: { value: number }) {
   );
 }
 
-function PipelineProgress({ machine, decided }: { machine: MachineState; decided: number | null }) {
+function PipelineProgress({ machine }: { machine: MachineState }) {
   if (machine.status === "loading") {
     return <div role="status" aria-label="Loading pipeline"><Skeleton className="h-2 w-full" /></div>;
   }
   if (machine.status === "error") {
     return <p className="text-xs text-fg-muted">Pipeline could not be loaded.</p>;
   }
-  const stages = pipelineStages({ counts: machine.snapshot.counts, operating: machine.snapshot.operating, decidedReviews: decided });
+  const stages = pipelineStages({ counts: machine.snapshot.counts, operating: machine.snapshot.operating });
   return (
     <div className="space-y-1.5">
       <p className="text-xs text-fg-muted">{summary(stages)}</p>

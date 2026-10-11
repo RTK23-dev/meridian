@@ -11,7 +11,7 @@ import {
   NO_LIBRARY_FILTERS,
   distinctValues,
   filterLibraryCreatives,
-  groupMediaByCreative,
+  mediaByCreative,
   mediaKindFor,
   primaryMedia,
   type LibraryFilters,
@@ -22,7 +22,6 @@ import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { buildTraceTimeline } from "@/components/library/trace-model";
-import { REVIEW_LIST_LIMIT } from "@/components/reviews/review-model";
 import { hasRole } from "@/lib/meridian/access";
 import { attachCreativeImage, recordObservation, recordPerformance } from "@/lib/meridian/machine";
 import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
@@ -50,7 +49,8 @@ function Library({ brandId }: { brandId: string }) {
   const data = query.data ?? null;
   // Media for the cards and the trace comes from the studio session. It is the only read that links an asset id to a creative.
   const studio = useStudioQuery(brandId);
-  const variantsByCreative = useMemo(() => groupMediaByCreative(studio.data?.variants ?? []), [studio.data?.variants]);
+  // Each card's media comes from the studio variants where they exist, and from the asset id in the library list otherwise.
+  const variantsByCreative = useMemo(() => mediaByCreative(data?.creatives ?? [], studio.data?.variants ?? []), [data?.creatives, studio.data?.variants]);
   // The trace stays mounted after the drawer closes, so its content does not blank out during the exit animation.
   const [traceCreativeId, setTraceCreativeId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -134,7 +134,9 @@ function Library({ brandId }: { brandId: string }) {
   if (!data) return <ScreenSkeleton label="Loading library" shape="rows" />;
   const canEdit = hasRole(data.role, "member");
 
-  const mediaLoad: MediaLoad = studio.isError ? "unavailable" : studio.data ? "ready" : "loading";
+  // The cards read media from the library list, which always answers with the asset ids. The studio read adds detail only.
+  const mediaLoad: MediaLoad = "ready";
+  const studioLoad: MediaLoad = studio.isError ? "unavailable" : studio.data ? "ready" : "loading";
   const kindOf = (creativeId: string) => mediaKindFor(mediaLoad, variantsByCreative.get(creativeId) ?? []);
   const visibleCreatives = filterLibraryCreatives(data.creatives, filters, kindOf);
   const traceMedia = traceCreativeId ? variantsByCreative.get(traceCreativeId) ?? [] : [];
@@ -147,11 +149,11 @@ function Library({ brandId }: { brandId: string }) {
         decisions: trace.decisions,
         brief: trace.brief,
         observations: trace.observations,
-        mediaLoad,
+        mediaLoad: studioLoad,
         media: traceMedia,
         reviewsLoad: reviewsQuery.isError ? "unavailable" : reviewsQuery.data ? "ready" : "loading",
         reviews: reviewsQuery.data?.reviews ?? [],
-        reviewsTruncated: (reviewsQuery.data?.reviews.length ?? 0) >= REVIEW_LIST_LIMIT,
+        reviewsTruncated: reviewsQuery.data?.hasMore ?? false,
       })
     : null;
 
@@ -279,7 +281,7 @@ function Library({ brandId }: { brandId: string }) {
       {data.creatives.length === 0 ? <Card>No brand creatives yet. Rank an opportunity, brief it, and save a script. Or record one you already ran.</Card> : (
         <section aria-labelledby="library-creatives-title" className="space-y-4">
           <div><h2 id="library-creatives-title" className="font-display text-2xl">Creative library</h2><p className="text-sm text-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
-          {studio.isError ? <PlainErrorMessage message="Media previews could not be loaded. Open Details for the exact message." raw={plainError(studio.error).raw} /> : null}
+          {studio.isError ? <PlainErrorMessage message="Media details could not be loaded. Thumbnails still come from the library list. Open Details for the exact message." raw={plainError(studio.error).raw} /> : null}
           <LibraryFilterBar
             filters={filters}
             onChange={setFilters}

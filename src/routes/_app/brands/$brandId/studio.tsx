@@ -172,6 +172,7 @@ function Studio({ brandId }: { brandId: string }) {
         <TabsContent value="generate">
           <GenerateStep
             brief={brief}
+            usage={session.usage}
             canEdit={canEdit}
             form={generationForm}
             testImageAllowed={session.testImageAllowed}

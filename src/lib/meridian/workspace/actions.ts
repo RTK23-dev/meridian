@@ -2,8 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { isRole, nextOwnerCount, type Role } from "@/lib/meridian/access";
-import { brainCompleteness, slugify } from "@/lib/meridian/brain";
+import { slugify } from "@/lib/meridian/brain";
 import { WEIGHT_KEYS } from "@/lib/meridian/scoring";
+import { loadWorkspaceBrands } from "./brands-listing";
 import { memberInviteSchema, scoringWeightsSchema, workspaceNameSchema } from "@/lib/meridian/schemas/settings";
 import {
   id,
@@ -14,9 +15,7 @@ import {
   objectInput,
   requireMembership,
   writeAudit,
-  brainFromRow,
   weightsFromRow,
-  BRAIN_COLUMNS,
 } from "../api-shared";
 
 export type OrgSummary = {
@@ -35,6 +34,8 @@ export type BrandSummary = {
   country: string;
   completeness: number;
   updatedAt: string;
+  /** The id /api/assets/<id> serves for the brand's logo. Null when no logo is stored. */
+  logoAssetId: string | null;
 };
 
 export type AuditEntry = {
@@ -199,28 +200,7 @@ export const bootstrap = createServerFn({ method: "GET" })
       saturation: 0.1,
       risk: 0.15,
     };
-    const brandsQuery = `
-      select b.id, b.name, b.website, b.industry, b.sells, b.country_market, b.updated_at,
-             ${BRAIN_COLUMNS}
-      from brands b
-      left join brand_brains br on br.brand_id = b.id
-      where b.organization_id = $1 and b.deleted_at is null
-      order by b.updated_at desc
-    `;
-    const loadedBrands = await sql.query<Record<string, unknown>>(brandsQuery, [activeOrg.id]);
-    const brands: BrandSummary[] = loadedBrands.map((row) => {
-      const { brain } = brainFromRow(row);
-      return {
-        id: asText(row.id),
-        name: asText(row.name),
-        website: asText(row.website),
-        industry: asText(row.industry),
-        sells: asText(row.sells),
-        country: asText(row.country_market),
-        completeness: brainCompleteness(brain).ratio,
-        updatedAt: asText(row.updated_at),
-      };
-    });
+    const brands = await loadWorkspaceBrands(sql, activeOrg.id);
     const members = await listMembers(sql, activeOrg.id);
     const invites = await sql<{
       id: string;

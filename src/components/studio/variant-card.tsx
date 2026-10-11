@@ -6,7 +6,7 @@ import { copy, providerLabel, serverCodeMessage, statusLabel } from "@/lib/copy"
 import { cn } from "@/lib/cn";
 import { frameShape, frameWidthClass, type FrameShape } from "./aspect.ts";
 import { CopyButton } from "./copy-button.tsx";
-import { canPublish, canReview, canRetry, kindLabel, mediaPhase, showsMedia, type MediaPhase } from "./variant-state.ts";
+import { canPublish, canReview, canRetry, hasStoredFile, kindLabel, mediaPhase, showsMedia, type MediaPhase } from "./variant-state.ts";
 import type { ReviewAction } from "./review-rules.ts";
 import { VariantStatusBadges } from "./variant-badges.tsx";
 import type { StudioVariant } from "./types.ts";
@@ -133,6 +133,9 @@ function VariantMedia({ variant, phase, frame, title, onOpenImage }: { variant: 
     );
   }
   if (!showsMedia(phase)) return null;
+  if (!hasStoredFile(variant)) {
+    return <p role="status" className="rounded-md border border-dashed border-border p-4 text-sm">The file is not stored yet, so there is nothing to preview.</p>;
+  }
 
   const frameClass = frameWidthClass(frame.orientation);
   if (variant.kind === "video") {
