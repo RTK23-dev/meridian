@@ -6,7 +6,7 @@ import type { Sql } from "../learning/store.ts";
  * with its score and reason.
  *
  * The weights are seed priors. They were chosen by hand and have not been calibrated against outcomes, so
- * the score is an ordering, not a probability. Calibration is a P5 concern (docs/INTELLIGENCE_ROADMAP.md).
+ * the score is an ordering, not a probability. Calibration is a P5 concern (docs/ROADMAP.md).
  */
 export const GATE_PARAMETER_STATE = "seed_prior" as const;
 

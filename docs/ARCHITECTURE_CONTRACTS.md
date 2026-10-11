@@ -1,145 +1,85 @@
 # Architecture contracts
 
-This document freezes the shared interfaces and rules for decisions, credentials, brief creation, and transactions. Each
-workstream implements against these rules. No workstream redesigns them. A change to a contract is a coordinator decision,
-recorded here first, before any code that depends on it.
-
-Frozen code: `src/lib/db.ts` (`Sql.begin`, `createPoolSql`), `src/lib/meridian/learning/store.ts` (`withTransaction`),
-`src/lib/meridian/credentials/contract.ts`, `src/lib/meridian/studio/brief-service.contract.ts`,
-`src/lib/meridian/decisions/gate.ts` (`GateQuestion.evidenceScope`), `migrations/0051_decision_integrity.sql`.
-
-## 0. Principles that apply to every contract
-
-- **Fail closed.** A missing credential, a missing policy, a missing threshold, unsupported evidence, or an unresolved
-  answer produces human review or refusal. It never produces approval.
-- **One engine per decision.** The active engine (`DECISION_ENGINE`, or the workspace selection) is the only engine
-  called. A refusal or failure is never retried against the other engine.
-- **Unknown stays unknown.** A fact that a provider did not report is `null`. It is never recorded as a negative.
-- **Real transactions only.** A write that must stay consistent across several rows runs in `withTransaction`. A
-  compensating write (write, then undo on failure) is not used, because the undo can fail too.
-- **Tenant scope on every read and write.** Every query filters by `organization_id`, and by `brand_id` where the row has one.
+These are the rules the code is built on. Comments in the code cite them by number, so the numbers are stable. A change to
+one of these rules is a change to the product and needs a note in the CHANGELOG.
 
 ## 1. Credentials
 
-One resolver: `credentials/resolve.ts` (`resolveCredential(sql, organizationId, category, env)`), returning a
-`CredentialResolution` from `credentials/contract.ts`. Runtime execution, the readiness check, the settings summary and
-Test Connection all call it. No other code reads a provider key from the vault or from the environment.
+1.1 A workspace's saved key is used first, and only for that workspace. No workspace can read another workspace's key, even
+by its row id.
 
-Rules, in order:
+1.2 A saved key that cannot be used (expired, unreadable, empty) is reported as unusable. The deployment's key is never used
+in its place.
 
-1. **Workspace first.** The workspace's saved entry (`CREDENTIAL_VAULT_TYPE[category]`, read for this organization only)
-   is used when it is usable.
-2. **A saved entry that cannot be used fails closed.** An expired entry, an unreadable entry, or an entry with no key is
-   `unusable`. The resolver never returns the deployment key in its place.
-3. **The deployment key is a shared default, and only when opted in.** With no saved entry, the deployment key is used only
-   when `SHARED_DEFAULT_ENV[category].variable` is set to its accepted value. Otherwise the result is `not_configured`.
-4. **Secrets stay in the caller.** `secret` goes only to the provider request. Settings, errors, logs, run records and audit
-   metadata carry at most the masked fingerprint (`credentialFingerprint`: the last four characters, only for keys of eight
-   characters or more).
-5. **Test Connection checks the same resolution.** It reports `READY` only for a `usable` state. It says whether the live
-   provider was called. Perception's check does not call Gemini.
+1.3 The deployment's key is used only when that category's shared default is set to its accepted value (for example
+`JEV_SHARED_DEFAULT=deployment`). Without the opt-in it is never used.
 
-Per category:
+1.4 A key is never returned to a browser, written to a log, a run record or an audit row. Settings show a masked fingerprint.
 
-| Category | Saved key used for | Deployment key | Behaviour change |
-|---|---|---|---|
-| `perception` | Gemini perception (`PERCEPTION_PROVIDER`) | `PERCEPTION_SHARED_DEFAULT=gemini` | None. Already the rule. |
-| `jev` | The TypeSafe JEV transport, per request, from `DecisionRequest.organizationId` | `JEV_SHARED_DEFAULT=deployment` | Deployment JEV keys are no longer used without the flag. OpenRouter stays deployment-only, and the panel says so. |
-| `production` | Gemini Omni video and the Google image provider, through `CreativeSpec.organizationId` | `PRODUCTION_SHARED_DEFAULT=deployment` | Deployment production keys are no longer used without the flag. |
+1.5 One resolver, `src/lib/meridian/credentials/resolve.ts`, reads provider keys. Infrastructure secrets (listed in PROVIDERS.md)
+are read from the environment by the code that owns them.
 
-Operators who want the old behaviour set `JEV_SHARED_DEFAULT=deployment` and `PRODUCTION_SHARED_DEFAULT=deployment`.
+## 2. Decision engines
 
-## 2. Question-specific evidence
+2.1 Exactly one decision engine is active for a workspace. Its choice is set in the workspace (Settings, JEV tab), or by the
+deployment's `DECISION_ENGINE` when the workspace has not chosen one.
 
-Each gate question declares the evidence it may receive: `GateQuestion.evidenceScope`, a list of `GateEvidence.name`
-values (`decisions/gate.ts`). The rules:
+2.2 A decision never runs a second engine to compare, and never falls back to another engine when one fails.
 
-- A question sees only the evidence in its scope. Its `state.availableEvidence` and its `state` contain only that evidence.
-- Questions with the same scope share one engine call. Each group is one call to the active engine. The gate record keeps
-  every group's request summary (scope names and model) and merges the answers.
-- A question with no scope receives no evidence. It can be answered only if it needs none, and otherwise it abstains with
-  `abstain_insufficient_evidence`.
-- Perception observations are one evidence item, `perception_observations`. It is placed in the scope of only those
-  questions whose evidence contract is fully satisfied, checked per question (`perception/contracts.ts`).
-- Images are placed in the scope of the image questions only.
-- Evidence supplied for one question never satisfies another question's requirement.
+2.3 Switching engines is refused unless the target engine reports ready. The previous valid choice is kept.
+
+2.4 Engines are called with structured requests and answer in a structured form. No engine is asked to decide by prompting.
+
+2.5 Every engine's answers are normalized before the policy sees them, so the policy is the same whichever engine answered.
 
 ## 3. Brief creation
 
-`createGatedBrief(sql, input)` in `studio/brief-service.server.ts` (`brief-service.contract.ts`). Every path that creates a
-brief calls it. Today those are `openStudioBrief` (session) and `createBriefFromOpportunity` (creative actions).
+3.1 Every brief is created through `createGatedBrief`. No other path writes a brief row.
 
-Order, which is fixed:
+3.2 The brief gate judges a brief first, and the row is written only after the judgement. A brief is `ready` only when the gate
+approves it automatically. Otherwise it is `awaiting_review` or `rejected`.
 
-1. Reserve the brief id.
-2. Run `input.judge(briefId)`, the shared brief gate (`judgeBriefFit`). This is the engine call. No transaction is open.
-3. In one `withTransaction`: write the decision and its gate record (`writeBriefDecision`, which takes the transaction),
-   insert the brief with `briefStatusFor(action)`, and mark the opportunity `briefed` only if the brief is not rejected.
+3.3 A brief that is not `ready` is not generated from until a person accepts it.
 
-No path writes a brief row with status `ready` except through step 3 with an `AUTO_APPROVE` action. A brief created from an
-opportunity goes through the same gate as a brief created from the studio.
+## 4. Storage
 
-Production refuses any brief whose status is not `ready` or `used` (`productionRefusalFor`, `studio/brief-review.server.ts`).
+4.1 Postgres is the system of record. Drive and S3 hold artifacts and exports, and a storage object row says where each one is.
 
-## 4. Brief review
+4.2 An export package is a set of files, and Postgres rows list them. Drive is not used to store state.
 
-`reviewBrief` runs entirely inside `withTransaction`: claim the decision (a conditional update that succeeds only for an
-unreviewed row), move the brief (a conditional update that succeeds only from `awaiting_review`), insert the append-only
-`decision_reviews` row, and insert the `audit_log` row. Any failure rolls back all four. The claim-then-revert code is
-removed. A brief whose engine record is missing cannot be reviewed.
+4.3 An upload that is interrupted continues from the last byte the storage confirmed. Its session is kept in Postgres, and
+the session holds no access token.
 
-## 5. Opportunity-direction decisions
+## 5. Generation and spend
 
-`recordOpportunityDirection(sql, input: OpportunityDirectionInput)`. It writes the append-only
-`opportunity_direction_decisions` row (migration 0051), updates the opportunity's `reviews` row, and writes an `audit_log`
-row, all in one `withTransaction`. It requires a reason of at least `MIN_DIRECTION_REASON_LENGTH` characters after trimming.
+5.1 A generation runs only from a `ready` brief.
 
-Selecting a direction never writes a brief decision, never sets `reviewer_decision` on a `jev_decisions` row, and never implies
-that a brief passed its gate.
+5.2 Budget is reserved before a provider call and released when the call fails. Spend is recorded from the provider's result.
 
-## 6. Policy defaults
+## 6. Decision policy
 
-Owned by `decisions/policy.ts` and `decisions/gate.ts`:
+6.1 A question with no policy mapping goes to review, whatever its answer.
 
-- A question with no policy mapping, or with no policy, produces `HUMAN_REVIEW`.
-- A probability question with no `approveMinProbability` cannot approve. A score question with no `approveMinScore` cannot
-  approve. A choice question with no approve values cannot approve. Each produces `HUMAN_REVIEW`.
-- A probability or score vote whose `calibrationStatus` is not `calibrated` produces at most `HUMAN_REVIEW`. It never produces
-  `AUTO_APPROVE` or `REJECT`. An uncalibrated confidence is never read as a calibrated probability.
-- Categorical votes keep their explicit rules (`approveValues`, `rejectionValues`), because they are answers, not probabilities.
-- `AUTO_APPROVE` requires an explicit versioned policy for every gating question, every scope present, and no unresolved
-  gating answer.
-- Missing, abstained, unsupported, malformed, or failed answers take the question's `unresolvedOutcome`, which is
-  `HUMAN_REVIEW` unless a safety policy says `REJECT`.
-- Deterministic rejections (missing mandatory brief fields, literal prohibited claims) run before any engine call and are final.
+6.2 A refused, unsupported, malformed, unavailable or missing answer takes the policy's unresolved outcome.
 
-Product impact, stated plainly: until a calibration report exists, probability and score answers cannot auto-approve. Only
-explicit categorical approvals can. Briefs and creatives that relied on uncalibrated probabilities now go to review.
+6.3 A probability can approve only when the policy names `approveMinProbability`. A score can approve only when it names
+`approveMinScore`. A choice can approve only when it names `approveValues`. Without these, the answer goes to review.
 
-## 7. Transactions
+6.4 A probability or score that is not calibrated can route to review, and nothing else. It never produces AUTO_APPROVE or REJECT.
+Confidence is never read as a probability.
 
-- `Sql.begin` (`db.ts`) runs a block in one real transaction on one connection. It is implemented on PGlite
-  (`pg.transaction`) and on node-postgres (a pinned client with BEGIN, COMMIT, and ROLLBACK). A nested `begin` joins the
-  outer transaction.
-- `withTransaction(sql, fn)` (`learning/store.ts`) is the only way code uses a transaction. It throws when the connection
-  cannot provide one.
-- A connection whose ROLLBACK fails is discarded, not returned to the pool.
-- Verified by `src/lib/db-transaction.test.ts` on PGlite, and on PostgreSQL when `MERIDIAN_PG_TEST_URL` is set.
+6.5 A categorical answer is an answer, not a probability. Its explicit approve and reject values decide it.
 
-## 8. Ownership
+## 7. Publishing and delivery
 
-| Workstream | Owns | Must not change |
-|---|---|---|
-| Coordinator (frozen) | The files listed at the top, and migrations | Everything else, after the freeze |
-| A: credentials | `credentials/resolve.ts`, `perception/credential.ts`, `perception/run.ts` (readiness), `jev/router.ts`, `jev/client.ts`, `decisions/jev-engine.ts` (key pass-through only), `production/providers/omni.ts`, `production/image-providers.ts`, `providers/nano-banana.server.ts`, `settings/provider-config.ts`, `settings/server-actions.ts`, `components/provider-settings-panel.tsx`, and their tests | Decision gate, policy, briefs, review |
-| B: briefs and review | `studio/brief-service.server.ts` (new), `studio/brief-review.server.ts`, `studio/brief-review-access.server.ts`, `studio/creative-actions.ts` (`createBriefFromOpportunity` only), `studio/session.server.ts` (`openStudioBrief` and direction), `opportunity/actions.ts`, the studio UI for the direction reason, `scripts/product-loop.mjs` (direction step), and their tests | Gate, policy, evidence scopes, credentials |
-| C: evidence and policy | `decisions/gate.ts`, `decisions/policy.ts`, `jev/questions/*.ts` (scopes), `studio/brief-gate.server.ts`, `studio/image-qc.server.ts`, `perception/contracts.ts`, and their tests | Credentials, brief creation, review |
+7.1 Nothing is reported as published unless a real connection returned a receipt for it.
 
-Shared files: `session.server.ts` is B's. C changes only the functions it calls. `brief-gate.server.ts` is C's. B calls
-`writeBriefDecision` inside a transaction with its signature unchanged.
+7.2 Where live posting is not available, the manual export package is the way to deliver. The person posts the package by hand.
 
-## 9. Test databases
+7.3 A channel with no connection says so, with the reason, and offers no action that would publish.
 
-Each workstream migrates its own database: `meridian_ws_a`, `meridian_ws_b`, `meridian_ws_c`, with
-`MERIDIAN_PG_TEST_URL=postgresql://postgres@localhost:5432/<name>?host=/var/tmp/meridian-pg`. The coordinator uses
-`meridian_pg_test` for the final run. No two agents share a database.
+## 8. Telemetry and learning
+
+8.1 Synthetic or simulated telemetry never enters learning. The learning code rejects it.
+
+8.2 A metric is shown only when it was observed. No fixed number stands in for a missing one.

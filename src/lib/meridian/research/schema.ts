@@ -3,7 +3,7 @@ export const RESEARCH_SCHEMA_VERSION = "jev.research-ad.v2" as const;
 /**
  * Epistemic state. OBSERVED is transcript text and timestamps, verified against the supplied segments.
  * INFERRED is a model label drawn from those segments. Confidence on an INFERRED field is the model's
- * own self-report, so it is labelled as such and is not a calibrated score (see docs/INTELLIGENCE_ROADMAP.md).
+ * own self-report, so it is labelled as such and is not a calibrated score (see docs/ROADMAP.md).
  */
 export const CONFIDENCE_SOURCE = "model_self_report" as const;
 

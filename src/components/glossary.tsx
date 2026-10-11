@@ -3,8 +3,7 @@ import { Badge, Popover, PopoverContent, PopoverTrigger, Tooltip, TooltipContent
 import { IDEA_TO_TEST } from "@/lib/copy";
 
 /**
- * Short definitions for the terms the screens use. Each one matches the code it describes. docs/GLOSSARY.md lists the same
- * terms with their sources.
+ * Short definitions for the terms the screens use. Each one matches the code it describes.
  */
 const TERMS = {
   jev: {

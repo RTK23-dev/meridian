@@ -1,32 +1,58 @@
 # Testing
 
-Unit tests cover the decision math without a database:
+## Commands
 
-- `src/lib/meridian/scoring.test.ts` — weights and penalties
-- `src/lib/meridian/access.test.ts` — roles
-- `src/lib/meridian/brain.test.ts` — completeness
-- `src/lib/meridian/loop.test.ts` — learning changes the next rank and the next brief; empty market does not invent a signal; foreign brand ids throw; thin samples emit nothing; guardian evidence maps to approve, review, and reject; missing vision evidence cannot auto-approve
-- `src/lib/meridian/acceptance.test.ts` — includes the external advertising research-to-Hypit acceptance path: bounded Meta collection, transcript extraction, typed analysis, corpus pattern, opportunity, JEV, brief, and Hypit lineage; it also checks evidence confidence, source dedupe, and no causal performance claims
-- `src/lib/meridian/jev/fixtures.test.ts` — reads `evals/jev/cases.json`
-- `src/lib/meridian/knowledge/model.test.ts` — attribute query and near-duplicate filter
-- `src/lib/meridian/workflow/templates.test.ts` — same stages, different variables
-- `src/lib/meridian/sources/public-url.test.ts` — private hosts blocked before fetch
+```bash
+npm test          # unit and integration tests (scripts and src)
+npm run typecheck # tsc --noEmit
+npm run lint      # eslint
+npm run build     # production build, then migrations
+```
 
-- `src/lib/meridian/blockers.test.ts` — semantic retrieval, negative learning, worker lease, storage, PDF extraction, logo pixels, calibration
-- `src/lib/meridian/testing/historical-regression.test.ts` — 28-point regression test suite guarding against data fabrication, loose JEV fallbacks, unconfigured provider assumptions, drive resolution failures, and simulated telemetry
-- `src/lib/meridian/testing/end-to-end-integration.test.ts` — comprehensive boundary tests covering the 4 core lifecycle paths:
-  1. **Organic Discovery Path**: Raw source reference → artifact download → evidence normalization → perception observations → JEV Decisions evaluation → synthesized `CreativeSpec`.
-  2. **Production Routing & QC Path**: `CreativeSpec` → `ProductionRouter.route()` → Veo / Higgsfield / Hypit execution → durable Postgres jobs → Google Drive upload → postflight QC (originality, claim checks, container validation).
-  3. **Publishing Readiness & Account Gating Path**: Channel readiness evaluation → connected account gate verification → idempotent execution.
-  4. **Telemetry Ingestion & Closed-Loop Learning Path**: Telemetry ingestion with null preservation → recency decay weighting → Beta-binomial posteriors → calibrated model parameter lifecycle.
-- `src/lib/meridian/providers/readiness.test.ts` — provider probes store only returned ids, campaign retry does not create a second campaign, test provider stays off, contrast ratios
-- `src/lib/meridian/providers/completion.test.ts` — paused publishing stages, insight dedupe, OAuth seal, webhook rejection, calibration approval source
-- `src/lib/meridian/providers/final.test.ts` — TikTok and Google stage reuse, insight clients, performance-to-brief, schedules, refresh, alert dead-letter, calibration tenancy
+`npm test` runs `scripts/**/*.test.mjs` and `src/**/*.test.ts` with the Node test runner. Any new test file in those folders runs in
+`npm test`. Some tests run twice, once on the embedded database and once on PostgreSQL, and are labelled `[embedded]` and `[postgres]`.
 
-Run `npm test` (464 automated tests across 16 suites).
+## The PostgreSQL test database
 
-`node scripts/a11y-audit.mjs` signs up through the real form and runs axe on the signed-in screens, plus a keyboard walk, a narrow viewport, and reduced motion. It needs the app already running. It does not bypass authentication. It is not a screen-reader pass and it does not claim WCAG conformance.
+Create an empty database, migrate it, and point the tests at it:
 
-`evals/jev/` is the fixture set for the gate. `evals/acceptance/market.json` is the collected-creative fixture for the market-to-learning path. The acceptance test fails if a learned pattern stops changing the next opportunity or the next brief.
+```bash
+createdb meridian_test
+DATABASE_URL=postgresql://localhost/meridian_test npm run db:migrate
+MERIDIAN_PG_TEST_URL=postgresql://localhost/meridian_test DATABASE_URL=postgresql://localhost/meridian_test npm test
+```
 
-What is not covered: a live model call, a live page fetch against the public internet, VoiceOver/NVDA/JAWS, and a real ad account. Provider tests use a scripted HTTP transport. The `test:` provider throws unless the test turns it on. The worker is covered in process by `blockers.test.ts`. It is not started by the unit test against a second machine.
+A test database must be migrated; the tests do not create the schema. Tests that create workspaces use unique ids, so a re-run on the
+same database is safe.
+
+## Browser checks
+
+These drive the running app. Start it first (`npm run dev` on port 8080, with `MERIDIAN_TESTING_RUNTIME=true` for the test providers).
+
+- `npm run e2e` (`scripts/product-loop.mjs`): signs up, creates a workspace and a brand, fills the brain, and runs a review through
+  to publishing. It fails on the first step that does not work.
+- `npm run ui:button-audit` (`scripts/button-audit.mjs`): visits each screen and checks that every enabled control acts, and that every
+  disabled control shows its reason. It writes `artifacts/e2e/button-audit.json`.
+- `npm run ui:baseline` (`scripts/ui-baseline.mjs`): screenshots every route at phone and desktop widths, in light and dark, and fails on
+  horizontal overflow. It writes to `UI_BASELINE_DIR` (CI uses `artifacts/ui-baseline`).
+- `npm run ui:design-smoke`: checks the design system for accessibility violations.
+
+Playwright's Chromium is needed for the browser checks. CI installs it with `npx playwright install --with-deps chromium`.
+
+## CI
+
+| Job | Runs |
+| --- | --- |
+| `check` | `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` |
+| `ui-smoke` | `npm run build`, starts the app, `npm run ui:baseline`, `npm run ui:design-smoke`, and a browser smoke |
+| `e2e` | `npm run e2e` against the running app |
+
+Only the `check` job's results decide whether code is safe to merge on its own. The browser jobs catch what unit tests cannot:
+overflow, dead controls and broken flows.
+
+## Writing tests
+
+- Put a test next to the code it covers, as `<name>.test.ts`.
+- Test the rule, not the implementation: what a person or a caller can observe.
+- Tests that touch providers use injected fetch functions and fixture keys (`credentials/fixtures.ts`). No test calls a live provider.
+- A test that depends on a live key is skipped without that key, and says so.
