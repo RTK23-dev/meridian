@@ -88,6 +88,13 @@ export async function createGatedBrief(sql: Sql, input: CreateGatedBriefInput): 
         ${JSON.stringify(brief.failureNotes)}, ${status}, ${decisionId}, ${input.createdBy}
       )
     `;
+    if (input.supersedeReady && status !== "rejected" && brief.opportunityId) {
+      await tx`
+        update briefs set status = 'used'
+        where opportunity_id = ${brief.opportunityId} and status = 'ready' and organization_id = ${input.organizationId}
+          and id <> ${briefId}
+      `;
+    }
     if (brief.opportunityId && status === "rejected") {
       await reopenDirectionAfterRejectedBrief(tx, {
         organizationId: input.organizationId,
