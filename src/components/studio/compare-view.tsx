@@ -4,7 +4,7 @@ import { Field, SelectInput } from "@/components/ui";
 import { variantMetadataDiff } from "./compare-diff.ts";
 import { frameWidthClass, frameShape } from "./aspect.ts";
 import { useSyncedVideos } from "./use-synced-videos.ts";
-import { kindLabel, mediaPhase, showsMedia } from "./variant-state.ts";
+import { hasStoredFile, kindLabel, mediaPhase, showsMedia } from "./variant-state.ts";
 import type { StudioVariant } from "./types.ts";
 
 type CompareViewProps = {
@@ -29,7 +29,7 @@ export function CompareView({ variants, first, second, onChangeFirst, onChangeSe
   const a = variants.find((variant) => variant.assetId === first);
   const b = variants.find((variant) => variant.assetId === second);
   const bothPlayable = !!a && !!b && a.kind === "video" && b.kind === "video"
-    && showsMedia(mediaPhase(a.mediaStatus)) && showsMedia(mediaPhase(b.mediaStatus));
+    && showsMedia(mediaPhase(a.mediaStatus)) && showsMedia(mediaPhase(b.mediaStatus)) && hasStoredFile(a) && hasStoredFile(b);
   useSyncedVideos(firstPane, secondPane, bothPlayable);
 
   return (
@@ -114,7 +114,7 @@ function ComparePane({ label, variant, position, paneRef }: { label: string; var
     <div className="space-y-2">
       <p className="text-sm font-semibold">{label} · {title} · {variant.promptVersion || "prompt version not stored"}</p>
       <div ref={paneRef} className={frameWidthClass(frame.orientation)}>
-        {showsMedia(phase) ? (
+        {showsMedia(phase) && hasStoredFile(variant) ? (
           variant.kind === "video" ? (
             <LazyMediaPlayer assetId={variant.assetId} durationMs={variant.durationMs} width={variant.width} height={variant.height} />
           ) : (
@@ -122,7 +122,7 @@ function ComparePane({ label, variant, position, paneRef }: { label: string; var
           )
         ) : (
           <p role="status" className="rounded-md border border-dashed border-border p-4 text-sm text-fg-muted">
-            {phase === "failed" ? "This generation failed. There is no media to compare." : "This media is still being generated. It is not stored yet."}
+            {phase === "failed" ? "This generation failed. There is no media to compare." : showsMedia(phase) ? "The file is not stored yet, so there is nothing to compare." : "This media is still being generated. It is not stored yet."}
           </p>
         )}
       </div>

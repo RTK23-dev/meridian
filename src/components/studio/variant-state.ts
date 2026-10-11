@@ -22,6 +22,11 @@ export function showsMedia(phase: MediaPhase): boolean {
   return phase === "stored" || phase === "unknown";
 }
 
+/** The asset route serves a file only when its asset row is 'stored'. Any other status means the file is not stored yet. */
+export function hasStoredFile(variant: { assetStatus: string }): boolean {
+  return variant.assetStatus.trim().toLowerCase() === "stored";
+}
+
 /** Review actions show only for a variant waiting for review, and only to a role that may review. */
 export function canReview(variant: { creativeStatus: string }, canEdit: boolean): boolean {
   return canEdit && variant.creativeStatus === "in_review";

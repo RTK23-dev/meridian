@@ -32,7 +32,6 @@ import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreationScope, AutonomyMode, CreativePlan } from "../creative/plan.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
-import { defaultArtifactDrive } from "../storage/artifact-drive.ts";
 import { BudgetLedgerService, InvalidBudgetCapError, toMicros } from "../security/budget-ledger.ts";
 import { modelCapabilityRegistry } from "../production/registry.ts";
 import {
@@ -104,7 +103,19 @@ function hookFor(hypothesisId: string): string {
   return hypothesisById(hypothesisId)?.hookLine || "Keep the observed structure. Do not copy the competitor's wording.";
 }
 
-async function loadSession(sql: Sql, organizationId: string, brandId: string, role: Role) {
+/** Generation runs counted the way the gate counts them: runs in the last day, and runs in progress, for the workspace. */
+export async function generationUsage(sql: Sql, organizationId: string): Promise<{ runsToday: number; running: number }> {
+  const rows = await sql<{ runs_today: number; running: number }>`
+    select
+      count(*) filter (where created_at > now() - interval '1 day' and status in ('running', 'completed'))::int as runs_today,
+      count(*) filter (where status = 'running')::int as running
+    from generation_runs
+    where organization_id = ${organizationId}
+  `;
+  return { runsToday: asNumber(rows[0]?.runs_today), running: asNumber(rows[0]?.running) };
+}
+
+export async function loadSession(sql: Sql, organizationId: string, brandId: string, role: Role) {
   const loaded = await loadBrandContext(sql, organizationId, brandId);
   let clusters: MarketCluster[] = [];
   let semantic: { note: string; clusters: { id: string; label: string; summary: string; competitorCount: number; ownCount: number }[] } = {
@@ -181,10 +192,11 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
     order by created_at desc
     limit 6
   `;
+  // status is the stored-file state: 'stored' is served by /api/assets/<id>, 'unavailable' is not.
   const assets = await sql<Record<string, unknown>>`
     select a.id as asset_id, a.creative_id, a.kind, a.mime_type, a.byte_size, a.width, a.height, a.duration_ms,
            a.provider, a.model, a.prompt_version, a.generation_run_id, a.checksum, a.media_status, a.qa_decision,
-           a.review_status, a.transcript, a.scenes, a.provider_job_id, a.variant_index, a.storage_key, a.error,
+           a.review_status, a.transcript, a.scenes, a.provider_job_id, a.variant_index, a.status as asset_status, a.error,
            c.title, c.status as creative_status, c.angle, c.hook, c.raw_text, c.brief_id
     from assets a
     join creative_records c on c.id = a.creative_id
@@ -204,32 +216,8 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
     select id, creative_id, status from reviews
     where brand_id = ${brandId} and organization_id = ${organizationId} and creative_id is not null
   `;
-  const blobs = await sql<{ storage_key: string; body: string; mime_type: string }>`
-    select storage_key, body, mime_type from asset_blobs
-    where brand_id = ${brandId} and organization_id = ${organizationId} and mime_type like 'image/%'
-  `;
-  // Image previews come from the artifact store, where production writes image bytes. An artifact that cannot be read
-  // has no preview, so nothing is shown in its place.
-  const previewByKey = new Map<string, string>();
-  const artifactDrive = defaultArtifactDrive();
-  for (const asset of assets) {
-    const key = asText(asset.storage_key);
-    if (asText(asset.kind) !== "image" || !key || previewByKey.has(key)) continue;
-    const objects = await sql<{ provider_file_id: string }>`
-      select provider_file_id from storage_objects
-      where organization_id = ${organizationId} and brand_id = ${brandId} and name = ${key}
-      limit 1
-    `;
-    if (!objects[0]) continue;
-    try {
-      const stored = await artifactDrive.get(objects[0].provider_file_id);
-      if (stored.bytes.byteLength < 120_000) {
-        previewByKey.set(key, `data:${stored.mimeType};base64,${Buffer.from(stored.bytes).toString("base64")}`);
-      }
-    } catch {
-      // Unreadable artifact: no preview.
-    }
-  }
+  // Image bytes and video stills are not in the payload. The screen loads them from /api/assets/<assetId>, which checks
+  // the session and the workspace, and a video poster from ?thumb=1.
   const publications = await sql<{ external_id: string; idempotency_key: string; provider: string }>`
     select external_id, idempotency_key, provider from provider_objects
     where brand_id = ${brandId} and organization_id = ${organizationId} and object_type = 'ad'
@@ -288,7 +276,6 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
     brief: briefs[0] ? briefOf(briefs[0]) : null,
     variants: assets.map((row) => {
       const creativeId = asText(row.creative_id);
-      const preview = previewByKey.get(asText(row.storage_key)) ?? "";
       const questions = decisions
         .filter((item) => asText(item.subject_id) === creativeId)
         .map((item) => ({
@@ -301,15 +288,11 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
           answer: answerValue(item.answer),
         }));
       const review = reviews.find((item) => asText(item.creative_id) === creativeId && asText(item.status) === "open");
-      const storageKey = asText(row.storage_key);
-      const frames = blobs
-        .filter((blob) => storageKey && blob.storage_key.startsWith(`${storageKey}.frame.`) && blob.mime_type.startsWith("image/"))
-        .sort((left, right) => left.storage_key.localeCompare(right.storage_key))
-        .slice(0, 3)
-        .map((blob) => `data:${blob.mime_type};base64,${blob.body}`);
       return {
         creativeId,
         assetId: asText(row.asset_id),
+        // 'stored' means /api/assets/<assetId> serves the file. Any other value means the file is not stored yet.
+        assetStatus: asText(row.asset_status),
         kind: asText(row.kind),
         index: asNumber(row.variant_index),
         provider: asText(row.provider),
@@ -329,12 +312,12 @@ async function loadSession(sql: Sql, organizationId: string, brandId: string, ro
         checksum: asText(row.checksum),
         byteSize: asNumber(row.byte_size),
         title: asText(row.title),
-        preview,
-        frames,
         error: asText(row.error),
         questions,
       };
     }),
+    // The same counts generationAllowed checks, for the workspace. The Generate step draws its meters from these.
+    usage: await generationUsage(sql, organizationId),
     learned: loaded.patterns.slice(0, 8).map((pattern) => ({
       summary: pattern.summary,
       lift: pattern.lift,
