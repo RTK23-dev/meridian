@@ -119,7 +119,7 @@ test("Gate 4: Durable Artifact Finalizer & Storage Failure Closed Invariant (P0.
   const mockSql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
     executedQueries.push(query);
-    if (query.includes("select id from production_jobs")) return [{ id: values[0] }];
+    if (query.includes("select id, modality from production_jobs")) return [{ id: values[0], modality: "video" }];
     return [];
   }) as unknown as Sql;
 
