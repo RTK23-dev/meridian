@@ -62,7 +62,7 @@ export type CycloneObservationResult =
 
 export class CycloneScoutSourceAdapter implements SourceAdapter {
   readonly id = "cyclone_scout";
-  readonly platform: SourceKind = "licensed" as SourceKind;
+  readonly platform: SourceKind = "cyclone_scout";
   readonly name = "Cyclone Scout Fleet (Physical Android Device)";
   readonly isLicensed = true;
   readonly capabilities: SourceCapabilities = {

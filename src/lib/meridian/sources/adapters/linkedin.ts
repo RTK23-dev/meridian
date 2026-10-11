@@ -45,9 +45,9 @@ export class LinkedInSourceAdapter implements SourceAdapter {
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 15,
-      message: "Connected to LinkedIn REST API.",
+      message: "A key is saved for LinkedIn. Discovery reads public pages for this source and does not call the LinkedIn API in this release.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

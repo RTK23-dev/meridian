@@ -48,7 +48,7 @@ export class YouTubeSourceAdapter implements SourceAdapter {
       adapterId: this.id,
       status: "CONFIGURED",
       latencyMs: 15,
-      message: "Configured with YouTube Data API v3 key.",
+      message: "A key is saved for YouTube. Discovery reads public pages for this source and does not call the YouTube Data API in this release.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

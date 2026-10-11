@@ -104,7 +104,11 @@ function MarketPage({ brandId }: { brandId: string }) {
     mutationFn: (values: { url: string }) => fetchSourcePage({ data: { brandId, url: values.url } }),
     invalidate: () => [qk.market(brandId), qk.machine(brandId)],
     onSuccess: (result) => {
-      setNote(result.status === "stored" ? "Page text stored. It is not part of the brand brain." : result.error);
+      setNote(result.status === "stored"
+        ? result.seenBefore
+          ? "This page's text is already stored for this brand. No duplicate was added. It is not part of the brand brain."
+          : "Page text stored. It is not part of the brand brain."
+        : result.error);
       pageForm.reset({ url: "" });
     },
   });

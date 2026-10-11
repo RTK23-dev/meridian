@@ -19,7 +19,8 @@ export type SourceKind =
   | "search"
   | "upload"
   | "licensed"
-  | "first_party_analytics";
+  | "first_party_analytics"
+  | "cyclone_scout";
 
 export type EvidenceAvailability =
   | "REFERENCE_ONLY"
@@ -82,7 +83,11 @@ export type SourceSnapshot = {
 
 export type SourceHealth = {
   adapterId: string;
-  status: "HEALTHY" | "DEGRADED" | "NOT_CONFIGURED" | "UNAVAILABLE" | "CONFIGURED" | "AUTH_FAILED" | "RATE_LIMITED";
+  /**
+   * CONFIGURED means a key is saved, which is not the same as a checked connection. NOT_SUPPORTED means a key may be saved
+   * but this release has no client that uses it, so the source cannot run. Neither is reported as a working connection.
+   */
+  status: "HEALTHY" | "DEGRADED" | "NOT_CONFIGURED" | "NOT_SUPPORTED" | "UNAVAILABLE" | "CONFIGURED" | "AUTH_FAILED" | "RATE_LIMITED";
   latencyMs: number;
   message?: string;
   lastCheckedAt: string;

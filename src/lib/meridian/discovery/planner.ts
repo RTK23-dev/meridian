@@ -9,10 +9,13 @@
  * - Scopes: scrape_page, page_plus_links, domain, and scrape_niche.
  * - Cyclone is strictly optional supplemental observation; standard discovery
  *   runs fully with Cyclone absent and all Cyclone env vars unset.
- * - Distinct source status: unavailable, not configured, blocked, failed vs zero results.
+ * - Every registered multi-source adapter is planned for each seed, so a keyed source with no saved key is listed as
+ *   not configured with its reason. It is never dropped silently.
+ * - Distinct source status: not configured, not supported, failed, and eligible. Zero results is not a status here.
  */
 
 import type { SourceRegistry } from "../sources/registry.ts";
+import type { SourceHealth } from "../sources/types.ts";
 import type { DiscoveryScope, CrawlBudget } from "./types.ts";
 
 export interface ResearchPlanRequest {
@@ -30,8 +33,11 @@ export interface PlannedSourceExecution {
   sourceKind: string;
   seed: string;
   isOptional: boolean;
-  status: "eligible" | "not_configured" | "skipped_by_policy";
+  status: "eligible" | "not_configured" | "not_supported" | "failed" | "skipped_by_policy";
+  /** Why the source is not eligible. For a gated source this is the resolver's reason, or the adapter's own explanation. */
   reason?: string;
+  /** The adapter's health status at planning time, for an eligible source. */
+  healthStatus?: string;
 }
 
 export interface ResearchPlan {
@@ -41,6 +47,38 @@ export interface ResearchPlan {
   budget: CrawlBudget;
   cycloneIncluded: boolean;
   createdAt: string;
+}
+
+/** Adapters planned for niche, profile and URL-list scopes. Each reports its own gate; none is assumed connected. */
+const MULTI_SOURCE_ADAPTERS = [
+  "meta_ad_library",
+  "tiktok",
+  "youtube",
+  "instagram",
+  "twitter",
+  "facebook",
+  "pinterest",
+  "linkedin",
+  "reddit",
+  "search",
+  "licensed",
+] as const;
+
+/** Maps an adapter's health to a planned status. A health check that throws is a failure, with its message. */
+function planFromHealth(health: SourceHealth | { error: string }, adapterId: string): Pick<PlannedSourceExecution, "status" | "reason" | "healthStatus"> {
+  if ("error" in health) {
+    return { status: "failed", reason: `Health check failed for ${adapterId}: ${health.error}` };
+  }
+  if (health.status === "HEALTHY" || health.status === "CONFIGURED") {
+    return { status: "eligible", healthStatus: health.status };
+  }
+  if (health.status === "NOT_CONFIGURED") {
+    return { status: "not_configured", reason: health.message || `${adapterId} is not configured.`, healthStatus: health.status };
+  }
+  if (health.status === "NOT_SUPPORTED") {
+    return { status: "not_supported", reason: health.message || `${adapterId} is not supported in this release.`, healthStatus: health.status };
+  }
+  return { status: "failed", reason: health.message || `${adapterId} status: ${health.status}`, healthStatus: health.status };
 }
 
 export class ResearchPlanner {
@@ -74,51 +112,35 @@ export class ResearchPlanner {
     } else {
       // scrape_niche / profile / url_list multi-source orchestration
       for (const seed of request.seeds) {
-        // 1. Website crawler / search
-        const webAdapter = registry.get("website");
-        if (webAdapter) {
+        // 1. Website pages. The run reads a seed only when it names a page; a free-text seed is reported per source.
+        if (registry.get("website")) {
           executions.push({
             adapterId: "website",
             sourceKind: "website",
             seed,
             isOptional: false,
             status: "eligible",
+            healthStatus: "HEALTHY",
           });
         }
 
-        // 2. Meta Ad Library adapter
-        const metaAdapter = registry.get("meta_ad_library");
-        if (metaAdapter) {
-          const health = await metaAdapter.health(request.organizationId).catch(() => ({ status: "UNAVAILABLE" as const }));
-          const isEligible = health.status === "HEALTHY" || health.status === "CONFIGURED";
+        // 2. Keyed and public-platform adapters. Each health check is scoped to the workspace.
+        for (const adapterId of MULTI_SOURCE_ADAPTERS) {
+          const adapter = registry.get(adapterId);
+          if (!adapter) continue;
+          const health = await adapter.health(request.organizationId).catch((error: unknown) => ({
+            error: error instanceof Error ? error.message : String(error),
+          }));
           executions.push({
-            adapterId: "meta_ad_library",
-            sourceKind: "meta_ad_library",
+            adapterId: adapter.id,
+            sourceKind: adapter.platform,
             seed,
             isOptional: true,
-            status: isEligible ? "eligible" : "not_configured",
-            reason: isEligible ? undefined : `Meta Ad Library status: ${health.status}`,
+            ...planFromHealth(health, adapter.id),
           });
         }
 
-        // 3. Social / Video adapters (TikTok, YouTube)
-        for (const platform of ["tiktok", "youtube"] as const) {
-          const adapter = registry.get(platform);
-          if (adapter) {
-            const health = await adapter.health(request.organizationId).catch(() => ({ status: "UNAVAILABLE" as const }));
-            const isEligible = health.status === "HEALTHY" || health.status === "CONFIGURED";
-            executions.push({
-              adapterId: adapter.id,
-              sourceKind: platform,
-              seed,
-              isOptional: true,
-              status: isEligible ? "eligible" : "not_configured",
-              reason: isEligible ? undefined : `${platform} adapter status: ${health.status}`,
-            });
-          }
-        }
-
-        // 4. Optional Cyclone Scout supplemental observation
+        // 3. Optional Cyclone Scout supplemental observation
         const cycloneAdapter = registry.get("cyclone_scout");
         if (cycloneAdapter && request.includeCycloneIfAvailable !== false) {
           const health = await cycloneAdapter.health().catch(() => ({ status: "NOT_CONFIGURED" as const }));

@@ -46,9 +46,9 @@ export class TikTokSourceAdapter implements SourceAdapter {
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 15,
-      message: "Connected to TikTok Marketing API.",
+      message: "A key is saved for TikTok. Discovery reads public pages for this source and does not call the TikTok API in this release.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

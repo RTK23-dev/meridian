@@ -46,9 +46,9 @@ export class TwitterSourceAdapter implements SourceAdapter {
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 15,
-      message: "Connected to Twitter API v2.",
+      message: "A key is saved for X (Twitter). Discovery reads public pages for this source and does not call the X API in this release.",
       lastCheckedAt: new Date().toISOString(),
     };
   }
