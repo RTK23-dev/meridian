@@ -3,9 +3,11 @@
  *
  * Async video generation via Higgsfield AI platform:
  * - Uses Bearer-less Key auth header (Authorization: Key <api_key>)
- * - Posts to requests endpoint and retains request_id, status_url, and cancel_url
- * - Polls returned status_url or /requests/<request_id>/status
- * - Never invents job IDs or guesses unreturned endpoints
+ * - Posts to requests endpoint and retains request_id, status_url, and cancel_url as records
+ * - Polls and cancels /v1/requests/<request_id>/{status,cancel} on HIGGSFIELD_ORIGIN only. The key is never sent to a URL
+ *   the provider returned or a stored URL names, so a returned status_url or cancel_url cannot redirect the key elsewhere.
+ * - Redirects on authenticated calls are refused, not followed
+ * - Never invents job IDs
  */
 
 import type {
@@ -21,6 +23,45 @@ import type { CredentialResolution } from "../../credentials/contract.ts";
 
 /** A workspace's usable key, or the reason there is none. The provider is never called without a usable key. */
 type KeyAccess = { ok: true; apiKey: string } | { ok: false; reason: string };
+
+/** The one origin the workspace key is ever sent to. */
+export const HIGGSFIELD_ORIGIN = "https://api.higgsfield.ai";
+
+/** A status check or cancel that gets no answer in this long is abandoned. */
+const CONTROL_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Opaque request ids: letters, digits, underscore and hyphen. A URL, a path or a dot segment is refused before any request. */
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+export type HiggsfieldRequestErrorCode = "INVALID_JOB_ID" | "MALFORMED_RESPONSE" | "REDIRECT_REFUSED";
+
+/**
+ * A failed call to Higgsfield. `status` is the HTTP status when a response arrived. `code` names a contract failure that
+ * has no useful status. The poller classifies on these fields, never on the message. A failure with neither (a network
+ * error or a timeout) has no status.
+ */
+export class HiggsfieldRequestError extends Error {
+  readonly status?: number;
+  readonly code?: HiggsfieldRequestErrorCode;
+
+  constructor(message: string, options: { status?: number; code?: HiggsfieldRequestErrorCode } = {}) {
+    super(message);
+    this.name = "HiggsfieldRequestError";
+    this.status = options.status;
+    this.code = options.code;
+  }
+}
+
+/**
+ * The authenticated URL for one request, built from its opaque id and HIGGSFIELD_ORIGIN. Nothing the provider returned is
+ * used here, so the key can only ever be sent to HIGGSFIELD_ORIGIN.
+ */
+export function higgsfieldRequestUrl(requestId: string, action: "status" | "cancel"): string {
+  if (typeof requestId !== "string" || !REQUEST_ID_PATTERN.test(requestId)) {
+    throw new HiggsfieldRequestError("The Higgsfield request id is not a valid opaque id. No request was sent.", { code: "INVALID_JOB_ID" });
+  }
+  return `${HIGGSFIELD_ORIGIN}/v1/requests/${requestId}/${action}`;
+}
 
 export type HiggsfieldModelDefinition = {
   path: string;
@@ -196,7 +237,7 @@ export class HiggsfieldProvider implements ProductionProvider {
       };
     }
     const modelDef = HIGGSFIELD_MODELS[model] || HIGGSFIELD_MODELS["higgsfield-video-v1"];
-    const endpoint = `https://api.higgsfield.ai${modelDef.path}`;
+    const endpoint = `${HIGGSFIELD_ORIGIN}${modelDef.path}`;
     const payload = modelDef.buildPayload(spec);
 
     try {
@@ -255,7 +296,8 @@ export class HiggsfieldProvider implements ProductionProvider {
       const statusUrl = data.status_url;
       const cancelUrl = data.cancel_url;
 
-      if (!requestId || !statusUrl) {
+      // A request id that is not opaque cannot be polled safely, so it is not tracked. The submission may have been accepted.
+      if (!requestId || !statusUrl || !REQUEST_ID_PATTERN.test(String(requestId))) {
         return {
           jobId: "",
           organizationId: spec.organizationId,
@@ -265,7 +307,7 @@ export class HiggsfieldProvider implements ProductionProvider {
           status: "SUBMISSION_UNKNOWN",
           costEstimateUsd: costEstimate,
           errorCode: "MALFORMED_RESPONSE",
-          error: "Higgsfield response missing required request_id or status_url contract fields.",
+          error: "Higgsfield response is missing request_id or status_url, or its request_id is not an opaque id this workspace can poll.",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -318,45 +360,38 @@ export class HiggsfieldProvider implements ProductionProvider {
   }
 
   /**
-   * The poll uses the key of the workspace that owns the job, which the job's metadata names. Without a usable key it throws,
-   * so the poller retries and no request is sent.
+   * The poll uses the key of the workspace that owns the job, which the job's metadata names. The URL comes from the request id
+   * alone, so a stored or returned URL never receives the key. Without a usable key it throws, so no request is sent. A failed
+   * check throws a HiggsfieldRequestError that carries its HTTP status for the poller to classify.
    */
   async checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob> {
+    const pollUrl = higgsfieldRequestUrl(jobId, "status");
     const owner = typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined;
     const access = await this.keyFor(owner);
     if (!access.ok) {
       throw new Error(`Cannot check Higgsfield job status: ${access.reason}`);
     }
 
-    const pollUrl =
-      typeof metadata?.statusUrl === "string"
-        ? metadata.statusUrl
-        : jobId.startsWith("http")
-          ? jobId
-          : `https://api.higgsfield.ai/v1/requests/${encodeURIComponent(jobId)}/status`;
-
-    const res = await this.fetchImpl(pollUrl, {
-      headers: {
-        Authorization: `Key ${access.apiKey}`,
-      },
-    });
+    const res = await this.controlRequest(pollUrl, access.apiKey, "GET");
 
     if (!res.ok) {
-      const errText = await res.text();
-      if (res.status === 401 || res.status === 403) {
-        throw new Error(`Higgsfield poll unauthorized (401/403): ${errText}`);
-      }
-      if (res.status === 429) {
-        throw new Error(`Higgsfield poll rate limited (429): ${errText}`);
-      }
-      throw new Error(`Higgsfield poll failed (${res.status}): ${errText}`);
+      // The body is not echoed: an error page is untrusted text and may be long.
+      await res.body?.cancel().catch(() => undefined);
+      throw new HiggsfieldRequestError(`Higgsfield status check failed (${res.status}).`, { status: res.status });
     }
 
     let data: any;
     try {
       data = await res.json();
     } catch {
-      throw new Error("Higgsfield returned malformed JSON response during polling.");
+      throw new HiggsfieldRequestError("Higgsfield returned malformed JSON response during polling.", { code: "MALFORMED_RESPONSE" });
+    }
+
+    if (!data || typeof data !== "object") {
+      throw new HiggsfieldRequestError("Higgsfield status response is not an object.", { code: "MALFORMED_RESPONSE" });
+    }
+    if (!data.error && typeof data.status !== "string") {
+      throw new HiggsfieldRequestError("Higgsfield status response has no status field.", { code: "MALFORMED_RESPONSE" });
     }
 
     if (data.error) {
@@ -401,25 +436,48 @@ export class HiggsfieldProvider implements ProductionProvider {
     };
   }
 
+  /**
+   * Best-effort cancellation, addressed as the status check is. A redirect is an error and is never followed, so it is
+   * thrown; a network failure or a non-2xx answer is best-effort and does not throw.
+   */
   async cancelJob(jobId: string, metadata?: Record<string, unknown>): Promise<void> {
+    const cancelUrl = higgsfieldRequestUrl(jobId, "cancel");
     const owner = typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined;
     const access = await this.keyFor(owner);
     if (!access.ok) return;
 
-    const cancelUrl =
-      typeof metadata?.cancelUrl === "string"
-        ? metadata.cancelUrl
-        : `https://api.higgsfield.ai/v1/requests/${encodeURIComponent(jobId)}/cancel`;
-
+    let res: Response;
     try {
-      await this.fetchImpl(cancelUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Key ${access.apiKey}`,
-        },
-      });
-    } catch {
+      res = await this.controlRequest(cancelUrl, access.apiKey, "POST");
+    } catch (err) {
+      if (err instanceof HiggsfieldRequestError && err.code === "REDIRECT_REFUSED") throw err;
       // Best-effort cancellation
+      return;
     }
+    await res.body?.cancel().catch(() => undefined);
+  }
+
+  /**
+   * One authenticated call to HIGGSFIELD_ORIGIN. Redirects are not followed: a 3xx, or an opaque redirect, becomes a
+   * REDIRECT_REFUSED error, so the key is never sent to a location the provider names.
+   */
+  private async controlRequest(url: string, apiKey: string, method: "GET" | "POST"): Promise<Response> {
+    const res = await this.fetchImpl(url, {
+      method,
+      redirect: "manual",
+      headers: {
+        Authorization: `Key ${apiKey}`,
+      },
+      signal: AbortSignal.timeout(CONTROL_REQUEST_TIMEOUT_MS),
+    });
+    const isRedirect = res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400);
+    if (isRedirect) {
+      await res.body?.cancel().catch(() => undefined);
+      throw new HiggsfieldRequestError(
+        `Higgsfield answered with a redirect (${res.status || "opaque"}). The workspace key was not sent to the redirect target.`,
+        { status: res.status >= 300 && res.status < 400 ? res.status : undefined, code: "REDIRECT_REFUSED" },
+      );
+    }
+    return res;
   }
 }
