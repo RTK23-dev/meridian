@@ -33,6 +33,10 @@ export type DriveHealth = {
   latencyMs: number;
 };
 
+export type DriveDropScan =
+  | { ok: true; files: Array<{ fileId: string; name: string; mimeType: string; size: number; modifiedTime: string | null }> }
+  | { ok: false; error: string };
+
 /** The earliest-created folder, ties broken by id, so every process picks the same one. */
 export function pickEarliest(folders: Array<{ id: string; createdTime?: string }>): string {
   const sorted = [...folders].sort((a, b) => {
@@ -186,7 +190,7 @@ export class GoogleDriveClient {
       qParts.join(" and "),
     )}&fields=files(id,name,createdTime)`;
     const res = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error(`Google Drive folder listing failed (${res.status}): ${(await res.text()).slice(0, 500)}`);
     const data = (await res.json()) as { files?: Array<{ id: string; createdTime?: string }> };
     return data.files ?? [];
   }
@@ -516,38 +520,31 @@ export class GoogleDriveClient {
     organizationId: string;
     brandId: string;
     jobId: string;
-  }): Promise<Array<{ fileId: string; name: string; mimeType: string; size: number; modifiedTime: string | null }>> {
-    const token = await this.tokenOrNull(input.organizationId);
-    if (!token) return [];
-
+  }): Promise<DriveDropScan> {
+    const access = await resolveDriveAccess(input.organizationId);
+    if (!access.ok) return { ok: false, error: access.reason };
     try {
       const folderId = await this.getFolderForPath({
         organizationId: input.organizationId,
         brandId: input.brandId,
         subpath: `production/outputs/${input.jobId}`,
       });
-
       const q = `'${folderId}' in parents and trashed = false`;
       const res = await fetch(
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size,modifiedTime)`,
-        { headers: { Authorization: `Bearer ${token}` } },
+        { headers: { Authorization: `Bearer ${access.token}` } },
       );
-
-      if (!res.ok) return [];
+      if (!res.ok) return { ok: false, error: `Google Drive output listing failed (${res.status}): ${(await res.text()).slice(0, 500)}` };
       const data = (await res.json()) as {
         files?: Array<{ id: string; name: string; mimeType: string; size?: string; modifiedTime?: string }>;
       };
-      if (!data.files) return [];
-
-      return data.files.map((f) => ({
-        fileId: f.id,
-        name: f.name,
-        mimeType: f.mimeType,
-        size: f.size ? Number(f.size) : 0,
-        modifiedTime: f.modifiedTime ?? null,
-      }));
-    } catch {
-      return [];
+      if (!Array.isArray(data.files)) return { ok: false, error: "Google Drive output listing returned an invalid response." };
+      return { ok: true, files: data.files.map((f) => ({
+        fileId: f.id, name: f.name, mimeType: f.mimeType,
+        size: f.size ? Number(f.size) : 0, modifiedTime: f.modifiedTime ?? null,
+      })) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 }
