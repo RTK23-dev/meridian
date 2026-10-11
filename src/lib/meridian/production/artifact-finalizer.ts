@@ -51,6 +51,11 @@ export interface ArtifactFinalizeInput {
     fetchImpl?: typeof fetch;
     /** The DNS answers used to validate an artifact host. Defaults to the system resolver. */
     resolver?: ArtifactResolver;
+    /**
+     * The byte cap for this artifact, whatever form it arrives in. It can only lower MAX_ARTIFACT_BYTES, never raise it.
+     * Defaults to MAX_ARTIFACT_BYTES.
+     */
+    maxBytes?: number;
     durationMs?: number;
     skipPostflight?: boolean;
     job?: ProductionJob;
@@ -291,6 +296,44 @@ async function readCapped(response: Response, maxBytes: number): Promise<Uint8Ar
   return out;
 }
 
+/** The refusal for an artifact over the byte cap. It is permanent: the same bytes cannot succeed on retry. */
+function tooLargeResult(): ArtifactFinalizeResult {
+  return {
+    success: false,
+    status: "FAILED",
+    errorCode: "ARTIFACT_TOO_LARGE",
+    error: "The artifact is larger than the artifact size limit.",
+  };
+}
+
+/**
+ * The decoded size of a base64 payload, read from its length and trailing padding without decoding it. For canonical padded
+ * or unpadded base64 it is exact. Whitespace counts toward the length, so a line-wrapped payload is estimated high, which
+ * fails closed.
+ */
+export function estimateBase64DecodedBytes(encoded: string): number {
+  const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
+  return Math.floor((encoded.length * 3) / 4) - padding;
+}
+
+/**
+ * Decodes a base64 payload only when it fits the cap. The encoded length is measured first, so an oversized payload is never
+ * decoded. The decoded length is checked again before the bytes are returned.
+ */
+function decodeBase64WithinCap(encoded: string, maxBytes: number): Uint8Array | "TOO_LARGE" | null {
+  if (estimateBase64DecodedBytes(encoded) > maxBytes) return "TOO_LARGE";
+  const decoded = Buffer.from(encoded, "base64");
+  if (decoded.byteLength > maxBytes) return "TOO_LARGE";
+  return decoded.byteLength > 0 ? new Uint8Array(decoded) : null;
+}
+
+/** The base64 payload of a `data:<type>;base64,<payload>` URI, or null. The payload is sliced, not copied. */
+function base64PayloadOfDataUri(uri: string): string | null {
+  const comma = uri.indexOf(",");
+  if (comma < 0 || !/^data:[^;,]+;base64$/.test(uri.slice(0, comma))) return null;
+  return comma + 1 < uri.length ? uri.slice(comma + 1) : null;
+}
+
 export async function finalizeProductionArtifact(
   sql: Sql,
   input: ArtifactFinalizeInput,
@@ -311,37 +354,31 @@ export async function finalizeProductionArtifact(
     };
   }
 
-  // 1. Normalize and extract complete bytes
+  // 1. Normalize and extract complete bytes. Every input form is held to the same cap, and an encoded form is measured
+  // before it is decoded.
+  const maxBytes = Math.min(input.options?.maxBytes ?? MAX_ARTIFACT_BYTES, MAX_ARTIFACT_BYTES);
   let bytes: Uint8Array | null = null;
   const raw = input.rawArtifact;
 
   if (raw.bytes && raw.bytes.byteLength > 0) {
+    if (raw.bytes.byteLength > maxBytes) return tooLargeResult();
     bytes = raw.bytes;
   } else if (raw.base64 && typeof raw.base64 === "string") {
-    try {
-      const buf = Buffer.from(raw.base64, "base64");
-      if (buf.byteLength > 0) {
-        bytes = new Uint8Array(buf);
-      }
-    } catch {
-      // Base64 decode failed
-    }
+    const decoded = decodeBase64WithinCap(raw.base64, maxBytes);
+    if (decoded === "TOO_LARGE") return tooLargeResult();
+    bytes = decoded;
   } else if (raw.uri && raw.uri.startsWith("data:")) {
-    try {
-      const match = raw.uri.match(/^data:([^;]+);base64,(.+)$/);
-      if (match && match[2]) {
-        const buf = Buffer.from(match[2], "base64");
-        if (buf.byteLength > 0) {
-          bytes = new Uint8Array(buf);
-        }
-      }
-    } catch {
-      // Data URI decode failed
+    const payload = base64PayloadOfDataUri(raw.uri);
+    if (payload !== null) {
+      const decoded = decodeBase64WithinCap(payload, maxBytes);
+      if (decoded === "TOO_LARGE") return tooLargeResult();
+      bytes = decoded;
     }
   } else if (raw.uri && (raw.uri.startsWith("http://") || raw.uri.startsWith("https://"))) {
     const download = await downloadProviderArtifact(raw.uri, {
       fetchImpl: input.options?.fetchImpl,
       resolver: input.options?.resolver,
+      maxBytes,
     });
     if (!download.ok) {
       // A refused or oversized URL is permanent and fails the job. Any other failure is retried by the caller.
@@ -360,6 +397,8 @@ export async function finalizeProductionArtifact(
     } catch {
       // Drive fetch failed
     }
+    // The Drive client reads the whole file before it returns, so the cap is checked on what it returned.
+    if (bytes && bytes.byteLength > maxBytes) return tooLargeResult();
   }
 
   // 2. Validate bytes presence and minimal sensible size

@@ -1,9 +1,89 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
-import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
+import { estimateBase64DecodedBytes, finalizeProductionArtifact, type ArtifactFinalizeInput } from "./artifact-finalizer.ts";
 import type { Sql } from "../learning/store.ts";
 import type { GoogleDriveClient } from "../storage/drive.ts";
+
+/** A small cap, so the one-byte-over tests stay small. The default cap is tested in artifact-download.test.ts. */
+const CAP = 512;
+
+const MP4_HEAD = new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00, 0x69, 0x73, 0x6f, 0x6d]);
+
+/** An MP4 of exactly `size` bytes: an ftyp box, then zero padding. */
+function mp4Of(size: number): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(size);
+  out.set(MP4_HEAD.subarray(0, Math.min(size, MP4_HEAD.length)));
+  return out;
+}
+
+/** A storage fake. It records every statement and every Drive write, and reads back what was written. */
+function storageFixture() {
+  const statements: Array<{ query: string; values: unknown[] }> = [];
+  const drivePuts: Array<{ path: string; mimeType: string; bytes: Uint8Array }> = [];
+  const driveFiles = new Map<string, Uint8Array>();
+  let storedRow: Record<string, unknown> | undefined;
+  const sql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const query = strings.join("?");
+    statements.push({ query, values });
+    if (query.includes("select id from production_jobs")) return [{ id: String(values[0]) }];
+    if (query.includes("insert into storage_objects")) {
+      storedRow = { id: values[0], provider_file_id: values[3], mime_type: values[5], size_bytes: values[6], sha256: values[7] };
+      return [];
+    }
+    if (query.includes("select id, provider_file_id, size_bytes, sha256, mime_type")) return storedRow ? [storedRow] : [];
+    return [];
+  }) as unknown as Sql;
+  const drive = {
+    put: async (input: { path: string; mimeType: string; bytes: Uint8Array }) => {
+      drivePuts.push(input);
+      const fileId = `drive-${drivePuts.length}`;
+      driveFiles.set(fileId, input.bytes);
+      return { fileId };
+    },
+    get: async (fileId: string) => {
+      const bytes = driveFiles.get(fileId);
+      return bytes ? { fileId, bytes, name: "artifact", mimeType: "" } : null;
+    },
+    delete: async () => {},
+    health: async () => ({ status: "CONFIGURED" as const, configured: true }),
+  } as unknown as GoogleDriveClient;
+  return { sql, drive, statements, drivePuts };
+}
+
+/** Runs `run` and counts the Buffer.from calls that decode a large string, which is how a base64 payload is decoded. */
+async function countLargeDecodes<T>(run: () => Promise<T>): Promise<{ value: T; decodes: number }> {
+  const original = Buffer.from;
+  let decodes = 0;
+  const counting = (value: unknown, ...rest: unknown[]) => {
+    if (typeof value === "string" && value.length > 1_000) decodes += 1;
+    return (original as unknown as (...args: unknown[]) => Buffer).call(Buffer, value, ...rest);
+  };
+  Buffer.from = counting as unknown as typeof Buffer.from;
+  try {
+    return { value: await run(), decodes };
+  } finally {
+    Buffer.from = original;
+  }
+}
+
+/** The four input forms a provider artifact can arrive in, each carrying the same bytes. */
+const INPUT_FORMS: Array<{ form: string; rawFor: (bytes: Uint8Array) => ArtifactFinalizeInput["rawArtifact"] }> = [
+  { form: "raw bytes", rawFor: (bytes) => ({ bytes }) },
+  { form: "base64", rawFor: (bytes) => ({ base64: Buffer.from(bytes).toString("base64") }) },
+  { form: "data: URI", rawFor: (bytes) => ({ uri: `data:video/mp4;base64,${Buffer.from(bytes).toString("base64")}` }) },
+];
+
+function finalizeWith(sql: Sql, drive: GoogleDriveClient, rawArtifact: ArtifactFinalizeInput["rawArtifact"], provider = "google_omni") {
+  return finalizeProductionArtifact(sql, {
+    jobId: "job-cap-1",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    provider,
+    rawArtifact,
+    options: { driveClient: drive, maxBytes: CAP },
+  });
+}
 
 test("finalizeProductionArtifact: persists valid media bytes to Drive and commits COMPLETED", async () => {
   const validMp4Bytes = Buffer.from("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41payload-video-sample-bytes");
@@ -200,4 +280,76 @@ test("finalizeProductionArtifact: verified retry reuses the stored artifact", as
   assert.equal(result.artifactId, "artifact-existing");
   assert.equal(puts, 0, "Retry must not create another Drive object");
   assert.equal(gets, 1, "Existing object must be downloaded and verified");
+});
+
+for (const { form, rawFor } of INPUT_FORMS) {
+  test(`finalizeProductionArtifact: a ${form} artifact one byte over the cap is refused before storage`, async () => {
+    const fixture = storageFixture();
+    const result = await finalizeWith(fixture.sql, fixture.drive, rawFor(mp4Of(CAP + 1)));
+    assert.equal(result.success, false);
+    assert.equal(result.status, "FAILED");
+    assert.equal(result.errorCode, "ARTIFACT_TOO_LARGE");
+    assert.equal(fixture.drivePuts.length, 0, "an oversized artifact never reaches Drive");
+    assert.ok(!fixture.statements.some((s) => s.query.includes("insert into storage_objects")));
+  });
+
+  test(`finalizeProductionArtifact: a ${form} artifact at the cap is stored whole`, async () => {
+    for (const size of [CAP - 1, CAP]) {
+      const fixture = storageFixture();
+      const bytes = mp4Of(size);
+      const result = await finalizeWith(fixture.sql, fixture.drive, rawFor(bytes));
+      assert.ok(result.success, `size ${size}: ${JSON.stringify(result)}`);
+      assert.equal(result.byteSize, size);
+      assert.equal(fixture.drivePuts[0]?.bytes.byteLength, size);
+    }
+  });
+}
+
+test("finalizeProductionArtifact: an encoded payload over the cap is refused before it is decoded", async () => {
+  // 16 million characters decode to about 12 MB, far over the cap. The refusal must come from the encoded length alone.
+  const huge = "A".repeat(4 * 4_000_000);
+  const forms: ArtifactFinalizeInput["rawArtifact"][] = [{ base64: huge }, { uri: `data:video/mp4;base64,${huge}` }];
+  for (const rawArtifact of forms) {
+    const fixture = storageFixture();
+    const { value: result, decodes } = await countLargeDecodes(() => finalizeWith(fixture.sql, fixture.drive, rawArtifact));
+    assert.equal(result.errorCode, "ARTIFACT_TOO_LARGE", Object.keys(rawArtifact).join(","));
+    assert.equal(decodes, 0, `${Object.keys(rawArtifact).join(",")} must not be decoded`);
+    assert.equal(fixture.drivePuts.length, 0);
+  }
+});
+
+test("finalizeProductionArtifact: a Drive artifact over the cap is refused before QC or storage", async () => {
+  const fixture = storageFixture();
+  const drive = {
+    put: async () => {
+      throw new Error("an oversized artifact must not be stored");
+    },
+    get: async () => ({ fileId: "drive-big", bytes: mp4Of(CAP + 1), name: "big.mp4", mimeType: "video/mp4" }),
+    delete: async () => {},
+    health: async () => ({ status: "CONFIGURED" as const, configured: true }),
+  } as unknown as GoogleDriveClient;
+  const result = await finalizeWith(fixture.sql, drive, { uri: "drive-big" }, "manual_cloud");
+  assert.equal(result.success, false);
+  assert.equal(result.errorCode, "ARTIFACT_TOO_LARGE");
+});
+
+test("finalizeProductionArtifact: an HTTP artifact over the cap is refused with the same code", async () => {
+  const fixture = storageFixture();
+  const fetchImpl = (async () => new Response(mp4Of(CAP + 1), { status: 200 })) as unknown as typeof fetch;
+  const result = await finalizeProductionArtifact(fixture.sql, {
+    jobId: "job-cap-1",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    provider: "higgsfield",
+    rawArtifact: { uri: "https://cdn.example.com/output.mp4" },
+    options: { driveClient: fixture.drive, fetchImpl, maxBytes: CAP },
+  });
+  assert.equal(result.errorCode, "ARTIFACT_TOO_LARGE");
+  assert.equal(fixture.drivePuts.length, 0);
+});
+
+test("estimateBase64DecodedBytes is exact for canonical base64 at every padding length", () => {
+  for (let size = 0; size <= 64; size += 1) {
+    assert.equal(estimateBase64DecodedBytes(Buffer.from(new Uint8Array(size).fill(7)).toString("base64")), size, `size ${size}`);
+  }
 });
