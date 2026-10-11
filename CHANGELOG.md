@@ -2,7 +2,7 @@
 
 ## Prerelease — not yet tagged
 
-The next beta tag will be cut after this work is verified on a fresh migrated database. Migrations 0054 to 0057 are new.
+The next beta tag will be cut after this work is verified on a fresh migrated database. Migrations 0055 to 0059 are new.
 
 **Action for deployments that used environment keys:** provider keys from the environment are now used only when the deployment
 opts in with the category's `*_SHARED_DEFAULT` variable (see `docs/PROVIDERS.md`). Set the opt-in, or save the key in Settings.
@@ -14,15 +14,18 @@ opts in with the category's `*_SHARED_DEFAULT` variable (see `docs/PROVIDERS.md`
 - **Video**: Google Veo is removed. Gemini Omni is the only Google video engine and the default. Stored videos play in Studio review and
   the Library, with byte-range support.
 - **Storage**: Postgres is the system of record. Drive and S3 hold artifacts and exports. Drive uploads resume from the last confirmed byte,
-  and the session is kept in Postgres (migration 0056).
+  and the session is kept in Postgres (migration 0056). Admins connect Drive from Settings with OAuth; the refresh token is stored encrypted
+  and resumable session URIs are sealed at rest (migration 0058). Uploads over 5 MB need `TOKEN_ENCRYPTION_KEY`.
 - **Sourcing**: public-page discovery runs end to end with per-source states, provenance on every evidence row, and deduplication by
-  canonical URL and content hash (migration 0057).
+  content hash within a brand (migrations 0057 and 0059). Discovery starts from Market and lists recent runs. YouTube, SerpAPI and Meta
+  Ad Library have live request code, not yet run against the live services.
 - **Brand brain**: the 26 fields come from one list. Four are required, and "Complete brand brain" depends only on those. Onboarding
   resumes at the section the person left (migration 0055).
 - **Setup**: `npm run setup` is the one command. Settings → General has a setup view and a Drive panel. `.env.example` lists every variable
   the code reads.
-- **Honesty**: Facebook, Instagram and YouTube report not connected instead of connected from environment tokens. The Reddit API reports
-  not connected. Live posting is not implemented; the manual export package is the delivery path.
+- **Publishing**: Facebook Page and YouTube Shorts post through a connected account, and a receipt is stored only when the service returns an
+  id. Instagram Reels reports not connected until a public media route exists. No live posting call was made in this release. Environment
+  tokens no longer configure paid Meta, TikTok or Google. The Reddit API reports not connected.
 - **Controls**: every button acts or shows why it cannot (`npm run ui:button-audit`). The settings screen and the brand switcher state what is
   missing instead of showing a percentage.
 - **Cleanup**: removed dead modules (the Instagram graph adapter, the Meta outcome ingestion, the duplicate-evidence helper, the shadow-decision

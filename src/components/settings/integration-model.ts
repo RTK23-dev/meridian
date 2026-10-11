@@ -65,7 +65,7 @@ const OAUTH_PROVIDERS = new Set<keyof typeof ACCOUNT_LABEL>(["meta", "tiktok", "
 const ACCOUNT_MISSING: Record<keyof typeof ACCOUNT_LABEL, string> = {
   meta: "Connect with Meta OAuth, or set META_ACCESS_TOKEN on the server. META_AD_ACCOUNT_ID is needed to publish.",
   tiktok: "Connect with TikTok OAuth, or set TIKTOK_ACCESS_TOKEN and TIKTOK_ADVERTISER_ID on the server.",
-  google: "Connect with Google OAuth, or set GOOGLE_ADS_DEVELOPER_TOKEN and GOOGLE_ADS_ACCESS_TOKEN on the server.",
+  google: "Connect with Google OAuth. The Google Ads developer token is read from GOOGLE_ADS_DEVELOPER_TOKEN on the server.",
   ad_library: "Set META_AD_LIBRARY_TOKEN on the server. No ads are collected until a request succeeds.",
 };
 

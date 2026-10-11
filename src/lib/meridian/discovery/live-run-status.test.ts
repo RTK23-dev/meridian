@@ -24,7 +24,6 @@ const NO_DEPLOYMENT_KEYS = {
   YOUTUBE_API_KEY: undefined,
   YOUTUBE_SHARED_DEFAULT: undefined,
   SERPAPI_API_KEY: undefined,
-  GOOGLE_SEARCH_API_KEY: undefined,
   SEARCH_SHARED_DEFAULT: undefined,
   META_AD_LIBRARY_TOKEN: undefined,
   META_AD_LIBRARY_SHARED_DEFAULT: undefined,

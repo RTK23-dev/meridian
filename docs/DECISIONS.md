@@ -27,9 +27,10 @@ in ARCHITECTURE_CONTRACTS.md, section 6.
 
 ## Calibration
 
-No engine's numbers are calibrated yet. A probability or score is what the engine reported. Until a calibration report says otherwise
-(`learning/calibration-gate.ts`), such a number can send an item to review, but it cannot approve or reject it automatically. The
-Calibration screen shows the calibration state the server reports.
+No engine's numbers are calibrated yet. A probability or score is what the engine reported. The calibration report
+(`learning/calibration-report.ts`) says "not calibrated" until 200 usable outcomes exist, and shows no numbers before then. Until a
+calibration report says otherwise (`learning/calibration-gate.ts`), such a number can send an item to review, but it cannot approve or
+reject it automatically. The Calibration screen shows the calibration state the server reports.
 
 ## Records
 

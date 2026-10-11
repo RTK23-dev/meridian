@@ -12,16 +12,17 @@ creatives may go out, exports them for posting, and records what happened afterw
 - **Studio.** A brief passes a gate before it can generate. Variants carry their evidence, decision and review. Video uses Gemini Omni by default.
 - **Decisions.** One engine per workspace, TypeSafe JEV or OpenAI Decisions. A versioned policy turns answers into approve, review or reject.
 - **Library and exports.** Creatives, their lineage, and an export package for manual posting.
+- **Google Drive.** Admins connect from Settings with OAuth. Drive stores artifacts and exports only.
 - **Settings.** Provider keys per workspace, encrypted and never shown again, with a setup view that states what is connected and why not.
 
-## What is not connected
+## What is not connected or not verified
 
-- Live posting to Facebook, Instagram or YouTube. Channels report not connected; deliver with the export package.
-- Connecting Google Drive from the app. The panel shows the real state and the steps.
-- Live calls to the source APIs. Keyed sources check that a key is present.
+- Instagram Reels posting reports not connected. Facebook Page and YouTube Shorts posting go through a connected account, but no live call was made in this release. The export package is the delivery path for everything else.
+- Live source APIs are built and tested against fixtures. No live key was used, so their live responses are unverified.
 - Calibration. Every probability and score is uncalibrated, so none approves or rejects on its own.
 
-[ROADMAP.md](docs/ROADMAP.md) lists everything that is not built or not verified.
+[ROADMAP.md](docs/ROADMAP.md) lists what is open, with the reason for each item.
+
 
 ## Quick start
 
