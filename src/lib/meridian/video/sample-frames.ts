@@ -22,7 +22,7 @@ const FRAME_MAX_BYTES = 32 * 1024 * 1024;
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 export type SampledFrame = { timestampMs: number; bytes: Uint8Array };
-export type SampleFailure = { timestampMs: number; reason: "extract_failed" | "not_png" };
+export type SampleFailure = { timestampMs: number; reason: "extract_failed" | "not_png" | "invalid_timestamp" };
 export type SampleResult = {
   version: typeof FRAME_SAMPLER_VERSION;
   frames: SampledFrame[];
@@ -66,10 +66,32 @@ function isFfmpegMissing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 }
 
+/**
+ * Decodes a frame at each requested timestamp, in time order, with no duplicates. A timestamp the media cannot hold (not a
+ * finite number, negative, or at or past the end) is recorded as a failure. It is never moved to a nearby frame.
+ */
+export function requestedTimestamps(timestamps: readonly number[], durationMs: number): { times: number[]; invalid: number[] } {
+  const times: number[] = [];
+  const invalid: number[] = [];
+  for (const value of timestamps) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value >= durationMs) {
+      invalid.push(value);
+      continue;
+    }
+    times.push(Math.round(value));
+  }
+  return { times: [...new Set(times)].sort((a, b) => a - b), invalid };
+}
+
 export async function sampleVideoFrames(input: {
   bytes: Uint8Array;
   durationMs: number | null;
   count?: number;
+  /**
+   * Exact timestamps to decode, such as the start of each selected scene. When given, they replace the even spacing, and each
+   * frame is decoded at its real time (video/scene-frames.ts).
+   */
+  timestampsMs?: readonly number[];
   extractor?: FrameExtractor;
 }): Promise<SampleResult> {
   const base = { version: FRAME_SAMPLER_VERSION } as const;
@@ -84,7 +106,11 @@ export async function sampleVideoFrames(input: {
     const extract = input.extractor ?? ffmpegExtractor();
     const frames: SampledFrame[] = [];
     const failures: SampleFailure[] = [];
-    for (const timestampMs of sampleTimestamps(input.durationMs, input.count)) {
+    const plan = input.timestampsMs
+      ? requestedTimestamps(input.timestampsMs, input.durationMs)
+      : { times: sampleTimestamps(input.durationMs, input.count), invalid: [] };
+    for (const value of plan.invalid) failures.push({ timestampMs: value, reason: "invalid_timestamp" });
+    for (const timestampMs of plan.times) {
       try {
         const bytes = await extract(containerPath, timestampMs);
         if (!isPng(bytes)) {
