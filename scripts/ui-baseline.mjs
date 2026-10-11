@@ -84,10 +84,14 @@ async function discoverRoutes(page, seededBrandId) {
 async function prepareFixtureWorkspace(page) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
   await page.waitForFunction(
-    () => document.body.innerText.includes("Create account") || Boolean(document.querySelector('[aria-label="Account and appearance settings"]')),
+    () => document.body.innerText.includes("Create an account instead") || document.body.innerText.includes("Create account") || Boolean(document.querySelector('[aria-label="Account and appearance settings"]')),
     undefined,
     { timeout: 15_000 },
   );
+  // The email form opens in sign-in mode. A fresh fixture account is created from the create-account form.
+  if (await page.getByRole("button", { name: "Create an account instead" }).count()) {
+    await page.getByRole("button", { name: "Create an account instead" }).click();
+  }
   if (await page.getByRole("button", { name: "Create account", exact: true }).count()) {
     await page.getByLabel("Your name").fill(testUser.name);
     await page.getByLabel("Email").fill(testUser.email);

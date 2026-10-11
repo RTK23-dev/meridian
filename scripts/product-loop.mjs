@@ -34,6 +34,8 @@ async function scan(name) {
 
 try {
   await page.goto(`${base}/login`, { waitUntil: "networkidle" });
+  // The login page opens in sign-in mode. A fresh fixture account is created from the create-account form.
+  await page.getByRole("button", { name: "Create an account instead" }).click();
   await page.getByLabel("Your name").fill("Loop Fixture");
   await page.getByLabel("Email").fill(`loop-${stamp}@example.com`);
   await page.getByLabel(/^Password/).fill("fixture-pass-1");
