@@ -46,7 +46,7 @@ export class MetaAdLibrarySourceAdapter implements SourceAdapter {
       adapterId: this.id,
       status: "CONFIGURED",
       latencyMs: 15,
-      message: "Configured with Meta Ad Library credentials.",
+      message: "A key is saved for Meta Ad Library. Discovery does not call that API. The research collection job does, and reports its own status.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

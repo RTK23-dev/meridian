@@ -13,6 +13,8 @@ import { publicUrlIssue } from "@/lib/meridian/sources/public-url";
 import { competitorFieldsSchema, publicPageSchema, researchCollectionSchema } from "@/lib/meridian/schemas/market";
 import { observationFieldsSchema } from "@/lib/meridian/schemas/observation";
 import { loadResearchAds } from "./ad-listing.ts";
+import { libraryStateFor } from "./library-state.ts";
+import { storedPageWithText } from "./source-documents.ts";
 import {
   id,
   asText,
@@ -80,15 +82,17 @@ export const getMarket = createServerFn({ method: "POST" })
     `;
     const libraryConnection = libraryConnectionRows[0];
     const metaKey = await sourceKeyFor("meta_ad_library", access.organizationId);
+    const libraryState = libraryStateFor({
+      keySecret: metaKey.secret,
+      keyReason: metaKey.reason,
+      storedStatus: asText(libraryConnection?.status),
+      storedError: asText(libraryConnection?.last_error),
+    });
     return {
       role: access.role,
-      adapters: SOURCE_ADAPTERS.map((adapter) => ({
-        ...adapter,
-        status: adapter.id === "ad_library"
-          ? asText(libraryConnection?.status) || (metaKey.secret ? "AVAILABLE" : "NOT_CONNECTED")
-          : adapter.implemented ? "AVAILABLE" : "NOT_CONNECTED",
-        connectionError: adapter.id === "ad_library" ? asText(libraryConnection?.last_error) : "",
-      })),
+      adapters: SOURCE_ADAPTERS.map((adapter) => adapter.id === "ad_library"
+        ? { ...adapter, ...libraryState }
+        : { ...adapter, status: adapter.implemented ? "AVAILABLE" : "NOT_CONNECTED", connectionError: "" }),
       competitors: competitors.map((row) => ({
         id: asText(row.id),
         name: asText(row.name),
@@ -425,11 +429,15 @@ export const fetchSourcePage = createServerFn({ method: "POST" })
       const page = await fetchPublicText(data.url);
       const clean = quarantineExternalText(page.text);
       if (!clean.text) throw new Error("The page had no usable text after instruction-like lines were removed.");
+      const excerpt = clean.text.slice(0, 12000);
+      // Identical stored text for this brand is the same record. It is reported as seen before and not stored again.
+      const seenId = await storedPageWithText(sql, { organizationId: access.organizationId, brandId: data.brandId }, excerpt);
+      if (seenId) return { id: seenId, status: "stored" as const, seenBefore: true };
       await sql`
         insert into source_documents (id, organization_id, brand_id, url, status, excerpt, created_by)
-        values (${documentId}, ${access.organizationId}, ${data.brandId}, ${page.url}, 'stored', ${clean.text.slice(0, 12000)}, ${context.userId})
+        values (${documentId}, ${access.organizationId}, ${data.brandId}, ${page.url}, 'stored', ${excerpt}, ${context.userId})
       `;
-      return { id: documentId, status: "stored" as const };
+      return { id: documentId, status: "stored" as const, seenBefore: false };
     } catch (error) {
       const message = error instanceof Error ? error.message : "The page could not be read.";
       await sql`

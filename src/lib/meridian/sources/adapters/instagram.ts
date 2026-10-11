@@ -46,9 +46,9 @@ export class InstagramSourceAdapter implements SourceAdapter {
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 12,
-      message: "Connected to Instagram Graph API.",
+      message: "A key is saved for Instagram. Discovery reads public pages for this source and does not call the Instagram Graph API in this release.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

@@ -42,32 +42,19 @@ export class LicensedSourceAdapter implements SourceAdapter {
         lastCheckedAt: new Date().toISOString(),
       };
     }
+    // A key is saved, but no licensed-provider client exists in this release, so the source cannot run.
     return {
       adapterId: this.id,
-      status: "HEALTHY",
-      latencyMs: 20,
-      message: "Licensed data provider configured.",
+      status: "NOT_SUPPORTED",
+      latencyMs: 0,
+      message: "A licensed-data key is saved, but this release has no client for that provider. No records are produced from it.",
       lastCheckedAt: new Date().toISOString(),
     };
   }
 
-  async discover(query: DiscoveryQuery): Promise<SourceReference[]> {
-    const resolved = await sourceKeyFor("licensed", query.organizationId);
-    const key = resolved.secret;
-    if (!key) return [];
-
-    return [
-      {
-        sourceId: `licensed_${query.advertiser || query.niche || "general"}`,
-        platform: "licensed",
-        sourceAdapter: this.id,
-        discoveredAt: new Date().toISOString(),
-        metadata: {
-          advertiser: query.advertiser,
-          niche: query.niche,
-        },
-      },
-    ];
+  /** No provider request is made in this release, so there are no records. The adapter never invents a reference. */
+  async discover(_query: DiscoveryQuery): Promise<SourceReference[]> {
+    return [];
   }
 
   async fetch(reference: SourceReference): Promise<RawArtifact> {

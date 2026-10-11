@@ -76,7 +76,7 @@ test("a scraped page's structured data is stored per run, as OBSERVED, linked to
   assert.ok(rows.every((row) => row.source_key === `${brandId}|url:${url}`), "evidence joins the source row by the same key");
 });
 
-test("the same page in two runs keeps one evidence set per run, so history is not overwritten", async () => {
+test("the same page in a second run stores no duplicate evidence, and the run reports it as seen before", async () => {
   const sql = await getSql();
   const { organizationId, brandId } = await tenant(sql);
   const url = "https://shop.example/history";
@@ -84,7 +84,9 @@ test("the same page in two runs keeps one evidence set per run, so history is no
   const one = await service.startDiscoveryRun({ organizationId, brandId, scope: "scrape_page", seeds: [url], sql });
   const two = await service.startDiscoveryRun({ organizationId, brandId, scope: "scrape_page", seeds: [url], sql });
   assert.equal((await evidenceRows(sql, one.run.id)).length, 3);
-  assert.equal((await evidenceRows(sql, two.run.id)).length, 3);
+  assert.equal((await evidenceRows(sql, two.run.id)).length, 0, "the same declarations are not stored a second time");
+  assert.ok((two.run.progress.seenBefore ?? 0) >= 3, "each of the three declarations is counted as seen before");
+  assert.match(two.run.caveat ?? "", /already stores/);
 });
 
 test("frontier-discovered pages also keep their structured data", async () => {

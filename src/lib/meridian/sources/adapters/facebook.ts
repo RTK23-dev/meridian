@@ -45,9 +45,9 @@ export class FacebookSourceAdapter implements SourceAdapter {
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 14,
-      message: "Connected to Facebook Graph API.",
+      message: "A key is saved for Facebook. Discovery reads public pages for this source and does not call the Facebook Graph API in this release.",
       lastCheckedAt: new Date().toISOString(),
     };
   }

@@ -45,29 +45,19 @@ export class FirstPartyAnalyticsSourceAdapter implements SourceAdapter {
       };
     }
 
+    // A platform key is saved, but this release does not read campaign data with it, so nothing runs from it.
     return {
       adapterId: this.id,
-      status: "HEALTHY",
-      latencyMs: 5,
-      message: "First-party connectors active.",
+      status: "NOT_SUPPORTED",
+      latencyMs: 0,
+      message: "A platform key is saved, but this release does not read first-party campaign data. No records are produced from it.",
       lastCheckedAt: new Date().toISOString(),
     };
   }
 
-  async discover(query: DiscoveryQuery): Promise<SourceReference[]> {
-    // When queried, returns tracked first-party campaigns/ad creatives
-    if (!query.advertiser) return [];
-
-    return [
-      {
-        sourceId: `1p_${query.advertiser}`,
-        platform: "first_party_analytics",
-        externalId: query.advertiser,
-        sourceAdapter: this.id,
-        discoveredAt: new Date().toISOString(),
-        metadata: { advertiser: query.advertiser },
-      },
-    ];
+  /** No campaign read is made in this release, so there are no references. The adapter never invents one. */
+  async discover(_query: DiscoveryQuery): Promise<SourceReference[]> {
+    return [];
   }
 
   async fetch(reference: SourceReference): Promise<RawArtifact> {

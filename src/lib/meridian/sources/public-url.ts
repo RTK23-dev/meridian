@@ -1,5 +1,22 @@
 /** Syntax and hostname policy. DNS resolution is a separate step in the fetcher. */
 
+/**
+ * The page URL a discovery seed names, or null when the seed is free text. A seed is a page when it has an http(s) scheme,
+ * or when it is a bare domain such as `example.com/shop`. A niche phrase ("artisan sourdough") names no page, so no page is
+ * read for it. A page URL that is blocked (for example a private address) is still returned, so the crawl reports the block.
+ */
+export function pageUrlForSeed(seed: string): string | null {
+  const trimmed = seed.trim();
+  if (!trimmed) return null;
+  const explicit = /^https?:\/\//i.test(trimmed);
+  if (!explicit && !/^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(\/\S*)?$/i.test(trimmed)) return null;
+  try {
+    return new URL(explicit ? trimmed : `https://${trimmed}`).toString();
+  } catch {
+    return null;
+  }
+}
+
 function isIpv4(value: string): boolean {
   const parts = value.split(".");
   if (parts.length !== 4) return false;

@@ -45,9 +45,9 @@ export class PinterestSourceAdapter implements SourceAdapter {
     }
     return {
       adapterId: this.id,
-      status: "HEALTHY",
+      status: "CONFIGURED",
       latencyMs: 16,
-      message: "Connected to Pinterest API v5.",
+      message: "A key is saved for Pinterest. Discovery reads public pages for this source and does not call the Pinterest API in this release.",
       lastCheckedAt: new Date().toISOString(),
     };
   }
