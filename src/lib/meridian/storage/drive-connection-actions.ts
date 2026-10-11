@@ -21,19 +21,24 @@ async function memberRole(userId: string, organizationId: string): Promise<Role>
   return role;
 }
 
-/** The Drive connection as the deployment is set up. Names and presence only, never a key or a token. */
+/**
+ * The Drive connection as this workspace and the deployment set it up. Names, presence and times only, never a key or a
+ * token.
+ */
 export const getDriveConnection = createServerFn({ method: "GET" })
   .validator((input: unknown) => ({ organizationId: organizationIdOf(input) }))
   .middleware([authMiddleware])
   .handler(async ({ context, data }): Promise<DriveConnectionView> => {
     await memberRole(context.userId, data.organizationId);
+    const { readDriveConnectionMeta } = await import("./drive-connection-store.ts");
     const { driveConnectionView } = await import("./drive-connection-view.ts");
-    return driveConnectionView(process.env);
+    const meta = await readDriveConnectionMeta(await getSql(), data.organizationId);
+    return driveConnectionView(process.env, meta.connected ? { connected: true, connectedAt: meta.connectedAt } : { connected: false, connectedAt: null });
   });
 
 /**
- * Asks Drive whether the configured credentials work: one read of the Drive API. It is not a write, but it spends a
- * Google request on the deployment's credentials, so it is limited to admins.
+ * Asks Drive whether the credentials this workspace would use work: one read of the Drive API. It is not a write, but it
+ * spends a Google request on the credentials, so it is limited to admins.
  */
 export const checkDriveConnection = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ organizationId: organizationIdOf(input) }))
@@ -41,6 +46,28 @@ export const checkDriveConnection = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertRole(await memberRole(context.userId, data.organizationId), "admin");
     const { googleDriveClient } = await import("./drive.ts");
-    const health = await googleDriveClient.health();
+    const health = await googleDriveClient.health(data.organizationId);
     return { status: health.status, detail: health.detail, checkedAt: new Date().toISOString() };
+  });
+
+/**
+ * Disconnects this workspace's Google Drive: removes the stored connection, then asks Google to revoke it. The result says
+ * whether Google confirmed the revocation. Admin only.
+ */
+export const disconnectDrive = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ organizationId: organizationIdOf(input) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    assertRole(await memberRole(context.userId, data.organizationId), "admin");
+    const { disconnectDriveWorkspace } = await import("./drive-oauth.ts");
+    const { invalidateGoogleDriveAccessToken } = await import("./google-auth.ts");
+    const result = await disconnectDriveWorkspace(await getSql(), {
+      organizationId: data.organizationId,
+      userId: context.userId,
+      masterKey: process.env.TOKEN_ENCRYPTION_KEY?.trim() ?? "",
+      fetch: (input, init) => globalThis.fetch(input, init),
+      invalidate: () => invalidateGoogleDriveAccessToken(data.organizationId),
+    });
+    if (!result.ok) throw new Error(result.message);
+    return { status: result.status, revocation: result.revocation, detail: result.detail };
   });

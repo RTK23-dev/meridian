@@ -12,6 +12,11 @@ import {
 import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
 import { startDriveSession, sendDriveChunk, type ResumableTransport } from "./drive-resumable.ts";
 import { fakeDriveUpload, FAKE_DRIVE_SESSION_PREFIX, patternBytes } from "./fake-drive-upload.ts";
+import { openSessionUri, sealSessionUri } from "./session-seal.ts";
+
+/** The key that seals session URIs in these tests. Every store here is given it explicitly. */
+const TEST_KEY = "artifact-upload-test-key-with-sufficient-length-00";
+const sealedStore = (sql: Sql) => createSqlArtifactUploadStore(sql, { masterKey: () => TEST_KEY });
 
 // Each scenario runs on the embedded database, and on PostgreSQL when MERIDIAN_PG_TEST_URL names a migrated database.
 
@@ -71,7 +76,7 @@ function requestFor(scope: { organizationId: string; brandId: string }, storageK
 /** The deps one process would build. A new call with the same fake is a new process talking to the same Drive. */
 function depsFor(sql: Sql, fake: ReturnType<typeof fakeDriveUpload>, sleeps: number[], overrides: Partial<ArtifactUploadDeps> = {}): ArtifactUploadDeps {
   return {
-    store: createSqlArtifactUploadStore(sql),
+    store: sealedStore(sql),
     transport: { fetch: fake.fetch, accessToken: async () => "token-test" },
     chunkBytes: CHUNK,
     sleep: async (ms) => {
@@ -212,7 +217,9 @@ for (const backend of backends) {
     const beforeStatus = await sessionRow(sql, sessionId);
     assert.equal(beforeStatus.confirmed_offset, CHUNK, "the first chunk was confirmed before the stop");
     assert.equal(beforeStatus.attempts, 1);
-    assert.ok(beforeStatus.session_uri.startsWith(FAKE_DRIVE_SESSION_PREFIX));
+    // The database holds the URI sealed, never the raw URI.
+    assert.ok(beforeStatus.session_uri.startsWith("sealed:v1:"));
+    assert.equal(beforeStatus.session_uri.includes(FAKE_DRIVE_SESSION_PREFIX), false, "the stored value is not the Drive session URI");
 
     // A new process: new store, new deps, same database row and same Drive.
     const posts = fake.requests.filter((r) => r.method === "POST").length;
@@ -227,7 +234,7 @@ for (const backend of backends) {
     assert.deepEqual(sleeps, []);
     const afterRestart = fake.requests.slice(beforeRestart).filter((r) => r.method === "PUT").map((r) => r.headers["content-range"]);
     assert.deepEqual(afterRestart, [`bytes */${TOTAL}`, `bytes ${CHUNK}-${2 * CHUNK - 1}/${TOTAL}`, `bytes ${2 * CHUNK}-${TOTAL - 1}/${TOTAL}`]);
-    assert.ok(fake.persistedBytes(beforeStatus.session_uri).equals(Buffer.from(bytes)));
+    assert.ok(fake.persistedBytes(fake.sessionUris()[0]!).equals(Buffer.from(bytes)));
   });
 
   test(`${backend.name}: a process that loses the start race continues the stored Drive session from Drive's offset`, async () => {
@@ -242,11 +249,12 @@ for (const backend of backends) {
     const winnerUri = await startDriveSession(transport, { metadata: {}, mimeType: "image/png", totalBytes: TOTAL });
     await sendDriveChunk(transport, { sessionUri: winnerUri, totalBytes: TOTAL, offset: 0, chunk: bytes.subarray(0, CHUNK) });
 
-    const real = createSqlArtifactUploadStore(sql);
+    const real = sealedStore(sql);
     const losing = {
       ...real,
       setSessionUri: async (s: typeof scope, sessionId: string, uri: string) => {
-        await sql`update artifact_upload_sessions set session_uri = ${winnerUri} where id = ${sessionId} and session_uri = ''`;
+        // The other process stored its URI first, sealed the same way this store seals it.
+        await sql`update artifact_upload_sessions set session_uri = ${sealSessionUri(winnerUri, TEST_KEY)} where id = ${sessionId} and session_uri = ''`;
         return real.setSessionUri(s, sessionId, uri);
       },
     };
@@ -256,7 +264,11 @@ for (const backend of backends) {
     const sent = fake.requests.slice(before).filter((r) => r.method === "PUT").map((r) => r.headers["content-range"]);
     assert.deepEqual(sent, [`bytes */${TOTAL}`, `bytes ${CHUNK}-${2 * CHUNK - 1}/${TOTAL}`, `bytes ${2 * CHUNK}-${TOTAL - 1}/${TOTAL}`], "the loser never re-sends the first chunk");
     assert.ok(fake.persistedBytes(winnerUri).equals(Buffer.from(bytes)));
-    if (outcome.status === "completed") assert.equal((await sessionRow(sql, outcome.sessionId)).session_uri, winnerUri);
+    if (outcome.status === "completed") {
+      const stored = (await sessionRow(sql, outcome.sessionId)).session_uri;
+      assert.notEqual(stored, winnerUri, "the winner's URI is stored sealed");
+      assert.equal(openSessionUri(stored, TEST_KEY), winnerUri, "and opens to the winner's URI");
+    }
   });
 
   test(`${backend.name}: two processes starting the same key at once end up on one session`, async () => {
@@ -267,7 +279,7 @@ for (const backend of backends) {
     const fake = fakeDriveUpload((chunk) => (chunk.index === 1 ? { kind: "drop" } : { kind: "accept" }));
     // The other process's session is already active. This process's first lookup misses it, so its insert loses the race.
     const otherSessionId = await leaveActiveSession(sql, fake, scope, storageKey, bytes);
-    const real = createSqlArtifactUploadStore(sql);
+    const real = sealedStore(sql);
     let misses = 1;
     const racing = {
       ...real,
@@ -338,7 +350,7 @@ for (const backend of backends) {
     const fake = fakeDriveUpload((chunk) => (chunk.index === 1 ? { kind: "drop" } : { kind: "accept" }));
     const sessionId = await leaveActiveSession(sql, fake, scope, storageKey, bytes);
     const aSessionUri = (await sessionRow(sql, sessionId)).session_uri;
-    const store = createSqlArtifactUploadStore(sql);
+    const store = sealedStore(sql);
     const other = { organizationId: t.orgB, brandId: t.brandB };
 
     assert.equal(await store.load(other, sessionId), null, "organization B cannot read A's session");

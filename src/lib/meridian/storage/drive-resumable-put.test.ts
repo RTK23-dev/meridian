@@ -9,7 +9,7 @@ import { fakeDriveUpload, patternBytes } from "./fake-drive-upload.ts";
 // GoogleDriveClient.put for a file over 5 MB goes through the resumable path. Drive is stubbed (no network), and the session
 // is recorded in Postgres through the same connection the application uses.
 
-const ENV_KEYS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN", "GOOGLE_SERVICE_ACCOUNT_KEY"] as const;
+const ENV_KEYS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN", "GOOGLE_SERVICE_ACCOUNT_KEY", "TOKEN_ENCRYPTION_KEY"] as const;
 const CHUNK = 256 * 1024;
 
 async function withDriveEnv(fn: () => Promise<void>) {
@@ -18,6 +18,8 @@ async function withDriveEnv(fn: () => Promise<void>) {
   process.env.GOOGLE_CLIENT_SECRET = "secret-test";
   process.env.GOOGLE_REFRESH_TOKEN = "refresh-test";
   delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  // Session URIs are sealed with this key, so a resumable upload needs it.
+  process.env.TOKEN_ENCRYPTION_KEY = "drive-resumable-put-test-key-with-sufficient-length";
   try {
     await fn();
   } finally {
