@@ -35,12 +35,13 @@ test("credentials without a successful request are not connected", () => {
 test("meta probe stores only an id the endpoint returned", async () => {
   const result = await probeLive(
     "meta",
-    { META_ACCESS_TOKEN: "token" },
+    {},
     scripted([
       { status: 200, body: JSON.stringify({ id: "user-1", name: "North" }) },
       { status: 200, body: JSON.stringify({ data: [{ id: "act_1", name: "North ads" }] }) },
       { status: 200, body: JSON.stringify({ data: [{ permission: "ads_management", status: "granted" }] }) },
     ]),
+    "token",
   );
   assert.equal(result.ok, true);
   assert.equal(result.accountId, "user-1");
@@ -48,7 +49,7 @@ test("meta probe stores only an id the endpoint returned", async () => {
 });
 
 test("meta probe does not invent an id when the response has none", async () => {
-  const result = await probeLive("meta", { META_ACCESS_TOKEN: "token" }, scripted([{ status: 200, body: JSON.stringify({ name: "North" }) }]));
+  const result = await probeLive("meta", {}, scripted([{ status: 200, body: JSON.stringify({ name: "North" }) }]), "token");
   assert.equal(result.ok, false);
   assert.equal(result.accountId, "");
 });
@@ -68,7 +69,8 @@ test("a paused meta campaign reuses a stored id and does not create another camp
     link: "https://example.com",
     message: "Soap",
     existingCampaignId: "camp-1",
-    env: { META_ACCESS_TOKEN: "token", META_AD_ACCOUNT_ID: "act_1" },
+    accessToken: "token",
+    env: { META_AD_ACCOUNT_ID: "act_1" },
     transport,
   });
   assert.equal(published.externalId, "camp-1");
@@ -85,7 +87,8 @@ test("google publish stores nothing when the budget response has no resource", a
     pageId: "",
     link: "",
     message: "",
-    env: { GOOGLE_ADS_ACCESS_TOKEN: "oauth", GOOGLE_ADS_DEVELOPER_TOKEN: "dev", GOOGLE_ADS_CUSTOMER_ID: "123" },
+    accessToken: "oauth",
+    env: { GOOGLE_ADS_DEVELOPER_TOKEN: "dev", GOOGLE_ADS_CUSTOMER_ID: "123" },
     transport: scripted([{ status: 200, body: JSON.stringify({ results: [{}] }) }]),
   });
   assert.equal(published.externalId, null);

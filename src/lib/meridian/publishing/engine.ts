@@ -37,13 +37,14 @@ export function metaPublishEngine(): PublishEngine {
   return {
     id: "meta",
     name: "Meta Ads Paused Publisher",
-    status(env = process.env) {
-      const hasToken = Boolean(env.META_ACCESS_TOKEN?.trim());
-      const hasAccount = Boolean(env.META_AD_ACCOUNT_ID?.trim());
-      if (hasToken && hasAccount) {
-        return { status: "CONFIGURED", provider: "meta", detail: "Meta Ads credentials configured." };
-      }
-      return { status: "NOT_CONNECTED", provider: "meta", detail: "Meta Ads credentials (token/account) missing." };
+    status() {
+      // The token is the one stored for the workspace, and this check has no workspace in scope. An environment token is not
+      // read, so this never claims a connection. The publish itself reports the real state.
+      return {
+        status: "NOT_CONNECTED",
+        provider: "meta",
+        detail: "Meta Ads publishing needs the access token stored for this workspace. The environment is not checked.",
+      };
     },
     async publishPaused(request: PublishPausedRequest): Promise<PublishEngineResult> {
       try {

@@ -11,13 +11,19 @@ export function isLiveProvider(value: string): value is LiveProvider {
   return (LIVE_PROVIDERS as readonly string[]).includes(value);
 }
 
-export function providerConfigured(provider: LiveProvider, env: NodeJS.ProcessEnv = process.env): boolean {
-  if (provider === "meta") return Boolean(env.META_ACCESS_TOKEN?.trim());
-  if (provider === "tiktok") return Boolean(env.TIKTOK_ACCESS_TOKEN?.trim());
-  if (provider === "google") return Boolean(env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim() && env.GOOGLE_ADS_ACCESS_TOKEN?.trim());
-  return Boolean(env.META_AD_LIBRARY_TOKEN?.trim());
+/**
+ * Whether a provider is configured. An environment token never configures a provider, so this is always false: a provider is
+ * configured only by a token stored for the workspace, and callers decide that from the token they hold.
+ */
+export function providerConfigured(provider: LiveProvider): boolean {
+  void provider;
+  return false;
 }
 
+/**
+ * Probes a provider with the token the caller passes, which is the workspace's stored token. The probe never reads an access
+ * token from the environment. The Google developer token and the account ids are deployment settings, read from `env`.
+ */
 export async function probeLive(
   provider: LiveProvider,
   env: NodeJS.ProcessEnv = process.env,
@@ -25,11 +31,11 @@ export async function probeLive(
   accessToken = "",
 ): Promise<{ ok: boolean; accountId: string; accountName: string; permissions: string[]; error: string }> {
   const token = accessToken.trim();
-  if (!token && !providerConfigured(provider, env)) {
+  if (!token) {
     return { ok: false, accountId: "", accountName: "", permissions: [], error: "No credentials are configured." };
   }
   if (provider === "meta") {
-    const result = await probeMeta({ accessToken: token || env.META_ACCESS_TOKEN || "", adAccountId: env.META_AD_ACCOUNT_ID }, transport);
+    const result = await probeMeta({ accessToken: token, adAccountId: env.META_AD_ACCOUNT_ID }, transport);
     return result.ok
       ? { ok: true, accountId: result.accountId, accountName: result.accountName, permissions: result.permissions, error: "" }
       : { ok: false, accountId: "", accountName: "", permissions: [], error: result.error };
@@ -37,7 +43,7 @@ export async function probeLive(
   if (provider === "tiktok") {
     const result = await probeTikTok(
       {
-        accessToken: token || env.TIKTOK_ACCESS_TOKEN || "",
+        accessToken: token,
         appId: env.TIKTOK_APP_ID,
         appSecret: env.TIKTOK_APP_SECRET,
         advertiserId: env.TIKTOK_ADVERTISER_ID,
@@ -51,7 +57,9 @@ export async function probeLive(
   if (provider === "google") {
     const result = await probeGoogleAds(
       {
-        accessToken: token || env.GOOGLE_ADS_ACCESS_TOKEN || "",
+        accessToken: token,
+        // The developer token identifies the deployment's Google Ads API client. It is not an account token, and it is the one
+        // deployment token the probe still reads from the environment.
         developerToken: env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "",
         customerId: env.GOOGLE_ADS_CUSTOMER_ID,
       },
@@ -61,7 +69,7 @@ export async function probeLive(
       ? { ok: true, accountId: result.accountId, accountName: result.accountName, permissions: result.permissions, error: "" }
       : { ok: false, accountId: "", accountName: "", permissions: [], error: result.error };
   }
-  const library = await probeAdLibrary(env.META_AD_LIBRARY_TOKEN ?? "", transport);
+  const library = await probeAdLibrary(token, transport);
   return library.ok
     ? { ok: true, accountId: "", accountName: library.accountName, permissions: [], error: "" }
     : { ok: false, accountId: "", accountName: "", permissions: [], error: library.error };
@@ -76,7 +84,7 @@ export function phaseForProbe(input: {
   configured?: boolean;
 }): { phase: ConnectionPhase; detail: string } {
   return connectionPhase({
-    configured: input.configured ?? providerConfigured(input.provider, input.env),
+    configured: input.configured ?? providerConfigured(input.provider),
     disconnected: input.disconnected,
     probing: false,
     syncing: false,
@@ -133,9 +141,20 @@ export async function publishPausedStages(input: {
   const env = input.env ?? process.env;
   const transport = input.transport ?? liveTransport();
   const token = input.accessToken?.trim() ?? "";
+  if (!token) {
+    // No stored token means nothing is sent. Every stage is reported as not connected, with the reason.
+    const names = input.provider === "meta" ? ["campaign", "ad_set", "creative", "ad"] : input.provider === "tiktok" ? ["campaign", "ad_group", "creative", "ad"] : ["budget", "campaign", "ad_group", "ad"];
+    return names.map((objectType) => ({
+      objectType,
+      status: "NOT_CONNECTED",
+      externalId: null,
+      reused: false,
+      error: "No access token is stored for this workspace. Nothing was sent.",
+    }));
+  }
   if (input.provider === "meta") {
     const published = await publishMetaPaused(
-      { accessToken: token || env.META_ACCESS_TOKEN || "", adAccountId: env.META_AD_ACCOUNT_ID },
+      { accessToken: token, adAccountId: env.META_AD_ACCOUNT_ID },
       {
         adAccountId: env.META_AD_ACCOUNT_ID ?? "",
         name: input.name,
@@ -158,7 +177,7 @@ export async function publishPausedStages(input: {
   }
   if (input.provider === "tiktok") {
     const published = await publishTikTokFlow(
-      { accessToken: token || env.TIKTOK_ACCESS_TOKEN || "", advertiserId: env.TIKTOK_ADVERTISER_ID },
+      { accessToken: token, advertiserId: env.TIKTOK_ADVERTISER_ID },
       {
         name: input.name,
         dailyBudget: input.dailyBudgetCents / 100,
@@ -181,7 +200,7 @@ export async function publishPausedStages(input: {
   }
   const published = await publishGoogleFlow(
     {
-      accessToken: token || env.GOOGLE_ADS_ACCESS_TOKEN || "",
+      accessToken: token,
       developerToken: env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "",
       customerId: env.GOOGLE_ADS_CUSTOMER_ID,
     },
@@ -213,6 +232,7 @@ export async function publishPausedCampaign(input: {
   link: string;
   message: string;
   existingCampaignId?: string;
+  accessToken?: string;
   env?: NodeJS.ProcessEnv;
   transport?: Transport;
 }): Promise<{ externalId: string | null; reused: boolean; error: string }> {

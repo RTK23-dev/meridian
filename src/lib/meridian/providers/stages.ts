@@ -2,12 +2,14 @@ import { openSecret } from "../oauth/flow.server.ts";
 import { stageAuditRecord } from "./evidence.ts";
 import { reusableExternalId, type StoredExternalId } from "./ownership.ts";
 
-/** Opens a sealed token, or the environment token when nothing is sealed. A sealed row that cannot be opened does not fall through. */
+/**
+ * Opens a workspace's sealed OAuth token. Environment tokens are never read here. A sealed row that cannot be opened is an
+ * error, and it does not fall through to any other token.
+ */
 export function openAccessToken(input: {
   sealed: string;
   key: string;
-  envToken: string;
-}): { token: string; source: "sealed" | "environment" } | { error: string } {
+}): { token: string; source: "sealed" } | { error: string } {
   if (input.sealed.trim()) {
     if (!input.key.trim()) {
       return { error: "TOKEN_ENCRYPTION_KEY is not configured. The stored token was not opened and nothing was sent." };
@@ -21,7 +23,6 @@ export function openAccessToken(input: {
       return { error: "The stored token could not be read. Nothing was sent." };
     }
   }
-  if (input.envToken.trim()) return { token: input.envToken, source: "environment" };
   return { error: "No access token is stored and none is configured. Nothing was sent." };
 }
 

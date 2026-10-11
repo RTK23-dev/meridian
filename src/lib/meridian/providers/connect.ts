@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
-import { isLiveProvider, phaseForProbe, probeLive, providerConfigured, type LiveProvider } from "./live.ts";
+import { isLiveProvider, phaseForProbe, probeLive, type LiveProvider } from "./live.ts";
 import { liveTransport } from "./http.ts";
 
 export type { LiveProvider };
@@ -40,23 +40,28 @@ async function saveProbe(organizationId: string, provider: LiveProvider, userId:
     limit 1
   `;
   const sealed = secrets[0]?.sealed_token ?? "";
-  let accessToken = "";
-  if (sealed.trim()) {
-    const { openAccessToken } = await import("./stages.ts");
-    const opened = openAccessToken({ sealed, key: process.env.TOKEN_ENCRYPTION_KEY ?? "", envToken: "" });
-    if ("error" in opened) {
-      await sql`
-        insert into provider_connections (id, organization_id, provider, status, last_error, disconnected_at)
-        values (${id()}, ${organizationId}, ${provider}, 'FAILED', ${opened.error}, null)
-        on conflict (organization_id, provider) do update set
-          status = 'FAILED', last_error = excluded.last_error, disconnected_at = null, updated_at = now()
-      `;
-      return { phase: "FAILED" as const, detail: opened.error, accountId: "", accountName: "" };
-    }
-    accessToken = opened.token;
+  // The sealed OAuth token wins. With none, the workspace's saved key is used, and only through the resolver. No environment
+  // token is read, so an environment variable never makes a provider connected.
+  const { providerAccessToken } = await import("./access-token.ts");
+  const access = await providerAccessToken(sql, {
+    organizationId,
+    provider,
+    sealed,
+    encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "",
+    env: process.env,
+  });
+  if ("error" in access && sealed.trim()) {
+    await sql`
+      insert into provider_connections (id, organization_id, provider, status, last_error, disconnected_at)
+      values (${id()}, ${organizationId}, ${provider}, 'FAILED', ${access.error}, null)
+      on conflict (organization_id, provider) do update set
+        status = 'FAILED', last_error = excluded.last_error, disconnected_at = null, updated_at = now()
+    `;
+    return { phase: "FAILED" as const, detail: access.error, accountId: "", accountName: "" };
   }
+  const accessToken = "token" in access ? access.token : "";
   const result = await probeLive(provider, process.env, liveTransport(), accessToken);
-  const configured = providerConfigured(provider) || Boolean(accessToken);
+  const configured = Boolean(accessToken);
   const phase = phaseForProbe({
     provider,
     ok: configured ? result.ok : null,

@@ -88,7 +88,7 @@ test("approved stored Hypit MP4 uploads to Meta and its confirmed id enters the 
   const calls: TransportRequest[] = [];
   const stages = await publishPausedStages({
     provider: "meta", name: "Hypit test", dailyBudgetCents: 2000, countries: ["US"], pageId: "page-1",
-    link: "https://example.test", message: "Test", videoId: "meta-video-1", env: { META_ACCESS_TOKEN: "token", META_AD_ACCOUNT_ID: "act_1" },
+    link: "https://example.test", message: "Test", videoId: "meta-video-1", accessToken: "token", env: { META_AD_ACCOUNT_ID: "act_1" },
     transport: async (request) => {
       calls.push(request);
       const id = request.url.endsWith("/campaigns") ? "campaign-1" : request.url.endsWith("/adsets") ? "set-1" : request.url.endsWith("/adcreatives") ? "creative-1" : "ad-1";
@@ -134,7 +134,8 @@ test("retry reuses the persisted Meta video id and does not upload a duplicate",
     provider: "meta", name: "Hypit test", dailyBudgetCents: 2000, countries: ["US"], pageId: "page-1",
     link: "https://example.test", message: "Test", videoId: "meta-video-1",
     existing: { campaign: "campaign-1", ad_set: "set-1", creative: "creative-1", ad: "ad-1" },
-    env: { META_ACCESS_TOKEN: "token", META_AD_ACCOUNT_ID: "act_1" },
+    accessToken: "token",
+    env: { META_AD_ACCOUNT_ID: "act_1" },
     transport: async () => { chainRequests += 1; throw new Error("retry must reuse stored ids"); },
   });
   assert.equal(chainRequests, 0);
