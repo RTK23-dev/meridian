@@ -1,13 +1,17 @@
 /**
- * Google Drive REST Client & Primary Storage
+ * Google Drive REST Client: the artifact store.
  *
- * Primary binary object store for Meridian.
- * Organizes files by tenant and brand hierarchy.
+ * Google Drive holds the bytes of artifacts and exports (rendered media, export packages, uploaded source files) and nothing
+ * else. Postgres is the system of record for every row: storage_objects describes each stored file, and
+ * artifact_upload_sessions records each resumable upload. Files are organized by tenant and brand folder.
  * Never fabricates file states when disconnected.
  */
 
 import { createHash } from "node:crypto";
-import { getGoogleDriveAccessToken, getGoogleDriveAuthStatus } from "./google-auth.ts";
+import { uploadArtifactToDrive, type ArtifactUploadPolicy, type ArtifactUploadStore } from "./artifact-upload.ts";
+import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
+import { DriveUploadError, type ResumableTransport } from "./drive-resumable.ts";
+import { getGoogleDriveAccessToken, getGoogleDriveAuthStatus, invalidateGoogleDriveAccessToken } from "./google-auth.ts";
 
 export type DriveFileMetadata = {
   fileId: string;
@@ -35,8 +39,38 @@ export function pickEarliest(folders: Array<{ id: string; createdTime?: string }
   return sorted[0]!.id;
 }
 
+export type GoogleDriveClientOptions = {
+  /** Where resumable upload sessions are recorded in Postgres. Default: the shared database connection. */
+  uploadStore?: () => Promise<ArtifactUploadStore>;
+  /** Upload overrides: chunk size, retry cap, backoff and sleep. Defaults are 8 MiB chunks and six failures in a row. */
+  upload?: ArtifactUploadPolicy;
+};
+
+/** Access tokens come from the process cache. A token is never written to Postgres. */
+const driveTransport: ResumableTransport = {
+  fetch: (input, init) => globalThis.fetch(input, init),
+  accessToken: async () => {
+    const token = await getGoogleDriveAccessToken();
+    if (!token) {
+      throw new DriveUploadError("Google Drive access is unavailable. Check the Drive connection, then try again.", null, false);
+    }
+    return token;
+  },
+};
+
+/** The shared Postgres connection, loaded on first use so importing this module stays light. */
+async function defaultUploadStore(): Promise<ArtifactUploadStore> {
+  const { getSql } = await import("../../db.ts");
+  return createSqlArtifactUploadStore(await getSql());
+}
+
 export class GoogleDriveClient {
   private folderCache = new Map<string, string>();
+  private readonly options: GoogleDriveClientOptions;
+
+  constructor(options: GoogleDriveClientOptions = {}) {
+    this.options = options;
+  }
 
   private getRootFolderId(): string | undefined {
     return process.env.MERIDIAN_DRIVE_FOLDER_ID?.trim();
@@ -185,6 +219,10 @@ export class GoogleDriveClient {
     return currentFolderId;
   }
 
+  /**
+   * Stores artifact bytes in Drive and returns Drive's file metadata. Drive keeps the bytes only. The caller records the
+   * storage_objects row in Postgres. Files over 5 MB go through a resumable upload whose session is recorded in Postgres.
+   */
   async put(input: {
     organizationId: string;
     brandId: string;
@@ -271,53 +309,31 @@ export class GoogleDriveClient {
       },
     };
 
-    // Resumable upload for files larger than 5 MB
+    // Resumable upload for files larger than 5 MB: chunks, a confirmed offset, and a session recorded in Postgres.
     const isLarge = input.bytes.byteLength > 5 * 1024 * 1024;
     if (isLarge) {
-      const initRes = await fetch(
-        "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size,webViewLink",
+      const store = await (this.options.uploadStore ?? defaultUploadStore)();
+      const outcome = await uploadArtifactToDrive(
+        { ...this.options.upload, store, transport: driveTransport, onUnauthorized: invalidateGoogleDriveAccessToken },
         {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json; charset=UTF-8",
-            "X-Upload-Content-Type": input.mimeType,
-            "X-Upload-Content-Length": input.bytes.byteLength.toString(),
-          },
-          body: JSON.stringify(fileMetadata),
+          organizationId: input.organizationId,
+          brandId: input.brandId,
+          storageKey: input.path,
+          mimeType: input.mimeType,
+          bytes: input.bytes,
+          metadata: fileMetadata,
         },
       );
-
-      if (!initRes.ok) {
-        throw new Error(`Google Drive resumable upload init failed (${initRes.status}): ${await initRes.text()}`);
+      if (outcome.status === "failed") {
+        throw new Error(`Google Drive upload failed. ${outcome.reason} The upload is recorded as failed in Postgres.`);
       }
-
-      const uploadUrl = initRes.headers.get("location");
-      if (!uploadUrl) {
-        throw new Error("Google Drive did not return resumable upload session URL.");
-      }
-
-      const uploadRes = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Length": input.bytes.byteLength.toString(),
-          "Content-Type": input.mimeType,
-        },
-        body: Buffer.from(input.bytes),
-      });
-
-      if (!uploadRes.ok) {
-        throw new Error(`Google Drive resumable content upload failed (${uploadRes.status}): ${await uploadRes.text()}`);
-      }
-
-      const data = (await uploadRes.json()) as { id: string; name: string; mimeType: string; size?: string; webViewLink?: string };
       return {
-        fileId: data.id,
-        name: data.name,
-        mimeType: data.mimeType || input.mimeType,
-        size: data.size ? Number(data.size) : input.bytes.byteLength,
+        fileId: outcome.file.id,
+        name: outcome.file.name || fileName,
+        mimeType: outcome.file.mimeType || input.mimeType,
+        size: outcome.file.size ?? input.bytes.byteLength,
         checksum: sha256,
-        webViewLink: data.webViewLink,
+        webViewLink: outcome.file.webViewLink,
       };
     }
 

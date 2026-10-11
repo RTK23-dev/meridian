@@ -12,7 +12,7 @@ import {
   verifiedMediaMime,
 } from "./media-access.ts";
 
-/** The part of the artifact drive the asset route reads. Production artifacts are fetched through it. */
+/** The part of the artifact store the asset route reads. Production artifact bytes are fetched through it; Postgres locates them. */
 export type ArtifactFileReader = { get(providerFileId: string): Promise<{ bytes: Uint8Array }> };
 
 export type AssetRequest = {
@@ -41,8 +41,8 @@ type StoredSource = {
 
 /**
  * Loads the stored bytes for one storage key within one workspace and brand. Studio, Hypit and creative-image writes land
- * in asset_blobs. Production artifacts land in the artifact store (Google Drive), indexed by storage_objects, so that is
- * read when no blob exists. Call this only after the caller has been checked against the workspace.
+ * in asset_blobs. Production artifacts land as bytes in the artifact store (Google Drive). Their storage_objects row in
+ * Postgres locates them, so the bytes are read through that row when no blob exists. Call this only after the caller has been checked against the workspace.
  */
 async function loadStoredSource(
   sql: Sql,
