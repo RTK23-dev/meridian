@@ -59,7 +59,8 @@ function OpportunityDetail({ item, position, brandId, canEdit, dismissing, onDis
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" className="min-h-11 text-left font-semibold underline decoration-dotted underline-offset-4">{dimension.label}</button>
+                    {/* A focusable span: the label explains the score on hover and focus, and has no click action. */}
+                    <span tabIndex={0} className="min-h-11 text-left font-semibold underline decoration-dotted underline-offset-4">{dimension.label}</span>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-64">{dimension.explanation}</TooltipContent>
                 </Tooltip>

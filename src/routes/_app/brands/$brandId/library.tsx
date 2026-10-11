@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Field, Card, ScreenSkeleton, SelectInput, StatusBadge, Textarea, Input } from "@/components/ui";
+import { Button, DisabledReason, Field, Card, ScreenSkeleton, SelectInput, StatusBadge, Textarea, Input } from "@/components/ui";
 import { PlainErrorMessage, PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { CreativeCard } from "@/components/library/creative-card";
@@ -182,10 +182,19 @@ function Library({ brandId }: { brandId: string }) {
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
-      <Button type="button" variant="quiet" disabled={!visibleCreatives.length} onClick={() => downloadCsv("meridian-library.csv", [
-        { key: "id", label: "Creative ID" }, { key: "title", label: "Title" }, { key: "hook", label: "Hook" },
-        { key: "angle", label: "Angle" }, { key: "status", label: "Status" }, { key: "origin", label: "Origin" }, { key: "createdAt", label: "Created at" },
-      ], visibleCreatives)}>Export visible library</Button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button type="button" variant="quiet" disabled={!visibleCreatives.length} aria-describedby={visibleCreatives.length ? undefined : "library-export-reason"} onClick={() => downloadCsv("meridian-library.csv", [
+          { key: "id", label: "Creative ID" }, { key: "title", label: "Title" }, { key: "hook", label: "Hook" },
+          { key: "angle", label: "Angle" }, { key: "status", label: "Status" }, { key: "origin", label: "Origin" }, { key: "createdAt", label: "Created at" },
+        ], visibleCreatives)}>Export visible library</Button>
+        {visibleCreatives.length ? null : (
+          <DisabledReason id="library-export-reason" className="basis-full">
+            {data.creatives.length === 0
+              ? "There are no creatives to export yet. Record or generate one first."
+              : "No creatives match the filters, so there is nothing to export. Clear the filters to export the library."}
+          </DisabledReason>
+        )}
+      </div>
       <Card>
         <h2 className="font-display text-2xl">Paused publishing</h2>
         <p className="mt-2 text-sm text-muted">
@@ -259,7 +268,10 @@ function Library({ brandId }: { brandId: string }) {
               onConfirmingChange={setPublishDiscard}
               onDiscard={() => { publishForm.reset(); setPublishDiscard(false); }}
             />
-            <Button type="submit" disabled={pausedObjects.isPending || publishForm.formState.isSubmitting || data.creatives.length === 0}>{pausedObjects.isPending || publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <Button type="submit" disabled={pausedObjects.isPending || publishForm.formState.isSubmitting || data.creatives.length === 0} aria-describedby={data.creatives.length === 0 ? "paused-publish-reason" : undefined}>{pausedObjects.isPending || publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
+              {data.creatives.length === 0 ? <DisabledReason id="paused-publish-reason" className="basis-full">Create or record a creative first. A paused object needs a creative to point at.</DisabledReason> : null}
+            </div>
           </form>
         ) : (
           <p className="mt-2 text-sm text-muted">An admin can send a paused publish.</p>

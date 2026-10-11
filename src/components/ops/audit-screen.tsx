@@ -3,7 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Button, DataTable, Field, PageHeader, ScreenSkeleton, SelectInput, Input } from "@/components/ui";
+import { Button, DataTable, DisabledReason, Field, PageHeader, ScreenSkeleton, SelectInput, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { auditFilterSchema, type AuditFilterInput } from "@/components/forms/client-schemas";
@@ -134,7 +134,8 @@ export function AuditScreen() {
         </Field>
         <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-5">
           <Button type="submit">Apply filters</Button>
-          <Button type="button" variant="quiet" disabled={!filtered && !hasDraft} onClick={clearFilters}>Clear</Button>
+          <Button type="button" variant="quiet" disabled={!filtered && !hasDraft} aria-describedby={!filtered && !hasDraft ? "audit-clear-reason" : undefined} onClick={clearFilters}>Clear</Button>
+          {!filtered && !hasDraft ? <DisabledReason id="audit-clear-reason" className="basis-full">No filters are set.</DisabledReason> : null}
         </div>
       </form>
 
@@ -168,9 +169,9 @@ export function AuditScreen() {
       ) : null}
       {data && span ? (
         <div className="flex items-center justify-between gap-3">
-          <Button type="button" variant="secondary" size="md" disabled={page === 0 || query.isFetching} onClick={() => setPage(page - 1)}>Previous page</Button>
-          <p className="text-sm text-fg-muted">Page {page + 1} of {span.pageCount}</p>
-          <Button type="button" variant="secondary" size="md" disabled={page + 1 >= span.pageCount || query.isFetching} onClick={() => setPage(page + 1)}>Next page</Button>
+          <Button type="button" variant="secondary" size="md" disabled={page === 0 || query.isFetching} aria-describedby={page === 0 ? "audit-page-status" : undefined} onClick={() => setPage(page - 1)}>Previous page</Button>
+          <p id="audit-page-status" className="text-sm text-fg-muted">Page {page + 1} of {span.pageCount}{page === 0 ? ". You are on the first page." : page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
+          <Button type="button" variant="secondary" size="md" disabled={page + 1 >= span.pageCount || query.isFetching} aria-describedby={page + 1 >= span.pageCount ? "audit-page-status" : undefined} onClick={() => setPage(page + 1)}>Next page</Button>
         </div>
       ) : null}
     </div>

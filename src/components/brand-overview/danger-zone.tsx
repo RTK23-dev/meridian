@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, AlertDialogTrigger, Button, Field, Input, errorText } from "@/components/ui";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle, AlertDialogTrigger, Button, DisabledReason, Field, Input, errorText } from "@/components/ui";
 import { FormError } from "@/components/settings/form-error";
 import { plainServerError } from "@/components/settings/form-model";
 import { useWorkspace } from "@/components/workspace";
@@ -58,7 +58,8 @@ export function DangerZone({ brandId, brandName }: { brandId: string; brandName:
               <Input {...confirmForm.register("confirmName")} autoComplete="off" />
             </Field>
             {rawError ? <FormError message={plainServerError(rawError, "brand")} raw={rawError} /> : null}
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {!matches && !removeBrand.isPending ? <DisabledReason id="delete-brand-reason" className="basis-full text-right">Type the brand name exactly as shown above to turn on Delete brand.</DisabledReason> : null}
               <AlertDialogCancel asChild>
                 <Button variant="secondary">Cancel</Button>
               </AlertDialogCancel>
@@ -66,6 +67,7 @@ export function DangerZone({ brandId, brandName }: { brandId: string; brandName:
                 <Button
                   variant="danger"
                   disabled={!matches || removeBrand.isPending}
+                  aria-describedby={!matches && !removeBrand.isPending ? "delete-brand-reason" : undefined}
                   onClick={(event) => {
                     event.preventDefault();
                     void removeBrand.mutateAsync().catch(() => undefined);

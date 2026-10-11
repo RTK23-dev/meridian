@@ -32,10 +32,12 @@ export function ImageLightbox({ target, onClose }: { target: LightboxTarget | nu
             Zoom {Math.round(zoom * 100)}%. Use the buttons, or the plus, minus and zero keys.
           </DialogDescription>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" variant="secondary" aria-label="Zoom out" disabled={zoomIndex === 0} onClick={() => setZoomIndex((index) => Math.max(index - 1, 0))}>−</Button>
-            <span aria-live="polite" className="min-w-16 text-center text-sm">{Math.round(zoom * 100)}%</span>
-            <Button type="button" size="sm" variant="secondary" aria-label="Zoom in" disabled={zoomIndex === ZOOM_STEPS.length - 1} onClick={() => setZoomIndex((index) => Math.min(index + 1, ZOOM_STEPS.length - 1))}>+</Button>
-            <Button type="button" size="sm" variant="quiet" disabled={zoomIndex === 0} onClick={() => setZoomIndex(0)}>Reset zoom</Button>
+            <Button type="button" size="sm" variant="secondary" aria-label="Zoom out" disabled={zoomIndex === 0} aria-describedby={zoomIndex === 0 ? "lightbox-zoom-level" : undefined} onClick={() => setZoomIndex((index) => Math.max(index - 1, 0))}>−</Button>
+            <span id="lightbox-zoom-level" aria-live="polite" className="min-w-16 text-center text-sm">
+              {Math.round(zoom * 100)}%{zoomIndex === 0 ? " (smallest)" : zoomIndex === ZOOM_STEPS.length - 1 ? " (largest)" : ""}
+            </span>
+            <Button type="button" size="sm" variant="secondary" aria-label="Zoom in" disabled={zoomIndex === ZOOM_STEPS.length - 1} aria-describedby={zoomIndex === ZOOM_STEPS.length - 1 ? "lightbox-zoom-level" : undefined} onClick={() => setZoomIndex((index) => Math.min(index + 1, ZOOM_STEPS.length - 1))}>+</Button>
+            <Button type="button" size="sm" variant="quiet" disabled={zoomIndex === 0} aria-describedby={zoomIndex === 0 ? "lightbox-zoom-level" : undefined} onClick={() => setZoomIndex(0)}>Reset zoom</Button>
           </div>
           <div className="mt-3 max-h-[70vh] overflow-auto rounded-md border border-border bg-surface-2">
             {failed ? (

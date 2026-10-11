@@ -127,9 +127,9 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
 
         {data.total > 0 ? (
           <div className="flex items-center justify-between gap-3">
-            <Button type="button" variant="secondary" size="md" disabled={page === 0 || versions.isFetching} onClick={() => setPage(page - 1)}>Previous page</Button>
-            <p className="text-sm text-fg-muted">Page {page + 1} of {span.pageCount}</p>
-            <Button type="button" variant="secondary" size="md" disabled={page + 1 >= span.pageCount || versions.isFetching} onClick={() => setPage(page + 1)}>Next page</Button>
+            <Button type="button" variant="secondary" size="md" disabled={page === 0 || versions.isFetching} aria-describedby={page === 0 ? "versions-page-status" : undefined} onClick={() => setPage(page - 1)}>Previous page</Button>
+            <p id="versions-page-status" className="text-sm text-fg-muted">Page {page + 1} of {span.pageCount}{page === 0 ? ". You are on the first page." : page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
+            <Button type="button" variant="secondary" size="md" disabled={page + 1 >= span.pageCount || versions.isFetching} aria-describedby={page + 1 >= span.pageCount ? "versions-page-status" : undefined} onClick={() => setPage(page + 1)}>Next page</Button>
           </div>
         ) : null}
       </section>

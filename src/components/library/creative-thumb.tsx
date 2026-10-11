@@ -31,7 +31,11 @@ export function CreativeThumb({ variant, alt }: { variant: LibraryMediaVariant; 
         <span className="pointer-events-none absolute inset-0 grid place-items-center p-4 text-center text-sm text-fg-muted">Loading preview</span>
       ) : null}
       {state === "error" ? (
-        <span className="absolute inset-0 grid place-items-center p-4 text-center text-sm text-fg-muted">Preview unavailable. The stored file could not be loaded.</span>
+        <span className="absolute inset-0 grid place-items-center p-4 text-center text-sm text-fg-muted">
+          {variant.kind === "video"
+            ? "The still for this video could not be loaded. Open Trace to play the stored video."
+            : "Preview unavailable. The stored file could not be loaded."}
+        </span>
       ) : null}
     </div>
   );

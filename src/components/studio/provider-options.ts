@@ -2,17 +2,23 @@
  * Provider cards for the Generate step. Pure. A card is enabled only when the stored state says it can run. A card whose
  * connection the screen cannot check says so, and it is not shown as connected.
  *
+ * The video engines are the ones Meridian can run: Gemini Omni (the default), Hypit and a manual cloud hand-over, plus
+ * "No video". Any other engine is not offered here.
+ *
  * Sources: the production credential state and the Hypit configuration come from getProviderSettings; the image test
  * option is offered only when the server says the test runtime is active.
  */
 
-import { CONNECTION_MESSAGES, providerLabel } from "../../lib/copy.ts";
+import { providerLabel } from "../../lib/copy.ts";
 
 export const IMAGE_PROVIDER_VALUES = ["none", "test:image", "google:nano-banana"] as const;
 export type ImageProviderValue = (typeof IMAGE_PROVIDER_VALUES)[number];
 
-export const VIDEO_PROVIDER_VALUES = ["hypit", "none", "auto", "manual_cloud", "higgsfield", "google_omni"] as const;
+export const VIDEO_PROVIDER_VALUES = ["google_omni", "hypit", "manual_cloud", "none"] as const;
 export type VideoProviderValue = (typeof VIDEO_PROVIDER_VALUES)[number];
+
+/** The engine a video run uses when the person has not chosen one. The server reads "auto" as this same engine. */
+export const DEFAULT_VIDEO_PROVIDER: VideoProviderValue = "google_omni";
 
 export function isImageProviderValue(value: string): value is ImageProviderValue {
   return (IMAGE_PROVIDER_VALUES as readonly string[]).includes(value);
@@ -56,17 +62,17 @@ export type ProviderCard<Value extends string> = {
 
 const CONNECTED_TEXT = "Saved workspace key is usable. It is checked again when a run starts.";
 const NO_KEY_REASON = "No usable Google key is saved for this workspace. Save one in Settings, then return here.";
+const CHECKING_REASON = "The connection is still being checked.";
+const UNREADABLE_REASON = "The connection could not be read, so it is not treated as connected. Reload the page to try again.";
+const HYPIT_NOT_SET_REASON = "This server has no Hypit address set (HYPIT_BASE_URL), so Meridian cannot send Hypit a job. Set it up in Integrations, then reload.";
 
-function credentialGate(production: ProductionStatus): Pick<ProviderCard<string>, "connection" | "disabled" | "disabledReason"> {
+/** A Google-key provider. The reason names the provider, so the card says which connection is missing and why. */
+function credentialGate(production: ProductionStatus, label: string): Pick<ProviderCard<string>, "connection" | "disabled" | "disabledReason"> {
   if (production.status === "loading") {
-    return { connection: { kind: "checking", text: "Checking the connection…" }, disabled: true, disabledReason: "The connection is still being checked." };
+    return { connection: { kind: "checking", text: "Checking the connection…" }, disabled: true, disabledReason: CHECKING_REASON };
   }
   if (production.status === "unavailable") {
-    return {
-      connection: { kind: "unknown", text: "Connection could not be read" },
-      disabled: true,
-      disabledReason: "The connection could not be read, so it is not treated as connected. Reload the page to try again.",
-    };
+    return { connection: { kind: "unknown", text: "Connection could not be read" }, disabled: true, disabledReason: UNREADABLE_REASON };
   }
   if (production.credential === "usable") {
     return { connection: { kind: "connected", text: CONNECTED_TEXT }, disabled: false, disabledReason: null };
@@ -74,7 +80,7 @@ function credentialGate(production: ProductionStatus): Pick<ProviderCard<string>
   return {
     connection: { kind: "not_connected", text: "Not connected" },
     disabled: true,
-    disabledReason: production.credentialReason || NO_KEY_REASON,
+    disabledReason: `${label} is not connected. ${production.credentialReason || NO_KEY_REASON}`,
   };
 }
 
@@ -103,24 +109,24 @@ export function imageProviderCards(input: { testImageAllowed: boolean; productio
     value: "google:nano-banana",
     label: providerLabel("google:nano-banana"),
     description: "Google AI Studio image model. It uses the workspace production key.",
-    ...credentialGate(input.production),
+    ...credentialGate(input.production, providerLabel("google:nano-banana")),
   });
   return cards;
 }
 
 export function videoProviderCards(input: { production: ProductionStatus }): ProviderCard<VideoProviderValue>[] {
+  const production = input.production;
   const hypit: ProviderCard<VideoProviderValue> = {
     value: "hypit",
     label: providerLabel("hypit"),
     description: "A separate Hypit process. A clip is stored only after Hypit returns verified MP4 bytes.",
     connection: { kind: "checking", text: "Checking the connection…" },
     disabled: true,
-    disabledReason: "The connection is still being checked.",
+    disabledReason: CHECKING_REASON,
   };
-  const production = input.production;
   if (production.status === "unavailable") {
     hypit.connection = { kind: "unknown", text: "Connection could not be read" };
-    hypit.disabledReason = "The connection could not be read, so it is not treated as connected. Reload the page to try again.";
+    hypit.disabledReason = UNREADABLE_REASON;
   } else if (production.status === "ready") {
     if (production.hypitConfigured) {
       hypit.connection = { kind: "configured", text: "Configured. Nothing is verified until Hypit stores a clip." };
@@ -128,35 +134,20 @@ export function videoProviderCards(input: { production: ProductionStatus }): Pro
       hypit.disabledReason = null;
     } else {
       hypit.connection = { kind: "not_connected", text: "Not connected" };
-      hypit.disabledReason = CONNECTION_MESSAGES.hypitNotConnected;
+      hypit.disabledReason = `Hypit is not connected. ${HYPIT_NOT_SET_REASON}`;
     }
   }
 
-  const gate = credentialGate(production);
+  const omni: ProviderCard<VideoProviderValue> = {
+    value: "google_omni",
+    label: "Google Gemini Omni",
+    description: "Google video model and the default engine. It runs off the device and reports back when finished.",
+    ...credentialGate(production, "Gemini Omni"),
+  };
+
   return [
+    omni,
     hypit,
-    {
-      value: "none",
-      label: "No video",
-      description: "This run makes no video.",
-      connection: { kind: "not_needed", text: "No video is generated." },
-      disabled: false,
-      disabledReason: null,
-    },
-    {
-      value: "google_omni",
-      label: "Google Gemini Omni",
-      description: "Google video model. It runs off the device and reports back when finished.",
-      ...gate,
-    },
-    {
-      value: "higgsfield",
-      label: "Higgsfield AI",
-      description: "Higgsfield video engine.",
-      connection: { kind: "not_checked", text: "This screen does not check Higgsfield. The run checks it when it starts." },
-      disabled: false,
-      disabledReason: null,
-    },
     {
       value: "manual_cloud",
       label: "Manual Cloud (Google Drive)",
@@ -166,10 +157,10 @@ export function videoProviderCards(input: { production: ProductionStatus }): Pro
       disabledReason: null,
     },
     {
-      value: "auto",
-      label: "Auto",
-      description: "The server picks a healthy supported engine when the run starts.",
-      connection: { kind: "not_checked", text: "The engine is chosen when the run starts." },
+      value: "none",
+      label: "No video",
+      description: "This run makes no video.",
+      connection: { kind: "not_needed", text: "No video is generated." },
       disabled: false,
       disabledReason: null,
     },

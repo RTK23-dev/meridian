@@ -48,10 +48,11 @@ export function IdeaToTestBadge() {
   return (
     <TooltipProvider>
       <Tooltip>
+        {/* A span, not a button: the badge does nothing on click, so it must not look like a control. It still opens its tooltip on hover and focus. */}
         <TooltipTrigger asChild>
-          <button type="button" className={`inline-flex ${FOCUS}`}>
+          <span tabIndex={0} className={`inline-flex rounded-md ${FOCUS}`}>
             <Badge variant="warning">{IDEA_TO_TEST.badge}</Badge>
-          </button>
+          </span>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-64">{IDEA_TO_TEST.tooltip}</TooltipContent>
       </Tooltip>
@@ -64,8 +65,9 @@ export function InfoTip({ label, text }: { label: string; text: string }) {
   return (
     <TooltipProvider>
       <Tooltip>
+        {/* A focusable span, not a button: it has no click action, only the tooltip on hover and focus. */}
         <TooltipTrigger asChild>
-          <button type="button" className={`cursor-help underline decoration-dotted underline-offset-4 ${FOCUS}`}>{label}</button>
+          <span tabIndex={0} className={`cursor-help underline decoration-dotted underline-offset-4 ${FOCUS}`}>{label}</span>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-72">{text}</TooltipContent>
       </Tooltip>

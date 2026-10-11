@@ -1,6 +1,6 @@
 import { Suspense, lazy } from "react";
 import { InfoTip } from "@/components/glossary";
-import { Button, ChartSkeleton, Card } from "@/components/ui";
+import { Button, ChartSkeleton, Card, DisabledReason } from "@/components/ui";
 import { copy } from "@/lib/copy";
 import { learningRows } from "./learning-rows.ts";
 import type { StudioPattern, StudioPublication } from "./types.ts";
@@ -88,13 +88,17 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
         </div>
       ) : null}
       {canEdit ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button type="button" disabled={recordingTest || publications.length === 0} onClick={onRecordTest}>
-            Record test-provider performance and learn
-          </Button>
-          <Button type="button" variant="quiet" disabled={recordingOrganic || organicPosts.length === 0} onClick={onRecordOrganic}>
-            Record organic telemetry &amp; learn
-          </Button>
+        <div className="mt-4 space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" disabled={recordingTest || publications.length === 0} aria-describedby={publications.length === 0 ? "test-learning-reason" : undefined} onClick={onRecordTest}>
+              Record test-provider performance and learn
+            </Button>
+            <Button type="button" variant="quiet" disabled={recordingOrganic || organicPosts.length === 0} aria-describedby={organicPosts.length === 0 ? "organic-learning-reason" : undefined} onClick={onRecordOrganic}>
+              Record organic telemetry &amp; learn
+            </Button>
+          </div>
+          {publications.length === 0 ? <DisabledReason id="test-learning-reason">Publish a variant with the test publisher first. Its performance is recorded only after a stored publication.</DisabledReason> : null}
+          {organicPosts.length === 0 ? <DisabledReason id="organic-learning-reason">No organic posts are stored for this brand yet. Organic telemetry is recorded from stored posts only.</DisabledReason> : null}
         </div>
       ) : null}
     </Card>

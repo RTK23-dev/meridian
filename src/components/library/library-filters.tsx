@@ -1,4 +1,4 @@
-import { Button, Field, SelectInput, Input } from "@/components/ui";
+import { Button, DisabledReason, Field, SelectInput, Input } from "@/components/ui";
 import { countActiveFilters, NO_LIBRARY_FILTERS, type LibraryFilters } from "./library-model";
 
 const KIND_OPTIONS = [
@@ -58,10 +58,11 @@ export function LibraryFilterBar({
         <Field label="Created before">
           <Input type="date" value={filters.createdBefore} onChange={(event) => set("createdBefore", event.currentTarget.value)} />
         </Field>
-        <div className="flex items-end">
-          <Button type="button" variant="quiet" size="md" disabled={active === 0} onClick={() => onChange(NO_LIBRARY_FILTERS)}>
+        <div className="flex flex-col items-start justify-end gap-1">
+          <Button type="button" variant="quiet" size="md" disabled={active === 0} aria-describedby={active === 0 ? "library-clear-reason" : undefined} onClick={() => onChange(NO_LIBRARY_FILTERS)}>
             Clear filters{active ? ` (${active})` : ""}
           </Button>
+          {active === 0 ? <DisabledReason id="library-clear-reason">No filters are set.</DisabledReason> : null}
         </div>
       </div>
     </div>

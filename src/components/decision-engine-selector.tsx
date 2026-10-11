@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 const engineSchema = z.object({ engineId: z.string().min(1, "Choose a decision engine.") });
-import { Button, ErrorState, Field, SelectInput } from "@/components/ui";
+import { Button, DisabledReason, ErrorState, Field, SelectInput } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
@@ -154,9 +154,10 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
               </SelectInput>
             </Field>
           </div>
-          <Button type="button" onClick={handleSave} disabled={saving || choice === status.active.engineId}>
+          <Button type="button" onClick={handleSave} disabled={saving || choice === status.active.engineId} aria-describedby={choice === status.active.engineId ? "engine-save-reason" : undefined}>
             {saving ? "Saving..." : "Save engine"}
           </Button>
+          {choice === status.active.engineId && !saving ? <DisabledReason id="engine-save-reason">This engine is already active. Choose a different engine to save.</DisabledReason> : null}
         </div>
       ) : (
         <p className="text-xs text-muted">Only workspace admins can change the decision engine.</p>

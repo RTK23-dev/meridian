@@ -1,5 +1,6 @@
 export { Button, buttonVariants, type ButtonProps, type ButtonVariant } from "./button";
 export { Field } from "./field";
+export { DisabledReason } from "./disabled-reason";
 export { Input, Textarea, SelectInput, Select, SelectItem, SelectValue, Checkbox, Switch, RadioGroup, RadioGroupItem, Slider } from "./controls";
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "./card";
 export { Badge, StatusBadge, badgeVariants } from "./badge";
