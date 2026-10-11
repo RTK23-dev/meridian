@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
-import { handleWebhookReceive, WEBHOOK_BODY_LIMIT_BYTES, type WebhookReceiveDeps } from "./receive-handler.ts";
+import {
+  handleWebhookReceive,
+  WEBHOOK_BODY_DEADLINE_MS,
+  WEBHOOK_BODY_LIMIT_BYTES,
+  type WebhookReceiveDeps,
+} from "./receive-handler.ts";
 import { signWebhookBody } from "./verify.ts";
 
 const SECRET = "test-webhook-secret";
@@ -232,4 +237,115 @@ test("application/json with a charset parameter is accepted", async () => {
   const db = fakeWebhookDb(ONE_ORG);
   const response = await handleWebhookReceive(delivery({ contentType: "application/json; charset=utf-8" }), depsFor(db));
   assert.equal(response.status, 202);
+});
+
+test("the body read deadline is ten seconds", () => {
+  assert.equal(WEBHOOK_BODY_DEADLINE_MS, 10_000);
+});
+
+test("a body that stops arriving is refused with 408 once the read deadline passes, and the database is never opened", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  // Part of a body arrives, then the stream neither delivers more nor closes.
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"type":"ad.'));
+    },
+    pull() {
+      return new Promise<void>(() => {});
+    },
+  });
+  const request = new Request(URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: stream,
+    duplex: "half",
+  } as RequestInit);
+  const started = Date.now();
+  // The deadline is shortened so the test is quick. The default is checked above.
+  const response = await handleWebhookReceive(request, { ...depsFor(db), bodyDeadlineMs: 50 });
+  const elapsed = Date.now() - started;
+  assert.equal(response.status, 408);
+  assert.equal(await response.text(), "The webhook body did not arrive in time.");
+  assert.ok(elapsed < 2000, `the stalled body was refused after ${elapsed} ms`);
+  assert.equal(db.opens, 0);
+  assert.deepEqual(db.events, []);
+});
+
+/**
+ * A database handle that fails the test the moment anything touches it: any property read or call. Paired with a counter
+ * on the opener, it shows that a refused delivery made no database call at all.
+ */
+function untouchableDeps(): { deps: WebhookReceiveDeps; opened: () => number } {
+  let opens = 0;
+  const trap = new Proxy(() => {}, {
+    get() {
+      throw new Error("The database was touched before the webhook was verified.");
+    },
+    apply() {
+      throw new Error("The database was touched before the webhook was verified.");
+    },
+  }) as unknown as Sql;
+  return {
+    deps: {
+      sql: async () => {
+        opens += 1;
+        return trap;
+      },
+      secret: SECRET,
+      nowMs: NOW,
+    },
+    opened: () => opens,
+  };
+}
+
+test("an invalid signature makes zero database calls", async () => {
+  const { deps, opened } = untouchableDeps();
+  const response = await handleWebhookReceive(delivery({ signedWith: "not-the-secret" }), deps);
+  assert.equal(response.status, 401);
+  assert.equal(await response.text(), "The webhook signature does not match.");
+  assert.equal(opened(), 0);
+});
+
+test("a body altered after signing makes zero database calls", async () => {
+  const { deps, opened } = untouchableDeps();
+  const signedBody = JSON.stringify({ type: "ad.updated", amount: 10 });
+  const sentBody = JSON.stringify({ type: "ad.updated", amount: 1000 });
+  const timestamp = String(NOW);
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-meridian-provider": "meta",
+      "x-meridian-account": "acct-1",
+      "x-meridian-event": "evt-1",
+      "x-meridian-timestamp": timestamp,
+      "x-meridian-signature": signWebhookBody(SECRET, timestamp, signedBody),
+    },
+    body: new TextEncoder().encode(sentBody),
+  });
+  const response = await handleWebhookReceive(request, deps);
+  assert.equal(response.status, 401);
+  assert.equal(opened(), 0);
+});
+
+test("a correctly signed delivery outside the replay window makes zero database calls", async () => {
+  const { deps, opened } = untouchableDeps();
+  const rawBody = JSON.stringify({ type: "ad.updated" });
+  const stale = String(NOW - 10 * 60 * 1000);
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-meridian-provider": "meta",
+      "x-meridian-account": "acct-1",
+      "x-meridian-event": "evt-1",
+      "x-meridian-timestamp": stale,
+      "x-meridian-signature": signWebhookBody(SECRET, stale, rawBody),
+    },
+    body: new TextEncoder().encode(rawBody),
+  });
+  const response = await handleWebhookReceive(request, deps);
+  assert.equal(response.status, 401);
+  assert.equal(await response.text(), "The webhook timestamp is outside the replay window.");
+  assert.equal(opened(), 0);
 });

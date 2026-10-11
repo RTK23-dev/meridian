@@ -1,12 +1,17 @@
 import type { Sql } from "../learning/store.ts";
 import { activeWebhookOrganizations, findStoredWebhookEventIds, storeWebhookEvent } from "./receive-store.ts";
-import { verifyWebhook } from "./verify.ts";
+import { verifyDeliverySignature } from "./verify.ts";
 
 export interface WebhookReceiveDeps {
-  /** Opens the database. Called only after the body is read and within the cap, so a refused request does not reach it. */
+  /**
+   * Opens the database. Called only after the body is read (within the cap and the deadline) and after the signature and
+   * timestamp pass, so a refused delivery does not reach it.
+   */
   sql: () => Promise<Sql>;
   secret: string;
   nowMs: number;
+  /** How long the whole body may take to arrive. Defaults to WEBHOOK_BODY_DEADLINE_MS. Tests shorten it. */
+  bodyDeadlineMs?: number;
 }
 
 /**
@@ -17,6 +22,14 @@ export interface WebhookReceiveDeps {
  */
 export const WEBHOOK_BODY_LIMIT_BYTES = 256 * 1024;
 
+/**
+ * The total time the receiver waits for the body, from its first read to its last. A body still arriving when this
+ * passes is refused with 408, so a stalled sender cannot hold the request open. Providers send each event at once.
+ */
+export const WEBHOOK_BODY_DEADLINE_MS = 10 * 1000;
+
+const DEADLINE_PASSED = Symbol("deadline-passed");
+
 /** Providers send JSON; a charset parameter is accepted. Any other media type is refused with 415. */
 function isJsonContentType(value: string | null): boolean {
   return (value ?? "").split(";")[0]?.trim().toLowerCase() === "application/json";
@@ -26,8 +39,11 @@ function refusal(message: string, status: number): Response {
   return new Response(message, { status });
 }
 
-/** Reads the body up to the cap. The result is the text, or the refusal to return instead. */
-async function readBoundedBody(request: Request): Promise<{ text: string } | { refusal: Response }> {
+/**
+ * Reads the body up to the cap and within the deadline. The result is the text, or the refusal to return instead.
+ * The deadline is one timer for the whole read, not a timeout per chunk, so a trickle of bytes cannot extend it.
+ */
+async function readBoundedBody(request: Request, deadlineMs: number): Promise<{ text: string } | { refusal: Response }> {
   const declared = request.headers.get("content-length");
   if (declared !== null) {
     if (!/^\d+$/.test(declared)) return { refusal: refusal("Content-Length must be a number.", 400) };
@@ -37,15 +53,28 @@ async function readBoundedBody(request: Request): Promise<{ text: string } | { r
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > WEBHOOK_BODY_LIMIT_BYTES) {
-      await reader.cancel();
-      return { refusal: refusal("The webhook payload is too large.", 413) };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof DEADLINE_PASSED>((resolve) => {
+    timer = setTimeout(() => resolve(DEADLINE_PASSED), deadlineMs);
+  });
+  try {
+    for (;;) {
+      const next = await Promise.race([reader.read(), deadline]);
+      if (next === DEADLINE_PASSED) {
+        // Not awaited: a stalled source may never settle its cancel, and the 408 must not wait on it.
+        reader.cancel().catch(() => {});
+        return { refusal: refusal("The webhook body did not arrive in time.", 408) };
+      }
+      if (next.done) break;
+      total += next.value.byteLength;
+      if (total > WEBHOOK_BODY_LIMIT_BYTES) {
+        await reader.cancel();
+        return { refusal: refusal("The webhook payload is too large.", 413) };
+      }
+      chunks.push(next.value);
     }
-    chunks.push(value);
+  } finally {
+    clearTimeout(timer);
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -64,50 +93,50 @@ async function readBoundedBody(request: Request): Promise<{ text: string } | { r
  * workspace it belongs to. The 409 is returned only after the signature checks pass, so an unsigned caller cannot tell
  * how an account is connected. An account with no active connection stays 401.
  *
- * The media type is checked first (415), then the body is read within the cap (413), then the signature is checked over
- * those raw bytes before the JSON is parsed.
+ * The order is fixed. The media type is checked first (415). The body is read within the cap and the deadline (413, 408).
+ * The signature, the timestamp and the JSON are checked over those raw bytes (401) before any database access. Only then
+ * is the account resolved.
  */
 export async function handleWebhookReceive(request: Request, deps: WebhookReceiveDeps): Promise<Response> {
   if (!isJsonContentType(request.headers.get("content-type"))) {
     return refusal("Webhook payloads must be application/json.", 415);
   }
-  const body = await readBoundedBody(request);
+  const body = await readBoundedBody(request, deps.bodyDeadlineMs ?? WEBHOOK_BODY_DEADLINE_MS);
   if ("refusal" in body) return body.refusal;
-  const rawBody = body.text;
   const provider = request.headers.get("x-meridian-provider") ?? "";
   const signature = request.headers.get("x-meridian-signature") ?? "";
   const timestamp = request.headers.get("x-meridian-timestamp") ?? "";
   const eventId = request.headers.get("x-meridian-event") ?? "";
   const account = request.headers.get("x-meridian-account") ?? "";
-  const sql = await deps.sql();
-  const organizations = account ? await activeWebhookOrganizations(sql, { provider, accountId: account }) : [];
-  const organizationId = organizations.length === 1 ? organizations[0] : undefined;
-  const seen = eventId && organizationId ? await findStoredWebhookEventIds(sql, { organizationId, provider, eventId }) : [];
-  const decision = verifyWebhook({
+  const delivery = verifyDeliverySignature({
     secret: deps.secret,
     timestamp,
     signature,
-    rawBody,
+    rawBody: body.text,
     eventId,
     nowMs: deps.nowMs,
-    seenEventIds: seen,
-    accountKnown: organizations.length > 0,
   });
-  if (decision.status === "rejected") return new Response(decision.reason, { status: 401 });
+  if (delivery.status === "rejected") return refusal(delivery.reason, 401);
+
+  const sql = await deps.sql();
+  const organizations = account ? await activeWebhookOrganizations(sql, { provider, accountId: account }) : [];
   if (organizations.length > 1) {
     console.warn(
       `[webhooks] Refused ${provider} event ${eventId} for account ${account}: the account is connected to more than one organization. No organization was chosen and nothing was stored.`,
     );
-    return new Response("This account is connected to more than one workspace, so the event cannot be routed.", { status: 409 });
+    return refusal("This account is connected to more than one workspace, so the event cannot be routed.", 409);
   }
-  if (!organizationId) return new Response("Unknown account.", { status: 401 });
-  const stored = await storeWebhookEvent(sql, { organizationId, provider, eventId: decision.eventId });
+  const organizationId = organizations[0];
+  if (!organizationId) return refusal("The account on the webhook is not connected to a workspace.", 401);
+  const seen = await findStoredWebhookEventIds(sql, { organizationId, provider, eventId: delivery.eventId });
+  if (seen.length > 0) return refusal("This event id was already stored.", 401);
+  const stored = await storeWebhookEvent(sql, { organizationId, provider, eventId: delivery.eventId });
   if (!stored) return new Response("This event id was already stored.", { status: 200 });
   await sql`
     insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload)
     values (
       ${crypto.randomUUID()}, ${organizationId}, null, 'webhook.received',
-      ${`webhook:${provider}:${decision.eventId}`}, 'queued', ${JSON.stringify({ eventId: decision.eventId, provider })}
+      ${`webhook:${provider}:${delivery.eventId}`}, 'queued', ${JSON.stringify({ eventId: delivery.eventId, provider })}
     )
     on conflict (organization_id, idempotency_key) do nothing
   `;

@@ -8,15 +8,17 @@ export function signWebhookBody(secret: string, timestamp: string, rawBody: stri
   return createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
 }
 
-export function verifyWebhook(input: {
+/**
+ * The checks that need no database: the secret, the body, the replay window, the signature over the raw bytes, the JSON
+ * and the event id. The receiver runs these before it opens the database, so a refused delivery never reaches it.
+ */
+export function verifyDeliverySignature(input: {
   secret: string;
   timestamp: string;
   signature: string;
   rawBody: string;
   eventId: string;
   nowMs: number;
-  seenEventIds: string[];
-  accountKnown: boolean;
 }): WebhookDecision {
   if (!input.secret.trim()) return { status: "rejected", reason: "No webhook secret is configured." };
   if (!input.rawBody.trim()) return { status: "rejected", reason: "The payload was empty." };
@@ -37,7 +39,26 @@ export function verifyWebhook(input: {
   }
   if (!parsed || typeof parsed !== "object") return { status: "rejected", reason: "The payload is not an object." };
   if (!input.eventId.trim()) return { status: "rejected", reason: "The webhook has no event id." };
+  return { status: "accepted", eventId: input.eventId };
+}
+
+/**
+ * The full decision: the database-free checks, then whether the event id is already stored for the organization and
+ * whether the account is connected. The receiver does the two database checks itself, so it can answer them in order.
+ */
+export function verifyWebhook(input: {
+  secret: string;
+  timestamp: string;
+  signature: string;
+  rawBody: string;
+  eventId: string;
+  nowMs: number;
+  seenEventIds: string[];
+  accountKnown: boolean;
+}): WebhookDecision {
+  const delivery = verifyDeliverySignature(input);
+  if (delivery.status === "rejected") return delivery;
   if (input.seenEventIds.includes(input.eventId)) return { status: "rejected", reason: "This event id was already stored." };
   if (!input.accountKnown) return { status: "rejected", reason: "The account on the webhook is not connected to a workspace." };
-  return { status: "accepted", eventId: input.eventId };
+  return delivery;
 }
