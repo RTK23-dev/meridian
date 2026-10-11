@@ -3,6 +3,20 @@ import { sendWithRetry, type Transport } from "../providers/http.ts";
 
 export type OauthProvider = "meta" | "tiktok" | "google";
 
+/** Only configured public origins (or loopback development origins) may become OAuth redirect URIs. */
+export function isAllowedOauthOrigin(origin: string, env: NodeJS.ProcessEnv): boolean {
+  let parsed: URL;
+  try { parsed = new URL(origin); } catch { return false; }
+  if (parsed.origin !== origin || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return false;
+  if (parsed.protocol === "http:" && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]")) return true;
+  if (parsed.protocol !== "https:") return false;
+  const configured = [env.MERIDIAN_ALLOWED_OAUTH_ORIGINS, env.APP_URL, env.PUBLIC_APP_URL]
+    .flatMap((value) => (value ?? "").split(","))
+    .map((value) => { try { return new URL(value.trim()).origin; } catch { return ""; } })
+    .filter(Boolean);
+  return configured.includes(parsed.origin);
+}
+
 export function newOauthState(): string {
   return randomBytes(24).toString("hex");
 }
@@ -19,9 +33,12 @@ export function oauthStateMatches(storedHash: string, presented: string): boolea
 }
 
 export function authorizationUrl(provider: OauthProvider, input: { state: string; redirectUri: string; env: NodeJS.ProcessEnv }): { url: string } | { error: string } {
-  const redirectOk = input.redirectUri.startsWith("https://") || input.redirectUri.startsWith("http://localhost") || input.redirectUri.startsWith("http://127.0.0.1");
+  let redirectOrigin = "";
+  try { redirectOrigin = new URL(input.redirectUri).origin; } catch { /* rejected below */ }
+  const redirectOk = input.redirectUri === `${redirectOrigin}/api/oauth/callback?provider=${provider}`
+    && isAllowedOauthOrigin(redirectOrigin, input.env);
   if (!input.state.trim() || !redirectOk) {
-    return { error: "OAuth needs a state value and an http://localhost or https redirect URI." };
+    return { error: "OAuth redirect origin is not in MERIDIAN_ALLOWED_OAUTH_ORIGINS (localhost is allowed for development)." };
   }
   if (provider === "meta") {
     const appId = input.env.META_APP_ID?.trim();
