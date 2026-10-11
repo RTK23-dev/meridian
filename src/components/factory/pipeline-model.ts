@@ -351,7 +351,7 @@ export const NOT_READ_REASON = {
   retention3sMin: "No factory job checks 3 s retention against this value yet.",
   confidenceMin: "No factory job reads this value yet.",
   autoApproveEnabled: "No job reads this switch. JEV's own approval rules run separately.",
-  strictClaimGate: "The gate job passes no claim text to the claims check, so this switch cannot block a variant today.",
+  strictClaimGate: "The claims check runs on every variant with the brand's own claims. No job reads this switch yet, so it does not change that check.",
   prompt: "No model call reads this text yet.",
 } as const;
 
