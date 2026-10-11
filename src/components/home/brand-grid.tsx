@@ -5,6 +5,7 @@ import { Badge, Button, EmptyState, SelectInput, Skeleton, Input } from "@/compo
 import type { BrandSummary } from "@/lib/meridian/workspace/actions";
 import type { MachineSnapshot } from "@/lib/meridian/machine";
 import { doneCount, pipelineStages, type PipelineStage } from "@/components/brand-overview/pipeline";
+import { BrandMark } from "@/components/brand-mark";
 import { relativeTime, visibleBrands, type BrandSort } from "./home-model";
 
 export type MachineState = { status: "loading" } | { status: "error" } | { status: "ready"; snapshot: MachineSnapshot };
@@ -63,9 +64,7 @@ function BrandCard({ brand, lookup }: { brand: BrandSummary; lookup: BrandLookup
     <li>
       <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="group block h-full rounded-lg border border-border bg-surface p-5 transition-colors hover:border-accent hover:shadow-sm">
         <div className="flex items-start gap-3">
-          <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-lg bg-accent-soft text-lg font-semibold text-accent">
-            {brand.name.trim().slice(0, 1).toLocaleUpperCase() || "B"}
-          </span>
+          <BrandMark name={brand.name} logoAssetId={brand.logoAssetId} />
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <h3 className="truncate text-section font-semibold text-fg group-hover:text-accent">{brand.name}</h3>

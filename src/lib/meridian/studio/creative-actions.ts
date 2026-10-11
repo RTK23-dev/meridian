@@ -10,6 +10,7 @@ import { assessCopy } from "@/lib/meridian/production/assess";
 import { promptById } from "@/lib/meridian/prompts/registry";
 import { contentHash } from "@/lib/meridian/assets/lifecycle";
 import { loadLibraryCreatives } from "@/lib/meridian/library/listing";
+import { persistBrandLogo } from "@/lib/meridian/brand/logo-store";
 import { deriveMetrics } from "@/lib/meridian/performance/metrics";
 import { summarizeIntelligence } from "@/lib/meridian/intelligence/summary";
 import { inspectImage } from "@/lib/meridian/assets/images";
@@ -536,13 +537,15 @@ export const uploadLogo = createServerFn({ method: "POST" })
     if (!inspected.ok) return { status: "failed" as const, detail: inspected.detail };
     const assetId = id();
     const hash = contentHash(data.base64);
-    await sql`
-      insert into assets (id, organization_id, brand_id, version, storage_key, content_hash, mime_type, source, status, body, byte_size, label)
-      values (
-        ${assetId}, ${access.organizationId}, ${data.brandId}, 1, ${`brand/${data.brandId}/logo/${hash}`},
-        ${hash}, ${inspected.mime}, 'logo_upload', 'stored', ${data.base64}, ${inspected.bytes}, 'logo'
-      )
-    `;
+    await persistBrandLogo(sql, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      assetId,
+      base64: data.base64,
+      bytes,
+      mime: inspected.mime,
+      contentHashValue: hash,
+    });
     await audit(sql, {
       organizationId: access.organizationId,
       brandId: data.brandId,
