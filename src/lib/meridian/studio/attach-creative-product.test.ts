@@ -5,7 +5,7 @@ import { enableAppAliases } from "../testing/module-aliases.ts";
 
 // The server module uses the "@/" alias, so the alias hook is registered before the module is loaded.
 enableAppAliases();
-const { productForCreative } = await import("./creative-image.server.ts");
+const { attachStatesFor, productForCreative } = await import("./creative-image.server.ts");
 
 const alpha: ProductFact = { id: "a", name: "Alpha soap", description: "", allowedClaims: "", prohibitedClaims: "guaranteed results" };
 const beta: ProductFact = { id: "b", name: "Beta sponge", description: "", allowedClaims: "", prohibitedClaims: "miracle cure" };
@@ -53,4 +53,10 @@ test("a brand with no products claims none, and a stored name is still unknown",
 test("blank product names never match", () => {
   const blank: ProductFact = { id: "c", name: "   ", description: "", allowedClaims: "", prohibitedClaims: "" };
   assert.deepEqual(productForCreative([blank], { product_name: "", raw_text: "Any copy at all.", title: "Any title" }), { product: null, evidence: "none" });
+});
+
+test("each judgment implies one creative status and one asset lifecycle", () => {
+  assert.deepEqual(attachStatesFor("AUTO_APPROVE"), { creativeStatus: "approved", assetLifecycle: "approved" });
+  assert.deepEqual(attachStatesFor("HUMAN_REVIEW"), { creativeStatus: "in_review", assetLifecycle: "qa_required" });
+  assert.deepEqual(attachStatesFor("REJECT"), { creativeStatus: "rejected", assetLifecycle: "rejected" });
 });
