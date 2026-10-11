@@ -149,8 +149,9 @@ export function judgeFeatures(
     features.some((feature) => feature.name === "violation" && feature.value >= 0.5);
   const evidenceState: EvidenceState = !evidencePresent ? "missing" : violation ? "violation" : contradictory ? "contradictory" : "present";
   if (!evidencePresent) {
-    probability = Math.min(spec.thresholds.autoApprove - 0.05, Math.max(spec.thresholds.humanReview, probability));
-    confidence = Math.min(confidence, spec.thresholds.minConfidenceForAuto - 0.05);
+    // Missing evidence has no reading. The model's number is not kept as a judgment, and nothing is manufactured into the review band.
+    probability = 0;
+    confidence = 0;
   }
   const evaluation = {
     probability,

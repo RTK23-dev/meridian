@@ -179,7 +179,7 @@ test("evidence isolation: evidence supplied for one question does not satisfy an
   assert.equal(result.action, "HUMAN_REVIEW");
 });
 
-test("a question with no scope receives no evidence: it abstains without a call, and a question that needs none is never approved from an empty scope", async () => {
+test("a question with no scope is refused before any call, even when its spec needs no evidence", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "evidence-scope-no-scope");
   const jev = stubEngine("jev");
@@ -195,10 +195,12 @@ test("a question with no scope receives no evidence: it abstains without a call,
     engines: registryWith(jev, openai),
   });
   assert.equal(result.unresolved.find((item) => item.questionId === BRAND_FIT.id)?.status, "abstain_insufficient_evidence");
-  assert.equal(openai.requests.length, 1, "only the question that needs no evidence is asked");
-  assert.deepEqual(Object.keys(openai.requests[0]!.questions), ["free"]);
+  // Deterministic: a question with no evidence scope is never sent, so the engine receives no request at all.
+  assert.equal(openai.requests.length, 0, "no question without an evidence scope is sent");
+  assert.equal(jev.requests.length, 0);
   const free = result.unresolved.find((item) => item.questionId === FREE.id);
-  assert.match(free?.reason ?? "", /scope/, "an answer from an empty scope cannot approve");
+  assert.equal(free?.status, "abstain_insufficient_evidence");
+  assert.match(free?.reason ?? "", /scope/, "a question with no scope says so");
   assert.equal(result.action, "HUMAN_REVIEW");
 });
 

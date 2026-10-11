@@ -14,6 +14,7 @@ import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { EngineSelection } from "../decisions/selection.ts";
 import { BRIEF_EVIDENCE_SCOPES, BRIEF_QUESTIONS } from "../jev/questions/brief.ts";
 import { BRIEF_GATE_QUESTION_ID, BRIEF_GATE_SCHEMA_VERSION } from "../decisions/brief-contract.ts";
+import { prohibitedClaimRejection, type DeterministicRejection } from "../decisions/deterministic.ts";
 
 export type BriefForGate = {
   audience: string;
@@ -36,21 +37,20 @@ export type BriefBrain = {
 const MANDATORY_FIELDS = ["audience", "hook", "message", "angle"] as const;
 
 /** Checks that need no judgment. Any one of them rejects the brief before the engine is called. */
-export function briefDeterministicRejections(brief: BriefForGate, brain: BriefBrain): Array<{ rule: string; reason: string }> {
-  const rejections: Array<{ rule: string; reason: string }> = [];
+export function briefDeterministicRejections(brief: BriefForGate, brain: BriefBrain): DeterministicRejection[] {
+  const rejections: DeterministicRejection[] = [];
   const missing = MANDATORY_FIELDS.filter((field) => !brief[field].trim());
   if (missing.length > 0) {
     rejections.push({ rule: "mandatory_brief_fields", reason: `Missing ${missing.join(", ")}. A brief cannot be judged without them.` });
   }
-  const text = [brief.audience, brief.hook, brief.message, brief.format, brief.cta, brief.angle, brief.offer ?? ""].join("\n").toLowerCase();
+  const text = [brief.audience, brief.hook, brief.message, brief.format, brief.cta, brief.angle, brief.offer ?? ""].join("\n");
+  // The shared prohibited-claim rule decides the match. Only the splitting of the stored claims is local to briefs.
   const banned = brain.prohibitedClaims
     .split(/[\n,;]+/)
     .map((part) => part.trim())
     .filter((part) => part.length >= 3);
-  const hit = banned.find((part) => text.includes(part.toLowerCase()));
-  if (hit) {
-    rejections.push({ rule: "prohibited_claim", reason: `The brief contains the stored prohibited claim “${hit}”.` });
-  }
+  const claim = prohibitedClaimRejection(text, banned);
+  if (claim) rejections.push(claim);
   return rejections;
 }
 

@@ -15,6 +15,7 @@
 import type {
   JevProvider,
   JevProviderId,
+  JevQuestionType,
   JevCapabilities,
   JevProviderHealth,
   JevDecisionRequest,
@@ -43,6 +44,8 @@ export async function transportHealth(provider: JevProvider, organizationId: str
   const scoped = provider as JevProvider & { healthFor?: (organizationId: string) => Promise<JevProviderHealth> };
   return scoped.healthFor ? scoped.healthFor(organizationId) : provider.health();
 }
+
+const JEV_QUESTION_TYPES: readonly JevQuestionType[] = ["noul", "choice", "score"];
 
 /**
  * The reason a TypeSafe answer cannot be used for its question, or null when it fits. A noul is a probability between 0 and 1,
@@ -218,6 +221,21 @@ export class TypeSafeDirectJevProvider implements JevProvider {
     }
 
     for (const [key, qSpec] of Object.entries(request.questions)) {
+      // Only the three registry primitives can be sent. Any other question type is unsupported, and nothing is sent for it.
+      if (!JEV_QUESTION_TYPES.includes(qSpec.type)) {
+        answers[key] = {
+          questionId: qSpec.id,
+          questionVersion: qSpec.version,
+          type: qSpec.type,
+          model,
+          provider: this.id,
+          status: "unsupported",
+          evidenceRefs: [],
+          abstainReason: `Question type '${String((qSpec as { type: unknown }).type)}' is not a TypeSafe JEV primitive.`,
+          evaluatedAt: new Date().toISOString(),
+        };
+        continue;
+      }
       const sufficiency = checkEvidenceSufficiency(qSpec, availableEvidence);
       if (!sufficiency.sufficient) {
         answers[key] = {

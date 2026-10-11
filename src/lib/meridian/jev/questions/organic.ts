@@ -62,6 +62,8 @@ export const ORGANIC_QUESTIONS: Record<string, JevQuestionSpec> = {
       unclear: "No active retention architecture observed.",
     },
     evidenceRequirements: ["scene_cuts", "transcript"],
+    // Analysis only. It names no approve values or threshold, so the answer can route to review and can never approve.
+    policyMapping: { unresolvedOutcome: "HUMAN_REVIEW" },
   },
 
   "organic.visual_craft.v1": {
@@ -77,6 +79,8 @@ export const ORGANIC_QUESTIONS: Record<string, JevQuestionSpec> = {
       polished_commercial: "High-budget studio commercial style.",
     },
     evidenceRequirements: ["scene_frames"],
+    // Analysis only. It names no approve values or threshold, so the answer can route to review and can never approve.
+    policyMapping: { unresolvedOutcome: "HUMAN_REVIEW" },
   },
 
   "organic.share_trigger.v1": {
@@ -92,6 +96,8 @@ export const ORGANIC_QUESTIONS: Record<string, JevQuestionSpec> = {
       none: "No explicit share trigger detected.",
     },
     evidenceRequirements: ["transcript", "comments"],
+    // Analysis only. It names no approve values or threshold, so the answer can route to review and can never approve.
+    policyMapping: { unresolvedOutcome: "HUMAN_REVIEW" },
   },
 
   "organic.transferability.v1": {

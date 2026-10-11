@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock3, XCircle } from "lucide-react";
 import { Badge, Button, Card, PageHeader, ScreenSkeleton } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
+import { getDecisionCalibrationReport } from "@/lib/meridian/learning/calibration-report-actions";
+import { calibrationStateText } from "@/lib/meridian/learning/calibration-report";
 import { qk } from "@/lib/query/keys";
 import { useCalibrationVersionsQuery, useLearningQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 import { timestampLabel, pageSpan } from "./format";
@@ -20,6 +23,11 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
   const [page, setPage] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const versions = useCalibrationVersionsQuery(brandId, page, canAdmin);
+  const decisionReport = useQuery({
+    queryKey: ["calibration", "decision-report", brandId],
+    queryFn: () => getDecisionCalibrationReport({ data: { brandId } }),
+    enabled: canAdmin,
+  });
   const calibrationKey = ["mutation", "calibration", brandId] as const;
 
   const propose = useScopedMutation({
@@ -64,6 +72,11 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
 
   const data = versions.data;
   const baseline = baselineCopy(data.baseline, data.codeDefault);
+  const decisionLine = decisionReport.data
+    ? calibrationStateText(decisionReport.data)
+    : decisionReport.isError
+      ? "The report could not be read."
+      : "Checking the report.";
   const span = pageSpan(page, data.pageSize, data.total);
 
   return (
@@ -86,6 +99,7 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
           {baseline.warning ? (
             <p role="alert" className="flex items-start gap-2 text-sm text-danger"><AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />Check this version before you approve another one.</p>
           ) : null}
+          <p className="text-sm">Decision calibration: {decisionLine}</p>
           <p className="text-sm text-fg-muted">Thresholds are stored per workspace, not per brand. The active version is the baseline for every brand in this workspace.</p>
         </Card>
       </section>
