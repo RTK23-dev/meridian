@@ -12,11 +12,14 @@
  *   settles at its ceiling, because the image was made and the provider reports no billed amount.
  * - The quality judgment (image-qc.server.ts) is made from the stored image. recordAttachOutcome writes the asset, the creative's
  *   state and its review or rejection row in one transaction, and marks the job materialized.
+ * - If the process stops after the image is stored and before the outcome is recorded, the job is COMPLETED and unmaterialized.
+ *   The poller does not claim these jobs. The next attach for the creative finishes them with completeStoredAttach, once the
+ *   recording window has passed, and the image is never stored or settled twice.
  *
  * It lives in this module, not in creative-actions.ts, so that the client build never sees its server imports. The server function
  * loads this module inside its handler, as opportunity-brief.server.ts does.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { semanticNearest } from "@/lib/meridian/embeddings/store";
 import { resolveCredential } from "@/lib/meridian/credentials/resolve";
@@ -29,6 +32,7 @@ import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts"
 import { settleProductionReservation } from "../production/materialization.ts";
 import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
+import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
 import { resolveDriveAccess } from "../storage/google-auth.ts";
 import { id, requireBrand, loadContext } from "../machine-shared";
 import { competitorCopy, factsFor, generatedImageVisual, qcBrandOf, visualFacts, writeJudgment } from "./image-qc.server.ts";
@@ -173,6 +177,15 @@ export async function recordAttachOutcome(
 ): Promise<void> {
   const { creativeStatus, assetLifecycle } = attachStatesFor(outcome.rollup);
   await withTransaction(sql, async (tx) => {
+    // The job row is locked for the whole write. A job already materialized, by an earlier run or a resume after a stop, is left as
+    // it is, so its asset, the creative's state and its review are written once.
+    const jobs = await tx<{ materialized_at: unknown }>`
+      select materialized_at from production_jobs
+      where id = ${outcome.jobId} and organization_id = ${outcome.organizationId} and brand_id = ${outcome.brandId}
+      for update
+    `;
+    if (!jobs[0]) throw new Error("Attach job was not found in this tenant.");
+    if (jobs[0].materialized_at != null) return;
     await tx`
       insert into assets (
         id, organization_id, brand_id, creative_id, version, storage_key, content_hash, mime_type, source, status,
@@ -292,6 +305,147 @@ async function judgeAttachedImage(
   return { rollup: judgment.rollup, reason: judgment.reason, decisionId: judgment.decisionId };
 }
 
+/** A JSON column read as an object, whether the driver returned it parsed or as text. Anything else is an empty record. */
+function recordOf(value: unknown): Record<string, unknown> {
+  const parsed = typeof value === "string" ? parseJsonOrNull(value) : value;
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+}
+
+function parseJsonOrNull(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Finishes an attach whose image was stored but whose outcome was never recorded. The process can stop after the artifact is
+ * stored, when the job is COMPLETED with its artifact, and before recordAttachOutcome commits. The attach is then finished from what
+ * is stored: the bytes are read back and verified, the reservation settles if it is still held, the image is judged, and the outcome
+ * is recorded in one step.
+ *
+ * Running it again is safe. A job already materialized is left alone. The reservation is settled only while it is RESERVED. The
+ * judgment's decisions have deterministic ids, and recordAttachOutcome writes nothing for a materialized job. So the artifact is not
+ * duplicated and the budget is not settled twice.
+ */
+export async function completeStoredAttach(
+  sql: Sql,
+  ref: { organizationId: string; brandId: string; productionJobId: string },
+  options: { driveClient?: ArtifactDrive } = {},
+): Promise<"materialized" | "already_materialized"> {
+  const { organizationId, brandId } = ref;
+  const jobs = await sql<{ id: string; status: string; artifact_id: string | null; materialized_at: unknown; input: unknown; output: unknown }>`
+    select id, status, artifact_id, materialized_at, input, output from production_jobs
+    where id = ${ref.productionJobId} and organization_id = ${organizationId} and brand_id = ${brandId}
+    limit 1
+  `;
+  const job = jobs[0];
+  if (!job) throw new Error("Attach job was not found in this tenant.");
+  if (job.materialized_at != null) return "already_materialized";
+  const input = recordOf(job.input);
+  if (input.kind !== "creative_attach" || typeof input.attachCreativeId !== "string") {
+    throw new Error("This production job is not an image attach.");
+  }
+  if (job.status !== "COMPLETED" || !job.artifact_id) throw new Error("This attach has no stored image to record.");
+  const creativeId = input.attachCreativeId;
+  const facts = recordOf(job.output);
+  // The image's own facts are kept on the job before it is stored. Without them the outcome cannot be recorded truthfully, so no guess is made.
+  if (
+    typeof facts.width !== "number" ||
+    typeof facts.height !== "number" ||
+    typeof facts.model !== "string" ||
+    typeof facts.provider !== "string" ||
+    typeof facts.promptVersion !== "string" ||
+    typeof input.prompt !== "string"
+  ) {
+    throw new Error("The stored image's facts were not recorded, so this attach cannot be finished.");
+  }
+
+  const storedRows = await sql<{ name: string; sha256: string; size_bytes: string | number | bigint; mime_type: string; provider_file_id: string }>`
+    select name, sha256, size_bytes, mime_type, provider_file_id from storage_objects
+    where id = ${job.artifact_id} and organization_id = ${organizationId} and brand_id = ${brandId}
+    limit 1
+  `;
+  const stored = storedRows[0];
+  if (!stored) throw new Error("The stored image was not found in this tenant.");
+  const drive = options.driveClient || defaultArtifactDrive();
+  const bytes = (await drive.get(stored.provider_file_id, organizationId))?.bytes;
+  if (!bytes || createHash("sha256").update(bytes).digest("hex") !== stored.sha256 || bytes.byteLength !== Number(stored.size_bytes)) {
+    throw new Error("The stored image failed read-back verification, so it was not recorded.");
+  }
+
+  const creatives = await sql<{ title: string; raw_text: string; angle: string; product_name: string; brief_id: string | null }>`
+    select title, raw_text, angle, product_name, brief_id from creative_records
+    where id = ${creativeId} and brand_id = ${brandId} and organization_id = ${organizationId}
+    limit 1
+  `;
+  const creative = creatives[0];
+  if (!creative) throw new Error("Creative not found.");
+  const briefRows = creative.brief_id
+    ? await sql<{ decision_id: string }>`
+        select decision_id from briefs
+        where id = ${creative.brief_id} and organization_id = ${organizationId} and brand_id = ${brandId}
+        limit 1
+      `
+    : [];
+  const jevDecisionId = briefRows[0]?.decision_id ?? "";
+
+  // The image was made and is stored, so the reservation settles before the judgment, as it does on the first run. A settled one is left.
+  await settleProductionReservation(sql, { organizationId, brandId, productionJobId: job.id });
+  const judged = await judgeAttachedImage(sql, {
+    organizationId,
+    brandId,
+    creative,
+    creativeId,
+    bytes,
+    sha256: stored.sha256,
+    prompt: input.prompt,
+    width: facts.width,
+    height: facts.height,
+  });
+  await recordAttachOutcome(sql, {
+    organizationId,
+    brandId,
+    creativeId,
+    jobId: job.id,
+    assetId: id(),
+    storageKey: stored.name,
+    sha256: stored.sha256,
+    mimeType: stored.mime_type,
+    byteSize: Number(stored.size_bytes),
+    width: facts.width,
+    height: facts.height,
+    provider: facts.provider,
+    model: facts.model,
+    promptVersion: facts.promptVersion,
+    provenance: `jev-creative-image:${jevDecisionId || "no-decision"}`,
+    decisionId: judged.decisionId,
+    rollup: judged.rollup,
+    reason: judged.reason,
+  });
+  return "materialized";
+}
+
+/**
+ * Finishes the attaches for one creative whose stored image is past the recording window and was never recorded. A younger one is
+ * still being recorded, so it is left alone, and the in-flight check refuses it. A failure here stops the new attach, so a second
+ * image is never made while the first is unrecorded.
+ */
+async function resumeStaleStoredAttaches(sql: Sql, scope: { organizationId: string; brandId: string; creativeId: string }): Promise<void> {
+  const stale = await sql<{ id: string }>`
+    select id from production_jobs
+    where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and modality = 'image'
+      and input->>'attachCreativeId' = ${scope.creativeId}
+      and status = 'COMPLETED' and materialized_at is null and artifact_id is not null
+      and created_at <= now() - ${ATTACH_RECORDING_WINDOW}::interval
+    order by created_at asc
+  `;
+  for (const job of stale) {
+    await completeStoredAttach(sql, { organizationId: scope.organizationId, brandId: scope.brandId, productionJobId: job.id });
+  }
+}
+
 /**
  * Generates and stores an image for a creative, for a signed-in user. The role and the tenant are checked here. The image is
  * generated with the creative's own workspace production key, resolved through the shared credential resolver.
@@ -323,6 +477,8 @@ export async function attachCreativeImageFor(userId: string, data: { brandId: st
   const store = await artifactStoreReady(orgId);
   if (!store.ready) return { status: "NOT_CONNECTED", message: `${store.reason} No image was requested, so nothing was spent.` };
   const apiKey = workspaceKey.secret;
+  // An earlier stored image that was never recorded is finished first, so the creative never has two unrecorded images.
+  await resumeStaleStoredAttaches(sql, { organizationId: orgId, brandId: data.brandId, creativeId: data.creativeId });
 
   // The attach's job id is its idempotency key: the creative plus a fresh attempt id, so no key is ever reused.
   const jobId = `attach-${data.creativeId}-${randomUUID()}`;
@@ -388,6 +544,13 @@ export async function attachCreativeImageFor(userId: string, data: { brandId: st
     return { status: "failed", message: `${image.error} The reservation is held for reconciliation.` };
   }
 
+  // The image's facts are written to the job before it is stored. A resume after a stop can then record the outcome from the job alone.
+  await sql`
+    update production_jobs
+    set output = ${JSON.stringify({ width: image.width, height: image.height, mediaType: image.mediaType, promptVersion: image.promptVersion, model: image.model, provider: image.provider })},
+        updated_at = now()
+    where id = ${jobId} and organization_id = ${orgId} and brand_id = ${data.brandId}
+  `;
   // The bytes are stored and verified by the shared finalizer, which also marks the job COMPLETED.
   const stored = await finalizeProductionArtifact(sql, {
     jobId,

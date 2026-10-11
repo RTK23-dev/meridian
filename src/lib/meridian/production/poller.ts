@@ -427,7 +427,9 @@ export async function pollProductionJobs(
       from production_jobs
       where (
           status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'AWAITING_CHILDREN', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
-          or (status = 'COMPLETED' and materialized_at is null and artifact_id is not null)
+          -- A creative attach is finished by its own resume (studio/creative-image.server.ts), not by the production materializer.
+          or (status = 'COMPLETED' and materialized_at is null and artifact_id is not null
+              and input->>'kind' is distinct from 'creative_attach')
         )
         and (next_poll_at is null or next_poll_at <= now())
         and (${scope}::text is null or organization_id = ${scope})
