@@ -1,5 +1,4 @@
 import { auth } from "@/lib/auth/server";
-import { gateIdentityEnabled } from "@/lib/auth/gate-identity.server";
 import { DEV_USER_ID, authConfigured } from "@/lib/auth/verify.server";
 
 /**
@@ -8,6 +7,6 @@ import { DEV_USER_ID, authConfigured } from "@/lib/auth/verify.server";
  */
 export async function signedInUserId(request: Request): Promise<string | null> {
   const session = await auth.api.getSession({ headers: request.headers });
-  const devFallbackAllowed = !authConfigured && !gateIdentityEnabled() && !process.env.DATABASE_URL?.trim();
+  const devFallbackAllowed = !authConfigured && !process.env.DATABASE_URL?.trim();
   return session?.user?.id ?? (devFallbackAllowed ? DEV_USER_ID : null);
 }

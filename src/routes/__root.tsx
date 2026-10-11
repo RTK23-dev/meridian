@@ -1,6 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
-import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { ThemeProvider, themeBootstrap } from "@/components/ui";
 import { AppQueryProvider } from "@/lib/query/client";
 import { RootNotFound } from "@/components/status-pages";
@@ -31,7 +30,6 @@ export const Route = createRootRoute({
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
         <a className="skip-link" href="#main">Skip to main content</a>
-        <PreviewHostBridge />
         <ThemeProvider>
           <AppQueryProvider>
             <AuthProvider>

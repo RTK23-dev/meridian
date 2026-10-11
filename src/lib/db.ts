@@ -22,7 +22,6 @@ const databaseUrl =
 export const dbSource: DbSource = resolveDbSource({
   DATABASE_URL: typeof process !== "undefined" ? process.env.DATABASE_URL : undefined,
   NODE_ENV: typeof process !== "undefined" ? process.env.NODE_ENV : undefined,
-  GROK_PROJECT_ID: typeof process !== "undefined" ? process.env.GROK_PROJECT_ID : undefined,
 });
 
 /**

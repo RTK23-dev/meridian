@@ -55,20 +55,13 @@ test("production refuses to run without a real database", () => {
   );
 });
 
-test("a published deploy also fails closed when DATABASE_URL is missing", () => {
-  assert.throws(
-    () => resolveDbSource({ GROK_PROJECT_ID: "proj_1" }),
-    /published deploys/,
-  );
-});
-
 test("a real DATABASE_URL selects Neon in every environment", () => {
   assert.equal(
     resolveDbSource({ DATABASE_URL: "postgres://localhost/meridian", NODE_ENV: "production" }),
     "neon",
   );
   assert.equal(
-    resolveDbSource({ DATABASE_URL: "postgres://localhost/meridian", GROK_PROJECT_ID: "proj_1" }),
+    resolveDbSource({ DATABASE_URL: "postgres://localhost/meridian", NODE_ENV: "development" }),
     "neon",
   );
 });

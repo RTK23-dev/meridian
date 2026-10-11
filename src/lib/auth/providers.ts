@@ -1,38 +1,10 @@
 /**
- * The upstream identity providers this app offers for sign-in (via the broker).
+ * The sign-in providers this app offers, besides email and password.
  *
- * Source of truth for BOTH the server (`server.ts`, one `genericOAuth` provider
- * per entry) and the client (`client.ts` / sign-in buttons). Kept in its own
- * dependency-free module so the client can import it without pulling the
- * server-only Better Auth instance (and `pg`) into the browser bundle.
- *
- * Each app federates to the shared **auth broker** (`GROK_AUTH_ISSUER`), which
- * holds the real Google/X secrets. The app never sees them — it only knows its
- * own per-app client id/secret and which upstream to ask the broker for (`idp`).
- *
- * To add an upstream (e.g. GitHub) once the broker supports it: add one entry
- * here (`{ providerId: "grok-github", idp: "github", label: "GitHub" }`). The
- * `providerId` is this app's local id and the OAuth callback path segment
- * (`/api/auth/oauth2/callback/<providerId>`); `idp` is the hint the broker reads
- * to pick the upstream. X sign-in was removed on purpose: it is not offered.
+ * Dependency-free so the browser can import it without the server-only auth instance. The server registers each
+ * provider as a Better Auth social provider only when its credentials are set (see `server.ts`). The browser asks the
+ * server which ones are configured, so a button is never shown for a provider that cannot work.
  */
-export type GrokProvider = {
-  /** This app's local provider id; also the callback path segment. */
-  providerId: string;
-  /** Upstream hint the broker forwards to (Better Auth social id). */
-  idp: string;
-  /** Human label for the sign-in button. */
-  label: string;
-};
+export const SIGN_IN_PROVIDERS = [{ id: "google", label: "Google" }] as const;
 
-export const GROK_PROVIDERS: readonly GrokProvider[] = [
-  { providerId: "grok-google", idp: "google", label: "Google" },
-];
-
-/**
- * Hosts the shared live-preview broker client cannot return to. The broker accepts only `*.grok-sandbox.com` callbacks for
- * that client (see `preview.ts`), so federated sign-in ends at the broker and fails on the way back. Email sign-in works here.
- */
-export function isBrokerUnreachableHost(hostname: string): boolean {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
-}
+export type SignInProviderId = (typeof SIGN_IN_PROVIDERS)[number]["id"];

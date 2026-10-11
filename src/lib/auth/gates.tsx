@@ -1,13 +1,9 @@
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, Navigate } from "@tanstack/react-router";
-import { GROK_PROVIDERS, authEnabled, signIn, signOut, useLoopbackHost } from "./client";
-import { hasGateSessionMarker } from "./gate-session-marker";
+import { SIGN_IN_PROVIDERS, authEnabled, signIn, signOut, useSignInOptions } from "./client";
 import { resolveSignInGateState } from "./sign-in-gate";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, useTheme } from "@/components/ui";
-
-const subscribeToNothing = () => () => {};
-const noGateSessionOnServer = () => false;
 
 /**
  * Auth state components — plain wrappers around `useCurrentUserState()`.
@@ -65,30 +61,35 @@ export function SignInGate({
 }
 
 export function SignInButtons() {
-  const loopback = useLoopbackHost();
+  const { loaded, options } = useSignInOptions();
+  const [error, setError] = useState<string | null>(null);
   return (
     <div className="flex w-full max-w-sm flex-col gap-2">
-      {GROK_PROVIDERS.map((p) => (
+      {SIGN_IN_PROVIDERS.map((p) => (
         <button
-          key={p.providerId}
+          key={p.id}
           type="button"
-          disabled={loopback}
-          onClick={() => signIn(p.providerId, { callbackURL: "/" })}
+          disabled={!loaded || !options[p.id]}
+          onClick={() => {
+            setError(null);
+            signIn(p.id, { callbackURL: "/" }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Sign-in failed"));
+          }}
           className="w-full cursor-pointer rounded-md border border-neutral-300 px-4 py-2 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
         >
           Continue with {p.label}
         </button>
       ))}
-      {loopback ? <p className="text-sm text-neutral-600 dark:text-neutral-400">Google sign-in runs on the live preview or a deployed app. On localhost, use email sign-in.</p> : null}
+      {loaded && SIGN_IN_PROVIDERS.some((p) => !options[p.id]) ? (
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">Google sign-in is not set up on this deployment. Use email and password.</p>
+      ) : null}
+      {error ? <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p> : null}
     </div>
   );
 }
 
 /**
- * Signed-in account menu for the top bar: identity, appearance, notification preferences and sign-out. Sign-out is only
- * shown when auth is enabled (the disabled-auth dev user has nothing to sign out of) and the session is not
- * gate-materialized: behind the gate the next request signs the viewer straight back in, so a sign-out control there
- * is a broken loop.
+ * Signed-in account menu for the top bar: identity, appearance, notification preferences and sign-out. Sign-out is shown
+ * when auth is enabled. The disabled-auth dev user has nothing to sign out of.
  */
 export function UserButton() {
   const user = useCurrentUser();
@@ -96,11 +97,6 @@ export function UserButton() {
   // Sign-out can take a moment (and can fail when deployed), so the menu item
   // shows it is working and cannot be fired twice.
   const [signingOut, setSigningOut] = useState(false);
-  const gateSession = useSyncExternalStore(
-    subscribeToNothing,
-    hasGateSessionMarker,
-    noGateSessionOnServer,
-  );
   if (!user) return null;
   const label = user.displayName ?? user.primaryEmail ?? "Account";
   return (
@@ -127,7 +123,7 @@ export function UserButton() {
         </DropdownMenuItem>
         <p className="px-2 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-fg-muted">Appearance</p>
         {(["system", "light", "dark"] as const).map((choice) => <DropdownMenuItem key={choice} role="menuitemradio" aria-checked={theme === choice} onSelect={() => setTheme(choice)}>{choice[0].toUpperCase() + choice.slice(1)}{theme === choice ? " (current)" : ""}</DropdownMenuItem>)}
-        {authEnabled && !gateSession ? <DropdownMenuItem disabled={signingOut} onSelect={() => { setSigningOut(true); void signOut().catch(() => setSigningOut(false)); }}>{signingOut ? "Signing out…" : "Sign out"}</DropdownMenuItem> : null}
+        {authEnabled ? <DropdownMenuItem disabled={signingOut} onSelect={() => { setSigningOut(true); void signOut().catch(() => setSigningOut(false)); }}>{signingOut ? "Signing out…" : "Sign out"}</DropdownMenuItem> : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

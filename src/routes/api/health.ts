@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql, type Sql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { DEV_USER_ID, authConfigured } from "@/lib/auth/verify.server";
-import { gateIdentityEnabled } from "@/lib/auth/gate-identity.server";
 import { localSemanticModel, embeddingProviderState } from "@/lib/meridian/embeddings/provider";
 import { externalObjectStorageStatus } from "@/lib/meridian/storage/object-store";
 import { accountProviderState } from "@/lib/meridian/providers/boundaries";
@@ -33,7 +32,7 @@ function deploymentStatus() {
 /** The signed-in user, using the same rule as the asset route. Null when nobody is signed in. */
 async function signedInUserId(request: Request): Promise<string | null> {
   const session = await auth.api.getSession({ headers: request.headers });
-  const devFallbackAllowed = !authConfigured && !gateIdentityEnabled() && !process.env.DATABASE_URL?.trim();
+  const devFallbackAllowed = !authConfigured && !process.env.DATABASE_URL?.trim();
   return session?.user?.id ?? (devFallbackAllowed ? DEV_USER_ID : null);
 }
 
