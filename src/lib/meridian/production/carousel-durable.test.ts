@@ -31,9 +31,9 @@ function carouselPlan(decisionId: string) {
     preferredImageProvider: "google_nano_banana",
     brief: {
       title: "Kitchen sponge",
-      hook: "Tired of smelly sponges?",
-      message: "Swipe to see the antibacterial mesh layer",
-      cta: "Grab a 4-pack today",
+      hook: "Mesh sponge: tired of smelly sponges?",
+      message: "Mesh sponge: swipe to see the antibacterial mesh layer",
+      cta: "Grab a 4-pack of Mesh sponge today",
       angle: "live demonstration",
       productName: "Mesh sponge",
       aspectRatio: "1:1",
