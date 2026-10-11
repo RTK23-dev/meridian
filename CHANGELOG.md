@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased — fixes from the review of 2b0a119
+
+Operators must read these before deploying. Senders of webhooks must change how they sign.
+
+- **Webhook signature (breaking)**: the signature now covers provider, account, event id, timestamp and the SHA-256 of the body, in the
+  `v2` canonical string documented in `docs/PROVIDERS.md`. Old-format signatures are refused with 401. Re-address attempts are refused.
+- **Webhook duplicates**: a valid redelivery of a stored event returns 200 "already received" instead of 401. The event and its job are
+  written in one transaction.
+- **Webhook receipts**: the receipt says "recorded". No downstream processing runs for a webhook yet.
+- **Webhook timing**: a body that stalls for 10 seconds returns 408. A bad signature makes no database call.
+- **Artifact size and type**: every input form is capped at the artifact byte limit. A job whose modality does not match the artifact
+  fails with `ARTIFACT_MODALITY_MISMATCH`. An animated GIF is classified as video.
+- **Attached images**: attach runs through the production lifecycle: budget reservation, a job row, storage through the artifact store and
+  settlement. It needs the artifact store and refuses before any spend without it. The creative and asset state follow the quality outcome.
+  An in-flight or unresolved attach blocks a second one for the same creative.
+- **Review actions**: an approve or reject commits all its writes together, and a second decision on the same review is refused.
+- **Prohibited claims**: a creative's claims come from its stored product, not from the first product in the brand.
+
 ## Unreleased — fixes from the static review of 01307e8
 
 Operators should read these before deploying. Migration `0060_webhook_tenant_scope.sql` is new.
