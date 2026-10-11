@@ -18,9 +18,15 @@ test("sign-in, invite, upload, and model limiters are distinct named budgets", (
   assert.equal(modelLimit.allow("user-1", 10), true);
 });
 
-test("auth keys prefer the first forwarded address", () => {
+test("auth keys ignore client-supplied forwarding headers unless a trusted proxy is configured", () => {
   const request = new Request("https://example.test/api/auth/sign-in", {
     headers: { "x-forwarded-for": "203.0.113.8, 10.0.0.1", "x-real-ip": "198.51.100.4" },
   });
+  const previous = process.env.MERIDIAN_TRUST_PROXY_HEADERS;
+  delete process.env.MERIDIAN_TRUST_PROXY_HEADERS;
+  assert.equal(clientKey(request), "untrusted-client");
+  process.env.MERIDIAN_TRUST_PROXY_HEADERS = "true";
   assert.equal(clientKey(request), "203.0.113.8");
+  if (previous === undefined) delete process.env.MERIDIAN_TRUST_PROXY_HEADERS;
+  else process.env.MERIDIAN_TRUST_PROXY_HEADERS = previous;
 });
