@@ -3,6 +3,8 @@ import test from "node:test";
 import { createHash, randomUUID } from "node:crypto";
 import { getSql } from "../../../db.ts";
 import { createTenantFixture } from "../../testing/production-fixtures.ts";
+import { studioTenant } from "../../testing/durable-image-fixtures.ts";
+import { storeVaultCredential } from "../../vault/service.ts";
 import {
   GeminiOmniVideoProvider,
   buildOmniTextToVideoPayload,
@@ -11,6 +13,9 @@ import {
 } from "./omni.ts";
 import { modelCapabilityRegistry } from "../registry.ts";
 import type { CreativeSpec } from "../types.ts";
+
+// The vault encrypts saved keys with this master key. Only this test process uses it.
+process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || "test-master-key-omni-0123456789abcdef";
 
 const sampleSpec: CreativeSpec = {
   id: "spec-test-1",
@@ -27,27 +32,45 @@ const sampleSpec: CreativeSpec = {
   ],
 };
 
-test("GeminiOmniVideoProvider reports NOT_CONFIGURED when API key is missing", async () => {
-  const origKey = process.env.GEMINI_API_KEY;
-  const origGoogleKey = process.env.GOOGLE_API_KEY;
-  delete process.env.GEMINI_API_KEY;
-  delete process.env.GOOGLE_API_KEY;
-
-  try {
-    const provider = new GeminiOmniVideoProvider();
-    const health = await provider.health();
-    assert.equal(health.state, "NOT_CONFIGURED");
-
-    const job = await provider.submitJob(sampleSpec);
-    assert.equal(job.status, "NOT_CONFIGURED");
-  } finally {
-    if (origKey) process.env.GEMINI_API_KEY = origKey;
-    if (origGoogleKey) process.env.GOOGLE_API_KEY = origGoogleKey;
+/**
+ * A real workspace, optionally with a saved production key. The keys in these tests come from the workspace's vault entry,
+ * never from the environment.
+ */
+async function workspace(apiKey?: string) {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "omni");
+  if (apiKey) {
+    await storeVaultCredential(sql, tenant.organizationId, "provider_config:production", { accessToken: "", apiKey });
   }
+  return tenant;
+}
+
+function specFor(tenant: { organizationId: string; brandId: string }, extra: Partial<CreativeSpec> = {}): CreativeSpec {
+  return { ...sampleSpec, organizationId: tenant.organizationId, brandId: tenant.brandId, ...extra };
+}
+
+test("GeminiOmniVideoProvider reports NOT_CONFIGURED without a workspace, and never READY", async () => {
+  const provider = new GeminiOmniVideoProvider();
+  const health = await provider.health();
+  assert.equal(health.state, "NOT_CONFIGURED");
+  assert.match(health.detail, /workspace production credential/);
 });
 
-test("GeminiOmniVideoProvider submits official REST Interactions API payload", async () => {
-  process.env.GEMINI_API_KEY = "test-gemini-key";
+test("GeminiOmniVideoProvider reports NOT_CONFIGURED for a workspace with no saved key, and makes no request", async () => {
+  const tenant = await workspace();
+  let calls = 0;
+  const provider = new GeminiOmniVideoProvider({
+    fetchImpl: (async () => { calls++; return new Response("{}", { status: 200 }); }) as unknown as typeof fetch,
+  });
+  assert.equal((await provider.healthFor(tenant.organizationId)).state, "NOT_CONFIGURED");
+
+  const job = await provider.submitJob(specFor(tenant));
+  assert.equal(job.status, "NOT_CONFIGURED");
+  assert.equal(calls, 0, "no provider request is made without a usable key");
+});
+
+test("GeminiOmniVideoProvider submits official REST Interactions API payload with the workspace key", async () => {
+  const tenant = await workspace("test-gemini-key");
 
   const mockFetch = async (url: string | URL | Request, init?: RequestInit) => {
     assert.equal(url.toString(), "https://generativelanguage.googleapis.com/v1beta/interactions");
@@ -81,39 +104,35 @@ test("GeminiOmniVideoProvider submits official REST Interactions API payload", a
     fetchImpl: mockFetch as unknown as typeof fetch,
   });
 
-  const job = await provider.submitJob(sampleSpec);
+  const job = await provider.submitJob(specFor(tenant));
   assert.equal(job.status, "RUNNING");
   assert.equal(job.providerJobId, "interactions/omni-job-999");
   assert.equal(job.providerId, "google_omni");
+  assert.equal(job.metadata?.organizationId, tenant.organizationId, "the job records the workspace that owns it");
 });
 
 test("Gemini Omni preserves an ambiguous submission as unknown and never synthesizes a provider request id", async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  process.env.GEMINI_API_KEY = "test-gemini-key";
-  try {
-    const transportFailure = new GeminiOmniVideoProvider({
-      fetchImpl: (async () => { throw new Error("connection reset after request write"); }) as unknown as typeof fetch,
-    });
-    assert.equal((await transportFailure.submitJob({ ...sampleSpec, idempotencyKey: "durable-job-key" })).status, "SUBMISSION_UNKNOWN");
+  const tenant = await workspace("test-gemini-key");
+  const transportFailure = new GeminiOmniVideoProvider({
+    fetchImpl: (async () => { throw new Error("connection reset after request write"); }) as unknown as typeof fetch,
+  });
+  assert.equal((await transportFailure.submitJob(specFor(tenant, { idempotencyKey: "durable-job-key" }))).status, "SUBMISSION_UNKNOWN");
 
-    const missingProviderId = new GeminiOmniVideoProvider({
-      fetchImpl: (async () => new Response(JSON.stringify({ status: "in_progress" }), { status: 200 })) as unknown as typeof fetch,
-    });
-    const result = await missingProviderId.submitJob({ ...sampleSpec, idempotencyKey: "durable-job-key" });
-    assert.equal(result.status, "SUBMISSION_UNKNOWN");
-    assert.equal(result.providerJobId, undefined);
-  } finally {
-    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
-    else delete process.env.GEMINI_API_KEY;
-  }
+  const missingProviderId = new GeminiOmniVideoProvider({
+    fetchImpl: (async () => new Response(JSON.stringify({ status: "in_progress" }), { status: 200 })) as unknown as typeof fetch,
+  });
+  const result = await missingProviderId.submitJob(specFor(tenant, { idempotencyKey: "durable-job-key" }));
+  assert.equal(result.status, "SUBMISSION_UNKNOWN");
+  assert.equal(result.providerJobId, undefined);
 });
 
 test("GeminiOmniVideoProvider parses official REST steps[].content[] Base64 video and lowercase completed", async () => {
-  process.env.GEMINI_API_KEY = "test-gemini-key";
+  const tenant = await workspace("test-gemini-key");
   const fakeBase64 = Buffer.from("fake-mp4-video-stream-content").toString("base64");
 
-  const mockFetch = async (url: string | URL | Request) => {
+  const mockFetch = async (url: string | URL | Request, init?: RequestInit) => {
     assert.ok(url.toString().includes("interactions/omni-job-999"));
+    assert.equal((init?.headers as Record<string, string>)["x-goog-api-key"], "test-gemini-key");
     return new Response(
       JSON.stringify({
         interaction_id: "interactions/omni-job-999",
@@ -140,17 +159,40 @@ test("GeminiOmniVideoProvider parses official REST steps[].content[] Base64 vide
     fetchImpl: mockFetch as unknown as typeof fetch,
   });
 
-  const polled = await provider.checkJobStatus("interactions/omni-job-999");
+  const polled = await provider.checkJobStatus("interactions/omni-job-999", { organizationId: tenant.organizationId });
   assert.equal(polled.status, "COMPLETED");
   assert.ok(polled.metadata?.sha256);
   assert.equal(polled.metadata?.mimeType, "video/mp4");
   assert.ok((polled.metadata?.byteSize as number) > 0);
 });
 
-test("GeminiOmniVideoProvider supports image-to-video multimodal input structure", async () => {
-  process.env.GEMINI_API_KEY = "test-gemini-key";
+test("GeminiOmniVideoProvider polls only with the key of the workspace that owns the job", async () => {
+  const owner = await workspace("owner-gemini-key");
+  const other = await workspace();
+  const keys: Array<string | null> = [];
+  const provider = new GeminiOmniVideoProvider({
+    fetchImpl: (async (_url: string | URL | Request, init?: RequestInit) => {
+      keys.push(new Headers(init?.headers).get("x-goog-api-key"));
+      return new Response(JSON.stringify({ status: "in_progress" }), { status: 200 });
+    }) as unknown as typeof fetch,
+  });
 
-  const mockFetch = async (url: string | URL | Request, init?: RequestInit) => {
+  const unowned = await provider.checkJobStatus("interactions/omni-job-1", {});
+  assert.equal(unowned.status, "NOT_CONFIGURED", "a poll with no owning workspace sends nothing");
+
+  const foreign = await provider.checkJobStatus("interactions/omni-job-1", { organizationId: other.organizationId });
+  assert.equal(foreign.status, "NOT_CONFIGURED", "a workspace with no key of its own cannot poll another workspace's job");
+  assert.deepEqual(keys, [], "neither refused poll sent a request");
+
+  const owned = await provider.checkJobStatus("interactions/omni-job-1", { organizationId: owner.organizationId });
+  assert.equal(owned.status, "RUNNING");
+  assert.deepEqual(keys, ["owner-gemini-key"], "the owner's poll carries the owner's key");
+});
+
+test("GeminiOmniVideoProvider supports image-to-video multimodal input structure", async () => {
+  const tenant = await workspace("test-gemini-key");
+
+  const mockFetch = async (_url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(init?.body as string);
     assert.equal(body.model, "gemini-omni-1.1-flash");
     assert.ok(Array.isArray(body.input));
@@ -186,10 +228,9 @@ test("GeminiOmniVideoProvider supports image-to-video multimodal input structure
     fetchImpl: mockFetch as unknown as typeof fetch,
   });
 
-  const specWithImage: CreativeSpec = {
-    ...sampleSpec,
+  const specWithImage = specFor(tenant, {
     sourceMediaUrl: "https://storage.googleapis.com/test-bucket/product.jpg",
-  };
+  });
 
   const job = await provider.submitJob(specWithImage);
   assert.equal(job.status, "COMPLETED");
@@ -197,7 +238,6 @@ test("GeminiOmniVideoProvider supports image-to-video multimodal input structure
 });
 
 test("E2E: Production poller consumes Omni Base64 video response and materializes real bytes to Drive", async () => {
-  process.env.GEMINI_API_KEY = "test-gemini-key";
   const sql = await getSql();
   const fakeVideoBytes = Buffer.from("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41test-omni-rendered-mp4-payload-bytes");
   const fakeBase64 = fakeVideoBytes.toString("base64");
@@ -235,6 +275,10 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
     );
   };
 
+  // A real tenant and a durable job row, as the executor leaves it while the render is in flight. The workspace has its own
+  // saved production key, which the poller's job metadata leads the provider to.
+  const tenant = await createTenantFixture(sql, "omni-poll", 50, "google_omni", "gemini-omni-1.1-flash");
+  await storeVaultCredential(sql, tenant.organizationId, "provider_config:production", { accessToken: "", apiKey: "test-gemini-key" });
   const omniProvider = new GeminiOmniVideoProvider({
     fetchImpl: mockOmniFetch as unknown as typeof fetch,
   });
@@ -242,8 +286,6 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
     get: (id: string) => (id === "google_omni" || id === "omni" ? omniProvider : undefined),
   };
 
-  // A real tenant and a durable job row, as the executor leaves it while the render is in flight.
-  const tenant = await createTenantFixture(sql, "omni-poll", 50, "google_omni", "gemini-omni-1.1-flash");
   const jobId = `prod-job-omni-${randomUUID()}`;
   const input = {
     creativeSpec: { ...sampleSpec, durationTargetSeconds: 5 },

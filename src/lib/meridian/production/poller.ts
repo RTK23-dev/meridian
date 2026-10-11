@@ -16,6 +16,20 @@ import { completeProductionJob, settleCarouselParent, settleCreativePlanIfComple
 const POLLER_ACTOR_ID = "production-poller";
 
 /** Records a materialization failure durably. The job stays COMPLETED and unmaterialized, so it is claimed again. */
+function toIsoOrNull(value: unknown): string | null {
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+/** Attempts before a job whose render cannot be stored durably is failed. */
+export const MAX_STORAGE_PERSISTENCE_ATTEMPTS = 5;
+
+/** Pure retry decision for a render that could not be stored. Exported so the bound is tested without a provider. */
+export function storageRetryAction(previousAttempts: number): { action: "retry" | "fail"; attempts: number } {
+  const attempts = previousAttempts + 1;
+  return { action: attempts < MAX_STORAGE_PERSISTENCE_ATTEMPTS ? "retry" : "fail", attempts };
+}
+
 async function recordMaterializationRetry(
   sql: Sql,
   row: { id: string; organization_id: string; brand_id: string; attempt_count: number },
@@ -92,12 +106,13 @@ export async function pollProductionJobs(
     creative_plan_id: string | null;
     materialized_at: unknown;
     modality: string;
+    created_at: unknown;
   }>`
     with candidates as (
       select id
       from production_jobs
       where (
-          status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
+          status in ('QUEUED', 'RUNNING', 'RENDERING', 'SUBMITTING', 'AWAITING_CHILDREN', 'WAITING_FOR_ARTIFACT', 'WAITING_FOR_EXTERNAL_ARTIFACT', 'PENDING_PREFLIGHT', 'STORAGE_PERSISTENCE_FAILED')
           or (status = 'COMPLETED' and materialized_at is null and artifact_id is not null)
         )
         and (next_poll_at is null or next_poll_at <= now())
@@ -112,7 +127,7 @@ export async function pollProductionJobs(
     where jobs.id = candidates.id
     returning jobs.id, jobs.organization_id, jobs.brand_id, jobs.provider, jobs.provider_job_id,
               jobs.request_id, jobs.status_url, jobs.cancel_url, jobs.status, jobs.attempt_count, jobs.input,
-              jobs.artifact_id, jobs.creative_plan_id, jobs.materialized_at, jobs.modality
+              jobs.artifact_id, jobs.creative_plan_id, jobs.materialized_at, jobs.modality, jobs.created_at
   `;
 
   const result: PollResult = {
@@ -226,6 +241,8 @@ export async function pollProductionJobs(
       providerJobId: row.provider_job_id,
       creativeSpec: parsedInput.creativeSpec,
       dropFolderUrl: parsedInput.dropFolderUrl,
+      // When the job was submitted. A manual handoff expires from this time.
+      createdAt: toIsoOrNull(row.created_at),
     };
 
     const externalJobId = row.provider_job_id || row.id;
@@ -308,6 +325,34 @@ export async function pollProductionJobs(
             where id = ${row.id}
           `;
           // Billing is uncertain for an accepted render, so the reservation stays held for reconciliation.
+          await settlePlanOf(sql, row);
+          result.failed++;
+        }
+      } else if (finalized.status === "STORAGE_PERSISTENCE_FAILED") {
+        // The render exists but was not stored durably. Retry with backoff, and fail the job once retries are exhausted,
+        // so the plan can settle. The provider accepted the render and may have billed it, so the reservation is held.
+        const retry = storageRetryAction(row.attempt_count || 0);
+        if (retry.action === "retry") {
+          await sql`
+            update production_jobs
+            set attempt_count = ${retry.attempts},
+                error_code = 'STORAGE_PERSISTENCE_FAILED',
+                last_polled_at = now(),
+                next_poll_at = now() + (least(${retry.attempts}, 6) * interval '30 seconds'),
+                updated_at = now()
+            where id = ${row.id}
+          `;
+          result.polled++;
+        } else {
+          await sql`
+            update production_jobs
+            set status = 'FAILED',
+                attempt_count = ${retry.attempts},
+                error_code = 'STORAGE_RETRY_EXHAUSTED',
+                last_polled_at = now(),
+                updated_at = now()
+            where id = ${row.id}
+          `;
           await settlePlanOf(sql, row);
           result.failed++;
         }

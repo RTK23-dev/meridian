@@ -52,6 +52,16 @@ export function injectProvider(
         checkedAt: new Date().toISOString(),
       }),
     },
+    // A provider with a workspace-scoped check is stubbed on that path too, so the router sees the same readiness.
+    healthFor: {
+      value: async () => ({
+        id: providerId,
+        state: "HEALTHY",
+        capabilities: [],
+        detail: "test stub",
+        checkedAt: new Date().toISOString(),
+      }),
+    },
     submitJob: {
       value: async (spec: CreativeSpec) => {
         const index = submitted.length + 1;

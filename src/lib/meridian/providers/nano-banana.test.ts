@@ -96,7 +96,7 @@ test("generateNanoBananaImage: successfully parses documented raw Interactions R
   const result = await generateNanoBananaImage({
     prompt: "Vibrant skincare product bottle on marble surface",
     promptVersion: "v1.0",
-    env: { MERIDIAN_GEMINI_API_KEY: "test-google-key-123" },
+    apiKey: "test-google-key-123",
     fetchImpl: async (url, init) => {
       assert.equal(String(url), "https://generativelanguage.googleapis.com/v1beta/interactions");
       capturedApiKey = new Headers(init?.headers).get("x-goog-api-key") || "";
@@ -122,7 +122,7 @@ test("generateNanoBananaImage: fails safely with typed error on malformed base64
   const invalidResult = await generateNanoBananaImage({
     prompt: "invalid image",
     promptVersion: "v1.0",
-    env: { MERIDIAN_GEMINI_API_KEY: "test-key" },
+    apiKey: "test-key",
     fetchImpl: async () => {
       return new Response(
         JSON.stringify({

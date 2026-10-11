@@ -13,6 +13,8 @@ Credentials without a successful request stay `NOT_CONFIGURED`. `HEALTHY` means 
 ### TypeSafe JEV (Decisions API)
 JEV uses OpenRouter's native Decisions API at `POST https://openrouter.ai/api/alpha/decisions` with model `typesafe/jev-1.13`. It provides typed probabilistic judgments (`choice`, `noul`, `score`). Generic chat completion endpoints (`/chat/completions`) are never used as a fallback for JEV judgments.
 
+**Decision engines.** One engine is active per workspace: TypeSafe JEV (above) or the OpenAI Decisions API (`POST /v1/decisions`, public beta, model `gpt-6-luna` by default). Only the active engine receives decisions, and nothing falls back to the other engine. See [DECISION_ENGINES.md](DECISION_ENGINES.md) for configuration, image transport, and the status of each part.
+
 ### Binary Storage (Google Drive Primary)
 Google Drive is the primary binary artifact store for Meridian. Assets are organized by tenant, brand, and lifecycle hierarchy:
 - Key lookup resolves provider file IDs via Postgres `storage_objects`.

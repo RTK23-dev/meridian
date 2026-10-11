@@ -87,6 +87,6 @@ test("SnapshotScheduler recomputes rating with longitudinal snapshots", () => {
   });
 
   assert.equal(rating.outlierRatio, 15); // 45k / 3k
-  assert.ok(rating.velocityScore > 50);
+  assert.ok(rating.velocityScore !== null && rating.velocityScore > 50);
   assert.ok(["S", "A"].includes(rating.ratingTier));
 });

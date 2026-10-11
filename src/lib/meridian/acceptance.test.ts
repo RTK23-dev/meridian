@@ -8,7 +8,7 @@ import { designExperiment } from "./experiments/design.ts";
 import { buildBrief } from "./brief/engine.ts";
 import { decide } from "./jev/engine.ts";
 import { questionRegistry } from "./jev/registry.ts";
-import { opportunityGate, visualQa } from "./jev/questions.ts";
+import { creativeQa, opportunityGate, visualQa } from "./jev/questions.ts";
 import { createJobQueue, learningJobKey } from "./jobs/runner.ts";
 import { learnPatterns } from "./learning/engine.ts";
 import { explainOpportunity, rankOpportunities } from "./opportunity/engine.ts";
@@ -354,6 +354,9 @@ function own(index: number, angle: string): ObservedCreative {
   };
 }
 
+/** A calibration step that maps a score to itself. It stands for a calibrated value, the only kind that can approve. */
+const CALIBRATED = { calibration: { version: "identity.acceptance.v1", apply: (score: number) => score } };
+
 test("acceptance: market evidence becomes a recommendation, then learning changes the next one", () => {
   const fixture = JSON.parse(readFileSync(new URL("../../../evals/acceptance/market.json", import.meta.url), "utf8")) as {
     competitors: { id: string; angle: string; hookType: string; format: string; proofType: string; text: string }[];
@@ -464,7 +467,9 @@ test("acceptance: market evidence becomes a recommendation, then learning change
     hook: briefBefore.hook,
     cta: "Shop",
   });
-  assert.equal(textGate.decision.decision, "AUTO_APPROVE");
+  // The copy gate scores the copy. Uncalibrated, a clean copy can only go to review. Calibrated, the same copy approves.
+  assert.equal(textGate.decision.decision, "HUMAN_REVIEW");
+  assert.equal(decide(creativeQa, textGate.evidence, CALIBRATED).decision, "AUTO_APPROVE");
   const vision = decide(visualQa, {
     available: false,
     logoPresent: null,

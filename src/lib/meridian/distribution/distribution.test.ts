@@ -4,6 +4,9 @@ import { InstagramReelsChannel } from "./instagram.ts";
 import { YouTubeShortsChannel } from "./youtube.ts";
 import { publishToSelectedChannels, listDistributionChannels } from "./registry.ts";
 
+// Test-provider publishing is restricted to the testing runtime.
+process.env.MERIDIAN_TESTING_RUNTIME = "true";
+
 test("registry discovers all built-in organic channels", () => {
   const channels = listDistributionChannels();
   assert.ok(channels.length >= 3);

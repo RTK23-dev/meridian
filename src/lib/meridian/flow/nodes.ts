@@ -6,6 +6,7 @@ import type { VideoEngine } from "../video/engine.ts";
 import type { PublishEngine, PublishPausedRequest, PublishEngineResult } from "../publishing/engine.ts";
 import { compareOriginalityAgainstSource } from "../factory/gates.ts";
 import type { HypitJobContract } from "../hypit/contract.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 /** Source Ingestion Connector Node */
 export function createSourceNode(adapter: SourceAdapter, id = "source-node"): FlowNode<{ niche?: string; limit?: number }, SourceAdItem[]> {
@@ -268,7 +269,7 @@ export function createOrganicPublishNode(
           title: input.title,
           tags: input.tags,
           aspectRatio: input.aspectRatio ?? "9:16",
-          allowTestProvider: true,
+          allowTestProvider: isTestingRuntimeNow(),
         },
       });
 
@@ -295,15 +296,15 @@ export function createOrganicTelemetryNode(
   id = "organic-telemetry-node",
 ): FlowNode<
   { channelId: string; externalId: string }[],
-  { channelId: string; externalId: string; metrics: Record<string, unknown> }[]
+  { channelId: string; externalId: string; metrics: Record<string, unknown> | null }[]
 > {
   return {
     id,
     name: "Organic Telemetry Ingestor",
     type: "telemetry",
-    async execute(targets): Promise<NodeExecutionResult<{ channelId: string; externalId: string; metrics: Record<string, unknown> }[]>> {
+    async execute(targets): Promise<NodeExecutionResult<{ channelId: string; externalId: string; metrics: Record<string, unknown> | null }[]>> {
       const { getDistributionChannel } = await import("../distribution/registry.ts");
-      const results: { channelId: string; externalId: string; metrics: Record<string, unknown> }[] = [];
+      const results: { channelId: string; externalId: string; metrics: Record<string, unknown> | null }[] = [];
 
       for (const target of targets) {
         const channel = getDistributionChannel(target.channelId);
@@ -319,7 +320,11 @@ export function createOrganicTelemetryNode(
       return {
         ok: true,
         data: results,
-        logs: results.map((r) => `[${r.channelId}] Ingested telemetry for ${r.externalId}`),
+        logs: results.map((r) =>
+          r.metrics === null
+            ? `[${r.channelId}] Telemetry not observed for ${r.externalId}`
+            : `[${r.channelId}] Ingested telemetry for ${r.externalId}`,
+        ),
       };
     },
   };

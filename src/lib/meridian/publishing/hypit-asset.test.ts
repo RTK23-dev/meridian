@@ -8,6 +8,9 @@ import type { Sql } from "../learning/store.ts";
 import { publishThrough } from "../providers/boundaries.ts";
 import { memoryPublishLedger, publishStoredHypitAsset, sqlPublishLedger, type StoredHypitPublishInput } from "./hypit-asset.ts";
 
+// Test-provider publishing is restricted to the testing runtime.
+process.env.MERIDIAN_TESTING_RUNTIME = "true";
+
 const REAL_SHA = "daaff4d5d84675a0d70f78c4fb13a60828626de2640bd1126c0780a3aec63e9c";
 const REAL_JOB = "bld_20261006T070619745Z_B3ADAF5010";
 

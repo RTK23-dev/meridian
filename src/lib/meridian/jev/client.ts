@@ -113,7 +113,7 @@ const memoryDecisionCache = new Map<string, JevDecisionResponse>();
  * Minimizes state before sending to remote JEV API, stripping out unneeded secrets,
  * raw database columns, and irrelevant internal identifiers.
  */
-function minimizeJevState(state: Record<string, unknown>): Record<string, unknown> {
+export function minimizeJevState(state: Record<string, unknown>): Record<string, unknown> {
   const clean: Record<string, unknown> = {};
 
   if (state.description) clean.description = state.description;

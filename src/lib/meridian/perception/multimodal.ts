@@ -1,205 +1,267 @@
+/**
+ * Gemini as the first multimodal perception provider, behind MultimodalPerceptionProvider.
+ *
+ * Observations are the model's inferences from the media it was given. They are attached to the media by index, and only when
+ * the model reports that index. A missing, duplicate or out-of-range observation is a failure, not a guess. A fact the model
+ * does not report, or reports as unknown, stays unknown (null): no value, no confidence and no end time is invented.
+ *
+ * The credential is passed in per request by perception/credential.ts. The key goes in a request header, never in the URL.
+ */
 import { createHash } from "node:crypto";
+import { checkImageBytes } from "../media/image-input.ts";
 import type {
+  MediaObservation,
   MultimodalPerceptionProvider,
-  PerceptionBundle,
+  PerceptionFailureKind,
   PerceptionHealth,
-  SceneObservation,
+  PerceptionMedia,
+  PerceptionMediaKind,
+  PerceptionResult,
 } from "./types.ts";
+
+export const GEMINI_PERCEPTION_PROMPT_VERSION = "gemini-perception.v2";
+/** The most media one call may carry. A video is judged on at most this many frames, never on the whole video. */
+export const GEMINI_PERCEPTION_MAX_MEDIA = 4;
+const DEFAULT_TIMEOUT_MS = 30_000;
+const SHOT_TYPES = ["close_up", "medium_shot", "wide_shot", "macro", "screen_recording", "unknown"] as const;
+const SETTINGS = ["indoor", "outdoor", "studio", "vehicle", "screen", "unknown"] as const;
+const PRODUCT_PROMINENCE = ["prominent", "visible_small", "not_visible"] as const;
+const SHARPNESS = ["sharp", "soft", "blurred"] as const;
+const LIGHTING = ["good", "poor", "mixed"] as const;
+const COMPOSITION = ["balanced", "cluttered", "unclear"] as const;
+const LEGIBILITY = ["legible", "partly_legible", "illegible", "no_text"] as const;
+
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function instructions(kind: PerceptionMediaKind, count: number): string {
+  const scope = kind === "video_frames"
+    ? `These are ${count} frames sampled from one video, in time order. Describe each frame on its own. Do not describe what happens between frames.`
+    : `This is ${count} image. Describe it on its own.`;
+  return [
+    "You are a factual visual perception system for advertising review. Describe only what is visible in each item.",
+    scope,
+    "Return a JSON array with one object per item, in the order given. Each object has:",
+    `- index: integer, 0 to ${count - 1}`,
+    `- shotType: one of ${SHOT_TYPES.join(", ")}`,
+    "- productPresence: boolean, true only if the advertised product is visible",
+    `- productProminence: one of ${PRODUCT_PROMINENCE.join(", ")}`,
+    "- productObstructed: boolean, true if something covers part of the product",
+    "- facePresence: boolean",
+    "- presenterPresence: boolean",
+    `- setting: one of ${SETTINGS.join(", ")}`,
+    "- motionIntensity: number from 0 to 1, or null when a single still cannot show it",
+    "- contrastRatio: number from 0 to 1",
+    "- typographyDensity: number from 0 to 1",
+    "- dominantColors: up to 5 colour names",
+    "- ocrText: on-screen text transcribed exactly as shown, or an empty string when there is none",
+    `- sharpness: one of ${SHARPNESS.join(", ")}`,
+    `- lighting: one of ${LIGHTING.join(", ")}`,
+    `- composition: one of ${COMPOSITION.join(", ")}`,
+    `- legibility: one of ${LEGIBILITY.join(", ")}`,
+    "- artifactsVisible: boolean, true if visible compression, distortion or rendering artefacts are present",
+    "Use null for any value you cannot determine from the item. Never guess. Output only the JSON array.",
+  ].join("\n");
+}
+
+type ParsedEntry = Omit<MediaObservation, "mediaId" | "sha256" | "timestampMs" | "basis">;
+
+function pick<T extends string>(value: unknown, allowed: readonly T[]): T | null | undefined {
+  if (value === null) return null;
+  if (typeof value === "string" && (allowed as readonly string[]).includes(value)) return value as T;
+  return undefined;
+}
+
+function bool(value: unknown): boolean | null | undefined {
+  if (value === null) return null;
+  return typeof value === "boolean" ? value : undefined;
+}
+
+/** Keeps only the fields the model reported in the expected form. Anything else is left out, which means unknown. */
+function sanitize(entry: Record<string, unknown>): ParsedEntry {
+  const out: ParsedEntry = {};
+  const shot = pick(entry.shotType, SHOT_TYPES);
+  if (shot !== undefined && shot !== null) out.shotType = shot;
+  const setting = pick(entry.setting, SETTINGS);
+  if (setting !== undefined && setting !== null) out.setting = setting;
+  for (const key of ["productPresence", "productObstructed", "facePresence", "presenterPresence", "artifactsVisible"] as const) {
+    const value = bool(entry[key]);
+    if (value !== undefined) out[key] = value;
+  }
+  const prominence = pick(entry.productProminence, PRODUCT_PROMINENCE);
+  if (prominence !== undefined) out.productProminence = prominence;
+  const sharpness = pick(entry.sharpness, SHARPNESS);
+  if (sharpness !== undefined) out.sharpness = sharpness;
+  const lighting = pick(entry.lighting, LIGHTING);
+  if (lighting !== undefined) out.lighting = lighting;
+  const composition = pick(entry.composition, COMPOSITION);
+  if (composition !== undefined) out.composition = composition;
+  const legibility = pick(entry.legibility, LEGIBILITY);
+  if (legibility !== undefined) out.legibility = legibility;
+  for (const key of ["motionIntensity", "contrastRatio", "typographyDensity"] as const) {
+    const value = entry[key];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1) out[key] = value;
+  }
+  if (Array.isArray(entry.dominantColors)) {
+    const colours = entry.dominantColors.filter((item): item is string => typeof item === "string").slice(0, 5);
+    if (colours.length > 0) out.dominantColors = colours;
+  }
+  if (typeof entry.ocrText === "string") {
+    const text = entry.ocrText.trim().slice(0, 2000);
+    if (text) out.ocrText = text;
+  }
+  return out;
+}
+
+/** Attaches each observation to the media at its index. Any missing, duplicate, or out-of-range index is a failure. */
+export function parseGeminiObservations(
+  text: string,
+  media: PerceptionMedia[],
+): { ok: true; observations: MediaObservation[] } | { ok: false; reason: string } {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return { ok: false, reason: "The response was not valid JSON." };
+  }
+  if (!Array.isArray(raw)) return { ok: false, reason: "The response was not an array." };
+  const byIndex = new Map<number, Record<string, unknown>>();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") return { ok: false, reason: "An observation was not an object." };
+    const index = (entry as { index?: unknown }).index;
+    if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index >= media.length) {
+      return { ok: false, reason: `An observation had index ${String(index)}, outside 0 to ${media.length - 1}.` };
+    }
+    if (byIndex.has(index)) return { ok: false, reason: `Index ${index} was reported more than once.` };
+    byIndex.set(index, entry as Record<string, unknown>);
+  }
+  const observations: MediaObservation[] = [];
+  for (const [index, item] of media.entries()) {
+    const entry = byIndex.get(index);
+    if (!entry) return { ok: false, reason: `No observation was reported for media ${index + 1}.` };
+    observations.push({
+      ...sanitize(entry),
+      mediaId: item.id,
+      sha256: item.sha256,
+      timestampMs: item.timestampMs,
+      basis: "inferred",
+    });
+  }
+  return { ok: true, observations };
+}
 
 export class GeminiPerceptionProvider implements MultimodalPerceptionProvider {
   readonly id = "gemini_multimodal";
   readonly model: string;
-  private fetchImpl: typeof fetch;
+  readonly promptVersion = GEMINI_PERCEPTION_PROMPT_VERSION;
+  private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
 
-  constructor(
-    model = process.env.PERCEPTION_MODEL || "gemini-2.5-flash",
-    options?: { fetchImpl?: typeof fetch },
-  ) {
+  constructor(model = process.env.PERCEPTION_MODEL || "gemini-2.5-flash", options: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}) {
     this.model = model;
-    this.fetchImpl = options?.fetchImpl || globalThis.fetch;
-  }
-
-  private getApiKey(): string | undefined {
-    return process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   async health(): Promise<PerceptionHealth> {
-    const key = this.getApiKey();
-    if (!key) {
-      return {
-        id: this.id,
-        state: "NOT_CONFIGURED",
-        detail: "GEMINI_API_KEY or GOOGLE_API_KEY is not set.",
-      };
-    }
-    return {
-      id: this.id,
-      state: "HEALTHY",
-      detail: `Gemini multimodal perception configured with model ${this.model}.`,
-    };
+    return { id: this.id, state: "HEALTHY", detail: `Gemini perception module ready (model ${this.model}). Credentials are resolved per request.` };
   }
 
-  async perceiveVideo(input: {
-    artifactId: string;
-    videoBytes?: Uint8Array;
-    durationMs?: number;
-    keyframes?: Array<{ sceneIndex: number; timestampMs: number; bytes: Uint8Array }>;
-  }): Promise<PerceptionBundle> {
-    const durationMs = input.durationMs ?? 0;
-    const apiKey = this.getApiKey();
-
-    if (!apiKey || !input.keyframes || input.keyframes.length === 0) {
-      // Disconnected or no keyframes provided: return factual baseline with zero fabrication
-      return {
-        artifactId: input.artifactId,
-        durationMs,
-        scenes: [],
-        transcriptSegments: [],
-        capturedAt: new Date().toISOString(),
-        provider: this.id,
-        model: this.model,
-      };
-    }
-
-    try {
-      // Build multimodal contents for Gemini
-      const imageParts = input.keyframes.map((kf) => ({
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: Buffer.from(kf.bytes).toString("base64"),
-        },
-      }));
-
-      const promptText = `You are a factual video scene perception system. Analyze these ${imageParts.length} keyframe images in sequential order.
-For each keyframe, return factual visual observations without editorial judgment.
-Output a JSON array where each object has:
-- index: integer (0 to ${imageParts.length - 1})
-- shotType: "close_up" | "medium_shot" | "wide_shot" | "macro" | "screen_recording" | "unknown"
-- presenterPresence: boolean
-- facePresence: boolean
-- productPresence: boolean
-- setting: "indoor" | "outdoor" | "studio" | "vehicle" | "screen" | "unknown"
-- motionIntensity: number between 0 and 1
-- contrastRatio: number between 0 and 1
-- typographyDensity: number between 0 and 1
-- dominantColors: string[]
-- ocrText: string (prominent visible text, or empty string)
-Output ONLY the JSON array.`;
-
-      const res = await this.fetchImpl(
-        `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: promptText }, ...imageParts],
-              },
-            ],
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0.1,
-            },
-          }),
-        },
-      );
-
-      if (res.ok) {
-        const data = (await res.json()) as {
-          candidates?: Array<{
-            content?: {
-              parts?: Array<{ text?: string }>;
-            };
-          }>;
-        };
-
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (rawText) {
-          const parsed = JSON.parse(rawText) as Array<{
-            index: number;
-            shotType?: "close_up" | "medium_shot" | "wide_shot" | "macro" | "screen_recording" | "unknown";
-            presenterPresence?: boolean;
-            facePresence?: boolean;
-            productPresence?: boolean;
-            setting?: "indoor" | "outdoor" | "studio" | "vehicle" | "screen" | "unknown";
-            motionIntensity?: number;
-            contrastRatio?: number;
-            typographyDensity?: number;
-            dominantColors?: string[];
-            ocrText?: string;
-          }>;
-
-          const scenes: SceneObservation[] = input.keyframes.map((kf, i) => {
-            const sha256 = createHash("sha256").update(kf.bytes).digest("hex");
-            const obs = parsed.find((p) => p.index === i) || parsed[i];
-            return {
-              sceneIndex: kf.sceneIndex,
-              startMs: kf.timestampMs,
-              endMs: kf.timestampMs + 2000,
-              keyframeHash: sha256,
-              visual: {
-                shotType: obs?.shotType || "unknown",
-                presenterPresence: obs?.presenterPresence,
-                facePresence: obs?.facePresence,
-                productPresence: obs?.productPresence,
-                setting: obs?.setting || "unknown",
-                motionIntensity: obs?.motionIntensity,
-                contrastRatio: obs?.contrastRatio,
-                typographyDensity: obs?.typographyDensity,
-                dominantColors: obs?.dominantColors,
-              },
-              ocrText: obs?.ocrText || undefined,
-              state: "OBSERVED",
-              methodId: "gemini_visual_perception.v1",
-              modelQualityEstimate: 0.85,
-            };
-          });
-
-          return {
-            artifactId: input.artifactId,
-            durationMs,
-            scenes,
-            transcriptSegments: [],
-            capturedAt: new Date().toISOString(),
-            provider: this.id,
-            model: this.model,
-          };
-        }
-      }
-    } catch {
-      // Fall through to hash-only factual fallback if API call fails
-    }
-
-    const scenes: SceneObservation[] = input.keyframes.map((kf) => {
-      const sha256 = createHash("sha256").update(kf.bytes).digest("hex");
-      return {
-        sceneIndex: kf.sceneIndex,
-        startMs: kf.timestampMs,
-        endMs: kf.timestampMs + 2000,
-        keyframeHash: sha256,
-        visual: {
-          shotType: "unknown",
-          facePresence: undefined,
-          productPresence: undefined,
-          setting: "unknown",
-        },
-        state: "INFERRED",
-        methodId: "hash_keyframe_fallback.v1",
-      };
+  async perceive(input: { kind: PerceptionMediaKind; media: PerceptionMedia[] }, options: { apiKey: string }): Promise<PerceptionResult> {
+    const started = Date.now();
+    const failed = (failureKind: PerceptionFailureKind, message: string): PerceptionResult => ({
+      status: "failed",
+      providerId: this.id,
+      model: this.model,
+      promptVersion: this.promptVersion,
+      failureKind,
+      message,
+      latencyMs: Date.now() - started,
     });
 
+    const key = options.apiKey.trim();
+    if (!key) return failed("not_configured", "No Gemini credential was supplied for this request.");
+    if (input.media.length === 0) return failed("no_media", "No media was supplied.");
+    if (input.media.length > GEMINI_PERCEPTION_MAX_MEDIA) {
+      return failed("unsupported_media", `At most ${GEMINI_PERCEPTION_MAX_MEDIA} media items per call; ${input.media.length} were supplied.`);
+    }
+    for (const [index, item] of input.media.entries()) {
+      const checked = checkImageBytes(item.bytes, `Media ${index + 1}`);
+      if (!checked.ok) return failed("unsupported_media", checked.reason);
+      if (checked.mimeType !== item.mimeType) {
+        return failed("unsupported_media", `Media ${index + 1} is ${checked.mimeType}, not the ${item.mimeType} it was recorded as.`);
+      }
+      if (sha256Hex(item.bytes) !== item.sha256) return failed("unsupported_media", `Media ${index + 1} does not match its recorded hash.`);
+    }
+
+    // Only the media and the fixed instructions are sent. No copy, prompt, brand or competitor text.
+    const body = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: instructions(input.kind, input.media.length) },
+            ...input.media.map((item) => ({ inlineData: { mimeType: item.mimeType, data: Buffer.from(item.bytes).toString("base64") } })),
+          ],
+        },
+      ],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
+    };
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        },
+      );
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "";
+      if (name === "TimeoutError" || name === "AbortError") return failed("timeout", `No response within ${this.timeoutMs} ms.`);
+      return failed("network", "The request to the perception provider did not complete.");
+    }
+    if (!response.ok) {
+      const kind: PerceptionFailureKind =
+        response.status === 401 || response.status === 403
+          ? "authentication"
+          : response.status === 429
+            ? "rate_limited"
+            : response.status >= 500
+              ? "provider_unavailable"
+              : "invalid_response";
+      return failed(kind, `The perception provider returned HTTP ${response.status}.`);
+    }
+
+    let data: {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
+    };
+    try {
+      data = (await response.json()) as typeof data;
+    } catch {
+      return failed("invalid_response", "The response was not JSON.");
+    }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (typeof text !== "string" || !text.trim()) return failed("invalid_response", "The response had no text.");
+    const parsed = parseGeminiObservations(text, input.media);
+    if (!parsed.ok) return failed("invalid_response", parsed.reason);
+
+    const usage = data.usageMetadata;
     return {
-      artifactId: input.artifactId,
-      durationMs,
-      scenes,
-      transcriptSegments: [],
-      capturedAt: new Date().toISOString(),
-      provider: this.id,
+      status: "observed",
+      providerId: this.id,
       model: this.model,
+      promptVersion: this.promptVersion,
+      observations: parsed.observations,
+      latencyMs: Date.now() - started,
+      usage: usage
+        ? { inputTokens: usage.promptTokenCount, outputTokens: usage.candidatesTokenCount, totalTokens: usage.totalTokenCount }
+        : undefined,
     };
   }
 }
-
-export const defaultPerceptionProvider = new GeminiPerceptionProvider();

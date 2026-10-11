@@ -24,7 +24,8 @@ export interface InstantRatingInput {
 export interface InstantRatingResult {
   outlierRatio: number;
   shrunkOutlierScore: number;
-  velocityScore: number;
+  /** Null when fewer than two snapshots exist: velocity is not observed, so it is not assumed to be neutral. */
+  velocityScore: number | null;
   actionScore: number;
   intentScore: number;
   ratingTier: InstantRatingTier;
@@ -34,14 +35,20 @@ export interface InstantRatingResult {
   };
   isSmallCreatorBreakout: boolean;
   isFitted: boolean;
+  /** Whether the shares count was observed. When false, action rate counts comments only and is a lower bound. */
+  sharesObserved: boolean;
+  actionScoreIsLowerBound: boolean;
+  /** "supplied" when the creator and niche variances were measured; "seed_default" when the fixed seed priors were used. */
+  priorSource: "supplied" | "seed_default";
   evidenceSummary: string[];
 }
 
 /**
  * Calculates views acceleration slope from multiple snapshot checkpoints (0h, 6h, 24h, 72h).
  */
-export function calculateVelocityScore(snapshots: PostSnapshot[] = []): number {
-  if (snapshots.length < 2) return 50.0; // neutral default when only 1 snapshot exists
+export function calculateVelocityScore(snapshots: PostSnapshot[] = []): number | null {
+  // One snapshot shows no change over time, so velocity is not observed. It is not reported as a neutral score.
+  if (snapshots.length < 2) return null;
 
   const sorted = [...snapshots].sort((a, b) => a.hoursSincePost - b.hoursSincePost);
   const first = sorted[0];
@@ -68,6 +75,8 @@ export function calculateInstantRating(input: InstantRatingInput): InstantRating
   // sigma^2 = creator variance; tau^2 = niche prior variance
   const sigma2 = Math.max(0.1, input.creatorVariance ?? 1.2);
   const tau2 = Math.max(0.1, input.nichePriorVariance ?? 0.8);
+  const priorSource: InstantRatingResult["priorSource"] =
+    input.creatorVariance !== undefined && input.nichePriorVariance !== undefined ? "supplied" : "seed_default";
   const nicheMean = input.nichePriorMean ?? 0.0;
 
   const shrinkageFactor = tau2 / (sigma2 + tau2);
@@ -76,9 +85,11 @@ export function calculateInstantRating(input: InstantRatingInput): InstantRating
   // Velocity
   const velocityScore = calculateVelocityScore(input.snapshots);
 
-  // Action Rate: (comments + shares) per 1k views
-  const estimatedShares = input.sharesCount ?? ((input.friendTagCommentsCount ?? 0) * 2.5);
-  const totalActions = input.commentsCount + estimatedShares;
+  // Action Rate: (comments + shares) per 1k views. Shares are counted only when observed. They are never estimated
+  // from another count, so without them the action rate is a lower bound.
+  const sharesObserved = typeof input.sharesCount === "number" && Number.isFinite(input.sharesCount);
+  const totalActions = input.commentsCount + (sharesObserved ? (input.sharesCount as number) : 0);
+  const actionScoreIsLowerBound = !sharesObserved;
   const actionsPerK = (totalActions / safeViews) * 1000;
   // Organic benchmark: 4 actions/1k is typical (score ~40), 16 actions/1k is top decile (score ~70), 36+ is viral outlier (score ~90-100)
   const actionScore = Math.min(100, Math.max(0, (Math.sqrt(Math.max(0, actionsPerK)) / 6) * 100));
@@ -94,7 +105,7 @@ export function calculateInstantRating(input: InstantRatingInput): InstantRating
 
   // Tier Assignment Logic
   let ratingTier: InstantRatingTier = "C";
-  const hasHighVelocity = velocityScore >= 70;
+  const hasHighVelocity = velocityScore !== null && velocityScore >= 70;
 
   if ((shrunkScore >= 1.8 || (isSmallCreatorBreakout && shrunkScore >= 1.4)) && actionScore >= 45) {
     ratingTier = "S";
@@ -108,9 +119,12 @@ export function calculateInstantRating(input: InstantRatingInput): InstantRating
   const evidence: string[] = [
     `${rawRatio.toFixed(1)}x creator median views (${safeViews.toLocaleString()} vs ${safeMedian.toLocaleString()})`,
     `Shrunk outlier score: ${shrunkScore.toFixed(2)} (shrinkage weight: ${(shrinkageFactor * 100).toFixed(0)}%)`,
-    `Velocity: ${velocityScore}/100`,
-    `Action rate: ${actionsPerK.toFixed(1)} actions/1k views`,
+    velocityScore === null ? "Velocity: not observed (one snapshot)" : `Velocity: ${velocityScore}/100`,
+    `Action rate: ${actionsPerK.toFixed(1)} actions/1k views${sharesObserved ? "" : " (shares not observed; lower bound)"}`,
   ];
+  if (priorSource === "seed_default") {
+    evidence.push("Variance priors: seed defaults, not measured from this creator");
+  }
   if (isSmallCreatorBreakout) {
     evidence.push(`Small creator breakout: ${input.creatorFollowers.toLocaleString()} followers reached ${safeViews.toLocaleString()} views`);
   }
@@ -131,6 +145,9 @@ export function calculateInstantRating(input: InstantRatingInput): InstantRating
     },
     isSmallCreatorBreakout,
     isFitted: false, // Seed heuristic until calibrated with real own-account telemetry
+    sharesObserved,
+    actionScoreIsLowerBound,
+    priorSource,
     evidenceSummary: evidence,
   };
 }

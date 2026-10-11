@@ -11,6 +11,9 @@ import { winnerScoreGradingEngine, heuristicGradingEngine } from "../grading/eng
 import { matrixPlannerEngine } from "../planner/engine.ts";
 import { testPublishEngine } from "../publishing/engine.ts";
 
+// Test-provider publishing is restricted to the testing runtime.
+process.env.MERIDIAN_TESTING_RUNTIME = "true";
+
 test("Flow Connectors: n8n-style modular pipeline chains nodes smoothly", async () => {
   const flow = createFlow("factory-campaign-pipeline");
 
@@ -186,7 +189,9 @@ test("Flow Connectors: channel branch node selectively routes to user-chosen org
 
   assert.equal(telemetryReport.ok, true);
   assert.equal(telemetryReport.data.length, 2);
-  assert.ok((telemetryReport.data[0]?.metrics as any).views > 0);
-  assert.ok((telemetryReport.data[1]?.metrics as any).threeSecondViews > 0);
+  // Live metrics are not implemented, so nothing is observed. The node reports that, and invents no engagement numbers.
+  assert.equal(telemetryReport.data[0]?.metrics, null, "no metrics are invented for an unobserved post");
+  assert.equal(telemetryReport.data[1]?.metrics, null, "no metrics are invented for an unobserved post");
+  assert.match((telemetryReport.logs ?? []).join("\n"), /Telemetry not observed/);
 });
 

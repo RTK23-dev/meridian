@@ -1,265 +1,288 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Command } from "cmdk";
-import { Activity, BarChart3, Bell, Brain, ChevronDown, Factory, FileClock, FlaskConical, House, Layers3, Menu, Moon, Package, Search, Settings, Sparkles, Sun, WandSparkles, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, Bell, BellRing, Brain, ChevronDown, ClipboardCheck, Download, FileClock, FlaskConical, GraduationCap, House, Layers3, Library, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
+import { hasRole } from "@/lib/meridian/access";
 import { useWorkspace } from "@/components/workspace";
-import { useMachineQuery } from "@/lib/query/hooks";
+import { useAlertsQuery, useMachineQuery } from "@/lib/query/hooks";
+import { prefetchScreen } from "@/lib/query/prefetch";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { userScopedQueryKey } from "@/lib/query/keys";
-import { useTheme, Sheet, SheetContent, SheetTitle } from "@/components/ui";
+import { Button, Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, Kbd, Sheet, SheetContent, SheetTitle, useTheme } from "@/components/ui";
+import { CommandPalette } from "@/components/command-palette";
+import { PageCommandProvider, usePageCommandRegistry } from "@/components/page-commands";
+import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, resolveLastBrand, sidebarGroups, unreadAlertLabel, type NavGroup } from "@/lib/navigation/model";
+import { chordPath, INITIAL_SHORTCUT_STATE, nextShortcutState, type ShortcutState } from "@/lib/navigation/shortcuts";
+import { readLocal, writeLocal } from "@/lib/navigation/local-storage";
+import { routePageTitle } from "@/lib/navigation/route-data";
 
-type NavLink = { label: string; to: string; icon: LucideIcon; badge?: number };
+const COLLAPSED_KEY = "meridian-nav-collapsed";
+const SWITCHER_CLASS = "min-h-11 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-fg";
 
-const PAGE_NAMES: Record<string, string> = {
-  "": "Overview", factory: "Factory", market: "Market research", intelligence: "Intelligence", opportunities: "Opportunities",
-  reviews: "Reviews", studio: "Studio", library: "Library", learning: "Learning", calibration: "Calibration", brain: "Brand brain", products: "Products", accounts: "Connected accounts",
-  integrations: "Integrations", settings: "Settings", jobs: "Jobs & health", usage: "Usage & cost", alerts: "Alerts center", audit: "Audit log", webhooks: "Webhook events", notifications: "Notification preferences", new: "New brand",
+/** One icon per sidebar and tab item. Items without an entry fall back to the overview icon. */
+const NAV_ICONS: Record<string, LucideIcon> = {
+  overview: House,
+  "brand-overview": House,
+  market: FlaskConical,
+  intelligence: Sparkles,
+  opportunities: Layers3,
+  reviews: ClipboardCheck,
+  studio: WandSparkles,
+  library: Library,
+  learning: GraduationCap,
+  brain: Brain,
+  products: Package,
+  jobs: Activity,
+  usage: BarChart3,
+  alerts: Bell,
+  integrations: Plug,
+  settings: Settings,
+  audit: FileClock,
+  exports: Download,
+  webhooks: Webhook,
+  notifications: BellRing,
 };
 
-const WORKSPACE_LINKS: NavLink[] = [
-  { label: "Jobs & health", to: "/jobs", icon: Activity },
-  { label: "Usage & cost", to: "/usage", icon: BarChart3 },
-  { label: "Alerts center", to: "/alerts", icon: Bell },
-  { label: "Audit log", to: "/audit", icon: FileClock },
-  { label: "Webhook events", to: "/webhooks", icon: FileClock },
-  { label: "Notification preferences", to: "/notifications", icon: Bell },
-  { label: "Integrations", to: "/integrations", icon: Activity },
-  { label: "Settings", to: "/settings", icon: Settings },
-];
-
-function navGroups(brandId: string | undefined, reviews: number): { label: string; links: NavLink[] }[] {
-  if (!brandId) return [{ label: "Workspace", links: [{ label: "Overview", to: "/", icon: House }, ...WORKSPACE_LINKS] }];
-  const b = `/brands/${brandId}`;
-  return [
-    { label: "Overview", links: [{ label: "Overview", to: b, icon: House }] },
-    { label: "Factory", links: [{ label: "Factory", to: `${b}/factory`, icon: Factory }] },
-    { label: "Research", links: [{ label: "Market", to: `${b}/market`, icon: FlaskConical }, { label: "Intelligence", to: `${b}/intelligence`, icon: Sparkles }] },
-    { label: "Decide", links: [{ label: "Opportunities", to: `${b}/opportunities`, icon: Layers3 }, { label: "Reviews", to: `${b}/reviews`, icon: Bell, ...(reviews ? { badge: reviews } : {}) }] },
-    { label: "Create", links: [{ label: "Studio", to: `${b}/studio`, icon: WandSparkles }, { label: "Library", to: `${b}/library`, icon: Package }] },
-    { label: "Learn", links: [{ label: "Learning", to: `${b}/learning`, icon: Activity }, { label: "Calibration", to: `${b}/calibration`, icon: BarChart3 }] },
-    { label: "Brand", links: [{ label: "Brand brain", to: `${b}/brain`, icon: Brain }, { label: "Products", to: `${b}/products`, icon: Package }, { label: "Accounts", to: `${b}/accounts`, icon: Layers3 }] },
-    { label: "Workspace", links: WORKSPACE_LINKS },
-  ];
+/** The shell owns the page-command registry, so screens inside it can register actions. */
+export function Shell({ children }: { children: ReactNode }) {
+  return <PageCommandProvider><ShellChrome>{children}</ShellChrome></PageCommandProvider>;
 }
 
-export function Shell({ children }: { children: ReactNode }) {
+function ShellChrome({ children }: { children: ReactNode }) {
   const { data, reload } = useWorkspace();
   const path = useRouterState({ select: (state) => state.location.pathname.replace(/\/$/, "") || "/" });
+  const matches = useMatches();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useCurrentUserState();
   const { theme, setTheme } = useTheme();
+  const registry = usePageCommandRegistry();
   const active = data?.active;
-  const routeBrandId = path.match(/^\/brands\/([^/]+)/)?.[1];
-  const brandId = routeBrandId && routeBrandId !== "new" ? routeBrandId : data?.brands[0]?.id;
+  // The brand comes from the route only. Pages outside /brands/:id show workspace navigation.
+  const brandId = brandIdFromPath(path);
   const brand = data?.brands.find((item) => item.id === brandId);
   const machine = useMachineQuery(brandId ?? "", !!brandId);
-  const links = useMemo(() => navGroups(brandId, machine.data?.counts.reviews ?? 0), [brandId, machine.data?.counts.reviews]);
+  const alerts = useAlertsQuery(active?.id ?? "", !!active);
+  // A count is passed only once it has loaded. Null means "unknown", and the sidebar shows no badge for it.
+  const reviewCount = machine.data ? machine.data.counts.reviews : null;
+  const groups = useMemo(() => sidebarGroups({ brandId, reviewCount }), [brandId, reviewCount]);
+  const bellLabel = alerts.data ? unreadAlertLabel(alerts.data.alerts) : null;
+  const tabs = bottomTabs(brandId);
+  const canAddBrand = active ? hasRole(active.role, "member") : false;
+  const pageTitle = routePageTitle(matches);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const page = pageName(path);
-
-  useEffect(() => {
-    document.title = `${page} · Meridian`;
-    const focusHeading = () => {
-      const heading = document.querySelector<HTMLElement>("#main h1");
-      if (heading) {
-        heading.tabIndex = -1;
-        heading.focus({ preventScroll: true });
-      }
-    };
-    const frame = requestAnimationFrame(focusHeading);
-    return () => cancelAnimationFrame(frame);
-  }, [page, path]);
+  const shortcutState = useRef<ShortcutState>(INITIAL_SHORTCUT_STATE);
+  const activeOrganizationId = active?.id;
+  // Hover and focus warm the cache for the target screen, so the click renders from cache.
+  const prefetch = useCallback((to: string) => prefetchScreen(queryClient, { userId: user?.id, organizationId: activeOrganizationId }, to), [queryClient, user?.id, activeOrganizationId]);
 
   const go = useCallback((to: string) => {
     setPaletteOpen(false);
-    if (to === "/") { void navigate({ to: "/" }); return; }
-    if (to === "/integrations") { void navigate({ to: "/integrations" }); return; }
-    if (to === "/usage") { void navigate({ to: "/usage" }); return; }
-    if (to === "/alerts") { void navigate({ to: "/alerts" }); return; }
-    if (to === "/audit") { void navigate({ to: "/audit" }); return; }
-    if (to === "/webhooks") { void navigate({ to: "/webhooks" }); return; }
-    if (to === "/notifications") { void navigate({ to: "/notifications" }); return; }
-    if (to === "/settings") { void navigate({ to: "/settings" }); return; }
-    if (to === "/brands/new") { void navigate({ to: "/brands/new" }); return; }
-    const match = to.match(/^\/brands\/([^/]+)(?:\/(.*))?$/);
-    if (!match) return;
-    const id = match[1];
-    const suffix = match[2] ?? "";
-    const route = suffix ? `/brands/$brandId/${suffix}` : "/brands/$brandId";
-    void navigate({ to: route as never, params: { brandId: id } as never });
+    setMobileNavOpen(false);
+    void navigate({ to: to as never });
   }, [navigate]);
 
+  const switchWorkspace = useCallback((organizationId: string) => {
+    setPaletteOpen(false);
+    void setActiveOrganization({ data: { organizationId } })
+      .then(() => reload())
+      .then(() => {
+        // A brand belongs to one workspace, so leave a brand page when the workspace changes.
+        if (brandId) void navigate({ to: "/" });
+      });
+  }, [brandId, navigate, reload]);
+
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    writeLocal(COLLAPSED_KEY, String(next));
+  };
+
+  // Remember the brand the user opened, so the next app open without a brand in the URL can return to it.
   useEffect(() => {
-    let gPressedAt = 0;
+    if (brandId) writeLocal(LAST_BRAND_KEY, brandId);
+  }, [brandId]);
+
+  // On the first load with the workspace known, open the remembered brand instead of the workspace home.
+  const entryHandled = useRef(false);
+  useEffect(() => {
+    if (entryHandled.current || !data) return;
+    entryHandled.current = true;
+    if (path !== "/") return;
+    const remembered = resolveLastBrand(readLocal(LAST_BRAND_KEY), data.brands.map((item) => item.id));
+    if (remembered) void navigate({ to: `/brands/${remembered}` as never, replace: true });
+  }, [data, navigate, path]);
+
+  useEffect(() => {
+    document.title = documentTitle({ page: pageTitle, brandName: brand?.name });
+  }, [pageTitle, brand?.name]);
+
+  // Focus the page heading on every route change. A page without a heading yet gets the main landmark.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const heading = document.querySelector<HTMLElement>("#main h1");
+      const target = heading ?? document.getElementById("main");
+      if (heading) heading.tabIndex = -1;
+      target?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [path]);
+
+  const overlayOpen = paletteOpen || shortcutsOpen || mobileNavOpen;
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const typing = target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "");
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault(); setPaletteOpen(true); return;
+        event.preventDefault();
+        setPaletteOpen(true);
+        return;
       }
-      if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key.toLowerCase() === "g") { gPressedAt = Date.now(); return; }
-      if (Date.now() - gPressedAt < 900) {
-        const targetPath = {
-          o: "/",
-          s: brandId ? `/brands/${brandId}/studio` : "/",
-          r: brandId ? `/brands/${brandId}/reviews` : "/",
-          i: brandId ? `/brands/${brandId}/intelligence` : "/",
-          l: brandId ? `/brands/${brandId}/learning` : "/",
-          f: brandId ? `/brands/${brandId}/factory` : "/",
-          a: brandId ? `/brands/${brandId}/accounts` : "/",
-        }[event.key.toLowerCase()];
-        if (targetPath) { event.preventDefault(); go(targetPath); }
-        gPressedAt = 0; return;
+      const ignore = event.metaKey || event.ctrlKey || event.altKey || overlayOpen || isTypingTarget(event.target);
+      const { state, action } = nextShortcutState(shortcutState.current, { key: event.key, now: Date.now(), ignore });
+      shortcutState.current = state;
+      if (!action) return;
+      event.preventDefault();
+      if (action.kind === "palette") setPaletteOpen(true);
+      else if (action.kind === "help") setShortcutsOpen(true);
+      else {
+        const to = chordPath(action.target, brandId);
+        if (to) go(to);
       }
-      if (event.key === "/") { event.preventDefault(); setPaletteOpen(true); }
-      if (event.key === "?") { event.preventDefault(); setShortcutsOpen(true); }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [brandId, go]);
+  }, [brandId, go, overlayOpen]);
 
-  const sidebar = (mobile = false) => (
-    <div className="flex h-full flex-col bg-panel">
-      <div className="flex h-16 items-center justify-between border-b border-line px-4">
-        <Link to="/" onClick={() => setMobileNavOpen(false)} className="font-display text-lg font-semibold tracking-tight">Meridian</Link>
-        {mobile ? <button className="rounded p-2 lg:hidden" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation">×</button> : null}
+  // Brand switcher: shown in the sidebar on brand-scoped pages only (the caller checks brandId).
+  const brandSwitcher = (className: string) => data?.brands.length ? (
+    <select aria-label="Brand" className={className} value={brandId ?? ""} onChange={(event) => { if (event.target.value) go(`/brands/${event.target.value}`); }}>
+      {data.brands.map((item) => <option key={item.id} value={item.id}>{item.name} · {Math.round(item.completeness * 100)}%</option>)}
+    </select>
+  ) : null;
+  // Workspace switcher: shown at the top of the sidebar on every page.
+  const workspaceSwitcher = (className: string) => data?.organizations.length && active ? (
+    <select aria-label="Workspace" className={className} value={active.id} onChange={(event) => switchWorkspace(event.target.value)}>
+      {data.organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+    </select>
+  ) : null;
+
+  const sidebar = (mobile = false) => {
+    const iconOnly = collapsed && !mobile;
+    return <div className="flex h-full flex-col bg-surface">
+      <div className="flex h-16 items-center justify-between border-b border-border px-4">
+        <Link to="/" onClick={() => setMobileNavOpen(false)} className="font-display text-lg font-semibold tracking-tight text-fg">Meridian</Link>
+        {mobile ? <button className="grid size-11 place-items-center rounded-md text-fg-muted hover:bg-surface-2" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation"><X aria-hidden="true" className="size-5" /></button> : null}
       </div>
-      {brandId && data?.brands.length ? <label className="px-4 pt-4 text-[11px] font-semibold uppercase tracking-[.16em] text-muted">Brand
-        <select aria-label="Switch brand" className="mt-2 min-h-10 w-full rounded-md border border-line bg-surface px-2 text-sm text-ink" value={brandId} onChange={(event) => go(`/brands/${event.target.value}`)}>
-          {data.brands.map((item) => <option key={item.id} value={item.id}>{item.name} · {Math.round(item.completeness * 100)}%</option>)}
-        </select>
-      </label> : null}
+      {/* Workspace first, brand directly below it on brand-scoped pages. Hidden in the collapsed rail, which is too narrow for a select; the command palette still switches both. */}
+      {(mobile || !collapsed) && data ? <div className="space-y-3 border-b border-border p-4">
+        {workspaceSwitcher(SWITCHER_CLASS)}
+        {brandId ? brandSwitcher(SWITCHER_CLASS) : null}
+      </div> : null}
       <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-        {links.map((group) => <section key={group.label} className="mb-5">
-          <h2 className={`mb-1 px-2 text-[10px] font-bold uppercase tracking-[.16em] text-muted ${collapsed && !mobile ? "sr-only" : ""}`}>{group.label}</h2>
-          {group.links.map(({ label, to, icon: Icon, badge }) => {
-            const current = path === to || (label === "Overview" && path === `${to}/`);
-            return <Link key={to} to={to as never} params={to.includes("$brandId") && brandId ? { brandId } as never : undefined} aria-current={current ? "page" : undefined} title={collapsed && !mobile ? label : undefined} onClick={() => setMobileNavOpen(false)} className={`mb-1 flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition ${current ? "bg-ink text-paper" : "text-muted hover:bg-paper hover:text-ink"}`}>
-              <Icon aria-hidden="true" className="size-4 shrink-0" />
-              <span className={collapsed && !mobile ? "sr-only" : "flex-1"}>{label}</span>
-              {badge ? <span className="rounded-full bg-brass px-2 py-0.5 text-[10px] font-bold text-paper">{badge}</span> : null}
+        {groups.map((group: NavGroup) => <section key={group.id} className="mb-5">
+          <h2 className={`eyebrow mb-1 px-2 ${iconOnly ? "sr-only" : ""}`}>{group.label}</h2>
+          {group.items.map((item) => {
+            const Icon = NAV_ICONS[item.id] ?? House;
+            const current = isCurrentPath(path, item.to);
+            return <Link key={item.id} to={item.to as never} aria-current={current ? "page" : undefined} title={iconOnly ? item.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors ${current ? "bg-accent-soft font-semibold text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
+              <Icon aria-hidden="true" className={`size-4 shrink-0 ${current ? "text-accent" : ""}`} />
+              <span className={iconOnly ? "sr-only" : "flex-1"}>{item.label}</span>
+              {item.badge ? <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-fg">{item.badge}<span className="sr-only"> open</span></span> : null}
             </Link>;
           })}
         </section>)}
-        {!brandId ? <Link to="/brands/new" className="flex min-h-10 items-center gap-3 rounded-md px-3 text-sm text-muted hover:bg-paper hover:text-ink"><Sparkles className="size-4" />New brand</Link> : null}
+        {!brandId && canAddBrand ? <Link to="/brands/new" className="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm text-fg-muted hover:bg-surface-2 hover:text-fg"><Sparkles aria-hidden="true" className="size-4" />New brand</Link> : null}
       </nav>
-      <div className="border-t border-line p-3">
-        <button type="button" onClick={() => { const next = !collapsed; setCollapsed(next); try { localStorage.setItem("meridian-nav-collapsed", String(next)); } catch { /* Keep the in-memory preference when storage is unavailable. */ } }} className="hidden min-h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm text-muted hover:bg-paper lg:flex" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
+      <div className="border-t border-border p-3">
+        <button type="button" onClick={toggleCollapsed} className="hidden min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm text-fg-muted hover:bg-surface-2 lg:flex" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
           <ChevronDown aria-hidden="true" className={`size-4 transition ${collapsed ? "-rotate-90" : "rotate-90"}`} />{collapsed ? null : "Collapse navigation"}
         </button>
       </div>
-    </div>
-  );
+    </div>;
+  };
 
   return <div className={`min-h-screen ${collapsed ? "lg:grid lg:grid-cols-[5rem_1fr]" : "lg:grid lg:grid-cols-[16rem_1fr]"}`}>
-    <aside className="hidden border-r border-line lg:block">{sidebar()}</aside>
-      <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
+    <aside className="hidden border-r border-border lg:block">{sidebar()}</aside>
+    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
     <div className="flex min-h-screen min-w-0 flex-col">
-      <header className="sticky top-0 z-20 border-b border-line bg-panel/95 backdrop-blur">
-        <div className="flex min-h-16 flex-wrap items-center gap-2 px-3 sm:px-5">
-          <button type="button" className="min-h-10 rounded-md p-2 lg:hidden" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><Menu className="size-5" /></button>
-          <div className="hidden min-w-0 items-center gap-2 text-sm md:flex" aria-label="Breadcrumb">
-            <Link to="/" className="text-muted hover:text-ink">Workspace</Link>{brand ? <><span className="text-line">/</span><span className="max-w-36 truncate text-muted">{brand.name}</span></> : null}<span className="text-line">/</span><span className="font-semibold text-ink">{page}</span>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            {data?.organizations.length && active ? <select aria-label="Switch workspace" className="hidden min-h-10 max-w-48 rounded-md border border-line bg-surface px-2 text-sm sm:block" value={active.id} onChange={(event) => { void setActiveOrganization({ data: { organizationId: event.target.value } }).then(() => reload()); }}>
-              {data.organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
-            </select> : null}
-            {active ? <span className="hidden text-xs uppercase tracking-wide text-muted xl:inline">{active.role}</span> : null}
-            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-line px-3 text-sm text-muted hover:bg-paper" aria-label="Search and commands"><Search className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-line px-1 text-[10px] sm:inline">⌘K</kbd></button>
-            <Link to="/alerts" aria-label="Open alerts" title="Alerts" className="grid size-10 place-items-center rounded-md text-muted hover:bg-paper"><Bell className="size-4" /></Link>
-            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-md text-muted hover:bg-paper">{theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}</button>
+      <header className="sticky top-0 z-20 border-b border-border bg-surface/95 backdrop-blur">
+        {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. */}
+        <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2 sm:px-5">
+          <button type="button" className="grid size-11 shrink-0 place-items-center rounded-md text-fg-muted hover:bg-surface-2 lg:hidden" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
+          <nav aria-label="Location" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
+            <Link to="/" className="shrink-0 text-fg-muted hover:text-fg">Workspace</Link>
+            {brand ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span className="min-w-0 max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}
+            {pageTitle ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="min-w-0 truncate font-semibold text-fg">{pageTitle}</span></> : null}
+          </nav>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {active ? <span className="hidden text-xs uppercase tracking-wide text-fg-muted xl:inline">{active.role}</span> : null}
+            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong px-3 text-sm text-fg-muted hover:bg-surface-2 pointer-coarse:h-11" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">⌘K</kbd></button>
+            <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2 pointer-coarse:size-11">
+              <Bell aria-hidden="true" className="size-4" />
+              {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] font-bold leading-4 text-accent-fg">{bellLabel}</span> : null}
+            </Link>
+            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2 pointer-coarse:size-11">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
             <UserButton />
           </div>
         </div>
       </header>
-      <div className="border-b border-line px-4 py-2 text-sm text-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{page}</div>
-      <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-8">{children}</main>
-      <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-        {[{ label: "Overview", to: brandId ? `/brands/${brandId}` : "/", icon: House }, { label: "Decide", to: brandId ? `/brands/${brandId}/opportunities` : "/", icon: Layers3 }, { label: "Studio", to: brandId ? `/brands/${brandId}/studio` : "/", icon: WandSparkles }, { label: "Reviews", to: brandId ? `/brands/${brandId}/reviews` : "/", icon: Bell }].map(({ label, to, icon: Icon }) => <Link key={label} to={to as never} params={to.includes("/brands/") && brandId ? { brandId } as never : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] ${path === to ? "font-semibold text-brass" : "text-muted"}`}><Icon className="size-4" aria-hidden="true" />{label}</Link>)}
+      <div className="border-b border-border bg-surface px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
+      <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-8">{children}</main>
+      <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+        {tabs.map((tab) => {
+          const Icon = NAV_ICONS[tab.id] ?? House;
+          const current = isCurrentPath(path, tab.to);
+          return <Link key={tab.id} to={tab.to as never} aria-current={current ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[10px] ${current ? "font-semibold text-accent" : "text-fg-muted"}`}><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></Link>;
+        })}
+        <button type="button" onClick={() => setMobileNavOpen(true)} aria-haspopup="dialog" aria-expanded={mobileNavOpen} className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[10px] text-fg-muted"><MoreHorizontal aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">More</span></button>
       </nav>
-      <p className="sr-only" aria-live="polite" aria-atomic="true">{page}</p>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">{pageTitle ?? ""}</p>
     </div>
-    <Command.Dialog open={paletteOpen} onOpenChange={setPaletteOpen} label="Command palette" className="fixed left-1/2 top-[18vh] z-50 w-[min(38rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-line bg-panel shadow-2xl">
-      <Command.Input autoFocus placeholder="Search screens, brands, and operator actions…" className="h-14 w-full border-b border-line bg-transparent px-4 outline-none" />
-      <Command.List className="max-h-[60vh] overflow-auto p-2"><Command.Empty className="p-4 text-sm text-muted">No matching command.</Command.Empty>
-        {data?.brands && data.brands.length > 0 ? (
-          <Command.Group heading="Switch Brand" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-brass">
-            {data.brands.map((b) => (
-              <Command.Item
-                key={b.id}
-                value={`Switch Brand ${b.name}`}
-                onSelect={() => go(`/brands/${b.id}`)}
-                className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper"
-              >
-                🏢 {b.name}
-              </Command.Item>
-            ))}
-          </Command.Group>
-        ) : null}
-        {brandId ? (
-          <Command.Group heading="Operator Actions" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-brass">
-            <Command.Item value="Queue and Schedule Multi-Account Publish" onSelect={() => go(`/brands/${brandId}/studio`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
-              🚀 Multi-Account Publishing Queue
-            </Command.Item>
-            <Command.Item value="JEV Whitespace and Account DNA" onSelect={() => go(`/brands/${brandId}/intelligence`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
-              🧠 JEV Multimodal Account Intelligence
-            </Command.Item>
-            <Command.Item value="Telemetry and Bayesian Flywheel" onSelect={() => go(`/brands/${brandId}/learning`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
-              📈 Multi-Channel Performance Telemetry
-            </Command.Item>
-            <Command.Item value="Connected Accounts and Vault" onSelect={() => go(`/brands/${brandId}/accounts`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
-              🔐 Encrypted Credential Vault &amp; Accounts
-            </Command.Item>
-            <Command.Item value="Factory Pipeline" onSelect={() => go(`/brands/${brandId}/factory`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">
-              🏭 Content Factory Pipeline
-            </Command.Item>
-          </Command.Group>
-        ) : null}
-        <Command.Group heading="Navigate Screens" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
-          {brandId ? <>
-            {[["Overview", `/brands/${brandId}`], ["Factory", `/brands/${brandId}/factory`], ["Market", `/brands/${brandId}/market`], ["Intelligence", `/brands/${brandId}/intelligence`], ["Opportunities", `/brands/${brandId}/opportunities`], ["Reviews", `/brands/${brandId}/reviews`], ["Studio", `/brands/${brandId}/studio`], ["Library", `/brands/${brandId}/library`], ["Learning", `/brands/${brandId}/learning`], ["Brand brain", `/brands/${brandId}/brain`], ["Products", `/brands/${brandId}/products`], ["Accounts", `/brands/${brandId}/accounts`]].map(([label, to]) => <Command.Item key={to} value={label} onSelect={() => go(to)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">{label}</Command.Item>)}
-          </> : null}
-          <Command.Item value="Workspace overview" onSelect={() => go("/")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Workspace overview</Command.Item>
-          <Command.Item value="Usage and cost" onSelect={() => go("/usage")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Usage &amp; cost</Command.Item>
-          <Command.Item value="Alerts center" onSelect={() => go("/alerts")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Alerts center</Command.Item>
-          <Command.Item value="Audit log" onSelect={() => go("/audit")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Audit log</Command.Item>
-          <Command.Item value="Webhook events" onSelect={() => go("/webhooks")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Webhook events</Command.Item>
-          <Command.Item value="Notification preferences" onSelect={() => go("/notifications")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Notification preferences</Command.Item>
-          <Command.Item value="New brand" onSelect={() => go("/brands/new")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">New brand</Command.Item>
-          <Command.Item value="Settings" onSelect={() => go("/settings")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Settings</Command.Item>
-          <Command.Item value="Integrations" onSelect={() => go("/integrations")} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Integrations</Command.Item>
-        </Command.Group>
-        <Command.Group heading="Preferences &amp; System" className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
-          <Command.Item value="Toggle theme" onSelect={() => { setPaletteOpen(false); setTheme(theme === "dark" ? "light" : "dark"); }} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Toggle theme</Command.Item>
-          {brandId ? <Command.Item value="Refresh opportunities" onSelect={() => { setPaletteOpen(false); void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(user?.id, ["opportunities", brandId]) }); }} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Refresh opportunities</Command.Item> : null}
-          {brandId ? <Command.Item value="Open reviews" onSelect={() => go(`/brands/${brandId}/reviews`)} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Open reviews</Command.Item> : null}
-          {data && data.organizations.length > 1 && active ? <Command.Item value="Switch workspace" onSelect={() => { setPaletteOpen(false); const index = data.organizations.findIndex((item) => item.id === active.id); const next = data.organizations[(index + 1) % data.organizations.length]; void setActiveOrganization({ data: { organizationId: next.id } }).then(() => reload()); }} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Switch workspace</Command.Item> : null}
-          <Command.Item value="Keyboard shortcuts" onSelect={() => { setPaletteOpen(false); setShortcutsOpen(true); }} className="cursor-pointer rounded px-3 py-2 text-sm aria-selected:bg-paper">Keyboard shortcuts</Command.Item>
-        </Command.Group>
-      </Command.List>
-    </Command.Dialog>
-    {paletteOpen ? <button className="fixed inset-0 z-40 cursor-default bg-black/40" aria-label="Close command palette" onClick={() => setPaletteOpen(false)} /> : null}
-    {shortcutsOpen ? <div role="presentation" className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShortcutsOpen(false); }}><section role="dialog" aria-modal="true" aria-labelledby="shortcut-title" className="w-full max-w-md rounded-xl border border-line bg-panel p-6 shadow-xl"><div className="flex items-center justify-between"><h2 id="shortcut-title" className="font-display text-xl">Keyboard shortcuts</h2><button type="button" onClick={() => setShortcutsOpen(false)} aria-label="Close shortcuts">×</button></div><dl className="mt-4 grid grid-cols-[1fr_auto] gap-3 text-sm"><dt>Open search and commands</dt><dd><kbd>⌘ / Ctrl K</kbd></dd><dt>Overview</dt><dd><kbd>G O</kbd></dd><dt>Studio</dt><dd><kbd>G S</kbd></dd><dt>Reviews</dt><dd><kbd>G R</kbd></dd><dt>Intelligence &amp; DNA</dt><dd><kbd>G I</kbd></dd><dt>Learning &amp; Flywheel</dt><dd><kbd>G L</kbd></dd><dt>Factory Pipeline</dt><dd><kbd>G F</kbd></dd><dt>Connected Accounts</dt><dd><kbd>G A</kbd></dd><dt>Focus search</dt><dd><kbd>/</kbd></dd><dt>Show this help</dt><dd><kbd>?</kbd></dd></dl></section></div> : null}
+    <CommandPalette
+      open={paletteOpen}
+      onOpenChange={setPaletteOpen}
+      brands={data?.brands ?? []}
+      workspaces={data?.organizations ?? []}
+      activeWorkspaceId={activeOrganizationId}
+      brandId={brandId}
+      canCreateBrand={canAddBrand}
+      pageCommands={registry?.readAll() ?? []}
+      onNavigate={go}
+      onSwitchWorkspace={switchWorkspace}
+      onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+      onShowShortcuts={() => { setPaletteOpen(false); setShortcutsOpen(true); }}
+    />
+    <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+      <DialogContent aria-describedby="shortcut-description" className="max-w-md">
+        <DialogTitle className="text-section font-semibold">Keyboard shortcuts</DialogTitle>
+        <DialogDescription id="shortcut-description" className="mt-1 text-sm text-fg-muted">Single-key shortcuts work when no text field has focus. Screen shortcuts need a brand page open.</DialogDescription>
+        <dl className="mt-4 grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 text-sm">
+          <dt>Open search and commands</dt><dd><Kbd>⌘ / Ctrl K</Kbd></dd>
+          <dt>Focus search</dt><dd><Kbd>/</Kbd></dd>
+          <dt>Show this help</dt><dd><Kbd>?</Kbd></dd>
+          <dt>Overview</dt><dd><Kbd>G O</Kbd></dd>
+          <dt>Studio</dt><dd><Kbd>G S</Kbd></dd>
+          <dt>Reviews</dt><dd><Kbd>G R</Kbd></dd>
+          <dt>Intelligence</dt><dd><Kbd>G I</Kbd></dd>
+          <dt>Learning</dt><dd><Kbd>G L</Kbd></dd>
+          <dt>Factory</dt><dd><Kbd>G F</Kbd></dd>
+          <dt>Connected accounts</dt><dd><Kbd>G A</Kbd></dd>
+        </dl>
+        <div className="mt-5 flex justify-end"><DialogClose asChild><Button variant="secondary" size="md">Close</Button></DialogClose></div>
+      </DialogContent>
+    </Dialog>
   </div>;
 }
 
-function pageName(path: string) {
-  if (path === "/") return PAGE_NAMES[""];
-  const parts = path.split("/").filter(Boolean);
-  const last = parts.at(-1) ?? "";
-  return PAGE_NAMES[last] ?? last.replaceAll("-", " ").replace(/^./, (letter) => letter.toUpperCase());
+/** Shortcuts must not fire while the user types. Content-editable counts as typing. */
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
 function readCollapsed() {
-  try { return typeof window !== "undefined" && window.localStorage.getItem("meridian-nav-collapsed") === "true"; }
-  catch { return false; }
+  return readLocal(COLLAPSED_KEY) === "true";
 }

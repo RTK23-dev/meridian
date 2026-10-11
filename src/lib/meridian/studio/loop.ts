@@ -330,7 +330,7 @@ export function questionIds(): string[] {
   return QUESTION_SPECS.map((spec) => spec.id);
 }
 
-function featuresFor(
+export function featuresFor(
   id: string,
   flags: {
     aligned: boolean;
@@ -345,7 +345,8 @@ function featuresFor(
   },
 ): Feature[] {
   if (id === "logo_match") {
-    if (flags.logoMismatch) return [feature("mismatch", 1, "Logo similarity is below the match line.")];
+    // A measured mismatch is a violation, not a score, as features.ts classifies it. A score cannot reject without calibration.
+    if (flags.logoMismatch) return [feature("violation", 1, "Logo similarity is below the match line.")];
     if (flags.aligned) return [feature("aligned", 1, "Logo similarity supports the stored mark.")];
     return [];
   }
@@ -361,7 +362,7 @@ function featuresFor(
   if (id === "product_match") {
     return flags.productNamed
       ? [feature("aligned", 1, "The briefed product is named.")]
-      : [feature("mismatch", 1, "The briefed product is not in the copy.")];
+      : [feature("violation", 1, "The briefed product is not in the copy.")];
   }
   if (id === "image_readiness") {
     return flags.imageReady ? [feature("aligned", 1, "An image object was stored.")] : [];

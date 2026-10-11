@@ -3,6 +3,7 @@ import { assertRole, type Role, isRole } from "../access.ts";
 import { getDistributionChannel } from "./registry.ts";
 import { applyLearnedPatterns } from "../learning/store.ts";
 import { publishThrough } from "../providers/boundaries.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 export async function requireBrandAccess(
   sql: Sql,
@@ -104,11 +105,12 @@ export async function listAvailableChannels(
     connectionsByPlatform.set(asText(row.platform), asText(row.account_name));
   }
 
-  // Also check paid ad provider accounts
+  // Also check paid ad provider connections. The table is provider_connections, and its healthy status is stored as CONNECTED.
+  // Querying a table that does not exist failed the whole channel list, so the publish dialog showed no destinations.
   const adAccounts = await sql<Record<string, unknown>>`
     select provider, account_name, status
-    from provider_accounts
-    where organization_id = ${organizationId} and status = 'connected'
+    from provider_connections
+    where organization_id = ${organizationId} and status = 'CONNECTED'
   `;
   for (const row of adAccounts) {
     connectionsByPlatform.set(asText(row.provider), asText(row.account_name));
@@ -122,8 +124,8 @@ export async function listAvailableChannels(
       type: "paid",
       platform: "test",
       description: "Deterministic sandbox publisher for automated tests and safe preview validation.",
-      connected: true,
-      accountName: "Test Sandbox Ad Account",
+      connected: isTestingRuntimeNow(),
+      accountName: isTestingRuntimeNow() ? "Test Sandbox Ad Account" : "Not available outside the testing runtime",
     },
     {
       id: "meta-ads",
@@ -229,6 +231,9 @@ export async function publishCreativeToChannels(
       `;
       let extId = existing[0]?.external_id;
       if (!extId) {
+        if (!isTestingRuntimeNow()) {
+          throw new Error("The test publisher runs only in the testing runtime. Connect a live channel to publish.");
+        }
         const published = publishThrough({ provider: "test", creativeId: input.creativeId, allowTestProvider: true });
         extId = published.externalId ?? "";
         await sql`

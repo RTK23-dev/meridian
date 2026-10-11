@@ -4,6 +4,7 @@ export const qk = {
   machine: (brandId: string) => ["machine", brandId] as const,
   intelligence: (brandId: string) => ["intelligence", brandId] as const,
   studio: (brandId: string) => ["studio", brandId] as const,
+  briefReview: (brandId: string, briefId: string) => ["brief-review", brandId, briefId] as const,
   opportunities: (brandId: string) => ["opportunities", brandId] as const,
   market: (brandId: string) => ["market", brandId] as const,
   reviews: (brandId: string) => ["reviews", brandId] as const,
@@ -13,8 +14,11 @@ export const qk = {
   learning: (brandId: string) => ["learning", brandId] as const,
   factory: (brandId: string) => ["factory", brandId] as const,
   calibration: (brandId: string) => ["calibration", brandId] as const,
+  calibrationVersions: (brandId: string) => ["calibration-versions", brandId] as const,
   integrations: (organizationId: string) => ["integrations", organizationId] as const,
   jobs: (organizationId: string) => ["jobs", organizationId] as const,
+  jobDetail: (organizationId: string) => ["job-detail", organizationId] as const,
+  workerHealth: (organizationId: string) => ["worker-health", organizationId] as const,
   usage: (organizationId: string) => ["usage", organizationId] as const,
   audit: (organizationId: string) => ["audit", organizationId] as const,
   webhooks: (organizationId: string) => ["webhooks", organizationId] as const,
@@ -26,6 +30,10 @@ export const qk = {
   publishingQueue: (brandId: string, status?: string) => status ? ["publishing-queue", brandId, status] as const : ["publishing-queue", brandId] as const,
   telemetry: (brandId: string, platform?: string) => platform ? ["telemetry", brandId, platform] as const : ["telemetry", brandId] as const,
   pipelineConfig: (brandId: string) => ["pipeline-config", brandId] as const,
+  heldReservations: (brandId: string) => ["held-reservations", brandId] as const,
+  alerts: (organizationId: string) => ["alerts", organizationId] as const,
+  providerSettings: (organizationId: string) => ["provider-settings", organizationId] as const,
+  decisionEngines: (organizationId: string) => ["decision-engines", organizationId] as const,
 };
 
 export function userScopedQueryKey(userId: string | null | undefined, key: readonly unknown[]) {

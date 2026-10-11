@@ -51,5 +51,6 @@ export interface DistributionChannel {
 
   checkConnection(brandId: string): Promise<{ connected: boolean; accountName?: string; reason?: string }>;
   publish(request: OrganicPublishRequest): Promise<OrganicPublishReceipt>;
-  fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics>;
+  /** Null when the metrics are not observed. A channel never returns invented numbers. */
+  fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null>;
 }

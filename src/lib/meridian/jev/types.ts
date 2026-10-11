@@ -31,10 +31,25 @@ export type JevQuestionSpec = {
   options?: string[];
   evidenceRequirements: string[];
   outputInterpretation?: Record<string, string>;
+  /**
+   * The perception evidence contract a visual question may be judged from under JEV. JEV judges the grounded observations
+   * only when every fact the contract requires is known for every analysed item. Otherwise the question goes to review.
+   */
+  perceptionEvidence?: { contract: string; version: string };
   policyMapping?: {
     approveMinProbability?: number;
     reviewMinProbability?: number;
     rejectionValues?: string[];
+    /** Choice values that approve. A choice in neither list goes to review. */
+    approveValues?: string[];
+    /** Minimum score index that approves. Without it, a score always goes to human review. */
+    approveMinScore?: number;
+    /** "reject_if_true" when the predicate describes a defect. Default "pass_if_true". */
+    predicateDirection?: "pass_if_true" | "reject_if_true";
+    /** Outcome when the answer is refused, unsupported, malformed, or missing. Default HUMAN_REVIEW. */
+    unresolvedOutcome?: "HUMAN_REVIEW" | "REJECT";
+    /** An answer below this confidence goes to human review. */
+    minConfidence?: number;
   };
 };
 
@@ -60,12 +75,29 @@ export type EvidenceRef = {
   summary?: string;
 };
 
+/**
+ * Answer states shared by every decision engine. Only "answered" carries a value. A refusal, an unsupported question or
+ * input, and a malformed provider response are their own states, so none of them can be read as an answer.
+ */
 export type JevAnswerStatus =
   | "answered"
   | "abstain_insufficient_evidence"
   | "abstain_uncertain"
   | "provider_error"
-  | "not_configured";
+  | "not_configured"
+  | "refused"
+  | "unsupported"
+  | "invalid_response";
+
+export type AbstainedJevStatus = Exclude<JevAnswerStatus, "answered">;
+
+/**
+ * What an answered value means. A predicate probability is a probability; a choice is categorical with the provider's
+ * confidence; a score is an ordered level (possibly a weighted average between levels). None is calibrated against
+ * Meridian outcomes until a calibration report says so.
+ */
+export type AnswerSemantics = "probability" | "categorical" | "ordered_score";
+export type AnswerCalibrationStatus = "uncalibrated" | "calibrated";
 
 export type RawJevAnswer =
   | {
@@ -107,6 +139,8 @@ export type AnsweredJevAnswer = {
   evidenceRefs: EvidenceRef[];
   abstainReason?: undefined;
   evaluatedAt: string;
+  semantics?: AnswerSemantics;
+  calibrationStatus?: AnswerCalibrationStatus;
 };
 
 export type AbstainedJevAnswer = {
@@ -115,7 +149,7 @@ export type AbstainedJevAnswer = {
   type?: JevQuestionType;
   model: string;
   provider: string;
-  status: "abstain_insufficient_evidence" | "abstain_uncertain" | "provider_error" | "not_configured";
+  status: AbstainedJevStatus;
   choice?: undefined;
   noul?: undefined;
   score?: undefined;
@@ -128,6 +162,8 @@ export type AbstainedJevAnswer = {
   evidenceRefs: EvidenceRef[];
   abstainReason: string;
   evaluatedAt: string;
+  semantics?: undefined;
+  calibrationStatus?: undefined;
 };
 
 export type JevAnswer = AnsweredJevAnswer | AbstainedJevAnswer;

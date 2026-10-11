@@ -166,7 +166,7 @@ test("a reservation whose job is still in flight is never offered for operator r
   const suffix = `inflight-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const admin = `admin-${suffix}`;
   const tenant = await insertTenant(sql, suffix, [{ userId: admin, role: "admin" }]);
-  const inFlight = await heldReservation(sql, tenant, "PROCESSING");
+  const inFlight = await heldReservation(sql, tenant, "RUNNING");
   assert.deepEqual(await listHeldReservations(sql, admin, tenant.brandId), [], "in-flight work settles through the poller, not the operator");
   await assert.rejects(
     resolveHeldReservation(sql, admin, { brandId: tenant.brandId, reservationId: inFlight.reservationId, resolution: "not_accepted", note: "Trying to release live work." }),

@@ -20,7 +20,7 @@ import { semanticNearest } from "../embeddings/store.ts";
 import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
-import { accountSnapshots, competitorCopy, factsFor, visualFacts, writeJudgment, type QcBrandContext } from "../studio/image-qc.server.ts";
+import { accountSnapshots, competitorCopy, factsFor, generatedImageVisual, visualFacts, writeJudgment, type QcBrandContext } from "../studio/image-qc.server.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
 import type { CreativeSpec, ProductionModality } from "./types.ts";
 
@@ -373,7 +373,13 @@ export async function materializeImageArtifact(
     ownSemanticSimilarity: ownSemantic,
     publishing,
   });
-  const judged = await writeJudgment(sql, { organizationId: ref.organizationId, brandId: ref.brandId, creativeId, facts });
+  const judged = await writeJudgment(sql, {
+    organizationId: ref.organizationId,
+    brandId: ref.brandId,
+    creativeId,
+    facts,
+    visual: generatedImageVisual(stored.bytes, artifact.sha256),
+  });
   const status = judged.rollup === "REJECT" ? "rejected" : judged.rollup === "AUTO_APPROVE" ? "approved" : "in_review";
 
   await sql`
@@ -598,7 +604,7 @@ export async function settleCarouselParent(
   const parent = parents[0];
   if (!parent) throw new Error("Carousel job was not found in this tenant.");
   if (parent.modality !== "carousel") throw new Error(`Production job '${parent.id}' is a ${parent.modality} job, not a carousel.`);
-  if (parent.status !== "SUBMITTING") return "unchanged";
+  if (parent.status !== "AWAITING_CHILDREN") return "unchanged";
 
   const expected = Number(parseJson(parent.input).slideCount);
   if (!Number.isInteger(expected) || expected < 1) throw new Error("Carousel job has no slide count; refusing to settle it.");
@@ -633,7 +639,7 @@ export async function settleCarouselParent(
       set status = 'FAILED', error_code = 'CAROUSEL_INCOMPLETE', error_message = ${reason},
           output = ${JSON.stringify({ completedSlides: children.filter(done).map((child) => child.sequence_index) })},
           updated_at = now()
-      where id = ${parent.id} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId} and status = 'SUBMITTING'
+      where id = ${parent.id} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId} and status = 'AWAITING_CHILDREN'
     `;
     return "incomplete";
   }
@@ -695,7 +701,7 @@ export async function settleCarouselParent(
     set status = 'COMPLETED', materialized_creative_id = ${carouselCreativeId},
         materialized_at = coalesce(materialized_at, now()), output = ${JSON.stringify({ slides })},
         error_code = null, error_message = null, updated_at = now()
-    where id = ${parent.id} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId} and status = 'SUBMITTING'
+    where id = ${parent.id} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId} and status = 'AWAITING_CHILDREN'
   `;
   return "completed";
 }

@@ -26,7 +26,7 @@ test("calculateVelocityScore computes acceleration across multiple snapshots", (
   ];
 
   const score = calculateVelocityScore(snapshots);
-  assert.ok(score >= 60, `Expected high velocity score, got ${score}`);
+  assert.ok(score !== null && score >= 60, `Expected high velocity score, got ${score}`);
 });
 
 test("calculateInstantRating performs Empirical Bayes shrinkage and computes accurate tiers", () => {
@@ -77,4 +77,49 @@ test("calculateInstantRating performs Empirical Bayes shrinkage and computes acc
 
   assert.equal(averagePost.ratingTier, "C");
   assert.equal(averagePost.outlierRatio, 1.04);
+});
+
+test("a single snapshot is not a neutral velocity: velocity is not observed and does not lift the tier", () => {
+  assert.equal(calculateVelocityScore([]), null);
+  const oneSnapshot: PostSnapshot[] = [
+    { postId: "reel-2", hoursSincePost: 2, views: 9000, likes: 10, comments: 1, friendTagComments: 0, capturedAt: "2026-10-07T02:00:00Z" },
+  ];
+  const result = calculateInstantRating({
+    views: 6000,
+    creatorFollowers: 40000,
+    creatorMedianViews: 5000,
+    commentsCount: 40,
+    snapshots: oneSnapshot,
+  });
+  assert.equal(result.velocityScore, null);
+  assert.ok(result.evidenceSummary.some((line) => line.includes("Velocity: not observed")));
+});
+
+test("shares are never estimated from friend tags: an unobserved share count is a lower bound", () => {
+  const withoutShares = calculateInstantRating({
+    views: 20000,
+    creatorFollowers: 40000,
+    creatorMedianViews: 5000,
+    commentsCount: 20,
+    friendTagCommentsCount: 20,
+  });
+  assert.equal(withoutShares.sharesObserved, false);
+  assert.equal(withoutShares.actionScoreIsLowerBound, true);
+  // Comments only: 20 actions over 20,000 views is 1 action per 1k views, with no 2.5x share estimate added.
+  assert.ok(withoutShares.evidenceSummary.some((line) => line.includes("1.0 actions/1k views (shares not observed")));
+});
+
+test("a rating with the default variance priors says so, and a measured rating does not", () => {
+  const seed = calculateInstantRating({ views: 6000, creatorFollowers: 40000, creatorMedianViews: 5000, commentsCount: 10 });
+  assert.equal(seed.priorSource, "seed_default");
+  const measured = calculateInstantRating({
+    views: 6000,
+    creatorFollowers: 40000,
+    creatorMedianViews: 5000,
+    commentsCount: 10,
+    creatorVariance: 0.9,
+    nichePriorVariance: 0.7,
+  });
+  assert.equal(measured.priorSource, "supplied");
+  assert.ok(!measured.evidenceSummary.some((line) => line.includes("seed defaults")));
 });

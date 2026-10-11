@@ -24,6 +24,17 @@ export type DriveHealth = {
   latencyMs: number;
 };
 
+/** The earliest-created folder, ties broken by id, so every process picks the same one. */
+export function pickEarliest(folders: Array<{ id: string; createdTime?: string }>): string {
+  const sorted = [...folders].sort((a, b) => {
+    const left = a.createdTime ?? "";
+    const right = b.createdTime ?? "";
+    if (left !== right) return left < right ? -1 : 1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+  return sorted[0]!.id;
+}
+
 export class GoogleDriveClient {
   private folderCache = new Map<string, string>();
 
@@ -76,15 +87,27 @@ export class GoogleDriveClient {
     }
   }
 
+  /**
+   * Finds a folder by name under a parent, or creates it. Concurrent calls in this process share one lookup, and when
+   * several folders share a name (possible when two processes create one at the same time), every caller settles on the
+   * earliest-created one, so they converge without a lock in Drive.
+   */
   async findOrCreateFolder(name: string, parentId?: string): Promise<string> {
-    const token = await getGoogleDriveAccessToken();
-    if (!token) throw new Error("Google Drive is not configured. Access token unavailable.");
-
     const cacheKey = `${parentId || "root"}:${name}`;
     const cached = this.folderCache.get(cacheKey);
     if (cached) return cached;
+    const pending = this.folderInflight.get(cacheKey);
+    if (pending) return pending;
+    const work = this.resolveFolder(name, parentId, cacheKey).finally(() => {
+      this.folderInflight.delete(cacheKey);
+    });
+    this.folderInflight.set(cacheKey, work);
+    return work;
+  }
 
-    // Search for existing folder
+  private folderInflight = new Map<string, Promise<string>>();
+
+  private async listFolders(token: string, name: string, parentId?: string): Promise<Array<{ id: string; createdTime?: string }>> {
     const qParts = [
       `name = '${name.replace(/'/g, "\\'")}'`,
       "mimeType = 'application/vnd.google-apps.folder'",
@@ -93,23 +116,26 @@ export class GoogleDriveClient {
     if (parentId) {
       qParts.push(`'${parentId}' in parents`);
     }
-
     const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
       qParts.join(" and "),
-    )}&fields=files(id,name)`;
-    const searchRes = await fetch(searchUrl, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    )}&fields=files(id,name,createdTime)`;
+    const res = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { files?: Array<{ id: string; createdTime?: string }> };
+    return data.files ?? [];
+  }
 
-    if (searchRes.ok) {
-      const data = (await searchRes.json()) as { files?: Array<{ id: string; name: string }> };
-      if (data.files && data.files.length > 0 && data.files[0]) {
-        this.folderCache.set(cacheKey, data.files[0].id);
-        return data.files[0].id;
-      }
+  private async resolveFolder(name: string, parentId: string | undefined, cacheKey: string): Promise<string> {
+    const token = await getGoogleDriveAccessToken();
+    if (!token) throw new Error("Google Drive is not configured. Access token unavailable.");
+
+    const existing = await this.listFolders(token, name, parentId);
+    if (existing.length > 0) {
+      const earliest = pickEarliest(existing);
+      this.folderCache.set(cacheKey, earliest);
+      return earliest;
     }
 
-    // Create new folder
     const body: { name: string; mimeType: string; parents?: string[] } = {
       name,
       mimeType: "application/vnd.google-apps.folder",
@@ -132,8 +158,12 @@ export class GoogleDriveClient {
     }
 
     const created = (await createRes.json()) as { id: string };
-    this.folderCache.set(cacheKey, created.id);
-    return created.id;
+    // Another process may have created the same folder at the same moment. Settle on the earliest one.
+    const afterCreate = await this.listFolders(token, name, parentId);
+    // The re-read includes the folder we just created, with its createdTime. Fall back to it only if the re-read is empty.
+    const winner = afterCreate.length > 0 ? pickEarliest(afterCreate) : created.id;
+    this.folderCache.set(cacheKey, winner);
+    return winner;
   }
 
   async getFolderForPath(input: {
@@ -402,11 +432,24 @@ export class GoogleDriveClient {
   /**
    * Scans production drop folder for outputs produced externally (ManualCloud mode).
    */
+  /**
+   * Creates (or finds) a job's output folder and returns its URL, so a person can see where to place the finished file.
+   * Called at submit time, so the handoff location exists before anyone is asked to use it.
+   */
+  async ensureOutputFolder(input: { organizationId: string; brandId: string; jobId: string }): Promise<string> {
+    const folderId = await this.getFolderForPath({
+      organizationId: input.organizationId,
+      brandId: input.brandId,
+      subpath: `production/outputs/${input.jobId}`,
+    });
+    return `https://drive.google.com/drive/folders/${folderId}`;
+  }
+
   async syncDropFolder(input: {
     organizationId: string;
     brandId: string;
     jobId: string;
-  }): Promise<Array<{ fileId: string; name: string; mimeType: string; size: number }>> {
+  }): Promise<Array<{ fileId: string; name: string; mimeType: string; size: number; modifiedTime: string | null }>> {
     const token = await getGoogleDriveAccessToken();
     if (!token) return [];
 
@@ -419,12 +462,14 @@ export class GoogleDriveClient {
 
       const q = `'${folderId}' in parents and trashed = false`;
       const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size)`,
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size,modifiedTime)`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
 
       if (!res.ok) return [];
-      const data = (await res.json()) as { files?: Array<{ id: string; name: string; mimeType: string; size?: string }> };
+      const data = (await res.json()) as {
+        files?: Array<{ id: string; name: string; mimeType: string; size?: string; modifiedTime?: string }>;
+      };
       if (!data.files) return [];
 
       return data.files.map((f) => ({
@@ -432,6 +477,7 @@ export class GoogleDriveClient {
         name: f.name,
         mimeType: f.mimeType,
         size: f.size ? Number(f.size) : 0,
+        modifiedTime: f.modifiedTime ?? null,
       }));
     } catch {
       return [];

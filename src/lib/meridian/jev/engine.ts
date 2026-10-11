@@ -121,11 +121,13 @@ export function decide<TInput>(
     score >= question.thresholds.autoApprove &&
     confidence >= question.thresholds.minConfidenceForAuto
   ) {
-    decision = "AUTO_APPROVE";
+    // A score is not a calibrated risk until a calibration step is applied. Without one it can only go to review.
+    decision = context?.calibration ? "AUTO_APPROVE" : "HUMAN_REVIEW";
   } else if (score >= question.thresholds.humanReview) {
     decision = "HUMAN_REVIEW";
   } else {
-    decision = "REJECT";
+    // Below the review line. Uncalibrated, a low score is a reason for review, never a rejection on its own.
+    decision = context?.calibration ? "REJECT" : "HUMAN_REVIEW";
   }
   const answerValue = answerFor(decision, evidenceState, evaluation.answer);
   return {

@@ -15,15 +15,16 @@ import { publishThrough } from "../providers/boundaries.ts";
 import { testProviderPerformance } from "../providers/test-provider.ts";
 import { claimAndRun } from "../jobs/sql-worker.ts";
 import { decide } from "../jev/engine.ts";
-import { decisionRecordFields, ruleDecisionRecordFields } from "../jev/decision-record.ts";
 import { publishingReadiness } from "../jev/guards.ts";
-import { loadAppliedPolicies } from "../jev/policy.ts";
 import { generationAllowed } from "../security/budget.ts";
 import { evaluateJevGate } from "../jev/reviewer-decision.ts";
-import { judgeBrief } from "./features.ts";
+import { ruleDecisionRecordFields } from "../jev/decision-record.ts";
+import type { BriefGateResult } from "./brief-gate.server.ts";
+import { briefBrainFrom, briefGateJudge, createGatedBrief, directionReasonProblem, type BriefGateOptions } from "./brief-service.server.ts";
 import { STUDIO_PROMPT_VERSION, isTestingRuntime, variantPrompt } from "./media-work.ts";
 import { publishStudioHypitVideo } from "./hypit-run.ts";
 import { productionRouter, type ImageProviderSelection } from "../production/router.ts";
+import { productionCostMode } from "../production/cost-mode.ts";
 import { ensureLocalSemantic, readSemanticClusters, semanticNearest } from "../embeddings/store.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
 import { combineLogoFrames, combinePaletteFrames } from "../vision/measure.ts";
@@ -48,7 +49,10 @@ import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
 import { resolveProductionTarget } from "../production/target.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
-import { accountSnapshots, competitorCopy, factsFor, qcBrandOf, visualFacts, writeJudgment } from "./image-qc.server.ts";
+import { accountSnapshots, competitorCopy, factsFor, frameLike, qcBrandOf, videoVisualEvidence, visualFacts, writeJudgment } from "./image-qc.server.ts";
+import { resolveActiveEngine } from "../decisions/selection.ts";
+import { perceptionReadiness, selectPerceptionProvider } from "../perception/run.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -364,10 +368,17 @@ export async function getStudioSession(userId: string, data: { brandId: string }
     return (await sessionFor(sql, context.userId, data.brandId, "viewer")).session;
 }
 
-export async function openStudioBrief(userId: string, data: { brandId: string; forceNew: boolean }) {
+export async function openStudioBrief(
+  userId: string,
+  data: { brandId: string; forceNew: boolean; reason: string },
+  gate: BriefGateOptions = {},
+) {
   const context = { userId };
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");
+    // The reason is checked before anything is ranked or written, so a refused accept changes nothing.
+    const reasonProblem = directionReasonProblem(data.reason);
+    if (reasonProblem) throw new Error(reasonProblem);
     await rerankBrand(sql, access.organizationId, data.brandId);
     const loaded = await loadBrandContext(sql, access.organizationId, data.brandId);
     assertSameTenant(loaded.creatives, access.organizationId, data.brandId);
@@ -407,31 +418,26 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       throw new Error("JEV rejected this direction. A brief was not written.");
     }
     const opportunityId = asText(row.id);
-    await sql`
-      update reviews set status = 'approved'
-      where opportunity_id = ${opportunityId} and status = 'open' and organization_id = ${access.organizationId}
-    `;
-    await sql`
-      update jev_decisions set reviewer_id = ${context.userId}, reviewer_decision = 'approve', reviewed_at = now()
-      where id = ${asText(row.decision_id)} and organization_id = ${access.organizationId}
-    `;
-    if (data.forceNew) {
-      await sql`
-        update briefs set status = 'used'
-        where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
-      `;
-    }
-    const existing = await sql<{ id: string; decision_id: string }>`
-      select id, decision_id from briefs
-      where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
-      order by created_at desc limit 1
-    `;
-    if (existing[0]?.decision_id) {
-      await sql`
-        update jev_decisions set reviewer_id = ${context.userId}, reviewer_decision = 'approve', reviewed_at = now()
-        where id = ${existing[0].decision_id} and organization_id = ${access.organizationId}
-      `;
-    }
+    // The direction is recorded first, as its own decision, with who, when, what and why. It writes no brief decision and
+    // does not mean that the brief passed its gate. The brief is judged by createGatedBrief below.
+    // Loaded on demand: the opportunity module pulls in the server-function layer, which this module does not need otherwise.
+    const { recordOpportunityDirection } = await import("../opportunity/actions.ts");
+    await recordOpportunityDirection(sql, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      opportunityId,
+      actorId: context.userId,
+      actorRole: access.role,
+      action: "approve",
+      reason: data.reason,
+    });
+    const existing = data.forceNew
+      ? []
+      : await sql<{ id: string; decision_id: string }>`
+          select id, decision_id from briefs
+          where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
+          order by created_at desc limit 1
+        `;
     if (!existing[0]) {
       const draft: OpportunityDraft = {
         hypothesisId: asText(row.hypothesis_id),
@@ -480,56 +486,63 @@ export async function openStudioBrief(userId: string, data: { brandId: string; f
       }
       if (!brief.cta.trim()) brief.cta = "See it in use";
       brief.why.push("Success would test whether this direction beats this brand's stored baseline without copying a competitor line.");
-      const briefId = crypto.randomUUID();
-      const decisionId = crypto.randomUUID();
-      const policies = await loadAppliedPolicies(sql, access.organizationId);
-      const gate = judgeBrief({
-        audience: brief.audience,
-        hook: brief.hook,
-        message: brief.message,
-        format: brief.format,
-        cta: brief.cta,
-        angle: brief.angle,
-      }, policies.get("brief_completeness"));
-      if (gate.decision === "REJECT") {
-        throw new Error("The brief gate rejected this. A person was not asked to ignore a stored rejection.");
+      const outcome: { result?: BriefGateResult } = {};
+      const judge = briefGateJudge(sql, {
+        organizationId: access.organizationId,
+        brandId: data.brandId,
+        brief: {
+          audience: brief.audience,
+          hook: brief.hook,
+          message: brief.message,
+          format: brief.format,
+          cta: brief.cta,
+          angle: brief.angle,
+          offer: brief.offer,
+        },
+        brain: briefBrainFrom(loaded.brain),
+        ...gate,
+      });
+      const created = await createGatedBrief(sql, {
+        organizationId: access.organizationId,
+        brandId: data.brandId,
+        createdBy: context.userId,
+        brief: {
+          opportunityId,
+          title: brief.title,
+          audience: brief.audience,
+          angle: brief.angle,
+          hook: brief.hook,
+          message: brief.message,
+          offer: brief.offer,
+          cta: brief.cta,
+          format: brief.format,
+          proofType: brief.proofType,
+          constraints: brief.constraints,
+          context: brief.context,
+          workflow: brief.workflow,
+          why: brief.why,
+          learningNotes: brief.learningNotes,
+          failureNotes: brief.failureNotes,
+        },
+        judge: async (briefId) => {
+          outcome.result = await judge(briefId);
+          return outcome.result;
+        },
+      });
+      // A rejected brief is stored, so the rejection is on record, but it is not used. The person is told why.
+      if (created.status === "rejected") {
+        throw new Error(`The brief gate rejected this: ${outcome.result?.reason ?? "no reason was recorded"}. A person was not asked to ignore a stored rejection.`);
       }
-      const gateRecord = decisionRecordFields(gate);
-      await sql`
-        insert into jev_decisions (
-          id, organization_id, brand_id, correlation_id, question_id, question_version,
-          subject_type, subject_id, input, evidence, probability, confidence, thresholds, decision, reasons,
-          provider, model, answer, schema_version, policy_version, calibration_version,
-          reviewer_id, reviewer_decision, reviewed_at, decision_fingerprint, outcome_digest
-        ) values (
-          ${decisionId}, ${access.organizationId}, ${data.brandId}, ${crypto.randomUUID()},
-          ${gate.questionId}, ${gate.questionVersion}, 'brief', ${briefId}, ${JSON.stringify(gate.features)},
-          ${JSON.stringify(gate.evidence)}, ${gate.probability}, ${gate.confidence}, ${JSON.stringify(gate.policy)},
-          ${gate.decision}, ${JSON.stringify(gate.reasons)}, ${gate.provider}, ${gate.modelVersion},
-          ${JSON.stringify(gate.answer)}, ${gate.schemaVersion}, ${gate.policyVersion}, ${gate.calibrationVersion ?? ""},
-          ${context.userId}, 'approve', now(), ${gateRecord.decisionFingerprint}, ${gateRecord.outcomeDigest}
-        )
-      `;
-      await sql`
-        insert into briefs (
-          id, organization_id, brand_id, opportunity_id, title, audience, angle, hook, message, offer, cta,
-          format, proof_type, constraints, context_pack, workflow, why, learning_notes, failure_notes,
-          status, decision_id, created_by
-        ) values (
-          ${briefId}, ${access.organizationId}, ${data.brandId}, ${opportunityId}, ${brief.title},
-          ${brief.audience}, ${brief.angle}, ${brief.hook}, ${brief.message}, ${brief.offer}, ${brief.cta},
-          ${brief.format}, ${brief.proofType}, ${brief.constraints}, ${JSON.stringify(brief.context)},
-          ${JSON.stringify(brief.workflow)}, ${JSON.stringify(brief.why)}, ${JSON.stringify(brief.learningNotes)},
-          ${JSON.stringify(brief.failureNotes)}, 'ready', ${decisionId}, ${context.userId}
-        )
-      `;
-      await sql`update opportunities set status = 'briefed' where id = ${opportunityId}`;
+      if (data.forceNew) {
+        // Superseded only after the new brief exists, so a refused or failed write never leaves the old brief unused.
+        await sql`
+          update briefs set status = 'used'
+          where opportunity_id = ${opportunityId} and status = 'ready' and organization_id = ${access.organizationId}
+            and id <> ${created.briefId}
+        `;
+      }
     }
     return loadSession(sql, access.organizationId, data.brandId, access.role);
-}
-
-function frameLike(storageKey: string): string {
-  return `${storageKey.replace(/[\\%_]/g, (char) => `\\${char}`)}.frame.%`;
 }
 
 async function measuredVideoFrames(sql: Sql, organizationId: string, brandId: string, storageKey: string) {
@@ -1083,7 +1096,7 @@ export async function executeApprovedCreativePlan(
         ${JSON.stringify({ manifestId: manifest.creativeId, mode: manifest.mode, beats: manifest.beats.length, planId: creativePlan.id })}
       )
     `;
-    await sql`update briefs set status = 'used' where id = ${briefId}`;
+    await sql`update briefs set status = 'used' where id = ${briefId} and organization_id = ${access.organizationId} and brand_id = ${brandId}`;
     await transitionCreativePlan(sql, {
       organizationId: access.organizationId, brandId, planId: creativePlan.id, actorId: userId,
       target: "executing", reason: "Approved research manifest is being finalized.",
@@ -1188,7 +1201,7 @@ export async function executeApprovedCreativePlan(
           modality, sequence_index, parent_job_id, cost_status
         ) values (
           ${carouselJobId}, ${access.organizationId}, ${brandId}, 'carousel', null, null, null, null,
-          'SUBMITTING', 'BALANCED', null, ${JSON.stringify({ kind: "carousel", slideCount, runId, briefId, planDeliverableIds: creativePlan.deliverables.filter((d) => d.kind === "carousel_slide").map((d) => d.id) })},
+          'AWAITING_CHILDREN', 'BALANCED', null, ${JSON.stringify({ kind: "carousel", slideCount, runId, briefId, planDeliverableIds: creativePlan.deliverables.filter((d) => d.kind === "carousel_slide").map((d) => d.id) })},
           now(), null, now(), ${creativePlan.id}, 'carousel', null, null, null
         )
         on conflict (id) do nothing
@@ -1279,6 +1292,7 @@ export async function executeApprovedCreativePlan(
         let outcome: ImageGenerationOutcome;
         try {
           outcome = await selected.provider.generate({
+            organizationId: access.organizationId,
             prompt,
             seed: `${runId}:${deliv.kind}:${index}`,
             promptVersion,
@@ -1395,7 +1409,7 @@ export async function executeApprovedCreativePlan(
         // P4a: the provider and model are chosen by the capability matrix, and the choice is recorded on the job.
         const { provider, selection } = await productionRouter.selectForSpec(
           creativeSpec,
-          "BALANCED",
+          await productionCostMode(sql, creativeSpec.organizationId),
           targetVidProvider === "auto" ? undefined : targetVidProvider,
         );
         creativeSpec.providerId = provider.id;
@@ -1528,6 +1542,11 @@ export async function executeApprovedCreativePlan(
         destinationUrl: "",
       });
       const visual = await measuredVideoFrames(sql, access.organizationId, brandId, asText(video.storage_key));
+      const selection = await resolveActiveEngine(sql, access.organizationId);
+      // Perception is used only when the engine cannot see frames. It is checked here, before any frame is sampled for it.
+      const perceptionCandidate = selectPerceptionProvider().provider;
+      const perceptionForJudgment = selection.engineId !== "openai-decisions" &&
+        (await perceptionReadiness(sql, access.organizationId, perceptionCandidate)).ready ? perceptionCandidate : null;
       const facts = factsFor(loaded, {
         kind: "video",
         productName,
@@ -1557,6 +1576,11 @@ export async function executeApprovedCreativePlan(
         brandId,
         creativeId: asText(video.creative_id),
         facts,
+        selection,
+        perception: perceptionForJudgment,
+        visual: await videoVisualEvidence(sql, access.organizationId, brandId, asText(video.storage_key), video.duration_ms == null ? null : asNumber(video.duration_ms), {
+          sample: selection.engineId === "openai-decisions" || perceptionForJudgment !== null,
+        }),
       });
       const status = judged.rollup === "REJECT" ? "rejected" : "in_review";
       await sql`update creative_records set status = ${status}, updated_at = now() where id = ${asText(video.creative_id)}`;
@@ -1584,7 +1608,7 @@ export async function executeApprovedCreativePlan(
       });
     }
 
-    await sql`update briefs set status = 'used' where id = ${briefId}`;
+    await sql`update briefs set status = 'used' where id = ${briefId} and organization_id = ${access.organizationId}`;
     await sql`update generation_runs set status = 'completed' where id = ${runId}`;
     await settleCreativePlanIfComplete(sql, {
       organizationId: access.organizationId,
@@ -1846,7 +1870,7 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
         )
       `;
       const isTest = data.publisher === "test";
-      const isTestRuntime = process.env.NODE_ENV !== "production" || process.env.MERIDIAN_TESTING_RUNTIME === "true";
+      const isTestRuntime = isTestingRuntimeNow();
       if (isTest && !isTestRuntime) {
         throw new Error("The test publisher is isolated to TestingRuntime and cannot be used in ProductionRuntime. Connect a live channel to publish.");
       }
@@ -1877,6 +1901,9 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
 }
 
 export async function recordStudioTestPerformance(userId: string, data: { brandId: string }) {
+  if (!isTestingRuntimeNow()) {
+    throw new Error("Simulated performance is recorded only in the testing runtime. It is never used as a real outcome.");
+  }
   const context = { userId };
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "member");

@@ -9,6 +9,10 @@ import type { CreativeSpec, ProductionJob, ProductionProvider } from "../product
 import { BudgetExceededError, BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { executeApprovedCreativePlan } from "./session.server.ts";
 import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
+import { storeVaultCredential } from "../vault/service.ts";
+
+// The vault encrypts each workspace's saved production key with this master key. Only this test process uses it.
+process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || "test-master-key-reservation-0123456789abcdef";
 
 type Outcome = (spec: CreativeSpec) => Promise<ProductionJob>;
 
@@ -61,6 +65,8 @@ async function createTenantFixture(sql: Sql, label: string, planCapUsd: number |
   const briefId = `brief-sub-${suffix}`;
   const decisionId = `jev-sub-${suffix}`;
   await sql`insert into organizations (id, name, slug, created_by) values (${organizationId}, ${organizationId}, ${organizationId}, 'test-user')`;
+  // The workspace has its own saved production key, so the provider is ready for this workspace through the real readiness check.
+  await storeVaultCredential(sql, organizationId, "provider_config:production", { accessToken: "", apiKey: "test-workspace-gemini-key" });
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${organizationId}, ${brandId}, 'test-user')`;
   await sql`
     insert into jev_decisions (

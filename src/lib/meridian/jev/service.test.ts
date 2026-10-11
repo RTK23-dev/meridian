@@ -3,6 +3,7 @@ import test from "node:test";
 import { JevDecisionService } from "./service.ts";
 import { JevRouter, TypeSafeDirectJevProvider } from "./router.ts";
 import type { EvidenceBundle } from "../evidence/types.ts";
+import { fixedLookup } from "../credentials/fixtures.ts";
 
 const sampleCompleteBundle: EvidenceBundle = {
   id: "bundle-integration-123",
@@ -27,6 +28,11 @@ const sampleCompleteBundle: EvidenceBundle = {
   transcript: [
     { id: "seg-1", text: "Stop scrolling if you want 10x ROI on your ads.", startMs: 0, endMs: 2500, confidence: 0.95 },
   ],
+  // The scenes the bundle declares as scene_cuts and scene_frames. A declared name is evidence only when its structure is present.
+  scenes: [
+    { index: 0, startMs: 0, endMs: 2500, shotType: "close", facePresence: true, keyframeRef: "frame-0" },
+    { index: 1, startMs: 2500, endMs: 5000, shotType: "wide", facePresence: false },
+  ],
   metrics: {
     durationMs: 15000,
   },
@@ -41,13 +47,13 @@ test("JevDecisionService: dispatches typed evidence to TypeSafe provider via int
   let callCount = 0;
   let capturedUrl = "";
   let capturedHeaders: Record<string, string> = {};
-  let capturedBody: any = null;
+  const bodies: any[] = [];
 
   const mockFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
     callCount++;
     capturedUrl = String(url);
     capturedHeaders = (init?.headers as Record<string, string>) || {};
-    capturedBody = JSON.parse(String(init?.body || "{}"));
+    bodies.push(JSON.parse(String(init?.body || "{}")));
 
     return {
       ok: true,
@@ -73,7 +79,7 @@ test("JevDecisionService: dispatches typed evidence to TypeSafe provider via int
 
   const router = new JevRouter({
     typesafeProvider: new TypeSafeDirectJevProvider({
-      apiKey: "test_typesafe_key",
+      lookup: fixedLookup("test_typesafe_key"),
       baseUrl: "https://api.typesafe.ai/v1/systemone",
       fetchImpl: mockFetch as typeof fetch,
     }),
@@ -89,16 +95,24 @@ test("JevDecisionService: dispatches typed evidence to TypeSafe provider via int
     policy: { mode: "typesafe_direct" },
   });
 
-  assert.equal(callCount, 1);
+  // One call per evidence scope. The two questions declare different scopes, so there are two calls, each with one question.
+  assert.equal(callCount, 2);
   assert.equal(capturedUrl, "https://api.typesafe.ai/v1/systemone");
   assert.equal(capturedHeaders["Authorization"], "Bearer test_typesafe_key");
   assert.equal(capturedHeaders["Content-Type"], "application/json");
 
-  assert.equal(capturedBody.state.bundleId, "bundle-integration-123");
-  assert.equal(capturedBody.state.source.sourceAdapter, "meta_ad_library");
-  assert.ok(capturedBody.state.availableEvidence.includes("transcript"));
-  assert.ok(capturedBody.questions["organic.hook_mechanism.v1"]);
-  assert.ok(capturedBody.questions["organic.format_structure.v1"]);
+  const hookBody = bodies.find((body) => body.questions["organic.hook_mechanism.v1"]);
+  const formatBody = bodies.find((body) => body.questions["organic.format_structure.v1"]);
+  assert.ok(hookBody && formatBody, "each question is sent");
+  assert.deepEqual(Object.keys(hookBody.questions), ["organic.hook_mechanism.v1"], "the hook call carries only the hook question");
+  assert.deepEqual(Object.keys(formatBody.questions), ["organic.format_structure.v1"], "the format call carries only the format question");
+
+  // The bundle's identity and source reach each call inside its own scope, as bundle_source.
+  assert.equal(hookBody.state.evidence.bundle_source.bundleId, "bundle-integration-123");
+  assert.equal(hookBody.state.evidence.bundle_source.source.sourceAdapter, "meta_ad_library");
+  assert.deepEqual([...hookBody.state.availableEvidence].sort(), ["bundle_source", "scene_frames", "transcript"]);
+  assert.deepEqual([...formatBody.state.availableEvidence].sort(), ["bundle_source", "scene_cuts", "transcript"]);
+  assert.ok(hookBody.state.availableEvidence.includes("transcript"));
 
   assert.equal(result.provider, "typesafe_direct");
   assert.equal(result.answers.length, 2);
@@ -124,7 +138,7 @@ test("JevDecisionService: abstains with typed reason and skips network dispatch 
 
   const router = new JevRouter({
     typesafeProvider: new TypeSafeDirectJevProvider({
-      apiKey: "test_typesafe_key",
+      lookup: fixedLookup("test_typesafe_key"),
       baseUrl: "https://api.typesafe.ai/v1/systemone",
       fetchImpl: mockFetch as typeof fetch,
     }),
@@ -179,7 +193,7 @@ test("JevDecisionService: persists decisions and answers to SQL ledger when SQL 
 
   const router = new JevRouter({
     typesafeProvider: new TypeSafeDirectJevProvider({
-      apiKey: "test_typesafe_key",
+      lookup: fixedLookup("test_typesafe_key"),
       baseUrl: "https://api.typesafe.ai/v1/systemone",
       fetchImpl: mockFetch as typeof fetch,
     }),
@@ -197,7 +211,8 @@ test("JevDecisionService: persists decisions and answers to SQL ledger when SQL 
   });
 
   assert.equal(result.persisted, true);
+  // The active engine is looked up first, so the ledger writes are found by their statements, not their position.
   assert.ok(executedQueries.length >= 2, "Must execute insert into jev_runs and jev_answers");
-  assert.ok(executedQueries[0].sql.includes("insert into jev_runs"));
-  assert.ok(executedQueries[1].sql.includes("insert into jev_answers"));
+  assert.ok(executedQueries.some((query) => query.sql.includes("insert into jev_runs")));
+  assert.ok(executedQueries.some((query) => query.sql.includes("insert into jev_answers")));
 });

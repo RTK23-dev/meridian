@@ -147,6 +147,7 @@ Configure environment variables in `.env`:
 - [Credential Vault](docs/VAULT_AND_ACCOUNTS.md) — Encryption and provider account management.
 - [Database Schema](docs/DATABASE.md) — PostgreSQL table schemas and migration order.
 - [Operator Guide](docs/OPERATOR_GUIDE.md) — Operational runbook for production operators.
+- [Accessibility](docs/ACCESSIBILITY.md) — What the interface does for keyboard, screen-reader and touch users, and what is not yet verified.
 
 ---
 

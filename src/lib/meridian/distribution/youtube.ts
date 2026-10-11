@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { DistributionChannel, OrganicPublishRequest, OrganicPublishReceipt, OrganicTelemetryMetrics } from "./types.ts";
+import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 export class YouTubeShortsChannel implements DistributionChannel {
   public readonly id = "youtube-shorts";
@@ -44,7 +45,7 @@ export class YouTubeShortsChannel implements DistributionChannel {
     const sha256 = createHash("sha256").update(request.mediaBytes).digest("hex");
     const connection = await this.checkConnection(request.brandId);
 
-    if (!connection.connected && request.allowTestProvider) {
+    if (!connection.connected && request.allowTestProvider && isTestingRuntimeNow()) {
       const mockExternalId = `yt_test_${sha256.slice(0, 11)}`;
       return {
         externalId: mockExternalId,
@@ -65,14 +66,12 @@ export class YouTubeShortsChannel implements DistributionChannel {
     }
 
     try {
-      const isShort = request.aspectRatio === "9:16";
-      const mockId = `yt_${Date.now()}_${sha256.slice(0, 6)}`;
+      // Live YouTube publishing is not implemented in this build. Nothing is reported as published.
       return {
-        externalId: mockId,
-        postUrl: isShort ? `https://www.youtube.com/shorts/${mockId}` : `https://www.youtube.com/watch?v=${mockId}`,
+        externalId: "",
         platform: "youtube",
-        status: "published",
-        publishedAt: new Date().toISOString(),
+        status: "failed",
+        error: "Live YouTube publishing is not implemented in this build. Nothing was published.",
       };
     } catch (caught) {
       return {
@@ -84,19 +83,10 @@ export class YouTubeShortsChannel implements DistributionChannel {
     }
   }
 
-  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics> {
-    if (!externalId.trim()) {
-      return { views: 0, reach: 0, likes: 0, comments: 0, shares: 0 };
-    }
-    return {
-      views: 3400,
-      reach: 2900,
-      threeSecondViews: 2850,
-      averageWatchTimeSeconds: 14.1,
-      completionRate: 0.52,
-      likes: 180,
-      comments: 24,
-      shares: 45,
-    };
+  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {
+    // Live metrics are not implemented in this build. Nothing is observed, so nothing is returned: no fixed
+    // numbers stand in for engagement.
+    void externalId;
+    return null;
   }
 }

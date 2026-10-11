@@ -7,7 +7,10 @@
  */
 import type { ProviderHealth } from "./types.ts";
 import { generateImageBytes } from "../providers/image-bytes.server.ts";
-import { ProviderConfigResolver } from "../config/resolver.ts";
+import { generateNanoBananaImage } from "../providers/nano-banana.server.ts";
+import type { Sql } from "../learning/store.ts";
+import { loadDefaultSql, resolveCredential, type CredentialEnv } from "../credentials/resolve.ts";
+import { credentialStateOf, type CredentialResolution } from "../credentials/contract.ts";
 import { isTestingRuntimeNow as testingRuntimeNow } from "../runtime-mode.ts";
 
 export interface ImageGenerationInput {
@@ -17,6 +20,11 @@ export interface ImageGenerationInput {
   /** The registry model the capability matrix selected. */
   model: string;
   aspectRatio: string;
+  /**
+   * The workspace that owns the image. The Google provider uses that workspace's production credential. Without it, the
+   * provider makes no request.
+   */
+  organizationId?: string;
 }
 
 export type ImageGenerationOutcome =
@@ -57,25 +65,76 @@ function health(id: string, configured: boolean, detail: string): ProviderHealth
   };
 }
 
-/** Google's image model. Its adapter is selected only when Google credentials are configured. */
+/**
+ * Google's image model. It uses the workspace's own production credential, resolved per call from the image's organization.
+ * The deployment key is used only when PRODUCTION_SHARED_DEFAULT=deployment is set.
+ */
 export class GoogleNanoBananaImageProvider implements ProductionImageProvider {
   readonly id = "google_nano_banana";
   readonly capabilities = { zeroSpend: false };
+  private readonly sql?: Sql;
+  private readonly env?: CredentialEnv;
+  private readonly fetchImpl?: typeof fetch;
+  private readonly lookup?: (organizationId: string) => Promise<CredentialResolution>;
 
+  constructor(options?: {
+    sql?: Sql;
+    env?: CredentialEnv;
+    fetchImpl?: typeof fetch;
+    lookup?: (organizationId: string) => Promise<CredentialResolution>;
+  }) {
+    this.sql = options?.sql;
+    this.env = options?.env;
+    this.fetchImpl = options?.fetchImpl;
+    this.lookup = options?.lookup;
+  }
+
+  private async credentialFor(organizationId: string): Promise<CredentialResolution> {
+    if (this.lookup) return this.lookup(organizationId);
+    const sql = this.sql ?? (await loadDefaultSql());
+    return resolveCredential(sql, organizationId, "production", this.env ?? process.env);
+  }
+
+  /** Without a workspace there is no key to check, so this reports only that a workspace credential is needed. */
   async health(): Promise<ProviderHealth> {
-    const configured = Boolean(ProviderConfigResolver.resolveGoogle().apiKey);
-    return health(this.id, configured, configured ? "Google image credentials are configured." : "Google image credentials are not configured.");
+    return health(this.id, false, "Google image generation needs a workspace production credential. Readiness is checked for a workspace, and none was given.");
+  }
+
+  /** Readiness for one workspace. A workspace whose key is not usable is never reported as ready. */
+  async healthFor(organizationId: string): Promise<ProviderHealth> {
+    let state: ReturnType<typeof credentialStateOf>;
+    try {
+      state = credentialStateOf(await this.credentialFor(organizationId));
+    } catch {
+      return health(this.id, false, "The workspace's Google production credential could not be checked.");
+    }
+    if (state.state !== "usable") return health(this.id, false, state.reason ?? "No Google production credential is available for this workspace.");
+    const source = state.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
+    return health(this.id, true, `Google image generation uses ${source}.`);
   }
 
   async generate(input: ImageGenerationInput): Promise<ImageGenerationOutcome> {
-    const result = await generateImageBytes({
-      provider: "google:nano-banana",
+    const provider = "google:nano-banana";
+    if (!input.organizationId) {
+      return { status: "NOT_CONNECTED", provider, error: "Google image generation needs a workspace production credential, and no workspace was given. No image was generated." };
+    }
+    let resolution: CredentialResolution;
+    try {
+      resolution = await this.credentialFor(input.organizationId);
+    } catch {
+      return { status: "NOT_CONNECTED", provider, error: "The workspace's Google production credential could not be read. No image was generated." };
+    }
+    if (resolution.status !== "ready") {
+      return { status: "NOT_CONNECTED", provider, error: resolution.reason };
+    }
+    // The key goes only to this request. The bytes are returned to the caller, which stores and verifies them.
+    const result = await generateNanoBananaImage({
       prompt: input.prompt,
-      seed: input.seed,
       promptVersion: input.promptVersion,
-      allowTest: false,
       model: input.model,
       aspectRatio: input.aspectRatio,
+      apiKey: resolution.secret,
+      fetchImpl: this.fetchImpl,
     });
     return toOutcome(result);
   }

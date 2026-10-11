@@ -4,7 +4,7 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import { assertReproducible, decisionRecordFields } from "../jev/decision-record.ts";
 import type { Sql } from "../learning/store.ts";
-import { judgeMedia } from "./features.ts";
+import { ENGINE_REPLACED_MEDIA_QUESTIONS, judgeMedia } from "./features.ts";
 import { writeJudgment } from "./session.server.ts";
 
 const facts = {
@@ -53,7 +53,8 @@ test("every decision row a creative judgment writes carries the fingerprint and 
     select subject_id, question_id, decision_fingerprint, outcome_digest from jev_decisions
     where organization_id = ${t.organizationId} and brand_id = ${t.brandId}
   `;
-  const expected = judgeMedia(facts);
+  // The lexical brand and opportunity checks are decided by the engine gate, so they are not written locally.
+  const expected = judgeMedia(facts).filter((decision) => !ENGINE_REPLACED_MEDIA_QUESTIONS.has(decision.questionId));
   assert.equal(rows.length, 2 * expected.length);
   for (const decision of expected) {
     const fields = decisionRecordFields(decision);

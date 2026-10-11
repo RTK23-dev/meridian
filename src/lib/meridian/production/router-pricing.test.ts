@@ -31,7 +31,7 @@ test("an image spec is refused until its own durable path exists, rather than se
 
 test("a video price is the owner's per-second declaration, and an image price is unknown rather than zero", () => {
   const declared = priceFor(fakeProvider("hypit", 0.05), "video");
-  assert.deepEqual(declared, { status: "configured", unit: "per_second", amountUsd: 0.05, source: "provider declaration (hypit)", verifiedAt: null });
+  assert.deepEqual(declared, { status: "configured", unit: "per_second", amountUsd: 0.05, source: "code-declared estimate in the hypit adapter; not checked against the provider price page", verifiedAt: null });
   const image = priceFor(fakeProvider("hypit", 0.05), "image");
   assert.equal(image.status, "unknown");
   assert.equal(image.amountUsd, null);
@@ -106,4 +106,13 @@ test("the test image double is refused outside the testing runtime, and priced a
     if (prior === undefined) delete process.env.MERIDIAN_TESTING_RUNTIME;
     else process.env.MERIDIAN_TESTING_RUNTIME = prior;
   }
+});
+
+test("LOWEST_COST ranks on priced quotes: known amounts cheapest first, and an unknown price is never treated as zero", () => {
+  const router = new ProductionRouter({
+    runtime: "production",
+    providers: [fakeProvider("expensive", 0.3), fakeProvider("cheap", 0.05), fakeProvider("unpriced", Number.NaN)],
+  });
+  const ranked = router.rankProviders({ modality: "video" } as unknown as CreativeSpec, "LOWEST_COST");
+  assert.deepEqual(ranked.map((p) => p.id), ["cheap", "expensive", "unpriced"]);
 });

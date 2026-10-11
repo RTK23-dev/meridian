@@ -57,3 +57,15 @@ export const SAFETY_QUESTIONS: Record<string, JevQuestionSpec> = {
     },
   },
 };
+
+/**
+ * The evidence each research safety question may receive (GateQuestion.evidenceScope). Each scope is the question's requirements,
+ * plus bundle_source (the bundle's identity, source, and platform). The research bundle does not supply `script`,
+ * `brand_allowed_claims`, `source_reference`, or `concept_spec`, so these questions abstain and go to human review until a source
+ * supplies them. Nothing here is inferred from other evidence.
+ */
+export const SAFETY_EVIDENCE_SCOPES: Record<string, readonly string[]> = {
+  "safety.claim_compliance.v1": ["bundle_source", "script", "brand_allowed_claims"],
+  "safety.rights_and_originality.v1": ["bundle_source", "script", "source_reference"],
+  "safety.policy_risk_level.v1": ["bundle_source", "script", "concept_spec"],
+};
