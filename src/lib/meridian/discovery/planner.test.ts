@@ -65,8 +65,8 @@ test("DiscoveryService: executes multi-source niche discovery when Cyclone is un
     sql: mockSql,
   });
 
-  // Discovery completes successfully even with Cyclone absent
-  assert.equal(result.run.status, "completed");
+  // Cyclone absent and no keyed source connected: no source ran, so the run is blocked, not completed.
+  assert.equal(result.run.status, "blocked");
   assert.ok(Array.isArray(result.items));
   // Cyclone error is noted in perSourceErrors without crashing mission
   assert.ok(result.run.perSourceErrors["cyclone_scout"]?.includes("not connected or configured"));

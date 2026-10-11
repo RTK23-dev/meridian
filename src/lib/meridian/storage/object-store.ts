@@ -298,7 +298,7 @@ export function createGoogleDriveObjectStore(
               brandId,
               subpath: pathParts.join("/"),
             });
-            fileId = (await drive.findFileByName(folderId, fileName)) || undefined;
+            fileId = (await drive.findFileByName(folderId, fileName, organizationId)) || undefined;
           }
         } catch {
           // Folder navigation fallback not available or failed
@@ -310,7 +310,7 @@ export function createGoogleDriveObjectStore(
       }
 
       try {
-        const file = await drive.get(fileId);
+        const file = await drive.get(fileId, organizationId);
         return {
           key: cleanKey,
           organizationId,
@@ -326,9 +326,9 @@ export function createGoogleDriveObjectStore(
         return null;
       }
     },
-    async delete(fileId: string): Promise<void> {
+    async delete(organizationId: string, fileId: string): Promise<void> {
       const drive = client || (await import("./drive.ts")).googleDriveClient;
-      await drive.delete(fileId);
+      await drive.delete(fileId, organizationId);
     },
   };
 }

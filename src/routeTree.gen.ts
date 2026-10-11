@@ -28,6 +28,8 @@ import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as AppBrandsNewRouteImport } from './routes/_app/brands/new'
 import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$assetId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiDriveCallbackRouteImport } from './routes/api/drive/callback'
+import { Route as ApiDriveConnectRouteImport } from './routes/api/drive/connect'
 import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
 import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
 import { Route as AppBrandsBrandIdIndexRouteImport } from './routes/_app/brands/$brandId/index'
@@ -138,6 +140,16 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDriveCallbackRoute = ApiDriveCallbackRouteImport.update({
+  id: '/api/drive/callback',
+  path: '/api/drive/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDriveConnectRoute = ApiDriveConnectRouteImport.update({
+  id: '/api/drive/connect',
+  path: '/api/drive/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOauthCallbackRoute = ApiOauthCallbackRouteImport.update({
   id: '/api/oauth/callback',
   path: '/api/oauth/callback',
@@ -239,6 +251,8 @@ export interface FileRoutesByFullPath {
   '/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/drive/callback': typeof ApiDriveCallbackRoute
+  '/api/drive/connect': typeof ApiDriveConnectRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
@@ -274,6 +288,8 @@ export interface FileRoutesByTo {
   '/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/drive/callback': typeof ApiDriveCallbackRoute
+  '/api/drive/connect': typeof ApiDriveConnectRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
@@ -311,6 +327,8 @@ export interface FileRoutesById {
   '/_app/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/drive/callback': typeof ApiDriveCallbackRoute
+  '/api/drive/connect': typeof ApiDriveConnectRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/_app/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
@@ -348,6 +366,8 @@ export interface FileRouteTypes {
     | '/brands/new'
     | '/api/assets/$assetId'
     | '/api/auth/$'
+    | '/api/drive/callback'
+    | '/api/drive/connect'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/brands/$brandId/accounts'
@@ -383,6 +403,8 @@ export interface FileRouteTypes {
     | '/brands/new'
     | '/api/assets/$assetId'
     | '/api/auth/$'
+    | '/api/drive/callback'
+    | '/api/drive/connect'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/brands/$brandId/accounts'
@@ -419,6 +441,8 @@ export interface FileRouteTypes {
     | '/_app/brands/new'
     | '/api/assets/$assetId'
     | '/api/auth/$'
+    | '/api/drive/callback'
+    | '/api/drive/connect'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/_app/brands/$brandId/accounts'
@@ -443,6 +467,8 @@ export interface RootRouteChildren {
   ApiHealthRoute: typeof ApiHealthRoute
   ApiAssetsAssetIdRoute: typeof ApiAssetsAssetIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiDriveCallbackRoute: typeof ApiDriveCallbackRoute
+  ApiDriveConnectRoute: typeof ApiDriveConnectRoute
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
 }
@@ -580,6 +606,20 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/drive/callback': {
+      id: '/api/drive/callback'
+      path: '/api/drive/callback'
+      fullPath: '/api/drive/callback'
+      preLoaderRoute: typeof ApiDriveCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/drive/connect': {
+      id: '/api/drive/connect'
+      path: '/api/drive/connect'
+      fullPath: '/api/drive/connect'
+      preLoaderRoute: typeof ApiDriveConnectRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/oauth/callback': {
@@ -757,9 +797,20 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthRoute: ApiHealthRoute,
   ApiAssetsAssetIdRoute: ApiAssetsAssetIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiDriveCallbackRoute: ApiDriveCallbackRoute,
+  ApiDriveConnectRoute: ApiDriveConnectRoute,
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}

@@ -1,64 +1,78 @@
 import { createHash } from "node:crypto";
-import type { DistributionChannel, OrganicPublishRequest, OrganicPublishReceipt, OrganicTelemetryMetrics } from "./types.ts";
+import { liveTransport, type Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
+import { YOUTUBE_UPLOAD_SCOPE } from "./connection.ts";
+import { classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
+import type {
+  ConnectionCheck,
+  DistributionChannel,
+  OrganicConnection,
+  OrganicPublishRequest,
+  OrganicPublishReceipt,
+  OrganicTelemetryMetrics,
+} from "./types.ts";
 
+const LABEL = "YouTube";
+const UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
+const NOT_CONNECTED_REASON =
+  `No YouTube channel is connected for this brand. Add the channel ID and a token that grants ${YOUTUBE_UPLOAD_SCOPE} in Accounts.`;
+
+/**
+ * Uploads a Short to a connected YouTube channel with the Data API resumable upload: one request opens the session, a second
+ * sends the bytes. The receipt id is the video id the upload response returns. Uploads are public, because the receipt says
+ * published. Without a connection, or a token that lacks the upload scope, the channel reports NOT_CONNECTED and sends nothing.
+ */
 export class YouTubeShortsChannel implements DistributionChannel {
   public readonly id = "youtube-shorts";
   public readonly platform = "youtube" as const;
   public readonly targetType = "organic_post" as const;
   public readonly displayName = "YouTube Shorts & Video";
 
-  /**
-   * No per-workspace YouTube account is connected in this release, and no token from the environment is treated as a connected
-   * account. Live posting is not available, so the honest state is not connected, with the manual export as the way out.
-   */
-  async checkConnection(brandId: string): Promise<{ connected: boolean; accountName?: string; reason?: string }> {
-    void brandId;
-    return {
-      connected: false,
-      reason: "Live YouTube posting is not available in this release. Export the package and post it manually.",
-    };
+  private readonly transport: Transport;
+
+  constructor(options: { transport?: Transport } = {}) {
+    this.transport = options.transport ?? liveTransport();
+  }
+
+  checkConnection(connection: OrganicConnection | undefined): ConnectionCheck {
+    if (connection?.connected) return { connected: true, accountName: connection.accountName };
+    return { connected: false, code: "NOT_CONNECTED", reason: connection?.reason ?? NOT_CONNECTED_REASON };
   }
 
   async publish(request: OrganicPublishRequest): Promise<OrganicPublishReceipt> {
     if (!request.mediaBytes || request.mediaBytes.byteLength === 0) {
-      return {
-        externalId: "",
-        platform: "youtube",
-        status: "failed",
-        error: "Media bytes cannot be empty.",
-      };
+      return failure("youtube", "REJECTED", "Media bytes cannot be empty.");
     }
-
     if (!request.mimeType.startsWith("video/")) {
-      return {
-        externalId: "",
-        platform: "youtube",
-        status: "failed",
-        error: `YouTube accepts video files only (received ${request.mimeType}).`,
-      };
+      return failure("youtube", "REJECTED", `YouTube accepts video files only (received ${request.mimeType}).`);
     }
 
-    const sha256 = createHash("sha256").update(request.mediaBytes).digest("hex");
-    const connection = await this.checkConnection(request.brandId);
-
-    if (!connection.connected && request.allowTestProvider && isTestingRuntimeNow()) {
-      const mockExternalId = `yt_test_${sha256.slice(0, 11)}`;
-      return {
-        externalId: mockExternalId,
-        postUrl: `https://www.youtube.com/shorts/${mockExternalId}`,
-        platform: "youtube",
-        status: "published",
-        publishedAt: new Date().toISOString(),
-      };
+    const connection = request.connection;
+    if (!connection?.connected) {
+      if (request.allowTestProvider && isTestingRuntimeNow()) {
+        const sha256 = createHash("sha256").update(request.mediaBytes).digest("hex");
+        const mockExternalId = `yt_test_${sha256.slice(0, 11)}`;
+        return {
+          externalId: mockExternalId,
+          postUrl: `https://www.youtube.com/shorts/${mockExternalId}`,
+          platform: "youtube",
+          status: "published",
+          publishedAt: new Date().toISOString(),
+        };
+      }
+      return failure("youtube", "NOT_CONNECTED", this.checkConnection(connection).reason ?? NOT_CONNECTED_REASON);
     }
 
-    return {
-      externalId: "",
-      platform: "youtube",
-      status: "failed",
-      error: connection.reason || "YouTube is not connected. Nothing was published.",
-    };
+    if (request.scheduledFor) {
+      return failure("youtube", "REJECTED", "YouTube Shorts cannot be scheduled by this channel yet. Publish now, or export the package and post it by hand.");
+    }
+    return uploadYouTubeShort(this.transport, {
+      accessToken: connection.accessToken,
+      mediaBytes: request.mediaBytes,
+      mimeType: request.mimeType,
+      title: request.title ?? "",
+      description: request.caption,
+    });
   }
 
   async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {
@@ -67,4 +81,68 @@ export class YouTubeShortsChannel implements DistributionChannel {
     void externalId;
     return null;
   }
+}
+
+/**
+ * Opens a resumable upload session, then sends the video bytes to it. Nothing is retried after the bytes are sent. A failure
+ * before the session opens is safe to retry, and the receipt says so.
+ */
+export async function uploadYouTubeShort(
+  transport: Transport,
+  input: { accessToken: string; mediaBytes: Uint8Array; mimeType: string; title: string; description: string },
+): Promise<OrganicPublishReceipt> {
+  const title = input.title.replace(/\s+/g, " ").trim().slice(0, 100) || "Meridian Short";
+  const metadata = JSON.stringify({
+    snippet: { title, description: input.description.slice(0, 5000), categoryId: "22" },
+    status: { privacyStatus: "public", selfDeclaredMadeForKids: false },
+  });
+
+  let session;
+  try {
+    session = await transport({
+      method: "POST",
+      url: UPLOAD_URL,
+      headers: {
+        Authorization: `Bearer ${input.accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Length": String(input.mediaBytes.byteLength),
+        "X-Upload-Content-Type": input.mimeType,
+      },
+      body: metadata,
+    });
+  } catch {
+    return failure("youtube", "UNCONFIRMED", unconfirmed(LABEL, "no response arrived"));
+  }
+  if (session.status < 200 || session.status >= 300) {
+    const refused = classifyFailure({ label: LABEL, response: session, json: parseJsonBody(session.body), uploadStarted: false });
+    return failure("youtube", refused.code, refused.error);
+  }
+  const sessionUrl = session.headers.location?.trim() ?? "";
+  if (!sessionUrl) return failure("youtube", "UNCONFIRMED", unconfirmed(LABEL, "no upload session was returned"));
+
+  let uploaded;
+  try {
+    uploaded = await transport({
+      method: "PUT",
+      url: sessionUrl,
+      headers: { "Content-Type": input.mimeType },
+      body: input.mediaBytes,
+    });
+  } catch {
+    return failure("youtube", "UNCONFIRMED", unconfirmed(LABEL, "the upload did not get a response"));
+  }
+  const json = parseJsonBody(uploaded.body);
+  if (uploaded.status < 200 || uploaded.status >= 300) {
+    const refused = classifyFailure({ label: LABEL, response: uploaded, json, uploadStarted: true });
+    return failure("youtube", refused.code, refused.error);
+  }
+  const id = responseId(json);
+  if (!id) return failure("youtube", "UNCONFIRMED", unconfirmed(LABEL, "the response had no video id"));
+  return {
+    externalId: id,
+    postUrl: `https://www.youtube.com/shorts/${encodeURIComponent(id)}`,
+    platform: "youtube",
+    status: "published",
+    publishedAt: new Date().toISOString(),
+  };
 }

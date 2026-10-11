@@ -13,7 +13,7 @@ export {
   Dialog, DialogTrigger, DialogClose, DialogContent, DialogTitle, DialogDescription,
   AlertDialog, AlertDialogTrigger, AlertDialogCancel, AlertDialogAction, AlertDialogContent, AlertDialogTitle, AlertDialogDescription,
   Sheet, SheetTrigger, SheetClose, SheetContent, SheetTitle, SheetDescription,
-  Popover, PopoverTrigger, PopoverContent,
+  Popover, PopoverTrigger, PopoverClose, PopoverContent,
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   TooltipProvider, Tooltip, TooltipTrigger, TooltipContent,
   Tabs, TabsList, TabsTrigger, TabsContent,

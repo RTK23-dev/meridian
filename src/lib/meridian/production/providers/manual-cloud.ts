@@ -73,7 +73,7 @@ export class ManualCloudProvider implements ProductionProvider {
   }
 
   async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
-    const driveHealth = await this.drive.health();
+    const driveHealth = await this.drive.health(spec.organizationId);
     if (driveHealth.status !== "HEALTHY") {
       return {
         jobId: "",
@@ -132,12 +132,14 @@ export class ManualCloudProvider implements ProductionProvider {
 
     try {
       const manifestBytes = Buffer.from(JSON.stringify({ ...manifest, outputFolderUrl }, null, 2), "utf8");
+      // The manifest is a Drive file, so its storage_objects row is written in the same call, after Drive accepts it.
       await this.drive.put({
         organizationId: spec.organizationId,
         brandId: spec.brandId,
         path: `production/inputs/${jobId}/manifest.json`,
         mimeType: "application/json",
         bytes: manifestBytes,
+        storageRecord: { lifecycle: "stored" },
       });
       dropFolderUrl = outputFolderUrl;
     } catch (err) {

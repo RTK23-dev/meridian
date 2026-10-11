@@ -15,12 +15,6 @@ function list(value: unknown, max: number): string[] {
   return value.map((item) => clip(item, 80)).filter(Boolean).slice(0, max);
 }
 
-function envToken(provider: "meta" | "tiktok" | "google", env: NodeJS.ProcessEnv): string {
-  if (provider === "meta") return env.META_ACCESS_TOKEN ?? "";
-  if (provider === "tiktok") return env.TIKTOK_ACCESS_TOKEN ?? "";
-  return env.GOOGLE_ADS_ACCESS_TOKEN ?? "";
-}
-
 export type PublishView = {
   correlationId: string;
   detail: string;
@@ -55,7 +49,8 @@ export async function publishPausedForBrand(
 ): Promise<PublishView> {
   const { liveTransport } = await import("./http.ts");
   const { publishPausedStages } = await import("./live.ts");
-  const { openAccessToken, stageWrites } = await import("./stages.ts");
+  const { stageWrites } = await import("./stages.ts");
+  const { providerAccessToken } = await import("./access-token.ts");
   const operation = startOperation({
     provider: input.provider,
     operation: "publishing.paused",
@@ -68,10 +63,13 @@ export async function publishPausedForBrand(
     where organization_id = ${input.organizationId} and provider = ${input.provider}
     limit 1
   `;
-  const opened = openAccessToken({
+  // The sealed OAuth token, or the workspace's saved key through the resolver. Environment tokens are not read.
+  const opened = await providerAccessToken(sql, {
+    organizationId: input.organizationId,
+    provider: input.provider,
     sealed: secrets[0]?.sealed_token ?? "",
-    key: env.TOKEN_ENCRYPTION_KEY ?? "",
-    envToken: envToken(input.provider, env),
+    encryptionKey: env.TOKEN_ENCRYPTION_KEY ?? "",
+    env,
   });
   if ("error" in opened) {
     const record = operation.finish(false, 0, opened.error);

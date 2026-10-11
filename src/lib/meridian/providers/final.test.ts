@@ -323,11 +323,12 @@ test("calibration proposals stay inside the workspace and do not open twice", ()
   assert.equal(rows[0]?.reviewerApproved, true);
 });
 
-test("a sealed token that cannot be opened does not fall through to the environment token", () => {
-  const blocked = openAccessToken({ sealed: "not-a-token", key: "", envToken: "env-secret" });
+test("a sealed token that cannot be opened does not fall through, and there is no environment token to fall back to", () => {
+  const blocked = openAccessToken({ sealed: "not-a-token", key: "" });
   assert.equal("token" in blocked, false);
-  const plain = openAccessToken({ sealed: "", key: "", envToken: "env-secret" });
-  assert.equal("token" in plain && plain.source, "environment");
+  const plain = openAccessToken({ sealed: "", key: "" });
+  assert.equal("error" in plain, true);
+  assert.equal("token" in plain, false);
   assert.throws(
     () => stageWrites({
       organizationId: "b",
@@ -371,7 +372,8 @@ test("tiktok paused publish creates a disabled campaign and does not invent a la
     message: "Open the bar",
     scheduleStart: "2026-01-02 00:00:00",
     imageIds: ["img-1"],
-    env: { TIKTOK_ACCESS_TOKEN: "token", TIKTOK_ADVERTISER_ID: "adv" },
+    accessToken: "token",
+    env: { TIKTOK_ADVERTISER_ID: "adv" },
     transport: async (request) => {
       if (request.url.includes("/campaign/create/")) campaignBody = String(request.body ?? "");
       if (request.url.includes("/campaign/create/")) return { status: 200, body: JSON.stringify({ code: 0, data: { campaign_id: "c1" } }), headers: {} };
@@ -395,7 +397,7 @@ test("insight loading without a token stores nothing", async () => {
       timezone: "UTC",
       startDate: "2026-01-01",
       endDate: "2026-01-02",
-      env: {},
+      accessToken: "",
     },
     (async () => {
       throw new Error("should not send");

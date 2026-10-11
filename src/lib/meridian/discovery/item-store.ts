@@ -33,23 +33,34 @@ async function recordSighting(
   `;
 }
 
+/** The stored item that has this content hash for the brand, or undefined. */
+async function storedIdFor(sql: Sql, provenance: RecordProvenance, contentHash: string): Promise<string | undefined> {
+  const rows = await sql<{ id: string }>`
+    select id from discovered_items
+    where organization_id = ${provenance.organizationId} and brand_id = ${provenance.brandId} and content_hash = ${contentHash}
+    limit 1
+  `;
+  return rows[0]?.id;
+}
+
+/**
+ * Stores the item unless its content hash is already stored for the brand. The database enforces that rule with a unique
+ * index, so the insert itself is the check: a conflict stores nothing, and the item is `seen_before`. A sighting is recorded
+ * only when a row was written, so a source never lists a record this run did not store as stored.
+ */
 export async function storeDiscoveredItem(
   sql: Sql,
   provenance: RecordProvenance,
   item: DiscoveredItem,
 ): Promise<ItemOutcome> {
   const sourceKey = sourceExternalId({ brandId: provenance.brandId, itemId: item.id, canonicalUrl: item.canonicalUrl || item.url });
-  const seen = await sql<{ id: string }>`
-    select id from discovered_items
-    where organization_id = ${provenance.organizationId} and brand_id = ${provenance.brandId} and content_hash = ${item.contentHash}
-    limit 1
-  `;
-  if (seen[0]) {
-    await recordSighting(sql, provenance, { recordId: seen[0].id, sourceKey, seenBefore: true });
+  const existing = await storedIdFor(sql, provenance, item.contentHash);
+  if (existing) {
+    await recordSighting(sql, provenance, { recordId: existing, sourceKey, seenBefore: true });
     return "seen_before";
   }
 
-  await sql`
+  const inserted = await sql<{ id: string }>`
     insert into discovered_items (
       id, run_id, organization_id, brand_id, source, url, canonical_url,
       card_type, title, text_content, metrics, content_hash, source_location, discovered_at, source_key,
@@ -63,10 +74,22 @@ export async function storeDiscoveredItem(
       ${sourceKey},
       ${provenance.adapterId}, ${provenance.sourceStatus}
     )
-    on conflict (id) do nothing
+    on conflict do nothing
+    returning id
   `;
-  await recordSighting(sql, provenance, { recordId: item.id, sourceKey, seenBefore: false });
-  return "stored";
+  if (inserted[0]) {
+    await recordSighting(sql, provenance, { recordId: item.id, sourceKey, seenBefore: false });
+    return "stored";
+  }
+
+  // The conflict was on the content hash: another run stored the same content after the check above. That is seen before.
+  const winner = await storedIdFor(sql, provenance, item.contentHash);
+  if (winner) {
+    await recordSighting(sql, provenance, { recordId: winner, sourceKey, seenBefore: true });
+    return "seen_before";
+  }
+  // Otherwise the conflict was on the id, which is only reused by a different item. That is an error, not a duplicate.
+  throw new Error(`Discovered item ${item.id} conflicts with a stored record that has different content.`);
 }
 
 /** The source row for a stored item. One row per brand and web URL, so the same page found twice is one source. */

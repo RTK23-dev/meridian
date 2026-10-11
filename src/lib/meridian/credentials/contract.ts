@@ -37,7 +37,7 @@ export const SOURCE_KEY_ENV: Record<SourceCredentialCategory, readonly string[]>
   meta_graph: ["META_ACCESS_TOKEN", "FACEBOOK_ACCESS_TOKEN"],
   instagram: ["INSTAGRAM_ACCESS_TOKEN"],
   youtube: ["YOUTUBE_API_KEY"],
-  search: ["SERPAPI_API_KEY", "GOOGLE_SEARCH_API_KEY"],
+  search: ["SERPAPI_API_KEY"],
   twitter: ["TWITTER_BEARER_TOKEN", "X_API_KEY"],
   linkedin: ["LINKEDIN_ACCESS_TOKEN"],
   pinterest: ["PINTEREST_ACCESS_TOKEN"],

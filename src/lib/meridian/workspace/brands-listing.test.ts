@@ -12,7 +12,7 @@ import { emptyBrain } from "../brain.ts";
 
 // The brands listing imports modules that use the "@/" alias, so the alias hook is registered before it is loaded.
 enableAppAliases();
-const { loadWorkspaceBrands, requiredRatio } = await import("./brands-listing.ts");
+const { loadWorkspaceBrands, requiredRatio, requiredState } = await import("./brands-listing.ts");
 
 const PG_TEST_URL = process.env.MERIDIAN_PG_TEST_URL?.trim();
 const BACKFILL = fileURLToPath(new URL("../../../../migrations/0054_brand_logo_blobs.sql", import.meta.url));
@@ -25,9 +25,22 @@ test("the completeness of a brand is the share of required brain fields with con
   assert.equal(requiredRatio(all), 1);
 });
 
+test("requiredComplete is true only when every required field has content, and the ratio never decides it", () => {
+  assert.deepEqual(requiredState(emptyBrain()), { completeness: 0, requiredComplete: false });
+  const threeOfFour = { ...emptyBrain(), positioning: "a", targetCustomers: "b", tone: "c" };
+  assert.deepEqual(requiredState(threeOfFour), { completeness: 0.75, requiredComplete: false }, "three of four is not complete");
+  const blankLast = { ...threeOfFour, prohibitedClaims: "   " };
+  assert.deepEqual(requiredState(blankLast), { completeness: 0.75, requiredComplete: false }, "a whitespace-only field is empty");
+  const all = { ...threeOfFour, prohibitedClaims: "d" };
+  assert.deepEqual(requiredState(all), { completeness: 1, requiredComplete: true });
+  const optionalOnly = { ...emptyBrain(), mission: "a", colors: "b", personas: "c", offers: "d", tone: "" };
+  assert.equal(requiredState(optionalOnly).requiredComplete, false, "optional fields alone do not complete a brain");
+});
+
 /**
- * The listing's completeness is the required-field ratio. A brand with two of the four required fields reads 0.5, however
- * many optional fields it holds, and a brand with no brain row reads 0.
+ * The listing's completeness is the required-field ratio, and requiredComplete is true only for a brand with all four required
+ * fields. A brand with two of the four required fields reads 0.5, however many optional fields it holds, and a brand with no
+ * brain row reads 0 and is not complete.
  */
 async function completenessIsTheRequiredRatio(sql: Sql) {
   const tenant = await studioTenant(sql, `complete-${Math.random().toString(36).slice(2, 8)}`);
@@ -46,8 +59,11 @@ async function completenessIsTheRequiredRatio(sql: Sql) {
   `;
   const byId = new Map((await loadWorkspaceBrands(sql, tenant.organizationId)).map((brand) => [brand.id, brand]));
   assert.equal(byId.get(half)?.completeness, 0.5);
+  assert.equal(byId.get(half)?.requiredComplete, false, "two of four required fields is not complete");
   assert.equal(byId.get(full)?.completeness, 1);
+  assert.equal(byId.get(full)?.requiredComplete, true, "all four required fields is complete");
   assert.equal(byId.get(tenant.brandId)?.completeness, 0, "a brand with no brain row reads as empty");
+  assert.equal(byId.get(tenant.brandId)?.requiredComplete, false, "a brand with no brain row is not complete");
 }
 
 const COMPLETENESS_TARGETS = ["PGlite", "PostgreSQL"] as const;

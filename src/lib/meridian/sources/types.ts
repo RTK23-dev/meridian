@@ -100,6 +100,8 @@ export type DiscoveryQuery = {
   query?: string;
   creatorHandle?: string;
   advertiser?: string;
+  /** Two-letter market for sources that filter by country. Defaults to US. */
+  country?: string;
   limit?: number;
   since?: string;
 };

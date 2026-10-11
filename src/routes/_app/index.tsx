@@ -63,6 +63,7 @@ function Home() {
       return {
         id: brand.id,
         completeness: brand.completeness,
+        requiredComplete: brand.requiredComplete,
         competitors: counts ? counts.competitors : null,
         opportunities: counts ? counts.openOpportunities : null,
         creatives: counts ? counts.creatives : null,

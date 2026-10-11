@@ -228,7 +228,7 @@ test("the same page stored for another brand is stored again, because dedupe is 
   assert.equal(run.progress.seenBefore, 0);
 });
 
-test("a public page that cannot be fetched fails its source with the error, and the run is failed, not completed", async () => {
+test("a public page that cannot be fetched fails its source with the error, and the run is blocked, not completed", async () => {
   const sql = await getSql();
   const { organizationId, brandId } = await tenant(sql);
   const pages = servedPages({});
@@ -236,7 +236,7 @@ test("a public page that cannot be fetched fails its source with the error, and 
 
   const { run, items } = await service.startDiscoveryRun({ organizationId, brandId, scope: "url_list", seeds: [SPONGE], sql });
 
-  assert.equal(run.status, "failed");
+  assert.equal(run.status, "blocked", "no source ran: the only source that was called failed");
   assert.equal(items.length, 0);
   const website = run.progress.sources?.find((state) => state.adapterId === "website");
   assert.ok(website && website.status === "failed");

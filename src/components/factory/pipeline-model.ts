@@ -243,7 +243,8 @@ function engineRow(id: EngineId, state: EngineState, detail: string): EngineRow 
 
 /**
  * Connection state per engine, from what the server reports. An engine is "configured" only when a server status says so.
- * When this screen has no server status for an engine, the state is "not verified here" and the engine cannot be chosen.
+ * Only Manual Cloud and Hypit are listed. Higgsfield is not: no factory code submits a job to it (the production router is
+ * called from the studio path only), so a row for it would describe an engine the factory cannot use.
  */
 export function engineRows(sources: EngineSources): EngineRow[] {
   const { hypit, settings } = sources;
@@ -262,9 +263,7 @@ export function engineRows(sources: EngineSources): EngineRow[] {
     manualCloud = engineRow("manual_cloud", "not_connected", "Google Drive is not connected, so manual drops have nowhere to go.");
   }
 
-  const higgsfield = engineRow("higgsfield", "not_verified", "No server status for Higgsfield is available on this screen, so it is not shown as connected.");
-
-  return [manualCloud, hypitRow, higgsfield];
+  return [manualCloud, hypitRow];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

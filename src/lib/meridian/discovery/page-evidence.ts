@@ -80,10 +80,12 @@ export async function persistPageEvidence(
           ${pageUrl}, ${record.kind}, ${JSON.stringify(record.payload)}, 'OBSERVED', ${fetchedAt},
           ${provenance.adapterId}, ${contentHash}, ${provenance.sourceStatus}
         )
-        on conflict (run_id, page_url, kind) do nothing
+        on conflict do nothing
         returning id
       `;
+      // A conflict means the same record is already stored: on this page and kind in this run, or on its content hash.
       if (inserted[0]) stored += 1;
+      else seenBefore += 1;
     } catch (error) {
       perSourceErrors[`persist_evidence_${record.kind}_${pageUrl}`] = error instanceof Error ? error.message : String(error);
     }

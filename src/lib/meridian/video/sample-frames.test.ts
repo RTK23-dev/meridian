@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { DEFAULT_SAMPLE_COUNT, isPng, sampleTimestamps, sampleVideoFrames, type FrameExtractor } from "./sample-frames.ts";
+import { DEFAULT_SAMPLE_COUNT, isPng, requestedTimestamps, sampleTimestamps, sampleVideoFrames, type FrameExtractor } from "./sample-frames.ts";
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 const ffmpegAvailable = spawnSync(process.env.FFMPEG_PATH || "ffmpeg", ["-version"]).status === 0;
@@ -111,4 +111,42 @@ test("real ffmpeg: frames come out of an actual clip at the recorded timestamps"
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("requested timestamps are decoded exactly, in time order, with duplicates removed", async () => {
+  const requested: number[] = [];
+  const extractor: FrameExtractor = async (_path, timestampMs) => {
+    requested.push(timestampMs);
+    return PNG_BYTES;
+  };
+  const result = await sampleVideoFrames({ bytes: new Uint8Array([1]), durationMs: 10_000, timestampsMs: [4000, 0, 4000, 7500.4], extractor });
+  assert.deepEqual(requested, [0, 4000, 7500]);
+  assert.deepEqual(result.frames.map((frame) => frame.timestampMs), [0, 4000, 7500]);
+  assert.deepEqual(result.failures, []);
+});
+
+test("a requested timestamp the media cannot hold is a recorded failure, and is never decoded or moved", async () => {
+  const requested: number[] = [];
+  const extractor: FrameExtractor = async (_path, timestampMs) => {
+    requested.push(timestampMs);
+    return PNG_BYTES;
+  };
+  const result = await sampleVideoFrames({
+    bytes: new Uint8Array([1]),
+    durationMs: 10_000,
+    timestampsMs: [-1, Number.NaN, 10_000, 12_000, 2000],
+    extractor,
+  });
+  assert.deepEqual(requested, [2000], "only the timestamp inside the media is decoded");
+  assert.deepEqual(result.failures, [
+    { timestampMs: -1, reason: "invalid_timestamp" },
+    { timestampMs: Number.NaN, reason: "invalid_timestamp" },
+    { timestampMs: 10_000, reason: "invalid_timestamp" },
+    { timestampMs: 12_000, reason: "invalid_timestamp" },
+  ]);
+  assert.equal(result.frames.length, 1);
+});
+
+test("requestedTimestamps rounds to whole milliseconds, sorts, and removes duplicates", () => {
+  assert.deepEqual(requestedTimestamps([3000, 1000, 3000, 999.6], 5000), { times: [1000, 3000], invalid: [] });
 });

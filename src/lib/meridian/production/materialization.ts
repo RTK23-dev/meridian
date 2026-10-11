@@ -309,7 +309,7 @@ export async function materializeImageArtifact(
 
   const artifact = await loadVerifiedArtifact(sql, ref, job.artifact_id!, "image/");
   const drive = options.driveClient ?? defaultArtifactDrive();
-  const stored = await drive.get(artifact.providerFileId);
+  const stored = await drive.get(artifact.providerFileId, ref.organizationId);
   if (!stored?.bytes || stored.bytes.byteLength === 0) {
     throw new Error("The stored image bytes are missing; refusing to judge or materialize it.");
   }

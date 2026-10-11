@@ -36,6 +36,8 @@ export const CREATOR_QUESTIONS: Record<string, JevQuestionSpec> = {
       controversy_ragebait: "Breakout is fueled by intentional error, outrage, or provocative claims.",
     },
     evidenceRequirements: ["creator_baseline", "transcript", "performance_snapshot"],
+    // Analysis only. It names no approve values or threshold, so the answer can route to review and can never approve.
+    policyMapping: { unresolvedOutcome: "HUMAN_REVIEW" },
   },
 
   "creator.repeatability.v1": {
@@ -51,5 +53,7 @@ export const CREATOR_QUESTIONS: Record<string, JevQuestionSpec> = {
       "5: Elite systematic creator producing recurring outliers through clear formulas.",
     ],
     evidenceRequirements: ["creator_baseline"],
+    // Analysis only. It names no approve values or threshold, so the answer can route to review and can never approve.
+    policyMapping: { unresolvedOutcome: "HUMAN_REVIEW" },
   },
 };

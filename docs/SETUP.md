@@ -47,6 +47,10 @@ Drive stores artifacts and exports only. Postgres holds the data. Connect Drive 
 
 Set `MERIDIAN_DRIVE_FOLDER_ID` to the folder the artifacts go into. The Drive panel reports the state and the missing names.
 
+To connect with OAuth from the app instead, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, enable the Drive API, and register
+`<your origin>/api/drive/callback` as the redirect URI. An admin then connects from Settings → General. Uploads over 5 MB need
+`TOKEN_ENCRYPTION_KEY`, which `npm run setup` generates.
+
 ## Deploying
 
 1. Create a PostgreSQL 16 database and set `DATABASE_URL`.

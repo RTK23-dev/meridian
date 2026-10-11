@@ -16,8 +16,8 @@ happened. Each step is a screen, and each screen says what it has and what it is
    variant has its evidence, its decision and its review. Video generation uses Gemini Omni by default; a video that does not exist is
    shown as missing, with what would produce it.
 6. **Library.** The creatives that exist, with their media and their lineage. An export package for manual posting is made here.
-7. **Publishing.** Live posting is not available in this release for any channel. A channel with no connection says so. The export
-   package is the way to deliver.
+7. **Publishing.** Facebook Page and YouTube Shorts post through a connected account, unverified against the live services in this release.
+   Instagram Reels reports not connected. A channel with no connection says so, and the export package is the way to deliver.
 8. **Learning and calibration.** What was measured after a creative went out. A number is shown only when it was observed.
 
 ## Roles

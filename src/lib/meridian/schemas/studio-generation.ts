@@ -1,8 +1,18 @@
 import { z } from "zod";
 
+/**
+ * The video choices a Studio run accepts. The Generate step offers google_omni, hypit, manual_cloud and none (provider-options.ts).
+ * "auto" and "omni" are aliases that the server maps to google_omni (studio/actions.ts and studio/session.server.ts).
+ *
+ * "higgsfield" is not accepted. A studio video targets 8 seconds, and the Higgsfield model runs only 5, 10 and 15 seconds, so
+ * resolveProductionTarget refuses it before any job exists. "test:video" is a fixture for the testing loop, and no provider of
+ * that name is registered for a studio run.
+ */
+export const VIDEO_PROVIDER_CHOICES = ["google_omni", "hypit", "manual_cloud", "none", "auto", "omni"] as const;
+
 export const studioGenerationSchema = z.object({
   imageProvider: z.enum(["none", "test:image", "google:nano-banana"]),
-  videoProvider: z.enum(["hypit", "none", "auto", "manual_cloud", "higgsfield", "omni", "google_omni", "test:video"]),
+  videoProvider: z.enum(VIDEO_PROVIDER_CHOICES),
   creationScope: z.enum(["auto_choose", "image_only", "video_only", "carousel_only", "mixed_campaign", "research_only"]).optional(),
   autonomy: z.enum(["manual", "semi_automatic", "fully_automatic"]).optional(),
   maxSpendUsd: z.number().finite().nonnegative().max(1000).optional(),

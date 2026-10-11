@@ -125,7 +125,7 @@ export async function finalizeProductionArtifact(
     }
   } else if (raw.uri && input.provider === "manual_cloud") {
     try {
-      const driveFile = await drive.get(raw.uri);
+      const driveFile = await drive.get(raw.uri, input.organizationId);
       if (driveFile) {
         bytes = driveFile.bytes;
       }
@@ -249,7 +249,7 @@ export async function finalizeProductionArtifact(
       };
     }
     try {
-      const stored = await drive.get(existingObject.provider_file_id);
+      const stored = await drive.get(existingObject.provider_file_id, input.organizationId);
       const storedHash = stored?.bytes ? createHash("sha256").update(stored.bytes).digest("hex") : "";
       const storedType = stored?.bytes ? detectArtifactType(stored.bytes).mimeType : "";
       if (!stored?.bytes || storedHash !== sha256 || stored.bytes.byteLength !== byteSize || storedType !== mimeType) {
@@ -317,7 +317,7 @@ export async function finalizeProductionArtifact(
 
   // 5b. Read-after-write byte-level integrity verification
   try {
-    const downloaded = await drive.get(providerFileId);
+    const downloaded = await drive.get(providerFileId, input.organizationId);
     if (!downloaded || !downloaded.bytes || downloaded.bytes.byteLength === 0) {
       throw new ArtifactIntegrityError(
         `Drive download returned empty or missing bytes for file ID '${providerFileId}'`

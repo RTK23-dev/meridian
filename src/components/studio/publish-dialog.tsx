@@ -10,6 +10,7 @@ import { copy, providerLabel, serverCodeMessage, statusLabel } from "@/lib/copy"
 import { cn } from "@/lib/cn";
 import { CopyButton } from "./copy-button.tsx";
 import { frameShape } from "./aspect.ts";
+import { deliverByHandOnly, publishBlockReason } from "./publish-state.ts";
 import type { PublishReceipt } from "./types.ts";
 
 export type PublishTarget = {
@@ -29,6 +30,8 @@ export type PublishChannel = {
   description: string;
   connected: boolean;
   accountName?: string;
+  /** Why the destination is not connected. Shown on its row. */
+  reason?: string;
 };
 
 const CAPTION_MAX = 1000;
@@ -48,13 +51,15 @@ type PublishDialogProps = {
   results: readonly PublishReceipt[] | null;
   onClose: () => void;
   onConfirm: (channelIds: string[], caption: string) => void;
+  /** Starts the export package for manual posting. Shown as the way to deliver when no destination is connected. */
+  onExportPackage?: () => void;
 };
 
 /**
  * Destinations for one variant. Only connected destinations start selected, and a destination that is not connected cannot
  * be chosen. The parent remounts the dialog for each opening, so the selection and caption start from the stored values.
  */
-export function PublishDialog({ target, channels, pending, results, onClose, onConfirm }: PublishDialogProps) {
+export function PublishDialog({ target, channels, pending, results, onClose, onConfirm, onExportPackage }: PublishDialogProps) {
   const defaults = { channelIds: channels.filter((channel) => channel.connected).map((channel) => channel.id), caption: target?.defaultCaption ?? "" };
   const form = useForm<{ channelIds: string[]; caption: string }, unknown, PublishFormValues>({
     resolver: zodResolver(publishFormSchema),
@@ -63,6 +68,9 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
   });
   const { register, formState: { errors, isDirty } } = form;
   const selected = form.watch("channelIds");
+  const caption = form.watch("caption");
+  const blockReason = publishBlockReason(channels, selected.length);
+  const handOnly = deliverByHandOnly(channels);
   const descriptionId = useId();
   const captionId = useId();
   const frame = frameShape(target?.width, target?.height);
@@ -125,7 +133,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
                           <span className={cn("block text-xs", channel.connected ? "text-success" : "text-fg-muted")}>
                             {channel.connected ? "Connected" : "Not connected"}{channel.accountName ? ` · ${channel.accountName}` : ""}
                           </span>
-                          {!channel.connected ? <span id={reasonId} className="block text-xs text-fg-muted">This destination is not connected, so it cannot be chosen.</span> : null}
+                          {!channel.connected ? <span id={reasonId} className="block text-xs text-fg-muted">{channel.reason ?? "This destination is not connected, so it cannot be chosen."}</span> : null}
                         </span>
                       </label>
                     );
@@ -156,6 +164,21 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
             />
           </div>
 
+          {handOnly ? (
+            <div className="mt-4 space-y-2 rounded-md border border-border bg-surface-2 p-3 text-sm">
+              <p className="font-semibold">Deliver by hand</p>
+              <p className="text-fg-muted">
+                {onExportPackage
+                  ? "Nothing is sent while no destination is connected. Post the video yourself with this caption, or export the package for manual posting."
+                  : "Nothing is sent while no destination is connected. Post the video yourself with this caption."}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {caption.trim() ? <CopyButton value={caption} label="Copy caption" /> : null}
+                {onExportPackage ? <Button type="button" variant="quiet" onClick={onExportPackage}>Export package</Button> : null}
+              </div>
+            </div>
+          ) : null}
+
           {results ? (
             <div role="status" aria-live="polite" className="mt-4 space-y-2 rounded-md border border-border p-3 text-sm">
               <p className="font-semibold">Publish receipts</p>
@@ -180,9 +203,9 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           ) : null}
 
           <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-            {selected.length === 0 && !pending ? <DisabledReason id="publish-destination-reason" className="basis-full text-right">Choose at least one destination to publish to.</DisabledReason> : null}
+            {blockReason && !pending ? <DisabledReason id="publish-destination-reason" className="basis-full text-right">{blockReason}</DisabledReason> : null}
             <Button type="button" variant="quiet" disabled={pending} onClick={() => dismiss.requestOpenChange(false)}>Close</Button>
-            <Button type="submit" disabled={pending || selected.length === 0} aria-describedby={selected.length === 0 && !pending ? "publish-destination-reason" : undefined}>
+            <Button type="submit" disabled={pending || blockReason !== null} aria-describedby={blockReason && !pending ? "publish-destination-reason" : undefined}>
               {pending ? "Publishing…" : `Publish to ${selected.length} destination${selected.length === 1 ? "" : "s"}`}
             </Button>
           </div>

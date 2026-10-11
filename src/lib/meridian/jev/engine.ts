@@ -106,12 +106,13 @@ export function decide<TInput>(
   context?: DecisionContext,
 ): DecisionOutput {
   const evaluation = question.evaluate(input);
-  const rawScore = round3(clamp01(evaluationScore(evaluation)));
-  const calibrated = context?.calibration ? context.calibration.apply(rawScore) : rawScore;
-  const score = round3(clamp01(calibrated));
-  const confidence = round3(clamp01(evaluation.confidence));
   const evidenceState: EvidenceState =
     evaluation.evidenceState ?? (evaluation.evidence.length === 0 ? "missing" : "present");
+  const rawScore = round3(clamp01(evaluationScore(evaluation)));
+  // Missing evidence is not a score, so no calibration step is applied to it.
+  const calibrated = context?.calibration && evidenceState !== "missing" ? context.calibration.apply(rawScore) : rawScore;
+  const score = round3(clamp01(calibrated));
+  const confidence = round3(clamp01(evaluation.confidence));
   let decision: DecisionState;
   if (evidenceState === "violation" || evaluation.answer === "violation") {
     decision = "REJECT";

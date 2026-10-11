@@ -38,20 +38,36 @@ export async function loadTenantMetaToken(
   organizationId: string,
   encryptionKey: string,
 ): Promise<{ status: "connected"; accessToken: string } | { status: "NOT_CONNECTED"; error: string }> {
+  return loadTenantProviderToken(sql, organizationId, "meta", encryptionKey);
+}
+
+const PROVIDER_LABEL: Record<"meta" | "tiktok" | "google", string> = { meta: "Meta", tiktok: "TikTok", google: "Google Ads" };
+
+/**
+ * The workspace's own sealed OAuth token for one provider, opened with the deployment key. It is the only token a metric read
+ * uses. An environment token is never a fallback: with no sealed token the read is not connected and nothing is requested.
+ */
+export async function loadTenantProviderToken(
+  sql: Sql,
+  organizationId: string,
+  provider: "meta" | "tiktok" | "google",
+  encryptionKey: string,
+): Promise<{ status: "connected"; accessToken: string } | { status: "NOT_CONNECTED"; error: string }> {
+  const label = PROVIDER_LABEL[provider];
   const credentials = await sql<{ sealed_token: string }>`
     select sealed_token from provider_secrets
-    where organization_id = ${organizationId} and provider = 'meta' limit 1
+    where organization_id = ${organizationId} and provider = ${provider} limit 1
   `;
   const sealed = credentials[0]?.sealed_token ?? "";
-  if (!sealed.trim()) return { status: "NOT_CONNECTED", error: "Meta performance sync has no tenant-scoped OAuth credential. No observations were stored." };
+  if (!sealed.trim()) return { status: "NOT_CONNECTED", error: `${label} performance sync has no tenant-scoped OAuth credential. No observations were stored.` };
   if (!encryptionKey.trim()) return { status: "NOT_CONNECTED", error: "TOKEN_ENCRYPTION_KEY is not configured. No observations were stored." };
   try {
     const opened = openSecret(sealed, encryptionKey);
     if (typeof opened !== "string" || !opened.trim()) {
-      return { status: "NOT_CONNECTED", error: typeof opened === "string" ? "The tenant Meta credential is empty. No observations were stored." : `${opened.error} No observations were stored.` };
+      return { status: "NOT_CONNECTED", error: typeof opened === "string" ? `The tenant ${label} credential is empty. No observations were stored.` : `${opened.error} No observations were stored.` };
     }
     return { status: "connected", accessToken: opened };
   } catch {
-    return { status: "NOT_CONNECTED", error: "The tenant Meta credential could not be opened. No observations were stored." };
+    return { status: "NOT_CONNECTED", error: `The tenant ${label} credential could not be opened. No observations were stored.` };
   }
 }

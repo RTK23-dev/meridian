@@ -8,12 +8,20 @@ import { BRAIN_COLUMNS, asText, brainFromRow } from "../api-shared.ts";
 import type { BrandSummary } from "./actions.ts";
 
 /**
- * The share of required brain fields with content, from 0 to 1. This is the brand's `completeness` in the listing, so the
- * brand switcher, the home list and the setup checklist all read the same number. 1 means every required field has content.
+ * The brand's required-field state, as the listing carries it. `completeness` is the share of required fields with content,
+ * from 0 to 1, shown on the home list and the brain screen. `requiredComplete` is the gate: true only when every required
+ * field has content. The gate reads the boolean, not the ratio, so the ratio can change without changing what counts as done.
  */
+export function requiredState(brain: BrainValues): { completeness: number; requiredComplete: boolean } {
+  const score = brainCompleteness(brain);
+  return {
+    completeness: score.requiredTotal === 0 ? 0 : score.requiredFilled / score.requiredTotal,
+    requiredComplete: score.requiredComplete,
+  };
+}
+
 export function requiredRatio(brain: BrainValues): number {
-  const { requiredFilled, requiredTotal } = brainCompleteness(brain);
-  return requiredTotal === 0 ? 0 : requiredFilled / requiredTotal;
+  return requiredState(brain).completeness;
 }
 
 /**
@@ -41,6 +49,7 @@ export async function loadWorkspaceBrands(sql: Sql, organizationId: string): Pro
   return rows.map((row) => {
     const { brain } = brainFromRow(row);
     const logo = asText(row.logo_asset_id);
+    const required = requiredState(brain);
     return {
       id: asText(row.id),
       name: asText(row.name),
@@ -48,7 +57,8 @@ export async function loadWorkspaceBrands(sql: Sql, organizationId: string): Pro
       industry: asText(row.industry),
       sells: asText(row.sells),
       country: asText(row.country_market),
-      completeness: requiredRatio(brain),
+      completeness: required.completeness,
+      requiredComplete: required.requiredComplete,
       updatedAt: asText(row.updated_at),
       logoAssetId: logo || null,
     };
