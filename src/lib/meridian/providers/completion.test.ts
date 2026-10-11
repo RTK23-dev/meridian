@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import test from "node:test";
 import { learnPatterns } from "../learning/engine.ts";
 import { deliverAlert, dedupeAlert } from "../alerts/deliver.ts";
@@ -12,7 +13,7 @@ import type { Transport } from "./http.ts";
 import { publishGoogleFlow } from "./google-ads.ts";
 import { confirmedExternalId, reusableExternalId } from "./ownership.ts";
 import { publishTikTokFlow } from "./tiktok.ts";
-import { verifyWebhook, signWebhookBody } from "../webhooks/verify.ts";
+import { signWebhookDelivery, verifyWebhook } from "../webhooks/verify.ts";
 
 function scripted(responses: { urlIncludes?: string; status: number; body: string }[]): Transport {
   const queue = [...responses];
@@ -226,15 +227,28 @@ test("oauth exchange stores nothing when the provider omits the token", async ()
 test("webhooks reject a bad signature, a replay, a duplicate, and an unknown account", () => {
   const body = JSON.stringify({ hello: "north" });
   const timestamp = "100000";
-  const signature = signWebhookBody("secret", timestamp, body);
   const now = 100000;
-  assert.equal(verifyWebhook({ secret: "secret", timestamp, signature, rawBody: body, eventId: "e1", nowMs: now, seenEventIds: [], accountKnown: true }).status, "accepted");
-  assert.equal(verifyWebhook({ secret: "secret", timestamp, signature: "nope", rawBody: body, eventId: "e1", nowMs: now, seenEventIds: [], accountKnown: true }).status, "rejected");
-  assert.equal(reason(verifyWebhook({ secret: "secret", timestamp: "1", signature, rawBody: body, eventId: "e1", nowMs: 500000, seenEventIds: [], accountKnown: true })), "The webhook timestamp is outside the replay window.");
-  assert.equal(reason(verifyWebhook({ secret: "secret", timestamp, signature, rawBody: body, eventId: "e1", nowMs: now, seenEventIds: ["e1"], accountKnown: true })), "This event id was already stored.");
-  assert.equal(reason(verifyWebhook({ secret: "secret", timestamp, signature, rawBody: body, eventId: "e1", nowMs: now, seenEventIds: [], accountKnown: false })), "The account on the webhook is not connected to a workspace.");
+  const fields = { provider: "meta", account: "acct-1", eventId: "e1", timestamp, rawBody: body };
+  const signature = signWebhookDelivery({ secret: "secret", ...fields });
+  const verify = (overrides: Partial<Parameters<typeof verifyWebhook>[0]> = {}) =>
+    verifyWebhook({ secret: "secret", ...fields, signature, nowMs: now, seenEventIds: [], accountKnown: true, ...overrides });
+  assert.equal(verify().status, "accepted");
+  assert.equal(verify({ signature: "nope" }).status, "rejected");
+  assert.equal(reason(verify({ timestamp: "1", nowMs: 500000 })), "The webhook timestamp is outside the replay window.");
+  assert.equal(reason(verify({ seenEventIds: ["e1"] })), "This event id was already stored.");
+  assert.equal(reason(verify({ accountKnown: false })), "The account on the webhook is not connected to a workspace.");
+  // The v2 signature binds the routing headers: a kept signature does not verify for another provider or account.
+  assert.equal(reason(verify({ provider: "google" })), "The webhook signature does not match.");
+  assert.equal(reason(verify({ account: "acct-2" })), "The webhook signature does not match.");
+  // An old-format signature, over the timestamp and body only, is refused.
+  const oldForm = createHmac("sha256", "secret").update(`${timestamp}.${body}`).digest("hex");
+  assert.equal(reason(verify({ signature: oldForm })), "The webhook signature does not match.");
   const broken = "{";
-  assert.equal(reason(verifyWebhook({ secret: "secret", timestamp, signature: signWebhookBody("secret", timestamp, broken), rawBody: broken, eventId: "e1", nowMs: now, seenEventIds: [], accountKnown: true })), "The payload is not JSON.");
+  const brokenFields = { ...fields, rawBody: broken };
+  assert.equal(
+    reason(verify({ rawBody: broken, signature: signWebhookDelivery({ secret: "secret", ...brokenFields }) })),
+    "The payload is not JSON.",
+  );
 });
 
 function reason(decision: ReturnType<typeof verifyWebhook>): string {
