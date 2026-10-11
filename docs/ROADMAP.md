@@ -26,4 +26,3 @@ This is what is not built, or not verified, in this release. It is stated plainl
 
 - A discovery run whose sources all fail reports `completed` in one test. The honest status is `blocked`.
 - The Higgsfield status row still shows in the factory, and the server schema still accepts `higgsfield` and `auto` as video providers.
-- The Settings tab strip scrolls on phones, but the screen can still overflow by a few pixels at 360px.
