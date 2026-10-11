@@ -11,8 +11,14 @@
  */
 
 import { createHash } from "node:crypto";
+import { lookup as dnsLookup } from "node:dns/promises";
+import type { IncomingMessage, RequestOptions } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { Readable } from "node:stream";
 import type { Sql } from "../learning/store.ts";
 import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
+import { resolveAndPinHost } from "../sources/fetch-page.server.ts";
+import { ipIsBlocked, publicUrlIssue } from "../sources/public-url.ts";
 import { evaluateProductionPostflight } from "./postflight.ts";
 import type { ProductionJob } from "./types.ts";
 import { detectArtifactType } from "./mime-detector.ts";
@@ -41,7 +47,10 @@ export interface ArtifactFinalizeInput {
   };
   options?: {
     driveClient?: ArtifactDrive;
+    /** A test transport for provider artifact URLs. Production omits it, so downloads connect to the addresses they validated. */
     fetchImpl?: typeof fetch;
+    /** The DNS answers used to validate an artifact host. Defaults to the system resolver. */
+    resolver?: ArtifactResolver;
     durationMs?: number;
     skipPostflight?: boolean;
     job?: ProductionJob;
@@ -65,11 +74,227 @@ export interface ArtifactFinalizeResult {
   error?: string;
 }
 
+/**
+ * Largest provider artifact the finalizer reads. The whole body is held in memory before it is stored in Drive, so this cap
+ * bounds what one download can take from a worker. 200 MB is well above a short-form render at ordinary bitrates, and small
+ * enough that a runaway response cannot exhaust a worker. It is a judgement, not a measured provider maximum.
+ */
+export const MAX_ARTIFACT_BYTES = 200 * 1024 * 1024;
+
+/** Time allowed for one artifact download, from the request to the last body byte. */
+export const ARTIFACT_DOWNLOAD_TIMEOUT_MS = 30_000;
+
+/** Redirects followed for one artifact. Every hop is checked again, so this limit only bounds a loop. */
+const MAX_ARTIFACT_REDIRECTS = 3;
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const ARTIFACT_ACCEPT = "video/*,image/*,application/octet-stream;q=0.9";
+
+type ResolvedAddress = { address: string; family: number };
+export type ArtifactResolver = (hostname: string) => Promise<ResolvedAddress[]>;
+
+const systemResolver: ArtifactResolver = (hostname) => dnsLookup(hostname, { all: true, verbatim: true });
+
+export type ArtifactDownloadOptions = {
+  /** A test transport. The caller then owns the connection, so DNS is not pinned here. Omitted, the download connects to the addresses it validated. */
+  fetchImpl?: typeof fetch;
+  resolver?: ArtifactResolver;
+  timeoutMs?: number;
+  maxBytes?: number;
+};
+
+export type ArtifactDownload =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; status: "WAITING_FOR_ARTIFACT"; error: string }
+  | { ok: false; status: "FAILED"; errorCode: "ARTIFACT_URL_REFUSED" | "ARTIFACT_TOO_LARGE"; error: string };
+
+/** A URL, host or redirect the policy refuses. The same artifact cannot succeed on retry, so the job fails. */
+class RefusedArtifactUrl extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RefusedArtifactUrl";
+  }
+}
+
+/** A body that is, or is declared as, larger than the cap. It cannot succeed on retry either. */
+class OversizedArtifact extends Error {
+  constructor() {
+    super("The artifact is larger than the download limit.");
+    this.name = "OversizedArtifact";
+  }
+}
+
+/**
+ * Downloads one provider artifact. Only https is accepted, and each hop must be a public host. The pinned transport connects
+ * only to the addresses it validated. Redirects are followed one hop at a time with the same checks. The whole download has
+ * one deadline, and the body is read only up to the byte cap. Failures are either refused (permanent) or retryable.
+ */
+export async function downloadProviderArtifact(rawUri: string, options: ArtifactDownloadOptions = {}): Promise<ArtifactDownload> {
+  const timeoutMs = options.timeoutMs ?? ARTIFACT_DOWNLOAD_TIMEOUT_MS;
+  const maxBytes = options.maxBytes ?? MAX_ARTIFACT_BYTES;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      const timeout = new Error("The artifact download timed out.");
+      controller.abort(timeout);
+      reject(timeout);
+    }, timeoutMs);
+  });
+  // Promise.race subscribes to the deadline; this only keeps a late rejection from surfacing as unhandled.
+  deadline.catch(() => undefined);
+
+  try {
+    const bytes = await Promise.race([readArtifact(rawUri, { ...options, maxBytes }, controller.signal), deadline]);
+    return { ok: true, bytes };
+  } catch (err) {
+    controller.abort(err);
+    if (err instanceof RefusedArtifactUrl) return { ok: false, status: "FAILED", errorCode: "ARTIFACT_URL_REFUSED", error: err.message };
+    if (err instanceof OversizedArtifact) return { ok: false, status: "FAILED", errorCode: "ARTIFACT_TOO_LARGE", error: err.message };
+    return {
+      ok: false,
+      status: "WAITING_FOR_ARTIFACT",
+      error: err instanceof Error ? err.message : "The artifact download did not complete.",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readArtifact(
+  rawUri: string,
+  options: ArtifactDownloadOptions & { maxBytes: number },
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  let url: URL;
+  try {
+    url = new URL(rawUri);
+  } catch {
+    throw new RefusedArtifactUrl("The artifact URL is not valid.");
+  }
+
+  for (let redirects = 0; ; redirects += 1) {
+    if (url.protocol !== "https:") throw new RefusedArtifactUrl("Artifact URLs must use https.");
+    const issue = publicUrlIssue(url.toString());
+    if (issue) throw new RefusedArtifactUrl(`The artifact host is refused. ${issue}`);
+
+    const response = options.fetchImpl
+      ? await options.fetchImpl(url.toString(), { method: "GET", redirect: "manual", headers: { accept: ARTIFACT_ACCEPT }, signal })
+      : await pinnedGet(url, signal, options.resolver);
+
+    if (response.type === "opaqueredirect" || REDIRECT_STATUSES.has(response.status)) {
+      await response.body?.cancel().catch(() => undefined);
+      const location = response.headers.get("location");
+      if (!location || redirects >= MAX_ARTIFACT_REDIRECTS) {
+        throw new RefusedArtifactUrl("The artifact URL redirected more times than allowed, or to no target.");
+      }
+      try {
+        url = new URL(location, url);
+      } catch {
+        throw new RefusedArtifactUrl("The artifact redirect target is not a valid URL.");
+      }
+      continue;
+    }
+
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error(`The artifact host returned ${response.status}.`);
+    }
+
+    const declared = response.headers.get("content-length");
+    if (declared !== null && /^\d+$/.test(declared.trim()) && Number(declared) > options.maxBytes) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new OversizedArtifact();
+    }
+    return readCapped(response, options.maxBytes);
+  }
+}
+
+/** Resolves once, refuses any private or loopback answer, and connects only to the validated addresses. */
+async function pinnedGet(url: URL, signal: AbortSignal, resolver?: ArtifactResolver): Promise<Response> {
+  const seen: { records?: ResolvedAddress[] } = {};
+  let lookup: NonNullable<RequestOptions["lookup"]>;
+  try {
+    lookup = await resolveAndPinHost(url.hostname, async (hostname) => {
+      const records = await (resolver ?? systemResolver)(hostname);
+      seen.records = records;
+      return records;
+    });
+  } catch {
+    // A private answer is a policy refusal. A failed lookup is retried, like any other transient download failure.
+    if (seen.records?.some((record) => ipIsBlocked(record.address))) {
+      throw new RefusedArtifactUrl("That host does not resolve to a public address.");
+    }
+    throw new Error("The artifact host could not be resolved.");
+  }
+  return requestPinned(url, lookup, signal);
+}
+
+function requestPinned(url: URL, lookup: NonNullable<RequestOptions["lookup"]>, signal: AbortSignal): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest(
+      url,
+      { method: "GET", signal, headers: { accept: ARTIFACT_ACCEPT }, lookup },
+      (incoming) => {
+        try {
+          resolve(toResponse(incoming));
+        } catch (err) {
+          incoming.resume();
+          reject(err);
+        }
+      },
+    );
+    request.once("error", reject);
+    request.end();
+  });
+}
+
+function toResponse(incoming: IncomingMessage): Response {
+  const status = incoming.statusCode ?? 0;
+  if (status < 200 || status > 599) throw new Error("The artifact host returned an invalid status.");
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(incoming.headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) headers.append(name, item);
+    } else if (typeof value === "string") {
+      headers.set(name, value);
+    }
+  }
+  const nullBody = status === 204 || status === 205 || status === 304;
+  if (nullBody) incoming.resume();
+  const body = nullBody ? null : (Readable.toWeb(incoming) as unknown as ReadableStream<Uint8Array>);
+  return new Response(body, { status, headers });
+}
+
+/** Reads the body, and stops and cancels as soon as it passes the cap. A body past the cap is never held in full. */
+async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array> {
+  if (!response.body) return new Uint8Array(0);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const step = await reader.read();
+    if (step.done) break;
+    received += step.value.byteLength;
+    if (received > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new OversizedArtifact();
+    }
+    chunks.push(step.value);
+  }
+  const out = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
 export async function finalizeProductionArtifact(
   sql: Sql,
   input: ArtifactFinalizeInput,
 ): Promise<ArtifactFinalizeResult> {
-  const fetchImpl = input.options?.fetchImpl || globalThis.fetch;
   const drive = input.options?.driveClient || defaultArtifactDrive();
 
   const ownedJob = await sql<{ id: string }>`
@@ -114,15 +339,18 @@ export async function finalizeProductionArtifact(
       // Data URI decode failed
     }
   } else if (raw.uri && (raw.uri.startsWith("http://") || raw.uri.startsWith("https://"))) {
-    try {
-      const res = await fetchImpl(raw.uri);
-      if (res.ok) {
-        const arrayBuf = await res.arrayBuffer();
-        bytes = new Uint8Array(arrayBuf);
+    const download = await downloadProviderArtifact(raw.uri, {
+      fetchImpl: input.options?.fetchImpl,
+      resolver: input.options?.resolver,
+    });
+    if (!download.ok) {
+      // A refused or oversized URL is permanent and fails the job. Any other failure is retried by the caller.
+      if (download.status === "FAILED") {
+        return { success: false, status: "FAILED", errorCode: download.errorCode, error: download.error };
       }
-    } catch {
-      // Download failed
+      return { success: false, status: "WAITING_FOR_ARTIFACT", error: download.error };
     }
+    bytes = download.bytes;
   } else if (raw.uri && input.provider === "manual_cloud") {
     try {
       const driveFile = await drive.get(raw.uri, input.organizationId);

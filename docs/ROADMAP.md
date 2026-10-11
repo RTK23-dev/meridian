@@ -25,6 +25,19 @@ What is still open in this release. Each item says whether it is built and verif
 - **Environment reads outside the contract.** `GOOGLE_ADS_DEVELOPER_TOKEN` has no entry in `credentials/contract.ts`. Other reads sit outside it in `discovery/cyclone-scout-adapter.ts`, `settings/provider-config.ts`, `notifications/email.ts`, `factory/sources.ts`, `embeddings/external.ts`, `system.ts`, `routes/api/webhooks/receive.ts` and `storage/google-auth.ts`.
 - **Cyclone console field.** The Cyclone gateway is configured by the deployment's environment only.
 - **Lint warnings.** Six `react-refresh/only-export-components` warnings remain in existing files. They are not errors.
+- **Static review, P2 items still open** (from the review of `01307e8`): the OAuth redirect origin comes from the caller and is only
+  checked for an https prefix, and the OAuth state is claimed after the code exchange rather than before; Drive listing treats API
+  errors as an empty folder, which can create duplicate folders; a failed organic-observation query erases learned patterns, and the
+  replacement is not transactional; the generic HTTP transport has no timeout or response cap; rate limiting trusts forwarded headers
+  and is process-local; video-DNA frame labelling bypasses the perception provider; manual-cloud polling reports Drive errors as
+  "waiting"; `minConfidence` is skipped when confidence is absent.
+- **Review P1 follow-ups.** `SUBMISSION_UNKNOWN` plans stay `executing`, because `resolveHeldReservation` does not settle the plan.
+  `jev/policy.ts` `evaluatePolicy` still auto-approves on probability alone; it has no production callers, only tests. The attach path
+  can return a gate-record id as `decisionId`, which `reviews.decision_id` cannot store; attach cannot reach this today, but a live
+  publisher on the materialization path might. The Higgsfield status path `/v1/requests/<id>/status` is derived from the existing mocks
+  and must be confirmed against Higgsfield's documentation. No host allowlist exists for provider artifact hosts. The webhook edge
+  rate limit and the body cap in front of the function are not verified. The product-name rule now judges the job's copy, so the
+  rejection rate on creatives whose copy does not name the product should be checked on real data.
 
 ## Not verified
 

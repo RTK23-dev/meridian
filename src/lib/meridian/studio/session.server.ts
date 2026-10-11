@@ -946,6 +946,10 @@ export async function executeApprovedCreativePlan(
   // production job id before any provider call, so its budget line is settled or held per job.
   const reservations = new Map<string, { id: string; amountMicros: bigint; held: boolean }>();
   const productionJobIds = new Map<string, string>();
+  // An image job is judged on its own copy. A plan with an image that has no copy is refused before any job or reservation exists.
+  if (creativePlan.deliverables.some((d) => (d.kind === "image" || d.kind === "carousel_slide") && !d.copy?.trim())) {
+    throw new Error("An image in this plan has no copy to check, so nothing was sent.");
+  }
   for (const deliverable of creativePlan.deliverables) {
     if (deliverable.kind === "video" || deliverable.kind === "image" || deliverable.kind === "carousel_slide") {
       productionJobIds.set(deliverable.id, crypto.randomUUID());
@@ -1031,7 +1035,7 @@ export async function executeApprovedCreativePlan(
           index,
           kind: "image",
         });
-        const copy = `${productName}. ${prompt}`;
+        const copy = deliv.copy.trim();
         const itemLabel = deliv.kind === "carousel_slide" ? `carousel slide ${index + 1}` : `image ${index + 1}`;
         const imageTarget = resolveProductionTarget({
           provider: delivManifest.production!.provider,
