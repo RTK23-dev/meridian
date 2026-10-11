@@ -141,21 +141,29 @@ export function brandGate(input: {
   return { gate: "brand", result: "pass", reason: "Logo, palette, and product match the brand kit evidence." };
 }
 
+/**
+ * Checks the claim text a variant makes against the brand's approved claims and banned words. The claim text is the input
+ * the check exists for. When none is recorded (`null`, or an empty list), nothing was checked, so the result is review and
+ * never pass. Missing evidence is review, not a pass.
+ */
 export function claimsGate(input: {
-  claims: string[];
+  claims: string[] | null;
   approvedClaims: string[];
   bannedWords: string[];
 }): GateVerdict {
+  const claims = (input.claims ?? []).filter((claim) => claim.trim().length > 0);
+  if (claims.length === 0) {
+    return { gate: "claims", result: "review", reason: "No claim text is recorded for this variant. A person must check its claims." };
+  }
   const approved = new Set(input.approvedClaims.map((item) => item.trim().toLowerCase()).filter(Boolean));
-  for (const claim of input.claims) {
+  for (const claim of claims) {
     const key = claim.trim().toLowerCase();
-    if (!key) continue;
     if (!approved.has(key)) {
       return { gate: "claims", result: "block", reason: `Claim "${claim.trim()}" is not on the approved list.` };
     }
   }
   const banned = input.bannedWords.map((item) => item.trim().toLowerCase()).filter(Boolean);
-  const haystack = input.claims.join(" ").toLowerCase();
+  const haystack = claims.join(" ").toLowerCase();
   for (const word of banned) {
     if (haystack.includes(word)) {
       return { gate: "claims", result: "block", reason: `Banned word "${word}" is present.` };

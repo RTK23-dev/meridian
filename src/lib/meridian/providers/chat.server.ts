@@ -1,8 +1,24 @@
 import type { ChatProvider, ChatRequest, ChatResult } from "@/lib/meridian/providers/types";
+import { resolveDeploymentOnlyKey } from "../credentials/resolve.ts";
+import type { CredentialResolution } from "../credentials/contract.ts";
 
 function key(name: string): string | undefined {
   const value = process.env[name]?.trim();
   return value || undefined;
+}
+
+/**
+ * The OpenRouter key for the chat path. The path runs for the whole deployment, with no workspace in scope, so the key is
+ * read only through the credential resolver and only when OPENROUTER_SHARED_DEFAULT=deployment is set. A deployment that has
+ * not opted in gets no chat provider, and nothing is sent.
+ */
+export function openRouterChatCredential(): CredentialResolution {
+  return resolveDeploymentOnlyKey("openrouter_chat", process.env);
+}
+
+function chatKey(): string | undefined {
+  const resolution = openRouterChatCredential();
+  return resolution.status === "ready" ? resolution.secret : undefined;
 }
 
 export type ContentPart =
@@ -63,11 +79,11 @@ async function postChat(
 
 export const openRouterProvider: ChatProvider = {
   id: "openrouter",
-  configured: () => Boolean(key("OPENROUTER_API_KEY") && key("OPENROUTER_MODEL")),
+  configured: () => Boolean(chatKey() && key("OPENROUTER_MODEL")),
   complete: (request) => {
-    const apiKey = key("OPENROUTER_API_KEY");
+    const apiKey = chatKey();
     if (!apiKey || !key("OPENROUTER_MODEL")) {
-      return Promise.resolve({ ok: false, status: "unavailable", provider: "openrouter", error: "OPENROUTER_API_KEY and OPENROUTER_MODEL are required." });
+      return Promise.resolve({ ok: false, status: "unavailable", provider: "openrouter", error: "OpenRouter chat needs OPENROUTER_SHARED_DEFAULT=deployment, OPENROUTER_API_KEY and OPENROUTER_MODEL." });
     }
     return postChat("openrouter", "https://openrouter.ai/api/v1/chat/completions", apiKey, {}, request, request.user);
   },
@@ -123,7 +139,7 @@ export async function completeWithImage(request: {
     { type: "text", text: request.text },
     { type: "image_url", image_url: { url: request.imageUrl } },
   ];
-  const apiKey = key("OPENROUTER_API_KEY");
+  const apiKey = chatKey();
   if (!apiKey) return { ok: false, status: "unavailable", provider: "openrouter", error: "No vision model is configured." };
   return postChat("openrouter", "https://openrouter.ai/api/v1/chat/completions", apiKey, {}, payload, parts);
 }

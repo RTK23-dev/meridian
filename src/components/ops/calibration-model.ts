@@ -3,7 +3,7 @@
  * decideCalibration). They are shown, not enforced here, so a change to the server needs a change to this text too.
  */
 import type { Baseline, CalibrationProposalView, ThresholdChange, ThresholdPair } from "@/lib/meridian/calibration/versions";
-import { statusLabel } from "@/lib/copy";
+import { statusLabel } from "../../lib/copy.ts";
 
 /** How a proposal is made and decided. Matches proposeThresholdChange, proposalCreateDecision and approveThresholdChange. */
 export const DECISION_RULES: readonly string[] = [

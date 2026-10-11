@@ -6,6 +6,13 @@ import { phaseForProbe, type LiveProvider } from "../providers/live.ts";
 import { planPerformanceSchedule } from "./schedule.ts";
 import { validatePerformanceOwnership } from "./ownership.ts";
 
+/** A recorded count, or null when nothing was recorded. A missing value is never read as 0. */
+function recordedCount(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const count = Number(value);
+  return Number.isFinite(count) ? count : null;
+}
+
 export const getPerformanceRowsForExport = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const brandId = input && typeof input === "object" && typeof (input as { brandId?: unknown }).brandId === "string" ? (input as { brandId: string }).brandId.trim() : "";
@@ -33,8 +40,8 @@ export const getPerformanceRowsForExport = createServerFn({ method: "POST" })
     `;
     return rows.map((row) => ({
       id: String(row.id), creativeId: String(row.creative_id), experimentId: row.experiment_id == null ? "" : String(row.experiment_id),
-      platform: String(row.platform), impressions: Number(row.impressions), reach: Number(row.reach), clicks: Number(row.clicks),
-      conversions: Number(row.conversions), spendCents: Number(row.spend_cents), revenueCents: Number(row.revenue_cents),
+      platform: String(row.platform), impressions: recordedCount(row.impressions), reach: recordedCount(row.reach), clicks: recordedCount(row.clicks),
+      conversions: recordedCount(row.conversions), spendCents: recordedCount(row.spend_cents), revenueCents: recordedCount(row.revenue_cents),
       observedOn: String(row.observed_on), source: String(row.source), createdAt: String(row.created_at),
     }));
   });

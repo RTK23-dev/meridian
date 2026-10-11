@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import { parseFactoryLevel } from "@/lib/meridian/factory/autopilot";
+import { isCapAmount } from "@/lib/meridian/factory/cap-amount";
 
 /** startFactoryRun: the niche is trimmed, required and at most 80 characters. */
 export const factoryRunSchema = z.object({
@@ -16,10 +17,7 @@ export type FactoryRunInput = z.input<typeof factoryRunSchema>;
 const levelField = z.string().refine((value) => parseFactoryLevel(value) !== null, "Choose factory levels 0–3.");
 
 /** A blank cap is not sent: the saved cap stays. A typed cap must be a number of dollars, zero or more. */
-const capField = z.string().trim().refine(
-  (value) => value === "" || (Number.isFinite(Number(value)) && Math.round(Number(value) * 100) >= 0),
-  "Enter a dollar amount of 0 or more.",
-);
+const capField = z.string().trim().refine((value) => isCapAmount(value), "Enter a dollar amount of 0 or more.");
 
 /** setFactoryControls: levels are 0 to 3, caps are whole cents at zero or more, and the running level cannot pass the ceiling. */
 export const factoryControlsSchema = z.object({

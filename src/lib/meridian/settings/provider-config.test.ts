@@ -27,7 +27,8 @@ const DEPLOYMENT_TYPESAFE = "deployment-typesafe-key-5432";
 const WORKSPACE_GEMINI = "workspace-gemini-key-1234";
 const WORKSPACE_JEV = "workspace-jev-key-4321";
 
-const CREDENTIAL_CATEGORIES: CredentialCategory[] = ["perception", "jev", "production"];
+// The settings summary holds these three categories. OpenAI and Hypit have no settings entry, so they are not listed here.
+const CREDENTIAL_CATEGORIES: Array<Extract<CredentialCategory, "perception" | "jev" | "production">> = ["perception", "jev", "production"];
 
 /** The summary's source name for a resolver state. The panel and the summary use the same mapping. */
 function expectedSourceOf(state: CredentialState): string {

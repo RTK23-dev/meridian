@@ -17,10 +17,12 @@ import type { Sql } from "../learning/store.ts";
 import { retrieveVaultCredential } from "../vault/service.ts";
 import {
   CREDENTIAL_VAULT_TYPE,
+  DEPLOYMENT_ONLY_KEY_ENV,
   SHARED_DEFAULT_ENV,
   credentialFingerprint,
   type CredentialCategory,
   type CredentialResolution,
+  type DeploymentOnlyKey,
 } from "./contract.ts";
 
 /** The environment a resolution reads. Injected by tests; production passes `process.env`. */
@@ -40,17 +42,22 @@ const CATEGORY_LABEL: Record<CredentialCategory, string> = {
   perception: "Gemini",
   jev: "TypeSafe JEV",
   production: "Gemini",
+  openai: "OpenAI",
+  hypit: "Hypit",
 };
 
 /**
  * The deployment's own key for a category. It is read here, and it is used only when the category's shared default is
  * opted in. The Google key follows the documented aliases in config/resolver.ts. The TypeSafe key follows the canonical and
- * legacy names used by jev/config.ts.
+ * legacy names used by jev/config.ts. The OpenAI and Hypit keys each have one name, and Hypit also accepts its legacy name.
+ * Every category has an explicit branch, so no category can fall through to another provider's key.
  */
 function deploymentKeyFor(category: CredentialCategory, env: CredentialEnv): string {
   if (category === "jev") {
     return env.TYPESAFE_JEV_API_KEY?.trim() || env.TYPESAFE_API_KEY?.trim() || "";
   }
+  if (category === "openai") return env.OPENAI_API_KEY?.trim() ?? "";
+  if (category === "hypit") return env.HYPIT_API_TOKEN?.trim() || env.HYPIT_API_KEY?.trim() || "";
   return ProviderConfigResolver.resolveGoogle({ env }).apiKey?.trim() ?? "";
 }
 
@@ -114,6 +121,25 @@ function resolveSharedDefault(category: CredentialCategory, env: CredentialEnv):
     return { status: "not_configured", reason: `${rule.variable}=${rule.accepts}, but the deployment has no ${label} key set.` };
   }
   return { status: "ready", source: "deployment_shared_default", secret: key, fingerprint: credentialFingerprint(key) ?? "" };
+}
+
+/**
+ * Resolves a deployment-only key (DEPLOYMENT_ONLY_KEY_ENV). It has no workspace entry, so it is synchronous and needs no
+ * database. It is used only when its opt-in variable is set to its accepted value, the same rule as a shared default.
+ */
+export function resolveDeploymentOnlyKey(key: DeploymentOnlyKey, env: CredentialEnv = process.env): CredentialResolution {
+  const rule = DEPLOYMENT_ONLY_KEY_ENV[key];
+  if ((env[rule.variable] ?? "").trim().toLowerCase() !== rule.accepts) {
+    return {
+      status: "not_configured",
+      reason: `This deployment has not opted in. Set ${rule.variable}=${rule.accepts} to use the deployment's ${rule.keyVariable}.`,
+    };
+  }
+  const secret = (env[rule.keyVariable] ?? "").trim();
+  if (!secret) {
+    return { status: "not_configured", reason: `${rule.variable}=${rule.accepts}, but ${rule.keyVariable} is not set on the deployment.` };
+  }
+  return { status: "ready", source: "deployment_shared_default", secret, fingerprint: credentialFingerprint(secret) ?? "" };
 }
 
 /**

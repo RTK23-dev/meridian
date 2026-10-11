@@ -27,6 +27,7 @@ import { credentialStateOf, type CredentialCategory, type CredentialState } from
 import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
+import { PAGE_LIMIT_MESSAGE, parsePageLimit } from "./page-limit.ts";
 
 export type ProviderCategory = "jev" | "perception" | "sources" | "production" | "storage" | "cyclone";
 
@@ -279,6 +280,13 @@ export async function saveWorkspaceProviderConfig(
     settings?: Record<string, unknown>;
   }
 ): Promise<{ success: boolean; category: ProviderCategory }> {
+  // A page limit is a whole number of pages, 1 or more. It is stored as that number, so a fraction, a negative or text never lands.
+  if (input.settings && "maxPages" in input.settings) {
+    const pages = parsePageLimit(input.settings.maxPages);
+    if (pages === null) throw new Error(PAGE_LIMIT_MESSAGE);
+    input = { ...input, settings: { ...input.settings, maxPages: pages } };
+  }
+
   // Validate URLs in settings to prevent SSRF
   if (input.settings) {
     for (const [key, val] of Object.entries(input.settings)) {
@@ -390,10 +398,65 @@ export async function removeWorkspaceProviderConfig(
 }
 
 /**
+ * Sources has no required key. Public page sources run without one. Meta Ad Library needs a token, and this check looks only
+ * at the workspace's own saved token. READY means that token is saved and readable. It never means the live Meta Ad Library
+ * answered, because no request is made here. A deployment META_AD_LIBRARY_TOKEN is not read by this check.
+ */
+async function testSourcesConnection(
+  sql: Sql,
+  organizationId: string,
+  started: number,
+): Promise<{ status: "READY" | "ERROR" | "NOT_CONFIGURED"; message: string; latencyMs: number }> {
+  const latencyMs = () => Date.now() - started;
+  const live = "The live Meta Ad Library was not called by this check.";
+  const deploymentNote = process.env.META_AD_LIBRARY_TOKEN?.trim()
+    ? " The deployment has META_AD_LIBRARY_TOKEN set, but this check does not use it."
+    : "";
+
+  const rows = await sql<{ id: string }>`
+    select id from credential_vault
+    where organization_id = ${organizationId} and credential_type = ${vaultTypeForCategory("sources")}
+    limit 1
+  `;
+  if (!rows[0]) {
+    return {
+      status: "NOT_CONFIGURED",
+      message: `No sources settings are saved for this workspace. Public page sources need no key, and Meta Ad Library is not connected.${deploymentNote} ${live}`,
+      latencyMs: latencyMs(),
+    };
+  }
+
+  let token = "";
+  try {
+    const saved = await retrieveVaultCredential(sql, organizationId, rows[0].id);
+    const raw: unknown = saved?.customFields?.metaAdLibraryToken;
+    token = typeof raw === "string" ? raw.trim() : "";
+  } catch {
+    return {
+      status: "ERROR",
+      message: `The workspace's saved sources settings could not be read, so no Meta Ad Library token can be used. Save the settings again. ${live}`,
+      latencyMs: latencyMs(),
+    };
+  }
+  if (!token) {
+    return {
+      status: "NOT_CONFIGURED",
+      message: `No Meta Ad Library token is saved for this workspace. Public page sources need no key.${deploymentNote} ${live}`,
+      latencyMs: latencyMs(),
+    };
+  }
+  return {
+    status: "READY",
+    message: `This workspace's saved Meta Ad Library token can be read. ${live}`,
+    latencyMs: latencyMs(),
+  };
+}
+
+/**
  * Tests connection for a specific provider category with SSRF protection and live health checks.
  *
  * READY is reported only for a usable credential, by the same resolver the runtime uses. The credential categories do
- * not call their live provider here, and the message says so.
+ * not call their live provider here, and the message says so. Sources reports READY only for a saved token that can be read.
  */
 export async function testWorkspaceProviderConnection(
   sql: Sql,
@@ -401,7 +464,7 @@ export async function testWorkspaceProviderConnection(
     organizationId: string;
     category: ProviderCategory;
   }
-): Promise<{ status: "READY" | "ERROR"; message: string; latencyMs: number }> {
+): Promise<{ status: "READY" | "ERROR" | "NOT_CONFIGURED"; message: string; latencyMs: number }> {
   const started = Date.now();
 
   try {
@@ -450,12 +513,12 @@ export async function testWorkspaceProviderConnection(
       return { status: "ERROR", message: `Cyclone gateway returned HTTP ${res.status}.`, latencyMs };
     }
 
-    // Default readiness check
-    return {
-      status: "READY",
-      message: `${input.category} configuration test verified.`,
-      latencyMs: Date.now() - started,
-    };
+    if (input.category === "sources") {
+      return testSourcesConnection(sql, input.organizationId, started);
+    }
+
+    // No category reaches here without a check above. An unknown category is an error, never a READY.
+    return { status: "ERROR", message: `Unknown provider category: ${String(input.category)}.`, latencyMs: Date.now() - started };
   } catch (err) {
     return {
       status: "ERROR",

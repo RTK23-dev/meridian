@@ -18,7 +18,24 @@ export type StoryboardTemplate = {
   format: AdFormat;
   musicMood: string;
   beats: StoryboardBeat[];
+  /** The claim text a brief has recorded for this storyboard. Absent when none was recorded. */
+  claims?: string[];
 };
+
+/**
+ * The claim text recorded on a stored storyboard, or null when none is recorded. A storyboard built from creative DNA
+ * records no claims, so its variants are checked as "no claim text", which is review, never pass.
+ */
+export function recordedClaimsOf(storyboard: string): string[] | null {
+  try {
+    const parsed = JSON.parse(storyboard) as { claims?: unknown };
+    if (!Array.isArray(parsed.claims)) return null;
+    const claims = parsed.claims.filter((claim): claim is string => typeof claim === "string" && claim.trim().length > 0);
+    return claims.length > 0 ? claims : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Abstract a winner into a storyboard. Footage, slogans, and look are dropped. */
 export function templateFromDna(dna: CreativeDna): StoryboardTemplate {

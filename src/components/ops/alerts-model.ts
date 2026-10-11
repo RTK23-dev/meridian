@@ -2,7 +2,7 @@
  * Pure rules for the alerts center. The server decides severity and delivery; this file only words them. Delivery is
  * reported only after the webhook endpoint accepts an event, so a saved target is never described as delivered.
  */
-import { statusLabel } from "@/lib/copy";
+import { statusLabel } from "../../lib/copy.ts";
 
 export type AlertFilter = "open" | "acknowledged" | "all";
 export const ALERT_FILTER_OPTIONS: ReadonlyArray<{ value: AlertFilter; label: string }> = [

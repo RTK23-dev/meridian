@@ -5,9 +5,10 @@ import { Button, Card, Field, PageHeader, SelectInput } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { downloadCsvText } from "@/lib/csv";
 import { hasRole } from "@/lib/meridian/access";
-import { libraryCsv, opportunitiesCsv } from "@/lib/meridian/exports/csv";
+import { libraryCsv, opportunitiesCsv, performanceCsv } from "@/lib/meridian/exports/csv";
 import { listLibrary, listOpportunities } from "@/lib/meridian/machine";
 import { exportAuditCsv } from "@/lib/meridian/observability/actions";
+import { getPerformanceRowsForExport } from "@/lib/meridian/performance/actions";
 import { auditExportNote } from "./audit-model";
 import { exportFilename } from "./format";
 import { RefusalNotice } from "./ops-shared";
@@ -36,6 +37,13 @@ export function ExportsScreen() {
       const result = await listLibrary({ data: { brandId } });
       const rows = libraryExportRows(result.creatives);
       downloadCsvText(exportFilename("meridian-library", new Date()), libraryCsv(rows));
+      return rows.length;
+    },
+  });
+  const performanceExport = useMutation({
+    mutationFn: async () => {
+      const rows = await getPerformanceRowsForExport({ data: { brandId } });
+      downloadCsvText(exportFilename("meridian-performance", new Date()), performanceCsv(rows));
       return rows.length;
     },
   });
@@ -69,7 +77,7 @@ export function ExportsScreen() {
           title="Opportunities"
           description="One row per opportunity for the selected brand, with its rank score, JEV decision, probability, evidence confidence, risk and reason. An empty cell means the value is not stored."
           action={<Button type="button" variant="secondary" size="md" disabled={!brandId} loading={opportunityExport.isPending} onClick={() => opportunityExport.mutate()}>Export opportunities</Button>}
-          result={opportunityExport.data !== undefined ? rowsNote(opportunityExport.data, "opportunity") : null}
+          result={opportunityExport.data !== undefined ? rowsNote(opportunityExport.data, "opportunity", "opportunities") : null}
           error={opportunityExport.error}
         />
         <ExportPanel
@@ -99,7 +107,10 @@ export function ExportsScreen() {
         <ExportPanel
           id="performance-export"
           title="Performance rows"
-          description="Not exported from this screen yet. The performance query writes a spend or impression count that was never recorded as 0, so a file from it would state values that were not recorded. The export is held until that is fixed."
+          description="One row per stored performance observation for the selected brand. A spend, impression, reach, click, conversion or revenue value that was never recorded is an empty cell, not 0."
+          action={<Button type="button" variant="secondary" size="md" disabled={!brandId} loading={performanceExport.isPending} onClick={() => performanceExport.mutate()}>Export performance rows</Button>}
+          result={performanceExport.data !== undefined ? rowsNote(performanceExport.data, "performance row") : null}
+          error={performanceExport.error}
         />
       </div>
     </div>

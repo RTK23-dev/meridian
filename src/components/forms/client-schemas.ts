@@ -6,6 +6,7 @@
 import { z } from "zod";
 // Relative, not @/, so the schemas also load under plain Node for the tests.
 import { deliveryUrlAllowed } from "../../lib/meridian/alerts/lifecycle.ts";
+import { PAGE_LIMIT_MESSAGE, parsePageLimit } from "../../lib/meridian/settings/page-limit.ts";
 
 /** saveDeliveryTarget: the URL is trimmed. A blank URL clears the target. Anything else must pass deliveryUrlAllowed. */
 export const deliveryTargetSchema = z.object({
@@ -73,10 +74,8 @@ export const providerFieldsSchema = z.object({
   perceptionKey: z.string().trim(),
   costPreference: z.enum(CLIENT_COST_MODES, { error: "Choose a cost mode: ZERO_SPEND, LOWEST_COST, BALANCED or QUALITY_FIRST." }),
   gatewayUrl: z.string().trim(),
-  maxPages: z.string().trim().refine(
-    (value) => value !== "" && Number.isFinite(Number(value)),
-    "Enter the number of pages, as a number.",
-  ),
+  // The same whole-number rule the server applies when it saves the sources settings.
+  maxPages: z.string().trim().refine((value) => parsePageLimit(value) !== null, PAGE_LIMIT_MESSAGE),
 });
 
 export type ProviderFieldsInput = z.input<typeof providerFieldsSchema>;
