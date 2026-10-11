@@ -39,7 +39,13 @@ export async function probeTikTok(credentials: TikTokCredentials, transport: Tra
 async function advertiserList(credentials: TikTokCredentials, transport: Transport): Promise<{ id: string; name: string }[]> {
   if (!credentials.appId?.trim() || !credentials.appSecret?.trim()) return [];
   const url = `${ROOT}/oauth2/advertiser/get/?app_id=${encodeURIComponent(credentials.appId)}&secret=${encodeURIComponent(credentials.appSecret)}`;
-  const result = await sendWithRetry(transport, { method: "GET", url, headers: headers(credentials.accessToken) });
+  // The documented contract passes app_id and secret in the query string, so the request keeps that shape.
+  // The secret is redacted from any error text the transport produces.
+  const result = await sendWithRetry(
+    transport,
+    { method: "GET", url, headers: headers(credentials.accessToken) },
+    { redact: [credentials.appSecret] },
+  );
   if (numberField(result.json, "code") !== 0) return [];
   const list = nestedList(result.json);
   return list
