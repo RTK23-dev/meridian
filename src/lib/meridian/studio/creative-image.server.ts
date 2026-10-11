@@ -12,8 +12,44 @@ import { getSql } from "@/lib/db";
 import { semanticNearest } from "@/lib/meridian/embeddings/store";
 import { resolveCredential } from "@/lib/meridian/credentials/resolve";
 import { generateNanoBananaImage } from "@/lib/meridian/providers/nano-banana.server";
+import type { ProductFact } from "../domain.ts";
 import { id, requireBrand, loadContext } from "../machine-shared";
 import { competitorCopy, factsFor, generatedImageVisual, qcBrandOf, visualFacts, writeJudgment } from "./image-qc.server.ts";
+
+export type CreativeProductMatch = {
+  product: ProductFact | null;
+  /**
+   * stored: the creative's stored product name resolved to one product.
+   * copy: no stored name, and the copy or title named exactly one product.
+   * none: no stored name, and the copy and title name no product. No product is claimed.
+   * unknown: the creative names a product that does not resolve to exactly one. Its product-specific claims cannot be checked.
+   */
+  evidence: "stored" | "copy" | "none" | "unknown";
+};
+
+/**
+ * The product a creative is judged against. A stored product name decides when there is one, and a name that matches no product
+ * resolves to nothing. No other product is used in its place. With no stored name, the copy or the title must name exactly one
+ * product. A product the creative does not name is never claimed.
+ */
+export function productForCreative(
+  products: ProductFact[],
+  creative: { product_name: string; raw_text: string; title: string },
+): CreativeProductMatch {
+  const stored = creative.product_name.trim();
+  if (stored) {
+    const match = products.find((item) => item.name.trim() === stored);
+    return match ? { product: match, evidence: "stored" } : { product: null, evidence: "unknown" };
+  }
+  const named = products.filter((item) => {
+    const name = item.name.trim();
+    return name !== "" && (creative.raw_text.includes(name) || creative.title.includes(name));
+  });
+  const [only] = named;
+  if (named.length === 1 && only) return { product: only, evidence: "copy" };
+  if (named.length > 1) return { product: null, evidence: "unknown" };
+  return { product: null, evidence: "none" };
+}
 
 /**
  * Generates and stores an image for a creative, for a signed-in user. The role and the tenant are checked here. The image is
@@ -69,13 +105,12 @@ export async function attachCreativeImageFor(userId: string, data: { brandId: st
   const loaded = await loadContext(sql, access.organizationId, data.brandId);
   const brand = qcBrandOf(loaded);
   // The product the creative is for: its stored product, or the one its copy names. A product it does not mention is not claimed.
-  const named = loaded.products.find((item) => creative.raw_text.includes(item.name) || creative.title.includes(item.name));
-  const product = named ?? loaded.products[0];
+  const product = productForCreative(loaded.products, creative).product;
   const copy = creative.raw_text;
   const visual = await visualFacts(sql, access.organizationId, data.brandId, image.bytes);
   const facts = factsFor(brand, {
     kind: "image",
-    productName: creative.product_name || named?.name || "",
+    productName: creative.product_name || product?.name || "",
     angle: creative.angle,
     copy,
     prompt,
