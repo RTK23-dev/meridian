@@ -63,8 +63,7 @@ function BrandHome({ brandId }: { brandId: string }) {
           <NextActionCard
             brandId={brandId}
             action={nextBestAction({
-              brainFilled: known.filled,
-              brainTotal: known.total,
+              brain: known,
               stages,
               recommendation: machine.operating.recommendation,
             })}
@@ -73,7 +72,7 @@ function BrandHome({ brandId }: { brandId: string }) {
         {machine ? (
           <MissingChecklist
             brandId={brandId}
-            items={missingItems({ brainFilled: known.filled, counts: machine.counts, operating: machine.operating })}
+            items={missingItems({ brain: known, counts: machine.counts, operating: machine.operating })}
           />
         ) : <Skeleton variant="card" />}
       </div>

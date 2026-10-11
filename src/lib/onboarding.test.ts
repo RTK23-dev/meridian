@@ -12,6 +12,18 @@ test("onboarding marks only recorded milestones complete", () => {
   assert.equal(steps[3]?.to, "/brands/brand-a/market");
 });
 
+test("the brain step is done only when every required field has content, which is a completeness of 1", () => {
+  const brainStep = (completeness: number) => getOnboardingSteps({
+    brands: [{ id: "brand-a", completeness, competitors: 0, opportunities: 0, creatives: 0 }],
+    providerConnected: false,
+    reviewedCreative: false,
+  })[1];
+  assert.equal(brainStep(0.5)?.done, false, "two of the four required fields");
+  assert.equal(brainStep(0.75)?.done, false, "three of the four required fields");
+  assert.equal(brainStep(1)?.done, true, "all four required fields");
+  assert.equal(brainStep(1)?.to, "/brands/brand-a/brain");
+});
+
 test("an empty workspace points setup actions to brand creation", () => {
   const steps = getOnboardingSteps({ brands: [], providerConnected: false, reviewedCreative: false });
   assert.ok(steps.slice(1).every((step) => step.to === "/brands/new" || step.to === "/integrations"));
