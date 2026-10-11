@@ -4,7 +4,7 @@ import { createPoolSql, getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
 import { enableAppAliases } from "../testing/module-aliases.ts";
-import { loadSession } from "./session.server.ts";
+import { loadSession, storedProbability } from "./session.server.ts";
 
 enableAppAliases();
 
@@ -92,3 +92,12 @@ for (const target of TARGETS) {
     }
   });
 }
+
+test("a missing probability is unknown, not zero", () => {
+  assert.equal(storedProbability(null), null);
+  assert.equal(storedProbability(undefined), null);
+  assert.equal(storedProbability(""), null);
+  assert.equal(storedProbability("not a number"), null);
+  assert.equal(storedProbability(0), 0, "a stored zero is still a value");
+  assert.equal(storedProbability("0.4"), 0.4);
+});

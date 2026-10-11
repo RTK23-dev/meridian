@@ -72,6 +72,13 @@ function asNumber(value: unknown): number {
   return Number.isFinite(number) ? number : 0;
 }
 
+/** A stored probability, or null when none is stored. A missing probability is unknown, never 0. */
+export function storedProbability(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function asJson<T>(value: unknown, fallback: T): T {
   if (typeof value === "string") {
     try {
@@ -261,7 +268,7 @@ export async function loadSession(sql: Sql, organizationId: string, brandId: str
           evidence: top.evidence.map((item) => item.summary),
           opportunityId: match ? asText(match.id) : "",
           decision: match ? asText(match.decision) : "",
-          probability: match ? asNumber(match.probability) : 0,
+          probability: match ? storedProbability(match.probability) : null,
           reviewId: match ? asText(match.review_id) : "",
           posture: posture?.posture ?? "exploration",
           because: posture?.because ?? "",

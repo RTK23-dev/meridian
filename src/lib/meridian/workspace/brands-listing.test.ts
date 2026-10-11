@@ -14,7 +14,7 @@ enableAppAliases();
 const { loadWorkspaceBrands } = await import("./brands-listing.ts");
 
 const PG_TEST_URL = process.env.MERIDIAN_PG_TEST_URL?.trim();
-const BACKFILL = fileURLToPath(new URL("../../../../migrations/0053_brand_logo_blobs.sql", import.meta.url));
+const BACKFILL = fileURLToPath(new URL("../../../../migrations/0054_brand_logo_blobs.sql", import.meta.url));
 
 /**
  * A stored logo is served by its asset id, so the bootstrap lists it. A logo whose bytes are not stored, a brand with no logo,
