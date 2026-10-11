@@ -9,7 +9,7 @@ import { hasRole, isRole } from "../access.ts";
 import { withTransaction } from "../learning/store.ts";
 import type { OpportunityDirectionInput } from "../studio/brief-service.contract.ts";
 import { directionReasonProblem } from "./direction-reason.ts";
-import { storedProbability } from "../decisions/probability.ts";
+import { storedNumberOrNull } from "../decisions/stored-number.ts";
 import {
   id,
   asText,
@@ -87,7 +87,7 @@ export const listOpportunities = createServerFn({ method: "POST" })
     `;
     return {
       role: access.role,
-      opportunities: rows.map((row) => opportunityView(row, asText(row.decision), storedProbability(row.probability))),
+      opportunities: rows.map((row) => opportunityView(row, asText(row.decision), storedNumberOrNull(row.probability))),
     };
   });
 

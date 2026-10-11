@@ -5,7 +5,7 @@ import type { Sql } from "../learning/store.ts";
 import { createBrief, registryWith, stubEngine } from "../testing/brief-fixtures.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
 import { enableAppAliases } from "../testing/module-aliases.ts";
-import { storedProbability } from "./probability.ts";
+import { storedNumberOrNull } from "./stored-number.ts";
 
 // The opportunity and learning readers import the server-function layer, which uses the "@/" alias.
 enableAppAliases();
@@ -15,14 +15,14 @@ const { learningDecisionView } = await import("../learning/actions.ts");
 const PG_TEST_URL = process.env.MERIDIAN_PG_TEST_URL?.trim();
 
 test("a probability that was never stored reads back as null, and a stored zero stays zero", () => {
-  assert.equal(storedProbability(null), null);
-  assert.equal(storedProbability(undefined), null);
-  assert.equal(storedProbability(""), null);
-  assert.equal(storedProbability("not a number"), null);
-  assert.equal(storedProbability(Number.NaN), null);
-  assert.equal(storedProbability(Number.POSITIVE_INFINITY), null);
-  assert.equal(storedProbability(0), 0, "a measured zero is still a zero");
-  assert.equal(storedProbability("0.25"), 0.25);
+  assert.equal(storedNumberOrNull(null), null);
+  assert.equal(storedNumberOrNull(undefined), null);
+  assert.equal(storedNumberOrNull(""), null);
+  assert.equal(storedNumberOrNull("not a number"), null);
+  assert.equal(storedNumberOrNull(Number.NaN), null);
+  assert.equal(storedNumberOrNull(Number.POSITIVE_INFINITY), null);
+  assert.equal(storedNumberOrNull(0), 0, "a measured zero is still a zero");
+  assert.equal(storedNumberOrNull("0.25"), 0.25);
 });
 
 test("an opportunity with no stored JEV decision shows a null probability, not 0", () => {

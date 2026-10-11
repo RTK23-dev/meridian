@@ -64,6 +64,16 @@ function promptFrom(brief: BriefDraft): string {
   return [brief.hook, brief.message, brief.constraints, ...brief.learningNotes].filter(Boolean).join("\n");
 }
 
+/**
+ * Whether the copy names the product. The rule is "not named in the copy", so only the copy counts. The generation prompt
+ * (the brief's hook, message and constraints) does not: a creative must not pass because its prompt names the product.
+ * A blank product name names nothing.
+ */
+export function productNamedInCopy(copy: string | undefined, productName: string): boolean {
+  const name = productName.trim().toLowerCase();
+  return name.length > 0 && (copy ?? "").toLowerCase().includes(name);
+}
+
 export function runCoreLoop(input: {
   organizationId: string;
   brandId: string;
@@ -174,7 +184,6 @@ export function runCoreLoop(input: {
       lineage: lineage(input.brandId, chosen.id, brief.title, variant, video.provider, video.model),
     });
   }
-  const copy = `${firstPrompt} ${input.copyPhrase ?? ""}`;
   const competitorText = input.observations.filter((item) => item.origin === "competitor").map((item) => item.text).join(" ");
   const copies = Boolean(input.copyPhrase && input.copyPhrase.length > 12 && competitorText.includes(input.copyPhrase));
   const audits = QUESTION_SPECS.map((spec) => {
@@ -182,7 +191,7 @@ export function runCoreLoop(input: {
       aligned: input.logoMatch != null && input.logoMatch >= 0.8,
       logoMismatch: input.logoMatch != null && input.logoMatch < 0.4,
       paletteMissing: input.paletteMatch == null,
-      productNamed: copy.toLowerCase().includes(input.product.name.toLowerCase()) || brief.message.toLowerCase().includes(input.product.name.toLowerCase()),
+      productNamed: productNamedInCopy(input.copyPhrase, input.product.name),
       copies,
       imageReady: assets.some((asset) => asset.kind === "image" && asset.image),
       videoReady: !input.omitVideoEvidence && assets.some((asset) => asset.video?.status === "completed" && (Boolean(asset.video.transcript) || asset.video.scenes.length > 0)),

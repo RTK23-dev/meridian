@@ -2,6 +2,7 @@ import type { HeldReservationResolution } from "../security/held-reservations.ts
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
+import { parseVariantReview } from "./variant-review-input.ts";
 
 function clip(value: unknown): string {
   return typeof value === "string" ? value.trim().slice(0, 80) : "";
@@ -128,17 +129,8 @@ export const rejectCreativePlan = createServerFn({ method: "POST" })
   });
 
 export const reviewStudioVariant = createServerFn({ method: "POST" })
-  .validator((input: unknown) => {
-    const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
-    const action = clip(body.action);
-    if (action !== "approve" && action !== "reject" && action !== "revision") throw new Error("Choose approve, reject, or revision.");
-    const reasonCode = typeof body.reasonCode === "string" ? body.reasonCode.trim().slice(0, 40) : "";
-    if (action === "reject" && !reasonCode) throw new Error("Choose a rejection reason.");
-    const brandId = clip(body.brandId);
-    const creativeId = clip(body.creativeId);
-    if (!brandId || !creativeId) throw new Error("Choose a variant.");
-    return { brandId, creativeId, action, reasonCode, note: typeof body.note === "string" ? body.note.trim().slice(0, 400) : "" };
-  })
+  // A rejection must name a reason code from the server list. The check is in variant-review-input.ts, with its test.
+  .validator((input: unknown) => parseVariantReview(input && typeof input === "object" ? (input as Record<string, unknown>) : {}))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const api = await import("./session.server");

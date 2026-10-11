@@ -5,7 +5,7 @@ import { countRejections } from "@/lib/meridian/learning/engine";
 import { applyLearnedPatterns } from "@/lib/meridian/learning/store";
 import { designExperiment } from "@/lib/meridian/experiments/design";
 import { manualPerformanceSchema } from "@/lib/meridian/schemas/performance";
-import { storedProbability } from "../decisions/probability.ts";
+import { storedNumberOrNull } from "../decisions/stored-number.ts";
 import {
   id,
   asText,
@@ -18,6 +18,35 @@ import {
   notify,
 } from "../machine-shared";
 
+/**
+ * The 95% interval the engine computed for a pattern's lift. A bound that was never stored makes the interval unknown (null),
+ * never a zero interval.
+ */
+export function confidenceIntervalOf(row: Record<string, unknown>): { low: number; high: number } | null {
+  const low = storedNumberOrNull(row.ci_low);
+  const high = storedNumberOrNull(row.ci_high);
+  return low === null || high === null ? null : { low, high };
+}
+
+/** One learned pattern for the learning screen. `confidenceInterval` is new; every other field keeps its earlier shape. */
+export function learnedPatternView(row: Record<string, unknown>) {
+  return {
+    id: asText(row.id),
+    attribute: asText(row.attribute),
+    value: asText(row.value),
+    metric: asText(row.metric),
+    lift: asNumber(row.lift),
+    sampleSize: asNumber(row.sample_size),
+    baseline: asNumber(row.baseline),
+    observed: asNumber(row.observed),
+    impressions: asNumber(row.impressions),
+    summary: asText(row.summary),
+    state: asText(row.state) || "INFERRED",
+    scope: asText(row.scope) || "brand",
+    confidenceInterval: confidenceIntervalOf(row),
+  };
+}
+
 /** One recorded decision for the learning screen. A probability or confidence that was never stored reads back as null. */
 export function learningDecisionView(row: Record<string, unknown>) {
   return {
@@ -25,8 +54,8 @@ export function learningDecisionView(row: Record<string, unknown>) {
     question: `${asText(row.question_id)}.${asText(row.question_version)}`,
     subject: asText(row.subject_type),
     decision: asText(row.decision),
-    probability: storedProbability(row.probability),
-    confidence: storedProbability(row.confidence),
+    probability: storedNumberOrNull(row.probability),
+    confidence: storedNumberOrNull(row.confidence),
     reasons: asJson<string[]>(row.reasons, []),
     createdAt: asText(row.created_at),
   };
@@ -165,7 +194,8 @@ export const getLearning = createServerFn({ method: "POST" })
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
     const patterns = await sql<Record<string, unknown>>`
-      select id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary, state, scope, created_at
+      select id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary, state, scope, created_at,
+             ci_low, ci_high
       from learned_patterns
       where organization_id = ${access.organizationId}
         and (brand_id = ${data.brandId} or scope = 'organization')
@@ -191,20 +221,7 @@ export const getLearning = createServerFn({ method: "POST" })
       organizationId: access.organizationId,
       useOrganizationLearning: flag === true || flag === "t" || flag === "true",
       policy: "A pattern is stored only after at least 3 creatives and 300 impressions in that bucket, and only when CTR, conversion rate, or ROAS differs from the brand baseline by 5% or more. Pairs such as angle+hook and visual style+format use the same floor. VALIDATED requires 4 creatives, 2000 impressions, and 15% absolute lift. OBSERVED patterns are discounted in the next rank. Organization patterns are ignored unless this brand opts in. Global patterns are never used. A separate worker runs queued learning when it is deployed. Thresholds change only after an admin approves a proposal.",
-      patterns: patterns.map((row) => ({
-        id: asText(row.id),
-        attribute: asText(row.attribute),
-        value: asText(row.value),
-        metric: asText(row.metric),
-        lift: asNumber(row.lift),
-        sampleSize: asNumber(row.sample_size),
-        baseline: asNumber(row.baseline),
-        observed: asNumber(row.observed),
-        impressions: asNumber(row.impressions),
-        summary: asText(row.summary),
-        state: asText(row.state) || "INFERRED",
-        scope: asText(row.scope) || "brand",
-      })),
+      patterns: patterns.map(learnedPatternView),
       rejections: countRejections(rejections.flatMap((row) => Array.from({ length: asNumber(row.count) }, () => row.reason_code))),
       decisions: decisions.map(learningDecisionView),
     };
