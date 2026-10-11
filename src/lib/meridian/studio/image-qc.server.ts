@@ -19,8 +19,9 @@ import { judgeMedia, rollupDecision, ENGINE_REPLACED_MEDIA_QUESTIONS, type Media
 import type { AccountSnapshot } from "../publishing/readiness.ts";
 import { measureLogo, measurePalette } from "../vision/measure.ts";
 import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateImage, type GateQuestion } from "../decisions/gate.ts";
-import { runPerception, selectPerceptionProvider, type PerceptionInputMedia, type PerceptionRunOutcome } from "../perception/run.ts";
+import { selectPerceptionProvider, type PerceptionInputMedia, type PerceptionRunOutcome } from "../perception/run.ts";
 import type { MediaObservation, MultimodalPerceptionProvider, PerceptionMediaKind } from "../perception/types.ts";
+import { readVisualMedia } from "../providers/vision.server.ts";
 import { EVIDENCE_CONTRACTS, PERCEPTION_EVIDENCE_NAME, checkQuestionContract, satisfiedContractLines } from "../perception/contracts.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import { selectRepresentativeFrames, sha256Hex } from "../decisions/frames.ts";
@@ -160,6 +161,8 @@ export type CreativeJudgmentInput = {
 export type CreativeJudgment = {
   /** The outcome that governs the creative: the more severe of the local checks and the engine gate. */
   rollup: PolicyOutcome;
+  /** The engine gate's reason, in words a reviewer can read. */
+  reason: string;
   /** The decision the creative points to: a local decision, or the gate record when the engine decided the outcome. */
   decisionId: string;
   gateRecordId: string | null;
@@ -294,7 +297,8 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     }));
   } else if (visual.media.length > 0) {
     const provider = input.perception === undefined ? selectPerceptionProvider().provider : input.perception;
-    const run = await runPerception(sql, {
+    // The media is checked by its own bytes and then perceived by the configured provider, through the shared runner.
+    const run = await readVisualMedia(sql, {
       organizationId: input.organizationId,
       brandId: input.brandId,
       subjectType: "creative",
@@ -305,7 +309,7 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
       provider,
       providerReason: provider ? undefined : "No perception provider is ready.",
     });
-    perceptionRunId = run.runId;
+    perceptionRunId = run.runId || null;
     perceptionOutcome = run;
     if (run.status === "observed") {
       perceptionEvidence = [
@@ -374,6 +378,7 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
   }
   return {
     rollup,
+    reason: gate.reason,
     decisionId: (gateIsMoreSevere ? gate.gateRecordId : pointed) || gate.gateRecordId || "",
     gateRecordId: gate.gateRecordId,
     gateAction: gate.action,

@@ -111,7 +111,9 @@ function overlap(angle: string, text: string): number {
 }
 
 function build(id: string, facts: MediaFacts): { present: boolean; features: Feature[] } {
-  const text = `${facts.copy}\n${facts.prompt}\n${facts.transcript}`;
+  // The creative's own words: its persisted copy and its spoken transcript. The generation prompt is an instruction to the image
+  // model, not something the creative says, so no rule reads it. Each rule below names the one field it enforces.
+  const published = `${facts.copy}\n${facts.transcript}`;
   if (id === "brand_fit") {
     const score = overlap(facts.angle, facts.positioning);
     return {
@@ -130,7 +132,7 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
     };
   }
   if (id === "competitor_copy_risk") {
-    const phrase = sharedPhrase(text, facts.competitorTexts);
+    const phrase = sharedPhrase(published, facts.competitorTexts);
     const semantic = facts.semanticSimilarity;
     const features = [
       feat("aligned", phrase ? 0 : 1, "competitor-copy", "creative_records", phrase ? "A competitor phrase is present, so alignment is 0." : "No stored competitor phrase of four or more words appears in this variant."),
@@ -150,7 +152,7 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
       .split(/[\n,;]+/)
       .map((part) => part.trim())
       .filter((part) => part.length >= 3);
-    const hit = banned.find((part) => text.toLowerCase().includes(part.toLowerCase()));
+    const hit = banned.find((part) => published.toLowerCase().includes(part.toLowerCase()));
     return {
       present: true,
       features: [
@@ -203,7 +205,8 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
     if (!facts.productName.trim()) {
       return { present: false, features: [feat("missing", 1, "product", "products", "No product name is stored for this variant.")] };
     }
-    const mentioned = hasWord(text, facts.productName) || text.toLowerCase().includes(facts.productName.toLowerCase());
+    // The product rule enforces the copy only. A name that appears in the generation prompt does not satisfy it.
+    const mentioned = hasWord(facts.copy, facts.productName) || facts.copy.toLowerCase().includes(facts.productName.toLowerCase());
     // A literal miss is a deterministic rejection, so it is a violation, not a score. Same as a measured logo mismatch.
     return {
       present: true,
@@ -213,7 +216,7 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
           1,
           "product",
           "products",
-          mentioned ? `The stored product name “${facts.productName}” appears in the variant text.` : `The stored product “${facts.productName}” is not in the variant text.`,
+          mentioned ? `The stored product name “${facts.productName}” appears in the copy.` : `The stored product “${facts.productName}” is not in the copy.`,
         ),
       ],
     };
@@ -223,7 +226,7 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
       .split(/[\n,;]+/)
       .map((part) => part.trim())
       .filter((part) => part.length >= 3);
-    const hit = words.find((word) => hasWord(text, word));
+    const hit = words.find((word) => hasWord(published, word));
     return {
       present: facts.tone.trim().length > 0 || words.length > 0,
       features: [
@@ -240,7 +243,7 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
     };
   }
   if (id === "duplicate_risk") {
-    const kind = classifyDuplicate(text, facts.ownTexts, facts.ownSemanticSimilarity ?? null);
+    const kind = classifyDuplicate(published, facts.ownTexts, facts.ownSemanticSimilarity ?? null);
     if (kind === "unchecked") {
       return {
         present: false,
@@ -248,7 +251,7 @@ function build(id: string, facts: MediaFacts): { present: boolean; features: Fea
       };
     }
     if (kind === "exact" || kind === "near") {
-      const phrase = sharedPhrase(text, facts.ownTexts);
+      const phrase = sharedPhrase(published, facts.ownTexts);
       return {
         present: true,
         features: [
@@ -382,8 +385,13 @@ export function judgeMedia(facts: MediaFacts, policies?: ReadonlyMap<string, App
   });
 }
 
+/**
+ * The approved policy a media judgment is made under. Whenever the policy exists, its thresholds and version are recorded, even
+ * when it has no calibration. Uncalibrated, a judgment can go to review but never approve, so the audit keeps the policy that
+ * was applied and the outcome stays fail-closed.
+ */
 function policyOptions(policy?: AppliedPolicy): JudgeOptions | undefined {
-  if (!policy?.calibration) return undefined;
+  if (!policy) return undefined;
   return {
     thresholds: policy.thresholds,
     policyVersion: policy.policyVersion,

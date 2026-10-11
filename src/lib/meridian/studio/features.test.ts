@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { judgeMedia, rollupDecision, sharedPhrase } from "./features.ts";
+import type { AppliedPolicy } from "../jev/policy.ts";
 
 const base = {
   kind: "image" as const,
@@ -58,4 +59,72 @@ test("video without scenes is not approved", () => {
     mime: "video/mp4",
   });
   assert.equal(decisions.find((item) => item.questionId === "video_readiness")?.decision, "HUMAN_REVIEW");
+});
+
+test("a product name present only in the generation prompt does not satisfy the product check", () => {
+  const decisions = judgeMedia({
+    ...base,
+    productName: "Mesh sponge",
+    copy: "Swipe to see the antibacterial layer.",
+    prompt: "Still of Mesh sponge on a kitchen sink.",
+  });
+  const product = decisions.find((item) => item.questionId === "product_match");
+  assert.equal(product?.decision, "REJECT", "the copy does not name the product, so the prompt cannot satisfy the check");
+  assert.match(product?.reasons[0] ?? "", /not in the copy/);
+  assert.equal(rollupDecision(decisions), "REJECT");
+});
+
+test("the product check is satisfied by the copy, and the prompt is not needed", () => {
+  const decisions = judgeMedia({ ...base, productName: "Lather bar", copy: "Lather bar, shown in one take.", prompt: "" });
+  assert.notEqual(decisions.find((item) => item.questionId === "product_match")?.decision, "REJECT");
+});
+
+test("a prohibited claim present only in the copy is caught", () => {
+  const decisions = judgeMedia({
+    ...base,
+    prohibited: "guaranteed results",
+    copy: "Guaranteed results in one wash.",
+    prompt: "Still of Lather bar, clean and bright.",
+    logoSimilarity: 0.9,
+    paletteDistance: 0.1,
+  });
+  assert.equal(decisions.find((item) => item.questionId === "claim_safety")?.decision, "REJECT");
+  assert.equal(rollupDecision(decisions), "REJECT");
+});
+
+test("the generation prompt is not read as copy: a prohibited claim only in the prompt is not a copy violation", () => {
+  const decisions = judgeMedia({
+    ...base,
+    prohibited: "guaranteed results",
+    copy: "Lather bar, shown in one take.",
+    prompt: "Still of Lather bar. Guaranteed results in the caption.",
+    logoSimilarity: 0.9,
+    paletteDistance: 0.1,
+  });
+  assert.notEqual(decisions.find((item) => item.questionId === "claim_safety")?.decision, "REJECT");
+});
+
+test("a policy with no calibration keeps its approved thresholds and version in the audit record, and cannot approve", () => {
+  const approved: AppliedPolicy = {
+    thresholds: { autoApprove: 0.8, humanReview: 0.4, minConfidenceForAuto: 0.7 },
+    policyVersion: "approved:logo_match.3",
+    calibration: null,
+  };
+  const decisions = judgeMedia(
+    {
+      ...base,
+      logoOutcome: "MATCH",
+      logoSimilarity: 0.97,
+      logoEvidence: "The logo matched the stored brand logo on the bytes.",
+      paletteDistance: 0.1,
+      paletteOutcome: "MATCH",
+      paletteEvidence: "The palette is within the brand's colours.",
+    },
+    new Map([["logo_match", approved]]),
+  );
+  const logo = decisions.find((item) => item.questionId === "logo_match");
+  assert.equal(logo?.policyVersion, "approved:logo_match.3", "the audit record keeps the policy version when there is no calibration");
+  assert.deepEqual(logo?.policy, approved.thresholds, "the audit record keeps the approved thresholds");
+  assert.equal(logo?.calibrationVersion ?? null, null, "no calibration is claimed");
+  assert.notEqual(logo?.decision, "AUTO_APPROVE", "an uncalibrated score cannot approve");
 });
