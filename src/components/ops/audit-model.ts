@@ -3,7 +3,7 @@
  * (AUDIT_PAGE_SIZE and AUDIT_EXPORT_LIMIT in observability/actions.ts). The export response also reports its cap, and
  * the note uses that value once a file exists.
  */
-import { redactSecrets } from "@/lib/meridian/observability/redact";
+import { redactSecrets } from "../../lib/meridian/observability/redact.ts";
 
 export const AUDIT_PAGE_SIZE = 50;
 export const AUDIT_EXPORT_CAP = 5_000;
@@ -18,8 +18,9 @@ export function dateRangeProblem(from: string, to: string): string | null {
 }
 
 /**
- * Metadata as one line of key and value pairs, with secrets removed and the line clipped. The server already maps each value
- * to text, and this is a second pass, so nothing that looks like a token reaches the table.
+ * Metadata as one line of key and value pairs, with the line clipped. Secrets go through redactSecrets, which removes the
+ * forms it knows: access and refresh tokens and client secrets written as key=value, bearer headers and their JSON fields.
+ * It does not remove an arbitrary value under a key such as "token", so the server must not write one into metadata.
  */
 export function auditDetailsText(metadata: Record<string, string>): string {
   const entries = Object.entries(metadata);
