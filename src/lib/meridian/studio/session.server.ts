@@ -1031,7 +1031,11 @@ export async function executeApprovedCreativePlan(
           index,
           kind: "image",
         });
-        const copy = `${productName}. ${prompt}`;
+        // The ad copy is the plan deliverable's own copy (hook, message and CTA). The generation prompt is an instruction to
+        // the provider, not copy, so the job, its judgment and the creative record never carry it. A blank copy is refused
+        // here, before any reservation is held or any provider call, because materialization cannot store a creative without it.
+        const copy = deliv.copy;
+        if (!copy.trim()) throw new Error(`CreativePlan deliverable ${deliv.id} has no copy; the image is not submitted.`);
         const itemLabel = deliv.kind === "carousel_slide" ? `carousel slide ${index + 1}` : `image ${index + 1}`;
         const imageTarget = resolveProductionTarget({
           provider: delivManifest.production!.provider,

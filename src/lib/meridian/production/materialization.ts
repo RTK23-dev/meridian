@@ -324,9 +324,8 @@ export async function materializeImageArtifact(
   if (!Number.isFinite(width) || !Number.isFinite(height)) throw new Error("Image dimensions were not recorded; refusing to materialize it.");
 
   // Quality judgment, made from the stored bytes and the brand's data as it is now. Judgments are written with deterministic
-  // ids, so a retry after a crash does not duplicate them.
+  // ids, so a retry after a crash does not duplicate them. The judged copy is the job's ad copy, never the generation prompt.
   const product = productName || manifest.brand?.product || "";
-  const copyWithProduct = `${product}. ${prompt}`;
   // The brand data the judgment compares against was captured when the image was submitted. It is never reloaded here.
   const qcBrand = input.qcBrand as QcBrandContext | undefined;
   if (!qcBrand || !qcBrand.brain || !Array.isArray(qcBrand.creatives)) {
@@ -335,7 +334,7 @@ export async function materializeImageArtifact(
   const loaded = qcBrand;
   const visual = await visualFacts(sql, ref.organizationId, ref.brandId, stored.bytes);
   const ownSemantic = await semanticNearest(
-    copyWithProduct,
+    copy,
     loaded.creatives.filter((item) => item.origin !== "competitor").map((item) => item.text),
   ).catch(() => null);
   const accounts = await accountSnapshots(sql, ref.organizationId);
@@ -353,7 +352,7 @@ export async function materializeImageArtifact(
     kind: "image",
     productName: product,
     angle: text(manifest.concept?.mechanism),
-    copy: copyWithProduct,
+    copy,
     prompt,
     mime: artifact.mimeType,
     byteSize: artifact.sizeBytes,
@@ -369,7 +368,7 @@ export async function materializeImageArtifact(
     paletteDistance: visual.measuredPalette.distance,
     paletteOutcome: visual.measuredPalette.outcome,
     paletteEvidence: visual.measuredPalette.evidence,
-    semanticSimilarity: await semanticNearest(copyWithProduct, competitorCopy(loaded)).catch(() => null),
+    semanticSimilarity: await semanticNearest(copy, competitorCopy(loaded)).catch(() => null),
     ownSemanticSimilarity: ownSemantic,
     publishing,
   });
