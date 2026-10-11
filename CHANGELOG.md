@@ -1,8 +1,9 @@
 # Changelog
 
-## Prerelease — not yet tagged
+## 0.1.0-beta.11 — not yet tagged
 
-The next beta tag will be cut after this work is verified on a fresh migrated database. Migrations 0055 to 0059 are new.
+Verified on a freshly migrated PostgreSQL database: the full test suite, typecheck, lint, build, and the browser checks (UI baseline,
+browser smoke, design-system smoke, product loop, button audit). Migrations 0055 to 0059 are new.
 
 **Action for deployments that used environment keys:** provider keys from the environment are now used only when the deployment
 opts in with the category's `*_SHARED_DEFAULT` variable (see `docs/PROVIDERS.md`). Set the opt-in, or save the key in Settings.
