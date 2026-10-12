@@ -177,7 +177,7 @@ function Library({ brandId }: { brandId: string }) {
     <div className="space-y-8">
       <UnsavedChangesGuard dirty={formsDirty} />
       <div className="max-w-2xl space-y-3">
-        <p className="text-sm font-semibold uppercase tracking-widest text-brass">Library</p>
+        <p className="eyebrow">Library</p>
         <h1 className="font-display text-4xl">Creatives this brand owns</h1>
         <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing creates paused Meta objects when you submit the form below. Nothing runs until you switch it on in Meta Ads Manager.</p>
       </div>

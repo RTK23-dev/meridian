@@ -140,7 +140,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="max-w-2xl space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-widest text-brass">Account Vault</p>
+          <p className="eyebrow">Account Vault</p>
           <h1 className="font-display text-4xl">Connected Platform Accounts</h1>
           <p className="text-muted">
             Manage multiple social pages, creator profiles, and advertising accounts for this brand.
@@ -178,7 +178,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
               <Card key={account.id} className="flex flex-col justify-between p-5 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-widest text-brass">
+                    <span className="eyebrow">
                       {account.platform.replace("_", " ")}
                     </span>
                     <Badge variant={isConnected ? "success" : "danger"}>

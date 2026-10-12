@@ -217,7 +217,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
       <UnsavedChangesGuard dirty={providerDirty} />
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-widest text-brass">Architecture & Intelligence</p>
+          <p className="eyebrow">Architecture & Intelligence</p>
           <h2 className="font-display text-2xl">AI, Research & Provider Configuration</h2>
           <p className="text-muted text-sm mt-1">
             Configure JEV decision routers, perception models, crawl budgets, production engines, and Cyclone Scout.
@@ -322,7 +322,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           {activeTab === "jev" ? (
             <div className="space-y-6">
               <DecisionEngineSelector organizationId={organizationId} canAdmin={canAdmin} />
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">TypeSafe JEV transport</p>
+              <p className="eyebrow">TypeSafe JEV transport</p>
             <div className="grid gap-4 sm:grid-cols-2">
               <p className="sm:col-span-2 text-xs text-muted">
                 TypeSafe is the decision transport. Its key is saved per workspace, and a deployment key is used only when

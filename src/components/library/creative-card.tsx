@@ -45,7 +45,7 @@ export function CreativeCard({
       )}
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h3 className="font-display text-xl">{label}</h3>
-        <span className="text-xs font-semibold uppercase tracking-widest text-brass">{item.status}</span>
+        <span className="eyebrow">{item.status}</span>
       </div>
       <p className="text-sm text-muted">{item.angle} · {item.origin} · {formatDay(item.createdAt)}</p>
       <p className="line-clamp-3 text-sm">{item.hook}</p>

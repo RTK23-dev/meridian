@@ -65,7 +65,7 @@ export function StageFlow({
                 className="flex h-full min-h-11 w-full flex-col gap-3 rounded-lg border border-border bg-surface p-4 text-left shadow-sm transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 <span className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-widest text-brass">Stage {index + 1}</span>
+                  <span className="eyebrow">Stage {index + 1}</span>
                   <span className="text-xs text-fg-muted">{CATEGORY_LABEL[stage.category]}</span>
                 </span>
                 <span className="font-semibold text-fg">{stage.label}</span>

@@ -194,7 +194,7 @@ function MarketPage({ brandId }: { brandId: string }) {
     <div className="space-y-8">
       <UnsavedChangesGuard dirty={marketFormsDirty} />
       <div className="max-w-2xl space-y-3">
-        <p className="text-sm font-semibold uppercase tracking-widest text-brass">Market</p>
+        <p className="eyebrow">Market</p>
         <h1 className="font-display text-4xl">What has actually been seen</h1>
         <p className="text-muted">
           Collect bounded public Meta video-ad records, preserve source and transcript evidence, and let JEV Research identify recurring structures. Missing media stays unavailable; no observations or outcomes are invented.
@@ -203,7 +203,7 @@ function MarketPage({ brandId }: { brandId: string }) {
       <ul className="grid gap-3 md:grid-cols-3">
         {market.adapters.map((adapter) => (
           <li key={adapter.id} className="rounded-lg border border-line bg-panel p-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-brass">{adapter.status}</p>
+            <p className="eyebrow">{adapter.status}</p>
             <h2 className="mt-2 font-display text-xl">{adapter.label}</h2>
             <p className="mt-2 text-sm text-muted">{adapter.note}</p>
             {adapter.connectionError ? <p className="mt-2 text-xs text-muted [overflow-wrap:anywhere]">{adapter.connectionError}</p> : null}
@@ -214,7 +214,7 @@ function MarketPage({ brandId }: { brandId: string }) {
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
       <Card>
         <div className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-widest text-brass">Discovery</p>
+          <p className="eyebrow">Discovery</p>
           <h2 className="mt-2 font-display text-2xl">Find public pages and posts</h2>
           <p className="mt-2 text-sm text-muted">A public page is read as untrusted text and stored as evidence. A search phrase is searched only by a keyed source with a key saved for this workspace. A run where no source ran is reported as blocked, not completed.</p>
         </div>
@@ -233,7 +233,7 @@ function MarketPage({ brandId }: { brandId: string }) {
       </Card>
       <Card>
         <div className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-widest text-brass">JEV Research</p>
+          <p className="eyebrow">JEV Research</p>
           <h2 className="mt-2 font-display text-2xl">Collect external video-ad evidence</h2>
           <p className="mt-2 text-sm text-muted">Meta Ad Library collection is capped at 100 ads and 100 MB of stored source video per run. Each video is capped at 24 MB. Media, transcript and analysis each retain their own status. Ads without a public downloadable video are not analyzed.</p>
         </div>
@@ -259,7 +259,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         <div className="mt-6">
           <h3 className="font-display text-xl">Recurring patterns</h3>
           <p className="mt-1 text-sm text-muted">Counts describe the collected corpus, not ad effectiveness or causation.</p>
-          {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="rounded border border-line p-3"><p className="text-xs font-semibold uppercase tracking-widest text-brass">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No repeated, confidence-rated ad patterns are stored.</p>}
+          {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="rounded border border-line p-3"><p className="eyebrow">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No repeated, confidence-rated ad patterns are stored.</p>}
         </div>
       </Card>
       <Card>
@@ -343,7 +343,7 @@ function MarketPage({ brandId }: { brandId: string }) {
           <ul className="mt-4 space-y-3">
             {market.observations.map((item) => (
               <li key={item.id} className="border-t border-line pt-3">
-                <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.angle}</p>
+                <p className="eyebrow">{item.angle}</p>
                 <p className="font-semibold">{item.hook}</p>
                 <p className="text-sm text-muted">{item.message}</p>
               </li>
@@ -417,7 +417,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         <ul className="mt-4 space-y-3">
           {market.documents.length === 0 ? <li className="text-muted">No pages stored.</li> : market.documents.map((doc) => (
             <li key={doc.id} className="border-t border-line pt-3">
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">{doc.status}</p>
+              <p className="eyebrow">{doc.status}</p>
               <p className="break-all text-sm">{doc.url}</p>
               {doc.error ? <p className="text-sm text-danger">{doc.error}</p> : <p className="text-sm text-muted">{doc.excerpt}</p>}
               {canEdit && doc.status === "stored" ? (
@@ -440,7 +440,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             <h3 className="font-display text-xl">Suggestions waiting</h3>
             {market.suggestions.map((item) => (
               <div key={item.id} className="rounded-md border border-line p-3">
-                <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.field}</p>
+                <p className="eyebrow">{item.field}</p>
                 <p className="mt-1">{item.value}</p>
                 {canEdit ? (
                   <div className="mt-3 flex gap-2">

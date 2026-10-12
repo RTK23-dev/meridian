@@ -131,7 +131,7 @@ function Opportunities({ brandId }: { brandId: string }) {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-3">
-          <p className="text-sm font-semibold uppercase tracking-widest text-brass">Opportunities</p>
+          <p className="eyebrow">Opportunities</p>
           <h1 className="font-display text-4xl">What to make next</h1>
           <p className="text-muted">
             {copy.opportunities.intro}

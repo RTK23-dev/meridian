@@ -84,7 +84,7 @@ function Intelligence({ brandId }: { brandId: string }) {
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-widest text-brass">
+            <span className="eyebrow">
               JEV Cognitive Engine
             </span>
             <Badge variant="info">
@@ -389,15 +389,15 @@ function Intelligence({ brandId }: { brandId: string }) {
 
           <div className="grid gap-3 md:grid-cols-3">
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">Competitor rows</p>
+              <p className="eyebrow">Competitor rows</p>
               <p className="mt-2 font-display text-3xl">{baseData.competitorCount}</p>
             </Card>
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">This brand</p>
+              <p className="eyebrow">This brand</p>
               <p className="mt-2 font-display text-3xl">{baseData.ownCount}</p>
             </Card>
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">Angle Gaps</p>
+              <p className="eyebrow">Angle Gaps</p>
               <p className="mt-2 text-sm">
                 {baseData.whitespace.length === 0
                   ? "No competitor angle is missing from this brand."
