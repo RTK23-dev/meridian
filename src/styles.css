@@ -116,7 +116,8 @@
   /* Serif for page titles (h1) and anything that opts in with .font-display. Section headings use sans. */
   h1, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
   /* Headings break onto balanced lines, so a two-line title does not leave one word on its own. */
-  h1, h2, h3 { text-wrap: balance; }
+  h1 { text-wrap: balance; }
+  h2, h3 { text-wrap: balance; }
   ::selection { background: color-mix(in srgb, var(--color-accent) 26%, transparent); color: var(--color-fg); }
   @media (max-width: 639px) {
     input, select, textarea, [role="combobox"] { font-size: 16px; }
