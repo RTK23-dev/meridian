@@ -102,16 +102,16 @@ function Intelligence({ brandId }: { brandId: string }) {
       </div>
 
       <Tabs defaultValue="account" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
-          <TabsTrigger value="account" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-3 max-w-xl">
+          <TabsTrigger value="account" className="flex items-center gap-2 sm:whitespace-nowrap">
             <Activity className="h-4 w-4" />
             <span>Account DNA</span>
           </TabsTrigger>
-          <TabsTrigger value="whitespace" className="flex items-center gap-2">
+          <TabsTrigger value="whitespace" className="flex items-center gap-2 sm:whitespace-nowrap">
             <Compass className="h-4 w-4" />
             <span>Whitespace ({whitespace.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="semantic" className="flex items-center gap-2">
+          <TabsTrigger value="semantic" className="flex items-center gap-2 sm:whitespace-nowrap">
             <Layers className="h-4 w-4" />
             <span>Semantic Memory</span>
           </TabsTrigger>

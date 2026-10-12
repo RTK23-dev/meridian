@@ -134,7 +134,7 @@ function Opportunities({ brandId }: { brandId: string }) {
           <p className="eyebrow">Opportunities</p>
           <h1 className="font-display text-4xl">What to make next</h1>
           <p className="text-muted">
-            {copy.opportunities.intro}
+            {copy.opportunities.intro}{" "}
             Make image and video variants in <Link className="font-semibold" to="/brands/$brandId/studio" params={{ brandId }}>Studio</Link>, not from a script form.
           </p>
         </div>

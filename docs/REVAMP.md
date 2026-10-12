@@ -124,7 +124,17 @@ before image. The phone images are at 390 px.
 - `.env.example` still lists the S3 variables. NORTH_STAR work item 1 retires S3 in code, settings and docs, so it is a separate change.
 - `main` still has the brain-save failure until this PR merges. The fix is in this PR, not in `main`.
 - The overview's "after" screenshot predates the progress track on the pipeline. A fresh 1280 px capture is still to do.
-- The design pass covers sign-in, the overview, the setup guide, the Library's paused card, the brand form, the shell and the
-  Factory tabs. These screens still use their earlier layouts and have not been reviewed for the same pass: Studio, Market,
-  Intelligence, Opportunities, Reviews, Learning, Calibration, Products, Connected accounts, Brand brain, Settings, Usage, Jobs,
-  Alerts, Audit log, Exports and Notification preferences. Each is its own review, so they are not part of this PR's record.
+- Every screen was reviewed at 1440 px from the UI baseline fixture. Two were changed in this pass: Opportunities had a missing
+  space between its two sentences, and the Intelligence tabs wrapped "Whitespace (0)" and "Semantic Memory" onto two lines on
+  desktop. Both are fixed. The rest need work that was not done in this PR:
+  - **Audit log** shows the generic "The request did not finish" error in the fixture. The list and count queries run cleanly
+    on a minimal PGlite schema with the empty filters the page sends, the `memberships` table exists, and the dev server log
+    holds only aborted requests. The cause is not reproduced. Open the error's Details in a running workspace to get the message.
+  - **Settings** shows the decision engine and provider keys twice: once in the Setup panel and again under "Provider keys and
+    settings". One of the two should go, and the other should link to the setup guide. Not changed here, because it moves
+    save paths that have their own tests.
+  - **Notification preferences**: "Refresh preferences" reads as plain text, not as a button.
+  - **Products** uses the brand name as its kicker and has no eyebrow, unlike most brand screens.
+  - **Market** and **Brand brain** are long single columns. Grouping them into tabs changes their save paths, so each is a
+    separate change.
+  - **Jobs and health**: the brand filter's select truncates "All brands and workspace jobs".
