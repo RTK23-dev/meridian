@@ -6,7 +6,9 @@ import { decodeVideoDna } from "./decode.ts";
 import type { ResearchSegment } from "../research/schema.ts";
 import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate, type GateVerdict } from "./gates.ts";
 import { adsMustPause } from "./kill-switch.ts";
-import { factoryStageAllowed, isFactoryStage } from "./pipeline.ts";
+import { isFactoryStage } from "./pipeline.ts";
+import { runSettingsFromStorage } from "./run-settings.ts";
+import { stageDecision } from "./stage-decision.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { recordedClaimsOf, templateFromDna, variantMatrix } from "./template.ts";
 import { buildAdTimeline } from "./timeline.ts";
@@ -30,21 +32,37 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   if (!job.brand_id) throw new Error("Factory jobs need a brand.");
   const runId = text(payload.runId);
   if (!runId) throw new Error("Factory jobs need a run id.");
-  const owned = await sql<{ id: string; status: string; niche: string; level: number }>`
-    select id, status, niche, level from factory_runs
+  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string }>`
+    select id, status, niche, level, settings from factory_runs
     where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
     limit 1
   `;
   if (!owned[0]) throw new Error("Factory run is not owned by this organization and brand.");
-  if (!factoryStageAllowed(owned[0].level, job.job_type)) return `skipped:above-level-${owned[0].level}`;
-  const paused = await killSwitchPaused(sql, job.organization_id, job.brand_id);
-  if (paused && (job.job_type === "factory.launch" || job.job_type === "factory.test")) {
-    await sql`update factory_runs set status = 'paused', error = 'Kill switch is engaged. Live ads were not started.', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id}`;
-    return "kill-switch";
+  const settings = runSettingsFromStorage(owned[0].settings, owned[0].level);
+  const approvals = await sql<{ n: number }>`
+    select count(*)::int as n from factory_approvals
+    where run_id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and stage = ${job.job_type}
+  `;
+  const decision = stageDecision({
+    automation: settings.automation,
+    stage: job.job_type,
+    approved: (approvals[0]?.n ?? 0) > 0,
+    killSwitchEngaged: await killSwitchPaused(sql, job.organization_id, job.brand_id),
+    capCents: settings.caps.totalCents > 0 ? settings.caps.totalCents : null,
+    spentCents: await meteredSpendCents(sql, job.organization_id, job.brand_id),
+  });
+  if (decision.action === "stop" || decision.action === "await_approval") {
+    // A stage that waits or is stopped is recorded on the run with its reason. It is not a failure, and the run resumes once it clears.
+    const status = decision.action === "stop" ? "paused" : "awaiting_approval";
+    await sql`
+      update factory_runs set status = ${status}, current_stage = ${job.job_type}, error = ${decision.reason}, updated_at = now()
+      where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+    `;
+    return `${decision.action === "stop" ? "stopped" : "awaiting-approval"}:${job.job_type}`;
   }
   await sql`
     update factory_runs
-    set status = case when status in ('queued', 'failed') then 'running' else status end,
+    set status = case when status in ('queued', 'failed', 'awaiting_approval', 'paused') then 'running' else status end,
         current_stage = ${job.job_type},
         error = '',
         updated_at = now()
@@ -409,6 +427,15 @@ async function gateVariants(sql: Sql, organizationId: string, brandId: string): 
     count += 1;
   }
   return count;
+}
+
+/** Spend recorded against this brand's runs, from the metered rows in factory_costs. Zero until a stage records a metered call. */
+async function meteredSpendCents(sql: Sql, organizationId: string, brandId: string): Promise<number> {
+  const rows = await sql<{ spent: number }>`
+    select coalesce(sum(cents), 0)::int as spent from factory_costs
+    where organization_id = ${organizationId} and brand_id = ${brandId}
+  `;
+  return rows[0]?.spent ?? 0;
 }
 
 async function killSwitchPaused(sql: Sql, organizationId: string, brandId: string): Promise<boolean> {

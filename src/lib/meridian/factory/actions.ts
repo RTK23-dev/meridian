@@ -4,8 +4,14 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
-import { FACTORY_GRAPH } from "./pipeline.ts";
-import { factoryRunJobs } from "./pipeline.ts";
+import { FACTORY_GRAPH, factoryRunJobs, type FactoryStage } from "./pipeline.ts";
+import {
+  automationFromFactoryLevel,
+  factoryLevelOfAutomation,
+  mergeRunSettings,
+  parseRunSettings,
+  parseStoredSettings,
+} from "./run-settings.ts";
 import {
   parseFactoryLevel,
   FACTORY_LEVEL_DETAIL,
@@ -267,26 +273,39 @@ export const startFactoryRun = createServerFn({ method: "POST" })
       brandId: clip(body.brandId, 80, "Brand", true),
       niche: clip(body.niche, 80, "Niche", true),
       level,
+      // The run's own settings. Absent, the run takes the brand's defaults and the automation its level implies.
+      settings: body.settings,
     };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     refuseIfLimited(modelLimit, context.userId);
     const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "member");
-    const settings = await sql<{ ceiling: number }>`
+    const brandRows = await sql<{ run_defaults: string }>`
+      select run_defaults from brands where id = ${data.brandId} and organization_id = ${organizationId} limit 1
+    `;
+    const brandDefaults = parseStoredSettings(brandRows[0]?.run_defaults);
+    const parsed = data.settings === undefined
+      ? { ok: true as const, value: mergeRunSettings(brandDefaults, { automation: automationFromFactoryLevel(data.level) }) }
+      : parseRunSettings(data.settings, mergeRunSettings(brandDefaults, null));
+    if (!parsed.ok) throw new Error(parsed.error);
+    const effective = parsed.value;
+    // The owner ceiling and the verified round trip apply to the mode through the level it is held to.
+    const level = factoryLevelOfAutomation(effective.automation);
+    const ceilingRows = await sql<{ ceiling: number }>`
       select ceiling from factory_settings where organization_id = ${organizationId} and brand_id = ${data.brandId} limit 1
     `;
-    const ceiling = (settings[0]?.ceiling ?? 1) as FactoryLevel;
-    if (data.level > ceiling) throw new Error("That autopilot level is above the owner ceiling for this brand.");
-    if (data.level > 1) {
-      await assertAutopilotLevelAllowed(sql, data.brandId, data.level);
+    const ceiling = (ceilingRows[0]?.ceiling ?? 1) as FactoryLevel;
+    if (level > ceiling) throw new Error("That automation is above the owner ceiling for this brand.");
+    if (level > 1) {
+      await assertAutopilotLevelAllowed(sql, data.brandId, level);
     }
     const runId = crypto.randomUUID();
     await sql`
-      insert into factory_runs (id, organization_id, brand_id, niche, level, status, current_stage, created_by)
-      values (${runId}, ${organizationId}, ${data.brandId}, ${data.niche}, ${data.level}, 'queued', 'factory.discover', ${context.userId})
+      insert into factory_runs (id, organization_id, brand_id, niche, level, status, current_stage, created_by, settings)
+      values (${runId}, ${organizationId}, ${data.brandId}, ${data.niche}, ${level}, 'queued', 'factory.discover', ${context.userId}, ${JSON.stringify(effective)})
     `;
-    const jobs = factoryRunJobs({ organizationId, brandId: data.brandId, runId, niche: data.niche, level: data.level });
+    const jobs = factoryRunJobs({ organizationId, brandId: data.brandId, runId, niche: data.niche });
     const idByKey = new Map<string, string>();
     for (const job of jobs) {
       const id = crypto.randomUUID();
@@ -303,6 +322,66 @@ export const startFactoryRun = createServerFn({ method: "POST" })
       `;
     }
     return { runId, status: "queued" as const, jobs: jobs.length };
+  });
+
+const APPROVABLE_STAGES = ["factory.produce", "factory.launch", "factory.test", "factory.review"] as const;
+
+/**
+ * A person's approval of one stage that waits: produce, launch, test or review. It is recorded for the run and stage, and the
+ * stage and every stage after it are queued again in order, so the run carries on from the point it waited. Only a member of the
+ * brand can approve, and a stage can be approved once per run.
+ */
+export const approveFactoryStage = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    const stage = typeof body.stage === "string" ? body.stage : "";
+    if (!(APPROVABLE_STAGES as readonly string[]).includes(stage)) {
+      throw new Error("Only produce, launch, test and review wait for an approval.");
+    }
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      runId: clip(body.runId, 80, "Run", true),
+      stage: stage as FactoryStage,
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "member");
+    const runs = await sql<{ niche: string; status: string }>`
+      select niche, status from factory_runs
+      where id = ${data.runId} and organization_id = ${organizationId} and brand_id = ${data.brandId}
+      limit 1
+    `;
+    if (!runs[0]) throw new Error("That factory run is not in this brand.");
+    if (runs[0].status === "succeeded" || runs[0].status === "failed") {
+      throw new Error("This run has finished. Start a new run to approve more work.");
+    }
+    const approvalId = crypto.randomUUID();
+    const recorded = await sql<{ id: string }>`
+      insert into factory_approvals (id, organization_id, brand_id, run_id, stage, approved_by)
+      values (${approvalId}, ${organizationId}, ${data.brandId}, ${data.runId}, ${data.stage}, ${context.userId})
+      on conflict (run_id, stage) do nothing
+      returning id
+    `;
+    if (!recorded[0]) throw new Error("This stage is already approved for this run.");
+    const remaining = FACTORY_GRAPH.slice(FACTORY_GRAPH.findIndex((spec) => spec.type === data.stage));
+    const idByKey = new Map<string, string>();
+    for (const spec of remaining) {
+      const id = crypto.randomUUID();
+      const key = `factory:${data.brandId}:${data.runId}:${spec.type}:approval:${approvalId}`;
+      idByKey.set(key, id);
+      const dependsOnKey = spec.type === data.stage ? null : `factory:${data.brandId}:${data.runId}:${spec.dependsOn}:approval:${approvalId}`;
+      await sql`
+        insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload, max_attempts, depends_on, priority)
+        values (
+          ${id}, ${organizationId}, ${data.brandId}, ${spec.type}, ${key}, 'queued',
+          ${JSON.stringify({ organizationId, brandId: data.brandId, runId: data.runId, niche: runs[0]!.niche, stage: spec.type })},
+          ${spec.maxAttempts}, ${dependsOnKey ? idByKey.get(dependsOnKey) ?? "" : ""}, ${20 + FACTORY_GRAPH.indexOf(spec)}
+        )
+        on conflict (organization_id, idempotency_key) do nothing
+      `;
+    }
+    return { runId: data.runId, stage: data.stage, requeued: remaining.length };
   });
 
 export const setFactoryControls = createServerFn({ method: "POST" })

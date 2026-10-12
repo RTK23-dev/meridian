@@ -26,12 +26,10 @@ test("a factory run is a job graph with tenant-scoped idempotency", () => {
   assert.ok(jobs.every((job) => job.payload.organizationId === "org-1"));
   assert.ok(isFactoryStage("factory.gate"));
   assert.equal(isFactoryStage("video.generate"), false);
-  const suggest = factoryRunJobs({ organizationId: "org-1", brandId: "brand-1", runId: "run-2", niche: "skincare", level: 0 });
-  assert.ok(suggest.some((job) => job.jobType === "factory.template"));
-  assert.ok(suggest.every((job) => !["factory.produce", "factory.gate", "factory.review", "factory.launch"].includes(job.jobType)));
-  const produce = factoryRunJobs({ organizationId: "org-1", brandId: "brand-1", runId: "run-3", niche: "skincare", level: 1 });
-  assert.ok(produce.some((job) => job.jobType === "factory.review"));
-  assert.ok(produce.every((job) => !["factory.launch", "factory.test", "factory.learn"].includes(job.jobType)));
+  // Every mode gets the same graph. The automation mode decides where a run waits, and the worker enforces it.
+  const manual = factoryRunJobs({ organizationId: "org-1", brandId: "brand-1", runId: "run-2", niche: "skincare" });
+  assert.equal(manual.length, 13);
+  assert.ok(manual.some((job) => job.jobType === "factory.launch"), "a manual run can still reach launch after approval");
   assert.equal(factoryStageAllowed(0, "factory.produce"), false);
   assert.equal(factoryStageAllowed(1, "factory.review"), true);
   assert.throws(() => factoryRunJobs({ organizationId: "", brandId: "b", runId: "r", niche: "x" }), /organization/);
