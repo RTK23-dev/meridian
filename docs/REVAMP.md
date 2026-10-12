@@ -51,7 +51,12 @@ now uses `PausedExplainer` to say so in three steps. If an automatic switch-on i
   light behind the page.
 - Motion is limited to three entrances: a short rise for cards and steps, a fade for page changes, and a staggered loop on the
   sign-in screen. Progress bars and hover lifts use a transition. `prefers-reduced-motion` shortens every one of them to 0.01ms,
-  which lands on the final state.
+  and zeroes the animation delays too, so a staggered element is never held hidden. The overview's pipeline stages have no
+  entrance: a fade on data that arrives late ran during the UI baseline's contrast scan and failed it.
+- Section labels on the brand screens use the shared `.eyebrow` class (small, muted, uppercase) instead of bold brass caps. That
+  is 27 labels across 13 files. The Factory tabs have the same spacing below the tab bar as Settings.
+- The overview's advertising pipeline has one progress track above its ten stages. Its percent comes from `stageProgressPercent`,
+  which is tested.
 - Light and dark themes keep the existing token pairs.
 
 ## Removed
@@ -100,6 +105,8 @@ before image. The phone images are at 390 px.
 - Overview with a brand: `before-overview.png` → `after-overview.png`
 - Library, publishing as paused ads: `before-library-paused.png` → `after-library-paused.png`
 - Setup guide: `after-setup-desktop.png`, and `after-setup-phone.png`
+- Factory line, with the tab spacing and the quieter labels: `before-factory.png` → `after-factory.png` (1440 px, from the UI
+  baseline fixture)
 
 ## What was run for this change
 
@@ -116,3 +123,8 @@ before image. The phone images are at 390 px.
 
 - `.env.example` still lists the S3 variables. NORTH_STAR work item 1 retires S3 in code, settings and docs, so it is a separate change.
 - `main` still has the brain-save failure until this PR merges. The fix is in this PR, not in `main`.
+- The overview's "after" screenshot predates the progress track on the pipeline. A fresh 1280 px capture is still to do.
+- The design pass covers sign-in, the overview, the setup guide, the Library's paused card, the brand form, the shell and the
+  Factory tabs. These screens still use their earlier layouts and have not been reviewed for the same pass: Studio, Market,
+  Intelligence, Opportunities, Reviews, Learning, Calibration, Products, Connected accounts, Brand brain, Settings, Usage, Jobs,
+  Alerts, Audit log, Exports and Notification preferences. Each is its own review, so they are not part of this PR's record.
