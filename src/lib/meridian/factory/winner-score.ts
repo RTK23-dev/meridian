@@ -1,8 +1,14 @@
-/** Public-signal Winner Score. Weights are fitted later on the brand's own account. */
+/**
+ * Public-signal Winner Score. Weights are fitted later on the brand's own account.
+ *
+ * A component the evidence does not contain contributes nothing: it is not replaced by a default. The score then widens its
+ * range and names what is missing, so an unknown never reads as a measured value.
+ */
 
 export type WinnerEvidence = {
   daysRunning: number;
-  stillRunning: boolean;
+  /** Null when the source did not say whether the ad was still delivering at its last sighting. */
+  stillRunning: boolean | null;
   iterationCount: number;
   countries: number;
   platforms: number;
@@ -33,7 +39,9 @@ function clamp01(value: number): number {
   return value;
 }
 
-function survivalScore(days: number, stillRunning: boolean): number {
+/** Unknown delivery earns no survival credit. Known delivery earns the days score, less a third if the ad has stopped. */
+function survivalScore(days: number, stillRunning: boolean | null): number {
+  if (stillRunning == null) return 0;
   const daysScore = 1 - Math.exp(-Math.max(0, days) / 30);
   return clamp01(daysScore * (stillRunning ? 1 : 0.65));
 }
@@ -50,7 +58,7 @@ export function winnerScore(input: WinnerEvidence, weights = DEFAULT_WEIGHTS): W
   const survival = survivalScore(input.daysRunning, input.stillRunning);
   const iteration = iterationScore(input.iterationCount);
   const spread = spreadScore(input.countries, input.platforms);
-  const advertiser = input.advertiserSurvivorRate == null ? 0.4 : clamp01(input.advertiserSurvivorRate);
+  const advertiser = input.advertiserSurvivorRate == null ? 0 : clamp01(input.advertiserSurvivorRate);
   const quality = input.creativeQuality == null ? 0 : Math.min(0.6, clamp01(input.creativeQuality));
   const raw =
     survival * weights.survival +
@@ -59,12 +67,18 @@ export function winnerScore(input: WinnerEvidence, weights = DEFAULT_WEIGHTS): W
     advertiser * weights.advertiser +
     quality * weights.quality;
   const missing: string[] = [];
+  if (input.stillRunning == null) missing.push("delivery status");
   if (input.advertiserSurvivorRate == null) missing.push("advertiser track record");
   if (input.creativeQuality == null) missing.push("creative quality");
   const uncertainty = 0.08 + missing.length * 0.06 + (input.daysRunning < 7 ? 0.08 : 0);
   const score = Math.round(clamp01(raw) * 1000) / 1000;
+  const runLength = `ran ${Math.round(input.daysRunning)} days`;
   const evidence: string[] = [
-    input.stillRunning ? `live ${Math.round(input.daysRunning)} days` : `ran ${Math.round(input.daysRunning)} days, now off`,
+    input.stillRunning == null
+      ? `${runLength}; delivery at its last sighting not reported`
+      : input.stillRunning
+        ? `${runLength}; still delivering at its last sighting`
+        : `${runLength}; stopped`,
     `${input.iterationCount} variant${input.iterationCount === 1 ? "" : "s"}`,
     `${input.countries} countr${input.countries === 1 ? "y" : "ies"}`,
     `${input.platforms} platform${input.platforms === 1 ? "" : "s"}`,

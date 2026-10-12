@@ -197,35 +197,66 @@ async function decodeStoredAds(sql: Sql, organizationId: string, brandId: string
   return count;
 }
 
+/** The delivery facts the collector stored with an ad. A row without the stop-time key predates it, so nothing is known. */
+type Delivery = { stillRunning: boolean | null; countries: string[] };
+
+function deliveryOf(sourceMetrics: string): Delivery {
+  let record: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(sourceMetrics) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) record = parsed as Record<string, unknown>;
+  } catch {
+    record = {};
+  }
+  if (!("stoppedAt" in record)) return { stillRunning: null, countries: [] };
+  const stoppedAt = typeof record.stoppedAt === "string" && record.stoppedAt ? record.stoppedAt : null;
+  const countries = Array.isArray(record.countries) ? record.countries.filter((item): item is string => typeof item === "string") : [];
+  return { stillRunning: stoppedAt === null, countries };
+}
+
 async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string): Promise<number> {
   const ads = await sql<{
     id: string;
+    page_id: string;
     captured_at: unknown;
     published_at: unknown;
     platforms: string;
-    analysis_status: string;
+    source_metrics: string;
   }>`
-    select id, captured_at, published_at, platforms, analysis_status
+    select id, page_id, captured_at, published_at, platforms, source_metrics
     from research_ads
     where organization_id = ${organizationId} and brand_id = ${brandId}
     order by captured_at desc
     limit 80
   `;
-  const now = new Date().toISOString();
+  const delivered = new Map(ads.map((ad) => [ad.id, deliveryOf(ad.source_metrics)]));
+  // Variants and track record are counted per advertiser page, from the ads this brand has collected.
+  const variantsByPage = new Map<string, number>();
+  const knownByPage = new Map<string, number>();
+  const runningByPage = new Map<string, number>();
+  for (const ad of ads) {
+    variantsByPage.set(ad.page_id, (variantsByPage.get(ad.page_id) ?? 0) + 1);
+    const stillRunning = delivered.get(ad.id)?.stillRunning;
+    if (stillRunning == null) continue;
+    knownByPage.set(ad.page_id, (knownByPage.get(ad.page_id) ?? 0) + 1);
+    if (stillRunning) runningByPage.set(ad.page_id, (runningByPage.get(ad.page_id) ?? 0) + 1);
+  }
   let count = 0;
   for (const ad of ads) {
+    const facts = delivered.get(ad.id) ?? { stillRunning: null, countries: [] };
+    const known = knownByPage.get(ad.page_id) ?? 0;
     const timeline = buildAdTimeline({
       sightings: [
         {
           seenAt: String(ad.published_at || ad.captured_at),
           platforms: parseList(ad.platforms),
-          countries: [],
+          countries: facts.countries,
           reachLow: null,
           reachHigh: null,
-          stillRunning: true,
+          stillRunning: facts.stillRunning,
         },
       ],
-      now,
+      siblingVariants: variantsByPage.get(ad.page_id) ?? 1,
     });
     if (!timeline) continue;
     const scored = winnerScore({
@@ -234,8 +265,10 @@ async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string)
       iterationCount: Math.max(1, timeline.siblingVariants),
       countries: timeline.countries.length,
       platforms: timeline.platforms.length,
-      advertiserSurvivorRate: null,
-      creativeQuality: ad.analysis_status === "analyzed" ? 0.45 : null,
+      // Of this advertiser's ads whose delivery the source reported, the share still delivering. Unknown when none are.
+      advertiserSurvivorRate: known > 0 ? (runningByPage.get(ad.page_id) ?? 0) / known : null,
+      // No quality measure is stored for an ad yet, so quality is unknown, not a fixed value.
+      creativeQuality: null,
     });
     const id = `tl:${brandId}:${ad.id}`;
     await sql`

@@ -81,10 +81,11 @@ test("ad timelines refuse to invent first-seen when no sighting exists", () => {
       { seenAt: "2026-10-01T00:00:00.000Z", platforms: ["instagram"], countries: ["US", "CA"], reachLow: 2000, reachHigh: 8000, stillRunning: true },
     ],
     siblingVariants: 3,
-    now: "2026-10-07T00:00:00.000Z",
   });
   assert.ok(timeline);
-  assert.equal(timeline.daysRunning, 36);
+  // Measured between the two sightings, not up to today: nothing after the last sighting is known.
+  assert.equal(timeline.daysRunning, 30);
+  assert.equal(timeline.stillRunning, true);
   assert.deepEqual(timeline.platforms.sort(), ["facebook", "instagram"]);
   assert.equal(timeline.siblingVariants, 3);
 });

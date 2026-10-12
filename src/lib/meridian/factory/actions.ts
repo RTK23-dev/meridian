@@ -15,8 +15,6 @@ import {
 } from "./autopilot.ts";
 import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
-import { winnerScore } from "./winner-score.ts";
-import { buildAdTimeline } from "./timeline.ts";
 import { trendReport } from "./trends.ts";
 import { weeklyStrategistReport } from "./report.ts";
 import { hypitVideoEngine } from "@/lib/meridian/video/engine";
@@ -159,38 +157,17 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
           evidence: parseList(stored.evidence),
         };
       }
-      const timeline = buildAdTimeline({
-        sightings: [
-          {
-            seenAt: String(ad.published_at || ad.captured_at),
-            platforms: parseList(ad.platforms),
-            countries: [],
-            reachLow: null,
-            reachHigh: null,
-            stillRunning: true,
-          },
-        ],
-        now: new Date().toISOString(),
-      });
-      const score = winnerScore({
-        daysRunning: timeline?.daysRunning ?? 0,
-        stillRunning: true,
-        iterationCount: 1,
-        countries: timeline?.countries.length ?? 0,
-        platforms: timeline?.platforms.length ?? 0,
-        advertiserSurvivorRate: null,
-        creativeQuality: ad.analysis_status === "analyzed" ? 0.45 : null,
-      });
+      // An ad with no stored grade has no score. The board says so, rather than scoring it with assumed values.
       return {
         id: ad.id,
         advertiser: ad.advertiser,
         copy: ad.copy.slice(0, 180),
         mediaStatus: ad.media_status,
         analysisStatus: ad.analysis_status,
-        score: score.score,
-        low: score.low,
-        high: score.high,
-        evidence: score.evidence,
+        score: null,
+        low: null,
+        high: null,
+        evidence: ["Not graded yet. The Grade stage scores it from the sightings the collector stored."],
       };
     });
     const thisWeek = new Date().toISOString().slice(0, 10);
@@ -209,10 +186,11 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
     });
     const report = weeklyStrategistReport({
       week: thisWeek,
-      winners: winners.map((item) => ({
+      // Only graded ads can be winners. An ad with no stored grade has no score to report.
+      winners: winners.flatMap((item) => item.score == null || item.low == null || item.high == null ? [] : [{
         label: item.advertiser,
         score: { score: item.score, low: item.low, high: item.high, evidence: item.evidence, components: {} },
-      })),
+      }]),
       trends,
       queuedTemplates: [],
     });

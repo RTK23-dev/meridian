@@ -170,7 +170,11 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 {board.winners.map((item) => (
                   <li key={item.id} className="rounded-md border border-line p-4">
                     <p className="eyebrow">{item.advertiser}</p>
-                    <p className="font-display text-xl">Score {item.score.toFixed(2)} <span className="text-sm font-normal text-muted">range {item.low.toFixed(2)}–{item.high.toFixed(2)}</span></p>
+                    {item.score == null || item.low == null || item.high == null ? (
+                      <p className="font-display text-xl text-muted">Not graded yet</p>
+                    ) : (
+                      <p className="font-display text-xl tabular-nums">Score {item.score.toFixed(2)} <span className="text-sm font-normal text-muted">range {item.low.toFixed(2)}–{item.high.toFixed(2)}</span></p>
+                    )}
                     <p className="text-sm text-muted">{item.evidence.join(" · ")}</p>
                     {item.copy ? <p className="mt-2 text-sm">{item.copy}</p> : null}
                   </li>
