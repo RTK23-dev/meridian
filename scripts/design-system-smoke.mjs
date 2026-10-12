@@ -4,6 +4,7 @@ import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
+import { settleAnimations } from "./page-settle.mjs";
 
 const url = checkedUrl(process.argv[2] || "http://127.0.0.1:8080/_design");
 const outputRoot = resolve(process.env.DESIGN_SMOKE_OUTPUT_ROOT || process.cwd());
@@ -22,6 +23,7 @@ try {
       if (!(await page.getByRole("heading", { name: "Design system", exact: true }).count())) {
         throw new Error("The development-only design system route did not render.");
       }
+      await settleAnimations(page);
       const { violations } = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
         .analyze();
