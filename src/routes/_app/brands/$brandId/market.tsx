@@ -35,6 +35,15 @@ import { ResearchRunPanel } from "@/components/market/research-run-panel";
 import { useResearchFilters } from "@/components/market/use-research-filters";
 import type { ResearchAdRow } from "@/components/market/research-model";
 
+const MARKET_SECTIONS = [
+  { id: "market-discovery", label: "Discovery" },
+  { id: "market-collect", label: "Collect evidence" },
+  { id: "market-analyzed", label: "Analyzed ads" },
+  { id: "market-competitors", label: "Competitors" },
+  { id: "market-observed", label: "Observed creatives" },
+  { id: "market-public-page", label: "Public page" },
+] as const;
+
 export const Route = createFileRoute("/_app/brands/$brandId/market")({ staticData: { pageTitle: "Market" }, component: Page });
 
 const NO_ADS: ResearchAdRow[] = [];
@@ -212,7 +221,10 @@ function MarketPage({ brandId }: { brandId: string }) {
       </ul>
       {note ? <ErrorNotice>{note}</ErrorNotice> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
-      <Card>
+      <nav aria-label="Market sections" className="flex flex-wrap gap-2 text-sm">
+        {MARKET_SECTIONS.map((section) => <a key={section.id} href={`#${section.id}`} className="min-h-11 rounded-md border border-border bg-surface px-3 py-2 font-semibold text-fg hover:bg-surface-2">{section.label}</a>)}
+      </nav>
+      <Card id="market-discovery">
         <div className="max-w-3xl">
           <p className="eyebrow">Discovery</p>
           <h2 className="mt-2 font-display text-2xl">Find public pages and posts</h2>
@@ -262,7 +274,7 @@ function MarketPage({ brandId }: { brandId: string }) {
           {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="rounded border border-line p-3"><p className="eyebrow">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No repeated, confidence-rated ad patterns are stored.</p>}
         </div>
       </Card>
-      <Card>
+      <Card id="market-analyzed">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-2xl">Analyzed ads</h2><p className="text-sm text-muted">Showing saved source, media, transcript, and analysis states.</p></div><div role="group" className="flex gap-2" aria-label="Research display mode"><Button type="button" variant={researchView === "gallery" ? "primary" : "secondary"} aria-pressed={researchView === "gallery"} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant={researchView === "table" ? "primary" : "secondary"} aria-pressed={researchView === "table"} onClick={() => setResearchView("table")}>Table</Button></div></div>
         <div className="mt-4">
           <ResearchFilterBar
@@ -278,7 +290,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         {researchFilters.visible.length ? <div className="mt-4"><ResearchList view={researchView} ads={researchFilters.visible} onView={setSelectedAdId} /></div> : <p className="mt-4 text-sm text-muted">No ads match these filters.</p>}
         <ResearchDetailSheet ad={selectedAd} onOpenChange={(open) => { if (!open) setSelectedAdId(null); }} />
       </Card>
-      <Card>
+      <Card id="market-competitors">
         <h2 className="font-display text-2xl">Competitors</h2>
         {market.competitors.filter((item) => item.status === "confirmed").length === 0 ? (
           <p className="mt-3 text-muted">No competitors yet. Add one you actually compete with.</p>
@@ -336,7 +348,7 @@ function MarketPage({ brandId }: { brandId: string }) {
           </form>
         ) : null}
       </Card>
-      <Card>
+      <Card id="market-observed">
         <h2 className="font-display text-2xl">Observed creatives</h2>
         <p className="mt-2 text-sm text-muted">These rows are the only competitor evidence the ranker will use.</p>
         {market.observations.length === 0 ? <p className="mt-3 text-muted">No observations stored.</p> : (
@@ -398,7 +410,7 @@ function MarketPage({ brandId }: { brandId: string }) {
           </form>
         ) : null}
       </Card>
-      <Card>
+      <Card id="market-public-page">
         <h2 className="font-display text-2xl">Public page</h2>
         <p className="mt-2 text-sm text-muted">The text is stored as untrusted data. It does not change the brand brain unless you accept a suggestion.</p>
         {canEdit ? (
