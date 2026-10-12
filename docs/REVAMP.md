@@ -103,6 +103,13 @@ so the line says that and points to Connected accounts.
 - **Setup against a live Meta, YouTube, TikTok or Google account** was not run. Each key is the owner's to verify (NORTH_STAR
   section 7).
 
+## Decision made with the owner: Agent Reach
+
+The owner asked for Agent Reach to be added as a recommended optional tool, after the conflict with NORTH_STAR decision 1 and the sourcing
+rules was put to them. It is vendored under `vendor/agent-reach/` (MIT, pinned in its UPSTREAM.md), run only as an operator tool, and
+documented in `docs/AGENT_REACH.md`. Its cookie-based channels stay on the operator's host and are never read by Meridian. Meridian does
+not configure proxies for it, and it is not used to get past a bot check in Meridian's own sources.
+
 ## Open questions for the owner
 
 - Should a site that answers with a bot check be retried later, or kept as a permanent "blocked by site" note?

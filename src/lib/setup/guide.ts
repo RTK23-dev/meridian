@@ -64,7 +64,7 @@ export const GUIDE_STEPS: readonly Definition[] = [
   {
     id: "sources",
     title: "Pick where examples come from",
-    what: "Meridian learns from ads and posts that already work in your niche. Public web pages and your own uploads need no key. Ad libraries and video platforms need a key that you save on this page.",
+    what: "Meridian learns from ads and posts that already work in your niche. Public web pages and your own uploads need no key. Ad libraries and video platforms need a key that you save on this page. For research beyond these, Agent Reach is a recommended, optional tool an operator runs on the host (docs/AGENT_REACH.md).",
     why: "Better examples give better grades. With no source at all, there is nothing to compare against.",
     required: false,
   },
