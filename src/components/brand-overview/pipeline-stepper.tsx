@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Circle, CircleCheck, CircleDot, Lock, type LucideIcon } from "lucide-react";
-import { doneCount, type PipelineStage, type StageState } from "./pipeline";
+import { doneCount, stageProgressPercent, type PipelineStage, type StageState } from "./pipeline";
 
 const STATE: Record<StageState, { label: string; icon: LucideIcon; tone: string }> = {
   done: { label: "Done", icon: CircleCheck, tone: "text-success" },
@@ -11,18 +11,33 @@ const STATE: Record<StageState, { label: string; icon: LucideIcon; tone: string 
 
 /** Ten stages from market to learning. Each one links to its screen and names its state in words and in an icon. */
 export function PipelineStepper({ brandId, stages }: { brandId: string; stages: PipelineStage[] }) {
+  const done = doneCount(stages);
+  const percent = stageProgressPercent(stages);
   return (
     <section aria-labelledby="pipeline-title" className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <h2 id="pipeline-title" className="text-section font-semibold text-fg">Advertising pipeline</h2>
-        <p className="text-sm text-fg-muted">{doneCount(stages)} of {stages.length} stages done</p>
+        <p className="text-sm text-fg-muted">{done} of {stages.length} stages done</p>
+      </div>
+      {/* One thin track above the stages, so progress reads at a glance. The width eases in when a stage changes state. */}
+      <div
+        role="progressbar"
+        aria-label="Pipeline progress"
+        aria-valuemin={0}
+        aria-valuemax={stages.length}
+        aria-valuenow={done}
+        aria-valuetext={`${done} of ${stages.length} stages done`}
+        className="h-1.5 overflow-hidden rounded-full bg-border"
+      >
+        <div className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
       </div>
       <ol className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
         {stages.map((stage, index) => {
           const presentation = STATE[stage.state];
           const Icon = presentation.icon;
+          // The stages rise in one after another. The delay is capped, so the last stage is settled well inside the first second.
           return (
-            <li key={stage.key}>
+            <li key={stage.key} className="stagger-in" style={{ animationDelay: `${Math.min(index, 3) * 40}ms` }}>
               <Link
                 to={stage.to}
                 params={{ brandId }}

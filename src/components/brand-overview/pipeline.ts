@@ -200,3 +200,9 @@ export function missingItems(input: { brain: BrainCompleteness; counts: Pipeline
 export function doneCount(stages: PipelineStage[]): number {
   return stages.filter((stage) => stage.state === "done").length;
 }
+
+/** Whole-number share of the stages that are done, for the progress track. An empty pipeline is 0, not NaN. */
+export function stageProgressPercent(stages: PipelineStage[]): number {
+  if (!stages.length) return 0;
+  return Math.round((doneCount(stages) / stages.length) * 100);
+}

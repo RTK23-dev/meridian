@@ -165,7 +165,8 @@
 /* Reduced motion: every CSS transition and animation, including the ones in new components, is cut to 0.01ms. JS-driven
    chart animation is turned off in the chart components, which read the same media query. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  /* The delay goes too. A staggered entrance holds its element at opacity 0 until its delay ends, so a delay would hide content. */
+  *, *::before, *::after { animation-delay: 0ms !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
 /* More contrast: stronger dividers, text, accent and focus colour. The light block is scoped to :root:not(.dark), so the
