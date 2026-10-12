@@ -7,7 +7,7 @@ export type PlatformId = "instagram" | "facebook" | "youtube" | "tiktok";
 export type AspectRatio = "9:16" | "1:1" | "16:9" | "4:5";
 
 /** The organic platforms that have a connected-account publisher. */
-export type OrganicPlatform = "instagram" | "facebook" | "youtube";
+export type OrganicPlatform = "instagram" | "facebook" | "youtube" | "tiktok";
 
 /**
  * A workspace's connected organic account, resolved from `platform_accounts` and its encrypted `credential_vault` token by

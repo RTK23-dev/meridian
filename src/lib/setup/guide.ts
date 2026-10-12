@@ -78,7 +78,7 @@ export const GUIDE_STEPS: readonly Definition[] = [
   {
     id: "publish",
     title: "Publish your work (optional)",
-    what: "Two kinds, and you choose either or both. Regular posts go to a Facebook Page, Instagram or YouTube account you connect on Connected accounts. Paid ads go to Meta or TikTok, where Meridian creates them paused, so nothing spends until you switch them on in that platform.",
+    what: "Two kinds, and you choose either or both. Regular posts go to a Facebook Page, Instagram, YouTube or TikTok account you connect on Connected accounts. TikTok posts stay private until TikTok approves the app. Paid ads go to Meta or TikTok, where Meridian creates them paused, so nothing spends until you switch them on in that platform.",
     why: "Only needed to publish. Until then, the export package holds everything Meridian made, and you can post it yourself.",
     required: false,
   },
@@ -144,7 +144,7 @@ function detailOf(id: GuideStepId, facts: GuideFacts, done: boolean | null): str
     case "publish":
       return done
         ? "A paid-ad key is in use. Paid ads are created paused, and you switch them on in the platform. Regular posts depend on the accounts you connect on Connected accounts."
-        : "Not set up. Regular posts need a Facebook Page, Instagram or YouTube account. Paid ads need a Meta or TikTok key. Nothing is published until you choose a channel, and exports still work.";
+        : "Not set up. Regular posts need a Facebook Page, Instagram, YouTube or TikTok account. Paid ads need a Meta or TikTok key. Nothing is published until you choose a channel, and exports still work.";
     case "storage":
       return done
         ? "Google Drive is connected on the server."

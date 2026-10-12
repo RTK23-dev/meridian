@@ -17,7 +17,7 @@ It sits beside NORTH_STAR.md. Where the two disagree on direction, NORTH_STAR.md
    - **Pick where examples come from.** Public web pages and your own files need no key. Meta Ad Library, YouTube and search
      take a key each. The rest sit under "More connectors".
    - **Make images and video.** Optional. Gemini and Hypit rows, with a note that uploads cover the gap.
-   - **Publish your work.** Optional. Regular posts go to a Facebook Page, Instagram or YouTube account. Paid ads go to Meta or TikTok, created paused, and Meridian has no switch to turn them on. Either one completes the step.
+   - **Publish your work.** Optional. Regular posts go to a Facebook Page, Instagram, YouTube or TikTok account. Paid ads go to Meta or TikTok, created paused, and Meridian has no switch to turn them on. Either one completes the step.
    - **Connect Google Drive.** Optional. A server setting, so it names the variables rather than offering a form.
 4. **Settings → General** still shows every provider row with its reason. The guide links there.
 
@@ -52,8 +52,19 @@ added later, this text must change with it.
 Each creative in the Library has a **Publish** action for members. It opens the same dialog as Studio, which lists the connected
 destinations in two groups: regular posts (Instagram Reels, Facebook Page, YouTube Shorts) and paid ads. A person chooses one or
 more, and the dialog shows a receipt for each. Only connected destinations can be chosen. Nothing is published from a card until
-the person confirms in the dialog. TikTok regular posts are not in this build: they need a TikTok Content Posting adapter, which
-does not exist yet, so the dialog does not offer them.
+the person confirms in the dialog.
+
+**TikTok regular video** (`distribution/tiktok.ts`, channel `tiktok-organic`) uses TikTok's Content Posting API: the post is
+initialised, the MP4 or MOV is sent in one chunk (64 MB at most), then the status is checked. The rules it follows:
+
+- It is sent as private (`SELF_ONLY`) until TikTok approves the app for public posting. The dialog says so.
+- It is reported as published only when TikTok reports `PUBLISH_COMPLETE`. While TikTok is still processing, the status is
+  checked again, up to 12 times about 5 seconds apart. Any other state is reported as unconfirmed, with TikTok's own state,
+  and the person checks the account before trying again. An inbox delivery is not checked again.
+- Scheduling is refused for TikTok. A saved token must grant `video.publish`, or the account shows as not connected with
+  that reason. The account is added on Connected accounts with its TikTok account ID and that token.
+- Nothing has been run against TikTok's live service. That needs an approved app and a connected account. The tests use a
+  scripted transport.
 
 The deployment status line on Integrations no longer reads "No live publishing API is implemented". Publishing is set per channel,
 so the line says that and points to Connected accounts.
@@ -130,6 +141,10 @@ before image. The phone images are at 390 px.
 
 ## What was run for this change
 
+- For the TikTok channel and the Market section bar (the latest commits): `npm run typecheck` passes, and `npm run lint` has
+  0 errors and the same 6 warnings as before. The tests were not run here, because the owner asked that test scripts not be
+  run in this environment. `tiktok.test.ts` and the change to `distribution.test.ts` run in CI.
+- Earlier run, before the TikTok channel:
 - `npm run typecheck`: passes.
 - `npm run lint`: 0 errors. The 6 warnings are in files this change does not touch.
 - `npm test`: 1,952 tests, 1,911 pass, 0 fail, 41 skipped. The skipped tests need `MERIDIAN_PG_TEST_URL` (a Postgres admin
@@ -150,11 +165,12 @@ before image. The phone images are at 390 px.
   - **Audit log** shows the generic "The request did not finish" error in the fixture. The list and count queries run cleanly
     on a minimal PGlite schema with the empty filters the page sends, the `memberships` table exists, and the dev server log
     holds only aborted requests. The cause is not reproduced. Open the error's Details in a running workspace to get the message.
-  - **Settings** shows the decision engine and provider keys twice: once in the Setup panel and again under "Provider keys and
-    settings". One of the two should go, and the other should link to the setup guide. Not changed here, because it moves
-    save paths that have their own tests.
-  - **Notification preferences**: "Refresh preferences" reads as plain text, not as a button.
-  - **Products** uses the brand name as its kicker and has no eyebrow, unlike most brand screens.
-  - **Market** and **Brand brain** are long single columns. Grouping them into tabs changes their save paths, so each is a
-    separate change.
-  - **Jobs and health**: the brand filter's select truncates "All brands and workspace jobs".
+  - **Settings**: fixed in `2ddac26`. The Setup panel is the only place that takes the decision engine and provider keys. The
+    provider section points there instead of repeating the inputs.
+  - **Notification preferences**: fixed. "Refresh preferences" is a secondary button.
+  - **Products**: fixed. It has the "Brand" eyebrow the other brand screens use.
+  - **Market**: a section bar at the top jumps to each part. Save paths are unchanged.
+  - **Brand brain**: still one long column. Grouping it into tabs changes its save path, so it is a separate change.
+  - **Jobs and health**: the grid gives the brand filter more width on large screens. Not checked in a browser here.
+  - **Design pass** (`0aff259`): shared card, spacing and label changes across the screens. They were not checked in a browser
+    in this environment. The CI `ui-smoke` run is the check.

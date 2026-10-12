@@ -188,6 +188,14 @@ export async function listAvailableChannels(
       description: "Organic short-form vertical video (<=60s) published to the brand's official YouTube channel.",
       ...organicState("youtube"),
     },
+    {
+      id: "tiktok-organic",
+      name: "TikTok (regular video)",
+      type: "organic",
+      platform: "tiktok",
+      description: "Organic MP4 or MOV video posted to the brand's TikTok account. Posts stay private until TikTok approves the app for public posting.",
+      ...organicState("tiktok"),
+    },
   ];
 }
 
