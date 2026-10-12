@@ -9,19 +9,19 @@ export function MissingChecklist({ brandId, items }: { brandId: string; items: M
     <Card aria-labelledby="missing-title" className="space-y-3">
       <h2 id="missing-title" className="text-base font-semibold text-fg">What is missing</h2>
       {items.length ? (
-        <ul className="grid gap-2">
+        <ul className="grid gap-1">
           {items.map((item) => (
             <li key={item.text}>
               <Link
                 to={item.to}
                 params={{ brandId }}
-                className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border px-3 text-sm font-medium text-fg transition-colors hover:border-accent"
+                className="flex min-h-11 items-center justify-between gap-3 rounded-md px-2 -mx-2 text-sm font-medium text-fg transition-colors hover:bg-surface-2"
               >
                 <span className="flex items-center gap-2">
                   <Circle aria-hidden="true" className="size-3.5 shrink-0 text-fg-muted" />
                   {item.text}
                 </span>
-                <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-accent" />
+                <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-fg-muted" />
               </Link>
             </li>
           ))}

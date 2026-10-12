@@ -33,9 +33,9 @@ function ChangeList({ changes, hasPrevious }: { changes: BriefChange[]; hasPrevi
   if (!hasPrevious) return <p className="mt-2 text-sm text-fg-muted">There is no earlier brief to compare with.</p>;
   if (changes.length === 0) return <p className="mt-2 text-sm text-fg-muted">No field changed since the previous brief.</p>;
   return (
-    <ul className="mt-2 space-y-3 text-sm">
+    <ul className="mt-2 divide-y divide-border text-sm">
       {changes.map((change) => (
-        <li key={change.field} className="rounded-md border border-border p-3">
+        <li key={change.field} className="py-3">
           <p className="font-semibold">{change.label}</p>
           <p className="text-fg-muted">Before: {change.before || "Not stored."}</p>
           <p>Now: {change.after || "Not stored."}</p>
@@ -61,7 +61,7 @@ export function BriefStep({ brandId, session, brief, previous, canEdit, changed,
       {brief ? (
         <>
           <Card>
-            <h2 className="font-display text-2xl">Brief</h2>
+            <h2 className="text-section font-semibold">Brief</h2>
             <p className="mt-1 text-sm text-fg-muted">{brief.title}</p>
             {changed ? <p className="mt-2 text-sm font-semibold">These findings changed the next recommendation.</p> : null}
             <p className="mt-2 text-sm text-fg-muted">Editing a stored brief is not available on this screen. Write the next brief to get a new one.</p>
@@ -135,7 +135,7 @@ export function BriefStep({ brandId, session, brief, previous, canEdit, changed,
           </Card>
 
           <Card>
-            <h2 className="font-display text-2xl">What changed since the last brief</h2>
+            <h2 className="text-section font-semibold">What changed since the last brief</h2>
             <p className="mt-1 text-sm text-fg-muted">Compared field by field with the brief written before this one. Only stored text is compared.</p>
             <ChangeList changes={changes} hasPrevious={!!previous} />
             <p className="mt-3 text-xs text-fg-muted">Fields compared: {Object.values(BRIEF_FIELD_LABELS).join(", ")}.</p>

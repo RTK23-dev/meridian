@@ -51,14 +51,14 @@ export function VariantCard({ variant, position, selected, canEdit, reviewBusy, 
       onFocus={onSelect}
       className={cn(
         "rounded-lg border bg-surface p-4 focus:outline-none",
-        selected ? "border-accent ring-2 ring-accent" : "border-border",
+        selected ? "border-fg ring-1 ring-fg" : "border-border",
       )}
     >
-      <p className="text-xs font-semibold uppercase tracking-widest text-accent">
+      <p className="eyebrow">
         {title} · {variant.provider ? providerLabel(variant.provider) : "No provider"}
         {selected ? <span className="sr-only"> (selected)</span> : null}
       </p>
-      <h3 id={headingId} className="mt-1 font-display text-xl">{variant.title || title}</h3>
+      <h3 id={headingId} className="mt-1 text-base font-semibold">{variant.title || title}</h3>
 
       <div className="mt-3">
         <VariantMedia variant={variant} phase={phase} frame={frame} title={title} onOpenImage={() => actions.onOpenImage(variant)} />
@@ -85,7 +85,7 @@ export function VariantCard({ variant, position, selected, canEdit, reviewBusy, 
         </Button>
         {reviewable ? (
           <>
-            <Button type="button" disabled={reviewBusy} onClick={() => actions.onReview(variant, "approve")}>
+            <Button type="button" variant="secondary" disabled={reviewBusy} onClick={() => actions.onReview(variant, "approve")}>
               Approve<span className="sr-only"> {title}</span>
             </Button>
             <Button type="button" variant="danger" disabled={reviewBusy} onClick={() => actions.onReview(variant, "reject")}>
@@ -117,7 +117,7 @@ function VariantMedia({ variant, phase, frame, title, onOpenImage }: { variant: 
       <div role="status" className="rounded-md border border-dashed border-border p-4 text-sm">
         <p className="font-semibold">Generating · {statusLabel(variant.mediaStatus)}</p>
         <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
-          <div className="h-full w-1/3 animate-pulse rounded-full bg-accent motion-reduce:animate-none" />
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-fg motion-reduce:animate-none" />
         </div>
         <p className="mt-2 text-fg-muted">The provider has not reported a percentage. This card refreshes while the job runs.</p>
       </div>

@@ -61,7 +61,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
       {!canEdit ? <DisabledReason id={reasonId}>Only workspace members can start a discovery run.</DisabledReason> : null}
       {canEdit && disabledReason ? <DisabledReason id={reasonId}>{disabledReason}</DisabledReason> : null}
       <div>
-        <h3 className="font-display text-lg">Sources for this workspace</h3>
+        <h3 className="text-lg">Sources for this workspace</h3>
         <ul className="mt-2 grid gap-2 md:grid-cols-2">
           {sources.map((source) => (
             <li key={source.adapterId} className="rounded-md border border-border p-3">

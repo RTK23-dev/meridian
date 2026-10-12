@@ -125,12 +125,12 @@ export function JobsScreen() {
             <HealthCard label="Scheduler" copy={heartbeatCopy(health.data.scheduler)} />
             <Card className="space-y-2">
               <p className="text-sm text-fg-muted">Queue depth</p>
-              <p className="flex items-center gap-2 font-display text-2xl tabular-nums"><Clock3 aria-hidden="true" className="size-5 text-fg-muted" />{health.data.queue.depth}</p>
+              <p className="flex items-center gap-2 text-2xl tabular-nums"><Clock3 aria-hidden="true" className="size-5 text-fg-muted" />{health.data.queue.depth}</p>
               <p className="text-sm text-fg-muted">{queueCopy(health.data.queue)}</p>
             </Card>
             <Card className="space-y-2">
               <p className="text-sm text-fg-muted">Dead letter</p>
-              <p className="flex items-center gap-2 font-display text-2xl tabular-nums">
+              <p className="flex items-center gap-2 text-2xl tabular-nums">
                 {health.data.deadLetter > 0 ? <AlertTriangle aria-hidden="true" className="size-5 text-warning" /> : <CheckCircle2 aria-hidden="true" className="size-5 text-success" />}
                 {health.data.deadLetter}
               </p>
@@ -220,7 +220,7 @@ function HealthCard({ label, copy }: { label: string; copy: HealthCopy }) {
   return (
     <Card className="space-y-2">
       <p className="text-sm text-fg-muted">{label}</p>
-      <p className="flex items-center gap-2 font-display text-2xl"><Icon aria-hidden="true" className={`size-5 ${tone}`} />{copy.value}</p>
+      <p className="flex items-center gap-2 text-2xl"><Icon aria-hidden="true" className={`size-5 ${tone}`} />{copy.value}</p>
       <p className="text-sm text-fg-muted">{copy.detail}</p>
     </Card>
   );

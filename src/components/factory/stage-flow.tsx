@@ -62,7 +62,7 @@ export function StageFlow({
                   setOpenId(stage.id);
                   setIsOpen(true);
                 }}
-                className="flex h-full min-h-11 w-full flex-col gap-3 panel text-left shadow-sm transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex h-full min-h-11 w-full flex-col gap-3 panel text-left transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="eyebrow">Stage {index + 1}</span>
@@ -152,7 +152,7 @@ function StageDrawerBody({
   return (
     <div className="space-y-5">
       <div className="space-y-1">
-        <SheetTitle className="font-display text-2xl text-fg">{stage.label}</SheetTitle>
+        <SheetTitle className="text-section text-fg font-semibold">{stage.label}</SheetTitle>
         <SheetDescription className="text-sm text-fg-muted">
           {job ? `Factory job: ${job.label}.` : "No factory job runs this stage yet."}
         </SheetDescription>

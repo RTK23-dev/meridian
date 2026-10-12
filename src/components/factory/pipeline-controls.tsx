@@ -55,7 +55,7 @@ export function ChoiceGroup<T extends string | number>({
                 htmlFor={id}
                 className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border-strong bg-surface px-3 text-sm font-medium text-fg hover:bg-surface-2 peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-semibold peer-checked:ring-1 peer-checked:ring-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed peer-disabled:opacity-55 sm:min-h-9"
               >
-                {checked ? <Check aria-hidden="true" className="size-4 text-accent" /> : null}
+                {checked ? <Check aria-hidden="true" className="size-4 text-fg" /> : null}
                 {option.label}
               </label>
             </Fragment>

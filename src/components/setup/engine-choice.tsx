@@ -97,7 +97,7 @@ export function EngineChoice({
                     className="mt-1.5 size-4 shrink-0 accent-[var(--color-accent)]"
                   />
                   <label htmlFor={inputId} className={`block min-w-0 space-y-1 ${canPick && canAdmin ? "cursor-pointer" : ""}`}>
-                    <span className="block font-display text-lg font-semibold text-fg">{engine.label}</span>
+                    <span className="block text-lg font-semibold text-fg">{engine.label}</span>
                     {copy ? <span className="block text-sm text-fg-muted">{copy.summary}</span> : null}
                   </label>
                 </div>

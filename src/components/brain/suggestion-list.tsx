@@ -56,13 +56,13 @@ export function SuggestionList({ brandId, canEdit, saved, formDirty }: {
       <>
         <p className="text-sm text-fg-muted">Accepting replaces the saved text of that field with the suggestion. Rejecting leaves the field as it is.</p>
         {canEdit && blockReason ? <p role="note" className="rounded-md border border-warning bg-warning-soft p-3 text-sm">{blockReason}</p> : null}
-        <ul className="space-y-3">
+        <ul className="divide-y divide-border">
           {suggestions.map((item) => {
             const label = fieldLabel(item.field) ?? "Unknown field";
             const current = savedText(saved, item.field);
             const source = documents.find((document) => document.id === item.documentId);
             const busy = busyIds.includes(item.id);
-            return <li key={item.id} className="space-y-3 rounded-md border border-border p-4">
+            return <li key={item.id} className="space-y-3 py-4 first:pt-0">
               <div className="min-w-0 space-y-1">
                 <p className="text-sm font-semibold">{label}</p>
                 <p className="break-all text-xs text-fg-muted">From {source?.url ? source.url : "a stored document"}</p>
@@ -81,7 +81,7 @@ export function SuggestionList({ brandId, canEdit, saved, formDirty }: {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
-                    aria-label={`Accept suggestion for ${label}`}
+                    variant="secondary" aria-label={`Accept suggestion for ${label}`}
                     disabled={busy || formDirty}
                     onClick={() => void resolveMutation.mutateAsync({ suggestionId: item.id, action: "accept" }).catch(() => undefined)}
                   >
@@ -89,7 +89,7 @@ export function SuggestionList({ brandId, canEdit, saved, formDirty }: {
                   </Button>
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="quiet"
                     aria-label={`Reject suggestion for ${label}`}
                     disabled={busy}
                     onClick={() => void resolveMutation.mutateAsync({ suggestionId: item.id, action: "dismiss" }).catch(() => undefined)}

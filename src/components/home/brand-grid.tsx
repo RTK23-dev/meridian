@@ -62,12 +62,12 @@ function BrandCard({ brand, lookup }: { brand: BrandSummary; lookup: BrandLookup
   const machine = lookup?.machine ?? { status: "loading" as const };
   return (
     <li>
-      <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="group block h-full panel transition-colors hover:border-accent hover:shadow-sm">
+      <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="block h-full panel transition-colors hover:border-border-strong">
         <div className="flex items-start gap-3">
           <BrandMark name={brand.name} logoAssetId={brand.logoAssetId} />
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="truncate text-section font-semibold text-fg group-hover:text-accent">{brand.name}</h3>
+              <h3 className="truncate text-section font-semibold text-fg">{brand.name}</h3>
               <CompletenessRing value={brand.completeness} />
             </div>
             <p className="mt-1 line-clamp-2 min-h-10 text-sm text-fg-muted">{brand.sells || brand.industry || "No description yet."}</p>
@@ -80,7 +80,7 @@ function BrandCard({ brand, lookup }: { brand: BrandSummary; lookup: BrandLookup
             <span>{brand.updatedAt ? `Updated ${relativeTime(brand.updatedAt)}` : "No recorded update time"}</span>
           </div>
         </div>
-        <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-accent">
+        <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-fg">
           Open brand <ArrowRight aria-hidden="true" className="size-4" />
         </span>
       </Link>
@@ -96,7 +96,7 @@ export function CompletenessRing({ value }: { value: number }) {
       role="img"
       aria-label={`${percent}% complete`}
       className="grid size-11 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-fg"
-      style={{ background: `conic-gradient(var(--color-accent) ${percent}%, var(--color-border) 0)` }}
+      style={{ background: `conic-gradient(var(--color-fg) ${percent}%, var(--color-border) 0)` }}
     >
       <span aria-hidden="true" className="grid size-8 place-items-center rounded-full bg-surface">{percent}%</span>
     </span>
@@ -132,8 +132,8 @@ function summary(stages: PipelineStage[]): string {
 }
 
 function segmentClass(stage: PipelineStage): string {
-  if (stage.state === "done") return "bg-accent";
-  if (stage.state === "in_progress") return "bg-accent/40";
+  if (stage.state === "done") return "bg-fg";
+  if (stage.state === "in_progress") return "bg-fg/40";
   if (stage.state === "blocked") return "border border-dashed border-border-strong bg-transparent";
   return "bg-surface-2";
 }

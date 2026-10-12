@@ -47,7 +47,7 @@ export function CreativeCard({
         <MediaPlaceholder load={mediaLoad} variants={variants} />
       )}
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 className="font-display text-xl">{label}</h3>
+        <h3 className="text-xl">{label}</h3>
         <span className="eyebrow">{item.status}</span>
       </div>
       <p className="text-sm text-muted">{item.angle} · {item.origin} · {formatDay(item.createdAt)}</p>

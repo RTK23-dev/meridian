@@ -37,7 +37,7 @@ function OpportunityDetail({ item, position, brandId, canEdit, dismissing, onDis
   const held = isHeld(item);
   const showWhyNot = reasons.length > 0 || (position !== null && position > 1);
   return <>
-    <SheetTitle className="font-display text-2xl">{item.label}</SheetTitle>
+    <SheetTitle className="text-2xl">{item.label}</SheetTitle>
     <SheetDescription>{categoryLabel(item.category)} · {statusLabel(item.status)} · rank score {item.expectedValue.toFixed(2)}{position !== null ? ` · position ${position}` : ""}</SheetDescription>
     <div className="mt-5 space-y-6">
       <div className="flex flex-wrap gap-2"><CategoryChip category={item.category} /><OpportunityStatusBadge status={item.status} />{held ? <HoldBadge /> : null}</div>

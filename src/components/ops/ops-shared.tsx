@@ -37,7 +37,7 @@ export function MetricCard({ label, value, detail, icon }: { label: string; valu
         <span>{label}</span>
         {icon}
       </div>
-      <div className="font-display text-3xl tabular-nums">{value}</div>
+      <div className="text-3xl tabular-nums">{value}</div>
       {detail ? <div className="text-sm text-fg-muted">{detail}</div> : null}
     </Card>
   );

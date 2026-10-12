@@ -86,15 +86,15 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
     <div className="space-y-6">
       <UnsavedChangesGuard dirty={isDirty} />
       <div className="flex flex-col gap-1">
-        <h2 className="font-display text-2xl font-bold">Multi-Account Publishing Queue</h2>
+        <h2 className="text-section font-semibold">Multi-Account Publishing Queue</h2>
         <p className="text-sm text-fg-muted">
           Orchestrate social publishing across connected platform accounts with rate limiting, automated retries, and idempotency guarantees.
         </p>
       </div>
 
       <Card className="space-y-4">
-        <h3 className="font-display text-lg font-semibold flex items-center gap-2">
-          <Share2 className="h-4 w-4 text-accent" aria-hidden="true" />
+        <h3 className="text-base font-semibold flex items-center gap-2">
+          <Share2 className="h-4 w-4 text-fg-muted" aria-hidden="true" />
           Schedule Variant to Destination Accounts
         </h3>
 
@@ -125,7 +125,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
           {errors.targetAccountIds?.message ? <p role="alert" className="mb-2 text-sm text-danger">{errors.targetAccountIds.message}</p> : null}
           {(accountsQuery.data ?? []).length === 0 ? (
             <p className="text-xs text-fg-muted">
-              No social accounts connected yet. Go to <a href={`/brands/${brandId}/accounts`} className="underline text-accent">Accounts</a> to connect Instagram, TikTok, or YouTube.
+              No social accounts connected yet. Go to <a href={`/brands/${brandId}/accounts`} className="underline text-fg">Accounts</a> to connect Instagram, TikTok, or YouTube.
             </p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
@@ -135,7 +135,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
                     type="checkbox"
                     value={acct.id}
                     {...register("targetAccountIds")}
-                    className="size-4"
+                    className="size-4 accent-fg"
                   />
                   <div className="truncate">
                     <span className="font-semibold block truncate">{acct.name}</span>
@@ -176,8 +176,8 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
 
       <Card className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="font-display text-lg font-semibold flex items-center gap-2">
-            <Clock className="h-4 w-4 text-accent" aria-hidden="true" />
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <Clock className="h-4 w-4 text-fg-muted" aria-hidden="true" />
             Live Publishing Queue ({queueItems.length})
           </h3>
           {/* Not disabled while it loads: a second refresh is harmless, and the spinning icon shows the fetch is running. */}
@@ -250,20 +250,20 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
 
       {queueReceipts.length > 0 ? (
         <Card className="space-y-3">
-          <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+          <h3 className="text-base font-semibold flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
             Live Execution Receipts
           </h3>
-          <div className="space-y-2">
+          <div className="divide-y divide-border">
             {queueReceipts.map((rec) => (
-              <div key={rec.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface p-3 text-xs">
+              <div key={rec.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-xs">
                 <div>
                   <span className="font-semibold capitalize">{rec.platform} Post</span>
                   <span className="font-mono text-fg-muted block mt-0.5">ID: {rec.externalPostId}</span>
                   <span className="text-fg-muted block text-[11px]">Published: {new Date(rec.publishedAt).toLocaleString()}</span>
                 </div>
                 {rec.externalUrl ? (
-                  <a href={rec.externalUrl} target="_blank" rel="noopener noreferrer" className="underline text-accent font-semibold">
+                  <a href={rec.externalUrl} target="_blank" rel="noopener noreferrer" className="underline text-fg font-semibold">
                     View External Post &rarr;<span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 ) : (

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, DisabledReason, Field, Card, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, Input } from "@/components/ui";
+import { Button, DisabledReason, Field, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, Input } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
@@ -92,7 +92,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-2">
           <p className="eyebrow">Factory</p>
-          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Watch, copy the framework, never the ad</h1>
+          <h1 className="page-title">Watch, copy the framework, never the ad</h1>
           <p className="text-muted">{board.levelDetail} Autopilot is {FACTORY_LEVEL_LABELS[board.level as FactoryLevel]} (ceiling {FACTORY_LEVEL_LABELS[board.ceiling as FactoryLevel]}).</p>
         </div>
         {killOn ? <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm font-semibold" role="status">Kill switch is on. Live ads stay paused.</p> : null}
@@ -131,8 +131,8 @@ function FactoryPage({ brandId }: { brandId: string }) {
         </TabsContent>
 
         <TabsContent value="discover" className="space-y-6">
-          <Card className="space-y-4 p-5">
-            <h2 className="font-display text-2xl">Sources</h2>
+          <section className="space-y-4">
+            <h2 className="text-section font-semibold">Sources</h2>
             <ul className="grid gap-3 md:grid-cols-2">
               {board.sources.map((source) => (
                 <li key={source.id} className="rounded-md border border-line p-3">
@@ -143,10 +143,10 @@ function FactoryPage({ brandId }: { brandId: string }) {
             </ul>
             <p className="text-sm text-muted">Ad Library snapshot video is {board.snapshotMediaEnabled ? "on" : "off"}. Metadata-only is the default after the rights review.</p>
             <p className="text-sm text-muted">Video engine: {board.video.status} ({board.video.provider}). {board.video.detail}</p>
-          </Card>
+          </section>
 
-          <Card className="space-y-4 p-5">
-            <h2 className="font-display text-2xl">Watch a niche</h2>
+          <section className="space-y-4">
+            <h2 className="text-section font-semibold">Watch a niche</h2>
             {canEdit ? (
               <form
                 className="flex flex-wrap items-end gap-3"
@@ -170,7 +170,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
                     <li key={run.id} className="space-y-2 rounded-md border border-line p-3 text-sm">
                       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                         <span className="font-semibold">{run.niche || "unspecified niche"}</span>
-                        <span className={waitingOn ? "font-semibold text-accent" : "text-muted"}>
+                        <span className={waitingOn ? "font-semibold text-fg" : "text-muted"}>
                           {runStatusLabel(run.status)}{stageLabel ? ` · ${stageLabel}` : ""}
                         </span>
                       </div>
@@ -179,6 +179,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
                         canEdit ? (
                           <Button
                             size="sm"
+                            variant="secondary"
                             disabled={approveStage.isPending}
                             loading={approveStage.isPending}
                             onClick={() => void approveStage.mutateAsync({ runId: run.id, stage: waitingOn }).catch(() => undefined)}
@@ -192,19 +193,19 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 })}
               </ul>
             )}
-          </Card>
+          </section>
 
-          <Card className="space-y-4 p-5">
-            <h2 className="font-display text-2xl">Likely winners</h2>
+          <section className="space-y-4">
+            <h2 className="text-section font-semibold">Likely winners</h2>
             {board.winners.length === 0 ? <p className="text-muted">No tracked ads yet. Nothing is invented to fill this list.</p> : (
               <ul className="space-y-3">
                 {board.winners.map((item) => (
                   <li key={item.id} className="rounded-md border border-line p-4">
                     <p className="eyebrow">{item.advertiser}</p>
                     {item.score == null || item.low == null || item.high == null ? (
-                      <p className="font-display text-xl text-muted">Not graded yet</p>
+                      <p className="text-xl text-muted">Not graded yet</p>
                     ) : (
-                      <p className="font-display text-xl tabular-nums">Score {item.score.toFixed(2)} <span className="text-sm font-normal text-muted">range {item.low.toFixed(2)}–{item.high.toFixed(2)}</span></p>
+                      <p className="text-xl tabular-nums">Score {item.score.toFixed(2)} <span className="text-sm font-normal text-muted">range {item.low.toFixed(2)}–{item.high.toFixed(2)}</span></p>
                     )}
                     <p className="text-sm text-muted">{item.evidence.join(" · ")}</p>
                     {item.copy ? <p className="mt-2 text-sm">{item.copy}</p> : null}
@@ -212,10 +213,10 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Card>
+          </section>
 
-          <Card className="space-y-4 p-5">
-            <h2 className="font-display text-2xl">Trends</h2>
+          <section className="space-y-4">
+            <h2 className="text-section font-semibold">Trends</h2>
             {board.trends.length === 0 ? <p className="text-muted">No stored ads to cluster. Rising concepts stay unnamed until ads exist.</p> : (
               <ul className="space-y-3">
                 {board.trends.map((trend) => (
@@ -226,10 +227,10 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Card>
+          </section>
 
-          <Card className="space-y-3 p-5">
-            <h2 className="font-display text-2xl">Ad Library yield</h2>
+          <section className="space-y-3">
+            <h2 className="text-section font-semibold">Ad Library yield</h2>
             {board.yieldRows.length === 0 ? <p className="text-muted">No collection runs are stored, so yield is unknown.</p> : (
               <ul className="space-y-2 text-sm">
                 {board.yieldRows.map((row, index) => (
@@ -239,12 +240,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Card>
+          </section>
         </TabsContent>
 
         <TabsContent value="templates" className="space-y-4">
-          <Card className="space-y-3 p-5">
-            <h2 className="font-display text-2xl">Storyboard templates</h2>
+          <section className="space-y-3">
+            <h2 className="text-section font-semibold">Storyboard templates</h2>
             <p className="text-muted">A winner becomes timed beats, shot types, and overlay roles. Footage, slogans, and look are dropped.</p>
             {board.templates.length === 0 ? <p className="text-muted">No templates are stored.</p> : (
               <ul className="space-y-2">
@@ -255,12 +256,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Card>
+          </section>
         </TabsContent>
 
         <TabsContent value="production" className="space-y-4">
-          <Card className="space-y-3 p-5">
-            <h2 className="font-display text-2xl">Production queue</h2>
+          <section className="space-y-3">
+            <h2 className="text-section font-semibold">Production queue</h2>
             <ol className="grid gap-2 md:grid-cols-2">
               {board.stages.map((stage) => (
                 <li key={stage.type} className="rounded-md border border-line p-3 text-sm">
@@ -276,12 +277,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Card>
+          </section>
         </TabsContent>
 
         <TabsContent value="review" className="space-y-4">
-          <Card className="space-y-3 p-5">
-            <h2 className="font-display text-2xl">Gate results</h2>
+          <section className="space-y-3">
+            <h2 className="text-section font-semibold">Gate results</h2>
             <p className="text-muted">Originality, claims, policy, and rights can block. Brand gaps go to a person. Missing evidence is review, not a pass.</p>
             {board.variants.length === 0 ? <p className="text-muted">No variants are waiting.</p> : (
               <ul className="space-y-2">
@@ -292,12 +293,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             )}
-          </Card>
+          </section>
         </TabsContent>
 
         <TabsContent value="tests" className="space-y-4">
-          <Card className="space-y-4 p-5">
-            <h2 className="font-display text-2xl">Caps and kill switch</h2>
+          <section className="space-y-4">
+            <h2 className="text-section font-semibold">Caps and kill switch</h2>
             <p className="text-muted">Daily cap {dollars(board.cap.dailyCents)} · total cap {dollars(board.cap.totalCents)}. Spending starts only after the owner sets a cap. Automation never invents a live campaign.</p>
             {canOwnControls ? (
               <form
@@ -333,10 +334,10 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 {board.killSwitch.brand ? "Clear brand kill switch" : "Engage brand kill switch"}
               </Button>
             ) : null}
-          </Card>
+          </section>
 
-          <Card className="space-y-4 p-5">
-            <h2 className="font-display text-2xl">Multi-Channel Distribution & Organic Telemetry</h2>
+          <section className="space-y-4">
+            <h2 className="text-section font-semibold">Multi-Channel Distribution & Organic Telemetry</h2>
             <p className="text-muted">
               Creatives are selectively dispatched to paid ad networks and organic social accounts. JEV learns from paid conversions and organic engagement without requiring every account to be connected.
             </p>
@@ -345,7 +346,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 <div key={channel.id} className="rounded-md border border-line p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">{channel.name}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${channel.connected ? "bg-accent/20 text-accent font-medium" : "bg-muted/20 text-muted"}`}>
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${channel.connected ? "bg-success-soft font-medium text-success" : "bg-surface-2 text-muted"}`}>
                       {channel.connected ? "Connected" : "Optional"}
                     </span>
                   </div>
@@ -355,7 +356,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
             </div>
 
             <div className="mt-4 pt-3 border-t border-line">
-              <h3 className="font-semibold text-lg">Organic Post Queue & Performance</h3>
+              <h3 className="font-semibold text-base">Organic Post Queue & Performance</h3>
               {organicQuery.data && organicQuery.data.length > 0 ? (
                 <ul className="mt-3 space-y-2">
                   {organicQuery.data.map((post) => (
@@ -366,7 +367,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
                           <span className="text-xs text-muted">· {post.status}</span>
                         </div>
                         <p className="font-medium mt-0.5">{post.title || (post.caption ? post.caption.slice(0, 50) : "Creative post")}</p>
-                        {post.postUrl ? <a href={post.postUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-accent underline mt-0.5 inline-block">External post link</a> : null}
+                        {post.postUrl ? <a href={post.postUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-fg underline mt-0.5 inline-block">External post link</a> : null}
                       </div>
                       <div className="text-xs text-muted text-right">
                         <div className="font-mono">{organicMetricsLine(post)}</div>
@@ -379,12 +380,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 <p className="text-sm text-muted mt-2">No organic posts published yet. Select organic channels in Studio Review to publish.</p>
               )}
             </div>
-          </Card>
+          </section>
         </TabsContent>
 
         <TabsContent value="learnings" className="space-y-4">
-          <Card className="space-y-3 p-5">
-            <h2 className="font-display text-2xl">Weekly strategist report</h2>
+          <section className="space-y-3">
+            <h2 className="text-section font-semibold">Weekly strategist report</h2>
             <p className="text-muted">{board.report.note}</p>
             <section>
               <h3 className="font-semibold">Won</h3>
@@ -398,7 +399,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
               <h3 className="font-semibold">Drop</h3>
               {board.report.drop.length === 0 ? <p className="text-sm text-muted">No fading concepts with evidence.</p> : board.report.drop.map((item) => <p key={item.concept} className="text-sm">{item.concept}: {item.evidence.join("; ")}</p>)}
             </section>
-          </Card>
+          </section>
         </TabsContent>
       </Tabs>
     </div>

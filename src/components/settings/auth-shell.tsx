@@ -23,11 +23,11 @@ export function BrandStage({ headline = "Find what works. Make the next one.", l
     <section aria-label="About Meridian" className="space-y-8">
       <div className="flex items-center gap-3">
         <MeridianMark className="size-10" />
-        <span className="font-display text-2xl font-semibold tracking-tight text-fg">Meridian</span>
+        <span className="font-wordmark text-2xl font-semibold tracking-tight text-fg">Meridian</span>
       </div>
       <div className="space-y-4">
         <p className="eyebrow">An advertising factory that learns</p>
-        <h2 className="font-display text-4xl leading-tight text-fg sm:text-5xl">{headline}</h2>
+        <h2 className="text-3xl font-semibold leading-tight text-fg sm:text-4xl">{headline}</h2>
         <p className="max-w-prose text-lg text-fg-muted">
           {lead ?? "Add a brand and what you know about it. Meridian gathers what already works in its niche, grades it, makes new creatives, and learns from what happens next."}
         </p>
@@ -66,7 +66,7 @@ export function AuthShell({ title, description, children, footer }: {
       </div>
       <div className="page-enter order-1 mx-auto w-full max-w-md space-y-6 lg:order-2">
         <div className="space-y-2">
-          <h1 className="font-display text-4xl leading-tight text-fg">{title}</h1>
+          <h1 className="page-title">{title}</h1>
           {description ? <p className="text-fg-muted">{description}</p> : null}
         </div>
         <div className="surface-rise space-y-6 rounded-2xl border border-border bg-surface p-6 shadow-lg md:p-7">{children}</div>

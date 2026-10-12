@@ -68,7 +68,7 @@ function Home() {
       <PageHeader
         title="Workspace overview"
         description={`A current view of ${data.active.name}, its brands, and work that needs attention.`}
-        actions={canCreate ? <Button asChild><Link to="/brands/new"><Plus aria-hidden="true" className="mr-2 size-4" />New brand</Link></Button> : undefined}
+        actions={canCreate ? <Button asChild variant="secondary"><Link to="/brands/new"><Plus aria-hidden="true" className="mr-2 size-4" />New brand</Link></Button> : undefined}
       />
       <KpiRow kpis={kpis} />
       <AttentionList

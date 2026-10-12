@@ -202,7 +202,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
           <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-fg-muted underline-offset-4 hover:underline">
             {detail.identity.name}
           </Link>
-          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Brand brain</h1>
+          <h1 className="page-title">Brand brain</h1>
           <p className="max-w-2xl text-fg-muted">
             This is the record later decisions must use. Fill the four required fields first, then the rest as you have the facts.
             A save sends only the fields you changed.
@@ -302,7 +302,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
       </form>
 
       <Card>
-        <h2 className="font-display text-xl">Versions</h2>
+        <h2 className="text-section font-semibold">Versions</h2>
         {detail.versions.length === 0 ? <p className="mt-3 text-sm text-fg-muted">No versions stored yet.</p> : (
           <ul className="mt-3 space-y-2 text-sm">
             {detail.versions.map((version) => (
@@ -322,7 +322,7 @@ function SectionFrame({ id, label, progress, children }: { id: BrainSectionId; l
   const anchor = sectionAnchor(id);
   return <section id={anchor} data-brain-section={id} aria-labelledby={`${anchor}-title`} className="scroll-mt-6 space-y-4">
     <div className="flex flex-wrap items-baseline justify-between gap-2">
-      <h2 id={`${anchor}-title`} className="font-display text-2xl">{label}</h2>
+      <h2 id={`${anchor}-title`} className="text-section font-semibold">{label}</h2>
       {progress ? <p className="text-sm tabular-nums text-fg-muted">{progress.filled} of {progress.total} filled</p> : null}
     </div>
     {children}

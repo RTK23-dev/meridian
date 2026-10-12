@@ -218,7 +218,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
         <div>
           <p className="eyebrow">Architecture & Intelligence</p>
-          <h2 className="font-display text-2xl">AI, Research & Provider Configuration</h2>
+          <h2 className="text-2xl">AI, Research & Provider Configuration</h2>
           <p className="text-muted text-sm mt-1">
             Configure JEV decision routers, perception models, crawl budgets, production engines, and Cyclone Scout.
           </p>

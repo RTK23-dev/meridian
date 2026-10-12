@@ -54,7 +54,7 @@ export function PlanDialog({ plan, approving, rejecting, onApprove, onReject, on
     <Dialog open={!!plan} onOpenChange={dismiss.requestOpenChange}>
       {plan ? (
         <DialogContent aria-describedby={descriptionId} className="max-w-xl">
-          <DialogTitle className="font-display text-2xl">Review creative plan</DialogTitle>
+          <DialogTitle className="text-section font-semibold">Review creative plan</DialogTitle>
           <DialogDescription id={descriptionId} className="mt-2 text-sm text-fg-muted">
             {plan.note || "Review the planned deliverables and estimated cost before billable generation starts."}
           </DialogDescription>
@@ -77,7 +77,7 @@ export function PlanDialog({ plan, approving, rejecting, onApprove, onReject, on
                 {plan.plan?.deliverables?.map((deliverable, index) => (
                   <li key={deliverable.id || index} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-2 text-xs">
                     <div>
-                      <span className="mr-2 font-semibold uppercase text-accent">{deliverable.kind}</span>
+                      <span className="mr-2 font-semibold uppercase text-fg-muted">{deliverable.kind}</span>
                       <span>{deliverable.title || `Deliverable ${index + 1}`}</span>
                     </div>
                     <span className="text-fg-muted">{deliverable.provider} · {deliverable.aspectRatio || "9:16"}</span>

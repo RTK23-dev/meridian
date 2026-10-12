@@ -6,9 +6,9 @@ import type { NextAction } from "./pipeline";
 /** One recommended action with one button. The title and body come from the pure model, which reads the same stored data as the pipeline. */
 export function NextActionCard({ brandId, action }: { brandId: string; action: NextAction }) {
   return (
-    <Card aria-labelledby="next-action-title" className="flex h-full flex-col gap-3 border-accent/40 bg-accent-soft/40">
+    <Card aria-labelledby="next-action-title" className="flex h-full flex-col gap-3">
       <p className="eyebrow">Next best action</p>
-      <h2 id="next-action-title" className="text-xl font-semibold text-fg">{action.title}</h2>
+      <h2 id="next-action-title" className="text-section font-semibold text-fg">{action.title}</h2>
       <p className="text-sm text-fg-muted">{action.body}</p>
       <div className="mt-auto pt-2">
         <Button asChild>

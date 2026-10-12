@@ -31,7 +31,7 @@ function Products({ brandId }: { brandId: string }) {
       <div className="space-y-3">
         <p className="eyebrow">Brand</p>
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Products</h1>
+          <h1 className="page-title">Products</h1>
           {canEdit ? <Button type="button" onClick={() => setSheet({ open: true, product: null })}>Add product</Button> : null}
         </div>
         <p className="max-w-2xl text-fg-muted">Allowed and prohibited claims are checked when a creative is saved. The guardian reports evidence. JEV applies the threshold.</p>

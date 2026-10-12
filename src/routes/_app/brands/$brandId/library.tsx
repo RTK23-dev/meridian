@@ -191,7 +191,7 @@ function Library({ brandId }: { brandId: string }) {
       <UnsavedChangesGuard dirty={formsDirty} />
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Library</p>
-        <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Creatives this brand owns</h1>
+        <h1 className="page-title">Creatives this brand owns</h1>
         <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing creates paused Meta objects when you submit the form below. Nothing runs until you switch it on in Meta Ads Manager.</p>
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
@@ -210,7 +210,7 @@ function Library({ brandId }: { brandId: string }) {
         )}
       </div>
       <Card>
-        <h2 className="font-display text-2xl">Paid ads, created paused</h2>
+        <h2 className="text-2xl">Paid ads, created paused</h2>
         <p className="mt-2 text-sm text-muted">
           Optional. Choose Meta, TikTok or Google Ads. Meridian creates the campaign, ad set and ad with the status paused, and stores a platform id only when the platform returns one. A missing token, Page, location or uploaded image stops the chain, and nothing is marked published from this click alone.
         </p>
@@ -319,7 +319,7 @@ function Library({ brandId }: { brandId: string }) {
       </Card>
       {data.creatives.length === 0 ? <Card>No brand creatives yet. Rank an opportunity, brief it, and save a script. Or record one you already ran.</Card> : (
         <section aria-labelledby="library-creatives-title" className="space-y-4">
-          <div><h2 id="library-creatives-title" className="font-display text-2xl">Creative library</h2><p className="text-sm text-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
+          <div><h2 id="library-creatives-title" className="text-2xl">Creative library</h2><p className="text-sm text-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
           {studio.isError ? <PlainErrorMessage message="Media details could not be loaded. Thumbnails still come from the library list. Open Details for the exact message." raw={plainError(studio.error).raw} /> : null}
           <LibraryFilterBar
             filters={filters}
@@ -381,7 +381,7 @@ function Library({ brandId }: { brandId: string }) {
       />
       {canEdit ? (
         <Card>
-          <h2 className="font-display text-2xl">Record a creative we already ran</h2>
+          <h2 className="text-2xl">Record a creative we already ran</h2>
           <p className="mt-2 text-sm text-muted">Use this for history the system did not generate. It can receive performance and feed learning.</p>
           <form
             className="mt-4 grid gap-3"

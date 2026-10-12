@@ -75,7 +75,7 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
 
   return (
     <Card>
-      <h3 className="font-display text-xl">Held budget reservations</h3>
+      <h3 className="text-base font-semibold">Held budget reservations</h3>
       <p className="mt-1 text-sm text-muted">
         The provider outcome is uncertain, so this budget stays reserved until an admin resolves it. Nothing settles on its own.
       </p>

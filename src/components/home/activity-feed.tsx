@@ -13,7 +13,7 @@ export function ActivityFeed({ entries, brandNameById }: { entries: AuditEntry[]
           <h2 id="activity-title" className="text-section font-semibold">Recent activity</h2>
           <p className="mt-1 text-sm text-fg-muted">Recorded actions from this workspace audit trail.</p>
         </div>
-        <Link to="/audit" className="inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline">View all</Link>
+        <Link to="/audit" className="inline-flex min-h-11 items-center text-sm font-semibold text-fg underline underline-offset-4">View all</Link>
       </div>
       {entries.length === 0 ? (
         <p className="text-sm text-fg-muted">No actions recorded yet.</p>

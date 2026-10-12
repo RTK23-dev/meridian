@@ -28,7 +28,7 @@ export function JobDetailSheet({ organizationId, jobId, canAdmin, retrying, canc
   return (
     <Sheet open={!!jobId} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent className="max-h-[88vh] sm:mx-auto sm:max-w-2xl sm:rounded-xl sm:border">
-        <SheetTitle className="font-display text-2xl">{job ? `${job.jobType || "Job"} · ${statusLabel(job.status)}` : "Job details"}</SheetTitle>
+        <SheetTitle className="text-2xl">{job ? `${job.jobType || "Job"} · ${statusLabel(job.status)}` : "Job details"}</SheetTitle>
         <SheetDescription className="mt-1 text-sm text-fg-muted">
           Payload values are never shown. Only field names and value types appear here.
         </SheetDescription>

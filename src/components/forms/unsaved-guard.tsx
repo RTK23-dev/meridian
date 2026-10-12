@@ -30,7 +30,7 @@ export function UnsavedChangesGuard({ dirty }: { dirty: boolean }) {
   return (
     <AlertDialog open={blocked} onOpenChange={(open) => { if (!open) stay(); }}>
       <AlertDialogContent>
-        <AlertDialogTitle className="font-display text-2xl">Leave without saving?</AlertDialogTitle>
+        <AlertDialogTitle className="text-2xl">Leave without saving?</AlertDialogTitle>
         <AlertDialogDescription className="mt-2 text-sm text-fg-muted">
           This page has unsaved changes. Leaving now discards them.
         </AlertDialogDescription>

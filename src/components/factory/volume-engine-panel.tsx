@@ -139,7 +139,7 @@ export function VolumeEnginePanel({
                       disabled={!row.selectable}
                       aria-describedby={detailId}
                       onChange={() => onChange({ provider: row.id })}
-                      className="size-5 accent-accent"
+                      className="size-5 accent-fg"
                     />
                     {row.label}
                   </label>
