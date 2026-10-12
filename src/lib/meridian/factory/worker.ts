@@ -59,14 +59,14 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
     const allowed = snapshotMediaAllowed();
     return allowed ? "ingest:snapshot-media-opt-in" : "ingest:metadata-only";
   }
+  // The stages below record no cost. Nothing measures what they spend, so no figure is written. A cost row comes from the
+  // budget ledger once a stage makes a metered provider call.
   if (job.job_type === "factory.decode") {
     const decoded = await decodeStoredAds(sql, job.organization_id, job.brand_id);
-    await recordCost(sql, job, runId, "factory.decode", decoded * 2, decoded);
     return `decoded:${decoded}`;
   }
   if (job.job_type === "factory.grade") {
     const graded = await gradeStoredAds(sql, job.organization_id, job.brand_id);
-    await recordCost(sql, job, runId, "factory.grade", graded, graded);
     return `graded:${graded}`;
   }
   if (job.job_type === "factory.trend") {
@@ -86,7 +86,6 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   }
   if (job.job_type === "factory.template") {
     const made = await persistTemplates(sql, job.organization_id, job.brand_id, runId);
-    await recordCost(sql, job, runId, "factory.template", made * 3, made);
     if (owned[0].level === 0) {
       await sql`update factory_runs set status = 'succeeded', error = '', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
     }
@@ -94,7 +93,6 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   }
   if (job.job_type === "factory.produce") {
     const made = await persistVariants(sql, job.organization_id, job.brand_id, runId);
-    await recordCost(sql, job, runId, "factory.produce", made * 12, made);
     return `variants:${made}`;
   }
   if (job.job_type === "factory.gate") {
@@ -378,15 +376,6 @@ async function gateVariants(sql: Sql, organizationId: string, brandId: string): 
     count += 1;
   }
   return count;
-}
-
-async function recordCost(sql: Sql, job: ExecutableJob, runId: string, stage: string, cents: number, seconds: number): Promise<void> {
-  const id = `cost:${runId}:${stage}`;
-  await sql`
-    insert into factory_costs (id, organization_id, brand_id, run_id, stage, cents, seconds)
-    values (${id}, ${job.organization_id}, ${job.brand_id}, ${runId}, ${stage}, ${Math.max(0, cents)}, ${Math.max(0, seconds)})
-    on conflict (id) do update set cents = excluded.cents, seconds = excluded.seconds
-  `;
 }
 
 async function killSwitchPaused(sql: Sql, organizationId: string, brandId: string): Promise<boolean> {
