@@ -51,7 +51,7 @@ export function CreateWorkspace({ onCreated }: { onCreated: () => Promise<void> 
       <UnsavedChangesGuard dirty={isDirty} />
       <div className="space-y-3">
         <p className="eyebrow">First step</p>
-        <h1 className="font-display text-4xl">Name the workspace</h1>
+        <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Name the workspace</h1>
         <p className="text-fg-muted">A workspace holds your brands and their records. You own it. The name is only a label, and you can change it in Settings.</p>
       </div>
       <form onSubmit={handleSubmit(submit)} className="space-y-4" onKeyDown={(event) => submitOnShortcut(event)}>

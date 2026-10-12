@@ -132,7 +132,7 @@ function Opportunities({ brandId }: { brandId: string }) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-3">
           <p className="eyebrow">Opportunities</p>
-          <h1 className="font-display text-4xl">What to make next</h1>
+          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">What to make next</h1>
           <p className="text-muted">
             {copy.opportunities.intro}{" "}
             Make image and video variants in <Link className="font-semibold" to="/brands/$brandId/studio" params={{ brandId }}>Studio</Link>, not from a script form.

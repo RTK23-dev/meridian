@@ -82,7 +82,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-2">
           <p className="eyebrow">Factory</p>
-          <h1 className="font-display text-4xl">Watch, copy the framework, never the ad</h1>
+          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Watch, copy the framework, never the ad</h1>
           <p className="text-muted">{board.levelDetail} Autopilot is {FACTORY_LEVEL_LABELS[board.level as FactoryLevel]} (ceiling {FACTORY_LEVEL_LABELS[board.ceiling as FactoryLevel]}).</p>
         </div>
         {killOn ? <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm font-semibold" role="status">Kill switch is on. Live ads stay paused.</p> : null}

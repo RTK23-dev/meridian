@@ -239,8 +239,8 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 }}
                 className={`rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
                   activeTab === tab
-                    ? "bg-paper text-foreground shadow-sm"
-                    : "text-muted hover:text-foreground hover:bg-panel"
+                    ? "bg-paper text-fg shadow-sm"
+                    : "text-muted hover:text-fg hover:bg-panel"
                 }`}
               >
                 {tab} {isReady ? "✓" : "○"}

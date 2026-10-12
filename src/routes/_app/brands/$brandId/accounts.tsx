@@ -141,7 +141,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="max-w-2xl space-y-2">
           <p className="eyebrow">Account Vault</p>
-          <h1 className="font-display text-4xl">Connected Platform Accounts</h1>
+          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Connected Platform Accounts</h1>
           <p className="text-muted">
             Manage multiple social pages, creator profiles, and advertising accounts for this brand.
             All tokens are encrypted in the database with AES-256-GCM.

@@ -201,7 +201,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
           <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-fg-muted underline-offset-4 hover:underline">
             {detail.identity.name}
           </Link>
-          <h1 className="font-display text-4xl">Brand brain</h1>
+          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Brand brain</h1>
           <p className="max-w-2xl text-fg-muted">
             This is the record later decisions must use. A save sends only the fields you changed, so a field you did not touch is never
             overwritten. Suggestions from a stored document wait until you accept them.

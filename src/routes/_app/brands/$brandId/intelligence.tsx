@@ -91,7 +91,7 @@ function Intelligence({ brandId }: { brandId: string }) {
               Multimodal 2.0
             </Badge>
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">
             Account & Creative Intelligence
           </h1>
           <p className="mt-1 text-sm text-muted">
@@ -166,7 +166,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                     </span>
                     <div className="mt-2 flex items-center gap-2">
                       <Sparkles className="h-5 w-5 text-brass" />
-                      <span className="font-display text-xl font-semibold capitalize text-foreground">
+                      <span className="font-display text-xl font-semibold capitalize text-fg">
                         {profile.brandArchetype.replace(/_/g, " ") || "UGC Authentic"}
                       </span>
                     </div>
@@ -261,7 +261,7 @@ function Intelligence({ brandId }: { brandId: string }) {
               {/* Multimodal Decomposition Feed */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display text-lg font-semibold text-foreground">
+                  <h3 className="font-display text-lg font-semibold text-fg">
                     Multimodal Creative DNA Stream
                   </h3>
                   <span className="text-xs text-muted">

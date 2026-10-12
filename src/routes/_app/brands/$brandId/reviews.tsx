@@ -121,7 +121,7 @@ function Reviews({ brandId }: { brandId: string }) {
     <div className="space-y-10">
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Reviews</p>
-        <h1 className="font-display text-4xl">Holds a person has to clear</h1>
+        <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Holds a person has to clear</h1>
         <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject. A reject needs a reason.</p>
       </div>
       {resolve.error ? <PlainErrorNotice error={resolve.error} /> : null}

@@ -124,7 +124,7 @@ function Studio({ brandId }: { brandId: string }) {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">Studio</p>
-          <h1 className="font-display text-3xl">Make the next ads from evidence</h1>
+          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Make the next ads from evidence</h1>
         </div>
         <p className="max-w-md text-sm text-fg-muted">
           {session.observationCount} competitor observations. <Term id="jev" /> evaluates the evidence; <Term id="hypit" /> renders approved briefs. Media appears only after a provider stores bytes.

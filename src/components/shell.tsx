@@ -177,7 +177,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
     const iconOnly = collapsed && !mobile;
     return <div className="flex h-full flex-col bg-surface">
       <div className="flex h-16 items-center justify-between border-b border-border px-4">
-        <Link to="/" onClick={() => setMobileNavOpen(false)} className="font-display text-lg font-semibold tracking-tight text-fg">Meridian</Link>
+        <Link to="/" onClick={() => setMobileNavOpen(false)} className="flex min-w-0 items-center gap-2.5 font-display text-lg font-semibold tracking-tight text-fg"><span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-md bg-accent font-sans text-sm font-semibold text-accent-fg">M</span><span className={iconOnly ? "sr-only" : "truncate"}>Meridian</span></Link>
         {mobile ? <button className="grid size-11 place-items-center rounded-md text-fg-muted hover:bg-surface-2" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation"><X aria-hidden="true" className="size-5" /></button> : null}
       </div>
       {/* Workspace first, brand directly below it on brand-scoped pages. The collapsed rail keeps one switcher button, which opens the command palette, so a workspace or brand can still be changed there. */}
@@ -196,7 +196,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
           {group.items.map((item) => {
             const Icon = NAV_ICONS[item.id] ?? House;
             const current = isCurrentPath(path, item.to);
-            return <Link key={item.id} to={item.to as never} aria-current={current ? "page" : undefined} title={iconOnly ? item.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors ${current ? "bg-accent-soft font-semibold text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
+            return <Link key={item.id} to={item.to as never} aria-current={current ? "page" : undefined} title={iconOnly ? item.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`relative mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150 ${current ? "bg-accent-soft font-semibold text-fg before:absolute before:inset-y-2 before:-left-3 before:w-[3px] before:rounded-full before:bg-accent" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
               <Icon aria-hidden="true" className={`size-4 shrink-0 ${current ? "text-accent" : ""}`} />
               <span className={iconOnly ? "sr-only" : "flex-1"}>{item.label}</span>
               {item.badge ? <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-fg">{item.badge}<span className="sr-only"> open</span></span> : null}

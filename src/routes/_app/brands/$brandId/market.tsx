@@ -204,7 +204,7 @@ function MarketPage({ brandId }: { brandId: string }) {
       <UnsavedChangesGuard dirty={marketFormsDirty} />
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Market</p>
-        <h1 className="font-display text-4xl">What has actually been seen</h1>
+        <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">What has actually been seen</h1>
         <p className="text-muted">
           Collect bounded public Meta video-ad records, preserve source and transcript evidence, and let JEV Research identify recurring structures. Missing media stays unavailable; no observations or outcomes are invented.
         </p>
