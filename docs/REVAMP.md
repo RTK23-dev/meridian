@@ -8,7 +8,7 @@ It sits beside NORTH_STAR.md. Where the two disagree on direction, NORTH_STAR.md
 1. **Sign in.** A split screen: the loop Meridian runs (Gather, Grade, Make, Publish, Learn), where keys live, and that new paid
    ads start paused. The form sits on the right and stacks first on a phone.
 2. **Overview.** One callout names the next setup step and why. It disappears once the two required steps are done.
-3. **Setup guide (`/setup`, first item in the sidebar).** Six steps in order. Each one says what it is, why it matters, and what
+3. **Setup guide (`/setup`, first item in the sidebar's Settings group).** Six steps in order. Each one says what it is, why it matters, and what
    the saved records show now. Only the first two are required.
    - **Create your first brand.** A name and what you sell. Everything else is folded under "Add more detail".
    - **Choose a decision engine.** Two cards: TypeSafe JEV and OpenAI Decisions, with what each does and what key it needs. A

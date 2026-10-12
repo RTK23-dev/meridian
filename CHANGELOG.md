@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A sidebar for the core loop.** Brand brain, Products and Connected accounts sit under Brand; Market and Intelligence under
+  Research; Studio, Factory and Library under Create; Opportunities and Reviews under Review; Learning and Calibration under
+  Results. Usage & cost, Alerts center, Audit log, Webhook events, Exports and Notification preferences are listed on the Settings
+  screen, and every page ends with a link to the next step.
 - **Brand brain setup.** The brain opens with a setup panel: the four required fields as steps, in form order. Each step links to its
   field, and the next open one is named. Every field says what to write and shows an example as placeholder text. The example is not saved.
 - **Factory approvals on the screen.** A run waiting at produce, launch, test or review shows an approve button to members. Runs show their
