@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **One command for a local trial.** `npm run dev` creates `.env` and the secrets on the first run, prints three steps once the app
+  answers, and keeps the embedded database in `.data/pglite`. Accounts, workspaces and brands survive a restart. Without `DATABASE_URL`,
+  the dev server also runs the queued jobs, so no second terminal is needed. Periodic work still needs `npm run scheduler`.
+- **`npm run dev` loads `.env`.** Before, the dev server ignored `.env`, so sign-in sessions and saved provider keys did not survive a
+  restart. Values already set in the shell still win. Existing `.env` files may now apply their non-blank defaults, such as
+  `BETTER_AUTH_URL=http://127.0.0.1:8080`.
+- **`.env.example` is grouped** under "Needed to start" and "Needed for a real deployment". `MERIDIAN_LOCAL_DATA_DIR` is new.
+- **Docker Compose.** `Dockerfile`, `docker-compose.yml` and `.dockerignore` run the web app, worker, scheduler and PostgreSQL 16. Not
+  yet built or run with a Docker daemon. See [docs/SETUP.md](docs/SETUP.md).
 - **Brand brain setup.** The brain opens with a setup panel: the four required fields as steps, in form order. Each step links to its
   field, and the next open one is named. Every field says what to write and shows an example as placeholder text. The example is not saved.
 - **Factory approvals on the screen.** A run waiting at produce, launch, test or review shows an approve button to members. Runs show their
