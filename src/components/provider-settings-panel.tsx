@@ -328,16 +328,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 TypeSafe is the decision transport. Its key is saved per workspace, and a deployment key is used only when
                 JEV_SHARED_DEFAULT=deployment is set. A decision never calls a second provider.
               </p>
-              <div className="sm:col-span-2">
-                <Field label="TypeSafe JEV API key (saved per workspace)" error={fieldErrors.jevKey?.message}>
-                  <Input
-                    type="password"
-                    placeholder="Enter a TypeSafe JEV key to save or replace it..."
-                    {...providerForm.register("jevKey")}
-                    disabled={!canAdmin}
-                  />
-                </Field>
-              </div>
+              <p className="sm:col-span-2 text-xs text-muted">The TypeSafe key is entered in the Setup section above. It is saved there, and this panel keeps the transport settings only.</p>
             </div>
             </div>
           ) : null}
@@ -356,24 +347,14 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 </SelectInput>
               </Field>
 
-              <div className="sm:col-span-2">
-                <Field label="Gemini production API key (Omni video, image)" error={fieldErrors.productionKey?.message}>
-                  <Input
-                    type="password"
-                    placeholder="Enter a Gemini API key to save or replace it..."
-                    {...providerForm.register("productionKey")}
-                    disabled={!canAdmin}
-                  />
-                </Field>
-              </div>
+              <p className="sm:col-span-2 text-xs text-muted">The Gemini production key is entered in the Setup section above. This panel keeps the production settings only.</p>
             </div>
           ) : null}
 
           {activeTab === "production" ? (
             <p className="text-xs text-muted">
-              The key is saved per workspace and used only for this workspace&apos;s production calls. A deployment key is
-              used only when PRODUCTION_SHARED_DEFAULT=deployment is set. Saving the settings without a new key keeps the
-              stored key.
+              Production calls use the key saved for this workspace in the Setup section. A deployment key is used only when
+              PRODUCTION_SHARED_DEFAULT=deployment is set.
             </p>
           ) : null}
 
@@ -408,18 +389,9 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
           {activeTab === "perception" ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <Field label="Gemini API Key (perception)" error={fieldErrors.perceptionKey?.message}>
-                  <Input
-                    type="password"
-                    placeholder="Enter a Gemini API key..."
-                    {...providerForm.register("perceptionKey")}
-                    disabled={!canAdmin}
-                  />
-                </Field>
-              </div>
+              <p className="sm:col-span-2 text-xs text-muted">The Gemini perception key is entered in the Setup section above. This panel keeps the perception settings only.</p>
               <p className="sm:col-span-2 text-xs text-muted">
-                Used for still-image and video-frame perception. Saving replaces the stored key. The key is never shown again; only its last four characters are.
+                Used for still-image and video-frame perception. Its key is saved in the Setup section above.
               </p>
             </div>
           ) : null}

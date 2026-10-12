@@ -65,6 +65,17 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
+  sidecar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The sourcing sidecar's own tests. They need its Python requirements and make no outbound calls.
+      - run: python -m pip install -r sidecar/sourcing/requirements.txt
+      - run: python -m unittest discover -s sidecar/sourcing -p "test_*.py"
+
   e2e:
     needs: check
     runs-on: ubuntu-latest

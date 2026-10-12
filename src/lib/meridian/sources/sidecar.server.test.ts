@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractPageText, sidecarConfig, type SidecarConfig } from "./sidecar.server.ts";
+import { extractPageText, parseFeedWithSidecar, sidecarConfig, v2exTopicsWithSidecar, type SidecarConfig } from "./sidecar.server.ts";
 
 const TOKEN = "test-token-0123456789abcdef";
 const CONFIG: SidecarConfig = { url: "http://127.0.0.1:8765", token: TOKEN };
@@ -58,4 +58,36 @@ test("the error from a failed sidecar call is not returned, because it can carry
   const failing = (async () => { throw new Error("secret page text"); }) as typeof fetch;
   const result = await extractPageText("<p>Hi</p>", "https://example.com/", FALLBACK, CONFIG, failing);
   assert.equal(JSON.stringify(result).includes("secret"), false);
+});
+
+test("a feed is parsed by the sidecar, and a sidecar that cannot read it gives no items", async () => {
+  const seen: { url: string; body: unknown }[] = [];
+  const answering = (async (url: string | URL | Request, init?: RequestInit) => {
+    seen.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+    return jsonResponse({
+      feedTitle: "News",
+      items: [
+        { title: "One", link: "https://a.test/1", published: "Mon", summary: "Hi" },
+        { title: "No link", link: "", published: "", summary: "" },
+      ],
+    });
+  }) as typeof fetch;
+  const feed = await parseFeedWithSidecar(CONFIG, "<rss/>", 500, answering);
+  assert.equal(seen[0].url, "http://127.0.0.1:8765/feed");
+  assert.deepEqual(seen[0].body, { feed: "<rss/>", limit: 50 }, "the limit is capped at 50");
+  assert.deepEqual(feed, { feedTitle: "News", items: [{ title: "One", link: "https://a.test/1", published: "Mon", summary: "Hi" }] });
+
+  const refused = (async () => jsonResponse({ error: "bad" }, 400)) as typeof fetch;
+  assert.equal(await parseFeedWithSidecar(CONFIG, "<rss/>", 5, refused), null);
+});
+
+test("V2EX topics come from the hot list or one node, and a missing URL is dropped", async () => {
+  const paths: string[] = [];
+  const answering = (async (url: string | URL | Request) => {
+    paths.push(String(url));
+    return jsonResponse({ items: [{ title: "T", url: "https://www.v2ex.com/t/1", replies: 3 }, { title: "no url" }] });
+  }) as typeof fetch;
+  assert.deepEqual(await v2exTopicsWithSidecar(CONFIG, null, 5, answering), [{ title: "T", url: "https://www.v2ex.com/t/1", replies: 3 }]);
+  await v2exTopicsWithSidecar(CONFIG, "python", 5, answering);
+  assert.deepEqual(paths, ["http://127.0.0.1:8765/v2ex/hot", "http://127.0.0.1:8765/v2ex/node"]);
 });

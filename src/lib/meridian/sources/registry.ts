@@ -20,12 +20,16 @@ import { PinterestSourceAdapter } from "./adapters/pinterest.ts";
 import { RedditSourceAdapter } from "./adapters/reddit.ts";
 import { LinkedInSourceAdapter } from "./adapters/linkedin.ts";
 import { CycloneScoutSourceAdapter } from "../discovery/cyclone-scout-adapter.ts";
+import { FeedSourceAdapter } from "./adapters/feed.ts";
+import { V2exSourceAdapter } from "./adapters/v2ex.ts";
 
 export class SourceRegistry {
   private readonly adapters = new Map<string, SourceAdapter>();
 
   constructor() {
     this.register(new UploadSourceAdapter());
+    this.register(new FeedSourceAdapter());
+    this.register(new V2exSourceAdapter());
     this.register(new InstagramSourceAdapter());
     this.register(new MetaAdLibrarySourceAdapter());
     this.register(new TikTokSourceAdapter());

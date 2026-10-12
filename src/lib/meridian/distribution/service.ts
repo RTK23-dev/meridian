@@ -301,12 +301,16 @@ export async function publishCreativeToChannels(
 
     let mediaBytes: Uint8Array | null = null;
     try {
-      const { createFilesystemObjectStore } = await import("../storage/filesystem.ts");
-      const store = createFilesystemObjectStore(process.env.STORAGE_ROOT || ".meridian/storage");
-      const stored = store.get(access.organizationId, asset.storage_key);
-      if (stored?.bytes && stored.bytes.byteLength > 0) {
-        mediaBytes = stored.bytes;
-      }
+      // The bytes live in Postgres (asset_blobs) or in Google Drive, located by the storage_objects row. This is the same read a
+      // download makes, so a publish sends the file that the person can see.
+      const { loadStoredSource } = await import("../storage/asset-response.ts");
+      const { defaultArtifactDrive } = await import("../storage/artifact-drive.ts");
+      const stored = await loadStoredSource(sql, async () => defaultArtifactDrive(), {
+        storageKey: asset.storage_key,
+        organizationId: access.organizationId,
+        brandId: input.brandId,
+      });
+      if (stored && stored.bytes.byteLength > 0) mediaBytes = stored.bytes;
     } catch {
       // storage unavailable
     }

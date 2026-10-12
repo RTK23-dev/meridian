@@ -102,8 +102,8 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
 
       <section aria-labelledby="provider-settings-title" className="space-y-3">
         <div>
-          <h2 id="provider-settings-title" className="text-section font-semibold text-fg">Provider keys and settings</h2>
-          <p className="mt-1 text-sm text-fg-muted">Keys are stored encrypted and are never shown again. Only an admin can save or remove them.</p>
+          <h2 id="provider-settings-title" className="text-section font-semibold text-fg">Engine, sources and provider settings</h2>
+          <p className="mt-1 text-sm text-fg-muted">Each provider's settings and connection test. Keys are entered once, in Setup above.</p>
         </div>
         <ProviderSettingsPanel organizationId={organizationId} canAdmin={canAdmin} />
       </section>

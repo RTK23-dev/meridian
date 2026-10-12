@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button, ScreenSkeleton } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
@@ -28,9 +28,9 @@ function Products({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-fg-muted underline-offset-4 hover:underline">{detail.identity.name}</Link>
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="space-y-3">
+        <p className="eyebrow">Brand</p>
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <h1 className="font-display text-4xl">Products</h1>
           {canEdit ? <Button type="button" onClick={() => setSheet({ open: true, product: null })}>Add product</Button> : null}
         </div>

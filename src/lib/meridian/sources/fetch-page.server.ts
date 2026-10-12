@@ -151,26 +151,59 @@ export async function fetchPublicMedia(rawUrl: string, hops = 0, maxBytes = MAX_
   return { url: url.toString(), mimeType, bytes: concat(chunks) };
 }
 
+/** The shape of one public document read: which content types it may be, and how its refusals read. */
+type DocumentKind = { label: string; accept: string; types: readonly string[]; refusal: string };
+
+const HTML_SNAPSHOT: DocumentKind = {
+  label: "snapshot",
+  accept: "text/html;q=0.9",
+  types: ["text/html", "application/xhtml"],
+  refusal: "The ad snapshot did not return HTML.",
+};
+
+const FEED_DOCUMENT: DocumentKind = {
+  label: "feed",
+  accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8",
+  types: ["application/rss+xml", "application/atom+xml", "application/xml", "text/xml"],
+  refusal: "The address did not return an RSS or Atom feed.",
+};
+
 /** Reads a small public HTML snapshot while preserving the same DNS and redirect checks. */
 export async function fetchPublicHtml(rawUrl: string, hops = 0): Promise<{ url: string; html: string }> {
+  const { url, body } = await fetchPublicDocument(rawUrl, HTML_SNAPSHOT, hops);
+  return { url, html: body };
+}
+
+/**
+ * Reads a public RSS or Atom feed with the same DNS, robots, bot-check and redirect checks as a page. The body comes back raw:
+ * a feed is XML and must not go through the HTML text extraction.
+ */
+export async function fetchPublicFeed(rawUrl: string, hops = 0): Promise<{ url: string; feed: string }> {
+  const { url, body } = await fetchPublicDocument(rawUrl, FEED_DOCUMENT, hops);
+  return { url, feed: body };
+}
+
+async function fetchPublicDocument(rawUrl: string, kind: DocumentKind, hops: number): Promise<{ url: string; body: string }> {
   const issue = publicUrlIssue(rawUrl);
   if (issue) throw new Error(issue);
   const url = new URL(rawUrl);
   const pinnedLookup = await resolveAndPinHost(url.hostname);
   await enforceRobots(url, pinnedLookup);
-  const response = await requestPage(url, pinnedLookup, "text/html;q=0.9");
+  const response = await requestPage(url, pinnedLookup, kind.accept);
   await refuseBotChallenge(response);
   const statusCode = response.statusCode;
   if (statusCode != null && statusCode >= 300 && statusCode < 400) {
     const location = response.headers.location;
     const redirect = Array.isArray(location) ? location[0] : location;
-    if (!redirect || hops >= MAX_HOPS) throw new Error("The snapshot redirected too many times.");
-    return fetchPublicHtml(new URL(redirect, url).toString(), hops + 1);
+    if (!redirect || hops >= MAX_HOPS) throw new Error(`The ${kind.label} redirected too many times.`);
+    return fetchPublicDocument(new URL(redirect, url).toString(), kind, hops + 1);
   }
-  if (statusCode == null || statusCode < 200 || statusCode >= 300) throw new Error(`The snapshot returned ${statusCode ?? "an invalid status"}.`);
+  if (statusCode == null || statusCode < 200 || statusCode >= 300) {
+    throw new Error(`The ${kind.label} returned ${statusCode ?? "an invalid status"}.`);
+  }
   const contentType = response.headers["content-type"];
   const type = Array.isArray(contentType) ? contentType.join(",") : contentType ?? "";
-  if (type && !type.includes("text/html") && !type.includes("application/xhtml")) throw new Error("The ad snapshot did not return HTML.");
+  if (type && !kind.types.some((allowed) => type.includes(allowed))) throw new Error(kind.refusal);
   const reader = Readable.toWeb(response).getReader();
   const chunks: Uint8Array[] = [];
   let received = 0;
@@ -181,7 +214,7 @@ export async function fetchPublicHtml(rawUrl: string, hops = 0): Promise<{ url: 
     chunks.push(step.value);
   }
   await reader.cancel().catch(() => undefined);
-  return { url: url.toString(), html: new TextDecoder().decode(concat(chunks)).slice(0, MAX_BYTES) };
+  return { url: url.toString(), body: new TextDecoder().decode(concat(chunks)).slice(0, MAX_BYTES) };
 }
 
 function requestPage(url: URL, pinnedLookup: NonNullable<RequestOptions["lookup"]>, accept: string, timeoutMs = 8_000): Promise<IncomingMessage> {
