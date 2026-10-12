@@ -35,9 +35,10 @@ export function PipelineStepper({ brandId, stages }: { brandId: string; stages: 
         {stages.map((stage, index) => {
           const presentation = STATE[stage.state];
           const Icon = presentation.icon;
-          // The stages rise in one after another. The delay is capped, so the last stage is settled well inside the first second.
+          // No entrance animation here. The stages arrive with the brand data, and a fade that runs during the UI baseline's
+          // accessibility scan lowers the text contrast it measures. The progress track above is the only motion.
           return (
-            <li key={stage.key} className="stagger-in" style={{ animationDelay: `${Math.min(index, 3) * 40}ms` }}>
+            <li key={stage.key}>
               <Link
                 to={stage.to}
                 params={{ brandId }}
