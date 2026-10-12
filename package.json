@@ -26,6 +26,7 @@
     "ui:baseline": "node scripts/ui-baseline.mjs",
     "ui:design-smoke": "node scripts/design-system-smoke.mjs",
     "agent-reach": "node scripts/agent-reach.mjs",
+    "sourcing-sidecar": "python3 sidecar/sourcing/server.py",
     "ui:button-audit": "node scripts/button-audit.mjs",
     "e2e": "node scripts/product-loop.mjs"
   },

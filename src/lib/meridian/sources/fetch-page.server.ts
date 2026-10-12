@@ -4,6 +4,7 @@ import { request as httpsRequest } from "node:https";
 import { Readable } from "node:stream";
 import { ipIsBlocked, publicUrlIssue } from "./public-url.ts";
 import { BOT_CHECK_MESSAGE, CRAWLER_USER_AGENT, isBotChallenge, ROBOTS_MESSAGE, robotsAllows } from "./crawl-policy.ts";
+import { extractPageText } from "./sidecar.server.ts";
 
 const MAX_BYTES = 200_000;
 const MAX_MEDIA_BYTES = 80_000_000;
@@ -70,7 +71,8 @@ export async function resolveAndPinHost(
   return pinnedLookup;
 }
 
-export async function fetchPublicText(rawUrl: string, hops = 0): Promise<{ url: string; text: string }> {
+/** The page text, and which extractor read it: the sidecar's parser when it is configured and answers, otherwise the built-in one. */
+export async function fetchPublicText(rawUrl: string, hops = 0): Promise<{ url: string; text: string; extractor: "scrapling" | "builtin" }> {
   const issue = publicUrlIssue(rawUrl);
   if (issue) throw new Error(issue);
   const url = new URL(rawUrl);
@@ -104,9 +106,9 @@ export async function fetchPublicText(rawUrl: string, hops = 0): Promise<{ url: 
   }
   await reader.cancel().catch(() => undefined);
   const html = new TextDecoder().decode(concat(chunks)).slice(0, MAX_BYTES);
-  const text = htmlToText(html);
-  if (text.length < 40) throw new Error("The page did not contain enough text to store.");
-  return { url: url.toString(), text };
+  const extracted = await extractPageText(html, url.toString(), htmlToText);
+  if (extracted.text.length < 40) throw new Error("The page did not contain enough text to store.");
+  return { url: url.toString(), text: extracted.text, extractor: extracted.extractor };
 }
 
 /** Fetches bounded public video bytes using the same DNS-pinned connection as page collection. */
