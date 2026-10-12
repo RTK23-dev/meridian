@@ -363,6 +363,11 @@ export const approveFactoryStage = createServerFn({ method: "POST" })
       returning id
     `;
     if (!recorded[0]) throw new Error("This stage is already approved for this run.");
+    // The run leaves the waiting state now, so the approve control goes away and cannot be pressed twice. A paused run keeps its status.
+    await sql`
+      update factory_runs set status = 'queued', error = '', updated_at = now()
+      where id = ${data.runId} and organization_id = ${organizationId} and brand_id = ${data.brandId} and status = 'awaiting_approval'
+    `;
     const remaining = FACTORY_GRAPH.slice(FACTORY_GRAPH.findIndex((spec) => spec.type === data.stage));
     const idByKey = new Map<string, string>();
     for (const spec of remaining) {

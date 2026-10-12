@@ -73,20 +73,23 @@ export type OrganicPostSummary = {
   scheduledFor: string | null;
   publishedAt: string | null;
   createdAt: string;
-  views: number;
-  threeSecondViews: number;
-  completionRate: number;
-  shares: number;
-  likes: number;
+  // A metric the platform did not report is null. It is never shown or summed as zero.
+  views: number | null;
+  threeSecondViews: number | null;
+  completionRate: number | null;
+  shares: number | null;
+  likes: number | null;
 };
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
 }
 
-function asNumber(value: unknown): number {
+/** A stored metric, or null when it was never reported. Zero is a value, so it stays zero. */
+function asMetric(value: unknown): number | null {
+  if (value == null) return null;
   const number = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(number) ? number : 0;
+  return Number.isFinite(number) ? number : null;
 }
 
 /**
@@ -413,11 +416,7 @@ export async function listOrganicPosts(
   const posts = await sql<Record<string, unknown>>`
     select p.id, p.creative_id, p.platform, p.external_id, p.post_url, p.caption, p.title,
            p.status, p.scheduled_for, p.published_at, p.created_at,
-           coalesce(o.views, 0) as views,
-           coalesce(o.three_second_views, 0) as three_second_views,
-           coalesce(o.completion_rate, 0) as completion_rate,
-           coalesce(o.shares, 0) as shares,
-           coalesce(o.likes, 0) as likes
+           o.views, o.three_second_views, o.completion_rate, o.shares, o.likes
     from organic_posts p
     left join lateral (
       select views, three_second_views, completion_rate, shares, likes
@@ -442,17 +441,17 @@ export async function listOrganicPosts(
     scheduledFor: row.scheduled_for ? asText(row.scheduled_for) : null,
     publishedAt: row.published_at ? asText(row.published_at) : null,
     createdAt: asText(row.created_at),
-    views: asNumber(row.views),
-    threeSecondViews: asNumber(row.three_second_views),
-    completionRate: asNumber(row.completion_rate),
-    shares: asNumber(row.shares),
-    likes: asNumber(row.likes),
+    views: asMetric(row.views),
+    threeSecondViews: asMetric(row.three_second_views),
+    completionRate: asMetric(row.completion_rate),
+    shares: asMetric(row.shares),
+    likes: asMetric(row.likes),
   }));
 }
 
 /**
- * Simulates or records realistic organic observations for published organic posts,
- * then invokes applyLearnedPatterns so the feedback loop immediately trains JEV.
+ * Counts the real (not synthetic, not simulated) organic observations, then runs applyLearnedPatterns so the feedback loop
+ * trains from them. It writes no observation of its own: `recorded` is the count already stored, not a count of new rows.
  */
 export async function recordOrganicTelemetryAndLearn(
   sql: Sql,

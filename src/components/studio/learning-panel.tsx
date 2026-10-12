@@ -3,6 +3,7 @@ import { InfoTip } from "@/components/glossary";
 import { Button, ChartSkeleton, Card, DisabledReason } from "@/components/ui";
 import { copy } from "@/lib/copy";
 import { learningRows } from "./learning-rows.ts";
+import { organicMetricsLine } from "./organic-metrics.ts";
 import type { StudioPattern, StudioPublication } from "./types.ts";
 
 const LearningBars = lazy(() => import("./learning-bars.tsx"));
@@ -12,10 +13,10 @@ export type OrganicPostSummary = {
   platform: string;
   status: string;
   caption?: string | null;
-  views: number;
-  threeSecondViews: number;
-  completionRate: number;
-  shares: number;
+  views: number | null;
+  threeSecondViews: number | null;
+  completionRate: number | null;
+  shares: number | null;
 };
 
 type LearningPanelProps = {
@@ -80,7 +81,7 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
                   <p className="mt-0.5 text-xs text-fg-muted">{post.caption ? post.caption.slice(0, 70) : "No caption"}</p>
                 </div>
                 <div className="text-xs">
-                  <span>{post.views} views · {post.threeSecondViews} (3s hook) · {(post.completionRate * 100).toFixed(1)}% completion · {post.shares} shares</span>
+                  <span>{organicMetricsLine(post)}</span>
                 </div>
               </li>
             ))}

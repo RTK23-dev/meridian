@@ -13,6 +13,7 @@ import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@
 import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { approveFactoryStage, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian/factory/approval";
+import { organicMetricsLine } from "@/components/studio/organic-metrics";
 import { FACTORY_GRAPH } from "@/lib/meridian/factory/pipeline";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { qk } from "@/lib/query/keys";
@@ -368,8 +369,8 @@ function FactoryPage({ brandId }: { brandId: string }) {
                         {post.postUrl ? <a href={post.postUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-accent underline mt-0.5 inline-block">External post link</a> : null}
                       </div>
                       <div className="text-xs text-muted text-right">
-                        <div>{post.views.toLocaleString()} views · {post.threeSecondViews.toLocaleString()} 3s views</div>
-                        <div className="font-mono mt-0.5">{(post.completionRate * 100).toFixed(1)}% completion · {post.shares} shares · {post.likes} likes</div>
+                        <div className="font-mono">{organicMetricsLine(post)}</div>
+                        <div className="font-mono mt-0.5">{post.likes == null ? "likes not reported" : `${post.likes} likes`}</div>
                       </div>
                     </li>
                   ))}

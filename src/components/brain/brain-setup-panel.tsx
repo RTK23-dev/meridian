@@ -54,7 +54,8 @@ export function BrainSetupPanel({ steps, requiredFilled, requiredTotal, filled, 
             <span className="block break-words font-semibold">{step.label}</span>
             <span className="block text-xs text-fg-muted">{BRAIN_SECTION_LABELS[step.section]}</span>
           </span>
-          <span className={cn("shrink-0 text-xs font-semibold", step.state === "current" ? "text-accent" : "text-fg-muted")}>{STATE_LABEL[step.state]}</span>
+          {/* The accent is 4.3:1 on the accent-soft row, below the 4.5:1 minimum, so the current label uses the foreground colour. */}
+          <span className={cn("shrink-0 text-xs font-semibold", step.state === "current" ? "text-fg" : "text-fg-muted")}>{STATE_LABEL[step.state]}</span>
         </a>
       </li>)}
     </ol>
