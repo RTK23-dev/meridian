@@ -50,8 +50,20 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
 - **The app refuses to start.** Without `DATABASE_URL`, production (any `NODE_ENV` other than `development` or `test`) refuses to start.
   Set `DATABASE_URL`, or set `NODE_ENV` to `development` for a local trial.
 - **Media does not play.** Check that the artifact exists in its storage and that the browser can request byte ranges.
+- **A Factory run says awaiting approval.** The run reached a step that spends or publishes, in `manual` or `semi` automation. Approve the
+  stage, or change the run's automation. The reason on the run names the stage. The Factory screen does not have an approve button yet,
+  so until it does an approval is made through the `approveFactoryStage` server function (see [FACTORY.md](FACTORY.md)).
+- **A Factory run says paused or stopped.** Either the kill switch is engaged (every stage stops, in every mode) or a `full` run has no
+  spend cap, or has reached it. The reason on the run says which.
+- **A TikTok or YouTube post reports not connected.** The saved token does not grant the scope the publish needs (`video.publish` for
+  TikTok, the upload scope for YouTube). Save a token that grants it on Connected accounts.
 
 ## Upgrading
 
 Back up the database. Pull the new code. Run `npm ci`, `npm run build` (which migrates), then restart the web, worker and scheduler.
 A rollback is a restore of the backup, because migrations are not reversed automatically.
+
+This release adds migrations `0062` to `0065`. `0062` and `0063` make organic and paid metric columns nullable, so an unknown metric is
+stored as null and not as zero. `0064` clears the survival default from the Factory timelines, and the next grade run rewrites them from
+source data. `0065` adds run settings, the approvals table, and the `awaiting_approval` run status. Runs started before this release keep
+working from their level.
