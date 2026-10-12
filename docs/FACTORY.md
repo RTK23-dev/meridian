@@ -58,7 +58,9 @@ A person who is a member of the brand approves a waiting stage with the server f
 of `factory.produce`, `factory.launch`, `factory.test`, `factory.review`). The approval is recorded once per run and stage. The stage
 and every stage after it are queued again in order, so the run carries on from the point it waited.
 
-The Factory screen does not yet have an approve button. Until it does, an approval is made by calling the server function.
+The Factory screen shows an **Approve** button on a run that is waiting at one of these stages. The button is shown only to a member, and
+only where the server would accept the approval: a paused or stopped run has nothing to approve, because it needs its spend cap or the kill
+switch cleared first. The server function remains the way to approve from a script.
 
 ## Spend caps: a caveat
 

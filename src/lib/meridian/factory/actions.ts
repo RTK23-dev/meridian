@@ -21,6 +21,7 @@ import {
 } from "./autopilot.ts";
 import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
+import { isApprovableStage } from "./approval.ts";
 import { trendReport } from "./trends.ts";
 import { weeklyStrategistReport } from "./report.ts";
 import { hypitVideoEngine } from "@/lib/meridian/video/engine";
@@ -324,8 +325,6 @@ export const startFactoryRun = createServerFn({ method: "POST" })
     return { runId, status: "queued" as const, jobs: jobs.length };
   });
 
-const APPROVABLE_STAGES = ["factory.produce", "factory.launch", "factory.test", "factory.review"] as const;
-
 /**
  * A person's approval of one stage that waits: produce, launch, test or review. It is recorded for the run and stage, and the
  * stage and every stage after it are queued again in order, so the run carries on from the point it waited. Only a member of the
@@ -335,7 +334,7 @@ export const approveFactoryStage = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
     const stage = typeof body.stage === "string" ? body.stage : "";
-    if (!(APPROVABLE_STAGES as readonly string[]).includes(stage)) {
+    if (!isApprovableStage(stage)) {
       throw new Error("Only produce, launch, test and review wait for an approval.");
     }
     return {

@@ -10,7 +10,8 @@ import { plainError } from "@/lib/copy";
 import { useWorkspace } from "@/components/workspace";
 import { BrainMiniNav, type MiniNavItem } from "@/components/brain/brain-mini-nav";
 import { BRAIN_SECTIONS, sectionAnchor, sectionProgress } from "@/components/brain/brain-sections";
-import { CompletenessRing } from "@/components/brain/completeness-ring";
+import { BrainSetupPanel } from "@/components/brain/brain-setup-panel";
+import { FIELD_GUIDE, brainFieldAnchor, brainSetupSteps, nextBrainStep } from "@/components/brain/brain-guide";
 import { LogoUploader } from "@/components/brain/logo-uploader";
 import { SourceMaterial } from "@/components/brain/source-material";
 import { AutosaveIndicator } from "@/components/brain/autosave-status";
@@ -28,7 +29,6 @@ import {
   BRAIN_SECTION_IDS,
   BRAIN_VALUE_KEYS,
   brainCompleteness,
-  brainFieldLabel,
   emptyBrain,
   provenanceLabel,
   reconcileBrain,
@@ -164,7 +164,8 @@ function BrainEditor({ brandId }: { brandId: string }) {
   if (query.isError && !detail) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!detail) return <ScreenSkeleton label="Loading brand brain" shape="form" />;
   const completeness = brainCompleteness(brain);
-  const missingLabels = completeness.missingRequired.map((key) => brainFieldLabel(key) ?? key);
+  const setupSteps = brainSetupSteps(brain);
+  const nextStep = nextBrainStep(brain);
   // Ctrl or Cmd + Enter saves only from a brain text field, not from the paste box. Leaving a brain field saves it at once.
   const shared: FormShared = { register, errors, values: brain, provenance: detail.provenance, canEdit };
   const navItems: MiniNavItem[] = BRAIN_SECTIONS.map((section) => ({ id: section.id, label: section.label, ...sectionProgress(section.keys, brain) }));
@@ -203,33 +204,19 @@ function BrainEditor({ brandId }: { brandId: string }) {
           </Link>
           <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Brand brain</h1>
           <p className="max-w-2xl text-fg-muted">
-            This is the record later decisions must use. A save sends only the fields you changed, so a field you did not touch is never
-            overwritten. Suggestions from a stored document wait until you accept them.
+            This is the record later decisions must use. Fill the four required fields first, then the rest as you have the facts.
+            A save sends only the fields you changed.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-5 panel">
-          <CompletenessRing filled={completeness.requiredFilled} total={completeness.requiredTotal} />
-          <div className="min-w-0 flex-1 space-y-1">
-            {completeness.requiredComplete ? (
-              <>
-                <p className="font-semibold">Complete brand brain</p>
-                <p className="text-sm text-fg-muted">
-                  All {completeness.requiredTotal} required fields have content. {completeness.filled} of {completeness.total} fields have content in total.
-                  Empty fields are not inferred.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="font-semibold">Not complete yet</p>
-                <p className="text-sm text-fg-muted">
-                  {completeness.requiredFilled} of {completeness.requiredTotal} required fields have content. Still needed: {missingLabels.join(", ")}.
-                  {" "}{completeness.filled} of {completeness.total} fields have content in total. Empty fields are not inferred.
-                </p>
-              </>
-            )}
-          </div>
-        </div>
+        <BrainSetupPanel
+          steps={setupSteps}
+          requiredFilled={completeness.requiredFilled}
+          requiredTotal={completeness.requiredTotal}
+          filled={completeness.filled}
+          total={completeness.total}
+          next={nextStep}
+        />
 
         <div className="grid gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
           <BrainMiniNav items={navItems} onSelect={noteSection} />
@@ -293,7 +280,8 @@ function BrainEditor({ brandId }: { brandId: string }) {
           </div>
         </div>
 
-        <div className="sticky bottom-0 z-10 space-y-3 panel shadow-md">
+        {/* A compact bar at the foot of the screen. On phones it sits above the quick navigation (3.5rem tall). It keeps the save control in reach while the form scrolls. */}
+        <div className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-4 space-y-3 lg:bottom-0 border-t border-border bg-surface/95 px-4 py-3 shadow-md backdrop-blur sm:mx-0 sm:rounded-xl sm:border">
           {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
           <UnsavedChangesBar
             dirty={dirty}
@@ -350,17 +338,27 @@ function FieldList({ keys, shared }: { keys: readonly BrainKey[]; shared: FormSh
 
 function BrainTextField({ fieldKey, shared }: { fieldKey: BrainKey; shared: FormShared }) {
   const meta = BRAIN_FIELDS.find((field) => field.key === fieldKey);
+  const guide = FIELD_GUIDE[fieldKey];
   const value = shared.values[fieldKey] ?? "";
   const source = shared.provenance[fieldKey];
+  // An empty field says what it needs. A filled one says where its text came from.
   const hint = value.trim()
     ? (source ? provenanceLabel(source) : "Saved. No source recorded.")
-    : meta?.required ? "Required. Empty. Not inferred." : "Empty. Not inferred.";
-  return <Field
-    label={meta?.label ?? fieldKey}
-    required={meta?.required}
-    hint={hint}
-    error={shared.errors[fieldKey]?.message}
-  >
-    <Textarea {...shared.register(fieldKey)} data-brain-field="" disabled={!shared.canEdit} maxLength={4000} />
-  </Field>;
+    : `${meta?.required ? "Required. " : ""}${guide.help}`;
+  return <div id={brainFieldAnchor(fieldKey)} className="scroll-mt-28">
+    <Field
+      label={meta?.label ?? fieldKey}
+      required={meta?.required}
+      hint={hint}
+      error={shared.errors[fieldKey]?.message}
+    >
+      <Textarea
+        {...shared.register(fieldKey)}
+        data-brain-field=""
+        placeholder={guide.example}
+        disabled={!shared.canEdit}
+        maxLength={4000}
+      />
+    </Field>
+  </div>;
 }

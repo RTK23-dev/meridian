@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Brand brain setup.** The brain opens with a setup panel: the four required fields as steps, in form order. Each step links to its
+  field, and the next open one is named. Every field says what to write and shows an example as placeholder text. The example is not saved.
+- **Factory approvals on the screen.** A run waiting at produce, launch, test or review shows an approve button to members. Runs show their
+  status in plain words, such as "Waiting for your approval". The approval rule is shared with the server, so a button appears only where
+  the server would accept it.
+
 ## 0.1.0-beta.11 — prerelease
 
 The sections below this one are part of beta.11. Operators must read the upgrade notes in [docs/OPERATIONS.md](docs/OPERATIONS.md)

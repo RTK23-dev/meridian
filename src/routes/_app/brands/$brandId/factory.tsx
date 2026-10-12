@@ -11,7 +11,9 @@ import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
 import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
-import { startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import { approveFactoryStage, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian/factory/approval";
+import { FACTORY_GRAPH } from "@/lib/meridian/factory/pipeline";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { qk } from "@/lib/query/keys";
 
@@ -66,7 +68,14 @@ function FactoryPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
     onSuccess: (result) => setNote(result.engaged ? "Brand kill switch engaged. Live ads must pause." : "Brand kill switch cleared."),
   });
-  const failures = [startRun, saveControls, killSwitch].map((action) => action.error).filter((error): error is Error => Boolean(error));
+  const approveStage = useScopedMutation({
+    mutationKey: factoryKey("approve"),
+    mutationFn: (vars: { runId: string; stage: string }) => approveFactoryStage({ data: { brandId, runId: vars.runId, stage: vars.stage } }),
+    // An approval queues the stage and every stage after it, so the jobs and the run list change.
+    invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
+    onSuccess: (result) => setNote(`Approved. ${result.requeued} steps are queued again from ${FACTORY_GRAPH.find((spec) => spec.type === result.stage)?.label ?? result.stage}.`),
+  });
+  const failures = [startRun, saveControls, killSwitch, approveStage].map((action) => action.error).filter((error): error is Error => Boolean(error));
 
   if (query.isError && !board) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!board) return <ScreenSkeleton label="Loading factory" shape="cards" />;
@@ -153,12 +162,33 @@ function FactoryPage({ brandId }: { brandId: string }) {
             ) : <p className="text-sm text-muted">Viewers cannot queue runs.</p>}
             {board.runs.length === 0 ? <p className="text-sm text-muted">No factory runs are stored.</p> : (
               <ul className="space-y-2">
-                {board.runs.map((run) => (
-                  <li key={run.id} className="rounded-md border border-line p-3 text-sm">
-                    <span className="font-semibold">{run.niche || "unspecified niche"}</span> · {run.status} · {run.stage || "queued"}
-                    {run.error ? <span className="block text-muted">{run.error}</span> : null}
-                  </li>
-                ))}
+                {board.runs.map((run) => {
+                  const waitingOn = pendingApproval(run);
+                  const stageLabel = FACTORY_GRAPH.find((spec) => spec.type === run.stage)?.label ?? run.stage;
+                  return (
+                    <li key={run.id} className="space-y-2 rounded-md border border-line p-3 text-sm">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <span className="font-semibold">{run.niche || "unspecified niche"}</span>
+                        <span className={waitingOn ? "font-semibold text-accent" : "text-muted"}>
+                          {runStatusLabel(run.status)}{stageLabel ? ` · ${stageLabel}` : ""}
+                        </span>
+                      </div>
+                      {run.error ? <p className="text-muted">{run.error}</p> : null}
+                      {waitingOn ? (
+                        canEdit ? (
+                          <Button
+                            size="sm"
+                            disabled={approveStage.isPending}
+                            loading={approveStage.isPending}
+                            onClick={() => void approveStage.mutateAsync({ runId: run.id, stage: waitingOn }).catch(() => undefined)}
+                          >
+                            {APPROVAL_LABELS[waitingOn]}
+                          </Button>
+                        ) : <p className="text-muted">Only a member can approve this step.</p>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Card>
