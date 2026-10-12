@@ -139,9 +139,27 @@ test("a YouTube token that does not declare scopes is connected, and the upload 
   assert.equal(state.scopes, null);
 }));
 
+test("a TikTok token that declares scopes without video.publish is NOT_CONNECTED", withKey(async () => {
+  const payload = { accessToken: "tt-tok", customFields: { scopes: "user.info.basic" } };
+  const { sql } = fakeSql({ accounts: [account({ external_account_id: "open-id-1" })], vault: [vaultRow(payload)] });
+  const state = await resolveOrganicConnection(sql, { ...input, platform: "tiktok" });
+  assert.equal(state.connected, false);
+  if (state.connected) return;
+  assert.match(state.reason, /video\.publish/);
+}));
+
+test("a TikTok token that declares video.publish is connected, and its scopes are reported", withKey(async () => {
+  const payload = { accessToken: "tt-tok", customFields: { scopes: "user.info.basic,video.publish" } };
+  const { sql } = fakeSql({ accounts: [account({ external_account_id: "open-id-1" })], vault: [vaultRow(payload)] });
+  const state = await resolveOrganicConnection(sql, { ...input, platform: "tiktok" });
+  assert.equal(state.connected, true);
+  if (!state.connected) return;
+  assert.deepEqual(state.scopes, ["user.info.basic", "video.publish"]);
+}));
+
 test("resolveOrganicConnections returns every organic platform, each with its own state", withKey(async () => {
   const { sql } = fakeSql({ accounts: [] });
   const states = await resolveOrganicConnections(sql, input);
-  assert.deepEqual(Object.keys(states).sort(), ["facebook", "instagram", "youtube"]);
+  assert.deepEqual(Object.keys(states).sort(), ["facebook", "instagram", "tiktok", "youtube"]);
   for (const state of Object.values(states)) assert.equal(state.connected, false);
 }));
