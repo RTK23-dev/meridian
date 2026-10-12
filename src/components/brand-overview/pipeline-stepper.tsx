@@ -31,7 +31,7 @@ export function PipelineStepper({ brandId, stages }: { brandId: string; stages: 
       >
         <div className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
       </div>
-      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
+      <ol className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {stages.map((stage, index) => {
           const presentation = STATE[stage.state];
           const Icon = presentation.icon;

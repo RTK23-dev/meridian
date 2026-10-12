@@ -139,6 +139,7 @@ function Library({ brandId }: { brandId: string }) {
   // Hooks stop above this line. The screen renders from here down.
   if (query.isError && !data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!data) return <ScreenSkeleton label="Loading library" shape="rows" />;
+  const pausedProvider = publishForm.watch("provider");
   const canEdit = hasRole(data.role, "member");
 
   // The cards read media from the library list, which always answers with the asset ids. The studio read adds detail only.
@@ -248,33 +249,45 @@ function Library({ brandId }: { brandId: string }) {
             <Field label="Message" error={publishForm.formState.errors.message?.message}>
               <Textarea {...publishForm.register("message")} />
             </Field>
-            <Field label="Meta countries" hint="Comma-separated, such as US. Used only for Meta." error={publishForm.formState.errors.countries?.message}>
-              <Input {...publishForm.register("countries")} />
-            </Field>
-            <Field label="Meta page id" error={publishForm.formState.errors.pageId?.message}>
-              <Input {...publishForm.register("pageId")} />
-            </Field>
-            <Field label="TikTok location ids" hint="Numeric location ids, not country codes. An ad also needs an uploaded image or video id." error={publishForm.formState.errors.locationIds?.message}>
-              <Input {...publishForm.register("locationIds")} />
-            </Field>
-            <Field label="TikTok schedule start" error={publishForm.formState.errors.scheduleStart?.message}>
-              <Input {...publishForm.register("scheduleStart")} placeholder="2026-01-02 00:00:00" />
-            </Field>
-            <Field label="TikTok image ids" error={publishForm.formState.errors.imageIds?.message}>
-              <Input {...publishForm.register("imageIds")} />
-            </Field>
-            <Field label="TikTok video id" error={publishForm.formState.errors.videoId?.message}>
-              <Input {...publishForm.register("videoId")} />
-            </Field>
-            <Field label="Google headlines" hint="Each headline is 30 characters or fewer." error={publishForm.formState.errors.headlines?.message}>
-              <Input {...publishForm.register("headlines")} />
-            </Field>
-            <Field label="Google descriptions" hint="Each description is 90 characters or fewer." error={publishForm.formState.errors.descriptions?.message}>
-              <Input {...publishForm.register("descriptions")} />
-            </Field>
-            <Field label="Google CPC bid (cents)" error={publishForm.formState.errors.cpcBidCents?.message}>
-              <Input {...publishForm.register("cpcBidCents")} type="text" inputMode="decimal" />
-            </Field>
+            {pausedProvider === "meta" ? (
+  <>
+  <Field label="Meta countries" hint="Comma-separated, such as US. Used only for Meta." error={publishForm.formState.errors.countries?.message}>
+                <Input {...publishForm.register("countries")} />
+              </Field>
+              <Field label="Meta page id" error={publishForm.formState.errors.pageId?.message}>
+                <Input {...publishForm.register("pageId")} />
+              </Field>
+  </>
+) : null}
+            {pausedProvider === "tiktok" ? (
+  <>
+  <Field label="TikTok location ids" hint="Numeric location ids, not country codes. An ad also needs an uploaded image or video id." error={publishForm.formState.errors.locationIds?.message}>
+                <Input {...publishForm.register("locationIds")} />
+              </Field>
+              <Field label="TikTok schedule start" error={publishForm.formState.errors.scheduleStart?.message}>
+                <Input {...publishForm.register("scheduleStart")} placeholder="2026-01-02 00:00:00" />
+              </Field>
+              <Field label="TikTok image ids" error={publishForm.formState.errors.imageIds?.message}>
+                <Input {...publishForm.register("imageIds")} />
+              </Field>
+              <Field label="TikTok video id" error={publishForm.formState.errors.videoId?.message}>
+                <Input {...publishForm.register("videoId")} />
+              </Field>
+  </>
+) : null}
+            {pausedProvider === "google" ? (
+  <>
+  <Field label="Google headlines" hint="Each headline is 30 characters or fewer." error={publishForm.formState.errors.headlines?.message}>
+                <Input {...publishForm.register("headlines")} />
+              </Field>
+              <Field label="Google descriptions" hint="Each description is 90 characters or fewer." error={publishForm.formState.errors.descriptions?.message}>
+                <Input {...publishForm.register("descriptions")} />
+              </Field>
+              <Field label="Google CPC bid (cents)" error={publishForm.formState.errors.cpcBidCents?.message}>
+                <Input {...publishForm.register("cpcBidCents")} type="text" inputMode="decimal" />
+              </Field>
+  </>
+) : null}
             <UnsavedChangesBar
               dirty={publishForm.formState.isDirty}
               subject="paused publish"
