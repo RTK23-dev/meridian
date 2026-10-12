@@ -141,7 +141,7 @@ export function SettingSwitch({
   const labelId = `${id}-label`;
   const hintId = `${id}-hint`;
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-surface p-4">
+    <div className="space-y-3 panel">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 space-y-1">
           <span id={labelId} className="block text-sm font-semibold text-fg">{label}</span>

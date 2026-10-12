@@ -22,7 +22,7 @@ export type IntegrationId =
   | "meta" | "tiktok" | "google" | "ad_library"
   | "google_ai_studio" | "embeddings"
   | "hypit"
-  | "s3" | "email";
+  | "email";
 
 /** account: connected through OAuth or a stored token. key: a workspace key can be saved. deployment: set on the server only. */
 export type CardKind = "account" | "key" | "deployment";
@@ -126,7 +126,6 @@ export function integrationCards(input: { status: SystemStatus; summaries: Summa
     ready ? perceptionCard(ready.perception) : unavailableCard("google_ai_studio", "Google AI Studio", "research", "key", summaries.state),
     embeddingsCard(status),
     ready ? hypitCard(ready.production) : unavailableCard("hypit", "Hypit video", "generation", "deployment", summaries.state),
-    s3Card(status),
     emailCard(status),
   ];
 }
@@ -201,17 +200,6 @@ function hypitCard(summary: ProviderConfigSummary): CardModel {
   };
 }
 
-function s3Card(status: SystemStatus): CardModel {
-  const external = status.objectStorage.external === "CONFIGURED";
-  return {
-    id: "s3", label: "S3 object storage", group: "infrastructure", kind: "deployment",
-    status: external ? "AVAILABLE" : "NOT_CONFIGURED",
-    summary: status.objectStorage.detail,
-    missing: external ? null : "Set S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY on the server.",
-    facts: [`Active store: ${status.objectStorage.active === "s3" ? "S3" : "local filesystem"}`],
-  };
-}
-
 /** Email delivery is read from the server's state only. The state says whether EMAIL_API_URL and EMAIL_API_KEY are set. */
 function emailCard(status: SystemStatus): CardModel {
   const configured = status.email.status === "CONFIGURED";
@@ -244,5 +232,5 @@ export function processRows(status: SystemStatus): Array<{ id: string; label: st
 
 /** The publishing line is a server fact, shown as text. */
 export function publishingLine(status: SystemStatus): string {
-  return `${status.publishing.status === "NOT_CONNECTED" ? "Not connected" : status.publishing.status}. ${status.publishing.detail}`;
+  return `${status.publishing.status === "NOT_CONNECTED" ? "Set per channel" : status.publishing.status}. ${status.publishing.detail}`;
 }

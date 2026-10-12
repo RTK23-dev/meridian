@@ -78,20 +78,20 @@ function Intelligence({ brandId }: { brandId: string }) {
   const analyses = accountData.analyses;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
 
       {/* Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-widest text-brass">
+            <span className="eyebrow">
               JEV Cognitive Engine
             </span>
             <Badge variant="info">
               Multimodal 2.0
             </Badge>
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">
             Account & Creative Intelligence
           </h1>
           <p className="mt-1 text-sm text-muted">
@@ -102,16 +102,16 @@ function Intelligence({ brandId }: { brandId: string }) {
       </div>
 
       <Tabs defaultValue="account" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
-          <TabsTrigger value="account" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-3 max-w-xl">
+          <TabsTrigger value="account" className="flex items-center gap-2 sm:whitespace-nowrap">
             <Activity className="h-4 w-4" />
             <span>Account DNA</span>
           </TabsTrigger>
-          <TabsTrigger value="whitespace" className="flex items-center gap-2">
+          <TabsTrigger value="whitespace" className="flex items-center gap-2 sm:whitespace-nowrap">
             <Compass className="h-4 w-4" />
             <span>Whitespace ({whitespace.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="semantic" className="flex items-center gap-2">
+          <TabsTrigger value="semantic" className="flex items-center gap-2 sm:whitespace-nowrap">
             <Layers className="h-4 w-4" />
             <span>Semantic Memory</span>
           </TabsTrigger>
@@ -166,7 +166,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                     </span>
                     <div className="mt-2 flex items-center gap-2">
                       <Sparkles className="h-5 w-5 text-brass" />
-                      <span className="font-display text-xl font-semibold capitalize text-foreground">
+                      <span className="font-display text-xl font-semibold capitalize text-fg">
                         {profile.brandArchetype.replace(/_/g, " ") || "UGC Authentic"}
                       </span>
                     </div>
@@ -261,7 +261,7 @@ function Intelligence({ brandId }: { brandId: string }) {
               {/* Multimodal Decomposition Feed */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display text-lg font-semibold text-foreground">
+                  <h3 className="font-display text-lg font-semibold text-fg">
                     Multimodal Creative DNA Stream
                   </h3>
                   <span className="text-xs text-muted">
@@ -389,15 +389,15 @@ function Intelligence({ brandId }: { brandId: string }) {
 
           <div className="grid gap-3 md:grid-cols-3">
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">Competitor rows</p>
+              <p className="eyebrow">Competitor rows</p>
               <p className="mt-2 font-display text-3xl">{baseData.competitorCount}</p>
             </Card>
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">This brand</p>
+              <p className="eyebrow">This brand</p>
               <p className="mt-2 font-display text-3xl">{baseData.ownCount}</p>
             </Card>
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">Angle Gaps</p>
+              <p className="eyebrow">Angle Gaps</p>
               <p className="mt-2 text-sm">
                 {baseData.whitespace.length === 0
                   ? "No competitor angle is missing from this brand."

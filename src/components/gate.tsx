@@ -3,7 +3,7 @@ import { useWorkspace } from "@/components/workspace";
 import { documentTitle } from "@/lib/navigation/model";
 import { ErrorState, ScreenSkeleton } from "@/components/ui";
 import { ForbiddenPage } from "@/components/status-pages";
-import { MeridianMark } from "@/components/settings/auth-shell";
+import { AuthShell } from "@/components/settings/auth-shell";
 import { EmailAuthForm } from "@/components/settings/email-auth-form";
 
 /** Waits for the workspace bootstrap. Rendered inside the shell, so the navigation stays usable while it loads or fails. */
@@ -17,30 +17,18 @@ export function WorkspaceReady({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** The signed-out front door. The copy says what the product does and does not do, and the sign-in forms sit beside it. */
+/** The signed-out front door. It uses the same split layout as sign-in, so the first screen and the sign-in screen agree. */
 export function Welcome() {
   // The signed-out front door is outside the shell, so it sets its own document title.
   useEffect(() => {
     document.title = documentTitle({ page: "Welcome" });
   }, []);
   return (
-    <main id="main" tabIndex={-1} className="mx-auto grid min-h-screen w-full max-w-4xl content-center gap-10 px-4 py-12 sm:px-6">
-      <div className="flex items-center gap-3">
-        <MeridianMark />
-        <span className="font-display text-xl font-semibold tracking-tight text-fg">Meridian</span>
-      </div>
-      <div className="max-w-2xl space-y-4">
-        <p className="eyebrow">An advertising desk</p>
-        <h1 className="font-display text-4xl leading-tight text-fg sm:text-5xl">What should this brand make next?</h1>
-        <p className="text-lg text-fg-muted">
-          You add a brand, and it starts empty. You write what is true and record what you have actually seen.
-          The next recommendation has to cite that record.
-        </p>
-      </div>
-      <section aria-labelledby="welcome-email-title" className="mx-auto w-full max-w-md space-y-5 rounded-lg border border-border bg-surface p-6 shadow-sm">
-        <h2 id="welcome-email-title" className="text-section font-semibold text-fg">Sign in or create an account</h2>
-        <EmailAuthForm initialMode="in" />
-      </section>
-    </main>
+    <AuthShell
+      title="Sign in or create an account"
+      description="Your brands, records and decisions stay inside the workspace that owns them."
+    >
+      <EmailAuthForm initialMode="in" />
+    </AuthShell>
   );
 }

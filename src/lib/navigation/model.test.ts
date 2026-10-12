@@ -18,7 +18,7 @@ test("brandIdFromPath reads the brand from brand paths and never from /brands/ne
 test("workspace pages list the workspace groups in order and no brand groups", () => {
   const groups = sidebarGroups({ reviewCount: 4 });
   assert.deepEqual(groups.map((group) => group.id), ["overview", "workspace"]);
-  assert.deepEqual(groups[1]?.items.map((item) => item.id), ["jobs", "usage", "alerts", "integrations", "settings", "audit", "exports", "webhooks", "notifications"]);
+  assert.deepEqual(groups[1]?.items.map((item) => item.id), ["setup", "jobs", "usage", "alerts", "integrations", "settings", "audit", "exports", "webhooks", "notifications"]);
   for (const group of groups) {
     for (const item of group.items) assert.equal(item.to.startsWith("/brands/"), false, `${item.id} must not be a brand link off brand pages`);
   }
@@ -45,7 +45,7 @@ test("the review badge is absent on workspace pages", () => {
 });
 
 test("bottom tabs are the workspace four off brand pages and the brand four on them", () => {
-  assert.deepEqual(bottomTabs().map((tab) => tab.to), ["/", "/alerts", "/integrations", "/settings"]);
+  assert.deepEqual(bottomTabs().map((tab) => tab.to), ["/", "/setup", "/alerts", "/settings"]);
   assert.deepEqual(bottomTabs("brand-1").map((tab) => tab.to), ["/brands/brand-1", "/brands/brand-1/opportunities", "/brands/brand-1/studio", "/brands/brand-1/reviews"]);
 });
 

@@ -90,6 +90,23 @@ export function primaryMedia(variants: readonly LibraryMediaVariant[]): LibraryM
   return variants.find(hasStoredMedia) ?? null;
 }
 
+/**
+ * What the publish dialog needs to show a creative: its title, format and default caption. A creative with no stored file
+ * publishes its text only, so its kind is "creative" and its shape is unknown rather than guessed.
+ */
+export function publishTargetFor(item: LibraryCreative, variants: readonly LibraryMediaVariant[]) {
+  const media = primaryMedia(variants);
+  return {
+    creativeId: item.id,
+    title: item.title || item.hook || "Untitled creative",
+    kind: media?.kind ?? "creative",
+    width: media?.width ?? null,
+    height: media?.height ?? null,
+    durationMs: media?.durationMs ?? null,
+    defaultCaption: item.hook || item.title || "",
+  };
+}
+
 /** The kind a creative's preview uses. Unknown until the media query has answered. */
 export function mediaKindFor(load: MediaLoad, variants: readonly LibraryMediaVariant[]): MediaKind {
   if (load !== "ready") return "unknown";

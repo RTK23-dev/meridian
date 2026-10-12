@@ -68,7 +68,7 @@ export function WebhookEventsScreen() {
         description="Each row is a webhook that arrived, with its provider event ID and the time it was received. The index does not record whether an event was processed, and it does not store payloads."
       />
 
-      <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-[1fr_auto] sm:items-end" onSubmit={applyFilter} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
+      <form className="grid gap-3 panel sm:grid-cols-[1fr_auto] sm:items-end" onSubmit={applyFilter} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
         <Field label="Provider" hint="The provider key as stored, such as meta or tiktok. Leave empty for all providers." error={filterForm.formState.errors.provider?.message}>
           <Input {...filterForm.register("provider")} maxLength={80} placeholder="meta" />
         </Field>

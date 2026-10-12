@@ -38,7 +38,7 @@ process. Every piece of data belongs to one workspace (organization), and most r
 
 ## Storage and media
 
-- Postgres holds every row. Google Drive and S3 hold only artifacts and exports (rendered media, export packages, uploaded
+- Postgres holds every row. Google Drive holds only artifacts and exports (rendered media, export packages, uploaded
   source files). An upload is resumable: its session is recorded in Postgres, and an interrupted upload continues from the
   last confirmed byte.
 - Media is served from `/api/assets/:assetId`. The route checks tenancy and supports byte ranges and cache validators.

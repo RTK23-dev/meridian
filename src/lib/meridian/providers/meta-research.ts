@@ -10,6 +10,10 @@ export type MetaLibraryAd = {
   snapshotRequestUrl: string;
   capturedAt: string;
   publishedAt: string | null;
+  /** Meta's ad_delivery_stop_time. Null while the ad is still delivering as of capture; a value when it has stopped. */
+  stoppedAt: string | null;
+  /** The countries the ad reached, from ad_reached_countries. Empty when Meta does not return it. */
+  countries: string[];
   copy: string;
   headline: string;
   description: string;
@@ -50,6 +54,8 @@ function parseAd(value: unknown, capturedAt: string): MetaLibraryAd | null {
     snapshotRequestUrl,
     capturedAt,
     publishedAt: text(row.ad_delivery_start_time) || null,
+    stoppedAt: text(row.ad_delivery_stop_time) || null,
+    countries: Array.isArray(row.ad_reached_countries) ? row.ad_reached_countries.map(text).filter(Boolean).slice(0, 60) : [],
     copy: first(row.ad_creative_bodies),
     headline: first(row.ad_creative_link_titles),
     description: first(row.ad_creative_link_descriptions),
@@ -81,7 +87,7 @@ export async function collectMetaAdLibrary(input: {
     ad_reached_countries: JSON.stringify([country]),
     ad_type: "ALL",
     media_type: "VIDEO",
-    fields: "id,page_id,page_name,ad_snapshot_url,ad_delivery_start_time,ad_creative_bodies,ad_creative_link_titles,ad_creative_link_descriptions,publisher_platforms",
+    fields: "id,page_id,page_name,ad_snapshot_url,ad_delivery_start_time,ad_delivery_stop_time,ad_reached_countries,ad_creative_bodies,ad_creative_link_titles,ad_creative_link_descriptions,publisher_platforms",
     limit: String(Math.min(limit, 25)),
   });
   const collected: MetaLibraryAd[] = [];

@@ -33,7 +33,7 @@ export function PresetBar({
           <article
             key={key}
             aria-labelledby={`factory-preset-${key}`}
-            className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4"
+            className="flex flex-col gap-3 panel"
           >
             <h4 id={`factory-preset-${key}`} className="font-semibold text-fg">{PRESET_LABEL[key]}</h4>
             {matchKey === key ? (

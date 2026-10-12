@@ -72,7 +72,10 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
     claim: asText(row.claim),
     text: asText(row.raw_text),
   }));
-  const observations: PerformanceRow[] = observationRows.map((row) => ({
+  // A row with an unreported paid metric cannot give a rate, so it does not train learning. Unknown is never read as zero.
+  const observations: PerformanceRow[] = observationRows
+    .filter((row) => row.impressions != null && row.clicks != null && row.conversions != null && row.spend_cents != null)
+    .map((row) => ({
     creativeId: asText(row.creative_id),
     organizationId: asText(row.organization_id),
     brandId: asText(row.brand_id),

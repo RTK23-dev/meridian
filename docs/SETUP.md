@@ -51,6 +51,15 @@ To connect with OAuth from the app instead, set `GOOGLE_CLIENT_ID` and `GOOGLE_C
 `<your origin>/api/drive/callback` as the redirect URI. An admin then connects from Settings → General. Uploads over 5 MB need
 `TOKEN_ENCRYPTION_KEY`, which `npm run setup` generates.
 
+## Publishing and approving work
+
+Publishing is optional. Paid ads (Meta, TikTok, Google) are created paused, and Meridian never switches them on. Regular posts go to a
+Facebook Page, Instagram, YouTube or TikTok account, connected per brand on Connected accounts. The account and token each platform
+needs are in [PROVIDERS.md](PROVIDERS.md#organic-publishing-accounts). The export package works without any account.
+
+A Factory run waits at each step that spends or publishes, unless its automation is `full` with a spend cap. A waiting run shows
+`awaiting approval` and the reason. The approval is recorded for that run and stage. See [FACTORY.md](FACTORY.md).
+
 ## Deploying
 
 1. Create a PostgreSQL 16 database and set `DATABASE_URL`.

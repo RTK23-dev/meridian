@@ -183,7 +183,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <UnsavedChangesGuard dirty={dirty || pasteDirty} />
       <form
         onSubmit={handleSubmit(submit)}
@@ -201,14 +201,14 @@ function BrainEditor({ brandId }: { brandId: string }) {
           <Link to="/brands/$brandId" params={{ brandId }} className="text-sm text-fg-muted underline-offset-4 hover:underline">
             {detail.identity.name}
           </Link>
-          <h1 className="font-display text-4xl">Brand brain</h1>
+          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Brand brain</h1>
           <p className="max-w-2xl text-fg-muted">
             This is the record later decisions must use. A save sends only the fields you changed, so a field you did not touch is never
             overwritten. Suggestions from a stored document wait until you accept them.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-5 rounded-lg border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-center gap-5 panel">
           <CompletenessRing filled={completeness.requiredFilled} total={completeness.requiredTotal} />
           <div className="min-w-0 flex-1 space-y-1">
             {completeness.requiredComplete ? (
@@ -236,7 +236,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
           <div className="min-w-0 space-y-10">
             <SectionFrame id="identity" label="Identity" progress={progressFor("identity")}>
-              <dl className="grid gap-3 rounded-lg border border-border bg-surface p-4 text-sm sm:grid-cols-2">
+              <dl className="grid gap-3 panel text-sm sm:grid-cols-2">
                 {[
                   ["Brand name", detail.identity.name],
                   ["Category", detail.identity.category],
@@ -293,7 +293,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
           </div>
         </div>
 
-        <div className="sticky bottom-0 z-10 space-y-3 rounded-lg border border-border bg-surface p-4 shadow-md">
+        <div className="sticky bottom-0 z-10 space-y-3 panel shadow-md">
           {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
           <UnsavedChangesBar
             dirty={dirty}
@@ -304,8 +304,9 @@ function BrainEditor({ brandId }: { brandId: string }) {
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <AutosaveIndicator status={autosave.status} canEdit={canEdit} />
+            {/* Not disabled while an autosave runs: leaving a field starts one, and a disabled button would swallow the click. The manual save waits behind it. */}
             {canEdit ? (
-              <Button type="submit" disabled={pending || isSubmitting || autosave.status.kind === "saving"}>{pending || isSubmitting ? "Saving…" : "Save brain"}</Button>
+              <Button type="submit" disabled={pending || isSubmitting}>{pending || isSubmitting ? "Saving…" : "Save brain"}</Button>
             ) : null}
           </div>
           {!canEdit ? <p className="text-sm text-fg-muted">You can read this brain. Changing it needs a member role.</p> : null}

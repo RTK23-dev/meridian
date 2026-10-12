@@ -3,6 +3,8 @@ import { request as httpRequest, type IncomingMessage, type RequestOptions } fro
 import { request as httpsRequest } from "node:https";
 import { Readable } from "node:stream";
 import { ipIsBlocked, publicUrlIssue } from "./public-url.ts";
+import { BOT_CHECK_MESSAGE, CRAWLER_USER_AGENT, isBotChallenge, ROBOTS_MESSAGE, robotsAllows } from "./crawl-policy.ts";
+import { extractPageText } from "./sidecar.server.ts";
 
 const MAX_BYTES = 200_000;
 const MAX_MEDIA_BYTES = 80_000_000;
@@ -69,12 +71,15 @@ export async function resolveAndPinHost(
   return pinnedLookup;
 }
 
-export async function fetchPublicText(rawUrl: string, hops = 0): Promise<{ url: string; text: string }> {
+/** The page text, and which extractor read it: the sidecar's parser when it is configured and answers, otherwise the built-in one. */
+export async function fetchPublicText(rawUrl: string, hops = 0): Promise<{ url: string; text: string; extractor: "scrapling" | "builtin" }> {
   const issue = publicUrlIssue(rawUrl);
   if (issue) throw new Error(issue);
   const url = new URL(rawUrl);
   const pinnedLookup = await resolveAndPinHost(url.hostname);
+  await enforceRobots(url, pinnedLookup);
   const response = await requestPage(url, pinnedLookup, "text/html,text/plain;q=0.9");
+  await refuseBotChallenge(response);
   const statusCode = response.statusCode;
   if (statusCode != null && statusCode >= 300 && statusCode < 400) {
     const location = response.headers.location;
@@ -101,9 +106,9 @@ export async function fetchPublicText(rawUrl: string, hops = 0): Promise<{ url: 
   }
   await reader.cancel().catch(() => undefined);
   const html = new TextDecoder().decode(concat(chunks)).slice(0, MAX_BYTES);
-  const text = htmlToText(html);
-  if (text.length < 40) throw new Error("The page did not contain enough text to store.");
-  return { url: url.toString(), text };
+  const extracted = await extractPageText(html, url.toString(), htmlToText);
+  if (extracted.text.length < 40) throw new Error("The page did not contain enough text to store.");
+  return { url: url.toString(), text: extracted.text, extractor: extracted.extractor };
 }
 
 /** Fetches bounded public video bytes using the same DNS-pinned connection as page collection. */
@@ -113,7 +118,9 @@ export async function fetchPublicMedia(rawUrl: string, hops = 0, maxBytes = MAX_
   if (issue) throw new Error(issue);
   const url = new URL(rawUrl);
   const pinnedLookup = await resolveAndPinHost(url.hostname);
+  await enforceRobots(url, pinnedLookup);
   const response = await requestPage(url, pinnedLookup, "video/*,application/octet-stream;q=0.9", 120_000);
+  await refuseBotChallenge(response);
   const statusCode = response.statusCode;
   if (statusCode != null && statusCode >= 300 && statusCode < 400) {
     const location = response.headers.location;
@@ -144,24 +151,59 @@ export async function fetchPublicMedia(rawUrl: string, hops = 0, maxBytes = MAX_
   return { url: url.toString(), mimeType, bytes: concat(chunks) };
 }
 
+/** The shape of one public document read: which content types it may be, and how its refusals read. */
+type DocumentKind = { label: string; accept: string; types: readonly string[]; refusal: string };
+
+const HTML_SNAPSHOT: DocumentKind = {
+  label: "snapshot",
+  accept: "text/html;q=0.9",
+  types: ["text/html", "application/xhtml"],
+  refusal: "The ad snapshot did not return HTML.",
+};
+
+const FEED_DOCUMENT: DocumentKind = {
+  label: "feed",
+  accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8",
+  types: ["application/rss+xml", "application/atom+xml", "application/xml", "text/xml"],
+  refusal: "The address did not return an RSS or Atom feed.",
+};
+
 /** Reads a small public HTML snapshot while preserving the same DNS and redirect checks. */
 export async function fetchPublicHtml(rawUrl: string, hops = 0): Promise<{ url: string; html: string }> {
+  const { url, body } = await fetchPublicDocument(rawUrl, HTML_SNAPSHOT, hops);
+  return { url, html: body };
+}
+
+/**
+ * Reads a public RSS or Atom feed with the same DNS, robots, bot-check and redirect checks as a page. The body comes back raw:
+ * a feed is XML and must not go through the HTML text extraction.
+ */
+export async function fetchPublicFeed(rawUrl: string, hops = 0): Promise<{ url: string; feed: string }> {
+  const { url, body } = await fetchPublicDocument(rawUrl, FEED_DOCUMENT, hops);
+  return { url, feed: body };
+}
+
+async function fetchPublicDocument(rawUrl: string, kind: DocumentKind, hops: number): Promise<{ url: string; body: string }> {
   const issue = publicUrlIssue(rawUrl);
   if (issue) throw new Error(issue);
   const url = new URL(rawUrl);
   const pinnedLookup = await resolveAndPinHost(url.hostname);
-  const response = await requestPage(url, pinnedLookup, "text/html;q=0.9");
+  await enforceRobots(url, pinnedLookup);
+  const response = await requestPage(url, pinnedLookup, kind.accept);
+  await refuseBotChallenge(response);
   const statusCode = response.statusCode;
   if (statusCode != null && statusCode >= 300 && statusCode < 400) {
     const location = response.headers.location;
     const redirect = Array.isArray(location) ? location[0] : location;
-    if (!redirect || hops >= MAX_HOPS) throw new Error("The snapshot redirected too many times.");
-    return fetchPublicHtml(new URL(redirect, url).toString(), hops + 1);
+    if (!redirect || hops >= MAX_HOPS) throw new Error(`The ${kind.label} redirected too many times.`);
+    return fetchPublicDocument(new URL(redirect, url).toString(), kind, hops + 1);
   }
-  if (statusCode == null || statusCode < 200 || statusCode >= 300) throw new Error(`The snapshot returned ${statusCode ?? "an invalid status"}.`);
+  if (statusCode == null || statusCode < 200 || statusCode >= 300) {
+    throw new Error(`The ${kind.label} returned ${statusCode ?? "an invalid status"}.`);
+  }
   const contentType = response.headers["content-type"];
   const type = Array.isArray(contentType) ? contentType.join(",") : contentType ?? "";
-  if (type && !type.includes("text/html") && !type.includes("application/xhtml")) throw new Error("The ad snapshot did not return HTML.");
+  if (type && !kind.types.some((allowed) => type.includes(allowed))) throw new Error(kind.refusal);
   const reader = Readable.toWeb(response).getReader();
   const chunks: Uint8Array[] = [];
   let received = 0;
@@ -172,7 +214,7 @@ export async function fetchPublicHtml(rawUrl: string, hops = 0): Promise<{ url: 
     chunks.push(step.value);
   }
   await reader.cancel().catch(() => undefined);
-  return { url: url.toString(), html: new TextDecoder().decode(concat(chunks)).slice(0, MAX_BYTES) };
+  return { url: url.toString(), body: new TextDecoder().decode(concat(chunks)).slice(0, MAX_BYTES) };
 }
 
 function requestPage(url: URL, pinnedLookup: NonNullable<RequestOptions["lookup"]>, accept: string, timeoutMs = 8_000): Promise<IncomingMessage> {
@@ -182,7 +224,7 @@ function requestPage(url: URL, pinnedLookup: NonNullable<RequestOptions["lookup"
       {
         method: "GET",
         signal: AbortSignal.timeout(timeoutMs),
-        headers: { accept },
+        headers: { accept, "user-agent": CRAWLER_USER_AGENT },
         lookup: pinnedLookup,
       },
       resolve,
@@ -201,4 +243,77 @@ function concat(chunks: Uint8Array[]): Uint8Array {
     offset += chunk.byteLength;
   }
   return out;
+}
+
+const ROBOTS_TTL_MS = 60 * 60 * 1000;
+const ROBOTS_CACHE_LIMIT = 200;
+const ROBOTS_MAX_BYTES = 64_000;
+const CHALLENGE_SAMPLE_BYTES = 4_096;
+
+/** What robots.txt says for one origin. `text` is null when the file is missing, which allows every path. */
+type RobotsEntry = { text: string | null; unavailable: boolean; checkedAt: number };
+const robotsCache = new Map<string, RobotsEntry>();
+
+/**
+ * Enforces robots.txt for the crawler before a page or media file is read. A missing file allows the read. A file that cannot be
+ * read at all refuses it for now, as RFC 9309 asks for a server error. The answer is cached per origin for an hour.
+ */
+async function enforceRobots(url: URL, pinnedLookup: NonNullable<RequestOptions["lookup"]>): Promise<void> {
+  let entry = robotsCache.get(url.origin);
+  if (!entry || Date.now() - entry.checkedAt >= ROBOTS_TTL_MS) {
+    entry = await readRobots(url.origin, pinnedLookup);
+    if (robotsCache.size >= ROBOTS_CACHE_LIMIT) robotsCache.delete(robotsCache.keys().next().value as string);
+    robotsCache.set(url.origin, entry);
+  }
+  if (entry.unavailable) throw new Error("The site's robots.txt could not be read, so the page was not read. Try again later.");
+  if (entry.text !== null && !robotsAllows(entry.text, `${url.pathname}${url.search}`)) throw new Error(ROBOTS_MESSAGE);
+}
+
+async function readRobots(origin: string, pinnedLookup: NonNullable<RequestOptions["lookup"]>): Promise<RobotsEntry> {
+  const checkedAt = Date.now();
+  try {
+    const response = await requestPage(new URL("/robots.txt", origin), pinnedLookup, "text/plain");
+    const status = response.statusCode ?? 0;
+    if (status >= 400 && status < 500 && status !== 429) {
+      response.resume();
+      return { text: null, unavailable: false, checkedAt };
+    }
+    if (status < 200 || status >= 300) {
+      response.resume();
+      return { text: null, unavailable: true, checkedAt };
+    }
+    const body = await readSample(response, ROBOTS_MAX_BYTES);
+    return { text: body, unavailable: false, checkedAt };
+  } catch {
+    return { text: null, unavailable: true, checkedAt };
+  }
+}
+
+/** Reads at most `limit` bytes of a response and stops. The rest is never read. */
+async function readSample(response: IncomingMessage, limit: number): Promise<string> {
+  const reader = Readable.toWeb(response).getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (received < limit) {
+    const step = await reader.read();
+    if (step.done) break;
+    received += step.value.byteLength;
+    chunks.push(step.value);
+  }
+  await reader.cancel().catch(() => undefined);
+  return new TextDecoder().decode(concat(chunks)).slice(0, limit);
+}
+
+/**
+ * Turns a bot check into a plain refusal. Meridian reads a small sample of the blocked response so it can tell a CAPTCHA or a
+ * challenge page from an ordinary refusal. It never tries to get past the check.
+ */
+async function refuseBotChallenge(response: IncomingMessage): Promise<void> {
+  const status = response.statusCode ?? 0;
+  if (![403, 429, 503].includes(status)) return;
+  const headers = Object.fromEntries(
+    Object.entries(response.headers).map(([name, value]) => [name, Array.isArray(value) ? value.join(",") : value]),
+  );
+  const body = await readSample(response, CHALLENGE_SAMPLE_BYTES);
+  if (isBotChallenge({ status, headers, body })) throw new Error(BOT_CHECK_MESSAGE);
 }

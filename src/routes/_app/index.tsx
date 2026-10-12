@@ -2,19 +2,19 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { Button, PageHeader, Skeleton } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { useIntegrationsQuery, useMachinesQuery } from "@/lib/query/hooks";
+import { useDecisionEnginesQuery, useIntegrationsQuery, useMachinesQuery, useProviderSettingsQuery } from "@/lib/query/hooks";
 import { hasRole } from "@/lib/meridian/access";
-import { getOnboardingSteps, reviewedCreativeState } from "@/lib/onboarding";
 import { providerLabel } from "@/lib/copy";
-import { countDecidedReviews } from "@/components/brand-overview/pipeline";
 import { KpiRow } from "@/components/home/kpi-row";
 import { AttentionList } from "@/components/home/attention-list";
-import { SetupChecklist } from "@/components/home/setup-checklist";
+import { SetupCallout } from "@/components/setup/setup-callout";
+import { guideFacts } from "@/lib/setup/facts";
+import { buildGuide } from "@/lib/setup/guide";
+import type { SetupEngines, SetupInput } from "@/components/settings/setup-model";
 import { BrandGrid, type BrandLookup, type MachineState } from "@/components/home/brand-grid";
 import { ActivityFeed } from "@/components/home/activity-feed";
 import { CreateWorkspace } from "@/components/home/create-workspace";
 import { attentionItems, homeKpis, isThinBrand, type ConnectionFact, type ReviewLoad } from "@/components/home/home-model";
-import { useBrandReviewLists } from "@/components/home/use-brand-reviews";
 
 export const Route = createFileRoute("/_app/")({ staticData: { pageTitle: "Overview" }, component: Home });
 
@@ -22,8 +22,10 @@ function Home() {
   const { data, loading, reload } = useWorkspace();
   const brandIds = data?.brands.map((brand) => brand.id) ?? [];
   const machines = useMachinesQuery(brandIds);
-  const reviewLists = useBrandReviewLists(brandIds);
-  const integrations = useIntegrationsQuery(data?.active?.id ?? "", !!data?.active);
+  const organizationId = data?.active?.id ?? "";
+  const integrations = useIntegrationsQuery(organizationId, !!data?.active);
+  const providers = useProviderSettingsQuery(organizationId, !!data?.active);
+  const engines = useDecisionEnginesQuery(organizationId, !!data?.active);
 
   if (loading) return <div role="status" aria-label="Loading workspace" className="space-y-4"><Skeleton variant="card" /></div>;
   if (!data?.active) return <CreateWorkspace onCreated={reload} />;
@@ -53,29 +55,12 @@ function Home() {
   });
   const kpis = homeKpis({ brandCount: data.brands.length, reviews, overview: data.overviewMetrics });
 
-  const hasConnectedProvider = connectionFacts.some((connection) => ["HEALTHY", "CONNECTED"].includes(connection.phase));
-  // Each count is null until its data has loaded, so the checklist shows "Unknown" rather than "To do". The review check reads
-  // the stored review lists, not the audit feed, which holds only the newest few entries.
-  const setupSteps = getOnboardingSteps({
-    brands: data.brands.map((brand) => {
-      const snapshot = machineByBrand.get(brand.id);
-      const counts = snapshot?.status === "ready" ? snapshot.snapshot.counts : null;
-      return {
-        id: brand.id,
-        completeness: brand.completeness,
-        requiredComplete: brand.requiredComplete,
-        competitors: counts ? counts.competitors : null,
-        opportunities: counts ? counts.openOpportunities : null,
-        creatives: counts ? counts.creatives : null,
-      };
-    }),
-    providerConnected: connectionsState === "ready" ? hasConnectedProvider : null,
-    reviewedCreative: reviewedCreativeState(reviewLists.map((query) => ({
-      loaded: query.data !== undefined,
-      decided: query.data ? countDecidedReviews(query.data.reviews) : 0,
-      listed: query.data?.reviews.length ?? 0,
-    }))),
-  });
+  // Every count is null until its data has loaded, so the setup steps say "could not be checked" rather than "to do".
+  const setupSteps = buildGuide(guideFacts({
+    brandCount: data.brands.length,
+    summaries: (providers.data as SetupInput["summaries"] | undefined) ?? null,
+    engines: (engines.data as SetupEngines | undefined) ?? null,
+  }));
   const canCreate = hasRole(data.active.role, "member");
 
   return (
@@ -93,7 +78,7 @@ function Home() {
         onRetryReviews={() => { void Promise.all(machines.map((query) => query.refetch())); }}
         onRetryConnections={() => { void integrations.refetch(); }}
       />
-      <SetupChecklist workspaceId={data.active.id} steps={setupSteps} />
+      <SetupCallout steps={setupSteps} />
       <BrandGrid brands={data.brands} lookup={lookup} canCreate={canCreate} />
       <ActivityFeed entries={data.audit} brandNameById={brandNameById} />
     </div>

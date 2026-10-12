@@ -71,7 +71,7 @@ export function ReviewDetail({
         <Badge variant={priority.high ? "warning" : "neutral"}>{priority.label}</Badge>
         <Badge variant={confidence.tone}>{confidence.label}</Badge>
       </div>
-      <p className="text-xs font-semibold uppercase tracking-widest text-brass">
+      <p className="eyebrow">
         {describeQuestion(item.question)} · {decisionOutcome(item.decision)} · answer {item.answer || "unrecorded"} · probability {percentOrUnknown(item.probability)} · <Term id="confidence" /> {percentOrUnknown(item.confidence)}
       </p>
       <TechnicalDetails>Question {item.question}. Decision code {item.decision || "none"}.</TechnicalDetails>

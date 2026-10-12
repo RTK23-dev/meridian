@@ -73,7 +73,7 @@ export function OpportunityTable(props: TableProps) {
     <ul className="grid gap-3 md:hidden">
       {rows.map((item) => {
         const eligible = canEdit && isBulkSelectable(item.status);
-        return <li key={item.id} className="space-y-3 rounded-lg border border-border bg-surface p-4">
+        return <li key={item.id} className="space-y-3 panel">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-fg-muted">Rank {positions.get(item.id) ?? "-"}</p>
             <OpportunityStatusBadge status={item.status} />

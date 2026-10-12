@@ -9,7 +9,7 @@ export function MissingChecklist({ brandId, items }: { brandId: string; items: M
     <Card aria-labelledby="missing-title" className="space-y-3">
       <h2 id="missing-title" className="text-base font-semibold text-fg">What is missing</h2>
       {items.length ? (
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="grid gap-2">
           {items.map((item) => (
             <li key={item.text}>
               <Link

@@ -7,7 +7,7 @@ function status(overrides: Partial<SystemStatus> = {}): SystemStatus {
     worker: "stopped",
     scheduler: "stopped",
     database: "up",
-    objectStorage: { database: "MIGRATION_SOURCE", active: "filesystem", external: "NOT_CONFIGURED", detail: "Not configured." },
+    objectStorage: { database: "MIGRATION_SOURCE", active: "postgres", external: "RETIRED", detail: "Files are stored in Postgres." },
     embeddings: { status: "NOT_CONNECTED", provider: "", detail: "No external embeddings API is connected." },
     localSemantic: { status: "AVAILABLE", provider: "local-minilm", model: "Xenova/all-MiniLM-L6-v2", kind: "SEMANTIC_EMBEDDING", detail: "" },
     publishing: { status: "NOT_CONNECTED", detail: "" },

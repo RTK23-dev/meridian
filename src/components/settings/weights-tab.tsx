@@ -126,7 +126,7 @@ export function WeightsTab({ organizationId, saved, canAdmin }: { organizationId
           })}
         </fieldset>
 
-        <aside aria-labelledby="weights-preview-title" className="h-fit space-y-4 rounded-lg border border-border bg-surface p-4">
+        <aside aria-labelledby="weights-preview-title" className="h-fit space-y-4 panel">
           <div>
             <h3 id="weights-preview-title" className="text-base font-semibold text-fg">Live preview</h3>
             <p className="mt-1 text-xs text-fg-muted">Each factor’s share of the total weight. Penalties are drawn dashed.</p>

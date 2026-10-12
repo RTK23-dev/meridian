@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.1.0-beta.11 — prerelease
+
+The sections below this one are part of beta.11. Operators must read the upgrade notes in [docs/OPERATIONS.md](docs/OPERATIONS.md)
+before deploying. Migrations `0062` to `0065` are new.
+
+- **Factory run settings (behaviour change).** A run has one settings object, with brand defaults and per-run overrides. The old levels map
+  to automation modes: level 0 or 1 is `manual`, 2 is `semi`, 3 is `full`. Runs store the settings they started with. The owner ceiling and
+  the verified round trip still apply, checked against the mode's level. See [docs/FACTORY.md](docs/FACTORY.md).
+- **Factory stops and approvals.** `manual` and `semi` runs wait at produce, launch and test, and `manual` also waits at review. A waiting
+  run has the status `awaiting_approval` with the reason. The kill switch stops every stage. `full` stops when it has no spend cap. The
+  approval is the `approveFactoryStage` server function. The Factory screen has no approve button yet.
+- **Spend caps are declared, not enforced.** No Factory stage writes metered spend yet, so the cap is not checked against real spend.
+- **Factory grading uses source data only.** The Meta Ad Library collector stores each ad's stop time and reached countries. An unknown value
+  contributes nothing to the score. Days running run to the last sighting. The fixed quality and track-record values are removed. A board
+  item with no stored grade says "Not graded yet". The JEV grade is not implemented; it needs the owner's questions and thresholds.
+- **Factory cost estimates removed.** The decode, grade, template and produce stages no longer write made-up cents and seconds. Cost rows
+  come only from metered calls, and none exist yet.
+- **Telemetry honesty.** An unreported metric is stored as null, not zero. Views are no longer copied into impressions. An organic post row
+  needs the platform's own post id. Learning reads only paid rows with all four metrics known.
+- **Telemetry sync fix.** The bridge now writes `created_by`, which the production table requires. On Postgres the sync failed for any new
+  paid row.
+- **TikTok regular video.** A TikTok channel uploads through the Content Posting API. The token must grant `video.publish`. Posts are
+  private until TikTok approves the app, and a publish is reported as done only on `PUBLISH_COMPLETE`. Not run against the live service.
+- **Sourcing sidecar and feeds.** An optional local sidecar parses pages Meridian has already fetched. RSS and V2EX source adapters use it.
+  Without the sidecar, both report not connected.
+- **S3 retired.** There are no `S3_*` settings. Storage status reads `RETIRED`. Publishing reads media from Postgres or Google Drive.
+- **Settings.** The decision engine and provider keys have one entry point, in the Setup panel. Settings points there.
+- **Interface.** One page-title size across the screens, a rail on the active sidebar item, tabular figures in stats, button press feedback,
+  and the Market screen has a section bar. Not yet checked in a browser; the CI `ui-smoke` run is the check.
+- **Not in this release.** Factory work-queue items 3, 5, 6, 8, 9, 10 and 11, the JEV grade, live organic metrics, and the Studio and
+  organic reads that show an unknown metric as zero. See [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Unreleased — production readiness batch 1
 
 Operators must read these before deploying. Migration `0061_oauth_state_redirect_origin.sql` is new.

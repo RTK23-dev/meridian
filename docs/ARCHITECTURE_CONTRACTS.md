@@ -43,7 +43,7 @@ approves it automatically. Otherwise it is `awaiting_review` or `rejected`.
 
 ## 4. Storage
 
-4.1 Postgres is the system of record. Drive and S3 hold artifacts and exports, and a storage object row says where each one is.
+4.1 Postgres is the system of record. Google Drive holds artifacts and exports, and a storage object row says where each one is.
 
 4.2 An export package is a set of files, and Postgres rows list them. Drive is not used to store state.
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowLeftRight, BarChart3, Bell, BellRing, Brain, Cable, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
+import { Activity, ArrowLeftRight, BarChart3, Bell, BellRing, Brain, Cable, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, ListChecks, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { hasRole } from "@/lib/meridian/access";
@@ -23,6 +23,7 @@ const SWITCHER_CLASS = "min-h-11 w-full rounded-md border border-border-strong b
 /** One icon per sidebar and tab item. Items without an entry fall back to the overview icon. */
 const NAV_ICONS: Record<string, LucideIcon> = {
   overview: House,
+  setup: ListChecks,
   "brand-overview": House,
   market: FlaskConical,
   intelligence: Sparkles,
@@ -176,7 +177,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
     const iconOnly = collapsed && !mobile;
     return <div className="flex h-full flex-col bg-surface">
       <div className="flex h-16 items-center justify-between border-b border-border px-4">
-        <Link to="/" onClick={() => setMobileNavOpen(false)} className="font-display text-lg font-semibold tracking-tight text-fg">Meridian</Link>
+        <Link to="/" onClick={() => setMobileNavOpen(false)} className="flex min-w-0 items-center gap-2.5 font-display text-lg font-semibold tracking-tight text-fg"><span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-md bg-accent font-sans text-sm font-semibold text-accent-fg">M</span><span className={iconOnly ? "sr-only" : "truncate"}>Meridian</span></Link>
         {mobile ? <button className="grid size-11 place-items-center rounded-md text-fg-muted hover:bg-surface-2" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation"><X aria-hidden="true" className="size-5" /></button> : null}
       </div>
       {/* Workspace first, brand directly below it on brand-scoped pages. The collapsed rail keeps one switcher button, which opens the command palette, so a workspace or brand can still be changed there. */}
@@ -195,7 +196,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
           {group.items.map((item) => {
             const Icon = NAV_ICONS[item.id] ?? House;
             const current = isCurrentPath(path, item.to);
-            return <Link key={item.id} to={item.to as never} aria-current={current ? "page" : undefined} title={iconOnly ? item.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors ${current ? "bg-accent-soft font-semibold text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
+            return <Link key={item.id} to={item.to as never} aria-current={current ? "page" : undefined} title={iconOnly ? item.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`relative mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150 ${current ? "bg-accent-soft font-semibold text-fg before:absolute before:inset-y-2 before:-left-3 before:w-[3px] before:rounded-full before:bg-accent" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
               <Icon aria-hidden="true" className={`size-4 shrink-0 ${current ? "text-accent" : ""}`} />
               <span className={iconOnly ? "sr-only" : "flex-1"}>{item.label}</span>
               {item.badge ? <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-fg">{item.badge}<span className="sr-only"> open</span></span> : null}
@@ -238,7 +239,9 @@ function ShellChrome({ children }: { children: ReactNode }) {
         </div>
       </header>
       <div className="border-b border-border bg-surface px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
-      <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-8">{children}</main>
+      <main id="main" tabIndex={-1} className="page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-12 lg:py-10 lg:pb-12">
+        <div className="mx-auto w-full max-w-6xl">{children}</div>
+      </main>
       <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {tabs.map((tab) => {
           const Icon = NAV_ICONS[tab.id] ?? House;

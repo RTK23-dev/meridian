@@ -262,13 +262,15 @@ test("Telemetry Engine: syncs unified telemetry into JEV profile benchmarks dyna
       organization_id text not null,
       brand_id text not null,
       creative_id text not null,
-      impressions integer not null default 0,
-      clicks integer not null default 0,
-      conversions integer not null default 0,
-      spend_cents integer not null default 0,
+      impressions integer,
+      clicks integer,
+      conversions integer,
+      spend_cents integer,
       revenue_cents integer,
+      reach integer,
       observed_on text not null,
-      source text not null default 'manual'
+      source text not null default 'manual',
+      created_by text not null
     );
 
     create table if not exists jev_account_profiles (

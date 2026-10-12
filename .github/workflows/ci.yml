@@ -21,6 +21,9 @@ jobs:
       - name: Start the local app for browser smoke
         run: |
           mkdir -p artifacts
+          # Pre-bundle first. A cold dev server answers before its optimizer has finished, and the bundling then competes with
+          # the first requests, so the browser checks start on a half-built server.
+          npx vite optimize
           npm run dev > artifacts/dev-server.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl --fail --silent http://127.0.0.1:8080/ > /dev/null; then
@@ -62,6 +65,17 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
+  sidecar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The sourcing sidecar's own tests. They need its Python requirements and make no outbound calls.
+      - run: python -m pip install -r sidecar/sourcing/requirements.txt
+      - run: python -m unittest discover -s sidecar/sourcing -p "test_*.py"
+
   e2e:
     needs: check
     runs-on: ubuntu-latest
@@ -79,6 +93,8 @@ jobs:
           MERIDIAN_TESTING_RUNTIME: "true"
         run: |
           mkdir -p artifacts/e2e
+          # Pre-bundle first, for the same reason as the browser smoke job: the product loop must not start on a half-built server.
+          npx vite optimize
           npm run dev > artifacts/e2e/dev-server.log 2>&1 &
           server_pid=$!
           for attempt in $(seq 1 60); do

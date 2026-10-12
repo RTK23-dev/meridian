@@ -113,7 +113,7 @@ export function AuditScreen() {
         description="Administrative history for this workspace, newest first. Entries are limited to this workspace."
       />
 
-      <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-2 xl:grid-cols-5" onSubmit={applyFilters} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
+      <form className="grid gap-3 panel sm:grid-cols-2 xl:grid-cols-5" onSubmit={applyFilters} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
         <Field label="Actor name or ID" error={errors.actor?.message}>
           <Input {...filterForm.register("actor")} maxLength={100} />
         </Field>
@@ -139,7 +139,7 @@ export function AuditScreen() {
         </div>
       </form>
 
-      <section aria-labelledby="export-heading" className="space-y-3 rounded-lg border border-border bg-surface p-4">
+      <section aria-labelledby="export-heading" className="space-y-3 panel">
         <h2 id="export-heading" className="text-section font-semibold">Export CSV</h2>
         <p className="text-sm text-fg-muted">
           Exports are generated when you click. The file uses the filters above, holds at most {AUDIT_EXPORT_CAP.toLocaleString()} of the newest matching entries, and downloads to this device.

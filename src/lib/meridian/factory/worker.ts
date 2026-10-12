@@ -6,7 +6,9 @@ import { decodeVideoDna } from "./decode.ts";
 import type { ResearchSegment } from "../research/schema.ts";
 import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate, type GateVerdict } from "./gates.ts";
 import { adsMustPause } from "./kill-switch.ts";
-import { factoryStageAllowed, isFactoryStage } from "./pipeline.ts";
+import { isFactoryStage } from "./pipeline.ts";
+import { runSettingsFromStorage } from "./run-settings.ts";
+import { stageDecision } from "./stage-decision.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { recordedClaimsOf, templateFromDna, variantMatrix } from "./template.ts";
 import { buildAdTimeline } from "./timeline.ts";
@@ -30,21 +32,37 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   if (!job.brand_id) throw new Error("Factory jobs need a brand.");
   const runId = text(payload.runId);
   if (!runId) throw new Error("Factory jobs need a run id.");
-  const owned = await sql<{ id: string; status: string; niche: string; level: number }>`
-    select id, status, niche, level from factory_runs
+  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string }>`
+    select id, status, niche, level, settings from factory_runs
     where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
     limit 1
   `;
   if (!owned[0]) throw new Error("Factory run is not owned by this organization and brand.");
-  if (!factoryStageAllowed(owned[0].level, job.job_type)) return `skipped:above-level-${owned[0].level}`;
-  const paused = await killSwitchPaused(sql, job.organization_id, job.brand_id);
-  if (paused && (job.job_type === "factory.launch" || job.job_type === "factory.test")) {
-    await sql`update factory_runs set status = 'paused', error = 'Kill switch is engaged. Live ads were not started.', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id}`;
-    return "kill-switch";
+  const settings = runSettingsFromStorage(owned[0].settings, owned[0].level);
+  const approvals = await sql<{ n: number }>`
+    select count(*)::int as n from factory_approvals
+    where run_id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and stage = ${job.job_type}
+  `;
+  const decision = stageDecision({
+    automation: settings.automation,
+    stage: job.job_type,
+    approved: (approvals[0]?.n ?? 0) > 0,
+    killSwitchEngaged: await killSwitchPaused(sql, job.organization_id, job.brand_id),
+    capCents: settings.caps.totalCents > 0 ? settings.caps.totalCents : null,
+    spentCents: await meteredSpendCents(sql, job.organization_id, job.brand_id),
+  });
+  if (decision.action === "stop" || decision.action === "await_approval") {
+    // A stage that waits or is stopped is recorded on the run with its reason. It is not a failure, and the run resumes once it clears.
+    const status = decision.action === "stop" ? "paused" : "awaiting_approval";
+    await sql`
+      update factory_runs set status = ${status}, current_stage = ${job.job_type}, error = ${decision.reason}, updated_at = now()
+      where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+    `;
+    return `${decision.action === "stop" ? "stopped" : "awaiting-approval"}:${job.job_type}`;
   }
   await sql`
     update factory_runs
-    set status = case when status in ('queued', 'failed') then 'running' else status end,
+    set status = case when status in ('queued', 'failed', 'awaiting_approval', 'paused') then 'running' else status end,
         current_stage = ${job.job_type},
         error = '',
         updated_at = now()
@@ -59,14 +77,14 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
     const allowed = snapshotMediaAllowed();
     return allowed ? "ingest:snapshot-media-opt-in" : "ingest:metadata-only";
   }
+  // The stages below record no cost. Nothing measures what they spend, so no figure is written. A cost row comes from the
+  // budget ledger once a stage makes a metered provider call.
   if (job.job_type === "factory.decode") {
     const decoded = await decodeStoredAds(sql, job.organization_id, job.brand_id);
-    await recordCost(sql, job, runId, "factory.decode", decoded * 2, decoded);
     return `decoded:${decoded}`;
   }
   if (job.job_type === "factory.grade") {
     const graded = await gradeStoredAds(sql, job.organization_id, job.brand_id);
-    await recordCost(sql, job, runId, "factory.grade", graded, graded);
     return `graded:${graded}`;
   }
   if (job.job_type === "factory.trend") {
@@ -86,7 +104,6 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   }
   if (job.job_type === "factory.template") {
     const made = await persistTemplates(sql, job.organization_id, job.brand_id, runId);
-    await recordCost(sql, job, runId, "factory.template", made * 3, made);
     if (owned[0].level === 0) {
       await sql`update factory_runs set status = 'succeeded', error = '', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
     }
@@ -94,7 +111,6 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   }
   if (job.job_type === "factory.produce") {
     const made = await persistVariants(sql, job.organization_id, job.brand_id, runId);
-    await recordCost(sql, job, runId, "factory.produce", made * 12, made);
     return `variants:${made}`;
   }
   if (job.job_type === "factory.gate") {
@@ -199,35 +215,66 @@ async function decodeStoredAds(sql: Sql, organizationId: string, brandId: string
   return count;
 }
 
+/** The delivery facts the collector stored with an ad. A row without the stop-time key predates it, so nothing is known. */
+type Delivery = { stillRunning: boolean | null; countries: string[] };
+
+function deliveryOf(sourceMetrics: string): Delivery {
+  let record: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(sourceMetrics) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) record = parsed as Record<string, unknown>;
+  } catch {
+    record = {};
+  }
+  if (!("stoppedAt" in record)) return { stillRunning: null, countries: [] };
+  const stoppedAt = typeof record.stoppedAt === "string" && record.stoppedAt ? record.stoppedAt : null;
+  const countries = Array.isArray(record.countries) ? record.countries.filter((item): item is string => typeof item === "string") : [];
+  return { stillRunning: stoppedAt === null, countries };
+}
+
 async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string): Promise<number> {
   const ads = await sql<{
     id: string;
+    page_id: string;
     captured_at: unknown;
     published_at: unknown;
     platforms: string;
-    analysis_status: string;
+    source_metrics: string;
   }>`
-    select id, captured_at, published_at, platforms, analysis_status
+    select id, page_id, captured_at, published_at, platforms, source_metrics
     from research_ads
     where organization_id = ${organizationId} and brand_id = ${brandId}
     order by captured_at desc
     limit 80
   `;
-  const now = new Date().toISOString();
+  const delivered = new Map(ads.map((ad) => [ad.id, deliveryOf(ad.source_metrics)]));
+  // Variants and track record are counted per advertiser page, from the ads this brand has collected.
+  const variantsByPage = new Map<string, number>();
+  const knownByPage = new Map<string, number>();
+  const runningByPage = new Map<string, number>();
+  for (const ad of ads) {
+    variantsByPage.set(ad.page_id, (variantsByPage.get(ad.page_id) ?? 0) + 1);
+    const stillRunning = delivered.get(ad.id)?.stillRunning;
+    if (stillRunning == null) continue;
+    knownByPage.set(ad.page_id, (knownByPage.get(ad.page_id) ?? 0) + 1);
+    if (stillRunning) runningByPage.set(ad.page_id, (runningByPage.get(ad.page_id) ?? 0) + 1);
+  }
   let count = 0;
   for (const ad of ads) {
+    const facts = delivered.get(ad.id) ?? { stillRunning: null, countries: [] };
+    const known = knownByPage.get(ad.page_id) ?? 0;
     const timeline = buildAdTimeline({
       sightings: [
         {
           seenAt: String(ad.published_at || ad.captured_at),
           platforms: parseList(ad.platforms),
-          countries: [],
+          countries: facts.countries,
           reachLow: null,
           reachHigh: null,
-          stillRunning: true,
+          stillRunning: facts.stillRunning,
         },
       ],
-      now,
+      siblingVariants: variantsByPage.get(ad.page_id) ?? 1,
     });
     if (!timeline) continue;
     const scored = winnerScore({
@@ -236,8 +283,10 @@ async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string)
       iterationCount: Math.max(1, timeline.siblingVariants),
       countries: timeline.countries.length,
       platforms: timeline.platforms.length,
-      advertiserSurvivorRate: null,
-      creativeQuality: ad.analysis_status === "analyzed" ? 0.45 : null,
+      // Of this advertiser's ads whose delivery the source reported, the share still delivering. Unknown when none are.
+      advertiserSurvivorRate: known > 0 ? (runningByPage.get(ad.page_id) ?? 0) / known : null,
+      // No quality measure is stored for an ad yet, so quality is unknown, not a fixed value.
+      creativeQuality: null,
     });
     const id = `tl:${brandId}:${ad.id}`;
     await sql`
@@ -380,13 +429,13 @@ async function gateVariants(sql: Sql, organizationId: string, brandId: string): 
   return count;
 }
 
-async function recordCost(sql: Sql, job: ExecutableJob, runId: string, stage: string, cents: number, seconds: number): Promise<void> {
-  const id = `cost:${runId}:${stage}`;
-  await sql`
-    insert into factory_costs (id, organization_id, brand_id, run_id, stage, cents, seconds)
-    values (${id}, ${job.organization_id}, ${job.brand_id}, ${runId}, ${stage}, ${Math.max(0, cents)}, ${Math.max(0, seconds)})
-    on conflict (id) do update set cents = excluded.cents, seconds = excluded.seconds
+/** Spend recorded against this brand's runs, from the metered rows in factory_costs. Zero until a stage records a metered call. */
+async function meteredSpendCents(sql: Sql, organizationId: string, brandId: string): Promise<number> {
+  const rows = await sql<{ spent: number }>`
+    select coalesce(sum(cents), 0)::int as spent from factory_costs
+    where organization_id = ${organizationId} and brand_id = ${brandId}
   `;
+  return rows[0]?.spent ?? 0;
 }
 
 async function killSwitchPaused(sql: Sql, organizationId: string, brandId: string): Promise<boolean> {

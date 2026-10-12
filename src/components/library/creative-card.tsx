@@ -28,16 +28,19 @@ export function CreativeCard({
   variants,
   mediaLoad,
   onTrace,
+  onPublish,
 }: {
   item: LibraryCreative;
   variants: readonly LibraryMediaVariant[];
   mediaLoad: MediaLoad;
   onTrace: () => void;
+  /** Present only for a member. It opens the publish dialog, which offers regular posts and paid ads. */
+  onPublish?: () => void;
 }) {
   const label = item.title || item.hook || "Untitled creative";
   const media = primaryMedia(variants);
   return (
-    <li className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+    <li className="flex flex-col gap-3 panel">
       {media ? (
         <CreativeThumb variant={media} alt={`${media.kind === "video" ? "Poster of video" : "Stored image of"} ${label}`} />
       ) : (
@@ -45,12 +48,13 @@ export function CreativeCard({
       )}
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h3 className="font-display text-xl">{label}</h3>
-        <span className="text-xs font-semibold uppercase tracking-widest text-brass">{item.status}</span>
+        <span className="eyebrow">{item.status}</span>
       </div>
       <p className="text-sm text-muted">{item.angle} · {item.origin} · {formatDay(item.createdAt)}</p>
       <p className="line-clamp-3 text-sm">{item.hook}</p>
       <div className="mt-auto flex flex-wrap gap-2">
         <Button variant="quiet" size="md" aria-label={`Trace ${label}`} onClick={onTrace}>Trace</Button>
+        {onPublish ? <Button variant="secondary" size="md" aria-label={`Publish ${label}`} onClick={onPublish}>Publish</Button> : null}
         {media ? (
           <Button asChild variant="quiet" size="md">
             <a href={downloadHref(media.assetId)} aria-label={`Download ${media.kind === "video" ? "video" : "image"} for ${label}`}>Download</a>

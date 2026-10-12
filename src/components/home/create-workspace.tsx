@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -11,16 +11,23 @@ import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useScopedMutation } from "@/lib/query/hooks";
 import { createOrganization } from "@/lib/meridian/api";
 import { workspaceNameSchema, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { suggestedWorkspaceName } from "@/lib/setup/workspace-name";
 
 /** First step for a signed-in person with no workspace. The workspace is created, then the home reloads. */
 export function CreateWorkspace({ onCreated }: { onCreated: () => Promise<void> }) {
   const navigate = useNavigate();
+  const { user } = useCurrentUserState();
   const [discardRequested, setDiscardRequested] = useState(false);
   const { register, handleSubmit, reset, formState: { errors, isDirty, isSubmitting } } = useForm<WorkspaceNameInput>({
     resolver: zodResolver(workspaceNameSchema),
-    defaultValues: { name: "" },
+    defaultValues: { name: suggestedWorkspaceName(user?.displayName) },
     mode: "onBlur",
   });
+  // The user can load after this form mounts, so the suggestion follows their name until the person types a name of their own.
+  useEffect(() => {
+    if (!isDirty) reset({ name: suggestedWorkspaceName(user?.displayName) });
+  }, [user?.displayName, isDirty, reset]);
   const createWorkspace = useScopedMutation({
     mutationKey: ["mutation", "organization.create"],
     mutationFn: (values: WorkspaceNameInput) => createOrganization({ data: values }),
@@ -44,8 +51,8 @@ export function CreateWorkspace({ onCreated }: { onCreated: () => Promise<void> 
       <UnsavedChangesGuard dirty={isDirty} />
       <div className="space-y-3">
         <p className="eyebrow">First step</p>
-        <h1 className="font-display text-4xl">Name the workspace</h1>
-        <p className="text-fg-muted">A workspace holds brands. You will be the owner. Other people can be added later if they already have accounts.</p>
+        <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Name the workspace</h1>
+        <p className="text-fg-muted">A workspace holds your brands and their records. You own it. The name is only a label, and you can change it in Settings.</p>
       </div>
       <form onSubmit={handleSubmit(submit)} className="space-y-4" onKeyDown={(event) => submitOnShortcut(event)}>
         <Field label="Workspace name" hint="Your company, studio, or agency." error={errors.name?.message} required>

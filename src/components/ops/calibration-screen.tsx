@@ -80,7 +80,7 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
   const span = pageSpan(page, data.pageSize, data.total);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         title="Calibration"
         description="Proposed changes to the opportunity gate, made from recorded reviewer outcomes. A proposal changes no threshold until an admin approves it."
@@ -184,7 +184,7 @@ function ProposalCard({ proposal, canAdmin, busy, deciding, onApprove, onReject 
   const StatusIcon = proposal.status === "approved" ? CheckCircle2 : proposal.status === "rejected" ? XCircle : Clock3;
   const tone = proposal.status === "approved" ? "success" : proposal.status === "rejected" ? "danger" : "info";
   return (
-    <li className="space-y-4 rounded-lg border border-border bg-surface p-4">
+    <li className="space-y-4 panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Badge variant={tone}><StatusIcon aria-hidden="true" className="size-3.5" /><span>{proposalStatusText(proposal.status)}</span></Badge>
         <span className="text-xs text-fg-muted">Recorded {timestampLabel(proposal.createdAt)}</span>

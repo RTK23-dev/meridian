@@ -14,7 +14,7 @@ import { rankOpportunities } from "./opportunity/engine.ts";
 import { acceptPerformanceEvent } from "./performance/normalize.ts";
 import { publishWithProvider } from "./publishing/provider.ts";
 import { createRateLimit } from "./security/limits.ts";
-import { createMemoryObjectStore, externalObjectStorageStatus, safeStorageKey } from "./storage/object-store.ts";
+import { createMemoryObjectStore, objectStorageStatus, safeStorageKey } from "./storage/object-store.ts";
 
 const org = "org-1";
 const brand = "brand-1";
@@ -60,7 +60,7 @@ test("stored evidence changes the next brief after the worker learns", async () 
   assert.ok(signed);
   assert.equal(logo.open(signed.token, 500)?.checksum, stored.checksum);
   assert.equal(logo.open(signed.token, 1000), null);
-  assert.equal(externalObjectStorageStatus({}).status, "NOT_CONNECTED");
+  assert.equal(objectStorageStatus().status, "RETIRED");
 
   const raw: RawMarketRecord = {
     id: "raw-1",

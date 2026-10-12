@@ -24,7 +24,7 @@ export function KpiRow({ kpis }: { kpis: KpiSpec[] }) {
 
 function KpiLoading({ label }: { label: string }) {
   return (
-    <div role="status" aria-label={`Loading ${label}`} className="rounded-lg border border-border bg-surface p-4">
+    <div role="status" aria-label={`Loading ${label}`} className="panel">
       <Skeleton className="h-4 w-28" />
       <Skeleton className="mt-4 h-8 w-16" />
       <Skeleton className="mt-3 h-3 w-32" />

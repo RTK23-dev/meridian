@@ -1,0 +1,12 @@
+# The vendored parser (vendor/scrapling) and the Agent Reach channels (vendor/agent-reach) need these.
+lxml
+cssselect
+orjson
+w3lib
+typing_extensions
+feedparser
+requests
+python-dotenv
+loguru
+pyyaml
+rich

@@ -81,8 +81,8 @@ function FactoryPage({ brandId }: { brandId: string }) {
       <UnsavedChangesGuard dirty={factoryFormsDirty} />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-widest text-brass">Factory</p>
-          <h1 className="font-display text-4xl">Watch, copy the framework, never the ad</h1>
+          <p className="eyebrow">Factory</p>
+          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Watch, copy the framework, never the ad</h1>
           <p className="text-muted">{board.levelDetail} Autopilot is {FACTORY_LEVEL_LABELS[board.level as FactoryLevel]} (ceiling {FACTORY_LEVEL_LABELS[board.ceiling as FactoryLevel]}).</p>
         </div>
         {killOn ? <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm font-semibold" role="status">Kill switch is on. Live ads stay paused.</p> : null}
@@ -91,7 +91,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
       {note ? <p className="text-sm text-muted" role="status">{note}</p> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
 
-      <Tabs defaultValue="pipeline">
+      <Tabs defaultValue="pipeline" className="space-y-6">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm font-medium" value="pipeline">Factory Line</TabsTrigger>
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="discover">Discover</TabsTrigger>
@@ -169,8 +169,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
               <ul className="space-y-3">
                 {board.winners.map((item) => (
                   <li key={item.id} className="rounded-md border border-line p-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-brass">{item.advertiser}</p>
-                    <p className="font-display text-xl">Score {item.score.toFixed(2)} <span className="text-sm font-normal text-muted">range {item.low.toFixed(2)}–{item.high.toFixed(2)}</span></p>
+                    <p className="eyebrow">{item.advertiser}</p>
+                    {item.score == null || item.low == null || item.high == null ? (
+                      <p className="font-display text-xl text-muted">Not graded yet</p>
+                    ) : (
+                      <p className="font-display text-xl tabular-nums">Score {item.score.toFixed(2)} <span className="text-sm font-normal text-muted">range {item.low.toFixed(2)}–{item.high.toFixed(2)}</span></p>
+                    )}
                     <p className="text-sm text-muted">{item.evidence.join(" · ")}</p>
                     {item.copy ? <p className="mt-2 text-sm">{item.copy}</p> : null}
                   </li>
@@ -327,7 +331,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
                     <li key={post.id} className="rounded-md border border-line p-3 text-sm flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold uppercase text-xs tracking-wider text-brass">{post.platform}</span>
+                          <span className="eyebrow">{post.platform}</span>
                           <span className="text-xs text-muted">· {post.status}</span>
                         </div>
                         <p className="font-medium mt-0.5">{post.title || (post.caption ? post.caption.slice(0, 50) : "Creative post")}</p>

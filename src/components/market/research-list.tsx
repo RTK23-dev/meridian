@@ -27,7 +27,7 @@ export function ResearchList({ view, ads, onView }: ListProps) {
 
 function ResearchCard({ ad, onView }: { ad: ResearchAdRow; onView: (id: string) => void }) {
   const copy = ad.copy || ad.headline;
-  return <li className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+  return <li className="flex min-w-0 flex-col gap-3 panel">
     <SnapshotPlaceholder ad={ad} />
     <div className="min-w-0 space-y-2">
       <div className="flex flex-wrap items-center gap-2">

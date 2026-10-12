@@ -62,7 +62,7 @@ function BrandCard({ brand, lookup }: { brand: BrandSummary; lookup: BrandLookup
   const machine = lookup?.machine ?? { status: "loading" as const };
   return (
     <li>
-      <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="group block h-full rounded-lg border border-border bg-surface p-5 transition-colors hover:border-accent hover:shadow-sm">
+      <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="group block h-full panel transition-colors hover:border-accent hover:shadow-sm">
         <div className="flex items-start gap-3">
           <BrandMark name={brand.name} logoAssetId={brand.logoAssetId} />
           <div className="min-w-0 flex-1">

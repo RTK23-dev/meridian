@@ -44,7 +44,7 @@ export function VolumeEnginePanel({
   const durationKnown = (DURATION_OPTIONS as readonly number[]).includes(params.durationSeconds);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <ChoiceGroup<number>
         legend="Videos per concept"
         hint="How many variants each winning concept should produce."

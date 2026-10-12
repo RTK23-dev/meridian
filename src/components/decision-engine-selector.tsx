@@ -98,7 +98,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
   return (
     <div className="space-y-4 rounded border border-line bg-panel p-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-brass">Decision engine</p>
+        <p className="eyebrow">Decision engine</p>
         <h3 className="font-semibold text-lg">Active: {activeLabel}</h3>
         <p className="text-sm text-muted">
           Only the active engine receives decisions. Meridian never calls the other engine for the same decision, and never

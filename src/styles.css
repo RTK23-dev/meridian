@@ -92,8 +92,17 @@
     background: var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  /* The warm light behind the page is its own layer, so text contrast is measured against the plain page background. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(1100px 520px at 12% -12%, color-mix(in srgb, var(--color-accent-soft) 85%, transparent), transparent 70%);
   }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
   /* One focus ring for every theme: 2px, 2px offset. */
@@ -106,6 +115,10 @@
   img, svg, video { max-width: 100%; height: auto; }
   /* Serif for page titles (h1) and anything that opts in with .font-display. Section headings use sans. */
   h1, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
+  /* Headings break onto balanced lines, so a two-line title does not leave one word on its own. */
+  h1 { text-wrap: balance; }
+  h2, h3 { text-wrap: balance; }
+  ::selection { background: color-mix(in srgb, var(--color-accent) 26%, transparent); color: var(--color-fg); }
   @media (max-width: 639px) {
     input, select, textarea, [role="combobox"] { font-size: 16px; }
   }
@@ -120,6 +133,15 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--color-fg-muted);
+  }
+
+  /* The card every screen uses: a soft shadow on the surface, a large radius, and room inside. One definition, so the screens match. */
+  .panel {
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
   }
 
   /* On touch screens a small control (a 24px switch, checkbox or thumb) gets a 44 by 44 px hit area. The pseudo-element
@@ -139,10 +161,25 @@
   }
 }
 
+/* Motion. An entrance rises a few pixels and fades in, then rests on the element's own styles. Reduced motion below shortens these to
+   0.01ms, which still lands on the final state. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.surface-rise { animation: rise 460ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.stagger-in { animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.page-enter { animation: fade 280ms ease-out both; }
+
 /* Reduced motion: every CSS transition and animation, including the ones in new components, is cut to 0.01ms. JS-driven
    chart animation is turned off in the chart components, which read the same media query. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  /* The delay goes too. A staggered entrance holds its element at opacity 0 until its delay ends, so a delay would hide content. */
+  *, *::before, *::after { animation-delay: 0ms !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
 /* More contrast: stronger dividers, text, accent and focus colour. The light block is scoped to :root:not(.dark), so the

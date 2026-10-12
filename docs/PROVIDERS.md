@@ -43,7 +43,7 @@ These are read by the code that owns them. They are not saved per workspace.
 - `TOKEN_ENCRYPTION_KEY`: encrypts saved keys and connection tokens. Losing it makes saved keys unreadable.
 - `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`: sign-in.
 - `DATABASE_URL`: PostgreSQL.
-- `S3_*`: optional object storage for artifacts.
+- S3 is retired (NORTH_STAR decision 2). There are no `S3_*` settings. Artifacts and exports go to Google Drive.
 - `EMAIL_API_URL`, `EMAIL_API_KEY`: optional email delivery.
 - `WEBHOOK_SECRET`: the secret that inbound webhooks are checked against.
 - `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY`: optional external embeddings. Without them, the local semantic store is used.
@@ -54,6 +54,22 @@ These are read by the code that owns them. They are not saved per workspace.
 Non-secret settings: `HYPIT_BASE_URL`, the model names (`MERIDIAN_OMNI_MODEL`, `MERIDIAN_IMAGE_MODEL`, `OPENAI_DECISIONS_MODEL`,
 `TYPESAFE_JEV_MODEL`), timeouts, and the Cyclone device gateway (`CYCLONE_GATEWAY_URL`, `CYCLONE_DEVICE_ID`, `CYCLONE_API_KEY`).
 Cyclone is one device owned by the deployment, so its key is read from the environment by design.
+
+The sourcing sidecar is optional. `MERIDIAN_SOURCING_SIDECAR_URL` (for example `http://127.0.0.1:8765`) and `MERIDIAN_SIDECAR_TOKEN` turn it
+on. The sidecar parses pages Meridian has already fetched and reads Agent Reach's public V2EX and RSS routes. It never fetches a URL
+itself. See [SOURCING_SIDECAR.md](SOURCING_SIDECAR.md).
+
+## Organic publishing accounts
+
+Regular posts go through a connected account, saved per brand on Connected accounts with its platform account ID and an access token.
+
+- **Facebook Page** and **Instagram**: a token for the Page or account, saved on the brand's account. Instagram needs a public https
+  route for the media (see the roadmap).
+- **YouTube Shorts**: a token that grants the upload scope (`https://www.googleapis.com/auth/youtube.upload`). A token that declares
+  scopes without it is not connected, and the reason says so.
+- **TikTok (regular video)**: a token that grants `video.publish`. A token that declares scopes without it is not connected. TikTok
+  posts are sent as private (`SELF_ONLY`) until TikTok approves the app for public posting. The publish is reported as done only when
+  TikTok reports `PUBLISH_COMPLETE`. Scheduling is refused. This is not run against TikTok's live service in this release.
 
 ## Engine choice
 

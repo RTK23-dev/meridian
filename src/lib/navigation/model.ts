@@ -22,6 +22,7 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
     id: "workspace",
     label: "Workspace",
     items: [
+      { id: "setup", label: "Setup guide", to: "/setup" },
       { id: "jobs", label: "Jobs & health", to: "/jobs" },
       { id: "usage", label: "Usage & cost", to: "/usage" },
       { id: "alerts", label: "Alerts center", to: "/alerts" },
@@ -92,8 +93,8 @@ export function bottomTabs(brandId?: string): NavItem[] {
   if (!brandId) {
     return [
       { id: "overview", label: "Overview", to: "/" },
+      { id: "setup", label: "Setup", to: "/setup" },
       { id: "alerts", label: "Alerts", to: "/alerts" },
-      { id: "integrations", label: "Integrations", to: "/integrations" },
       { id: "settings", label: "Settings", to: "/settings" },
     ];
   }

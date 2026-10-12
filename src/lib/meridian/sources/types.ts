@@ -20,7 +20,9 @@ export type SourceKind =
   | "upload"
   | "licensed"
   | "first_party_analytics"
-  | "cyclone_scout";
+  | "cyclone_scout"
+  | "rss"
+  | "v2ex";
 
 export type EvidenceAvailability =
   | "REFERENCE_ONLY"

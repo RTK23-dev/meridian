@@ -6,7 +6,10 @@ import type { OrganicConnection, OrganicPlatform } from "./types.ts";
 /** The Google scope a YouTube Shorts upload needs. */
 export const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 
-export const ORGANIC_PLATFORMS: readonly OrganicPlatform[] = ["instagram", "facebook", "youtube"];
+/** The TikTok scope the Content Posting API needs to upload a video. */
+export const TIKTOK_POSTING_SCOPE = "video.publish";
+
+export const ORGANIC_PLATFORMS: readonly OrganicPlatform[] = ["instagram", "facebook", "youtube", "tiktok"];
 
 export function isOrganicPlatform(value: string): value is OrganicPlatform {
   return (ORGANIC_PLATFORMS as readonly string[]).includes(value);
@@ -16,12 +19,14 @@ const LABEL: Record<OrganicPlatform, string> = {
   instagram: "Instagram",
   facebook: "Facebook Page",
   youtube: "YouTube",
+  tiktok: "TikTok",
 };
 
 const ACCOUNT_ID_LABEL: Record<OrganicPlatform, string> = {
   instagram: "Instagram account ID",
   facebook: "Page ID",
   youtube: "channel ID",
+  tiktok: "TikTok account ID",
 };
 
 function notConnected(platform: OrganicPlatform, reason: string): OrganicConnection {
@@ -106,6 +111,9 @@ export async function resolveOrganicConnection(
   const scopes = parseScopes(payload?.customFields?.scopes) ?? parseScopes(recordOf(account.metadata).scopes);
   if (input.platform === "youtube" && scopes && !scopes.includes(YOUTUBE_UPLOAD_SCOPE)) {
     return notConnected(input.platform, `The saved YouTube token does not include the upload scope (${YOUTUBE_UPLOAD_SCOPE}). Save a token that grants it.`);
+  }
+  if (input.platform === "tiktok" && scopes && !scopes.includes(TIKTOK_POSTING_SCOPE)) {
+    return notConnected(input.platform, `The saved TikTok token does not include the posting scope (${TIKTOK_POSTING_SCOPE}). Save a token that grants it.`);
   }
 
   return {

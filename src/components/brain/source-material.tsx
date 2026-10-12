@@ -122,7 +122,7 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty, onPasteDirt
     })();
   }
 
-  return <div className="space-y-5 rounded-lg border border-border bg-surface p-5">
+  return <div className="space-y-5 panel">
     <div className="space-y-1">
       <h3 className="text-base font-semibold">Suggest from document</h3>
       <p className="text-sm text-fg-muted">Plain text, Markdown, DOCX, and PDF text can be stored. Instruction-like lines are dropped. An image-only PDF fails. The file is stored as untrusted text. It does not change the brain.</p>

@@ -31,7 +31,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
   const disabledReason = !trimmed
     ? "Enter a search phrase or a public page URL to start a run."
     : !isPage && !anyConnected
-      ? "No discovery source is connected for this workspace. Save a YouTube, SerpAPI or Meta Ad Library key in Settings, or enter a public page URL instead."
+      ? "No discovery source is connected for this workspace. Save a YouTube, SerpAPI or Meta Ad Library key in the Setup guide, or enter a public page URL instead."
       : null;
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -73,7 +73,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
             </li>
           ))}
         </ul>
-        <p className="mt-2 text-xs text-fg-muted">Public pages need no key. Keyed sources read the key saved for this workspace only. A key is checked when a request is made.</p>
+        <p className="mt-2 text-xs text-fg-muted">Public pages need no key. Meridian reads each site's robots.txt first, and a bot check is reported, never bypassed. Keyed sources read the key saved for this workspace only. A key is checked when a request is made.</p>
       </div>
     </div>
   );

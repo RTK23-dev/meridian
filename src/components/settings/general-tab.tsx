@@ -56,9 +56,9 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <UnsavedChangesGuard dirty={renameForm.formState.isDirty || createForm.formState.isDirty} />
-      <section aria-labelledby="workspace-name-title" className="space-y-4 rounded-lg border border-border bg-surface p-5">
+      <section aria-labelledby="workspace-name-title" className="space-y-4 panel">
         <h2 id="workspace-name-title" className="text-section font-semibold text-fg">Workspace name</h2>
         {!canAdmin ? <p className="text-sm text-fg-muted">Only an admin can rename this workspace.</p> : null}
         <form className="flex flex-wrap items-end gap-3" onSubmit={renameForm.handleSubmit(rename)} onKeyDown={(event) => submitOnShortcut(event)}>
@@ -77,7 +77,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         {renameRaw ? <FormError message={plainServerError(renameRaw, "settings")} raw={renameRaw} /> : null}
       </section>
 
-      <section aria-labelledby="another-workspace-title" className="space-y-4 rounded-lg border border-border bg-surface p-5">
+      <section aria-labelledby="another-workspace-title" className="space-y-4 panel">
         <div>
           <h2 id="another-workspace-title" className="text-section font-semibold text-fg">Create another workspace</h2>
           <p className="mt-1 text-sm text-fg-muted">A second workspace keeps its own brands, members, and keys. You become its owner.</p>
@@ -102,15 +102,15 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
 
       <section aria-labelledby="provider-settings-title" className="space-y-3">
         <div>
-          <h2 id="provider-settings-title" className="text-section font-semibold text-fg">Provider keys and settings</h2>
-          <p className="mt-1 text-sm text-fg-muted">Keys are stored encrypted and are never shown again. Only an admin can save or remove them.</p>
+          <h2 id="provider-settings-title" className="text-section font-semibold text-fg">Engine, sources and provider settings</h2>
+          <p className="mt-1 text-sm text-fg-muted">Each provider's settings and connection test. Keys are entered once, in Setup above.</p>
         </div>
         <ProviderSettingsPanel organizationId={organizationId} canAdmin={canAdmin} />
       </section>
 
       <DriveConnectionPanel organizationId={organizationId} canAdmin={canAdmin} />
 
-      <section aria-labelledby="connected-title" className="space-y-3 rounded-lg border border-border bg-surface p-5">
+      <section aria-labelledby="connected-title" className="space-y-3 panel">
         <h2 id="connected-title" className="text-section font-semibold text-fg">What is and is not connected</h2>
         <ul className="space-y-2 text-sm text-fg-muted">
           <li>A public page you name can be fetched and stored as untrusted text. It does not change the brand brain until you accept a suggestion, and only if a text model is configured.</li>

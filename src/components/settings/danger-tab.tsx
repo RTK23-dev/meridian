@@ -29,7 +29,7 @@ export function DangerTab({ brands, canDelete }: { brands: BrandSummary[]; canDe
         ) : null}
       </section>
 
-      <section aria-labelledby="danger-workspace-title" className="space-y-2 rounded-lg border border-border bg-surface p-5">
+      <section aria-labelledby="danger-workspace-title" className="space-y-2 panel">
         <h2 id="danger-workspace-title" className="text-section font-semibold text-fg">Delete this workspace</h2>
         <p className="text-sm text-fg-muted">
           This build does not delete a workspace, so no control is offered here. Brands can be deleted one at a time, as above.

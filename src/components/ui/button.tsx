@@ -4,12 +4,12 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-semibold transition-[background-color,border-color,color,box-shadow,transform,filter] duration-150 ease-out active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        primary: "bg-accent text-accent-fg hover:brightness-95",
-        secondary: "border border-border-strong bg-surface text-fg hover:bg-surface-2",
+        primary: "bg-accent text-accent-fg shadow-sm hover:brightness-95",
+        secondary: "border border-border-strong bg-surface text-fg shadow-sm hover:bg-surface-2",
         quiet: "text-fg hover:bg-surface-2",
         ghost: "text-fg hover:bg-surface-2",
         danger: "border border-danger bg-surface text-danger hover:bg-danger-soft",

@@ -6,9 +6,12 @@ import { Button, DisabledReason, Field, Card, ScreenSkeleton, SelectInput, Statu
 import { PlainErrorMessage, PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { CreativeCard } from "@/components/library/creative-card";
+import { PublishCreativeDialog } from "@/components/library/publish-creative-dialog";
+import type { PublishTarget } from "@/components/studio/publish-dialog";
 import { LibraryFilterBar } from "@/components/library/library-filters";
 import {
   NO_LIBRARY_FILTERS,
+  type LibraryCreative,
   distinctValues,
   filterLibraryCreatives,
   mediaByCreative,
@@ -16,6 +19,7 @@ import {
   primaryMedia,
   type LibraryFilters,
   type MediaLoad,
+  publishTargetFor,
 } from "@/components/library/library-model";
 import { TraceDrawer } from "@/components/library/trace-drawer";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
@@ -24,6 +28,7 @@ import { submitOnShortcut } from "@/components/forms/shortcut";
 import { buildTraceTimeline } from "@/components/library/trace-model";
 import { hasRole } from "@/lib/meridian/access";
 import { attachCreativeImage, recordObservation, recordPerformance } from "@/lib/meridian/machine";
+import { PausedExplainer } from "@/components/publishing/paused-explainer";
 import { publishPausedObjects } from "@/lib/meridian/providers/publish-action";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { useLibraryQuery, useReviewsQuery, useScopedMutation, useStudioQuery, useTraceQuery } from "@/lib/query/hooks";
@@ -53,6 +58,8 @@ function Library({ brandId }: { brandId: string }) {
   const variantsByCreative = useMemo(() => mediaByCreative(data?.creatives ?? [], studio.data?.variants ?? []), [data?.creatives, studio.data?.variants]);
   // The trace stays mounted after the drawer closes, so its content does not blank out during the exit animation.
   const [traceCreativeId, setTraceCreativeId] = useState<string | null>(null);
+  const [publishTarget, setPublishTarget] = useState<PublishTarget | null>(null);
+  const [publishKey, setPublishKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filters, setFilters] = useState<LibraryFilters>(NO_LIBRARY_FILTERS);
   const traceQuery = useTraceQuery(brandId, traceCreativeId, drawerOpen);
@@ -132,6 +139,7 @@ function Library({ brandId }: { brandId: string }) {
   // Hooks stop above this line. The screen renders from here down.
   if (query.isError && !data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!data) return <ScreenSkeleton label="Loading library" shape="rows" />;
+  const pausedProvider = publishForm.watch("provider");
   const canEdit = hasRole(data.role, "member");
 
   // The cards read media from the library list, which always answers with the asset ids. The studio read adds detail only.
@@ -167,18 +175,24 @@ function Library({ brandId }: { brandId: string }) {
   async function savePausedObjects(values: PausedPublishing) {
     await pausedObjects.mutateAsync(values).catch(() => undefined);
   }
+  /** The publish dialog takes the creative and its stored media shape. A creative with no stored file publishes its text only. */
+  function openPublish(item: LibraryCreative) {
+    setPublishTarget(publishTargetFor(item, variantsByCreative.get(item.id) ?? []));
+    setPublishKey((key) => key + 1);
+  }
+
   function openTrace(creativeId: string) {
     setTraceCreativeId(creativeId);
     setDrawerOpen(true);
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <UnsavedChangesGuard dirty={formsDirty} />
       <div className="max-w-2xl space-y-3">
-        <p className="text-sm font-semibold uppercase tracking-widest text-brass">Library</p>
-        <h1 className="font-display text-4xl">Creatives this brand owns</h1>
-        <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing stays paused and runs only when you submit the form below.</p>
+        <p className="eyebrow">Library</p>
+        <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Creatives this brand owns</h1>
+        <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing creates paused Meta objects when you submit the form below. Nothing runs until you switch it on in Meta Ads Manager.</p>
       </div>
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
@@ -196,10 +210,11 @@ function Library({ brandId }: { brandId: string }) {
         )}
       </div>
       <Card>
-        <h2 className="font-display text-2xl">Paused publishing</h2>
+        <h2 className="font-display text-2xl">Paid ads, created paused</h2>
         <p className="mt-2 text-sm text-muted">
-          This creates paused objects and stores an id only when the provider returns one. Auto-publish stays off. A missing token, page, location, or uploaded asset stops the chain. Nothing is marked published from this form’s click alone.
+          Optional. Choose Meta, TikTok or Google Ads. Meridian creates the campaign, ad set and ad with the status paused, and stores a platform id only when the platform returns one. A missing token, Page, location or uploaded image stops the chain, and nothing is marked published from this click alone.
         </p>
+        <PausedExplainer />
         {hasRole(data.role, "admin") ? (
           <form
             className="mt-4 grid gap-3"
@@ -234,33 +249,45 @@ function Library({ brandId }: { brandId: string }) {
             <Field label="Message" error={publishForm.formState.errors.message?.message}>
               <Textarea {...publishForm.register("message")} />
             </Field>
-            <Field label="Meta countries" hint="Comma-separated, such as US. Used only for Meta." error={publishForm.formState.errors.countries?.message}>
-              <Input {...publishForm.register("countries")} />
-            </Field>
-            <Field label="Meta page id" error={publishForm.formState.errors.pageId?.message}>
-              <Input {...publishForm.register("pageId")} />
-            </Field>
-            <Field label="TikTok location ids" hint="Numeric location ids, not country codes. An ad also needs an uploaded image or video id." error={publishForm.formState.errors.locationIds?.message}>
-              <Input {...publishForm.register("locationIds")} />
-            </Field>
-            <Field label="TikTok schedule start" error={publishForm.formState.errors.scheduleStart?.message}>
-              <Input {...publishForm.register("scheduleStart")} placeholder="2026-01-02 00:00:00" />
-            </Field>
-            <Field label="TikTok image ids" error={publishForm.formState.errors.imageIds?.message}>
-              <Input {...publishForm.register("imageIds")} />
-            </Field>
-            <Field label="TikTok video id" error={publishForm.formState.errors.videoId?.message}>
-              <Input {...publishForm.register("videoId")} />
-            </Field>
-            <Field label="Google headlines" hint="Each headline is 30 characters or fewer." error={publishForm.formState.errors.headlines?.message}>
-              <Input {...publishForm.register("headlines")} />
-            </Field>
-            <Field label="Google descriptions" hint="Each description is 90 characters or fewer." error={publishForm.formState.errors.descriptions?.message}>
-              <Input {...publishForm.register("descriptions")} />
-            </Field>
-            <Field label="Google CPC bid (cents)" error={publishForm.formState.errors.cpcBidCents?.message}>
-              <Input {...publishForm.register("cpcBidCents")} type="text" inputMode="decimal" />
-            </Field>
+            {pausedProvider === "meta" ? (
+  <>
+  <Field label="Meta countries" hint="Comma-separated, such as US. Used only for Meta." error={publishForm.formState.errors.countries?.message}>
+                <Input {...publishForm.register("countries")} />
+              </Field>
+              <Field label="Meta page id" error={publishForm.formState.errors.pageId?.message}>
+                <Input {...publishForm.register("pageId")} />
+              </Field>
+  </>
+) : null}
+            {pausedProvider === "tiktok" ? (
+  <>
+  <Field label="TikTok location ids" hint="Numeric location ids, not country codes. An ad also needs an uploaded image or video id." error={publishForm.formState.errors.locationIds?.message}>
+                <Input {...publishForm.register("locationIds")} />
+              </Field>
+              <Field label="TikTok schedule start" error={publishForm.formState.errors.scheduleStart?.message}>
+                <Input {...publishForm.register("scheduleStart")} placeholder="2026-01-02 00:00:00" />
+              </Field>
+              <Field label="TikTok image ids" error={publishForm.formState.errors.imageIds?.message}>
+                <Input {...publishForm.register("imageIds")} />
+              </Field>
+              <Field label="TikTok video id" error={publishForm.formState.errors.videoId?.message}>
+                <Input {...publishForm.register("videoId")} />
+              </Field>
+  </>
+) : null}
+            {pausedProvider === "google" ? (
+  <>
+  <Field label="Google headlines" hint="Each headline is 30 characters or fewer." error={publishForm.formState.errors.headlines?.message}>
+                <Input {...publishForm.register("headlines")} />
+              </Field>
+              <Field label="Google descriptions" hint="Each description is 90 characters or fewer." error={publishForm.formState.errors.descriptions?.message}>
+                <Input {...publishForm.register("descriptions")} />
+              </Field>
+              <Field label="Google CPC bid (cents)" error={publishForm.formState.errors.cpcBidCents?.message}>
+                <Input {...publishForm.register("cpcBidCents")} type="text" inputMode="decimal" />
+              </Field>
+  </>
+) : null}
             <UnsavedChangesBar
               dirty={publishForm.formState.isDirty}
               subject="paused publish"
@@ -311,6 +338,7 @@ function Library({ brandId }: { brandId: string }) {
                   variants={variantsByCreative.get(item.id) ?? []}
                   mediaLoad={mediaLoad}
                   onTrace={() => openTrace(item.id)}
+                  onPublish={canEdit ? () => openPublish(item) : undefined}
                 />
               ))}
             </ul>
@@ -322,6 +350,14 @@ function Library({ brandId }: { brandId: string }) {
           )}
         </section>
       )}
+      {publishTarget ? (
+        <PublishCreativeDialog
+          key={publishKey}
+          brandId={brandId}
+          target={publishTarget}
+          onClose={() => setPublishTarget(null)}
+        />
+      ) : null}
       <TraceDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}

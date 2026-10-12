@@ -252,7 +252,6 @@ export async function getWorkspaceProviderSettings(
     settings: {
       primaryProvider: "google_drive",
       fallbackProvider: "filesystem",
-      s3Configured: Boolean(process.env.S3_BUCKET),
       driveDetail: driveStatus.detail,
     },
     capabilities: ["oauth_google_drive", "checksum_verification", "zero_fake_completion"],

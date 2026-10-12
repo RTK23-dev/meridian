@@ -5,19 +5,29 @@ import { RESEARCH_SCHEMA_VERSION, type ResearchAnalysis } from "./schema.ts";
 import type { TranscriptionResult } from "./transcription.ts";
 import type { MetaLibraryAd } from "../providers/meta-research.ts";
 
+/**
+ * What Meta reported about the ad at capture, kept as JSON. Every ad this collector reads gets a `stoppedAt` key, null while
+ * the ad was still delivering. A row without the key predates the field, so its survival is unknown and is not assumed.
+ */
+export function sourceMetricsOf(ad: Pick<MetaLibraryAd, "stoppedAt" | "countries" | "capturedAt">): string {
+  return JSON.stringify({ stoppedAt: ad.stoppedAt, countries: ad.countries, observedAt: ad.capturedAt });
+}
+
 export async function persistMetaAd(sql: Sql, input: { organizationId: string; brandId: string; runId: string; ad: MetaLibraryAd }): Promise<string> {
   const id = randomUUID();
   const rows = await sql<{ id: string }>`
     insert into research_ads (
       id, organization_id, brand_id, collection_run_id, external_id, page_id, advertiser, original_url,
-      captured_at, published_at, copy, headline, description, platforms, media_type
+      captured_at, published_at, copy, headline, description, platforms, media_type, source_metrics
     ) values (
       ${id}, ${input.organizationId}, ${input.brandId}, ${input.runId}, ${input.ad.externalId}, ${input.ad.pageId},
       ${input.ad.advertiser}, ${input.ad.snapshotUrl}, ${input.ad.capturedAt}, ${input.ad.publishedAt},
-      ${input.ad.copy}, ${input.ad.headline}, ${input.ad.description}, ${JSON.stringify(input.ad.platforms)}, ${input.ad.mediaType}
+      ${input.ad.copy}, ${input.ad.headline}, ${input.ad.description}, ${JSON.stringify(input.ad.platforms)}, ${input.ad.mediaType},
+      ${sourceMetricsOf(input.ad)}
     ) on conflict (organization_id, brand_id, source, external_id) do update set
       collection_run_id = excluded.collection_run_id,
       original_url = excluded.original_url,
+      source_metrics = excluded.source_metrics,
       captured_at = excluded.captured_at,
       updated_at = now()
     returning id

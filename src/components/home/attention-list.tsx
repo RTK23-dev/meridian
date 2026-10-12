@@ -61,7 +61,7 @@ function AttentionLink({ item }: { item: AttentionItem }) {
       <Link
         to={item.to as never}
         params={item.brandId ? { brandId: item.brandId } as never : undefined}
-        className="flex h-full min-h-11 gap-3 rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent"
+        className="flex h-full min-h-11 gap-3 panel transition-colors hover:border-accent"
       >
         <span className={`mt-0.5 shrink-0 ${ICON_TONE[item.tone]}`}>{iconFor(item)}</span>
         <span className="min-w-0 flex-1">

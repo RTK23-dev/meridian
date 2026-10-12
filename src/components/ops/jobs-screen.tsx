@@ -150,7 +150,7 @@ export function JobsScreen() {
 
       <section aria-labelledby="jobs-heading" className="space-y-3">
         <h2 id="jobs-heading" className="text-section font-semibold">Jobs</h2>
-        <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-2 xl:grid-cols-4" onSubmit={applyFilters}>
+        <form className="grid gap-3 panel sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.5fr_auto]" onSubmit={applyFilters}>
           <Field label="Status">
             <SelectInput value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value })}>
               {JOB_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
