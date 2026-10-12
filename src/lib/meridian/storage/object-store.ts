@@ -94,20 +94,14 @@ export function createMemoryObjectStore() {
   };
 }
 
-/** External bucket state. Credentials do not mean a successful upload. */
-export function externalObjectStorageStatus(env: { bucket?: string; accessKeyId?: string; endpoint?: string; secretAccessKey?: string } = {}): {
-  status: "NOT_CONNECTED" | "CONFIGURED";
-  detail: string;
-} {
-  if (!env.endpoint?.trim() || !env.bucket?.trim() || !env.accessKeyId?.trim() || !env.secretAccessKey?.trim()) {
-    return {
-      status: "NOT_CONNECTED",
-      detail: "No S3-compatible endpoint is configured. Development bytes use the local filesystem when that store is selected. Nothing is sent to a bucket.",
-    };
-  }
+/**
+ * Where files are kept. S3 is retired (NORTH_STAR decision 2): files live in Postgres, and Google Drive holds artifacts and
+ * exports when the server connects it. The statement is fixed, so it needs no environment check.
+ */
+export function objectStorageStatus(): { status: "RETIRED"; detail: string } {
   return {
-    status: "CONFIGURED",
-    detail: "S3 credentials are present. An object is stored only after the bucket accepts the request.",
+    status: "RETIRED",
+    detail: "Files are stored in Postgres. Google Drive holds artifacts and exports when the server connects it. S3 is retired and is not read.",
   };
 }
 

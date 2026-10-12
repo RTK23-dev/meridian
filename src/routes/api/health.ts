@@ -3,7 +3,7 @@ import { getSql, type Sql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { DEV_USER_ID, authConfigured } from "@/lib/auth/verify.server";
 import { localSemanticModel, embeddingProviderState } from "@/lib/meridian/embeddings/provider";
-import { externalObjectStorageStatus } from "@/lib/meridian/storage/object-store";
+import { objectStorageStatus } from "@/lib/meridian/storage/object-store";
 import { accountProviderState } from "@/lib/meridian/providers/boundaries";
 import { videoGenerationStatus } from "@/lib/meridian/video/provider";
 import { pickActiveOrganization } from "@/lib/meridian/storage/media-access";
@@ -12,12 +12,7 @@ import { healthResult, loadHealthDetail } from "@/lib/meridian/observability/hea
 /** Which integrations this deployment has configured. It carries no key, and no count. Shown only to a workspace admin. */
 function deploymentStatus() {
   return {
-    storage: externalObjectStorageStatus({
-      bucket: process.env.S3_BUCKET,
-      accessKeyId: process.env.S3_ACCESS_KEY_ID,
-      endpoint: process.env.S3_ENDPOINT,
-      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
-    }),
+    storage: objectStorageStatus(),
     localSemantic: localSemanticModel().kind,
     // Only the presence of a resolved key is passed. The key itself never reaches the status function.
     externalEmbeddings: embeddingProviderState({

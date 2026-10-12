@@ -34,6 +34,6 @@ function NotificationsPage() {
     <PageHeader title="Notification preferences" description="Choose which in-app notifications appear for you in this workspace. These preferences do not control external webhook delivery." />
     {change.error ? <PlainErrorNotice error={change.error} /> : null}
     <Card><ul className="divide-y divide-border">{query.data.preferences.map(({ kind, enabled }) => <li key={kind} className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"><div><p className="font-medium">{TITLES[kind] ?? kind}</p><p className="mt-1 text-sm text-fg-muted">{enabled ? "Shown in your in-app workspace feed." : "Hidden from your in-app workspace feed."}</p></div><label className="flex min-h-11 items-center gap-3"><span className="text-sm">{enabled ? "On" : "Off"}</span><input type="checkbox" className="size-6 accent-accent" aria-label={`${TITLES[kind] ?? kind} notifications`} checked={enabled} disabled={saving.includes(kind)} onChange={(event) => void change.mutateAsync({ kind, enabled: event.target.checked }).catch(() => undefined)} /></label></li>)}</ul></Card>
-    {saving.length > 0 ? <p role="status" className="text-sm text-fg-muted">Saving preference…</p> : <Button type="button" variant="quiet" onClick={() => void query.refetch()}>Refresh preferences</Button>}
+    {saving.length > 0 ? <p role="status" className="text-sm text-fg-muted">Saving preference…</p> : <Button type="button" variant="secondary" onClick={() => void query.refetch()}>Refresh preferences</Button>}
   </div>;
 }

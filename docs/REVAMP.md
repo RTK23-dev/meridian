@@ -141,7 +141,7 @@ before image. The phone images are at 390 px.
 
 ## Still open after this change
 
-- `.env.example` still lists the S3 variables. NORTH_STAR work item 1 retires S3 in code, settings and docs, so it is a separate change.
+- S3 is retired in this PR (NORTH_STAR decision 2): the S3 client and its test are removed, the storage status reads `RETIRED`, the integrations card and provider settings no longer read S3, and `.env.example` and the docs no longer list S3 variables. `STORAGE_ROOT` stays, because the distribution service still writes export files to a local filesystem store. That store should move to Google Drive, as its own change.
 - `main` still has the brain-save failure until this PR merges. The fix is in this PR, not in `main`.
 - The overview's "after" screenshot predates the progress track on the pipeline. A fresh 1280 px capture is still to do.
 - Every screen was reviewed at 1440 px from the UI baseline fixture. Two were changed in this pass: Opportunities had a missing

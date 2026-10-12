@@ -43,7 +43,7 @@ These are read by the code that owns them. They are not saved per workspace.
 - `TOKEN_ENCRYPTION_KEY`: encrypts saved keys and connection tokens. Losing it makes saved keys unreadable.
 - `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`: sign-in.
 - `DATABASE_URL`: PostgreSQL.
-- `S3_*`: optional object storage for artifacts.
+- S3 is retired (NORTH_STAR decision 2). There are no `S3_*` settings. Artifacts and exports go to Google Drive.
 - `EMAIL_API_URL`, `EMAIL_API_KEY`: optional email delivery.
 - `WEBHOOK_SECRET`: the secret that inbound webhooks are checked against.
 - `EXTERNAL_SEMANTIC_URL`, `EXTERNAL_SEMANTIC_KEY`: optional external embeddings. Without them, the local semantic store is used.

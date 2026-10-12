@@ -25,7 +25,7 @@ form behind a public load balancer.
 
 ## Artifacts and exports
 
-Rendered media and export packages go to the configured storage (Drive, or S3 when set). A storage object row in Postgres records each
+Rendered media and export packages go to Google Drive when the server connects it. S3 is retired. A storage object row in Postgres records each
 one. The media route `/api/assets/:assetId` serves an artifact to a member of its workspace only.
 
 Where live posting is not available, the manual export package is the delivery path. Export the package from the Library or the Studio
