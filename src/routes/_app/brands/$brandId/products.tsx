@@ -27,7 +27,7 @@ function Products({ brandId }: { brandId: string }) {
   const canEdit = hasRole(detail.identity.role, "member");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div className="space-y-3">
         <p className="eyebrow">Brand</p>
         <div className="flex flex-wrap items-end justify-between gap-4">

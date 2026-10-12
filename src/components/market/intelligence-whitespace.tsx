@@ -54,7 +54,7 @@ export function WhitespaceRanking({ items, brandId, canEdit, pendingIds, onStatu
       const busy = pendingIds.includes(opportunity.id);
       const probability = finite(opportunity.expectedWinProbability);
       const saturation = finite(opportunity.competitorSaturationScore);
-      return <li key={opportunity.id} className="rounded-lg border border-border bg-surface p-5">
+      return <li key={opportunity.id} className="panel">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">

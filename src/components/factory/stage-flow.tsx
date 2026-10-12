@@ -62,7 +62,7 @@ export function StageFlow({
                   setOpenId(stage.id);
                   setIsOpen(true);
                 }}
-                className="flex h-full min-h-11 w-full flex-col gap-3 rounded-lg border border-border bg-surface p-4 text-left shadow-sm transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex h-full min-h-11 w-full flex-col gap-3 panel text-left shadow-sm transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="eyebrow">Stage {index + 1}</span>
@@ -102,7 +102,7 @@ export function StageFlow({
         })}
       </ol>
 
-      <section aria-labelledby="factory-jobs-without-card" className="space-y-3 rounded-lg border border-border bg-surface p-4">
+      <section aria-labelledby="factory-jobs-without-card" className="space-y-3 panel">
         <h3 id="factory-jobs-without-card" className="font-semibold text-fg">Factory jobs with no stage card</h3>
         <p className="text-sm text-fg-muted">These jobs run in the factory but are not part of the stage line above.</p>
         <ul className="space-y-2 text-sm">

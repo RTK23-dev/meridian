@@ -179,7 +179,7 @@ export function PipelineEditor({
 
       <FeedbackLine feedback={feedback} onDismiss={() => setFeedback(null)} />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 panel">
         <p aria-live="polite" className="text-sm text-fg">{statusText}</p>
         <div className="flex flex-wrap items-center gap-2">
           {canEdit && dirty ? (

@@ -118,7 +118,7 @@ function Reviews({ brandId }: { brandId: string }) {
   ) : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Reviews</p>
         <h1 className="font-display text-4xl">Holds a person has to clear</h1>

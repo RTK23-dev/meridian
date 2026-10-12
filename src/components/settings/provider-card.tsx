@@ -13,7 +13,7 @@ export function ProviderCard({ card, actions = [], link, note }: {
   note?: string;
 }) {
   return (
-    <li className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+    <li className="flex flex-col gap-3 panel">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-base font-semibold text-fg">{card.label}</h3>
         <StatusBadge status={card.status} label={card.label} />

@@ -39,7 +39,7 @@ function Learning({ brandId }: { brandId: string }) {
   const canAdmin = hasRole(data.role, "admin");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         title="Learning"
         description={data.policy}

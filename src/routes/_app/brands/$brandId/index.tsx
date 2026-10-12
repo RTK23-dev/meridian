@@ -44,7 +44,7 @@ function BrandHome({ brandId }: { brandId: string }) {
   const stages = machine ? pipelineStages({ counts: machine.counts, operating: machine.operating }) : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         breadcrumbs={[{ label: "All brands", to: "/" }]}
         title={detail.identity.name}

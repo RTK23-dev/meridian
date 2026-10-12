@@ -131,6 +131,15 @@
     color: var(--color-fg-muted);
   }
 
+  /* The card every screen uses: a soft shadow on the surface, a large radius, and room inside. One definition, so the screens match. */
+  .panel {
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+  }
+
   /* On touch screens a small control (a 24px switch, checkbox or thumb) gets a 44 by 44 px hit area. The pseudo-element
      is part of the control's box, so a tap on it activates the control. The drawn size does not change. Add to a
      positioned or positionable control only: it sets position: relative. */

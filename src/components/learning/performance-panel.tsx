@@ -114,7 +114,7 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
   }));
   const hookSummary = `Average 3-second hook retention by hook type: ${hookData.map((item) => `${item.label} ${item.value === null ? NOT_ENOUGH_RESULTS : `${(item.value * 100).toFixed(1)}%`}`).join("; ")}.`;
 
-  return <div className="space-y-8">
+  return <div className="space-y-10">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="max-w-2xl space-y-1">
         <h2 className="text-section font-semibold">Performance</h2>
@@ -265,7 +265,7 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
     else onCancel();
   }
 
-  return <form id="telemetry-form" onSubmit={form.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} noValidate aria-labelledby="telemetry-form-title" className="space-y-6 rounded-lg border border-border bg-surface p-5">
+  return <form id="telemetry-form" onSubmit={form.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} noValidate aria-labelledby="telemetry-form-title" className="space-y-6 panel">
     <UnsavedChangesGuard dirty={dirty} />
     <div className="space-y-1">
       <h3 id="telemetry-form-title" className="text-base font-semibold text-fg">Add a telemetry row</h3>

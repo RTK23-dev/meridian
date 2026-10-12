@@ -71,7 +71,7 @@ function LearningRow({ brand }: { brand: BrandSummary }) {
   const canEdit = hasRole(learning.data.role, "member");
   const rawError = toggle.error ? errorText(toggle.error) : null;
   return (
-    <li className="space-y-3 rounded-lg border border-border bg-surface p-4">
+    <li className="space-y-3 panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="font-semibold text-fg">{brand.name}</h3>

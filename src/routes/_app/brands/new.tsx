@@ -80,7 +80,7 @@ function NewBrand() {
           <Textarea {...register("sells")} required maxLength={500} />
         </Field>
         {/* The optional fields stay in the form, so they still save, but they stay folded until someone wants them. */}
-        <details className="group rounded-lg border border-border bg-surface p-4">
+        <details className="group panel">
           <summary className="cursor-pointer text-sm font-semibold text-fg">
             Add more detail <span className="font-normal text-fg-muted">(optional: industry, market, customers, notes)</span>
           </summary>

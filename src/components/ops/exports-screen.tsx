@@ -55,7 +55,7 @@ export function ExportsScreen() {
   if (!workspace?.active) return null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         title="Exports"
         description="Exports are generated when you click. Each file is built from the records in this workspace and downloads to this device."

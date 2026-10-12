@@ -183,7 +183,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <UnsavedChangesGuard dirty={dirty || pasteDirty} />
       <form
         onSubmit={handleSubmit(submit)}
@@ -208,7 +208,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-5 rounded-lg border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-center gap-5 panel">
           <CompletenessRing filled={completeness.requiredFilled} total={completeness.requiredTotal} />
           <div className="min-w-0 flex-1 space-y-1">
             {completeness.requiredComplete ? (
@@ -236,7 +236,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
           <div className="min-w-0 space-y-10">
             <SectionFrame id="identity" label="Identity" progress={progressFor("identity")}>
-              <dl className="grid gap-3 rounded-lg border border-border bg-surface p-4 text-sm sm:grid-cols-2">
+              <dl className="grid gap-3 panel text-sm sm:grid-cols-2">
                 {[
                   ["Brand name", detail.identity.name],
                   ["Category", detail.identity.category],
@@ -293,7 +293,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
           </div>
         </div>
 
-        <div className="sticky bottom-0 z-10 space-y-3 rounded-lg border border-border bg-surface p-4 shadow-md">
+        <div className="sticky bottom-0 z-10 space-y-3 panel shadow-md">
           {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
           <UnsavedChangesBar
             dirty={dirty}

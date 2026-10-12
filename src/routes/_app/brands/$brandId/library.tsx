@@ -187,7 +187,7 @@ function Library({ brandId }: { brandId: string }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <UnsavedChangesGuard dirty={formsDirty} />
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Library</p>

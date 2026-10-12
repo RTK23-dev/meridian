@@ -128,7 +128,7 @@ function Opportunities({ brandId }: { brandId: string }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-3">
           <p className="eyebrow">Opportunities</p>

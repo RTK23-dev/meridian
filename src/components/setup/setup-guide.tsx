@@ -105,7 +105,7 @@ export function SetupGuide() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         title="Set up Meridian"
         description="Work down the list. Each step says what it does and why it matters, and shows what is saved right now. The first two are required; the rest can wait."

@@ -59,7 +59,7 @@ export function SetupPanel({ organizationId, canAdmin }: SetupPanelProps) {
   const rows = setupRows({ summaries, engines: engineStatus });
 
   return (
-    <section aria-labelledby="setup-title" className="space-y-6 rounded-lg border border-border bg-surface p-5">
+    <section aria-labelledby="setup-title" className="space-y-6 panel">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="setup-title" className="text-section font-semibold text-fg">Setup</h2>

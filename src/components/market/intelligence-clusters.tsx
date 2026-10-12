@@ -10,7 +10,7 @@ export function ClusterCards({ angleClusters, semanticClusters }: { angleCluster
     <section aria-labelledby="angle-fingerprints" className="space-y-3">
       <h3 id="angle-fingerprints" className="font-display text-base font-semibold">Angle fingerprints</h3>
       {angleClusters.length === 0 ? <p className="text-sm text-fg-muted">No angle fingerprints are stored yet.</p> : <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {angleClusters.map((group) => <li key={group.key} className="rounded-lg border border-border bg-surface p-4">
+        {angleClusters.map((group) => <li key={group.key} className="panel">
           <p className="text-xs font-semibold uppercase tracking-wider text-fg-muted">Fingerprint</p>
           <p className="mt-1 font-display text-lg capitalize">{group.key.replace(/_/g, " ")}</p>
           <p className="mt-2 text-sm"><span className="font-semibold tabular-nums">{group.count}</span> {group.count === 1 ? "member" : "members"}</p>
@@ -22,7 +22,7 @@ export function ClusterCards({ angleClusters, semanticClusters }: { angleCluster
       {semanticClusters.length === 0 ? <p className="text-sm text-fg-muted">No semantic clusters are stored yet.</p> : <>
         <p className="text-xs text-fg-muted">The server does not return member counts for semantic clusters yet.</p>
         <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {semanticClusters.map((group, index) => <li key={`${group.label}:${index}`} className="rounded-lg border border-border bg-surface p-4">
+          {semanticClusters.map((group, index) => <li key={`${group.label}:${index}`} className="panel">
             <p className="font-display text-lg">{group.label}</p>
             <p className="mt-2 text-sm text-fg-muted">{group.summary}</p>
           </li>)}

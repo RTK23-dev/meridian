@@ -61,7 +61,7 @@ export function UsageScreen() {
   const dayColumns = groupColumns<(typeof daily)[number]>("Day (UTC)", maxDayTokens, (row) => dayLabel(row.day));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         title="Usage & cost"
         description="Model runs recorded for this workspace. A cost a run did not report stays unknown. It is never counted as zero."

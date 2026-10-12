@@ -22,7 +22,7 @@ export function KpiCard(props: Parameters<typeof Stat>[0] & { icon?: ReactNode; 
   const min = sparkline ? Math.min(...sparkline) : 0;
   const range = sparkline ? Math.max(...sparkline) - min || 1 : 1;
   const points = sparkline?.map((value, index) => `${(index / Math.max(sparkline.length - 1, 1)) * 100},${28 - ((value - min) / range) * 24}`).join(" ");
-  return <div className="rounded-lg border border-border bg-surface p-4">{props.icon ? <div className="mb-3 text-fg-muted">{props.icon}</div> : null}<Stat {...statProps} />{points ? <svg role="img" aria-label={sparklineSummary(props.label, sparkline ?? [])} viewBox="0 0 100 32" className="mt-3 h-8 w-full text-accent"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg> : null}</div>;
+  return <div className="panel">{props.icon ? <div className="mb-3 text-fg-muted">{props.icon}</div> : null}<Stat {...statProps} />{points ? <svg role="img" aria-label={sparklineSummary(props.label, sparkline ?? [])} viewBox="0 0 100 32" className="mt-3 h-8 w-full text-accent"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg> : null}</div>;
 }
 
 export type StepState = "done" | "current" | "blocked" | "upcoming";

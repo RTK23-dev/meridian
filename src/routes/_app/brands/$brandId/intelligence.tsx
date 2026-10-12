@@ -78,7 +78,7 @@ function Intelligence({ brandId }: { brandId: string }) {
   const analyses = accountData.analyses;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
 
       {/* Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

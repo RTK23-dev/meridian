@@ -137,7 +137,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="max-w-2xl space-y-2">
           <p className="eyebrow">Account Vault</p>

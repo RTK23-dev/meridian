@@ -59,7 +59,7 @@ export function GradingPanel({
           const min = toPercent(range.min);
           const max = toPercent(range.max);
           return (
-            <div key={key} className="space-y-3 rounded-lg border border-border bg-surface p-4">
+            <div key={key} className="space-y-3 panel">
               <SettingSlider
                 id={`${sliderBase}-${key}`}
                 label={GRADING_META[key].label}

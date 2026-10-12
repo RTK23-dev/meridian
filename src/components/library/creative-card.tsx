@@ -40,7 +40,7 @@ export function CreativeCard({
   const label = item.title || item.hook || "Untitled creative";
   const media = primaryMedia(variants);
   return (
-    <li className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+    <li className="flex flex-col gap-3 panel">
       {media ? (
         <CreativeThumb variant={media} alt={`${media.kind === "video" ? "Poster of video" : "Stored image of"} ${label}`} />
       ) : (
