@@ -2,9 +2,9 @@ import { forwardRef, type HTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 type CardProps = HTMLAttributes<HTMLElement> & { elevation?: "flat" | "raised" | "floating" };
-export const Card = forwardRef<HTMLElement, CardProps>(function Card({ elevation = "flat", className, ...props }, ref) {
+export const Card = forwardRef<HTMLElement, CardProps>(function Card({ elevation = "raised", className, ...props }, ref) {
   const elevations = { flat: "border border-border bg-surface", raised: "border border-border bg-surface shadow-sm", floating: "border border-border bg-surface shadow-md" };
-  return <section {...props} ref={ref} className={cn("rounded-lg p-5", elevations[elevation], className)} />;
+  return <section {...props} ref={ref} className={cn("rounded-xl p-6", elevations[elevation], className)} />;
 });
 
 export const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(function CardHeader({ className, ...props }, ref) { return <div {...props} ref={ref} className={cn("mb-4 space-y-1", className)} />; });

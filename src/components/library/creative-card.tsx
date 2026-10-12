@@ -28,11 +28,14 @@ export function CreativeCard({
   variants,
   mediaLoad,
   onTrace,
+  onPublish,
 }: {
   item: LibraryCreative;
   variants: readonly LibraryMediaVariant[];
   mediaLoad: MediaLoad;
   onTrace: () => void;
+  /** Present only for a member. It opens the publish dialog, which offers regular posts and paid ads. */
+  onPublish?: () => void;
 }) {
   const label = item.title || item.hook || "Untitled creative";
   const media = primaryMedia(variants);
@@ -51,6 +54,7 @@ export function CreativeCard({
       <p className="line-clamp-3 text-sm">{item.hook}</p>
       <div className="mt-auto flex flex-wrap gap-2">
         <Button variant="quiet" size="md" aria-label={`Trace ${label}`} onClick={onTrace}>Trace</Button>
+        {onPublish ? <Button variant="secondary" size="md" aria-label={`Publish ${label}`} onClick={onPublish}>Publish</Button> : null}
         {media ? (
           <Button asChild variant="quiet" size="md">
             <a href={downloadHref(media.assetId)} aria-label={`Download ${media.kind === "video" ? "video" : "image"} for ${label}`}>Download</a>

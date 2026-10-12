@@ -17,7 +17,7 @@ It sits beside NORTH_STAR.md. Where the two disagree on direction, NORTH_STAR.md
    - **Pick where examples come from.** Public web pages and your own files need no key. Meta Ad Library, YouTube and search
      take a key each. The rest sit under "More connectors".
    - **Make images and video.** Optional. Gemini and Hypit rows, with a note that uploads cover the gap.
-   - **Send work to Meta.** Optional. Says plainly that ads are created paused and that Meridian has no switch to turn them on.
+   - **Publish your work.** Optional. Regular posts go to a Facebook Page, Instagram or YouTube account. Paid ads go to Meta or TikTok, created paused, and Meridian has no switch to turn them on. Either one completes the step.
    - **Connect Google Drive.** Optional. A server setting, so it names the variables rather than offering a form.
 4. **Settings → General** still shows every provider row with its reason. The guide links there.
 
@@ -39,11 +39,24 @@ Meridian does not try to solve CAPTCHAs, pass Cloudflare challenges, rotate iden
 is a line in this product, not a gap to fill later. Where a source offers an API or a licence, use that. Where it does not, the
 person uploads what they have the right to use.
 
-## Paused Meta ads
+## Paid ads, created paused
 
-Meridian creates Meta campaigns, ad sets and ads with the status `PAUSED` (`providers/meta.ts`). The only status-changing
-function in the codebase, `setMetaStatus`, has no caller, so nothing in Meridian switches an ad on. The Library's publishing card
-now uses `PausedExplainer` to say so in three steps. If an automatic switch-on is added later, this text must change with it.
+Paid ads are optional, and Meta, TikTok and Google Ads are each optional. Meridian creates campaigns, ad sets and ads with the status
+`PAUSED` (`providers/meta.ts` for Meta; TikTok and Google follow the same rule). The only status-changing function in the codebase,
+`setMetaStatus`, has no caller, so nothing in Meridian switches an ad on. The Library's "Paid ads, created paused" card uses
+`PausedExplainer` to say so in three steps, and it names the platform rather than assuming Meta. If an automatic switch-on is
+added later, this text must change with it.
+
+## Regular content and paid ads from the Library
+
+Each creative in the Library has a **Publish** action for members. It opens the same dialog as Studio, which lists the connected
+destinations in two groups: regular posts (Instagram Reels, Facebook Page, YouTube Shorts) and paid ads. A person chooses one or
+more, and the dialog shows a receipt for each. Only connected destinations can be chosen. Nothing is published from a card until
+the person confirms in the dialog. TikTok regular posts are not in this build: they need a TikTok Content Posting adapter, which
+does not exist yet, so the dialog does not offer them.
+
+The deployment status line on Integrations no longer reads "No live publishing API is implemented". Publishing is set per channel,
+so the line says that and points to Connected accounts.
 
 ## Design
 
@@ -77,7 +90,7 @@ now uses `PausedExplainer` to say so in three steps. If an automatic switch-on i
 2. **The overview callout replaces the checklist** rather than sitting beside it.
 3. **The brand form keeps all its fields,** folding the optional ones, so no saved data is lost.
 4. **Google Drive stays a server setting** in the guide, not a form, because the server shares one Drive across workspaces.
-5. **The Meta publish step is optional,** because the export package works without it.
+5. **Publishing is optional, and no platform is required.** Meta and TikTok paid ads each complete the step alone. Regular posts need only a connected account. The export package works without any of them.
 
 ## Not done, and why
 

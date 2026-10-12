@@ -5,7 +5,7 @@ import { localSemanticModel, embeddingProviderState } from "@/lib/meridian/embed
 import { INTEGRATIONS } from "@/lib/meridian/providers/integrations";
 import { externalObjectStorageStatus } from "@/lib/meridian/storage/object-store";
 import { emailDeliveryState, isoOrNull } from "@/lib/meridian/notifications/email-state";
-import { publishingProviderStatus } from "@/lib/meridian/publishing/provider";
+import { CHANNEL_PUBLISHING_DETAIL, publishingProviderStatus } from "@/lib/meridian/publishing/provider";
 import { accountProviderState } from "@/lib/meridian/providers/boundaries";
 import { isLiveProvider, phaseForProbe, providerConfigured, type LiveProvider } from "@/lib/meridian/providers/live";
 
@@ -23,7 +23,7 @@ export const getSystemStatus = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const embeddings = embeddingProviderState({ url: process.env.EXTERNAL_SEMANTIC_URL, key: process.env.EXTERNAL_SEMANTIC_KEY });
-    const publishing = publishingProviderStatus();
+    const publishing = { ...publishingProviderStatus(), detail: CHANNEL_PUBLISHING_DETAIL };
     const objectStorage = externalObjectStorageStatus({
       bucket: process.env.S3_BUCKET,
       accessKeyId: process.env.S3_ACCESS_KEY_ID,

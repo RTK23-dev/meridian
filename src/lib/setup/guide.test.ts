@@ -72,9 +72,15 @@ test("media needs both the perception and the production keys", () => {
   assert.equal(statusOf(both, "media"), "done");
 });
 
-test("publish and storage read the Meta Graph key and the Drive state", () => {
-  const steps = buildGuide(facts({ providers: { ...none, meta_graph: "usable", google_drive: "deployment_shared_default" } }));
-  assert.equal(statusOf(steps, "publish"), "done");
+test("publishing is optional, and a Meta or a TikTok paid-ad key each completes it", () => {
+  const none_ = buildGuide(facts({ providers: { ...none } }));
+  assert.equal(statusOf(none_, "publish"), "optional", "nothing published yet, and the step never blocks setup");
+  assert.equal(statusOf(buildGuide(facts({ providers: { ...none, meta_graph: "usable" } })), "publish"), "done");
+  assert.equal(statusOf(buildGuide(facts({ providers: { ...none, tiktok: "usable" } })), "publish"), "done");
+});
+
+test("storage reads the Drive state", () => {
+  const steps = buildGuide(facts({ providers: { ...none, google_drive: "deployment_shared_default" } }));
   assert.equal(statusOf(steps, "storage"), "done");
 });
 

@@ -6,9 +6,12 @@ import { Button, DisabledReason, Field, Card, ScreenSkeleton, SelectInput, Statu
 import { PlainErrorMessage, PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { CreativeCard } from "@/components/library/creative-card";
+import { PublishCreativeDialog } from "@/components/library/publish-creative-dialog";
+import type { PublishTarget } from "@/components/studio/publish-dialog";
 import { LibraryFilterBar } from "@/components/library/library-filters";
 import {
   NO_LIBRARY_FILTERS,
+  type LibraryCreative,
   distinctValues,
   filterLibraryCreatives,
   mediaByCreative,
@@ -16,6 +19,7 @@ import {
   primaryMedia,
   type LibraryFilters,
   type MediaLoad,
+  publishTargetFor,
 } from "@/components/library/library-model";
 import { TraceDrawer } from "@/components/library/trace-drawer";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
@@ -54,6 +58,8 @@ function Library({ brandId }: { brandId: string }) {
   const variantsByCreative = useMemo(() => mediaByCreative(data?.creatives ?? [], studio.data?.variants ?? []), [data?.creatives, studio.data?.variants]);
   // The trace stays mounted after the drawer closes, so its content does not blank out during the exit animation.
   const [traceCreativeId, setTraceCreativeId] = useState<string | null>(null);
+  const [publishTarget, setPublishTarget] = useState<PublishTarget | null>(null);
+  const [publishKey, setPublishKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filters, setFilters] = useState<LibraryFilters>(NO_LIBRARY_FILTERS);
   const traceQuery = useTraceQuery(brandId, traceCreativeId, drawerOpen);
@@ -168,6 +174,12 @@ function Library({ brandId }: { brandId: string }) {
   async function savePausedObjects(values: PausedPublishing) {
     await pausedObjects.mutateAsync(values).catch(() => undefined);
   }
+  /** The publish dialog takes the creative and its stored media shape. A creative with no stored file publishes its text only. */
+  function openPublish(item: LibraryCreative) {
+    setPublishTarget(publishTargetFor(item, variantsByCreative.get(item.id) ?? []));
+    setPublishKey((key) => key + 1);
+  }
+
   function openTrace(creativeId: string) {
     setTraceCreativeId(creativeId);
     setDrawerOpen(true);
@@ -197,9 +209,9 @@ function Library({ brandId }: { brandId: string }) {
         )}
       </div>
       <Card>
-        <h2 className="font-display text-2xl">Publish to Meta as paused ads</h2>
+        <h2 className="font-display text-2xl">Paid ads, created paused</h2>
         <p className="mt-2 text-sm text-muted">
-          Meridian creates the campaign, ad set and ad in Meta with the status paused. Auto-publish stays off. It stores a Meta id only when Meta returns one. A missing token, Page, location or uploaded image stops the chain, and nothing is marked published from this click alone.
+          Optional. Choose Meta, TikTok or Google Ads. Meridian creates the campaign, ad set and ad with the status paused, and stores a platform id only when the platform returns one. A missing token, Page, location or uploaded image stops the chain, and nothing is marked published from this click alone.
         </p>
         <PausedExplainer />
         {hasRole(data.role, "admin") ? (
@@ -313,6 +325,7 @@ function Library({ brandId }: { brandId: string }) {
                   variants={variantsByCreative.get(item.id) ?? []}
                   mediaLoad={mediaLoad}
                   onTrace={() => openTrace(item.id)}
+                  onPublish={canEdit ? () => openPublish(item) : undefined}
                 />
               ))}
             </ul>
@@ -324,6 +337,14 @@ function Library({ brandId }: { brandId: string }) {
           )}
         </section>
       )}
+      {publishTarget ? (
+        <PublishCreativeDialog
+          key={publishKey}
+          brandId={brandId}
+          target={publishTarget}
+          onClose={() => setPublishTarget(null)}
+        />
+      ) : null}
       <TraceDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}

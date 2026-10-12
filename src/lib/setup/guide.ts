@@ -77,9 +77,9 @@ export const GUIDE_STEPS: readonly Definition[] = [
   },
   {
     id: "publish",
-    title: "Send work to Meta",
-    what: "Meridian creates Meta ads as paused, so nothing spends until you switch them on in Meta Ads Manager. Organic posts go to the Facebook Page or YouTube account you connect on the Accounts screen.",
-    why: "Only needed to publish. Until then, the export package holds everything Meridian made.",
+    title: "Publish your work (optional)",
+    what: "Two kinds, and you choose either or both. Regular posts go to a Facebook Page, Instagram or YouTube account you connect on Connected accounts. Paid ads go to Meta or TikTok, where Meridian creates them paused, so nothing spends until you switch them on in that platform.",
+    why: "Only needed to publish. Until then, the export package holds everything Meridian made, and you can post it yourself.",
     required: false,
   },
   {
@@ -93,7 +93,8 @@ export const GUIDE_STEPS: readonly Definition[] = [
 
 const SOURCE_PROVIDERS = KEYED_SOURCE_IDS;
 const MEDIA_PROVIDERS = ["perception", "production"] as const;
-const PUBLISH_PROVIDER = "meta_graph";
+/** The paid-ad keys that can publish. Each one is optional, and either one is enough for a paid ad. */
+const PUBLISH_PROVIDERS = ["meta_graph", "tiktok"] as const;
 const STORAGE_PROVIDER = "google_drive";
 
 /** Whether each step is done, unknown, or not yet done, from the facts alone. */
@@ -108,7 +109,7 @@ function doneOf(id: GuideStepId, facts: GuideFacts): boolean | null {
     case "media":
       return facts.providers === null ? null : MEDIA_PROVIDERS.every((id) => isInUse(facts.providers?.[id]));
     case "publish":
-      return facts.providers === null ? null : isInUse(facts.providers[PUBLISH_PROVIDER]);
+      return facts.providers === null ? null : PUBLISH_PROVIDERS.some((key) => isInUse(facts.providers?.[key]));
     case "storage":
       return facts.providers === null ? null : isInUse(facts.providers[STORAGE_PROVIDER]);
   }
@@ -142,8 +143,8 @@ function detailOf(id: GuideStepId, facts: GuideFacts, done: boolean | null): str
         : "Not connected. You can upload your own images and video instead, so skipping this is fine.";
     case "publish":
       return done
-        ? "The Meta Graph key is in use. New ads are created paused, and you switch them on yourself."
-        : "Not connected. Nothing is published until you connect it. Exports still work.";
+        ? "A paid-ad key is in use. Paid ads are created paused, and you switch them on in the platform. Regular posts depend on the accounts you connect on Connected accounts."
+        : "Not set up. Regular posts need a Facebook Page, Instagram or YouTube account. Paid ads need a Meta or TikTok key. Nothing is published until you choose a channel, and exports still work.";
     case "storage":
       return done
         ? "Google Drive is connected on the server."

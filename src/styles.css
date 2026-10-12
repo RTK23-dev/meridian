@@ -92,8 +92,8 @@
     background: var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 15px;
+    line-height: 1.6;
   }
   /* The warm light behind the page is its own layer, so text contrast is measured against the plain page background. */
   body::before {

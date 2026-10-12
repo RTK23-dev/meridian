@@ -244,5 +244,5 @@ export function processRows(status: SystemStatus): Array<{ id: string; label: st
 
 /** The publishing line is a server fact, shown as text. */
 export function publishingLine(status: SystemStatus): string {
-  return `${status.publishing.status === "NOT_CONNECTED" ? "Not connected" : status.publishing.status}. ${status.publishing.detail}`;
+  return `${status.publishing.status === "NOT_CONNECTED" ? "Set per channel" : status.publishing.status}. ${status.publishing.detail}`;
 }
