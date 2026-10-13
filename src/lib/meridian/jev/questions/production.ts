@@ -56,4 +56,24 @@ export const PRODUCTION_QUESTIONS: Record<string, JevQuestionSpec> = {
       rejectionValues: ["borderline_copy", "plagiarism_reject"],
     },
   },
+
+  "production.reproducibility.v1": {
+    id: "production.reproducibility.v1",
+    version: "1.0.0",
+    type: "noul",
+    instructions:
+      "Can this concept be reproduced from the workflow template with the brand's own lines, without copying protected phrasing or a sequence of lines from the competitor creative?",
+    criteria: {
+      true: "The workflow template can be filled with the brand's own lines, and the concept needs no protected phrasing.",
+      false: "The concept depends on protected phrasing or on a copied sequence of lines that the template cannot supply.",
+    },
+    evidenceRequirements: ["concept_spec", "workflow_template"],
+    policyMapping: {
+      predicateDirection: "pass_if_true",
+      // Uncalibrated. These are the quality thresholds in jev/questions.ts, which no calibration report has confirmed.
+      approveMinProbability: 0.9,
+      reviewMinProbability: 0.6,
+      thresholdCalibration: "uncalibrated",
+    },
+  },
 };

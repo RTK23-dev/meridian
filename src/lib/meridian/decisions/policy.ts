@@ -44,6 +44,11 @@ export type DecisionPolicy = {
   unresolvedOutcome: "HUMAN_REVIEW" | "REJECT";
   /** An answer whose provider confidence is below this goes to human review. Never approves on low confidence. */
   minConfidence?: number;
+  /**
+   * "uncalibrated" when the thresholds have no calibration report: a probability or score under this policy goes to review
+   * whatever the engine reports. Absent, the engine's reported calibration decides.
+   */
+  thresholdCalibration?: "uncalibrated" | "calibrated";
 };
 
 export type PolicyVote = {
@@ -94,9 +99,19 @@ export function calibrationStatusOf(answer: JevAnswer): CalibrationStatus {
   return answer.calibrationStatus === "calibrated" ? "calibrated" : "uncalibrated";
 }
 
+/**
+ * The calibration a vote is judged under. A policy whose thresholds are marked uncalibrated in their spec keeps every
+ * probability and score under review, whatever the engine reports. A categorical answer has no threshold, so it is unchanged.
+ */
+function calibrationOf(answer: JevAnswer, policy: DecisionPolicy): CalibrationStatus {
+  const reported = calibrationStatusOf(answer);
+  if (policy.thresholdCalibration === "uncalibrated" && reported !== "not_applicable") return "uncalibrated";
+  return reported;
+}
+
 function voteFor(answer: JevAnswer, policy: DecisionPolicy): PolicyVote | null {
   if (answer.status !== "answered") return null;
-  const calibrationStatus = calibrationStatusOf(answer);
+  const calibrationStatus = calibrationOf(answer, policy);
   if (policy.minConfidence !== undefined && typeof answer.confidence === "number" && answer.confidence < policy.minConfidence) {
     return {
       questionId: answer.questionId,
@@ -309,6 +324,7 @@ export function policyForQuestion(spec: Pick<JevQuestionSpec, "id" | "version" |
     approveMinScore: mapping.approveMinScore,
     unresolvedOutcome: mapping.unresolvedOutcome ?? "HUMAN_REVIEW",
     minConfidence: mapping.minConfidence,
+    thresholdCalibration: mapping.thresholdCalibration,
   };
 }
 
