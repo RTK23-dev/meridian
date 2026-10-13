@@ -18,6 +18,12 @@ export const FACTORY_STAGES = [
 
 export type FactoryStage = (typeof FACTORY_STAGES)[number];
 
+/**
+ * The only way a run finishes is the learn stage doing its real work (NORTH_STAR section 5, step 10). Until that stage is built,
+ * it returns this reason, the run stays `running`, and the reason is kept on the run row. No other stage marks a run succeeded.
+ */
+export const LEARN_NOT_BUILT = "learn:not-built";
+
 export type FactoryStageSpec = {
   type: FactoryStage;
   label: string;

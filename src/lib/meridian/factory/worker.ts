@@ -6,7 +6,7 @@ import { decodeVideoDna } from "./decode.ts";
 import type { ResearchSegment } from "../research/schema.ts";
 import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate, type GateVerdict } from "./gates.ts";
 import { adsMustPause } from "./kill-switch.ts";
-import { isFactoryStage } from "./pipeline.ts";
+import { isFactoryStage, LEARN_NOT_BUILT } from "./pipeline.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { stageDecision } from "./stage-decision.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
@@ -102,11 +102,9 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
     `;
     return `picked:${rows[0]?.n ?? 0}`;
   }
+  // No stage below marks the run succeeded. The run finishes only when learn does its real work (see LEARN_NOT_BUILT).
   if (job.job_type === "factory.template") {
     const made = await persistTemplates(sql, job.organization_id, job.brand_id, runId);
-    if (owned[0].level === 0) {
-      await sql`update factory_runs set status = 'succeeded', error = '', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
-    }
     return `templates:${made}`;
   }
   if (job.job_type === "factory.produce") {
@@ -122,7 +120,7 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
       select count(*)::int as n from factory_variants
       where organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and gate_result = 'review'
     `;
-    await sql`update factory_runs set status = 'succeeded', error = '', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
+    // Review reports how many variants wait for a person. It does not finish the run: the approval stop points decide where it waits.
     return `review:${rows[0]?.n ?? 0}`;
   }
   if (job.job_type === "factory.launch") {
@@ -140,8 +138,13 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
     return "test:awaiting-live-results";
   }
   if (job.job_type === "factory.learn") {
-    await sql`update factory_runs set status = 'succeeded', error = '', updated_at = now() where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
-    return "learned";
+    // Learning is not built (NORTH_STAR section 8, item 10). Nothing was learned, so the run is not finished. It stays running,
+    // and the reason is on the run row where the Factory screen reads it.
+    await sql`
+      update factory_runs set error = ${LEARN_NOT_BUILT}, updated_at = now()
+      where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+    `;
+    return LEARN_NOT_BUILT;
   }
   return `queued:${job.job_type}`;
 }
