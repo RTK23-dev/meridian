@@ -94,6 +94,9 @@ function collectButtonFacts() {
 
 async function signUpAndCreateBrand(page) {
   await page.goto(`${base}/login`, { waitUntil: "networkidle" });
+  // The login page opens in sign-in mode. The audit makes a new account, so it switches to sign-up first.
+  const createInstead = page.getByRole("button", { name: "Create an account instead" });
+  if (await createInstead.isVisible()) await createInstead.click();
   await page.getByLabel("Your name").fill("Audit Fixture");
   await page.getByLabel("Email").fill(`audit-${stamp}@example.com`);
   await page.getByLabel(/^Password/).fill("fixture-pass-1");
