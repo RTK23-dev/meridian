@@ -65,7 +65,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
           <Field label="Name" error={renameForm.formState.errors.name?.message} required>
             <Input {...renameForm.register("name")} maxLength={80} disabled={!canAdmin} required />
           </Field>
-          {canAdmin ? <Button type="submit" disabled={renameWorkspace.isPending || renameForm.formState.isSubmitting}>{renameWorkspace.isPending || renameForm.formState.isSubmitting ? "Renaming…" : "Rename"}</Button> : null}
+          {canAdmin ? <Button type="submit" variant="secondary" disabled={renameWorkspace.isPending || renameForm.formState.isSubmitting}>{renameWorkspace.isPending || renameForm.formState.isSubmitting ? "Renaming…" : "Rename"}</Button> : null}
         </form>
         <UnsavedChangesBar
           dirty={renameForm.formState.isDirty}

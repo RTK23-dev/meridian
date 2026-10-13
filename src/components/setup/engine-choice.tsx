@@ -81,7 +81,7 @@ export function EngineChoice({
             <div
               key={engine.id}
               className={`space-y-3 rounded-lg border p-4 transition duration-200 ease-out hover:shadow-md ${
-                selected === engine.id ? "border-accent bg-accent-soft/60 shadow-sm" : "border-border bg-surface"
+                selected === engine.id ? "border-fg bg-surface-2 shadow-sm" : "border-border bg-surface"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -118,7 +118,7 @@ export function EngineChoice({
       {!canAdmin ? <p className="text-sm text-fg-muted">Only a workspace admin can choose the engine or save a key. Everyone can see which one is in use.</p> : null}
       {canAdmin ? (
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={() => { setMessage(null); void save.mutateAsync(selected).catch(() => undefined); }} disabled={save.isPending || unchanged || !selected} aria-describedby={unchanged ? "engine-unchanged" : undefined}>
+          <Button type="button" variant="secondary" onClick={() => { setMessage(null); void save.mutateAsync(selected).catch(() => undefined); }} disabled={save.isPending || unchanged || !selected} aria-describedby={unchanged ? "engine-unchanged" : undefined}>
             {save.isPending ? "Saving..." : "Use this engine"}
           </Button>
           {unchanged && !save.isPending ? <DisabledReason id="engine-unchanged">This engine is already the one in use. Pick the other card to change it.</DisabledReason> : null}

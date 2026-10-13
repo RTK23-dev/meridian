@@ -24,14 +24,14 @@ const ACTION = "max-w-full shrink whitespace-normal text-left";
 
 const STATUS_LABEL: Record<SetupStatus, { text: string; className: string }> = {
   usable: { text: "In use", className: "bg-success-soft text-success" },
-  deployment_shared_default: { text: "Shared by the server", className: "bg-accent-soft text-accent" },
+  deployment_shared_default: { text: "Shared by the server", className: "bg-info-soft text-info" },
   unusable: { text: "Key cannot be used", className: "bg-danger-soft text-danger" },
   not_configured: { text: "Not set up", className: "bg-surface-2 text-fg-muted" },
 };
 
 const STEP_MARK: Record<GuideStep["status"], { icon: typeof Circle; className: string; label: string }> = {
   done: { icon: CircleCheck, className: "bg-success text-accent-fg", label: "Done" },
-  current: { icon: Circle, className: "bg-accent text-accent-fg ring-4 ring-accent-soft", label: "Do this now" },
+  current: { icon: Circle, className: "bg-fg text-bg ring-4 ring-surface-2", label: "Do this now" },
   todo: { icon: Circle, className: "bg-surface-2 text-fg-muted ring-1 ring-border", label: "To do" },
   optional: { icon: CircleDashed, className: "bg-surface-2 text-fg-muted ring-1 ring-border", label: "Optional" },
   unknown: { icon: CircleDashed, className: "bg-warning-soft text-warning", label: "Could not check" },
@@ -132,7 +132,7 @@ export function SetupGuide() {
           aria-valuenow={percent}
           className="mt-5 h-2 overflow-hidden rounded-full bg-surface-2"
         >
-          <div className="h-full rounded-full bg-accent transition-[width] duration-700 ease-out" style={{ width: `${percent}%` }} />
+          <div className="h-full rounded-full bg-fg transition-[width] duration-700 ease-out" style={{ width: `${percent}%` }} />
         </div>
         {!canAdmin ? <p className="mt-4 text-sm text-fg-muted">Only a workspace admin can save keys or choose the engine. Everyone can read these states.</p> : null}
       </section>
@@ -146,7 +146,7 @@ export function SetupGuide() {
             <li key={step.id} id={`step-${step.id}`} className="scroll-mt-24">
               <article
                 aria-labelledby={`step-title-${step.id}`}
-                className={`stagger-in rounded-xl border bg-surface p-5 shadow-sm transition-shadow duration-300 md:p-6 ${isCurrent ? "border-accent shadow-md" : "border-border"}`}
+                className={`stagger-in rounded-xl border bg-surface p-5 shadow-sm transition-shadow duration-300 md:p-6 ${isCurrent ? "border-fg shadow-sm" : "border-border"}`}
                 style={{ animationDelay: `${Math.min(index, 2) * 40}ms` }}
               >
                 <div className="flex items-start gap-4">
@@ -187,7 +187,7 @@ function BrandAction({ brandCount, canCreate, firstBrandId, firstBrandName }: { 
   if (brandCount === 0) {
     return canCreate ? (
       <div className="space-y-2">
-        <Button asChild className={ACTION}><Link to="/brands/new">Create your first brand</Link></Button>
+        <Button asChild variant="secondary" className={ACTION}><Link to="/brands/new">Create your first brand</Link></Button>
         <p className="text-sm text-fg-muted">You only need a name and what you sell. The website and the rest of the brand brain can be added later.</p>
       </div>
     ) : <p className="text-sm text-fg-muted">Only a workspace member can create a brand.</p>;
