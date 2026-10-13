@@ -21,6 +21,7 @@ import {
 } from "./autopilot.ts";
 import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
+import { factoryRunSourcesFor, RECENT_RUNS_LIMIT } from "./gather.ts";
 import { isApprovableStage } from "./approval.ts";
 import { trendReport } from "./trends.ts";
 import { weeklyStrategistReport } from "./report.ts";
@@ -84,8 +85,10 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
       select id, status, current_stage, niche, error, created_at from factory_runs
       where organization_id = ${organizationId} and brand_id = ${data.brandId}
       order by created_at desc
-      limit 8
+      limit ${RECENT_RUNS_LIMIT}
     `;
+    // Each listed run's source states. A run that has not gathered yet has none, and the board says so rather than showing a guess.
+    const runSourcesById = await factoryRunSourcesFor(sql, organizationId, data.brandId);
     const settings = await sql<{ level: number; ceiling: number }>`
       select level, ceiling from factory_settings
       where organization_id = ${organizationId} and brand_id = ${data.brandId}
@@ -228,6 +231,8 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
         niche: row.niche,
         error: row.error,
         createdAt: String(row.created_at),
+        /** Each source's state for this run: ok, not_connected or failed with its reason. Empty until the run gathers. */
+        runSources: runSourcesById.get(row.id) ?? [],
       })),
       winners,
       trends,
