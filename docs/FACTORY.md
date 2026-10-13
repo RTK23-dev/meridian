@@ -17,9 +17,14 @@ A run stores the settings it started with, so a later change to the brand does n
 | `platforms` | for example `instagram`, `facebook`, `youtube`, `tiktok` | A platform with no connection is reported as not connected. |
 | `providers` | per format: `auto` or a provider id | `auto` lets the capability matrix choose. A named provider that is not ready stops the run with its reason. |
 | `caps` | `dailyCents`, `totalCents`, `maxVariants` | Spend caps and the variant limit. See the caveat on caps below. |
+| `targetingCountries` | ISO 3166-1 alpha-2 codes in capitals, such as `US` and `GB` | The countries a paid ad is targeted to. Empty means none is set. A live paid publish needs at least one. |
 
 The server checks every value. An unknown automation, intent or format, a platform id that is not lowercase letters, a provider id
-outside the allowed pattern, or a negative cap is refused with the reason. Nothing is coerced.
+outside the allowed pattern, a negative cap, or a country code that is not an officially assigned ISO code (or is not in capitals) is
+refused with the reason. Nothing is coerced.
+
+A brand has run defaults, saved from the run builder with **Save as brand defaults** (an admin or owner). A run starts from them, and
+each choice the builder changes is stored with the run. The defaults include the country list.
 
 The three older vocabularies map onto `automation`:
 
@@ -71,10 +76,28 @@ reached. Produce checks the caps again before each provider call, so the call th
 
 `full` also needs a cap to be set. A `full` run with no cap stops before any spend, with "Full automation needs a spend cap".
 
-A metered row is written only from a provider call that reported its own cost (`factory_costs.basis` is `provider_reported`). A
-provider that reports no cost writes no row, and the caps cannot see its spend. The Google image provider reports no cost today, so a
-Factory run that uses it is not counted against its caps. Its reservation is still held in the budget ledger, at the per-image
-ceiling of $1 (`FACTORY_IMAGE_CEILING_USD`), and settles at that ceiling. That ceiling is a guard, not a price.
+A metered row is written from one of two things, and its basis says which (`factory_costs.basis`):
+
+- `provider_reported`: a provider call that reported its own cost in cents.
+- `tokens`: a decision that called an engine and reported its token usage. Each decision writes one row for its run: the grade of an
+  ad (`factory.grade`) and the judgment of a generated image (`factory.produce`). The row names the engine and the model and holds the
+  prompt and completion tokens. A decision row is keyed by its gate record, so a rerun of a graded ad writes nothing.
+
+A token row's dollar cost is written only when the price table (`factory/price-table.ts`) has an entry for the engine and the model.
+The table is versioned, and each entry names the provider's pricing page and the date it was read. The OpenAI Decisions default model,
+`gpt-6-luna`, is priced from that page: $0.10 input, $0.01 cached input and $0.50 output per million tokens, with the long-context rates
+above 272,000 input tokens, read on 2026-10-13. A model with no entry is **tokens only, not priced**: its cost is null, never zero, and
+the run view says so. The JEV engine reports no token usage, so its decisions write no row, and the run says its spend is not measured.
+
+Caps count only priced cost. Unpriced spend is not counted. The priced cost is rounded up to a whole cent when it is compared with a cap,
+so a cap is never under-counted. The run view states this rule.
+
+A provider call that reports no cost writes no row, and the caps cannot see its spend. The Google image provider reports no cost today, so
+a Factory run that uses it is not counted against its caps. Its reservation is still held in the budget ledger, at the per-image ceiling of
+$1 (`FACTORY_IMAGE_CEILING_USD`), and settles at that ceiling. That ceiling is a guard, not a price.
+
+The price table does not cover cache writes. The engine reports none, so a request that wrote to the prompt cache is priced only for its
+input, cached input and output, and its cost can be lower than the invoice.
 
 ## Produce
 
@@ -161,9 +184,15 @@ launch summary and is never sent.
   connection records `not_connected` with its reason, and sends nothing. It is never counted as published. A post is recorded in
   `organic_posts` with surface `organic`.
 - **Paid** (`ad`, `both`): the campaign, ad set, ad creative and ad are created with status PAUSED, and each is recorded in
-  `provider_objects` with surface `paid` and status `paused`. In the testing runtime the fixture engine in `publishing/engine.ts` answers.
-  Outside it, a paid publish needs a stored Meta token and a targeting country. A Factory run does not carry a country yet, so the
-  publish is refused with that reason. Nothing in the Factory sets an ad or a campaign to ACTIVE.
+  `provider_objects` with surface `paid` and status `paused`. In the testing runtime the fixture engine in `publishing/engine.ts` answers,
+  and it takes the run's targeting countries unchanged. Outside it (`liveRouteFor` in `factory/publish.ts`), the checks run in order and
+  each refusal is recorded as a failed receipt, before the publisher is called:
+  - no stored Meta token: **not connected**, with the reason;
+  - no targeting country on the run: refused with **no targeting country**;
+  - no Facebook Page id or destination link: refused, because a Factory run carries neither yet. Without them the ad creative cannot be
+    created after the campaign and ad set, which would leave paused objects behind.
+  Only when all three pass does the Meta publisher run. Its ad set carries the run's countries as `targeting.geo_locations.countries`
+  (`providers/meta.ts`). Nothing in the Factory sets an ad or a campaign to ACTIVE.
 - **Receipts:** `organic_posts` and `provider_objects` both carry a `surface` column (migration 0069). A failure is recorded as a
   receipt with no external id, so a retry can publish the creative again without overwriting a confirmed object.
 
@@ -317,12 +346,14 @@ What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
   the ad was graded again. Keeping every grade needs a grade history table, which is not built.
 - Organic outcomes are still one observation per post. A later organic measurement of the same post is not added to `organic_observations`.
   The paid path is per measurement (see [Learning per surface](#learning-per-surface)).
+- Spend from perception reads is not metered. A perception read is a separate call from the decision, and it writes no row.
 - The Factory screen was not checked in a browser from this branch. Its before and after screenshots, and the button audit, need a run of
   the app that this change did not make.
 - The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
 - The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
-- Live Instagram and TikTok publishing is not connected, by the owner's decision. A live paid publish from a run needs a targeting country the
-  run does not carry.
+- Live Instagram and TikTok publishing is not connected, by the owner's decision.
+- A live paid publish from a run is refused until the run carries a Facebook Page id and a destination link. A run has a targeting country
+  now; the Page and link are the next gap.
 - Uploads are not connected to Gather.
 - Re-grading stored grades when a brand's calibrated report changes. A stored grade keeps the threshold it was made under until its ad is
   graded again by a new run.

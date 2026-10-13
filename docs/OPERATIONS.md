@@ -101,6 +101,8 @@ This release adds migration `0070`. It gives `learned_patterns` a `surface` (org
 
 This release adds migration `0071`. It gives `factory_picks` a `surface` and a `grade_fingerprint`. Both are empty for every pick written before it, and the Factory screen says the prediction of such a pick is not known. No existing row is rewritten.
 
+This release adds migration `0072`. It makes `factory_costs.cents` nullable and adds the `tokens` basis, with `micros` (the priced cost in millionths of a dollar), the engine, model, prompt and completion tokens, the price table version and the gate record id. Existing rows keep their cents and have no micros. Nothing is rewritten. A token row with no price has a null cost, which the Factory screen shows as "tokens only, not priced".
+
 This release adds migration `0074`. It creates `question_calibration_reports`, the per-brand, per-question calibration reports for the
 grading questions (see [FACTORY.md](FACTORY.md#calibration-per-brand-and-question)). Nothing existing is rewritten. The table is not
 `calibration_reports`, which migration `0045` already uses. No report is calibrated until a brand has the minimum measured outcomes.

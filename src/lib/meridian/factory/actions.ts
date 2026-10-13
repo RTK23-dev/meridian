@@ -6,6 +6,7 @@ import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
 import { FACTORY_GRAPH, factoryRunJobs, isFactoryStage, type FactoryStage } from "./pipeline.ts";
 import {
+  DEFAULT_RUN_SETTINGS,
   automationFromFactoryLevel,
   factoryLevelOfAutomation,
   mergeRunSettings,
@@ -22,6 +23,7 @@ import {
 } from "./autopilot.ts";
 import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
+import { NO_RUN_SPEND, runSpendFor } from "./spend.ts";
 import { factoryRunSourcesFor, RECENT_RUNS_LIMIT } from "./gather.ts";
 import { factoryRunViewsFor } from "./run-view.ts";
 import { isApprovableStage } from "./approval.ts";
@@ -121,12 +123,27 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
       order by created_at desc
       limit 40
     `;
-    const costs = await sql<{ stage: string; cents: number; seconds: number }>`
-      select stage, cents, seconds from factory_costs
+    // Each cost row is one metered provider call or one metered decision. A token row has no cents: its micros are null when no price
+    // exists for its model, and the board says so rather than showing zero.
+    const costs = await sql<{
+      run_id: string | null;
+      stage: string;
+      basis: string;
+      cents: number | null;
+      micros: number | string | null;
+      prompt_tokens: number | null;
+      completion_tokens: number | null;
+      engine: string;
+      model: string;
+      seconds: number;
+    }>`
+      select run_id, stage, basis, cents, micros, prompt_tokens, completion_tokens, engine, model, seconds from factory_costs
       where organization_id = ${organizationId} and brand_id = ${data.brandId}
       order by created_at desc
       limit 40
     `;
+    // The spend of each listed run, read from its own cost rows. Caps count only the priced part; see FACTORY.md.
+    const spendByRun = await runSpendFor(sql, organizationId, data.brandId, runs.map((row) => row.id));
     // The publish receipts and the measured rows of this brand's Factory creatives. A receipt is what the channel or the paid publisher
     // returned. A metric the source did not report is null, and the board says so rather than showing zero.
     const factoryCreatives = await sql<{ creative_id: string; run_id: string; format: string }>`
@@ -289,6 +306,8 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
         runSources: runSourcesById.get(row.id) ?? [],
         /** The run's picks: each concept with the JEV prediction it was made under, its status, and its variants. */
         picks: runViews.get(row.id)?.picks ?? [],
+        /** The run's spend: what was priced, what was metered in tokens only, and what provider calls reported. */
+        spend: spendByRun.get(row.id) ?? NO_RUN_SPEND,
       })),
       winners,
       trends,
@@ -320,7 +339,17 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
         lengthMs: row.length_ms,
         gateResult: row.gate_result,
       })),
-      costs: costs.map((row) => ({ stage: row.stage, cents: row.cents, seconds: row.seconds })),
+      costs: costs.map((row) => ({
+        runId: row.run_id,
+        stage: row.stage,
+        basis: row.basis,
+        cents: row.cents,
+        micros: row.micros === null ? null : Number(row.micros),
+        tokens: row.basis === "tokens" ? (row.prompt_tokens ?? 0) + (row.completion_tokens ?? 0) : null,
+        engine: row.engine,
+        model: row.model,
+        seconds: row.seconds,
+      })),
       publishing,
       note: ads.length
         ? "Scores and trends below use stored Ad Library rows only. They are not live account results."
@@ -385,6 +414,31 @@ export const startFactoryRun = createServerFn({ method: "POST" })
       `;
     }
     return { runId, status: "queued" as const, jobs: jobs.length };
+  });
+
+/**
+ * Saves the brand's run defaults: the settings a new run starts from. The settings are checked by the same rules a run's own settings
+ * are, and the whole checked object is stored, so a later change to the defaults does not change a run already started. An admin or
+ * owner saves them. A viewer or member reads them and cannot change them.
+ */
+export const saveFactoryRunDefaults = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      settings: body.settings,
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
+    const parsed = parseRunSettings(data.settings, DEFAULT_RUN_SETTINGS);
+    if (!parsed.ok) throw new Error(parsed.error);
+    await sql`
+      update brands set run_defaults = ${JSON.stringify(parsed.value)}
+      where id = ${data.brandId} and organization_id = ${organizationId} and deleted_at is null
+    `;
+    return { ok: true as const, settings: parsed.value };
   });
 
 /**

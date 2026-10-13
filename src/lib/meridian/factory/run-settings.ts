@@ -2,6 +2,7 @@
  * The one settings model (NORTH_STAR §4). A brand has defaults, and each Factory run or Studio plan can override them. The three
  * older vocabularies map onto it here, so no screen keeps its own meaning for "automatic".
  */
+import { isCountryCode } from "./country-codes.ts";
 
 export const AUTOMATION_MODES = ["manual", "semi", "full"] as const;
 export type AutomationMode = (typeof AUTOMATION_MODES)[number];
@@ -26,6 +27,11 @@ export type RunSettings = {
   /** Per format: "auto" lets the capability matrix choose, or a provider id. A named provider that is not ready stops the run. */
   providers: Partial<Record<Format, string>>;
   caps: { dailyCents: number; totalCents: number; maxVariants: number };
+  /**
+   * The countries a paid ad is targeted to: ISO 3166-1 alpha-2 codes in capitals (country-codes.ts). Empty means none is set. A live
+   * paid publish needs at least one, and is refused with "no targeting country" without it.
+   */
+  targetingCountries: string[];
 };
 
 export const DEFAULT_RUN_SETTINGS: RunSettings = {
@@ -36,13 +42,40 @@ export const DEFAULT_RUN_SETTINGS: RunSettings = {
   platforms: [],
   providers: {},
   caps: { dailyCents: 0, totalCents: 0, maxVariants: 8 },
+  targetingCountries: [],
 };
 
 const MAX_PLATFORMS = 8;
 const MAX_CENTS = 100_000_000;
 const MAX_VARIANTS = 40;
+const MAX_TARGETING_COUNTRIES = 25;
 const PLATFORM_ID = /^[a-z][a-z_]{1,19}$/;
 const PROVIDER_ID = /^[a-z0-9][a-z0-9_:.-]{1,59}$/;
+
+/**
+ * Checks a list of targeting countries. Each entry must be a two-letter ISO 3166-1 code in capitals that is officially assigned. An
+ * empty entry, a lowercase code and an unknown code are each refused with the reason. Duplicates are collapsed, in the order given.
+ */
+export function parseTargetingCountries(input: unknown): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (!Array.isArray(input)) return { ok: false, error: "Targeting countries must be a list of two-letter country codes, such as US." };
+  if (input.length > MAX_TARGETING_COUNTRIES) {
+    return { ok: false, error: `Choose at most ${MAX_TARGETING_COUNTRIES} targeting countries.` };
+  }
+  const value: string[] = [];
+  for (const entry of input) {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      return { ok: false, error: "A targeting country is empty. Remove it, or give its two-letter code, such as US." };
+    }
+    if (!isCountryCode(entry)) {
+      const hint = entry.length === 2 && /^[a-zA-Z]{2}$/.test(entry) && isCountryCode(entry.toUpperCase())
+        ? ` Write it in capitals: ${entry.toUpperCase()}.`
+        : "";
+      return { ok: false, error: `${entry} is not an ISO 3166-1 country code.${hint} Use codes such as US, GB or DE.` };
+    }
+    if (!value.includes(entry)) value.push(entry);
+  }
+  return { ok: true, value };
+}
 
 export type SettingsResult = { ok: true; value: RunSettings } | { ok: false; error: string };
 
@@ -127,6 +160,11 @@ export function parseRunSettings(input: unknown, base: RunSettings = DEFAULT_RUN
       caps.maxVariants = variants as number;
     }
     next.caps = caps;
+  }
+  if (input.targetingCountries !== undefined) {
+    const countries = parseTargetingCountries(input.targetingCountries);
+    if (!countries.ok) return countries;
+    next.targetingCountries = countries.value;
   }
   return { ok: true, value: next };
 }

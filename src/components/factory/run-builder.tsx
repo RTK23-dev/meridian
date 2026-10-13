@@ -8,9 +8,12 @@ import {
   ENGINE_LABELS,
   FORMAT_LABELS,
   INTENT_DESCRIPTIONS,
+  checkedDefaults,
   checkedSettings,
+  countriesFromText,
   draftFromDefaults,
   draftProblems,
+  paidCountryNote,
   type BuilderDraft,
 } from "@/lib/meridian/factory/run-builder-model";
 
@@ -28,16 +31,23 @@ export function RunBuilder({
   channels,
   channelsState,
   canEdit,
+  canAdmin,
   busy,
+  savingDefaults,
   onStart,
+  onSaveDefaults,
   onDirtyChange,
 }: {
   defaults: RunSettings;
   channels: RunChannel[];
   channelsState: "loading" | "ready" | "error";
   canEdit: boolean;
+  /** Admins and owners save the brand's run defaults. Other roles see the draft and cannot save it. */
+  canAdmin: boolean;
   busy: boolean;
+  savingDefaults: boolean;
   onStart: (input: { niche: string; settings: RunSettings }) => void;
+  onSaveDefaults: (settings: RunSettings) => void;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const [initial] = useState(() => draftFromDefaults(defaults));
@@ -47,6 +57,16 @@ export function RunBuilder({
 
   const problems = useMemo(() => draftProblems(draft), [draft]);
   const reason = busy ? "Queueing the run." : !canEdit ? "Viewers cannot start runs. Ask a member to start one." : problems[0] ?? "";
+  const countryNote = paidCountryNote(draft.intent, draft.countries);
+  const countriesCheck = countriesFromText(draft.countries);
+  const defaultsCheck = checkedDefaults(draft);
+  const defaultsReason = savingDefaults
+    ? "Saving the brand's defaults."
+    : !canAdmin
+      ? "Only an admin or owner saves the brand's run defaults."
+      : defaultsCheck.ok
+        ? ""
+        : defaultsCheck.problems[0] ?? "";
   const update = <K extends keyof BuilderDraft>(key: K, value: BuilderDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const toggle = <T extends string>(list: T[], value: T, on: boolean): T[] => (on ? [...new Set([...list, value])] : list.filter((item) => item !== value));
 
@@ -61,6 +81,11 @@ export function RunBuilder({
     const checked = checkedSettings(draft);
     if (!checked.ok) return;
     onStart({ niche: draft.niche.trim(), settings: checked.settings });
+  };
+
+  const saveDefaults = () => {
+    if (!defaultsCheck.ok) return;
+    onSaveDefaults(defaultsCheck.settings);
   };
 
   return (
@@ -149,6 +174,18 @@ export function RunBuilder({
         </fieldset>
       ) : null}
 
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-semibold">Paid targeting</legend>
+        <Field
+          label="Targeting countries"
+          hint="Two-letter country codes separated by commas, such as US, GB or DE. A paid ad is targeted to these countries."
+          error={countriesCheck.ok ? undefined : countriesCheck.error}
+        >
+          <Input value={draft.countries} onChange={(event) => update("countries", event.target.value)} placeholder="US, GB" disabled={!canEdit} />
+        </Field>
+        {countryNote ? <p className="text-sm text-muted">{countryNote}</p> : null}
+      </fieldset>
+
       <div className="grid gap-4 md:grid-cols-3">
         <Field label="Daily spend cap (USD)">
           <Input value={draft.dailyDollars} onChange={(event) => update("dailyDollars", event.target.value)} type="number" min="0" step="0.01" placeholder="0" disabled={!canEdit} />
@@ -167,6 +204,12 @@ export function RunBuilder({
           Start run
         </Button>
         {reason ? <DisabledReason id="factory-run-builder-reason">{reason}</DisabledReason> : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" variant="secondary" onClick={saveDefaults} disabled={Boolean(defaultsReason)} loading={savingDefaults} aria-describedby={defaultsReason ? "factory-run-defaults-reason" : undefined}>
+          Save as brand defaults
+        </Button>
+        {defaultsReason ? <DisabledReason id="factory-run-defaults-reason">{defaultsReason}</DisabledReason> : null}
       </div>
     </form>
   );
