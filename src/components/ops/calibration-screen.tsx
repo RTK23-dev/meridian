@@ -220,18 +220,30 @@ function GradingQuestionCard({ question, minimumSample }: { question: QuestionCa
   }
   const report = question.latest;
   if (report && report.status === "calibrated" && report.threshold !== null) {
+    const registry = question.registryThreshold;
+    const applyLine = report.applied
+      ? "The gate applies this threshold to the grades it decides from now on."
+      : registry === null
+        ? "Not applied. This question has no registry approve threshold, so calibration cannot raise a bar here."
+        : `Not applied. The calibrated value is below the registry threshold ${registry.toFixed(3)}. Calibration may only raise the bar, so the registry threshold stands.`;
     return (
       <li className="space-y-3 panel">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold">{question.label}</h3>
-          <Badge variant="success"><CheckCircle2 aria-hidden="true" className="size-3.5" /><span>Calibrated</span></Badge>
+          {report.applied ? (
+            <Badge variant="success"><CheckCircle2 aria-hidden="true" className="size-3.5" /><span>Calibrated and applied</span></Badge>
+          ) : (
+            <Badge variant="info"><Clock3 aria-hidden="true" className="size-3.5" /><span>Calibrated, not applied</span></Badge>
+          )}
         </div>
-        <dl className="grid gap-2 text-sm sm:grid-cols-4">
-          <div><dt className="font-semibold">Approve at or above</dt><dd className="tabular-nums">{report.threshold.toFixed(3)}</dd></div>
+        <dl className="grid gap-2 text-sm sm:grid-cols-3">
+          <div><dt className="font-semibold">Calibrated threshold</dt><dd className="tabular-nums">{report.threshold.toFixed(3)}</dd></div>
+          <div><dt className="font-semibold">Registry threshold</dt><dd className="tabular-nums text-fg-muted">{registry === null ? "none" : registry.toFixed(3)}</dd></div>
           <div><dt className="font-semibold">Sample size</dt><dd className="text-fg-muted">{report.sampleSize} outcomes</dd></div>
           <div><dt className="font-semibold">Report date</dt><dd className="text-fg-muted">{timestampLabel(report.createdAt)}</dd></div>
           <div><dt className="font-semibold">Method</dt><dd className="text-fg-muted">{report.methodVersion}</dd></div>
         </dl>
+        <p className="text-sm">{applyLine}</p>
         <p className="text-sm text-fg-muted">{report.reason}</p>
         <ReliabilityTable bins={report.reliability} />
       </li>
