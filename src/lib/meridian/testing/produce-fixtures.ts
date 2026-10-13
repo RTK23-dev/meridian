@@ -134,6 +134,11 @@ export type ImageStubOptions = {
 /**
  * Replaces the Google image provider for one test, and records each call. A test restores the provider it replaced. The stub stands in
  * for the external call only; its health check, its reservation and everything after the call are the real ones.
+ *
+ * The answer is shaped after the image-generation documentation the model registry cites for these models
+ * (https://ai.google.dev/gemini-api/docs/image-generation). It is a fixture, not a recorded response, and it has not been checked
+ * against a live call. It reports no cost unless a test asks for one, because the adapter reports none. A reported cost here is a
+ * fixture value that exercises the metered path, not a price.
  */
 export function stubImageProvider(options: ImageStubOptions = {}) {
   const state = { calls: 0, inputs: [] as ImageGenerationInput[] };
