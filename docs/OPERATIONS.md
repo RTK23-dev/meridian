@@ -88,6 +88,9 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
   on the control creative of a graded pick, on the pick's surface, that report the surface's metric. A pick whose ad was graded again after
   the pick, or that was picked before migration 0071, is not counted. Rows marked synthetic are never counted. See
   [FACTORY.md](FACTORY.md#calibration-per-brand-and-question).
+- **The Calibration screen says a calibrated threshold is "not applied".** The brand has a calibrated value, but it is below the registry's
+  approve threshold for that question. Calibration may only raise the bar, so the registry's threshold stands and the grade stays
+  uncalibrated. See [FACTORY.md](FACTORY.md#calibration-per-brand-and-question).
 - **The Calibration screen shows no report, only counts, after a release.** A report is stored when the brand's `learning.update` job runs,
   when a Factory learn stage runs, or when an admin presses **Recompute from outcomes**. Until one of these runs, the screen shows the counts
   measured now.

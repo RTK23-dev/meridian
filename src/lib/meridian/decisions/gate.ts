@@ -254,16 +254,18 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
   // 2b. The brand's calibrated thresholds: the newest stored report for each question version, read for this brand only. A question
   //     with no calibrated report keeps its registry policy. A read that fails keeps every policy as it was, so nothing is approved on
   //     a report that could not be read.
+  // A calibrated report applies only where applyCalibratedThreshold allows it: calibration may raise the registry's bar, never lower it.
   const calibrated = input.sql ? await readCalibratedThresholds(input.sql, input.organizationId, input.brandId, input.questions) : new Map<string, AppliedCalibration>();
   const policyOf = (question: GateQuestion): DecisionPolicy | null => {
     const policy = policyForQuestion(question.spec);
     const applied = calibrated.get(questionKeyOf(question.spec.id, question.spec.version));
     return policy && applied ? applyCalibratedThreshold(policy, applied) : policy;
   };
-  // A calibrated question's policy version names the report it used, so the record shows which threshold decided it.
+  // A question whose calibrated threshold was applied names the report in its policy version, so the record shows which threshold
+  // decided it. A report that was not applied leaves the version as the registry's.
   const versionOf = (question: GateQuestion): string => {
-    const applied = calibrated.get(questionKeyOf(question.spec.id, question.spec.version));
-    return applied ? `${policyVersionOf(question.spec)}+calibrated:${applied.reportId}` : policyVersionOf(question.spec);
+    const calibration = policyOf(question)?.calibration;
+    return calibration ? `${policyVersionOf(question.spec)}+calibrated:${calibration.reportId}` : policyVersionOf(question.spec);
   };
 
   // 3. Plan. Each question gets its own scope, is checked against it, and is grouped with the questions that share it.
