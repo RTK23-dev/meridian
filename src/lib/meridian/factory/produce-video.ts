@@ -27,7 +27,7 @@ import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts"
 import { productionRouter } from "../production/router.ts";
 import { productionCostMode } from "../production/cost-mode.ts";
 import { submitWithPreflight, type SubmitWithPreflightResult } from "../production/submit.ts";
-import { settleProductionReservation } from "../production/materialization.ts";
+import { openProductionReview, settleProductionReservation } from "../production/materialization.ts";
 import type { CreativeSpec, ProductionJob } from "../production/types.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
@@ -518,6 +518,17 @@ async function judgeFactoryVideo(
     update assets set qa_decision = ${judgment.rollup}, review_status = ${status}, lifecycle = 'qa_required'
     where id = ${args.assetId} and organization_id = ${organizationId} and brand_id = ${brandId}
   `;
+  // The review cites the decision row this judgment wrote. It never cites the plan's gate record, which is not a jev_decisions row
+  // (reviews.decision_id references jev_decisions). A rejected video has no review.
+  if (status === "in_review" && judgment.decisionId) {
+    await openProductionReview(sql, {
+      organizationId,
+      brandId,
+      creativeId: args.creativeId,
+      decisionId: judgment.decisionId,
+      subjectLabel: "Video",
+    });
+  }
 }
 
 function sceneCountOf(value: string): number {

@@ -72,7 +72,8 @@ export async function produceFactoryCreatives(sql: Sql, input: ProduceInput): Pr
       const step = await produceVariantFormat(sql, input, { variant, plan: stored.creativePlan, index, format, qcBrand });
       if (step.kind === "stop") return { produced, stop: step.reason, waiting: null };
       if (step.kind === "waiting") waits.push(step.reason);
-      if (step.kind === "linked") produced += 1;
+      if (step.kind === "linked") produced += step.creatives ?? 1;
+      if (step.kind === "failed") produced += step.creatives ?? 0;
     }
   }
   const extra = waits.length - 1;

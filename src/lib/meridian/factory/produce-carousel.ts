@@ -110,6 +110,7 @@ export async function produceCarousel(sql: Sql, input: ProduceInput, req: Carous
   }
 
   let failedSlides = 0;
+  let linkedSlides = 0;
   for (const slide of slides) {
     if (!slide.copy.trim()) {
       return { kind: "stop", reason: `Carousel slide ${slide.index + 1} has no copy to check, so nothing was sent.` };
@@ -134,6 +135,8 @@ export async function produceCarousel(sql: Sql, input: ProduceInput, req: Carous
     });
     if (step.kind === "stop") return step;
     if (step.kind === "waiting") return { kind: "stop", reason: step.reason };
+    // A slide this call linked counts as one creative of the run, whichever call made its job.
+    if (step.kind === "linked") linkedSlides += 1;
     // A slide that failed, or that an earlier run left unfinished, leaves the carousel incomplete.
     if (step.kind === "failed" || step.kind === "skipped") failedSlides += 1;
   }
@@ -141,7 +144,7 @@ export async function produceCarousel(sql: Sql, input: ProduceInput, req: Carous
   if (failedSlides > 0) {
     // The slides that did complete keep their own creatives. The carousel is marked incomplete, and no carousel creative is made.
     await settleCarouselParent(sql, { organizationId: scope.organizationId, brandId: scope.brandId, productionJobId: parentId });
-    return { kind: "failed" };
+    return { kind: "failed", creatives: linkedSlides };
   }
 
   // Every slide is stored. The last slide settles the carousel when it is materialized; a carousel that is still pending is settled here.
@@ -152,7 +155,7 @@ export async function produceCarousel(sql: Sql, input: ProduceInput, req: Carous
   `;
   if (!parent[0]?.materialized_creative_id) {
     const settled = await settleCarouselParent(sql, { organizationId: scope.organizationId, brandId: scope.brandId, productionJobId: parentId });
-    if (settled !== "completed") return { kind: "failed" };
+    if (settled !== "completed") return { kind: "failed", creatives: linkedSlides };
   }
   const made = await sql<{ materialized_creative_id: string | null }>`
     select materialized_creative_id from production_jobs
@@ -160,7 +163,7 @@ export async function produceCarousel(sql: Sql, input: ProduceInput, req: Carous
     limit 1
   `;
   const carouselCreativeId = made[0]?.materialized_creative_id;
-  if (!carouselCreativeId) return { kind: "failed" };
+  if (!carouselCreativeId) return { kind: "failed", creatives: linkedSlides };
   await linkCreative(sql, scope, {
     runId: input.runId,
     variantId: variant.id,
@@ -170,5 +173,6 @@ export async function produceCarousel(sql: Sql, input: ProduceInput, req: Carous
     jobId: parentId,
     provider: "carousel",
   });
-  return { kind: "linked" };
+  // The slides this call linked, and the carousel creative that makes the fifth.
+  return { kind: "linked", creatives: linkedSlides + 1 };
 }

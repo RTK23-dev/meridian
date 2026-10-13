@@ -41,14 +41,16 @@ export type VariantRow = {
 };
 
 /**
- * What one variant and format came to. "linked" is a creative the run now has. "skipped" is a job that was already handled or that
- * failed earlier. "failed" is a job that returned a failure for this variant. "stop" stops the run with the reason. "waiting" keeps the
- * run at its produce stage, because a provider job it needs has not finished. Nothing is marked produced for a waiting job.
+ * What one variant and format came to. "linked" is a creative the run now has, and `creatives` counts them when one step links more
+ * than one (a carousel links its slides and its own creative); it is one when omitted. "skipped" is a job that was already handled or
+ * that failed earlier. "failed" is a job that returned a failure for this variant, and `creatives` counts what it linked before it
+ * failed. "stop" stops the run with the reason. "waiting" keeps the run at its produce stage, because a provider job it needs has not
+ * finished. Nothing is marked produced for a waiting job.
  */
 export type Step =
-  | { kind: "linked" }
+  | { kind: "linked"; creatives?: number }
   | { kind: "skipped" }
-  | { kind: "failed" }
+  | { kind: "failed"; creatives?: number }
   | { kind: "stop"; reason: string }
   | { kind: "waiting"; reason: string };
 
@@ -151,8 +153,9 @@ export async function linkCreative(sql: Sql, scope: Scope, link: CreativeLink): 
 
 /**
  * Finishes one production job: the materializer stores the creative, judges it where it judges that modality, opens its review and
- * settles its reservation. A failure here is returned, not thrown, so the run stops with the reason. The job stays COMPLETED, and the
- * next run of this stage finishes it from what is stored.
+ * settles its reservation. A Factory video opens no review here: its review is opened once its own judgment is recorded. A failure here
+ * is returned, not thrown, so the run stops with the reason. The job stays COMPLETED, and the next run of this stage finishes it from
+ * what is stored.
  */
 export async function materialize(
   sql: Sql,
