@@ -122,9 +122,16 @@ engine has already graded with the same questions is not asked again.
 
 Pick chooses what to make next from the graded ads. A concept is an angle, hook type and format from the ad's creative DNA. The brand's
 brain filters out a concept it cannot judge, or one that uses a word the brand avoids. Each concept is weighted by the patterns the brand
-has learned, and ranked with a Thompson draw seeded by the run id, so a run's picks reproduce. The picks are stored in `factory_picks`. The patterns that weight a concept are the run's own surface's: an organic run reads organic
-patterns, an ad run reads paid patterns, and a run with intent `both` reads none, because no single surface describes it. See
-[Learning per surface](#learning-per-surface).
+has learned, and ranked with a Thompson draw seeded by the run id, so a run's picks reproduce. The picks are stored in `factory_picks`.
+
+The patterns that weight a concept are the run's own surface's. An organic run reads organic patterns and an ad run reads paid patterns.
+A run with intent `both` makes creatives for both surfaces, so each concept has two arms, an organic arm weighted by organic patterns and
+a paid arm weighted by paid patterns. A pattern on one surface never moves the other surface's arm. The concept is picked once, on the arm
+whose draw ranks first, and the pick records that surface in `factory_picks.surface`. See [Learning per surface](#learning-per-surface).
+
+Each pick also records the JEV grade its ad carried, as a fingerprint in `factory_picks.grade_fingerprint`. The grade itself is not copied:
+it stays in `ad_timelines`, with its engine, model and question versions. The fingerprint is how the run view knows whether that grade is
+still the one the pick was made under (see [Predictions and outcomes](#predictions-and-outcomes)).
 
 Plan turns each pick into a CreativePlan for the brand's product, made under the engine decision the ad was graded under. A pick with no
 such decision, or no product, gets a storyboard and no plan, and the reason is recorded on the run. The control takes its hook type,
@@ -195,8 +202,31 @@ outcomes are `performance_observations` (paid) and `organic_observations` (organ
 rows in `unified_performance_telemetry`, which is where a Factory creative's measurements are stored. A paid observation is written only from
 a row whose source is paid. Before this release an organic row that carried an impression count was written as a paid observation.
 
-Pick reads a pattern only when it is on the run's surface and on a channel the run names, or on every channel. An organic win never moves a
-paid run, and a paid win never moves an organic run. A run with intent `both` reads no learned pattern.
+Pick reads a pattern only when it is on a surface the run makes creatives for, and on a channel the run names, or on every channel. An
+organic win never moves a paid run or a paid arm, and a paid win never moves an organic run or an organic arm. A run with intent `both`
+reads both surfaces, each for its own arm (see [Pick and plan](#pick-and-plan)). The test `pick-surfaces.test.ts` seeds an organic win and a
+paid win that disagree, runs the learn recomputation, and checks that each pattern is produced and that each arm reads only its own.
+
+## Predictions and outcomes
+
+A pick is a prediction: the grade its ad carried says how the engine judged the concept before anything was made from it. The grade is stored
+once, on `ad_timelines`, with its engine, model, question versions and action. A pick stores the fingerprint of that grade at the time it was
+picked (`factory_picks.grade_fingerprint`). The fingerprint is a hash of what the engine answered, so it changes when the engine, model,
+questions, policy, action or gate record changes.
+
+The run view reads the ad's grade now and compares it with the stored fingerprint:
+
+| Status | Meaning | What the view shows |
+| --- | --- | --- |
+| `same` | The ad still carries the grade the pick was made under. | The grade, as the prediction the pick was made under. |
+| `regraded` | The ad was graded again after the pick, by another engine or with other questions. The earlier grade is not kept. | The current grade, and a note that the ad was graded again. |
+| `unrecorded` | The pick was written before fingerprints were stored. | The current grade, and a note that the prediction is not known. |
+
+A missing engine is shown as "Not graded", with the reason the grade gives. It is never shown as a score. The measured rows of the creatives
+a pick's variants produced are shown beside the pick. A metric the source did not report reads "not reported".
+
+Migration `0071` adds `factory_picks.surface` and `factory_picks.grade_fingerprint`. Picks written before it have `''` in both, and the
+view says so rather than guessing. The prediction an earlier pick was made under is kept only while the ad is not graded again.
 
 ## The Factory screen
 
@@ -206,13 +236,18 @@ what must change before the run can start; for example, full automation needs a 
 with, and the server checks them again.
 
 **Runs** lists each run with its settings, its stage progress, each source's state, and the receipts and measurements of its own creatives.
+Under **Run details** it also lists **Grades and variants**: each pick of the run with its concept, its surface, the grade it was made under
+(see [Predictions and outcomes](#predictions-and-outcomes)), its plan status, its measured rows, and each variant with the one attribute it
+tests, its gate result and the creative it became, with that creative's receipts and measured rows.
+
 Its controls:
 
 - **Approve**, on a run waiting at a stage a person approves. Members only.
 - **Start again from** the stage, on a paused run. Members only. It is disabled, with the reason, while the kill switch is on.
 - **Check learning again**, on a running run at its learn step. Members only.
 
-Viewers see the runs and the reason they cannot act. Grades and variants are listed for the brand, not per run.
+Viewers see the runs, their grades and variants, and the reason they cannot act. The run view is read through `getFactoryBoard`, which checks
+that the brand belongs to the caller's workspace, and every row it reads is scoped to that workspace and brand (`factory/run-view.ts`).
 
 ## Not built yet
 
@@ -221,9 +256,14 @@ What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
 - Video and carousel production. A run whose formats include video or carousel stops at produce, before any spend, with that reason.
 - Learning is not re-run on a schedule. The learn stage runs once in the queue, and a waiting run is checked again only with its Check learning
   button.
-- Per-run grades and variants on the Factory screen. They are listed for the brand.
-- JEV predictions stored next to their outcomes (item 10, second clause).
-- Cross-surface proposals: an organic winner proposed as an ad test, or the reverse.
+- Cross-surface proposals: an organic winner proposed as an ad test, or the reverse. A run with intent `both` learns each surface for its
+  own arm, but no pattern on one surface is proposed as a test on the other.
+- A re-grade overwrites the grade of record on `ad_timelines`. A pick made under the earlier grade can no longer show that grade, only that
+  the ad was graded again. Keeping every grade needs a grade history table, which is not built.
+- Organic outcomes are still one observation per post. A later organic measurement of the same post is not added to `organic_observations`.
+  The paid path is per measurement (see [Learning per surface](#learning-per-surface)).
+- The Factory screen was not checked in a browser from this branch. Its before and after screenshots, and the button audit, need a run of
+  the app that this change did not make.
 - The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
 - The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
 - Live Instagram and TikTok publishing is not connected, by the owner's decision. A live paid publish from a run needs a targeting country the
