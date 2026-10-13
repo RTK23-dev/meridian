@@ -91,7 +91,26 @@ kill switch stops is `paused`.
 
 ## Not built yet
 
-Work-queue items 3, 5, 6, 8, 9, 10 and 11 of NORTH_STAR section 8 are open. In short: Gather does not yet call the sourcing stack for each
-source; Pick and Plan do not use grades and Thompson allocation, and variants still come from a fixed hook and CTA list; produce does not
-materialize through the production router into the Studio creative tables; publish and measure both paths are not built; learning is not
-per surface; and the Factory screen does not show the run settings or the approve action. See [ROADMAP.md](ROADMAP.md).
+Work-queue items 5, 6, 8, 9, 10 and 11 of NORTH_STAR section 8 are open. In short: Pick and Plan do not use grades and Thompson allocation,
+and variants still come from a fixed hook and CTA list; produce does not materialize through the production router into the Studio
+creative tables; publish and measure both paths are not built; learning is not per surface; and the Factory screen does not show the
+run settings or the approve action. Uploads are not connected to Gather. See [ROADMAP.md](ROADMAP.md).
+
+## Gather
+
+The discover stage runs the sourcing stack for one run (NORTH_STAR section 5, step 1). It reads the brand's website and the websites of
+its confirmed competitors. A page is read by the crawler, and a social post or profile link is read by the social scraper. The registry
+adapters search the run's niche on the run's platforms, and the Meta Ad Library collector stores the ads that grading reads. The run's
+platforms are its `platforms` setting; with none chosen, every platform the niche search covers is reported.
+
+Each source records one state on the run, in `factory_run_sources`:
+
+| State | Meaning |
+| --- | --- |
+| `ok` | The source ran. `items` is what this run stored from it. Zero is a real result. |
+| `not_connected` | No key is saved, or no page or link is saved for it, or no adapter exists for the platform. The reason says which. |
+| `failed` | A call raised an error or the scraper could not read the link. The reason is the error text. |
+
+A source that is not connected or fails does not stop the run. Items go to the evidence tables that already exist: `research_ads` for
+Ad Library ads, `discovered_items`, `sources` and `discovered_page_evidence` for pages and posts. Uploads are `not_connected`, because no
+upload intake stores a swipe file yet. The Factory board lists each recent run's states in `runSources`.

@@ -91,7 +91,7 @@ Current state, stage by stage (`factory/worker.ts`):
 
 | Stage                 | Today                                                                                   | Problem                                           |
 | --------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| discover              | returns whether a Meta key exists                                                       | gathers nothing                                   |
+| discover              | gathers the crawler, social scraper, registry adapters and Ad Library; records each source's state on the run | uploads are not connected: no upload intake stores one yet |
 | ingest                | returns whether media snapshots are allowed                                             | ingests nothing                                   |
 | decode                | decodes stored research ads into DNA                                                    | works; keep                                       |
 | grade                 | winner score from the delivery the source stored: `stillRunning` is unknown (null) when the source gave no stop time, countries come from the source, quality is null | observed signal only; JEV not used                |
