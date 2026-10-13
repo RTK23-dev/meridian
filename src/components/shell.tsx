@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowLeftRight, BarChart3, Bell, BellRing, Brain, Cable, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, ListChecks, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, BarChart3, Bell, BellRing, Brain, Cable, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, ListChecks, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { hasRole } from "@/lib/meridian/access";
@@ -12,7 +12,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button, Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, Kbd, Sheet, SheetContent, SheetTitle, useTheme } from "@/components/ui";
 import { CommandPalette } from "@/components/command-palette";
 import { PageCommandProvider, usePageCommandRegistry } from "@/components/page-commands";
-import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, resolveLastBrand, sidebarGroups, switcherMode, unreadAlertLabel, type NavGroup } from "@/lib/navigation/model";
+import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, nextStep, resolveLastBrand, sidebarGroups, switcherMode, unreadAlertLabel, type NavGroup } from "@/lib/navigation/model";
 import { chordPath, INITIAL_SHORTCUT_STATE, isTypingTarget, nextShortcutState, type ShortcutState } from "@/lib/navigation/shortcuts";
 import { readLocal, writeLocal } from "@/lib/navigation/local-storage";
 import { routePageTitle } from "@/lib/navigation/route-data";
@@ -73,6 +73,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
   const groups = useMemo(() => sidebarGroups({ brandId, reviewCount }), [brandId, reviewCount]);
   const bellLabel = alerts.data ? unreadAlertLabel(alerts.data.alerts) : null;
   const tabs = bottomTabs(brandId);
+  const next = nextStep({ pathname: path, brandId });
   const canAddBrand = active ? hasRole(active.role, "member") : false;
   const pageTitle = routePageTitle(matches);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -240,7 +241,14 @@ function ShellChrome({ children }: { children: ReactNode }) {
       </header>
       <div className="border-b border-border bg-surface px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
       <main id="main" tabIndex={-1} className="page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-12 lg:py-10 lg:pb-12">
-        <div className="mx-auto w-full max-w-6xl">{children}</div>
+        <div className="mx-auto w-full max-w-6xl">
+          {children}
+          {/* Every core screen names the next step, so a person always knows what comes after this one. */}
+          {next ? <section aria-label="Next step" className="mt-12 border-t border-border pt-6">
+            <p className="eyebrow mb-3">Next step</p>
+            <Button asChild variant="secondary"><Link to={next.to as never} onMouseEnter={() => prefetch(next.to)} onFocus={() => prefetch(next.to)}>Continue to {next.label}<ArrowRight aria-hidden="true" className="size-4" /></Link></Button>
+          </section> : null}
+        </div>
       </main>
       <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {tabs.map((tab) => {

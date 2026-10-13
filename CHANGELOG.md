@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A sidebar for the core loop.** Brand brain, Products and Connected accounts sit under Brand; Market and Intelligence under
+  Research; Studio, Factory and Library under Create; Opportunities and Reviews under Review; Learning and Calibration under
+  Results. Usage & cost, Alerts center, Audit log, Webhook events, Exports and Notification preferences are listed on the Settings
+  screen, and every page ends with a link to the next step.
 - **One command for a local trial.** `npm run dev` creates `.env` and the secrets on the first run, prints three steps once the app
   answers, and keeps the embedded database in `.data/pglite`. Accounts, workspaces and brands survive a restart. Without `DATABASE_URL`,
   the dev server also runs the queued jobs, so no second terminal is needed. Periodic work still needs `npm run scheduler`.
