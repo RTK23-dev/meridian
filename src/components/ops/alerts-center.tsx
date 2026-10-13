@@ -2,7 +2,7 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { AlertCircle, CheckCheck, Clock3, Info, TriangleAlert } from "lucide-react";
-import { Badge, Button, Card, DisabledReason, Field, PageHeader, ScreenSkeleton, SelectInput, StatusBadge, Input } from "@/components/ui";
+import { Badge, Button, Card, DisabledReason, EmptyState, Field, PageHeader, ScreenSkeleton, SelectInput, StatusBadge, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -115,9 +115,9 @@ export function AlertsCenter() {
         </div>
 
         {data.alerts.length === 0 ? (
-          <Card><p className="text-sm text-fg-muted">No alerts are stored. Check systems to record any condition that is true now.</p></Card>
+          <EmptyState title="No alerts are stored yet" reason="Check systems to record any condition that is true now." />
         ) : visible.length === 0 ? (
-          <Card><p className="text-sm text-fg-muted">No {filter === "open" ? "open" : "acknowledged"} alerts. Change the filter to see the others.</p></Card>
+          <EmptyState title={filter === "open" ? "No open alerts" : "No acknowledged alerts"} reason="Change the filter to see the others." />
         ) : (
           <ul className="space-y-3">
             {visible.map((alert) => (
