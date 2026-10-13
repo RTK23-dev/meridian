@@ -69,7 +69,9 @@ export async function launchableCreatives(
     from factory_creatives fc
     join creative_records c on c.id = fc.creative_id and c.organization_id = fc.organization_id and c.brand_id = fc.brand_id
     join factory_variants v on v.id = fc.variant_id and v.organization_id = fc.organization_id and v.brand_id = fc.brand_id
+    -- A carousel slide is one image of its carousel. It is never posted alone; the carousel is launched as one creative.
     where fc.run_id = ${scope.runId} and fc.organization_id = ${scope.organizationId} and fc.brand_id = ${scope.brandId}
+      and fc.slide_index < 0
     order by fc.created_at asc, fc.creative_id asc
   `;
   const eligible: LaunchCreative[] = [];

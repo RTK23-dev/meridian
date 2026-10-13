@@ -123,11 +123,23 @@ function calibrationOf(answer: JevAnswer, policy: DecisionPolicy): CalibrationSt
 }
 
 /**
- * The policy with a brand's calibrated approve threshold in place of the registry's. Only a question whose probability means
- * "the condition holds" can be calibrated this way: a reject-if-true predicate is left as it is.
+ * Whether a calibrated threshold may replace the registry's approve threshold. Calibration may only raise the bar. It applies only
+ * when the calibrated value is at least the registry's review threshold and at least the registry's approve threshold, which is the
+ * bar it sets. A lower value leaves the registry's threshold in place. A question with no registry approve threshold, or a predicate
+ * that is not pass-if-true, is never calibrated this way.
+ */
+export function calibrationRaisesBar(policy: DecisionPolicy, threshold: number): boolean {
+  if (policy.predicateDirection !== "pass_if_true") return false;
+  if (policy.approveMinProbability === undefined) return false;
+  return threshold >= policy.reviewMinProbability && threshold >= policy.approveMinProbability;
+}
+
+/**
+ * The policy with a brand's calibrated approve threshold in place of the registry's, when calibrationRaisesBar allows it. Otherwise
+ * the policy is returned as it was, with no calibration, so its votes stay uncalibrated.
  */
 export function applyCalibratedThreshold(policy: DecisionPolicy, calibration: AppliedCalibration): DecisionPolicy {
-  if (policy.predicateDirection !== "pass_if_true") return policy;
+  if (!calibrationRaisesBar(policy, calibration.threshold)) return policy;
   return { ...policy, approveMinProbability: calibration.threshold, calibration };
 }
 

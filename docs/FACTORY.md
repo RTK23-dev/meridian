@@ -104,15 +104,30 @@ input, cached input and output, and its cost can be lower than the invoice.
 Produce materializes each variant of the run for each format the run makes, through the production router
 (`src/lib/meridian/factory/produce.ts`):
 
-- Only images are produced. A run whose formats include video or carousel stops at produce, before any spend, with that reason. The
-  video path completes asynchronously through the poller, and the Factory does not wait on it yet.
+- **Images** are one provider call each, as before.
+- **Carousels** are one carousel job with one image job for each slide. The slides come from the creative engine's carousel scope
+  (`creative/engine.ts`), so the number and the words of the slides are the engine's. Each slide is produced like an image, and the
+  carousel creative is made when its last slide is stored. A slide the engine left without words carries the product name alone.
+- **Videos** are one provider job each, through the router's video providers (Hypit, Gemini Omni, Higgsfield, or ManualCloud). A video's
+  estimate is reserved before the call. A video that finishes at once is stored and recorded. A video still at its provider keeps the run
+  **running**, with its reason in the run row and `waiting_on` set to produce. The stages after produce do not run until it finishes. The
+  stage checks again about every ten minutes, and the poller in the worker reads the job's own row to finish it. Nothing is marked
+  produced while the job is running. A video that fails for good leaves its variant with no video, as a failed image does.
+- **Caps for video.** A video's cost is a declared estimate, not a cost the provider reports, so it is not a metered row. The estimates of the
+  run's own video jobs that have not failed count toward the run's total and daily caps, and a video that would pass a cap is not sent.
+- A named provider that is not ready stops the run before any reservation or call, with the provider's reason (`NOT_CONFIGURED` or the
+  matrix's refusal). This is the same for images, slides and videos.
 - The provider is the run's choice for the format. `auto` lets the capability matrix choose. A named provider that is not configured
   or not connected stops the run, and the run row carries the provider's reason. No other provider is used in its place.
 - The budget is reserved before the provider is called. A call that returns a failure releases the reservation. A call that does not
   return keeps its reservation held. A held reservation is released on its own only when the provider's own lookup confirms it holds no job for the submission. The sweep asks once the submission window has passed. No provider has such a lookup yet, so every held reservation stays for an admin, who sees the last check on the panel (see [OPERATIONS.md](OPERATIONS.md), Budgets). An admin or owner
   releases it on the Factory screen, in the Held budget panel. Other roles see the panel's rule and the reason they cannot release it.
-- The image is stored, judged and recorded by the materializer that Studio uses. The creative is in `creative_records`, its review is
-  in `reviews`, and `factory_creatives` links it to its run and variant. Library and Reviews read it from there.
+- The image, slide and video are stored, judged and recorded by the materializer that Studio uses. The creative is in `creative_records`,
+  its review is in `reviews`, and `factory_creatives` links it to its run, its variant, its format and its slide (`slide_index`, -1 for a
+  creative that is not a slide). Library and Reviews read it from there. A slide is never launched on its own: the carousel is.
+- A video is judged once by the same `creative_qa` check Studio runs on a video, and its judgment is metered like an image's. A video is
+  never approved by the judgment alone: it stays in review, or is rejected.
+- The carousel creative is not judged separately. It is judged through its slides, so the gate reads the slides' judgments.
 
 The gate stage reads the JEV `creative_qa` record for each creative. That record holds the text questions and the visual questions
 (`creative.visual_quality.v1` and `creative.product_visible.v1`). The engine answers once, when the image is judged, so the gate does
@@ -330,10 +345,11 @@ qualifies, so a threshold means that every stated probability at or above it has
 least 100 observations for a question before any threshold is set. Below that the report is uncalibrated and says "n of 100 observations
 measured". A report also carries its reliability table: the count, the success rate and the mean stated probability of each bin.
 
-**Constants, for owner review.** The owner did not set these. They were chosen for the first method and are named in
-`question-method.ts` and `question-outcomes.ts`: 100 minimum observations per brand and question; five bins; 10 observations per bin; a 70%
-target; two measured creatives for a baseline; and the success rule above (median, click-through rate for paid, completion rate for
-organic). A change to any of them is a new method version. These are the questions NORTH_STAR section 9 asks the owner to decide.
+**Constants, accepted for now.** The owner has accepted these constants for now: 100 minimum observations per brand and question; five bins of
+0.2, with 10 observations per bin; a 70% target; and success meaning the pick beat its brand's median. They are named in
+`question-method.ts` and `question-outcomes.ts`. They will be reviewed once real measured outcomes exist. Two further values the build chose
+are part of the same method and are not yet set by the owner: two measured creatives for a baseline, and the paid and organic metrics the
+median is taken over (click-through rate for paid, completion rate for organic). A change to any of them is a new method version.
 
 **Storage and recomputation.** Reports are stored in `question_calibration_reports` (migration 0074). The name is not `calibration_reports`,
 which migration 0045 already uses for the learned-parameter reports read by `learning/calibration-gate.ts`. A recomputation writes a report
@@ -343,24 +359,31 @@ from outcomes** on the Calibration screen. That button needs the admin role and 
 job's or the stage's result and does not fail the pattern update.
 
 **Gate use.** The decision gate reads the newest report for the brand and question version whenever it decides a question. A calibrated
-report replaces that question's approve threshold for the brand. The vote then records `calibrationStatus: "calibrated"`, the report id, its
-sample size and the threshold. The question's policy version is `<question>@<version>+calibrated:<report id>`, so the decision record names
-the threshold it used. A question with no calibrated report, a report that is uncalibrated or uses another method version, or a read that
-fails, keeps its registry policy, and its threshold stays uncalibrated. The gate never reads another brand's report. Only the probability
-questions can be calibrated this way. A question whose predicate is a defect (reject if true) keeps its policy.
+threshold replaces that question's approve threshold for the brand only when the calibrated value is at least the registry's approve
+threshold, so calibration can only raise the bar. A calibrated value below the registry's approve threshold is not applied: the registry's
+threshold stands, and the vote stays uncalibrated. Where a calibrated threshold is applied, the vote records
+`calibrationStatus: "calibrated"`, the report id, its sample size and the threshold. The question's policy version is
+`<question>@<version>+calibrated:<report id>`, so the decision record names the threshold it used. A question with no calibrated report, a
+report that is uncalibrated or uses another method version, a report whose value is not applied, or a read that fails, keeps its registry
+policy, and its threshold stays uncalibrated. The gate never reads another brand's report. Only the probability questions can be calibrated
+this way. A question whose predicate is a defect (reject if true), and a question with no registry approve threshold, keeps its policy.
 
 A calibrated threshold applies to grades decided after its report. A grade already stored under the same question versions is not asked
 again, so existing grades keep the threshold they were made under.
 
-**The Calibration screen.** Each grading question shows either its calibrated report (the threshold, the reliability table, the sample size,
-the report date and the method version), or "Not enough outcomes: n of 100 measured", with the number counted now. A threshold is never shown
-for an uncalibrated brand.
+**The Calibration screen.** Each grading question shows either its calibrated report (the threshold, the registry threshold, the reliability
+table, the sample size, the report date and the method version), or "Not enough outcomes: n of 100 measured", with the number counted now. A
+threshold is never shown for an uncalibrated brand. A calibrated report whose value is not applied says so, and says that the registry
+threshold stands.
 
 ## Not built yet
 
 What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
 
-- Video and carousel production. A run whose formats include video or carousel stops at produce, before any spend, with that reason.
+- A video's cost is an estimate from the provider's declared price, not a price the provider reports, so it is not metered in
+  `factory_costs`. Its estimate is held against the run's caps, but it does not appear as priced spend.
+- A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.
+- Preflight and copy claims on the Factory image path. Factory images run no preflight and no claim check. Their specs carry no duration, and the Factory has no copy check (see [ROADMAP.md](ROADMAP.md)).
 - Learning is not re-run on a schedule. The learn stage runs once in the queue, and a waiting run is checked again only with its Check learning
   button.
 - Cross-surface proposals: an organic winner proposed as an ad test, or the reverse. A run with intent `both` learns each surface for its

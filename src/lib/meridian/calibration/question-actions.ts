@@ -10,6 +10,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
 import { GRADING_QUESTIONS } from "@/lib/meridian/factory/grade";
+import { calibrationRaisesBar, policyForQuestion } from "@/lib/meridian/decisions/policy";
 import { CALIBRATION_MINIMUM_OBSERVATIONS, QUESTION_CALIBRATION_METHOD, type ReliabilityBin } from "./question-method.ts";
 import { latestQuestionCalibrations, measureQuestionCalibrations, type CalibrationScope } from "./question-store.ts";
 import { calibratableGradingQuestions, recalibrateGradingQuestions } from "./question-recalibrate.ts";
@@ -45,6 +46,8 @@ export type QuestionCalibrationView = {
   calibratable: boolean;
   /** Observations counted from the brand's outcomes now. Zero for a question that cannot be calibrated. */
   measured: number;
+  /** The registry's approve threshold for the question: the bar a calibrated threshold may only raise. Null when it has none. */
+  registryThreshold: number | null;
   /** The newest stored report, or null when none has been stored yet. */
   latest: {
     id: string;
@@ -52,6 +55,8 @@ export type QuestionCalibrationView = {
     reason: string;
     sampleSize: number;
     threshold: number | null;
+    /** Whether the gate applies this threshold. A calibrated value below the registry's threshold is not applied. */
+    applied: boolean;
     reliability: ReliabilityBin[];
     methodVersion: string;
     createdAt: string;
@@ -83,19 +88,23 @@ export const getQuestionCalibration = createServerFn({ method: "POST" })
       const key = `${questionId}@${questionVersion}`;
       const isCalibratable = question.spec.type === "noul";
       const stored = isCalibratable ? latest.get(key) : undefined;
+      const registry = policyForQuestion(question.spec);
+      const threshold = stored?.status === "calibrated" ? stored.threshold : null;
       return {
         questionId,
         questionVersion,
         label: QUESTION_LABELS[questionId] ?? questionId,
         calibratable: isCalibratable,
         measured: isCalibratable ? (measured.questions.get(key)?.calibration.sampleSize ?? 0) : 0,
+        registryThreshold: registry?.approveMinProbability ?? null,
         latest: stored
           ? {
               id: stored.id,
               status: stored.status,
               reason: stored.reason,
               sampleSize: stored.sampleSize,
-              threshold: stored.status === "calibrated" ? stored.threshold : null,
+              threshold,
+              applied: registry !== null && threshold !== null && calibrationRaisesBar(registry, threshold),
               reliability: stored.reliability,
               methodVersion: stored.methodVersion,
               createdAt: stored.createdAt,
