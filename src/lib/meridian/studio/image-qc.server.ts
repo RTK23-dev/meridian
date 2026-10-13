@@ -28,6 +28,7 @@ import { selectRepresentativeFrames, sha256Hex } from "../decisions/frames.ts";
 import { sampleVideoFrames, type FrameExtractor } from "../video/sample-frames.ts";
 import { resolveActiveEngine, type EngineSelection } from "../decisions/selection.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
+import { judgmentDecisionId, type RecordedDecision } from "./judgment-decision.ts";
 
 export type QcBrandContext = {
   brain: { positioning: string; valueProposition: string; tone: string; prohibitedClaims: string; wordsToAvoid: string };
@@ -353,11 +354,11 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
 
   const gateIsMoreSevere = SEVERITY[gate.action] > SEVERITY[localRollup];
   const rollup: PolicyOutcome = gateIsMoreSevere ? gate.action : localRollup;
-  let pointed = "";
+  const recorded: RecordedDecision[] = [];
   for (const decision of local) {
     // Deterministic per creative and question, so a retried judgment cannot record the same decision twice.
     const id = `${input.creativeId}:${decision.questionId}`;
-    if (!pointed && decision.decision === rollup) pointed = id;
+    recorded.push({ id, decision: decision.decision });
     const record = decisionRecordFields(decision);
     await sql`
       insert into jev_decisions (
@@ -379,7 +380,9 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
   return {
     rollup,
     reason: gate.reason,
-    decisionId: (gateIsMoreSevere ? gate.gateRecordId : pointed) || gate.gateRecordId || "",
+    // reviews.decision_id and rejections.decision_id reference jev_decisions, so decisionId names one of the rows written above.
+    // The engine gate record is returned as gateRecordId and is never used as a decision id.
+    decisionId: judgmentDecisionId(rollup, recorded),
     gateRecordId: gate.gateRecordId,
     gateAction: gate.action,
     gateEngineCalled: gate.engineCalled,
