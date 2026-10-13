@@ -11,9 +11,10 @@ import { isFactoryStage } from "./pipeline.ts";
 import { learnForRun } from "./learn.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
+import { queueStagesFrom } from "./queue-stages.ts";
 import { stageDecision } from "./stage-decision.ts";
 import { effectiveCap, meteredSpendOf, spendCapsOf } from "./spend.ts";
-import { produceFactoryCreatives } from "./produce.ts";
+import { produceFactoryCreatives, scheduleProduceRecheck } from "./produce.ts";
 import { launchFactoryRun, recordTestPlan, scheduleRunMeasurement } from "./publish.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { recordedClaimsOf, templateFromDna } from "./template.ts";
@@ -82,12 +83,17 @@ export async function executeFactoryJob(
   if (!job.brand_id) throw new Error("Factory jobs need a brand.");
   const runId = text(payload.runId);
   if (!runId) throw new Error("Factory jobs need a run id.");
-  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string; created_by: string; current_stage: string }>`
-    select id, status, niche, level, settings, created_by, current_stage from factory_runs
+  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string; created_by: string; current_stage: string; waiting_on: string }>`
+    select id, status, niche, level, settings, created_by, current_stage, waiting_on from factory_runs
     where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
     limit 1
   `;
   if (!owned[0]) throw new Error("Factory run is not owned by this organization and brand.");
+  // A run waiting for a provider job (a video still at the provider) holds every stage but the one it waits at. The waiting stage checks
+  // again on its own schedule, and it is the only stage that may run until the wait clears.
+  if (owned[0].waiting_on !== "" && owned[0].waiting_on !== job.job_type) {
+    return `held:${job.job_type}`;
+  }
   // A run that is waiting for a person, or stopped, holds every stage after the one it stopped at. A stage returns successfully, so
   // the queue would otherwise run the stages after it, and the run would be marked running again. Only the stage it waits at may
   // decide, and it does so when it is run again after an approval or a cleared stop.
@@ -215,10 +221,38 @@ export async function executeFactoryJob(
     });
     if (produced.stop) {
       await sql`
-        update factory_runs set status = 'paused', current_stage = ${job.job_type}, error = ${produced.stop}, updated_at = now()
+        update factory_runs set status = 'paused', current_stage = ${job.job_type}, waiting_on = '', error = ${produced.stop}, updated_at = now()
         where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
       `;
       return `stopped:${job.job_type}`;
+    }
+    if (produced.waiting) {
+      // A video is still at its provider. The run stays running with the reason, the stages after produce are held, and the stage checks
+      // again later. Nothing is marked produced.
+      await sql`
+        update factory_runs set status = 'running', current_stage = ${job.job_type}, waiting_on = ${job.job_type}, error = ${produced.waiting}, updated_at = now()
+        where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+      `;
+      await scheduleProduceRecheck(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId, niche: owned[0].niche });
+      return `waiting:${job.job_type};creatives:${produced.produced}`;
+    }
+    // Every variant is produced or has its reason. The wait, if there was one, is over, so the stages after produce are queued from gate.
+    const wasWaiting = owned[0].waiting_on !== "";
+    await sql`
+      update factory_runs set waiting_on = '', error = '', updated_at = now()
+      where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+    `;
+    if (wasWaiting && payload.resumeWait === true) {
+      const queued = await queueStagesFrom(sql, {
+        organizationId: job.organization_id,
+        brandId: job.brand_id,
+        runId,
+        niche: owned[0].niche,
+        fromStage: "factory.gate",
+        kind: "resume",
+        token: job.id,
+      });
+      return `variants:${made};creatives:${produced.produced};resumed:${queued}`;
     }
     return `variants:${made};creatives:${produced.produced}`;
   }
@@ -765,7 +799,10 @@ export async function creativeQaVerdict(sql: Sql, organizationId: string, brandI
       order by d.created_at desc
       limit 1
     ) g on true
+    -- A carousel is judged through its slides, which are images with their own judgment (produce-carousel.ts). Its carousel row is an
+    -- aggregate, so it has no judgment of its own and is left out here; a variant whose carousel has no slides is still review.
     where fc.variant_id = ${variantId} and fc.organization_id = ${organizationId} and fc.brand_id = ${brandId}
+      and not (fc.format = 'carousel' and fc.slide_index = -1)
   `;
   if (rows.length === 0) {
     return { gate: "jev", result: "review", reason: "No creative was made for this variant, so the JEV creative check has no evidence." };

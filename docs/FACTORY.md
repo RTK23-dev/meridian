@@ -104,15 +104,30 @@ input, cached input and output, and its cost can be lower than the invoice.
 Produce materializes each variant of the run for each format the run makes, through the production router
 (`src/lib/meridian/factory/produce.ts`):
 
-- Only images are produced. A run whose formats include video or carousel stops at produce, before any spend, with that reason. The
-  video path completes asynchronously through the poller, and the Factory does not wait on it yet.
+- **Images** are one provider call each, as before.
+- **Carousels** are one carousel job with one image job for each slide. The slides come from the creative engine's carousel scope
+  (`creative/engine.ts`), so the number and the words of the slides are the engine's. Each slide is produced like an image, and the
+  carousel creative is made when its last slide is stored. A slide the engine left without words carries the product name alone.
+- **Videos** are one provider job each, through the router's video providers (Hypit, Gemini Omni, Higgsfield, or ManualCloud). A video's
+  estimate is reserved before the call. A video that finishes at once is stored and recorded. A video still at its provider keeps the run
+  **running**, with its reason in the run row and `waiting_on` set to produce. The stages after produce do not run until it finishes. The
+  stage checks again about every ten minutes, and the poller in the worker reads the job's own row to finish it. Nothing is marked
+  produced while the job is running. A video that fails for good leaves its variant with no video, as a failed image does.
+- **Caps for video.** A video's cost is a declared estimate, not a cost the provider reports, so it is not a metered row. The estimates of the
+  run's own video jobs that have not failed count toward the run's total and daily caps, and a video that would pass a cap is not sent.
+- A named provider that is not ready stops the run before any reservation or call, with the provider's reason (`NOT_CONFIGURED` or the
+  matrix's refusal). This is the same for images, slides and videos.
 - The provider is the run's choice for the format. `auto` lets the capability matrix choose. A named provider that is not configured
   or not connected stops the run, and the run row carries the provider's reason. No other provider is used in its place.
 - The budget is reserved before the provider is called. A call that returns a failure releases the reservation. A call that does not
   return keeps its reservation held. The window sweep releases a held reservation on its own when its submission window expires with no outcome (see [OPERATIONS.md](OPERATIONS.md), Budgets). An admin or owner
   releases it on the Factory screen, in the Held budget panel. Other roles see the panel's rule and the reason they cannot release it.
-- The image is stored, judged and recorded by the materializer that Studio uses. The creative is in `creative_records`, its review is
-  in `reviews`, and `factory_creatives` links it to its run and variant. Library and Reviews read it from there.
+- The image, slide and video are stored, judged and recorded by the materializer that Studio uses. The creative is in `creative_records`,
+  its review is in `reviews`, and `factory_creatives` links it to its run, its variant, its format and its slide (`slide_index`, -1 for a
+  creative that is not a slide). Library and Reviews read it from there. A slide is never launched on its own: the carousel is.
+- A video is judged once by the same `creative_qa` check Studio runs on a video, and its judgment is metered like an image's. A video is
+  never approved by the judgment alone: it stays in review, or is rejected.
+- The carousel creative is not judged separately. It is judged through its slides, so the gate reads the slides' judgments.
 
 The gate stage reads the JEV `creative_qa` record for each creative. That record holds the text questions and the visual questions
 (`creative.visual_quality.v1` and `creative.product_visible.v1`). The engine answers once, when the image is judged, so the gate does
@@ -357,7 +372,9 @@ for an uncalibrated brand.
 
 What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
 
-- Video and carousel production. A run whose formats include video or carousel stops at produce, before any spend, with that reason.
+- A video's cost is an estimate from the provider's declared price, not a price the provider reports, so it is not metered in
+  `factory_costs`. Its estimate is held against the run's caps, but it does not appear as priced spend.
+- A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.
 - Learning is not re-run on a schedule. The learn stage runs once in the queue, and a waiting run is checked again only with its Check learning
   button.
 - Cross-surface proposals: an organic winner proposed as an ad test, or the reverse. A run with intent `both` learns each surface for its
