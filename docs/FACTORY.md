@@ -86,8 +86,8 @@ Produce materializes each variant of the run for each format the run makes, thro
 - The provider is the run's choice for the format. `auto` lets the capability matrix choose. A named provider that is not configured
   or not connected stops the run, and the run row carries the provider's reason. No other provider is used in its place.
 - The budget is reserved before the provider is called. A call that returns a failure releases the reservation. A call that does not
-  return keeps its reservation held. Nothing releases a held reservation on its own, including when the submission expires. An admin
-  releases it on the Factory screen, in the Held budget panel.
+  return keeps its reservation held. Nothing releases a held reservation on its own, including when the submission expires. An admin or owner
+  releases it on the Factory screen, in the Held budget panel. Other roles see the panel's rule and the reason they cannot release it.
 - The image is stored, judged and recorded by the materializer that Studio uses. The creative is in `creative_records`, its review is
   in `reviews`, and `factory_creatives` links it to its run and variant. Library and Reviews read it from there.
 
@@ -122,7 +122,9 @@ engine has already graded with the same questions is not asked again.
 
 Pick chooses what to make next from the graded ads. A concept is an angle, hook type and format from the ad's creative DNA. The brand's
 brain filters out a concept it cannot judge, or one that uses a word the brand avoids. Each concept is weighted by the patterns the brand
-has learned, and ranked with a Thompson draw seeded by the run id, so a run's picks reproduce. The picks are stored in `factory_picks`.
+has learned, and ranked with a Thompson draw seeded by the run id, so a run's picks reproduce. The picks are stored in `factory_picks`. The patterns that weight a concept are the run's own surface's: an organic run reads organic
+patterns, an ad run reads paid patterns, and a run with intent `both` reads none, because no single surface describes it. See
+[Learning per surface](#learning-per-surface).
 
 Plan turns each pick into a CreativePlan for the brand's product, made under the engine decision the ad was graded under. A pick with no
 such decision, or no product, gets a storyboard and no plan, and the reason is recorded on the run. The control takes its hook type,
@@ -131,8 +133,12 @@ to a line the brand wrote in its brain, and records that attribute in `tests_att
 
 ## When a run finishes
 
-A run is finished only when the learn stage does its real work. Learning is not built yet, so a run that reaches the end of the
-graph stays `running`, and the run row says `learn:not-built`. No other stage marks a run finished. Review counts the variants that
+A run finishes at its learn stage, and only when that stage finds a measured outcome of the run's own creatives. Learning recomputes the
+brand's patterns per surface (see [Learning per surface](#learning-per-surface)) and counts the outcomes of the run's creatives on each
+surface. When there are some, the run is `succeeded`. When there are none, the run stays `running` and its row says `Learning waits for a
+measured outcome from this run's creatives`. Learning runs once in the queue, before the six-hourly measurement pull has stored anything, so a
+waiting run is checked again with **Check learning again**, which the run offers only while it is running at its learn step. No other stage
+marks a run finished. Review counts the variants that
 wait for a person and leaves the run where the stop points put it. A run that waits at a stop is `awaiting_approval`, and a run the
 kill switch stops is `paused`.
 
@@ -176,20 +182,62 @@ reverse. A metric the source did not report is null, never zero. A repeated pull
 
 The Factory board shows each creative's receipts and its measured rows. A metric that was not reported reads "not reported".
 
+## Learning per surface
+
+Learning keeps each pattern on one surface: `organic` (organic posts and their metrics) or `paid` (paused ads and their metrics). A pattern
+also names a channel, a platform such as `tiktok`, or `''` for every channel of its surface. The surface follows from the metric, and each
+metric is measured on one surface only: click-through, conversion and return are paid, and three-second retention, completion and shares are
+organic. Migration `0070` gave each existing pattern its surface this way. A pattern whose metric names neither surface is `unassigned`,
+Pick never reads it, and the next recomputation replaces it.
+
+Every recomputation rebuilds the brand's patterns from the stored outcomes: the learn stage, the telemetry sync and the organic bridge. The
+outcomes are `performance_observations` (paid) and `organic_observations` (organic). The telemetry sync fills those tables from the measured
+rows in `unified_performance_telemetry`, which is where a Factory creative's measurements are stored. A paid observation is written only from
+a row whose source is paid. Before this release an organic row that carried an impression count was written as a paid observation.
+
+Pick reads a pattern only when it is on the run's surface and on a channel the run names, or on every channel. An organic win never moves a
+paid run, and a paid win never moves an organic run. A run with intent `both` reads no learned pattern.
+
+## The Factory screen
+
+The Discover tab has two parts. **Start a run** is the run builder. It has the niche, automation, intent, decision engine, formats, platforms,
+a provider per format, the daily and total spend caps and the variant limit. It starts from the brand's run defaults. It says in plain words
+what must change before the run can start; for example, full automation needs a total cap above zero. Each run stores the settings it started
+with, and the server checks them again.
+
+**Runs** lists each run with its settings, its stage progress, each source's state, and the receipts and measurements of its own creatives.
+Its controls:
+
+- **Approve**, on a run waiting at a stage a person approves. Members only.
+- **Start again from** the stage, on a paused run. Members only. It is disabled, with the reason, while the kill switch is on.
+- **Check learning again**, on a running run at its learn step. Members only.
+
+Viewers see the runs and the reason they cannot act. Grades and variants are listed for the brand, not per run.
+
 ## Not built yet
 
-Work-queue item 10 of NORTH_STAR section 8 (learning per surface) is open, and item 6 covers images only. In short: produce does not yet
-materialize video or carousel, so organic channels, which take video, refuse Factory images with their reason; learning is not per
-surface; the Factory screen does not show the run settings or the approve action; live Instagram and TikTok publishing is not connected
-by the owner's decision; and a live paid publish from a run needs a targeting country the run does not carry. Uploads are not connected
-to Gather. See [ROADMAP.md](ROADMAP.md).
+What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
+
+- Video and carousel production. A run whose formats include video or carousel stops at produce, before any spend, with that reason.
+- Learning is not re-run on a schedule. The learn stage runs once in the queue, and a waiting run is checked again only with its Check learning
+  button.
+- Per-run grades and variants on the Factory screen. They are listed for the brand.
+- JEV predictions stored next to their outcomes (item 10, second clause).
+- Cross-surface proposals: an organic winner proposed as an ad test, or the reverse.
+- The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
+- The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
+- Live Instagram and TikTok publishing is not connected, by the owner's decision. A live paid publish from a run needs a targeting country the
+  run does not carry.
+- Uploads are not connected to Gather.
+
+See [ROADMAP.md](ROADMAP.md).
 
 ## Waiting and stopping
 
 A stage that waits, or a run that is stopped, holds the stages after it. Each of those stages returns without running, and the run
 keeps the stage it stopped at. A stage that is stopped by a cap, the kill switch or a provider that is not ready records the reason on
 the run row. A person approves a waiting stage, and the stage and the stages after it are queued again. Nothing queues a stopped stage
-again on its own: once its reason is cleared, the run must be started again. The Factory screen has no control for that yet.
+again on its own. A paused run has a **Start again** control on the Factory screen. It queues the stage the run stopped at and every stage after it, and it is refused while the kill switch is on. A spend cap that is still reached stops the run again, at the same stage, with the same reason.
 
 ## Gather
 

@@ -74,6 +74,8 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
   a member. See [FACTORY.md](FACTORY.md).
 - **A Factory run says paused or stopped.** Either the kill switch is engaged (every stage stops, in every mode) or a `full` run has no
   spend cap, or has reached it. The reason on the run says which.
+- **A paused Factory run does not start again.** The kill switch is on, which refuses **Start again** until it is cleared (Live tests, an admin). A spend cap that is still reached stops the run again at the same stage, with the same reason.
+- **A Factory run says learning waits for a measured outcome.** None of the run's creatives has a stored metric yet. The measurement pull runs every six hours after a launch, and a run with no published creative never gets one. Once a metric is stored, use **Check learning again** on the run. The button is offered only while the run is running at its learn step.
 - **A TikTok or YouTube post reports not connected.** The saved token does not grant the scope the publish needs (`video.publish` for
   TikTok, the upload scope for YouTube). Save a token that grants it on Connected accounts.
 
@@ -86,3 +88,5 @@ This release adds migrations `0062` to `0065`. `0062` and `0063` make organic an
 stored as null and not as zero. `0064` clears the survival default from the Factory timelines, and the next grade run rewrites them from
 source data. `0065` adds run settings, the approvals table, and the `awaiting_approval` run status. Runs started before this release keep
 working from their level.
+
+This release adds migration `0070`. It gives `learned_patterns` a `surface` (organic or paid) and a `channel`, and fills the surface of each existing pattern from its metric. Every brand's patterns are rebuilt by the next recomputation (the telemetry sync, the organic bridge, or a Factory learn stage), which replaces the whole set. A pattern whose metric names neither surface stays `unassigned` until then, and it is not applied. Nothing else in the database changes.
