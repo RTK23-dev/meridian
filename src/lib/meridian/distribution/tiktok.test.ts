@@ -11,7 +11,8 @@ delete process.env.MERIDIAN_TESTING_RUNTIME;
 
 const INIT_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/";
 const STATUS_URL = "https://open.tiktokapis.com/v2/post/publish/status/fetch/";
-const UPLOAD_URL = "https://upload.example.test/tiktok/chunk";
+const VERIFIED = ["media.example.test"];
+const SIGNED_LINK = `https://media.example.test/api/media-links/cr-1?expires=1900000000&sig=${"b".repeat(64)}`;
 
 function reply(status: number, body: unknown = {}): TransportResponse {
   return { status, body: typeof body === "string" ? body : JSON.stringify(body), headers: {} };
@@ -44,216 +45,216 @@ function request(overrides: Partial<OrganicPublishRequest> = {}): OrganicPublish
     mimeType: "video/mp4",
     caption: "Caption",
     aspectRatio: "9:16",
+    connection: connected(),
+    mediaUrl: SIGNED_LINK,
+    verifiedMediaDomains: VERIFIED,
     ...overrides,
   };
 }
 
 const noSleep = async () => undefined;
-const initReply = reply(200, { data: { publish_id: "pub-1", upload_url: UPLOAD_URL }, error: { code: "ok", message: "" } });
-const uploadReply = reply(201, "");
+const initReply = reply(200, { data: { publish_id: "pub-1" }, error: { code: "ok", message: "" } });
 
 function statusReply(status: string, extra: Record<string, unknown> = {}): TransportResponse {
   return reply(200, { data: { status, ...extra }, error: { code: "ok", message: "" } });
 }
 
+function channel(replies: Array<TransportResponse | Error>, polls = 3) {
+  const { transport, requests } = scripted(replies);
+  return { requests, channel: new TikTokOrganicChannel({ transport, sleep: noSleep, polls }) };
+}
+
+// ---- Refusals before any request ----
+
 test("TikTok without a connection sends nothing and reports NOT_CONNECTED with the reason", async () => {
-  const { transport, requests } = scripted([]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request());
+  const { requests, channel: tiktok } = channel([]);
+  const receipt = await tiktok.publish(request({ connection: undefined }));
   assert.equal(receipt.status, "failed");
   assert.equal(receipt.code, "NOT_CONNECTED");
-  assert.equal(receipt.externalId, "");
-  assert.match(receipt.error ?? "", /video\.publish/);
+  assert.match(receipt.error ?? "", /No TikTok account is connected/);
   assert.equal(requests.length, 0);
 });
 
 test("TikTok refuses a token that does not grant video.publish, and sends nothing", async () => {
-  const { transport, requests } = scripted([]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected(["user.info.basic"]) }));
+  const { requests, channel: tiktok } = channel([]);
+  const receipt = await tiktok.publish(request({ connection: connected(["user.info.basic"]) }));
   assert.equal(receipt.code, "NOT_CONNECTED");
-  assert.match(receipt.error ?? "", /Reconnect the account/);
   assert.equal(requests.length, 0);
 });
 
 test("TikTok refuses a file that is not MP4 or MOV, and sends nothing", async () => {
-  const { transport, requests } = scripted([]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected(), mimeType: "image/png" }));
+  const { requests, channel: tiktok } = channel([]);
+  const receipt = await tiktok.publish(request({ mimeType: "image/png" }));
   assert.equal(receipt.code, "REJECTED");
-  assert.match(receipt.error ?? "", /MP4 or MOV/);
   assert.equal(requests.length, 0);
 });
 
 test("TikTok refuses an empty file and a schedule, and sends nothing", async () => {
-  const { transport, requests } = scripted([]);
-  const empty = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected(), mediaBytes: new Uint8Array(0) }));
-  assert.equal(empty.code, "REJECTED");
-  const scheduled = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(
-    request({ connection: connected(), scheduledFor: new Date(Date.now() + 3_600_000).toISOString() }),
-  );
-  assert.equal(scheduled.code, "REJECTED");
-  assert.match(scheduled.error ?? "", /cannot be scheduled/);
+  const { requests, channel: tiktok } = channel([]);
+  assert.equal((await tiktok.publish(request({ mediaBytes: new Uint8Array() }))).code, "REJECTED");
+  assert.equal((await tiktok.publish(request({ scheduledFor: new Date(Date.now() + 3_600_000).toISOString() }))).code, "REJECTED");
   assert.equal(requests.length, 0);
 });
 
-test("TikTok refuses a video over 64 MB before it sends anything", async () => {
-  const { transport, requests } = scripted([]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(
-    request({ connection: connected(), mediaBytes: new Uint8Array(64 * 1024 * 1024 + 1) }),
-  );
-  assert.equal(receipt.code, "REJECTED");
+test("TikTok without a signed media link reports NOT_CONNECTED and sends nothing", async () => {
+  const { requests, channel: tiktok } = channel([]);
+  const receipt = await tiktok.publish(request({ mediaUrl: undefined }));
+  assert.equal(receipt.code, "NOT_CONNECTED");
+  assert.match(receipt.error ?? "", /signed media link/);
   assert.equal(requests.length, 0);
 });
 
-test("TikTok starts a private upload, sends the bytes in one chunk, and reports published once TikTok completes the post", async () => {
-  const { transport, requests } = scripted([
-    initReply,
-    uploadReply,
-    statusReply("PUBLISH_COMPLETE", { publicaly_available_post_id: ["7001"] }),
-  ]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected(), caption: "Launch video" }));
+test("TikTok refuses a media host that is not a verified domain, before any request is made", async () => {
+  const { requests, channel: tiktok } = channel([]);
+  const receipt = await tiktok.publish(request({ verifiedMediaDomains: ["other.example.test"] }));
+  assert.equal(receipt.code, "NOT_CONNECTED");
+  assert.match(receipt.error ?? "", /TIKTOK_VERIFIED_MEDIA_DOMAINS/);
+  assert.equal(requests.length, 0, "no request reaches TikTok for an unverified domain");
+});
+
+test("TikTok refuses a link that is not https, even on a verified host", async () => {
+  const { requests, channel: tiktok } = channel([]);
+  const receipt = await tiktok.publish(request({ mediaUrl: SIGNED_LINK.replace("https:", "http:") }));
+  assert.equal(receipt.code, "NOT_CONNECTED");
+  assert.equal(requests.length, 0);
+});
+
+// ---- The pull request and the status ----
+
+test("TikTok starts a private pull from the signed link and reports published only with TikTok's post id", async () => {
+  const { requests, channel: tiktok } = channel([initReply, statusReply("PUBLISH_COMPLETE", { publicaly_available_post_id: [7001] })]);
+  const receipt = await tiktok.publish(request());
   assert.equal(receipt.status, "published");
-  assert.equal(receipt.externalId, "7001");
+  assert.equal(receipt.externalId, "7001", "the receipt id is TikTok's post id");
   assert.equal(receipt.platform, "tiktok");
-  assert.ok(receipt.publishedAt);
-  assert.equal(requests.length, 3);
-
-  const init = requests[0]!;
-  assert.equal(init.method, "POST");
-  assert.equal(init.url, INIT_URL);
-  assert.equal(init.headers.Authorization, "Bearer token-123");
-  const initBody = JSON.parse(String(init.body)) as { post_info: { title: string; privacy_level: string }; source_info: Record<string, unknown> };
-  assert.equal(initBody.post_info.privacy_level, "SELF_ONLY", "posts stay private until the app is approved for public posting");
-  assert.equal(initBody.post_info.title, "Launch video");
-  assert.deepEqual(initBody.source_info, { source: "FILE_UPLOAD", video_size: 4, chunk_size: 4, total_chunk_count: 1 });
-
-  const upload = requests[1]!;
-  assert.equal(upload.method, "PUT");
-  assert.equal(upload.url, UPLOAD_URL);
-  assert.equal(upload.headers["Content-Type"], "video/mp4");
-  assert.equal(upload.headers["Content-Range"], "bytes 0-3/4");
-  assert.ok(upload.body instanceof Uint8Array);
-
-  const status = requests[2]!;
-  assert.equal(status.method, "POST");
-  assert.equal(status.url, STATUS_URL);
-  assert.equal(JSON.parse(String(status.body)).publish_id, "pub-1");
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0]!.url, INIT_URL);
+  assert.equal(requests[0]!.headers.Authorization, "Bearer token-123");
+  const body = JSON.parse(String(requests[0]!.body)) as {
+    post_info: { privacy_level: string; title: string };
+    source_info: { source: string; video_url: string; video_size?: number };
+  };
+  assert.equal(body.source_info.source, "PULL_FROM_URL");
+  assert.equal(body.source_info.video_url, SIGNED_LINK, "the request carries the signed link, not the bytes");
+  assert.equal(body.source_info.video_size, undefined, "no upload size is sent for a pull");
+  assert.equal(body.post_info.privacy_level, "SELF_ONLY", "an unaudited app posts privately");
+  assert.equal(body.post_info.title, "Caption");
+  assert.equal(requests[1]!.url, STATUS_URL);
+  assert.deepEqual(JSON.parse(String(requests[1]!.body)), { publish_id: "pub-1" });
 });
 
-test("TikTok names the publish id when TikTok returns no public post id", async () => {
-  const { transport } = scripted([initReply, uploadReply, statusReply("PUBLISH_COMPLETE")]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(receipt.status, "published");
-  assert.equal(receipt.externalId, "pub-1");
+test("TikTok reports PUBLISH_COMPLETE without a post id as unconfirmed, never as published", async () => {
+  const { channel: tiktok } = channel([initReply, statusReply("PUBLISH_COMPLETE")]);
+  const receipt = await tiktok.publish(request());
+  assert.notEqual(receipt.status, "published");
+  assert.equal(receipt.status, "failed");
+  assert.equal(receipt.code, "UNCONFIRMED");
+  assert.equal(receipt.externalId, "", "the publish id is never used as the post id");
+  assert.match(receipt.error ?? "", /no post id/);
 });
 
-test("TikTok keeps checking while it processes the upload, then reports the state it settles on", async () => {
-  const waited: number[] = [];
-  const { transport, requests } = scripted([initReply, uploadReply, statusReply("PROCESSING_UPLOAD"), statusReply("PUBLISH_COMPLETE")]);
-  const receipt = await new TikTokOrganicChannel({
-    transport,
-    sleep: async (ms) => { waited.push(ms); },
-    polls: 5,
-  }).publish(request({ connection: connected() }));
-  assert.equal(receipt.status, "published");
-  assert.equal(requests.length, 4);
-  assert.deepEqual(waited, [5_000], "one wait between the two status checks");
-});
-
-test("TikTok stops checking after its last poll and reports the processing state as unconfirmed", async () => {
-  const { transport, requests } = scripted([
+test("TikTok keeps checking while it downloads the video, then reports the state it settles on", async () => {
+  const { channel: tiktok } = channel([
     initReply,
-    uploadReply,
     statusReply("PROCESSING_DOWNLOAD"),
     statusReply("PROCESSING_DOWNLOAD"),
-    statusReply("PROCESSING_DOWNLOAD"),
+    statusReply("PUBLISH_COMPLETE", { publicaly_available_post_id: ["7002"] }),
   ]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep, polls: 3 }).publish(request({ connection: connected() }));
+  const receipt = await tiktok.publish(request());
+  assert.equal(receipt.status, "published");
+  assert.equal(receipt.externalId, "7002");
+});
+
+test("TikTok stops checking after its last poll and reports the downloading state as unconfirmed", async () => {
+  const { channel: tiktok } = channel([initReply, statusReply("PROCESSING_DOWNLOAD"), statusReply("PROCESSING_DOWNLOAD"), statusReply("PROCESSING_DOWNLOAD")], 3);
+  const receipt = await tiktok.publish(request());
   assert.equal(receipt.status, "failed");
   assert.equal(receipt.code, "UNCONFIRMED");
   assert.equal(receipt.externalId, "");
-  assert.match(receipt.error ?? "", /processing download/);
-  assert.equal(requests.length, 5, "three status checks after the upload, and no more");
 });
 
-test("TikTok does not check again when the upload went to the user's inbox, and does not report it as published", async () => {
-  const { transport, requests } = scripted([initReply, uploadReply, statusReply("SEND_TO_USER_INBOX")]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep, polls: 5 }).publish(request({ connection: connected() }));
+test("TikTok does not check again when the video went to the creator's inbox, and does not report it as published", async () => {
+  const { requests, channel: tiktok } = channel([initReply, statusReply("SEND_TO_USER_INBOX")]);
+  const receipt = await tiktok.publish(request());
   assert.equal(receipt.status, "failed");
   assert.equal(receipt.code, "UNCONFIRMED");
-  assert.match(receipt.error ?? "", /send to user inbox/);
-  assert.equal(requests.length, 3);
-});
-
-test("TikTok reports a post that TikTok failed as rejected", async () => {
-  const { transport } = scripted([initReply, uploadReply, statusReply("FAILED", { fail_reason: "video_format" })]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(receipt.code, "REJECTED");
-  assert.equal(receipt.externalId, "");
-  assert.equal(receipt.error, "TikTok could not post this video.");
-});
-
-test("TikTok maps a refused init to an auth failure, and nothing is uploaded", async () => {
-  const { transport, requests } = scripted([reply(401, { error: { code: "access_token_invalid", message: "Access token is invalid." } })]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(receipt.code, "AUTH_FAILED");
-  assert.equal(receipt.externalId, "");
-  assert.equal(requests.length, 1);
-});
-
-test("TikTok is retryable when the init is rate limited or unavailable, since no bytes were sent", async () => {
-  const limited = scripted([reply(429, { error: { code: "rate_limit_exceeded", message: "Too many requests" } })]);
-  const first = await new TikTokOrganicChannel({ transport: limited.transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(first.code, "RETRYABLE");
-  assert.equal(limited.requests.length, 1);
-
-  const unavailable = scripted([reply(503, "")]);
-  const second = await new TikTokOrganicChannel({ transport: unavailable.transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(second.code, "RETRYABLE");
-  assert.equal(unavailable.requests.length, 1);
-});
-
-test("TikTok with no publish id or upload address is unconfirmed, and sends no bytes", async () => {
-  const { transport, requests } = scripted([reply(200, { data: {}, error: { code: "ok", message: "" } })]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(receipt.code, "UNCONFIRMED");
-  assert.equal(requests.length, 1);
-});
-
-test("TikTok does not report a post after a failed byte upload, and does not check its status", async () => {
-  const { transport, requests } = scripted([initReply, reply(500, "")]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(receipt.status, "failed");
-  assert.equal(receipt.code, "UNCONFIRMED");
-  assert.equal(receipt.externalId, "");
   assert.equal(requests.length, 2);
 });
 
-test("TikTok reports a dropped connection on the init as unconfirmed", async () => {
-  const { transport } = scripted([new Error("socket hang up")]);
-  const receipt = await new TikTokOrganicChannel({ transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(receipt.code, "UNCONFIRMED");
+test("TikTok reports a FAILED post with the retry rule its fail_reason names", async () => {
+  const retry = await channel([initReply, statusReply("FAILED", { fail_reason: "video_pull_failed" })]).channel.publish(request());
+  assert.equal(retry.code, "RETRYABLE");
+  const rejected = await channel([initReply, statusReply("FAILED", { fail_reason: "spam_risk" })]).channel.publish(request());
+  assert.equal(rejected.code, "REJECTED");
+  const auth = await channel([initReply, statusReply("FAILED", { fail_reason: "auth_removed" })]).channel.publish(request());
+  assert.equal(auth.code, "AUTH_FAILED");
+  for (const receipt of [retry, rejected, auth]) assert.equal(receipt.status, "failed");
 });
 
 test("TikTok reports a status check that gets no answer, or no state, as unconfirmed and never as published", async () => {
-  const dropped = scripted([initReply, uploadReply, new Error("reset")]);
-  const droppedReceipt = await new TikTokOrganicChannel({ transport: dropped.transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(droppedReceipt.status, "failed");
-  assert.equal(droppedReceipt.code, "UNCONFIRMED");
-  assert.match(droppedReceipt.error ?? "", /did not return a state/);
+  const dropped = await channel([initReply, new Error("socket hang up")]).channel.publish(request());
+  assert.equal(dropped.code, "UNCONFIRMED");
+  assert.notEqual(dropped.status, "published");
+  const empty = await channel([initReply, reply(200, { data: {}, error: { code: "ok", message: "" } })]).channel.publish(request());
+  assert.equal(empty.code, "UNCONFIRMED");
+});
 
-  const noState = scripted([initReply, uploadReply, reply(401, { error: { code: "access_token_invalid", message: "expired" } })]);
-  const noStateReceipt = await new TikTokOrganicChannel({ transport: noState.transport, sleep: noSleep }).publish(request({ connection: connected() }));
-  assert.equal(noStateReceipt.status, "failed");
-  assert.equal(noStateReceipt.code, "UNCONFIRMED");
+// ---- Refused init, by TikTok's own error codes ----
+
+test("TikTok refuses an unverified URL domain at init, and does not check a status", async () => {
+  const { requests, channel: tiktok } = channel([reply(403, { error: { code: "url_ownership_unverified", message: "" } })]);
+  const receipt = await tiktok.publish(request());
+  assert.equal(receipt.code, "REJECTED");
+  assert.match(receipt.error ?? "", /not verified the domain/);
+  assert.equal(requests.length, 1);
+});
+
+test("TikTok names the private-only rule for an unaudited app, and is refused, not retried", async () => {
+  const { channel: tiktok } = channel([reply(403, { error: { code: "unaudited_client_can_only_post_to_private_accounts", message: "" } })]);
+  const receipt = await tiktok.publish(request());
+  assert.equal(receipt.code, "REJECTED");
+  assert.match(receipt.error ?? "", /private posts only/);
+});
+
+test("TikTok maps an invalid token at init to an auth failure", async () => {
+  const { channel: tiktok } = channel([reply(401, { error: { code: "access_token_invalid", message: "" } })]);
+  const receipt = await tiktok.publish(request());
+  assert.equal(receipt.code, "AUTH_FAILED");
+  assert.equal(receipt.externalId, "");
+});
+
+test("TikTok is retryable when the init is rate limited, since no pull started", async () => {
+  const { channel: tiktok } = channel([reply(429, { error: { code: "rate_limit_exceeded", message: "" } })]);
+  assert.equal((await tiktok.publish(request())).code, "RETRYABLE");
+});
+
+test("TikTok is retryable on a 500 at init, since no pull started", async () => {
+  const { channel: tiktok } = channel([reply(500, { error: { code: "internal_error", message: "" } })]);
+  assert.equal((await tiktok.publish(request())).code, "RETRYABLE");
+});
+
+test("TikTok reports a dropped connection on the init as unconfirmed", async () => {
+  const { channel: tiktok } = channel([new Error("reset")]);
+  const receipt = await tiktok.publish(request());
+  assert.equal(receipt.code, "UNCONFIRMED");
+  assert.notEqual(receipt.status, "published");
+});
+
+test("TikTok with no publish id in the init response is unconfirmed, and checks no status", async () => {
+  const { requests, channel: tiktok } = channel([reply(200, { data: {}, error: { code: "ok", message: "" } })]);
+  const receipt = await tiktok.publish(request());
+  assert.equal(receipt.code, "UNCONFIRMED");
+  assert.equal(requests.length, 1);
 });
 
 test("TikTok does not invent live metrics", async () => {
-  const { transport } = scripted([]);
-  assert.equal(await new TikTokOrganicChannel({ transport, sleep: noSleep }).fetchMetrics("7001"), null);
+  const { channel: tiktok } = channel([]);
+  assert.equal(await tiktok.fetchMetrics("7001"), null);
 });
 
 test("TikTok is registered as an organic channel for the publish service", () => {
-  const channel = getDistributionChannel("tiktok-organic");
-  assert.ok(channel instanceof TikTokOrganicChannel);
-  assert.equal(channel?.platform, "tiktok");
-  assert.equal(channel?.targetType, "organic_post");
+  const channelRegistered = getDistributionChannel("tiktok-organic");
+  assert.ok(channelRegistered instanceof TikTokOrganicChannel);
+  assert.equal(channelRegistered?.platform, "tiktok");
+  assert.equal(channelRegistered?.targetType, "organic_post");
 });

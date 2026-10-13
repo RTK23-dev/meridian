@@ -6,6 +6,7 @@ import { publishThrough } from "../providers/boundaries.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { isOrganicPlatform, resolveOrganicConnection, resolveOrganicConnections } from "./connection.ts";
 import type { OrganicPlatform } from "./types.ts";
+import { mediaDeliveryFor, signMediaLink, signedMediaUrl } from "../storage/media-link.ts";
 
 export async function requireBrandAccess(
   sql: Sql,
@@ -128,6 +129,13 @@ export async function listAvailableChannels(
       ? { connected: true, accountName: state.accountName, reason: undefined }
       : { connected: false, accountName: undefined, reason: state.reason };
   };
+  // A channel that publishes by URL (Instagram, TikTok) is connected only when its signed media link can be delivered. A missing
+  // secret, origin, or unverified TikTok domain shows not connected, with the reason.
+  const byUrlState = (platform: "instagram" | "tiktok", state: Pick<ChannelDefinition, "connected" | "accountName" | "reason">) => {
+    if (!state.connected) return state;
+    const delivery = mediaDeliveryFor(platform);
+    return delivery.ready ? state : { connected: false, accountName: undefined, reason: delivery.reason };
+  };
   const paidReason = (label: string) => `No ${label} account is connected for this workspace. Connect it on the Integrations screen.`;
 
   return [
@@ -179,7 +187,7 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "instagram",
       description: "Full-screen vertical short-form organic video (9:16) with captions and hashtag targeting.",
-      ...organicState("instagram"),
+      ...byUrlState("instagram", organicState("instagram")),
     },
     {
       id: "facebook-pages",
@@ -203,9 +211,25 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "tiktok",
       description: "Organic MP4 or MOV video posted to the brand's TikTok account. Posts stay private until TikTok approves the app for public posting.",
-      ...organicState("tiktok"),
+      ...byUrlState("tiktok", organicState("tiktok")),
     },
   ];
+}
+
+/** Records a channel that was not connected, or could not be given a link, as a not_connected receipt. It is never counted as published. */
+async function recordNotConnectedPost(
+  sql: Sql,
+  row: { organizationId: string; brandId: string; creativeId: string; assetId: string | null; platform: string; caption: string; title: string; error: string },
+): Promise<void> {
+  await sql`
+    insert into organic_posts (
+      id, organization_id, brand_id, creative_id, asset_id, platform, external_id, post_url, caption, title, aspect_ratio,
+      status, scheduled_for, published_at, error, surface
+    ) values (
+      ${globalThis.crypto.randomUUID()}, ${row.organizationId}, ${row.brandId}, ${row.creativeId}, ${row.assetId},
+      ${row.platform}, null, null, ${row.caption}, ${row.title}, '9:16', 'not_connected', null, null, ${row.error}, 'organic'
+    )
+  `;
 }
 
 /**
@@ -318,15 +342,16 @@ export async function publishCreativeToChannels(
     const check = organicChannel.checkConnection(connection);
     if (!check.connected) {
       const error = check.reason ?? "This channel is not connected. Nothing was sent.";
-      await sql`
-        insert into organic_posts (
-          id, organization_id, brand_id, creative_id, asset_id, platform, external_id, post_url, caption, title, aspect_ratio,
-          status, scheduled_for, published_at, error, surface
-        ) values (
-          ${globalThis.crypto.randomUUID()}, ${access.organizationId}, ${input.brandId}, ${input.creativeId}, ${asset?.id ?? null},
-          ${organicChannel.platform}, null, null, ${caption}, ${title}, '9:16', 'not_connected', null, null, ${error}, 'organic'
-        )
-      `;
+      await recordNotConnectedPost(sql, {
+        organizationId: access.organizationId,
+        brandId: input.brandId,
+        creativeId: input.creativeId,
+        assetId: asset?.id ?? null,
+        platform: organicChannel.platform,
+        caption,
+        title,
+        error,
+      });
       results.push({
         channelId,
         platform: organicChannel.platform,
@@ -348,6 +373,32 @@ export async function publishCreativeToChannels(
         error: "Missing video asset for creative. Stored artifact required for publishing.",
       });
       continue;
+    }
+
+    // A channel that publishes by URL gets a signed, short-lived link to this approved creative. The platform fetches the file through
+    // the link, so the link is the only thing sent. When no link can be delivered, nothing is sent and the receipt says why. The link is
+    // never stored or logged.
+    let mediaUrl: string | undefined;
+    let verifiedMediaDomains: string[] | undefined;
+    if (organicChannel.platform === "instagram" || organicChannel.platform === "tiktok") {
+      const delivery = mediaDeliveryFor(organicChannel.platform);
+      if (!delivery.ready) {
+        await recordNotConnectedPost(sql, {
+          organizationId: access.organizationId,
+          brandId: input.brandId,
+          creativeId: input.creativeId,
+          assetId: asset.id,
+          platform: organicChannel.platform,
+          caption,
+          title,
+          error: delivery.reason,
+        });
+        results.push({ channelId, platform: organicChannel.platform, type: "organic", surface: "organic", status: "not_connected", error: delivery.reason });
+        continue;
+      }
+      const signed = signMediaLink({ creativeId: input.creativeId, nowSeconds: Math.floor(Date.now() / 1000), secret: delivery.secret });
+      mediaUrl = signedMediaUrl({ origin: delivery.origin, creativeId: input.creativeId, expires: signed.expires, sig: signed.sig });
+      verifiedMediaDomains = delivery.verifiedDomains;
     }
 
     let mediaBytes: Uint8Array | null = null;
@@ -393,6 +444,8 @@ export async function publishCreativeToChannels(
         aspectRatio: "9:16",
         allowTestProvider: false,
         connection,
+        mediaUrl,
+        verifiedMediaDomains,
       });
 
       // A channel that reports NOT_CONNECTED sent nothing, for example Instagram without a public media URL. That is a not_connected

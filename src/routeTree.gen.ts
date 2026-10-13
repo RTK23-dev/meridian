@@ -31,6 +31,7 @@ import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$asset
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDriveCallbackRouteImport } from './routes/api/drive/callback'
 import { Route as ApiDriveConnectRouteImport } from './routes/api/drive/connect'
+import { Route as ApiMediaLinksCreativeIdRouteImport } from './routes/api/media-links/$creativeId'
 import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
 import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
 import { Route as AppBrandsBrandIdIndexRouteImport } from './routes/_app/brands/$brandId/index'
@@ -156,6 +157,11 @@ const ApiDriveConnectRoute = ApiDriveConnectRouteImport.update({
   path: '/api/drive/connect',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMediaLinksCreativeIdRoute = ApiMediaLinksCreativeIdRouteImport.update({
+  id: '/api/media-links/$creativeId',
+  path: '/api/media-links/$creativeId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOauthCallbackRoute = ApiOauthCallbackRouteImport.update({
   id: '/api/oauth/callback',
   path: '/api/oauth/callback',
@@ -260,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
+  '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
@@ -298,6 +305,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
+  '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
@@ -338,6 +346,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
+  '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/_app/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
@@ -378,6 +387,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/drive/callback'
     | '/api/drive/connect'
+    | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/brands/$brandId/accounts'
@@ -416,6 +426,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/drive/callback'
     | '/api/drive/connect'
+    | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/brands/$brandId/accounts'
@@ -455,6 +466,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/drive/callback'
     | '/api/drive/connect'
+    | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/_app/brands/$brandId/accounts'
@@ -481,6 +493,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDriveCallbackRoute: typeof ApiDriveCallbackRoute
   ApiDriveConnectRoute: typeof ApiDriveConnectRoute
+  ApiMediaLinksCreativeIdRoute: typeof ApiMediaLinksCreativeIdRoute
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
 }
@@ -639,6 +652,13 @@ declare module '@tanstack/react-router' {
       path: '/api/drive/connect'
       fullPath: '/api/drive/connect'
       preLoaderRoute: typeof ApiDriveConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/media-links/$creativeId': {
+      id: '/api/media-links/$creativeId'
+      path: '/api/media-links/$creativeId'
+      fullPath: '/api/media-links/$creativeId'
+      preLoaderRoute: typeof ApiMediaLinksCreativeIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/oauth/callback': {
@@ -820,6 +840,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDriveCallbackRoute: ApiDriveCallbackRoute,
   ApiDriveConnectRoute: ApiDriveConnectRoute,
+  ApiMediaLinksCreativeIdRoute: ApiMediaLinksCreativeIdRoute,
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,
 }

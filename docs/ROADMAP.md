@@ -4,7 +4,7 @@ What is still open in this release. Each item says whether it is built and verif
 
 ## Built, not verified against the live service
 
-- **Live posting through connected accounts.** Facebook Page posts, YouTube Shorts uploads and TikTok regular videos go out through a connected account. A receipt is stored only when the service returns an id, and TikTok reports published only on `PUBLISH_COMPLETE`. TikTok posts are private until TikTok approves the app. No request was made to any of these live APIs in this release. Tests use a scripted transport.
+- **Live posting through connected accounts.** Facebook Page posts, YouTube Shorts uploads, Instagram Reels and TikTok regular videos go out through a connected account. Instagram and TikTok fetch the video through a signed link to the approved creative, valid for 15 minutes (`/api/media-links/:creativeId`). A receipt is stored only when the platform returns an id: TikTok reports published only with the post id it returns, which a private post does not carry. TikTok posts are private until TikTok approves the app. No request was made to any of these live APIs in this release. Tests use a scripted transport.
 - **Google Drive connect from the app.** Workspace admins connect with OAuth (`drive.file`) from Settings, and can disconnect from the same panel. Not exercised against a live Google account.
 - **Live source calls.** YouTube, SerpAPI and Meta Ad Library have request code and tests against fixtures of their documented response shapes. No live key was used.
 - **Discovery runs in the interface.** The Market screen starts a run and lists recent runs with each source's state.
@@ -13,7 +13,8 @@ What is still open in this release. Each item says whether it is built and verif
 
 ## Open
 
-- **Instagram Reels posting.** Reports not connected. It needs a public https route for stored media and a token with `instagram_content_publish`.
+- **Instagram Reels token scope.** The connected-account check does not read `instagram_content_publish`, so a token without it fails at Meta, not in Meridian. The media route is built (see above).
+- **TikTok app audit.** Until TikTok audits the app, posts are private and TikTok returns no public post id, so this channel reports them as unconfirmed. Check the audit status before expecting a published receipt.
 - **Facebook Page token.** Meta sign-in requests only ads scopes, so the Page token has to be pasted.
 - **YouTube upload visibility.** Uploads default to public. Confirm that default before release.
 - **Drive folder visibility.** Under `drive.file`, a workspace connected by OAuth sees only folders the app created. A `MERIDIAN_DRIVE_FOLDER_ID` created elsewhere will refuse uploads from that token. Decide whether the app creates the folder at connect time.

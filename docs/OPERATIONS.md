@@ -43,7 +43,10 @@ form behind a public load balancer.
 ## Artifacts and exports
 
 Rendered media and export packages go to Google Drive when the server connects it. S3 is retired. A storage object row in Postgres records each
-one. The media route `/api/assets/:assetId` serves an artifact to a member of its workspace only.
+one. The media route `/api/assets/:assetId` serves an artifact to a member of its workspace only. `/api/media-links/:creativeId` serves one
+approved creative to Instagram and TikTok through a signed link that expires 15 minutes after it is made. It needs `MEDIA_LINK_SECRET` (32
+characters or more, never committed) and `APP_URL` (an https origin). For TikTok, the host must also be listed in
+`TIKTOK_VERIFIED_MEDIA_DOMAINS`, which TikTok has verified for the app.
 
 Where live posting is not available, the manual export package is the delivery path. Export the package from the Library or the Studio
 review, and post it by hand.
@@ -76,6 +79,8 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
   spend cap, or has reached it. The reason on the run says which.
 - **A paused Factory run does not start again.** The kill switch is on, which refuses **Start again** until it is cleared (Live tests, an admin). A spend cap that is still reached stops the run again at the same stage, with the same reason.
 - **A Factory run says learning waits for a measured outcome.** None of the run's creatives has a stored metric yet. The measurement pull runs every six hours after a launch, and a run with no published creative never gets one. Once a metric is stored, use **Check learning again** on the run. The button is offered only while the run is running at its learn step.
+- **An Instagram or TikTok post reports not connected with a link reason.** Set `MEDIA_LINK_SECRET` (32 characters or more), `APP_URL`
+  (https), and for TikTok the deployment's host in `TIKTOK_VERIFIED_MEDIA_DOMAINS`. Nothing was sent.
 - **A TikTok or YouTube post reports not connected.** The saved token does not grant the scope the publish needs (`video.publish` for
   TikTok, the upload scope for YouTube). Save a token that grants it on Connected accounts.
 

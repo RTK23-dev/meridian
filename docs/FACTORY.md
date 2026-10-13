@@ -163,6 +163,13 @@ launch summary and is never sent.
   `provider_objects` with surface `paid` and status `paused`. In the testing runtime the fixture engine in `publishing/engine.ts` answers.
   Outside it, a paid publish needs a stored Meta token and a targeting country. A Factory run does not carry a country yet, so the
   publish is refused with that reason. Nothing in the Factory sets an ad or a campaign to ACTIVE.
+- **Instagram and TikTok** publish by URL, not by upload. The service signs a link to the approved creative (`storage/media-link.ts`): an
+  HMAC-SHA256 over the creative id and an expiry, made with `MEDIA_LINK_SECRET`, valid for 15 minutes. The platform fetches the file through
+  `/api/media-links/:creativeId`, which checks the signature and the expiry before it reads anything, and serves only an approved or testing
+  creative. Instagram creates a Reels container from that link. TikTok pulls it with `PULL_FROM_URL`. Without a secret of at least 32
+  characters, a public https `APP_URL`, or (for TikTok) a host listed in `TIKTOK_VERIFIED_MEDIA_DOMAINS`, the channel shows not connected
+  with its reason and sends nothing. TikTok reports a post as published only with the post id it returns. An unaudited app can post only
+  privately, and TikTok returns no public post id for a private post, so its receipts are unconfirmed until the app is audited.
 - **Receipts:** `organic_posts` and `provider_objects` both carry a `surface` column (migration 0069). A failure is recorded as a
   receipt with no external id, so a retry can publish the creative again without overwriting a confirmed object.
 
@@ -266,8 +273,7 @@ What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
   the app that this change did not make.
 - The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
 - The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
-- Live Instagram and TikTok publishing is not connected, by the owner's decision. A live paid publish from a run needs a targeting country the
-  run does not carry.
+- A live paid publish from a run needs a targeting country the run does not carry.
 - Uploads are not connected to Gather.
 
 See [ROADMAP.md](ROADMAP.md).
