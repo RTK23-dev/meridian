@@ -10,7 +10,19 @@ import { isFactoryStage, LEARN_NOT_BUILT } from "./pipeline.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { stageDecision } from "./stage-decision.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
-import { recordedClaimsOf, templateFromDna, variantMatrix } from "./template.ts";
+import { recordedClaimsOf, templateFromDna } from "./template.ts";
+import {
+  brainEntriesOf,
+  controlAttributesOf,
+  creativePlanFor,
+  parseStoredPlan,
+  storedPlanOf,
+  variantsOf,
+  type PlanAttributes,
+  type PlanRun,
+} from "./plan.ts";
+import { conceptOf } from "./pick.ts";
+import { linesOf } from "./brain-facts.ts";
 import { buildAdTimeline } from "./timeline.ts";
 import { winnerScore } from "./winner-score.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
@@ -157,11 +169,16 @@ export async function executeFactoryJob(
   }
   // No stage below marks the run succeeded. The run finishes only when learn does its real work (see LEARN_NOT_BUILT).
   if (job.job_type === "factory.template") {
-    const made = await persistTemplates(sql, job.organization_id, job.brand_id, runId);
-    return `templates:${made}`;
+    const planned = await persistTemplates(sql, job.organization_id, job.brand_id, runId, {
+      formats: settings.formats,
+      automation: settings.automation,
+      intent: settings.intent,
+      capTotalCents: settings.caps.totalCents,
+    });
+    return `templates:${planned.templates};plans:${planned.plans};refused:${planned.refused.length}`;
   }
   if (job.job_type === "factory.produce") {
-    const made = await persistVariants(sql, job.organization_id, job.brand_id, runId);
+    const made = await persistVariants(sql, job.organization_id, job.brand_id, runId, settings.caps.maxVariants);
     return `variants:${made}`;
   }
   if (job.job_type === "factory.gate") {
@@ -478,59 +495,135 @@ async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string,
   return count;
 }
 
-async function persistTemplates(sql: Sql, organizationId: string, brandId: string, runId: string): Promise<number> {
-  const rows = await sql<{ research_ad_id: string; record: string }>`
-    select research_ad_id, record from creative_dna
-    where organization_id = ${organizationId} and brand_id = ${brandId}
-    order by created_at desc
-    limit 10
+/** The run's settings the plan reads. The plan takes its formats, automation, intent and spend cap from the run, and nothing else. */
+type PlanSettings = PlanRun;
+
+/**
+ * The storyboard and the CreativePlan of each pick of this run (NORTH_STAR section 5, plan). The storyboard is the framework of the
+ * pick's winning ad, read from its creative DNA. The plan needs the engine decision the ad was graded under, and the brand's product.
+ * A pick with neither gets a storyboard and no plan, and the reason is returned, so no variant is written for it.
+ */
+async function persistTemplates(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  runId: string,
+  settings: PlanSettings,
+): Promise<{ templates: number; plans: number; refused: string[] }> {
+  const picks = await sql<{
+    research_ad_id: string;
+    record: string;
+    winner_score: number | null;
+    jev_gate_record_id: string | null;
+    jev_reason: string;
+  }>`
+    select p.research_ad_id, d.record, t.winner_score, t.jev_gate_record_id, t.jev_reason
+    from factory_picks p
+    join creative_dna d on d.research_ad_id = p.research_ad_id and d.organization_id = p.organization_id
+      and d.brand_id = p.brand_id and d.schema_version = ${CREATIVE_DNA_VERSION}
+    left join ad_timelines t on t.research_ad_id = p.research_ad_id and t.organization_id = p.organization_id and t.brand_id = p.brand_id
+    where p.run_id = ${runId} and p.organization_id = ${organizationId} and p.brand_id = ${brandId}
+    order by p.score desc, p.id
   `;
-  let count = 0;
-  for (const row of rows) {
+  const brain = await loadFactoryBrain(sql, organizationId, brandId);
+  const product = await sql<{ name: string }>`
+    select p.name from products p
+    join brands b on b.id = p.brand_id
+    where p.brand_id = ${brandId} and b.organization_id = ${organizationId}
+    order by p.created_at asc, p.id asc
+    limit 1
+  `;
+  const productName = product[0]?.name ?? "";
+  const audience = linesOf(brain.values.targetCustomers)[0] ?? "";
+  const now = new Date().toISOString();
+  let templates = 0;
+  let plans = 0;
+  const refused: string[] = [];
+  for (const row of picks) {
     let dna: CreativeDna;
     try {
       dna = JSON.parse(row.record) as CreativeDna;
     } catch {
       continue;
     }
-    if (!dna?.adId) continue;
+    const concept = dna?.adId ? conceptOf(dna) : null;
+    if (!concept) continue;
     const template = templateFromDna(dna);
-    const id = `tpl:${runId}:${row.research_ad_id}`;
+    const templateId = `tpl:${runId}:${row.research_ad_id}`;
+    const attributes = controlAttributesOf(dna);
+    let plan = "";
+    if (!row.jev_gate_record_id) {
+      // No engine decision backs the item, so the plan has no lineage. The grade's own reason is recorded with the refusal.
+      refused.push(`${concept.label}: ${row.jev_reason || "no engine decision backs this ad"}`);
+    } else {
+      try {
+        const creativePlan = creativePlanFor({
+          templateId,
+          concept,
+          attributes,
+          decisionId: row.jev_gate_record_id,
+          researchAdId: row.research_ad_id,
+          winnerScore: Number(row.winner_score ?? 0),
+          productName,
+          audience,
+          run: settings,
+          now,
+        });
+        plan = storedPlanOf(attributes, creativePlan);
+        plans += 1;
+      } catch (error) {
+        refused.push(`${concept.label}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     await sql`
-      insert into factory_templates (id, organization_id, brand_id, source_ad_id, storyboard)
-      values (${id}, ${organizationId}, ${brandId}, ${row.research_ad_id}, ${JSON.stringify(template)})
-      on conflict (id) do update set storyboard = excluded.storyboard
+      insert into factory_templates (id, organization_id, brand_id, source_ad_id, storyboard, plan)
+      values (${templateId}, ${organizationId}, ${brandId}, ${row.research_ad_id}, ${JSON.stringify(template)}, ${plan})
+      on conflict (id) do update set storyboard = excluded.storyboard, plan = excluded.plan
     `;
-    count += 1;
+    templates += 1;
   }
-  return count;
+  return { templates, plans, refused };
 }
 
-async function persistVariants(sql: Sql, organizationId: string, brandId: string, runId: string): Promise<number> {
-  const templates = await sql<{ id: string }>`
-    select id from factory_templates
-    where organization_id = ${organizationId} and brand_id = ${brandId} and id like ${`tpl:${runId}:%`}
-    order by created_at desc
-    limit 5
+/**
+ * The variants of each planned pick (NORTH_STAR section 5, plan). A pick gets its control, and one variant for each entry the brain
+ * supplies, changing one attribute. Every row records the attribute it tests: "control" for the control. The run's variant cap bounds
+ * the rows written across all picks, and a pick the cap has no room for gets none.
+ */
+async function persistVariants(sql: Sql, organizationId: string, brandId: string, runId: string, maxVariants: number): Promise<number> {
+  const templates = await sql<{ id: string; plan: string }>`
+    select id, plan from factory_templates
+    where organization_id = ${organizationId} and brand_id = ${brandId} and id like ${`tpl:${runId}:%`} and plan <> ''
+    order by created_at asc, id asc
   `;
-  const axes = variantMatrix({
-    hooks: ["question", "pattern interrupt"],
-    ctas: ["shop", "learn"],
-    presenters: ["founder"],
-    lengthsMs: [9000, 15000],
-    max: 8,
-  });
+  const brain = await loadFactoryBrain(sql, organizationId, brandId);
+  const entries = brainEntriesOf(brain.values);
+  let budget = Math.max(0, maxVariants);
   let count = 0;
   for (const template of templates) {
-    for (const axis of axes) {
-      const id = `var:${template.id}:${axis.hook}:${axis.cta}:${axis.presenter}:${axis.lengthMs}`;
+    if (budget <= 0) break;
+    const stored = parseStoredPlan(template.plan);
+    if (!stored) continue;
+    const control: PlanAttributes = stored.attributes;
+    const rows: Array<{ attribute: string; attributes: PlanAttributes }> = [
+      { attribute: "control", attributes: control },
+      ...variantsOf(control, entries, budget - 1).map((variant) => ({ attribute: variant.attribute, attributes: variant.attributes })),
+    ].slice(0, budget);
+    for (const [index, row] of rows.entries()) {
+      const id = `var:${template.id}:${index}`;
       await sql`
-        insert into factory_variants (id, organization_id, brand_id, template_id, hook, cta, presenter, length_ms, gate_result)
-        values (${id.slice(0, 180)}, ${organizationId}, ${brandId}, ${template.id}, ${axis.hook}, ${axis.cta}, ${axis.presenter}, ${axis.lengthMs}, 'review')
+        insert into factory_variants (
+          id, organization_id, brand_id, template_id, hook, cta, presenter, length_ms, gate_result, tests_attribute, angle, format, proof
+        ) values (
+          ${id.slice(0, 180)}, ${organizationId}, ${brandId}, ${template.id}, ${row.attributes.hook}, ${row.attributes.cta},
+          ${row.attributes.presenter}, ${Math.round(row.attributes.lengthMs)}, 'review', ${row.attribute}, ${row.attributes.angle},
+          ${row.attributes.format}, ${row.attributes.proof}
+        )
         on conflict (id) do nothing
       `;
       count += 1;
     }
+    budget -= rows.length;
   }
   return count;
 }
