@@ -547,12 +547,12 @@ export async function syncTelemetryToLearning(
       await sql`
         insert into performance_observations (
           id, organization_id, brand_id, creative_id, impressions, clicks, conversions,
-          spend_cents, revenue_cents, reach, observed_on, source, created_by, platform
+          spend_cents, revenue_cents, reach, observed_on, source, created_by
         ) values (
           ${randomUUID()}, ${organizationId}, ${brandId}, ${r.creativeId},
           ${r.impressions ?? null}, ${r.clicks ?? null}, ${r.conversions ?? null},
           ${r.spendCents ?? null}, ${(r.revenueCents && r.revenueCents > 0) ? r.revenueCents : null}, ${r.reach ?? null},
-          ${r.recordedAt.slice(0, 10)}, ${r.platform}, 'telemetry.sync', ${r.platform ?? ""}
+          ${r.recordedAt.slice(0, 10)}, ${r.platform}, 'telemetry.sync'
         )
       `;
     }
