@@ -64,16 +64,20 @@ export type OrganicPublishReceipt = {
 
 export type ConnectionCheck = { connected: boolean; accountName?: string; reason?: string; code?: ReceiptCode };
 
+/**
+ * The metrics a platform reported for one post. A metric the platform did not report is null, never zero. The channels that
+ * have no live metric client return null for the whole object, so nothing is stored for them.
+ */
 export type OrganicTelemetryMetrics = {
-  views: number;
-  reach: number;
-  threeSecondViews?: number;
-  averageWatchTimeSeconds?: number;
-  completionRate?: number;
-  likes: number;
-  comments: number;
-  shares: number;
-  saves?: number;
+  views: number | null;
+  reach: number | null;
+  threeSecondViews: number | null;
+  averageWatchTimeSeconds: number | null;
+  completionRate: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
 };
 
 export interface DistributionChannel {
