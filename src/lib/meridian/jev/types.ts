@@ -208,25 +208,6 @@ export type JevDecisionResponse = {
   };
 };
 
-export type JevPolicyThresholds = {
-  autoApprove: number;
-  humanReview: number;
-  minConfidenceForAuto: number;
-};
-
-export type JevDecisionOutcome = "AUTO_APPROVE" | "HUMAN_REVIEW" | "REJECT";
-
-export type JevPolicyEvaluation = {
-  decision: JevDecisionOutcome;
-  reason: string;
-  policyVersion: string;
-  thresholds: JevPolicyThresholds;
-  supportingCount: number;
-  violationCount: number;
-  uncertainCount: number;
-  evidenceRefs: EvidenceRef[];
-};
-
 export interface JevClient {
   decide(request: JevDecisionRequest): Promise<JevDecisionResponse>;
 }
