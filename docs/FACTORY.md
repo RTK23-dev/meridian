@@ -136,11 +136,53 @@ graph stays `running`, and the run row says `learn:not-built`. No other stage ma
 wait for a person and leaves the run where the stop points put it. A run that waits at a stop is `awaiting_approval`, and a run the
 kill switch stops is `paused`.
 
+## Publish
+
+The launch stage sends each approved creative of the run down the paths its `intent` names (`factory/publish.ts`). A creative is
+approved when a person approved it, or the policy did, and its gate result is not `block`. An unapproved creative is counted in the
+launch summary and is never sent.
+
+- **Organic** (`organic`, `both`): each platform the run names goes through `distribution/service.ts`. A platform with no organic
+  channel is reported. A run with no platforms lists every organic platform, so each one shows its own state. A channel with no usable
+  connection records `not_connected` with its reason, and sends nothing. It is never counted as published. A post is recorded in
+  `organic_posts` with surface `organic`.
+- **Paid** (`ad`, `both`): the campaign, ad set, ad creative and ad are created with status PAUSED, and each is recorded in
+  `provider_objects` with surface `paid` and status `paused`. In the testing runtime the fixture engine in `publishing/engine.ts` answers.
+  Outside it, a paid publish needs a stored Meta token and a targeting country. A Factory run does not carry a country yet, so the
+  publish is refused with that reason. Nothing in the Factory sets an ad or a campaign to ACTIVE.
+- **Receipts:** `organic_posts` and `provider_objects` both carry a `surface` column (migration 0069). A failure is recorded as a
+  receipt with no external id, so a retry can publish the creative again without overwriting a confirmed object.
+
+The test stage records what a budget test would do, and it waits for a person in every mode. The audit log keeps the record. Nothing is
+switched on.
+
+The export package for a creative is its listing in Postgres (`distribution/export-package.ts`). It depends on no connection, so it is
+there for every creative. This build writes the listing only. It copies no files to Drive and no route serves it yet.
+
+## Measure
+
+The launch stage schedules `measurement.pull` for the run, every six hours, when it has a receipt to measure. The pull reads the run's
+published organic posts and its paused paid ads (`measurement/pull.ts`):
+
+- **Organic metrics** come from the channel's `fetchMetrics`. Every live channel returns null, so an organic pull with no fixture stores
+  nothing and reports that the metrics are not connected.
+- **Paid metrics** come from the workspace's stored token through the insights reader. Without a stored token, nothing is measured. The
+  test publisher has no insights source.
+
+Every metric row goes through `recordLinkedMetric` (`measurement/creative-linkage.ts`). The row is stored in
+`unified_performance_telemetry` with its creative id, its surface in `source_type`, and the external id of its receipt. A row with no
+creative id, no surface, or no receipt of that surface is refused. A paid metric is never written for an organic receipt, and the
+reverse. A metric the source did not report is null, never zero. A repeated pull of the same observation stores nothing twice.
+
+The Factory board shows each creative's receipts and its measured rows. A metric that was not reported reads "not reported".
+
 ## Not built yet
 
-Work-queue items 8, 9, 10 and 11 of NORTH_STAR section 8 are open, and item 6 covers images only. In short: produce does not yet
-materialize video or carousel; publish and measure both paths are not built; learning is not per surface; and the Factory screen does
-not show the run settings or the approve action. Uploads are not connected to Gather. See [ROADMAP.md](ROADMAP.md).
+Work-queue item 10 of NORTH_STAR section 8 (learning per surface) is open, and item 6 covers images only. In short: produce does not yet
+materialize video or carousel, so organic channels, which take video, refuse Factory images with their reason; learning is not per
+surface; the Factory screen does not show the run settings or the approve action; live Instagram and TikTok publishing is not connected
+by the owner's decision; and a live paid publish from a run needs a targeting country the run does not carry. Uploads are not connected
+to Gather. See [ROADMAP.md](ROADMAP.md).
 
 ## Waiting and stopping
 
