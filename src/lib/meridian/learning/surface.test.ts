@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ObservedCreative, OrganicObservationRow, PerformanceRow } from "../domain.ts";
 import { learnPatterns, surfaceOfMetric } from "./engine.ts";
-import { learnedWeightOf, learningScopeOf, type Concept, type LearnedRow } from "../factory/pick.ts";
+import { learnedWeightOf, learningScopesOf, type Concept, type LearnedRow, type LearningScope } from "../factory/pick.ts";
+
+/** The one scope of a run that makes creatives for a single surface. */
+function singleScopeOf(settings: { intent: "organic" | "ad"; platforms: string[] }): LearningScope {
+  const scopes = learningScopesOf(settings);
+  assert.equal(scopes.length, 1, "a run on one surface learns from one scope");
+  return scopes[0]!;
+}
 
 // Learning per surface (NORTH_STAR section 8, item 10). A pattern learned from organic outcomes is kept apart from one learned from
 // paid outcomes, and Pick applies each only to a run on the same surface.
@@ -122,8 +129,7 @@ const PAID_WIN: LearnedRow = {
 const ORGANIC_WIN: LearnedRow = { ...PAID_WIN, metric: "retention_3s", surface: "organic" };
 
 test("an organic run is weighted by the organic win, and a paid win does not move it", () => {
-  const scope = learningScopeOf({ intent: "organic", platforms: [] });
-  assert.ok(scope);
+  const scope = singleScopeOf({ intent: "organic", platforms: [] });
   const organic = learnedWeightOf(CURIOSITY, [ORGANIC_WIN], scope);
   assert.ok(organic.weight > 1, `the organic win raises an organic run to ${organic.weight}`);
   assert.ok(organic.notes.some((note) => /on organic/.test(note)));
@@ -134,25 +140,29 @@ test("an organic run is weighted by the organic win, and a paid win does not mov
 });
 
 test("a paid run is weighted by the paid win, and an organic win does not move it", () => {
-  const scope = learningScopeOf({ intent: "ad", platforms: [] });
-  assert.ok(scope);
+  const scope = singleScopeOf({ intent: "ad", platforms: [] });
   assert.ok(learnedWeightOf(CURIOSITY, [PAID_WIN], scope).weight > 1);
   assert.equal(learnedWeightOf(CURIOSITY, [ORGANIC_WIN], scope).weight, 1, "an organic pattern alone leaves a paid run at one");
 });
 
-test("a run with intent both has no surface, so no learned pattern moves it", () => {
-  assert.equal(learningScopeOf({ intent: "both", platforms: ["instagram"] }), null);
-  assert.equal(learnedWeightOf(CURIOSITY, [PAID_WIN, ORGANIC_WIN], null).weight, 1);
+test("a run with intent both has one scope per surface, and each scope reads only its own surface's patterns", () => {
+  const scopes = learningScopesOf({ intent: "both", platforms: ["instagram"] });
+  assert.deepEqual(scopes.map((scope) => scope.surface), ["organic", "paid"], "both surfaces are learned from");
+  const [organic, paid] = scopes;
+  assert.ok(organic && paid);
+  assert.ok(learnedWeightOf(CURIOSITY, [ORGANIC_WIN], organic).weight > 1, "an organic win moves the organic arm");
+  assert.equal(learnedWeightOf(CURIOSITY, [ORGANIC_WIN], paid).weight, 1, "an organic win never moves the paid arm");
+  assert.equal(learnedWeightOf(CURIOSITY, [PAID_WIN], organic).weight, 1, "a paid win never moves the organic arm");
+  assert.ok(learnedWeightOf(CURIOSITY, [PAID_WIN], paid).weight > 1, "a paid win moves the paid arm");
+  assert.ok(learnedWeightOf(CURIOSITY, [PAID_WIN, ORGANIC_WIN], paid).notes.every((note) => /on paid$/.test(note)), "the paid arm names only paid patterns");
 });
 
 test("a channel-specific pattern moves only a run that names its channel, and an all-channel pattern moves every run on its surface", () => {
   const tiktokWin: LearnedRow = { ...ORGANIC_WIN, channel: "tiktok" };
-  const allChannels = learningScopeOf({ intent: "organic", platforms: ["youtube"] });
-  assert.ok(allChannels);
+  const allChannels = singleScopeOf({ intent: "organic", platforms: ["youtube"] });
   assert.equal(learnedWeightOf(CURIOSITY, [tiktokWin], allChannels).weight, 1, "a tiktok pattern does not move a youtube run");
   assert.ok(learnedWeightOf(CURIOSITY, [ORGANIC_WIN], allChannels).weight > 1, "an all-channel pattern moves a youtube run");
 
-  const tiktokRun = learningScopeOf({ intent: "organic", platforms: ["tiktok"] });
-  assert.ok(tiktokRun);
+  const tiktokRun = singleScopeOf({ intent: "organic", platforms: ["tiktok"] });
   assert.ok(learnedWeightOf(CURIOSITY, [tiktokWin], tiktokRun).weight > 1, "a tiktok pattern moves a run that names tiktok");
 });
