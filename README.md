@@ -34,23 +34,31 @@ deploying. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 
-Requirements: Node.js 22. PostgreSQL 16 for anything beyond a local trial.
+Requirements: Node.js 22. Nothing else for a local trial. A real deployment uses PostgreSQL 16, or the Docker Compose stack in
+[docs/SETUP.md](docs/SETUP.md).
 
 ```bash
-npm run setup     # creates .env, generates the secrets, runs migrations if DATABASE_URL is set
-npm run dev       # http://127.0.0.1:8080
+npm run dev       # first run installs the dependencies and creates .env; then http://127.0.0.1:8080
 ```
 
-Create an account, a workspace and a brand, then complete the brand brain. Provider keys are saved in **Settings → General**.
+The first run creates `.env` from `.env.example`, generates the two secrets, and prints three steps:
+
+1. Open http://127.0.0.1:8080.
+2. Create an account. On the sign-in page, choose **Create an account instead**.
+3. Create a workspace and a brand, then complete the brand brain. Provider keys are saved in **Settings → General**.
+
+The local database is kept in `.data/pglite`, so accounts, workspaces and brands are still there after a restart. The queued jobs run
+inside `npm run dev` as well, so you do not need a second terminal. Set `DATABASE_URL` to use PostgreSQL instead.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `npm run setup` | One-time setup, safe to repeat |
-| `npm run dev` | Development server on port 8080 |
-| `npm run worker` | Runs queued jobs (needed in production) |
-| `npm run scheduler` | Runs periodic work (needed in production) |
+| `npm run dev` | Sets up on the first run, then runs the app on port 8080. Without `DATABASE_URL` it also runs the queued jobs |
+| `npm run setup` | Creates `.env` and generates the secrets, safe to repeat. Runs migrations when `DATABASE_URL` is set |
+| `npm run worker` | Runs queued jobs when `DATABASE_URL` is set (production) |
+| `npm run scheduler` | Runs periodic work when `DATABASE_URL` is set (production) |
+| `docker compose up --build` | The web app, worker, scheduler and PostgreSQL 16 (see [docs/SETUP.md](docs/SETUP.md)) |
 | `npm run db:migrate` | Applies migrations |
 | `npm test` | Unit and integration tests |
 | `npm run typecheck`, `npm run lint` | Type and lint checks |

@@ -8,6 +8,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
 // @ts-expect-error JS plugin alongside the TS vite config
 import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
+import { createLocalJobRunner, localJobsEnabled } from "./scripts/local-jobs.mjs";
 import { isMigrationFile } from "./scripts/migration-plan.mjs";
 
 /** The files `src/lib/db.ts` globs — same directory, same non-recursive scope. */
@@ -70,6 +71,37 @@ function pgliteBootstrapPlugin(): Plugin {
   };
 }
 
+/**
+ * Local trial only, dev server only: with DATABASE_URL unset, the embedded database is opened by this process, so
+ * `npm run worker` cannot reach it (PGlite is single-writer). This runs the same pass the worker runs (`tickSqlJobs`) against
+ * the web app's own database instance, through the dev server's module loader. A failed pass is logged and retried with a
+ * back-off, and never stops the dev server. The loop stops when the server closes.
+ */
+function localJobsPlugin(): Plugin {
+  return {
+    name: "app-builder:local-jobs",
+    apply: "serve",
+    configureServer(server) {
+      if (!localJobsEnabled(process.env)) return;
+      // Without migrations there is no jobs table, so there is nothing to run.
+      if (!hasGlobbedMigrations(server.config.root)) return;
+      const runner = createLocalJobRunner({
+        runTick: async () => {
+          const db = (await server.ssrLoadModule("/src/lib/db.ts")) as {
+            getSql: () => Promise<unknown>;
+          };
+          // Loaded on every pass, so an edit to the job code takes effect on the next pass.
+          const worker = (await server.ssrLoadModule("/src/lib/meridian/jobs/sql-worker.ts")) as {
+            tickSqlJobs: (sql: unknown) => Promise<{ claimed: number; stopped: boolean }>;
+          };
+          return worker.tickSqlJobs(await db.getSql());
+        },
+      });
+      server.httpServer?.once("close", () => runner.stop());
+      runner.start();
+    },
+  };
+}
 
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
@@ -151,6 +183,7 @@ export default defineConfig(({ command, isPreview }) => ({
   },
   plugins: [
     pgliteBootstrapPlugin(),
+    localJobsPlugin(),
     // Dev-only /__app-env, read by scripts/check-auth-invariant.mjs.
     appEnvPlugin(),
     tailwindcss(),

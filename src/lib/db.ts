@@ -1,5 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
-import { resolveDbSource, type DbSource } from "./db-source.ts";
+import { localDataDirFrom, resolveDbSource, type DbSource } from "./db-source.ts";
 import { createPoolSql, toSql, transactionSql } from "./meridian/learning/pool-sql.ts";
 
 export { createPoolSql };
@@ -101,13 +101,25 @@ function createNeonSql(): Promise<Sql> {
 
 async function createPgliteSql(): Promise<Sql> {
   // Embedded Postgres, imported on demand so it never loads on the Neon path.
-  // One in-memory instance per process, shared across HMR module instances, so
-  // data survives source edits (it resets on dev-server restart).
+  // One instance per process, shared across HMR module instances, so data survives
+  // source edits. It is in memory, unless MERIDIAN_LOCAL_DATA_DIR names a folder: then
+  // it is kept on disk and survives a restart (npm run dev sets the folder when DATABASE_URL is unset).
   // migrations/*.sql are applied again when this module reloads.
   globalRef.__pgliteInstance__ ??= (async () => {
     const { PGlite } = await import("@electric-sql/pglite");
     const { vector } = await import("@electric-sql/pglite-pgvector");
+    const dataDir = localDataDirFrom({
+      MERIDIAN_LOCAL_DATA_DIR: typeof process !== "undefined" ? process.env.MERIDIAN_LOCAL_DATA_DIR : undefined,
+    });
+    if (dataDir) {
+      // PGlite's Node filesystem creates only the last folder, so the whole path is made here first.
+      const { mkdirSync } = await import("node:fs");
+      mkdirSync(dataDir, { recursive: true });
+    }
+    // The options object carries dataDir. When PGlite's first argument is not a string, it takes the options from that
+    // argument, so `new PGlite(undefined, options)` would drop the pgvector extension the migrations need.
     const pg = new PGlite({
+      dataDir,
       extensions: {
         vector,
       },
@@ -232,8 +244,9 @@ export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite
 /**
  * Finish DB bootstrap before the server handles traffic.
  *
- * - **PGLite** (preview / no `DATABASE_URL`): open the in-memory DB and apply
- *   `migrations/*.sql`. Idempotent — concurrent callers share one promise.
+ * - **PGLite** (preview / no `DATABASE_URL`): open the embedded DB (in memory, or on disk
+ *   under `MERIDIAN_LOCAL_DATA_DIR`) and apply `migrations/*.sql`. Idempotent — concurrent
+ *   callers share one promise.
  * - **Neon**: no-op (pool is created lazily on first query).
  *
  * Vite `configureServer` awaits this at dev startup; production imports of this

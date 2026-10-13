@@ -4,7 +4,9 @@ import { createPoolSql } from "../src/lib/meridian/learning/pool-sql.ts";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) {
-  console.error("[worker] DATABASE_URL is required. This process does not attach to the web server's memory.");
+  console.error(
+    "[worker] DATABASE_URL is required. This process cannot open the web server's embedded database. Without DATABASE_URL, npm run dev runs the queued jobs itself.",
+  );
   process.exit(1);
 }
 

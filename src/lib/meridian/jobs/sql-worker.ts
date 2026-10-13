@@ -54,7 +54,10 @@ export function resetWorkerStop(): void {
   stopping = false;
 }
 
-/** One pass over due jobs. The web process must not call this. */
+/**
+ * One pass over due jobs. The web process must not call this, except the local trial's dev server: with DATABASE_URL unset
+ * it opens the embedded database itself, so no worker process can reach it (vite.config.ts, localJobsPlugin).
+ */
 export async function tickSqlJobs(sql: Sql): Promise<{ claimed: number; stopped: boolean }> {
   if (stopping) return { claimed: 0, stopped: true };
   const expired = await sql<ExecutableJob & { status: string }>`
