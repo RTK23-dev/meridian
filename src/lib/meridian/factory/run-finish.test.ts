@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { LEARN_NOT_BUILT } from "./pipeline.ts";
 import { executeFactoryJob } from "./worker.ts";
-import { factoryJob, factoryRunRow, FACTORY_TEST_RUN, makeFactoryTestSql, seedFactoryRun } from "../testing/factory-fixtures.ts";
+import {
+  factoryJob,
+  factoryRunRow,
+  FACTORY_TEST_RUN,
+  FIXTURE_BRAND_WEBSITE,
+  fixtureGatherDeps,
+  makeFactoryTestSql,
+  seedFactoryRun,
+  seedJobRow,
+  withFixtureFetch,
+} from "../testing/factory-fixtures.ts";
 
 const FULL_WITH_CAP = {
   automation: "full",
@@ -11,7 +21,7 @@ const FULL_WITH_CAP = {
 
 const MANUAL = { automation: "manual" };
 
-/** Every stage after discover, in graph order. Discover needs the sourcing fixtures and has its own tests. */
+/** Every stage after discover, in graph order. */
 const STAGES_AFTER_DISCOVER = [
   "factory.ingest",
   "factory.decode",
@@ -29,7 +39,13 @@ const STAGES_AFTER_DISCOVER = [
 
 test("a full run that reaches every stage is never marked succeeded: learning is not built, so the run stays running with the reason", async () => {
   const sql = await makeFactoryTestSql();
-  await seedFactoryRun(sql, { settings: FULL_WITH_CAP, level: 3 });
+  await seedFactoryRun(sql, { settings: FULL_WITH_CAP, level: 3, website: FIXTURE_BRAND_WEBSITE, country: "us" });
+  await seedJobRow(sql, "job-discover-finish", "factory.discover");
+
+  await withFixtureFetch(() =>
+    executeFactoryJob(sql, factoryJob("factory.discover", "job-discover-finish"), { runId: FACTORY_TEST_RUN }, fixtureGatherDeps({ metaToken: null })),
+  );
+  assert.notEqual((await factoryRunRow(sql)).status, "succeeded", "gathering does not finish the run");
 
   for (const stage of STAGES_AFTER_DISCOVER) {
     await executeFactoryJob(sql, factoryJob(stage), { runId: FACTORY_TEST_RUN });

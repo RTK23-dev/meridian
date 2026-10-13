@@ -1,6 +1,6 @@
 import type { Sql } from "../learning/store.ts";
-import { sourceKeyFor } from "../sources/credentials.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
+import { defaultGatherDeps, gatherForRun, gatheredSummary, type GatherDeps } from "./gather.ts";
 import { CREATIVE_DNA_VERSION, dnaFromTranscript, type AdFormat, type CreativeDna } from "./creative-dna.ts";
 import { decodeVideoDna } from "./decode.ts";
 import type { ResearchSegment } from "../research/schema.ts";
@@ -27,13 +27,22 @@ function parseList(value: string): string[] {
   }
 }
 
-export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: Record<string, unknown>): Promise<string> {
+/**
+ * Runs one Factory stage. `deps` are the sourcing seams the discover stage uses; production passes nothing and gets the live
+ * sources, and a test passes fixtures.
+ */
+export async function executeFactoryJob(
+  sql: Sql,
+  job: ExecutableJob,
+  payload: Record<string, unknown>,
+  deps: GatherDeps = defaultGatherDeps(),
+): Promise<string> {
   if (!isFactoryStage(job.job_type)) throw new Error(`No factory handler for ${job.job_type}.`);
   if (!job.brand_id) throw new Error("Factory jobs need a brand.");
   const runId = text(payload.runId);
   if (!runId) throw new Error("Factory jobs need a run id.");
-  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string }>`
-    select id, status, niche, level, settings from factory_runs
+  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string; created_by: string }>`
+    select id, status, niche, level, settings, created_by from factory_runs
     where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
     limit 1
   `;
@@ -70,8 +79,21 @@ export async function executeFactoryJob(sql: Sql, job: ExecutableJob, payload: R
   `;
 
   if (job.job_type === "factory.discover") {
-    const metaKey = await sourceKeyFor("meta_ad_library", job.organization_id);
-    return metaKey.secret ? "sources:meta_ad_library" : "NOT_CONNECTED:meta_ad_library";
+    // Every source records its own state on the run. A source that is not connected or fails does not stop the run.
+    const gathered = await gatherForRun(
+      sql,
+      {
+        organizationId: job.organization_id,
+        brandId: job.brand_id,
+        runId,
+        jobId: job.id,
+        createdBy: owned[0].created_by,
+        niche: owned[0].niche,
+        platforms: settings.platforms,
+      },
+      deps,
+    );
+    return gatheredSummary(gathered);
   }
   if (job.job_type === "factory.ingest") {
     const allowed = snapshotMediaAllowed();
