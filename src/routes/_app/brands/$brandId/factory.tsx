@@ -14,6 +14,7 @@ import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQu
 import { approveFactoryStage, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian/factory/approval";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
+import { HeldReservationsPanel } from "@/components/held-reservations-panel";
 import { FACTORY_GRAPH } from "@/lib/meridian/factory/pipeline";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { qk } from "@/lib/query/keys";
@@ -334,6 +335,14 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 {board.killSwitch.brand ? "Clear brand kill switch" : "Engage brand kill switch"}
               </Button>
             ) : null}
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-section font-semibold">Held budget</h2>
+            <p className="text-muted">
+              A provider call whose outcome is unknown keeps its reserved budget held. Nothing releases it automatically, not even when its submission expires. An admin releases it here.
+            </p>
+            {hasRole(board.role, "admin") ? <HeldReservationsPanel brandId={brandId} /> : <p className="text-sm text-muted">Only an admin can see and release held budget.</p>}
           </section>
 
           <section className="space-y-4">
