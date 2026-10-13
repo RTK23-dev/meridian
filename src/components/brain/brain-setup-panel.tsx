@@ -27,7 +27,7 @@ export function BrainSetupPanel({ steps, requiredFilled, requiredTotal, filled, 
       <CompletenessRing filled={requiredFilled} total={requiredTotal} />
       <div className="min-w-0 flex-1 space-y-1">
         <p className="eyebrow">Set up the brain</p>
-        <h2 id="brain-setup-title" className="font-display text-2xl">
+        <h2 id="brain-setup-title" className="text-section font-semibold">
           {complete ? "The required fields are done" : `${requiredTotal - requiredFilled} of ${requiredTotal} required fields to go`}
         </h2>
         <p className="text-sm text-fg-muted">
@@ -36,14 +36,14 @@ export function BrainSetupPanel({ steps, requiredFilled, requiredTotal, filled, 
       </div>
     </div>
 
-    <ol className="grid gap-2 sm:grid-cols-2">
+    <ol className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
       {steps.map((step, index) => <li key={step.key}>
         <a
           href={`#${step.anchor}`}
           aria-current={step.state === "current" ? "step" : undefined}
           className={cn(
-            "flex min-h-11 items-center gap-3 rounded-md border px-3 py-2 text-sm text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-            step.state === "current" ? "border-accent bg-accent-soft" : "border-border bg-surface",
+            "flex h-full min-h-11 items-center gap-3 px-3 py-3 text-sm text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            step.state === "current" ? "bg-surface-2" : "bg-surface",
           )}
         >
           <span aria-hidden="true" className={cn(
@@ -54,7 +54,6 @@ export function BrainSetupPanel({ steps, requiredFilled, requiredTotal, filled, 
             <span className="block break-words font-semibold">{step.label}</span>
             <span className="block text-xs text-fg-muted">{BRAIN_SECTION_LABELS[step.section]}</span>
           </span>
-          {/* The accent is 4.3:1 on the accent-soft row, below the 4.5:1 minimum, so the current label uses the foreground colour. */}
           <span className={cn("shrink-0 text-xs font-semibold", step.state === "current" ? "text-fg" : "text-fg-muted")}>{STATE_LABEL[step.state]}</span>
         </a>
       </li>)}

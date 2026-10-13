@@ -204,7 +204,7 @@ function MarketPage({ brandId }: { brandId: string }) {
       <UnsavedChangesGuard dirty={marketFormsDirty} />
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Market</p>
-        <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">What has actually been seen</h1>
+        <h1 className="page-title">What has actually been seen</h1>
         <p className="text-muted">
           Collect bounded public Meta video-ad records, preserve source and transcript evidence, and let JEV Research identify recurring structures. Missing media stays unavailable; no observations or outcomes are invented.
         </p>
@@ -213,7 +213,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         {market.adapters.map((adapter) => (
           <li key={adapter.id} className="rounded-lg border border-line bg-panel p-4">
             <p className="eyebrow">{adapter.status}</p>
-            <h2 className="mt-2 font-display text-xl">{adapter.label}</h2>
+            <h2 className="mt-2 text-xl">{adapter.label}</h2>
             <p className="mt-2 text-sm text-muted">{adapter.note}</p>
             {adapter.connectionError ? <p className="mt-2 text-xs text-muted [overflow-wrap:anywhere]">{adapter.connectionError}</p> : null}
           </li>
@@ -227,7 +227,7 @@ function MarketPage({ brandId }: { brandId: string }) {
       <Card id="market-discovery">
         <div className="max-w-3xl">
           <p className="eyebrow">Discovery</p>
-          <h2 className="mt-2 font-display text-2xl">Find public pages and posts</h2>
+          <h2 className="mt-2 text-2xl">Find public pages and posts</h2>
           <p className="mt-2 text-sm text-muted">A public page is read as untrusted text and stored as evidence. A search phrase is searched only by a keyed source with a key saved for this workspace. A run where no source ran is reported as blocked, not completed.</p>
         </div>
         <div className="mt-4">
@@ -239,14 +239,14 @@ function MarketPage({ brandId }: { brandId: string }) {
           />
         </div>
         <div className="mt-6">
-          <h3 className="font-display text-xl">Recent discovery runs</h3>
+          <h3 className="text-xl">Recent discovery runs</h3>
           <div className="mt-3"><DiscoveryRunList runs={market.discoveryRuns} /></div>
         </div>
       </Card>
       <Card>
         <div className="max-w-3xl">
           <p className="eyebrow">JEV Research</p>
-          <h2 className="mt-2 font-display text-2xl">Collect external video-ad evidence</h2>
+          <h2 className="mt-2 text-2xl">Collect external video-ad evidence</h2>
           <p className="mt-2 text-sm text-muted">Meta Ad Library collection is capped at 100 ads and 100 MB of stored source video per run. Each video is capped at 24 MB. Media, transcript and analysis each retain their own status. Ads without a public downloadable video are not analyzed.</p>
         </div>
         {canEdit ? (
@@ -269,13 +269,13 @@ function MarketPage({ brandId }: { brandId: string }) {
           />
         </div>
         <div className="mt-6">
-          <h3 className="font-display text-xl">Recurring patterns</h3>
+          <h3 className="text-xl">Recurring patterns</h3>
           <p className="mt-1 text-sm text-muted">Counts describe the collected corpus, not ad effectiveness or causation.</p>
           {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="rounded border border-line p-3"><p className="eyebrow">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No repeated, confidence-rated ad patterns are stored.</p>}
         </div>
       </Card>
       <Card id="market-analyzed">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-2xl">Analyzed ads</h2><p className="text-sm text-muted">Showing saved source, media, transcript, and analysis states.</p></div><div role="group" className="flex gap-2" aria-label="Research display mode"><Button type="button" variant={researchView === "gallery" ? "primary" : "secondary"} aria-pressed={researchView === "gallery"} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant={researchView === "table" ? "primary" : "secondary"} aria-pressed={researchView === "table"} onClick={() => setResearchView("table")}>Table</Button></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-2xl">Analyzed ads</h2><p className="text-sm text-muted">Showing saved source, media, transcript, and analysis states.</p></div><div role="group" className="flex gap-2" aria-label="Research display mode"><Button type="button" variant={researchView === "gallery" ? "primary" : "secondary"} aria-pressed={researchView === "gallery"} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant={researchView === "table" ? "primary" : "secondary"} aria-pressed={researchView === "table"} onClick={() => setResearchView("table")}>Table</Button></div></div>
         <div className="mt-4">
           <ResearchFilterBar
             filters={researchFilters.filters}
@@ -291,7 +291,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         <ResearchDetailSheet ad={selectedAd} onOpenChange={(open) => { if (!open) setSelectedAdId(null); }} />
       </Card>
       <Card id="market-competitors">
-        <h2 className="font-display text-2xl">Competitors</h2>
+        <h2 className="text-2xl">Competitors</h2>
         {market.competitors.filter((item) => item.status === "confirmed").length === 0 ? (
           <p className="mt-3 text-muted">No competitors yet. Add one you actually compete with.</p>
         ) : (
@@ -349,7 +349,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         ) : null}
       </Card>
       <Card id="market-observed">
-        <h2 className="font-display text-2xl">Observed creatives</h2>
+        <h2 className="text-2xl">Observed creatives</h2>
         <p className="mt-2 text-sm text-muted">These rows are the only competitor evidence the ranker will use.</p>
         {market.observations.length === 0 ? <p className="mt-3 text-muted">No observations stored.</p> : (
           <ul className="mt-4 space-y-3">
@@ -411,7 +411,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         ) : null}
       </Card>
       <Card id="market-public-page">
-        <h2 className="font-display text-2xl">Public page</h2>
+        <h2 className="text-2xl">Public page</h2>
         <p className="mt-2 text-sm text-muted">The text is stored as untrusted data. It does not change the brand brain unless you accept a suggestion.</p>
         {canEdit ? (
           <form
@@ -449,7 +449,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         </ul>
         {market.suggestions.length > 0 ? (
           <div className="mt-6 space-y-3">
-            <h3 className="font-display text-xl">Suggestions waiting</h3>
+            <h3 className="text-xl">Suggestions waiting</h3>
             {market.suggestions.map((item) => (
               <div key={item.id} className="rounded-md border border-line p-3">
                 <p className="eyebrow">{item.field}</p>

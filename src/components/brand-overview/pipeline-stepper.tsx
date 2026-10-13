@@ -29,7 +29,7 @@ export function PipelineStepper({ brandId, stages }: { brandId: string; stages: 
         aria-valuetext={`${done} of ${stages.length} stages done`}
         className="h-1.5 overflow-hidden rounded-full bg-border"
       >
-        <div className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-fg transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
       </div>
       <ol className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {stages.map((stage, index) => {
@@ -42,7 +42,7 @@ export function PipelineStepper({ brandId, stages }: { brandId: string; stages: 
               <Link
                 to={stage.to}
                 params={{ brandId }}
-                className="flex h-full min-h-11 flex-col gap-2 rounded-lg border border-border bg-surface p-3 transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex h-full min-h-11 flex-col gap-2 rounded-lg border border-border bg-surface p-3 transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="text-xs text-fg-muted">{index + 1}</span>

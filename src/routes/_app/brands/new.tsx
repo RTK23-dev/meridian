@@ -63,7 +63,7 @@ function NewBrand() {
       >
         <div className="space-y-2">
           <p className="eyebrow">New brand</p>
-          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Start with what you know</h1>
+          <h1 className="page-title">Start with what you know</h1>
           <p className="text-fg-muted">
             Two things are needed: the brand name and what you sell. Everything else can wait for the brand brain.
             A website is kept as a reference. Nothing is scraped from it here.

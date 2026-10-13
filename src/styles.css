@@ -7,20 +7,23 @@
 
 @theme {
   --font-sans: "Inter Variable", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces Variable", Georgia, serif;
+  /* Headings and big numbers use the UI sans. Fraunces is kept for the wordmark only. */
+  --font-display: var(--font-sans);
+  --font-wordmark: "Fraunces Variable", Georgia, serif;
   --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, monospace;
 
-  /* Semantic color tokens. Light values here; .dark below overrides each one. */
-  --color-bg: #f6f4ee;
+  /* One neutral surface scale for light and dark. Light values here; the dark block below overrides each one. */
+  --color-bg: #f5f5f5;
   --color-surface: #ffffff;
-  --color-surface-2: #faf8f3;
-  --color-border: #e4ded1;
-  --color-border-strong: #8f8674;
-  --color-fg: #14170f;
-  --color-fg-muted: #5f5a4e;
+  --color-surface-2: #efefef;
+  --color-border: #e2e2e2;
+  --color-border-strong: #8c8c8c;
+  --color-fg: #171717;
+  --color-fg-muted: #5c5c5c;
+  /* The one accent. It is used only for the primary action and the active navigation item. */
   --color-accent: #8f6232;
   --color-accent-fg: #ffffff;
-  --color-accent-soft: #f1e6d4;
+  --color-accent-soft: #f4ece1;
   /* Text and border colour for the legacy brass name. Darker than the accent so small text passes 4.5:1 on the panels. */
   --color-brass-text: #7a5529;
   --color-success: #2f6b3f;
@@ -32,22 +35,22 @@
   --color-info: #2a5b87;
   --color-info-soft: #e1ecf6;
 
-  /* Type scale. Sans is the default. The display serif is for page titles and big numbers. */
+  /* Type scale. Body is 15px. Section headings are 18px, page titles 24px on phones and 28px from sm. */
   --text-eyebrow: 0.75rem;
   --text-eyebrow--line-height: 1rem;
-  --text-section: 1.25rem;
-  --text-section--line-height: 1.75rem;
-  --text-title: 2.25rem;
-  --text-title--line-height: 2.5rem;
+  --text-section: 1.125rem;
+  --text-section--line-height: 1.5rem;
+  --text-title: 1.5rem;
+  --text-title--line-height: 2rem;
 
-  /* Shape and elevation. */
+  /* Shape and elevation. Panels rely on their border; shadows only mark floating layers. */
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --shadow-sm: 0 1px 2px rgb(20 23 15 / 0.06);
-  --shadow-md: 0 4px 16px rgb(20 23 15 / 0.08);
-  --shadow-lg: 0 12px 32px rgb(20 23 15 / 0.14);
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.14);
 }
 
 /* Legacy names kept while older screens migrate. Inline, so each element
@@ -61,16 +64,16 @@
 }
 
 .dark {
-  --color-bg: #0f110d;
-  --color-surface: #171a14;
-  --color-surface-2: #1d2118;
-  --color-border: #2b3025;
-  --color-border-strong: #75806b;
-  --color-fg: #f0ede4;
-  --color-fg-muted: #a9a496;
+  --color-bg: #0f0f0f;
+  --color-surface: #171717;
+  --color-surface-2: #1f1f1f;
+  --color-border: #2e2e2e;
+  --color-border-strong: #7d7d7d;
+  --color-fg: #f2f2f2;
+  --color-fg-muted: #a8a8a8;
   --color-accent: #d6a064;
   --color-accent-fg: #1a1208;
-  --color-accent-soft: #2e2415;
+  --color-accent-soft: #2b2116;
   --color-brass-text: #d6a064;
   --color-success: #6fbf86;
   --color-success-soft: #14261a;
@@ -81,7 +84,7 @@
   --color-info: #7fb2e0;
   --color-info-soft: #14212d;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-md: 0 4px 16px rgb(0 0 0 / 0.45);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
 }
 
@@ -95,15 +98,6 @@
     font-size: 15px;
     line-height: 1.6;
   }
-  /* The warm light behind the page is its own layer, so text contrast is measured against the plain page background. */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background: radial-gradient(1100px 520px at 12% -12%, color-mix(in srgb, var(--color-accent-soft) 85%, transparent), transparent 70%);
-  }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
   /* One focus ring for every theme: 2px, 2px offset. */
   :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
@@ -113,8 +107,8 @@
   }
   .skip-link:focus { transform: none; }
   img, svg, video { max-width: 100%; height: auto; }
-  /* Serif for page titles (h1) and anything that opts in with .font-display. Section headings use sans. */
-  h1, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
+  /* Headings use the UI sans. The .font-display opt-in maps to the same sans, so no heading is serif. Size and weight come from the classes. */
+  h1, .font-display { font-family: var(--font-display); letter-spacing: -0.01em; }
   /* Headings break onto balanced lines, so a two-line title does not leave one word on its own. */
   h1 { text-wrap: balance; }
   h2, h3 { text-wrap: balance; }
@@ -135,13 +129,30 @@
     color: var(--color-fg-muted);
   }
 
-  /* The card every screen uses: a soft shadow on the surface, a large radius, and room inside. One definition, so the screens match. */
+  /* The one page title. Every screen's h1 uses this class (PageHeader does too): 24px on phones, 28px from the sm breakpoint. */
+  .page-title {
+    font-size: var(--text-title);
+    line-height: var(--text-title--line-height);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--color-fg);
+  }
+  @media (min-width: 40rem) {
+    .page-title { font-size: 1.75rem; line-height: 2.25rem; }
+  }
+
+  /* The wordmark is the only place Fraunces is used. */
+  .font-wordmark { font-family: var(--font-wordmark); letter-spacing: -0.02em; }
+
+  /* The card every screen uses: a hairline border on the surface and room inside. No shadow, so nested blocks do not stack. */
   .panel {
     border-radius: var(--radius-xl);
     border: 1px solid var(--color-border);
     background: var(--color-surface);
-    padding: 1.5rem;
-    box-shadow: var(--shadow-sm);
+    padding: 1.25rem;
+  }
+  @media (min-width: 40rem) {
+    .panel { padding: 1.5rem; }
   }
 
   /* On touch screens a small control (a 24px switch, checkbox or thumb) gets a 44 by 44 px hit area. The pseudo-element
@@ -186,18 +197,18 @@
    dark block below (later in the file) wins in dark mode. The pairs still meet the targets in styles.contrast.test.ts. */
 @media (prefers-contrast: more) {
   :root:not(.dark) {
-    --color-border: #7a7364;
-    --color-border-strong: #5e5847;
-    --color-fg: #050604;
-    --color-fg-muted: #47433a;
+    --color-border: #7a7a7a;
+    --color-border-strong: #5e5e5e;
+    --color-fg: #050505;
+    --color-fg-muted: #474747;
     --color-accent: #6b4a22;
     --color-brass-text: #5e4220;
   }
   .dark {
-    --color-border: #6b7462;
-    --color-border-strong: #b3bca8;
-    --color-fg: #fdfcf8;
-    --color-fg-muted: #d8d3c4;
+    --color-border: #6b6b6b;
+    --color-border-strong: #b3b3b3;
+    --color-fg: #fdfdfd;
+    --color-fg-muted: #d9d9d9;
     --color-accent: #f0bf85;
     --color-brass-text: #f0bf85;
     --color-accent-fg: #1a1208;

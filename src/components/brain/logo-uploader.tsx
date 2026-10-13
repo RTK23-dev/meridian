@@ -105,10 +105,10 @@ export function LogoUploader({ brandId, canEdit }: { brandId: string; canEdit: b
         {problem?.raw ? <TechnicalDetails>{problem.raw}</TechnicalDetails> : null}
         {selected ? (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" disabled={uploadLogoMutation.isPending} onClick={() => void save()}>
+            <Button type="button" variant="secondary" disabled={uploadLogoMutation.isPending} onClick={() => void save()}>
               {uploadLogoMutation.isPending ? "Saving logo…" : "Save logo"}
             </Button>
-            <Button type="button" variant="secondary" disabled={uploadLogoMutation.isPending} onClick={clearSelection}>Cancel</Button>
+            <Button type="button" variant="quiet" disabled={uploadLogoMutation.isPending} onClick={clearSelection}>Cancel</Button>
           </div>
         ) : null}
       </div>

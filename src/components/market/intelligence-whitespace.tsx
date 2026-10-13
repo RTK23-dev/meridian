@@ -62,7 +62,7 @@ export function WhitespaceRanking({ items, brandId, canEdit, pendingIds, onStatu
               <Badge variant="neutral" className="capitalize">{opportunity.category || "uncategorised"}</Badge>
               <Badge variant={presentation.variant}><StatusIcon aria-hidden="true" className="size-3.5" />{presentation.label}</Badge>
             </div>
-            <h3 className="font-display text-lg capitalize">{opportunity.unsaturatedAngle.replace(/_/g, " ")}</h3>
+            <h3 className="text-lg capitalize">{opportunity.unsaturatedAngle.replace(/_/g, " ")}</h3>
           </div>
           <Button size="sm" variant="primary" className="h-9 text-xs" asChild>
             <Link to="/brands/$brandId/studio" params={{ brandId }}>Create brief <ArrowUpRight aria-hidden="true" className="ml-1 size-3.5" /></Link>

@@ -58,7 +58,7 @@ export function VariantGallery({ variants, canEdit, reviewBusyIds, publishBusyId
   return (
     <section ref={sectionRef} aria-labelledby="studio-variants-heading" className="space-y-4" onKeyDown={onKeyDown}>
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <h2 id="studio-variants-heading" className="font-display text-2xl">Variants</h2>
+        <h2 id="studio-variants-heading" className="text-section font-semibold">Variants</h2>
         {variants.length > 0 ? (
           <p className="text-sm text-fg-muted">
             With a variant focused: <Kbd>A</Kbd> opens approve · <Kbd>R</Kbd> opens reject · <Kbd>V</Kbd> opens revision request · <Kbd>←</Kbd> <Kbd>→</Kbd> move between variants. The dialog asks for the reason and note before anything is sent.

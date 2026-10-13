@@ -115,7 +115,7 @@ export function SetupGuide() {
       <section aria-labelledby="setup-progress" className="surface-rise rounded-xl border border-border bg-surface p-5 shadow-sm md:p-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0 space-y-1">
-            <h2 id="setup-progress" className="font-display text-xl font-semibold text-fg">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
+            <h2 id="setup-progress" className="text-xl font-semibold text-fg">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
             <p className="text-sm text-fg-muted">{summary.headline}</p>
           </div>
           {next ? (
@@ -155,7 +155,7 @@ export function SetupGuide() {
                   </span>
                   <div className="min-w-0 flex-1 space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 id={`step-title-${step.id}`} className="font-display text-xl font-semibold text-fg">
+                      <h3 id={`step-title-${step.id}`} className="text-xl font-semibold text-fg">
                         <span className="mr-2 text-fg-muted">{index + 1}.</span>{step.title}
                       </h3>
                       <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-semibold text-fg-muted">

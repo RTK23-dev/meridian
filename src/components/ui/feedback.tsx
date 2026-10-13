@@ -36,7 +36,7 @@ export function ScreenSkeleton({ label, shape = "cards", className }: { label: s
 
 export function EmptyState({ icon, title, reason, action, className }: { icon?: ReactNode; title: string; reason: string; action?: ReactNode; className?: string }) {
   return <Card className={cn("flex flex-col items-center gap-3 py-10 text-center", className)}>
-    <div className="grid size-12 place-items-center rounded-full border border-border bg-surface-2 text-accent">{icon ?? <FileQuestion aria-hidden="true" className="size-5" />}</div>
+    <div className="grid size-12 place-items-center rounded-full border border-border bg-surface-2 text-fg-muted">{icon ?? <FileQuestion aria-hidden="true" className="size-5" />}</div>
     <h2 className="text-section font-semibold">{title}</h2><p className="max-w-lg text-sm text-fg-muted">{reason}</p>{action}
   </Card>;
 }

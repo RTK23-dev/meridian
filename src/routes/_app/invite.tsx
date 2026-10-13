@@ -31,7 +31,7 @@ function Accept() {
     <div className="mx-auto max-w-lg space-y-6">
       <div className="space-y-2">
         <p className="eyebrow">Invitation</p>
-        <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">Join this workspace</h1>
+        <h1 className="page-title">Join this workspace</h1>
         <p className="text-fg-muted">Accept the invitation to add this workspace to your list. The link works once, and it is not shown again after you accept.</p>
       </div>
 

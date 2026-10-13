@@ -86,7 +86,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
     <Dialog open={!!target} onOpenChange={dismiss.requestOpenChange}>
       {target ? (
         <DialogContent aria-describedby={descriptionId} className="max-w-2xl">
-          <DialogTitle className="font-display text-2xl">Publish this variant</DialogTitle>
+          <DialogTitle className="text-section font-semibold">Publish this variant</DialogTitle>
           <DialogDescription id={descriptionId} className="mt-2 text-sm text-fg-muted">
             Choose where it goes. Nothing is sent to a destination you do not select. Each destination returns its own receipt.
           </DialogDescription>
@@ -115,7 +115,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
                         key={channel.id}
                         className={cn(
                           "flex min-h-11 items-start gap-3 rounded-md border p-3 text-sm",
-                          checked ? "border-accent bg-accent-soft" : "border-border bg-surface",
+                          checked ? "border-fg bg-surface-2" : "border-border bg-surface",
                           !channel.connected && "opacity-80",
                         )}
                       >

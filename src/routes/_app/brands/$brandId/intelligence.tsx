@@ -91,7 +91,7 @@ function Intelligence({ brandId }: { brandId: string }) {
               Multimodal 2.0
             </Badge>
           </div>
-          <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">
+          <h1 className="page-title">
             Account & Creative Intelligence
           </h1>
           <p className="mt-1 text-sm text-muted">
@@ -166,7 +166,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                     </span>
                     <div className="mt-2 flex items-center gap-2">
                       <Sparkles className="h-5 w-5 text-brass" />
-                      <span className="font-display text-xl font-semibold capitalize text-fg">
+                      <span className="text-xl font-semibold capitalize text-fg">
                         {profile.brandArchetype.replace(/_/g, " ") || "UGC Authentic"}
                       </span>
                     </div>
@@ -261,7 +261,7 @@ function Intelligence({ brandId }: { brandId: string }) {
               {/* Multimodal Decomposition Feed */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display text-lg font-semibold text-fg">
+                  <h3 className="text-lg font-semibold text-fg">
                     Multimodal Creative DNA Stream
                   </h3>
                   <span className="text-xs text-muted">
@@ -333,7 +333,7 @@ function Intelligence({ brandId }: { brandId: string }) {
           ) : (
             <Card className="space-y-3 py-8 text-center">
               <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
-              <h3 className="font-display text-lg font-semibold">No profile for {platform}</h3>
+              <h3 className="text-lg font-semibold">No profile for {platform}</h3>
               <p className="mx-auto max-w-md text-sm text-muted">
                 JEV computes rolling portfolio profiles automatically once accounts are connected and content is ingested.
               </p>
@@ -352,7 +352,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         <TabsContent value="whitespace" className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-display text-xl font-semibold">Competitor Whitespace Radar</h2>
+              <h2 className="text-xl font-semibold">Competitor Whitespace Radar</h2>
               <p className="text-sm text-muted">
                 Unsaturated angles ranked by expected win probability from market observation and creative gap analysis.
               </p>
@@ -362,7 +362,7 @@ function Intelligence({ brandId }: { brandId: string }) {
           {whitespace.length === 0 ? (
             <Card className="py-8 text-center">
               <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
-              <h3 className="mt-3 font-display text-lg font-semibold">No whitespace opportunities detected</h3>
+              <h3 className="mt-3 text-lg font-semibold">No whitespace opportunities detected</h3>
               <p className="mt-1 text-sm text-muted">
                 As market evidence and competitor campaigns are collected, JEV automatically flags high-probability gaps.
               </p>
@@ -381,7 +381,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         {/* TAB 3: SEMANTIC MEMORY & NOTICES */}
         <TabsContent value="semantic" className="space-y-6">
           <div className="max-w-2xl space-y-2">
-            <h2 className="font-display text-2xl">Stored Semantic Memory</h2>
+            <h2 className="text-2xl">Stored Semantic Memory</h2>
             <p className="text-muted text-sm">
               {baseData.semanticNote} Structured angle counts below are fingerprints. They are not a substitute for local:semantic vectors.
             </p>
@@ -390,11 +390,11 @@ function Intelligence({ brandId }: { brandId: string }) {
           <div className="grid gap-3 md:grid-cols-3">
             <Card>
               <p className="eyebrow">Competitor rows</p>
-              <p className="mt-2 font-display text-3xl">{baseData.competitorCount}</p>
+              <p className="mt-2 text-3xl">{baseData.competitorCount}</p>
             </Card>
             <Card>
               <p className="eyebrow">This brand</p>
-              <p className="mt-2 font-display text-3xl">{baseData.ownCount}</p>
+              <p className="mt-2 text-3xl">{baseData.ownCount}</p>
             </Card>
             <Card>
               <p className="eyebrow">Angle Gaps</p>
@@ -409,7 +409,7 @@ function Intelligence({ brandId }: { brandId: string }) {
           <ClusterCards angleClusters={baseData.angleClusters} semanticClusters={baseData.semanticClusters} />
 
           <Card>
-            <h3 className="font-display text-lg font-semibold">System Notices</h3>
+            <h3 className="text-lg font-semibold">System Notices</h3>
             {baseData.notifications.length === 0 ? (
               <p className="mt-2 text-muted text-sm">No notices yet.</p>
             ) : (

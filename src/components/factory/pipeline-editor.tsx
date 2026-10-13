@@ -169,7 +169,7 @@ export function PipelineEditor({
       <UnsavedChangesGuard dirty={dirty} />
       <header className="space-y-1">
         <p className="eyebrow">Factory line</p>
-        <h2 id="factory-pipeline-settings" className="font-display text-2xl text-fg">Pipeline settings</h2>
+        <h2 id="factory-pipeline-settings" className="text-section text-fg font-semibold">Pipeline settings</h2>
         <p className="max-w-3xl text-sm text-fg-muted">
           Settings save to this brand. Factory runs read the autopilot level and spend caps on the Live tests tab. They do not read the values on this page yet.
         </p>

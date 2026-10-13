@@ -27,7 +27,7 @@ export function ImageLightbox({ target, onClose }: { target: LightboxTarget | nu
     <Dialog open={!!target} onOpenChange={(open) => { if (!open) onClose(); }}>
       {target ? (
         <DialogContent className="max-w-4xl" onKeyDown={onKeyDown}>
-          <DialogTitle className="font-display text-xl">{target.title}</DialogTitle>
+          <DialogTitle className="text-section font-semibold">{target.title}</DialogTitle>
           <DialogDescription className="mt-1 text-sm text-fg-muted">
             Zoom {Math.round(zoom * 100)}%. Use the buttons, or the plus, minus and zero keys.
           </DialogDescription>

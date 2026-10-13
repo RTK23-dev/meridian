@@ -165,7 +165,7 @@ function Integrations() {
     <div className="space-y-10">
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Integrations</p>
-        <h1 className="font-display text-4xl tracking-tight text-fg sm:text-5xl">What is actually connected</h1>
+        <h1 className="page-title">What is actually connected</h1>
         <p className="text-fg-muted">
           A credential in the environment is not a connection. A provider shows as connected only after a request to it succeeds, and it changes again when someone disconnects it.
         </p>

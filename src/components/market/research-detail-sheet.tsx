@@ -36,7 +36,7 @@ function ResearchDetail({ ad }: { ad: ResearchAdRow }) {
   const analysis = parseAnalysis(ad.analysis);
   const segments: AnalysisSegment[] = analysis?.segments ?? [];
   return <>
-    <SheetTitle className="font-display text-2xl">{ad.advertiser || "Research ad"}</SheetTitle>
+    <SheetTitle className="text-2xl">{ad.advertiser || "Research ad"}</SheetTitle>
     <SheetDescription>Source {ad.externalId} · {META_SOURCE_LABEL} · captured {formatDate(ad.capturedAt)}</SheetDescription>
     <div className="mt-5 space-y-6">
       <section aria-labelledby="research-source-video" className="space-y-2">

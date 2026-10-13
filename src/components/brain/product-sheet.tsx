@@ -87,7 +87,7 @@ export function ProductSheet({ brandId, open, product, onOpenChange }: {
     <Sheet open={open} onOpenChange={dismiss.requestOpenChange}>
       <UnsavedChangesGuard dirty={dirty} />
       <SheetContent aria-describedby="product-sheet-description" className="flex max-h-[92vh] flex-col overflow-hidden">
-        <SheetTitle className="font-display text-2xl">{product ? "Edit product" : "Add product"}</SheetTitle>
+        <SheetTitle className="text-section font-semibold">{product ? "Edit product" : "Add product"}</SheetTitle>
         <SheetDescription id="product-sheet-description" className="mt-1 text-sm text-fg-muted">
           Product details and claim rules are used when creative evidence is checked.
         </SheetDescription>
