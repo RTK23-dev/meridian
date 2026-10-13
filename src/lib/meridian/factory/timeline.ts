@@ -48,8 +48,10 @@ export function buildAdTimeline(input: {
   const reachLows = dated.map((item) => item.row.reachLow).filter((value): value is number => value != null);
   const reachHighs = dated.map((item) => item.row.reachHigh).filter((value): value is number => value != null);
   return {
-    firstSeen: first.row.seenAt,
-    lastSeen: last.row.seenAt,
+    // The sighting times are stored as ISO text. A driver can hand back a Date object here, and a Date passed as a query
+    // parameter is written as its toString() form, which Postgres refuses.
+    firstSeen: new Date(first.time).toISOString(),
+    lastSeen: new Date(last.time).toISOString(),
     stillRunning: last.row.stillRunning,
     daysRunning: Math.max(0, Math.round((last.time - first.time) / 86_400_000)),
     siblingVariants: Math.max(0, input.siblingVariants ?? 0),
