@@ -24,9 +24,11 @@ export type TraceInput = {
   creativeId: string;
   creativeStatus: string;
   opportunity: { label: string; reason: string } | null;
-  decisions: readonly { id: string; question: string; decision: string; probability: number; reasons: readonly string[]; createdAt: string }[];
+  /** A null probability is unknown, and is shown as unknown. */
+  decisions: readonly { id: string; question: string; decision: string; probability: number | null; reasons: readonly string[]; createdAt: string }[];
   brief: { title: string; status: string; why: readonly string[]; learningNotes: readonly string[]; failureNotes: readonly string[] } | null;
-  observations: readonly { observedOn: string; impressions: number; clicks: number; conversions: number; ctr: number | null; cpmCents: number | null; source: string }[];
+  /** A null count is a metric the source did not report. It is shown as not reported, never as zero. */
+  observations: readonly { observedOn: string; impressions: number | null; clicks: number | null; conversions: number | null; ctr: number | null; cpmCents: number | null; source: string }[];
   /** Whether the media for this creative has loaded. Media is not known until it has. */
   mediaLoad: MediaLoad;
   media: readonly LibraryMediaVariant[];
@@ -42,6 +44,11 @@ function sourceNote(load: MediaLoad, loading: string, failed: string): string | 
   if (load === "loading") return loading;
   if (load === "unavailable") return failed;
   return undefined;
+}
+
+/** A count the source reported, or "not reported". A missing count is never shown as a number. */
+function countShown(value: number | null): string {
+  return value === null ? "not reported" : String(value);
 }
 
 export type TraceEntry = { key: string; title: string; detail: string; at: string };
@@ -149,7 +156,7 @@ export function buildTraceTimeline(input: TraceInput): TraceStage[] {
   const observations = input.observations.map((item) => ({
     key: `performance-${item.observedOn}-${item.impressions}-${item.clicks}-${item.conversions}-${item.source}`,
     title: item.observedOn,
-    detail: `${item.impressions} impressions, ${item.clicks} clicks, ${item.conversions} conversions. ${item.ctr === null ? "CTR not computable." : `CTR ${(item.ctr * 100).toFixed(1)}%.`}${item.cpmCents === null ? "" : ` CPM ${item.cpmCents} cents.`} Source: ${item.source || "not recorded"}.`,
+    detail: `Impressions ${countShown(item.impressions)}, clicks ${countShown(item.clicks)}, conversions ${countShown(item.conversions)}. ${item.ctr === null ? "CTR not computable." : `CTR ${(item.ctr * 100).toFixed(1)}%.`}${item.cpmCents === null ? "" : ` CPM ${item.cpmCents} cents.`} Source: ${item.source || "not recorded"}.`,
     at: item.observedOn,
   }));
 
