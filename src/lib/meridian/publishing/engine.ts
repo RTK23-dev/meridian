@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { publishPausedStages, type PausedStage } from "../providers/live.ts";
 import type { Transport } from "../providers/http.ts";
 
@@ -76,6 +77,15 @@ export function metaPublishEngine(): PublishEngine {
   };
 }
 
+/**
+ * The fixture paid publisher for the testing runtime. It makes no request. Its four stages have the names and the order the Meta
+ * publisher returns (`publishMetaPaused` in providers/meta.ts): a campaign, an ad set, an ad creative and an ad. Each is created
+ * with status PAUSED, as the Meta Marketing API documents for campaigns, ad sets and ads
+ * (https://developers.facebook.com/docs/marketing-api/reference/ad-account/campaigns/,
+ * https://developers.facebook.com/docs/marketing-api/reference/ad-campaign/,
+ * https://developers.facebook.com/docs/marketing-api/reference/ad-account/ads/). An ad creative has no status. Its ids are a digest
+ * of the request name and the stage, so a repeated publish names the same objects. The ids are not Meta ids.
+ */
 export function testPublishEngine(): PublishEngine {
   return {
     id: "test",
@@ -83,16 +93,24 @@ export function testPublishEngine(): PublishEngine {
     status() {
       return { status: "CONFIGURED", provider: "test", detail: "Test publisher is always ready for sandbox verification." };
     },
-    async publishPaused(_request: PublishPausedRequest): Promise<PublishEngineResult> {
-      const stages: PausedStage[] = [
-        { objectType: "campaign", status: "stored", externalId: `test_camp_${Date.now()}`, reused: false, error: "" },
-        { objectType: "adset", status: "stored", externalId: `test_set_${Date.now()}`, reused: false, error: "" },
-        { objectType: "adcreative", status: "stored", externalId: `test_creative_${Date.now()}`, reused: false, error: "" },
-        { objectType: "ad", status: "stored", externalId: `test_ad_${Date.now()}`, reused: false, error: "" },
-      ];
+    async publishPaused(request: PublishPausedRequest): Promise<PublishEngineResult> {
+      const stages: PausedStage[] = PAUSED_STAGE_ORDER.map((objectType) => ({
+        objectType,
+        status: "stored",
+        externalId: `test_${objectType}_${fixtureDigest(`${request.name}|${objectType}`)}`,
+        reused: false,
+        error: "",
+      }));
       return { engineId: "test", ok: true, stages };
     },
   };
+}
+
+/** The stages a paused paid publish creates, in the order Meta creates them. */
+export const PAUSED_STAGE_ORDER = ["campaign", "ad_set", "creative", "ad"] as const;
+
+function fixtureDigest(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 12);
 }
 
 const customPublishEngines = new Map<string, PublishEngine>();
