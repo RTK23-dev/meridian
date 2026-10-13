@@ -76,27 +76,38 @@ export async function executeFactoryJob(
   if (!job.brand_id) throw new Error("Factory jobs need a brand.");
   const runId = text(payload.runId);
   if (!runId) throw new Error("Factory jobs need a run id.");
-  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string; created_by: string }>`
-    select id, status, niche, level, settings, created_by from factory_runs
+  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string; created_by: string; current_stage: string }>`
+    select id, status, niche, level, settings, created_by, current_stage from factory_runs
     where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
     limit 1
   `;
   if (!owned[0]) throw new Error("Factory run is not owned by this organization and brand.");
+  // A run that is waiting for a person, or stopped, holds every stage after the one it stopped at. A stage returns successfully, so
+  // the queue would otherwise run the stages after it, and the run would be marked running again. Only the stage it waits at may
+  // decide, and it does so when it is run again after an approval or a cleared stop.
+  if ((owned[0].status === "awaiting_approval" || owned[0].status === "paused") && owned[0].current_stage !== job.job_type) {
+    return `held:${job.job_type}`;
+  }
   const settings = runSettingsFromStorage(owned[0].settings, owned[0].level);
   const approvals = await sql<{ n: number }>`
     select count(*)::int as n from factory_approvals
     where run_id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and stage = ${job.job_type}
   `;
+  const caps = await spendCapsOf(sql, job.organization_id, job.brand_id);
+  const spend = await meteredSpendOf(sql, job.organization_id, job.brand_id, runId);
   const decision = stageDecision({
     automation: settings.automation,
     stage: job.job_type,
     approved: (approvals[0]?.n ?? 0) > 0,
     killSwitchEngaged: await killSwitchPaused(sql, job.organization_id, job.brand_id),
-    capCents: settings.caps.totalCents > 0 ? settings.caps.totalCents : null,
-    spentCents: await meteredSpendCents(sql, job.organization_id, job.brand_id),
+    capCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
+    spentCents: spend.totalCents,
+    dailyCapCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
+    dailySpentCents: spend.dailyCents,
   });
   if (decision.action === "stop" || decision.action === "await_approval") {
-    // A stage that waits or is stopped is recorded on the run with its reason. It is not a failure, and the run resumes once it clears.
+    // A stage that waits or is stopped is recorded on the run with its reason. It is not a failure. The stages after it hold until
+    // a person approves the stage it waits at, or the stop is cleared and that stage runs again.
     const status = decision.action === "stop" ? "paused" : "awaiting_approval";
     await sql`
       update factory_runs set status = ${status}, current_stage = ${job.job_type}, error = ${decision.reason}, updated_at = now()
@@ -692,13 +703,42 @@ async function gateVariants(sql: Sql, organizationId: string, brandId: string): 
   return count;
 }
 
-/** Spend recorded against this brand's runs, from the metered rows in factory_costs. Zero until a stage records a metered call. */
-async function meteredSpendCents(sql: Sql, organizationId: string, brandId: string): Promise<number> {
-  const rows = await sql<{ spent: number }>`
-    select coalesce(sum(cents), 0)::int as spent from factory_costs
-    where organization_id = ${organizationId} and brand_id = ${brandId}
+/**
+ * The metered spend of one run, in cents: the sum of the factory_costs rows the run's provider calls wrote, and the part of it in the
+ * last 24 hours. A stage that made no metered call adds nothing. A provider that reports no cost adds nothing either.
+ */
+export async function meteredSpendOf(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  runId: string,
+): Promise<{ totalCents: number; dailyCents: number }> {
+  const rows = await sql<{ total: number; daily: number }>`
+    select coalesce(sum(cents), 0)::int as total,
+      coalesce(sum(cents) filter (where created_at >= now() - interval '1 day'), 0)::int as daily
+    from factory_costs
+    where organization_id = ${organizationId} and brand_id = ${brandId} and run_id = ${runId}
   `;
-  return rows[0]?.spent ?? 0;
+  return { totalCents: Number(rows[0]?.total ?? 0), dailyCents: Number(rows[0]?.daily ?? 0) };
+}
+
+/** The brand's declared caps, from factory_spend_caps. A brand with no row has none, which reads as zero. */
+export async function spendCapsOf(sql: Sql, organizationId: string, brandId: string): Promise<{ totalCents: number; dailyCents: number }> {
+  const rows = await sql<{ daily_cents: number; total_cents: number }>`
+    select daily_cents, total_cents from factory_spend_caps
+    where organization_id = ${organizationId} and brand_id = ${brandId}
+    limit 1
+  `;
+  return { totalCents: Number(rows[0]?.total_cents ?? 0), dailyCents: Number(rows[0]?.daily_cents ?? 0) };
+}
+
+/**
+ * The cap a run is held to, in cents: the stricter of the run's own cap and the brand's declared cap, counting only the caps that are
+ * set. Null when neither is set, which is how a full run without a cap is recognised.
+ */
+export function effectiveCap(runCents: number, brandCents: number): number | null {
+  const set = [runCents, brandCents].filter((value) => value > 0);
+  return set.length === 0 ? null : Math.min(...set);
 }
 
 async function killSwitchPaused(sql: Sql, organizationId: string, brandId: string): Promise<boolean> {

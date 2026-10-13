@@ -57,6 +57,27 @@ test("the kill switch stops every stage in every mode, approved or not", () => {
   }
 });
 
+test("a reached total cap stops a spend stage before it runs, in every mode, even once approved", () => {
+  for (const automation of ["manual", "semi", "full"] as const) {
+    const decision = stageDecision({ ...base, automation, stage: "factory.produce", approved: true, spentCents: 10_000 });
+    assert.equal(decision.action, "stop", `${automation} stops at a reached cap`);
+    if (decision.action === "stop") assert.equal(decision.reason, "The spend cap for this run is reached.");
+  }
+  // A stage that spends nothing is not held by the cap.
+  assert.equal(stageDecision({ ...base, automation: "manual", stage: "factory.grade", spentCents: 10_000 }).action, "run");
+});
+
+test("a reached daily cap stops a spend stage, and a daily cap alone lets a full run spend inside it", () => {
+  const daily = stageDecision({ ...base, automation: "manual", stage: "factory.produce", approved: true, capCents: null, dailyCapCents: 500, dailySpentCents: 500 });
+  assert.equal(daily.action, "stop");
+  if (daily.action === "stop") assert.match(daily.reason, /daily spend cap/);
+  assert.equal(
+    stageDecision({ ...base, automation: "full", stage: "factory.produce", capCents: null, dailyCapCents: 500, dailySpentCents: 499 }).action,
+    "run",
+    "a daily cap alone is a cap for full automation",
+  );
+});
+
 test("a stage that waits is not a failure: the decision never fails the run", () => {
   const waiting = stageDecision({ ...base, automation: "manual", stage: "factory.launch" });
   assert.equal(waiting.action, "await_approval");
