@@ -44,7 +44,7 @@ function pick(id: string, overrides: Partial<OutcomePick> = {}): OutcomePick {
 }
 
 function creativeOf(id: string): OutcomeCreative {
-  return { templateId: `tpl:${id}`, creativeId: `cr-${id}` };
+  return { templateId: `tpl:${id}`, creativeId: id };
 }
 
 function answer(id: string, probability: number | null, overrides: Partial<OutcomeAnswer> = {}): OutcomeAnswer {

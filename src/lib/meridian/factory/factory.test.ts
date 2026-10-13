@@ -40,7 +40,7 @@ test("a manual run waits at a spend stage for approval, and writes no variant be
   const sql = (async (strings: TemplateStringsArray) => {
     queries.push(strings.join(" "));
     if (strings.join(" ").includes("select id, status, niche, level")) {
-      return [{ id: "run-1", status: "running", niche: "skincare", level: 0, settings: "{}" }];
+      return [{ id: "run-1", status: "running", niche: "skincare", level: 0, settings: "{}", created_by: "user-1", current_stage: "", waiting_on: "" }];
     }
     return [];
   }) as unknown as Sql;
