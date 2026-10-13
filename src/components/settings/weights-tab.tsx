@@ -141,7 +141,7 @@ export function WeightsTab({ organizationId, saved, canAdmin }: { organizationId
                 <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
                   <div
                     aria-hidden="true"
-                    className={row.penalty ? "h-full rounded-full border border-dashed border-border-strong bg-transparent" : "h-full rounded-full bg-accent"}
+                    className={row.penalty ? "h-full rounded-full border border-dashed border-border-strong bg-transparent" : "h-full rounded-full bg-fg-muted"}
                     style={{ width: `${Math.round(row.share * 100)}%` }}
                   />
                 </div>

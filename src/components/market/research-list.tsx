@@ -20,14 +20,14 @@ type ListProps = {
 /** Gallery cards or a table of the same ads. Both open the same detail sheet. */
 export function ResearchList({ view, ads, onView }: ListProps) {
   if (view === "table") return <ResearchTable ads={ads} onView={onView} />;
-  return <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+  return <ul className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
     {ads.map((ad) => <ResearchCard key={ad.id} ad={ad} onView={onView} />)}
   </ul>;
 }
 
 function ResearchCard({ ad, onView }: { ad: ResearchAdRow; onView: (id: string) => void }) {
   const copy = ad.copy || ad.headline;
-  return <li className="flex min-w-0 flex-col gap-3 panel">
+  return <li className="flex min-w-0 flex-col gap-3 border-t border-border pt-4">
     <SnapshotPlaceholder ad={ad} />
     <div className="min-w-0 space-y-2">
       <div className="flex flex-wrap items-center gap-2">

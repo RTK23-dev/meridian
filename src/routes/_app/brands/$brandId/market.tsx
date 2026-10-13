@@ -254,7 +254,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             <Field label="Search ads" error={researchForm.formState.errors.searchTerms?.message} required><Input {...researchForm.register("searchTerms")} required maxLength={100} placeholder="Brand, product, or category" /></Field>
             <Field label="Country" error={researchForm.formState.errors.country?.message} required><Input {...researchForm.register("country")} required maxLength={2} /></Field>
             <Field label="Maximum ads" error={researchForm.formState.errors.limit?.message} required><SelectInput {...researchForm.register("limit", { valueAsNumber: true })}><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></SelectInput></Field>
-            <div className="flex items-end gap-2"><Button type="submit" disabled={startResearch.isPending || researchForm.formState.isSubmitting}>{startResearch.isPending || researchForm.formState.isSubmitting ? "Starting…" : "Start collection"}</Button></div>
+            <div className="flex items-end gap-2"><Button type="submit" variant="secondary" disabled={startResearch.isPending || researchForm.formState.isSubmitting}>{startResearch.isPending || researchForm.formState.isSubmitting ? "Starting…" : "Start collection"}</Button></div>
             <FormDiscardBar dirty={researchForm.formState.isDirty} subject="research search" onDiscard={() => researchForm.reset()} className="md:col-span-4" />
           </form>
         ) : null}
@@ -271,11 +271,11 @@ function MarketPage({ brandId }: { brandId: string }) {
         <div className="mt-6">
           <h3 className="text-xl">Recurring patterns</h3>
           <p className="mt-1 text-sm text-muted">Counts describe the collected corpus, not ad effectiveness or causation.</p>
-          {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="rounded border border-line p-3"><p className="eyebrow">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No repeated, confidence-rated ad patterns are stored.</p>}
+          {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="border-t border-line py-3"><p className="eyebrow">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No repeated, confidence-rated ad patterns are stored.</p>}
         </div>
       </Card>
       <Card id="market-analyzed">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-2xl">Analyzed ads</h2><p className="text-sm text-muted">Showing saved source, media, transcript, and analysis states.</p></div><div role="group" className="flex gap-2" aria-label="Research display mode"><Button type="button" variant={researchView === "gallery" ? "primary" : "secondary"} aria-pressed={researchView === "gallery"} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant={researchView === "table" ? "primary" : "secondary"} aria-pressed={researchView === "table"} onClick={() => setResearchView("table")}>Table</Button></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-2xl">Analyzed ads</h2><p className="text-sm text-muted">Showing saved source, media, transcript, and analysis states.</p></div><div role="group" className="flex gap-2" aria-label="Research display mode"><Button type="button" variant="secondary" aria-pressed={researchView === "gallery"} className={researchView === "gallery" ? "border-fg bg-surface-2" : undefined} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant="secondary" aria-pressed={researchView === "table"} className={researchView === "table" ? "border-fg bg-surface-2" : undefined} onClick={() => setResearchView("table")}>Table</Button></div></div>
         <div className="mt-4">
           <ResearchFilterBar
             filters={researchFilters.filters}
@@ -319,7 +319,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         )}
         {canEdit ? (
           <div className="mt-3">
-            <Button type="button" disabled={proposeCandidates.isPending} onClick={() => { void proposeCandidates.mutateAsync().catch(() => undefined); }}>Find candidates</Button>
+            <Button type="button" variant="secondary" disabled={proposeCandidates.isPending} onClick={() => { void proposeCandidates.mutateAsync().catch(() => undefined); }}>Find candidates</Button>
           </div>
         ) : null}
         {canEdit ? (
@@ -343,7 +343,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             </Field>
             <FormDiscardBar dirty={competitorForm.formState.isDirty} subject="competitor" onDiscard={() => competitorForm.reset()} className="md:col-span-2" />
             <div className="md:col-span-2">
-              <Button type="submit" disabled={addCompetitorMutation.isPending || competitorForm.formState.isSubmitting}>{addCompetitorMutation.isPending || competitorForm.formState.isSubmitting ? "Adding…" : "Add competitor"}</Button>
+              <Button type="submit" variant="secondary" disabled={addCompetitorMutation.isPending || competitorForm.formState.isSubmitting}>{addCompetitorMutation.isPending || competitorForm.formState.isSubmitting ? "Adding…" : "Add competitor"}</Button>
             </div>
           </form>
         ) : null}
@@ -406,7 +406,7 @@ function MarketPage({ brandId }: { brandId: string }) {
               <Field label="Source URL" error={observationForm.formState.errors.sourceUrl?.message}><Input {...observationForm.register("sourceUrl")} maxLength={500} /></Field>
             </div>
             <FormDiscardBar dirty={observationForm.formState.isDirty} subject="observation" onDiscard={() => observationForm.reset()} />
-            <div className="flex flex-wrap gap-2"><Button type="submit" disabled={storeObservationMutation.isPending || observationForm.formState.isSubmitting}>{storeObservationMutation.isPending || observationForm.formState.isSubmitting ? "Storing…" : "Store observation"}</Button></div>
+            <div className="flex flex-wrap gap-2"><Button type="submit" variant="secondary" disabled={storeObservationMutation.isPending || observationForm.formState.isSubmitting}>{storeObservationMutation.isPending || observationForm.formState.isSubmitting ? "Storing…" : "Store observation"}</Button></div>
           </form>
         ) : null}
       </Card>
@@ -422,7 +422,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             <Field label="Public page URL" error={pageForm.formState.errors.url?.message} required className="min-w-64 flex-1">
               <Input {...pageForm.register("url")} placeholder="https://" className="max-w-md" required maxLength={500} />
             </Field>
-            <div className="flex items-end gap-2"><Button type="submit" disabled={fetchPageMutation.isPending || pageForm.formState.isSubmitting}>{fetchPageMutation.isPending || pageForm.formState.isSubmitting ? "Fetching…" : "Fetch page"}</Button></div>
+            <div className="flex items-end gap-2"><Button type="submit" variant="secondary" disabled={fetchPageMutation.isPending || pageForm.formState.isSubmitting}>{fetchPageMutation.isPending || pageForm.formState.isSubmitting ? "Fetching…" : "Fetch page"}</Button></div>
             <FormDiscardBar dirty={pageForm.formState.isDirty} subject="page" onDiscard={() => pageForm.reset()} className="basis-full" />
           </form>
         ) : null}
@@ -451,12 +451,13 @@ function MarketPage({ brandId }: { brandId: string }) {
           <div className="mt-6 space-y-3">
             <h3 className="text-xl">Suggestions waiting</h3>
             {market.suggestions.map((item) => (
-              <div key={item.id} className="rounded-md border border-line p-3">
+              <div key={item.id} className="border-t border-line py-3">
                 <p className="eyebrow">{item.field}</p>
                 <p className="mt-1">{item.value}</p>
                 {canEdit ? (
                   <div className="mt-3 flex gap-2">
                     <Button
+                      variant="secondary"
                       disabled={resolvingSuggestions.includes(item.id)}
                       onClick={() => void resolveSuggestionMutation.mutateAsync({ suggestionId: item.id, action: "accept" }).catch(() => undefined)}
                     >

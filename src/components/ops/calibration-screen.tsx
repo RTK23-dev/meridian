@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock3, XCircle } from "lucide-react";
-import { Badge, Button, Card, PageHeader, ScreenSkeleton } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, PageHeader, ScreenSkeleton } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
@@ -122,7 +122,7 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
         </div>
 
         {data.proposals.length === 0 ? (
-          <Card><p className="text-sm text-fg-muted">No proposal has been recorded for this brand. A proposal appears here once the reviewer outcomes meet the rules above.</p></Card>
+          <EmptyState title="No proposal yet" reason="No proposal has been recorded for this brand. A proposal appears here once the reviewer outcomes meet the rules above." />
         ) : (
           <ol className="space-y-4">
             {data.proposals.map((proposal) => (
@@ -151,7 +151,7 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
       <section aria-labelledby="history-heading" className="space-y-3">
         <h2 id="history-heading" className="text-section font-semibold">Approved versions</h2>
         {data.versions.length === 0 ? (
-          <Card><p className="text-sm text-fg-muted">No version has been approved. The code defaults stay active.</p></Card>
+          <EmptyState title="No approved version yet" reason="No version has been approved. The code defaults stay active." />
         ) : (
           <Card>
             <ul className="divide-y divide-border">
@@ -201,7 +201,7 @@ function ProposalCard({ proposal, canAdmin, busy, deciding, onApprove, onReject 
           <h3 className="text-sm font-semibold">Change against the active baseline</h3>
           <div className="grid gap-2">
             {proposal.changes.map((change) => (
-              <div key={change.field} className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-md bg-surface-2 p-3 text-sm sm:grid-cols-4">
+              <div key={change.field} className="grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-3 text-sm sm:grid-cols-4">
                 <p className="col-span-2 font-semibold sm:col-span-1">{FIELD_LABELS[change.field]}</p>
                 <p><span className="text-xs text-fg-muted">Active</span> <span className="tabular-nums">{change.baseline.toFixed(3)}</span></p>
                 <p><span className="text-xs text-fg-muted">Proposed</span> <span className="tabular-nums">{change.proposed.toFixed(3)}</span></p>

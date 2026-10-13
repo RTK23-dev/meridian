@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, DisabledReason, Field, Card, ScreenSkeleton, SelectInput, StatusBadge, Textarea, Input } from "@/components/ui";
+import { Button, DisabledReason, EmptyState, Field, Card, ScreenSkeleton, SelectInput, StatusBadge, Textarea, Input } from "@/components/ui";
 import { PlainErrorMessage, PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { CreativeCard } from "@/components/library/creative-card";
@@ -296,7 +296,7 @@ function Library({ brandId }: { brandId: string }) {
               onDiscard={() => { publishForm.reset(); setPublishDiscard(false); }}
             />
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <Button type="submit" disabled={pausedObjects.isPending || publishForm.formState.isSubmitting || data.creatives.length === 0} aria-describedby={data.creatives.length === 0 ? "paused-publish-reason" : undefined}>{pausedObjects.isPending || publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
+              <Button type="submit" variant="secondary" disabled={pausedObjects.isPending || publishForm.formState.isSubmitting || data.creatives.length === 0} aria-describedby={data.creatives.length === 0 ? "paused-publish-reason" : undefined}>{pausedObjects.isPending || publishForm.formState.isSubmitting ? "Submitting…" : "Create paused objects"}</Button>
               {data.creatives.length === 0 ? <DisabledReason id="paused-publish-reason" className="basis-full">Create or record a creative first. A paused object needs a creative to point at.</DisabledReason> : null}
             </div>
           </form>
@@ -317,7 +317,7 @@ function Library({ brandId }: { brandId: string }) {
           </ul>
         ) : null}
       </Card>
-      {data.creatives.length === 0 ? <Card>No brand creatives yet. Rank an opportunity, brief it, and save a script. Or record one you already ran.</Card> : (
+      {data.creatives.length === 0 ? <EmptyState title="No creatives stored yet" reason="Rank an opportunity, brief it, and save a script. Or record one you already ran below." /> : (
         <section aria-labelledby="library-creatives-title" className="space-y-4">
           <div><h2 id="library-creatives-title" className="text-2xl">Creative library</h2><p className="text-sm text-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
           {studio.isError ? <PlainErrorMessage message="Media details could not be loaded. Thumbnails still come from the library list. Open Details for the exact message." raw={plainError(studio.error).raw} /> : null}

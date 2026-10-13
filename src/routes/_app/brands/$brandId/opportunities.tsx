@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button, DisabledReason, ErrorState, Field, Card, ScreenSkeleton, SelectInput } from "@/components/ui";
+import { Button, DisabledReason, EmptyState, ErrorState, Field, Card, ScreenSkeleton, SelectInput } from "@/components/ui";
 import { PlainErrorNotice } from "@/components/plain-error";
 import { copy, plainError } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
@@ -154,7 +154,10 @@ function Opportunities({ brandId }: { brandId: string }) {
       {dismiss.error ? <PlainErrorNotice error={dismiss.error} /> : null}
       {hasHold ? <HoldBanner brandId={brandId} /> : null}
       {rows.length === 0 ? (
-        <Card>{copy.opportunities.empty}</Card>
+        <EmptyState
+          title={canEdit ? "Rank opportunities to fill this list" : "No opportunities ranked yet"}
+          reason={copy.opportunities.empty}
+        />
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">

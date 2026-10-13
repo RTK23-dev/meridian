@@ -62,9 +62,9 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
       {canEdit && disabledReason ? <DisabledReason id={reasonId}>{disabledReason}</DisabledReason> : null}
       <div>
         <h3 className="text-lg">Sources for this workspace</h3>
-        <ul className="mt-2 grid gap-2 md:grid-cols-2">
+        <ul className="mt-2 grid gap-x-6 md:grid-cols-2">
           {sources.map((source) => (
-            <li key={source.adapterId} className="rounded-md border border-border p-3">
+            <li key={source.adapterId} className="border-t border-border py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{source.label}</span>
                 <StatusBadge status={source.connected ? "connected" : source.status === "failed" ? "failed" : "not_connected"} />
