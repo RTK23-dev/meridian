@@ -23,6 +23,9 @@ export type FactoryStage = (typeof FACTORY_STAGES)[number];
  * it returns this reason, the run stays `running`, and the reason is kept on the run row. No other stage marks a run succeeded.
  */
 
+/** The reason a run stays running at learn: none of its own creatives has a measured outcome stored yet. Read by the Factory screen too. */
+export const LEARN_WAITING = "Learning waits for a measured outcome from this run's creatives. None is stored yet, so the run stays running.";
+
 export type FactoryStageSpec = {
   type: FactoryStage;
   label: string;

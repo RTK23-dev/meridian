@@ -38,13 +38,21 @@ export async function makeFactoryTestSql(): Promise<Sql> {
   for (const name of names) {
     await db.exec(await readFile(join(dir, name), "utf8"));
   }
+  const sql = sqlOver(db);
+  // A real transaction, as the worker's connection has. The learn stage replaces a brand's patterns inside one transaction.
+  sql.begin = <T>(fn: (tx: Sql) => Promise<T>) => db.transaction((tx) => fn(sqlOver(tx)));
+  return sql;
+}
+
+/** A tagged-template connection over a PGlite database or one of its transactions. */
+function sqlOver(db: { query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }): Sql {
   const sql = (async <T = Record<string, unknown>>(strings: TemplateStringsArray, ...values: unknown[]) => {
     let text = strings[0] ?? "";
     for (let index = 0; index < values.length; index += 1) text += `$${index + 1}${strings[index + 1] ?? ""}`;
-    const result = await db.query<T>(text, values);
-    return result.rows;
+    const result = await db.query(text, values);
+    return result.rows as T[];
   }) as Sql;
-  sql.query = async <T = Record<string, unknown>>(text: string, params: unknown[] = []) => (await db.query<T>(text, params)).rows;
+  sql.query = async <T = Record<string, unknown>>(text: string, params: unknown[] = []) => (await db.query(text, params)).rows as T[];
   return sql;
 }
 

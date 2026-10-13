@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
-import { LEARN_WAITING } from "./learn.ts";
+import { LEARN_WAITING } from "./pipeline.ts";
 import { executeFactoryJob } from "./worker.ts";
 import {
   factoryJob,

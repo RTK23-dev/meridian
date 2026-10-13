@@ -7,9 +7,7 @@
 
 import type { Sql } from "../learning/store.ts";
 import { applyLearnedPatternsBySurface, type LearningSummary } from "../learning/store.ts";
-
-/** The reason a run stays running at learn: none of its own creatives has a measured outcome stored yet. */
-export const LEARN_WAITING = "Learning waits for a measured outcome from this run's creatives. None is stored yet, so the run stays running.";
+import { LEARN_WAITING } from "./pipeline.ts";
 
 export type RunOutcomes = { organic: number; paid: number };
 
