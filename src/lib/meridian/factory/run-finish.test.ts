@@ -53,10 +53,13 @@ test("a full run that reaches every stage is never marked succeeded: learning is
     assert.notEqual(row.status, "succeeded", `the run must not read finished after ${stage}`);
   }
 
+  // The budget test records what it would do and waits for a person, so the run stops there, and learning is held behind it. The run is
+  // waiting, not finished. Learning's own reason is checked by the learn test below.
   const finished = await factoryRunRow(sql);
-  assert.equal(finished.status, "running");
-  assert.equal(finished.current_stage, "factory.learn");
-  assert.equal(finished.error, LEARN_NOT_BUILT, "the reason the run is unfinished is on the run row");
+  assert.equal(finished.status, "awaiting_approval", "the budget test waits for a person in every mode");
+  assert.equal(finished.current_stage, "factory.test");
+  assert.match(finished.error, /budget test is recorded for a person to approve/, "the reason the run waits is on the run row");
+  assert.notEqual(finished.error, LEARN_NOT_BUILT, "learning has not been reached, so its reason is not on the row");
 });
 
 test("learn returns the reason and writes it to the run row, and nothing else", async () => {
