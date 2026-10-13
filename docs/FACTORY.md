@@ -254,6 +254,7 @@ that the brand belongs to the caller's workspace, and every row it reads is scop
 What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
 
 - Video and carousel production. A run whose formats include video or carousel stops at produce, before any spend, with that reason.
+- Preflight and copy claims on the Factory image path. Factory images run no preflight and no claim check. Their specs carry no duration, and the Factory has no copy check (see [ROADMAP.md](ROADMAP.md)).
 - Learning is not re-run on a schedule. The learn stage runs once in the queue, and a waiting run is checked again only with its Check learning
   button.
 - Cross-surface proposals: an organic winner proposed as an ad test, or the reverse. A run with intent `both` learns each surface for its

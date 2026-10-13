@@ -3,12 +3,17 @@
  *
  * Checks a creative spec's structure: the hook, the script or storyboard, and the duration.
  *
- * Status: no production submit path calls this function yet. Only tests do. Connecting it changes which submissions are
- * refused before spend, so that choice needs a decision first.
+ * Status: connected to the video submit path. `submitWithPreflight` (production/submit.ts) runs this check before any provider
+ * receives a spec, and the Studio video branch (studio/session.server.ts) submits through it. A BLOCK refuses the spec with these
+ * reasons: the job is recorded as PREFLIGHT_FAILED and the provider is not called. A PROCEED continues to the provider.
+ *
+ * Not connected: the image path. Image specs carry no duration (durationTargetSeconds is 0 for Studio and Factory images), so the
+ * duration rule would refuse every image. Connecting images needs a structural rule for images, which is a decision of its own.
+ * This check does not exempt images, and it does not fill the missing field.
  *
  * Claims are not judged here. The spec carries no brand claims, so a claim check run on it would be a check that never looked at
- * the copy. Claims are judged by the copy check (production/assess.ts), which the job and studio paths call. The shared engine
- * gate (decisions/gate.ts) is not called from the production path yet. This result reports `claimsJudged: false`, so nothing
+ * the copy. Claims are judged by the copy check (production/assess.ts, `judgeCopy`), which the job and studio paths call, and which
+ * runs the claim question through the shared engine gate (decisions/gate.ts). This result reports `claimsJudged: false`, so nothing
  * reads it as a claim check that passed.
  */
 
