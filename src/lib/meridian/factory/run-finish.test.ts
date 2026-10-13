@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { Sql } from "../learning/store.ts";
 import { LEARN_NOT_BUILT } from "./pipeline.ts";
 import { executeFactoryJob } from "./worker.ts";
 import {
   factoryJob,
   factoryRunRow,
+  FACTORY_TEST_BRAND,
+  FACTORY_TEST_ORG,
   FACTORY_TEST_RUN,
   FIXTURE_BRAND_WEBSITE,
   fixtureGatherDeps,
@@ -47,20 +50,39 @@ test("a full run that reaches every stage is never marked succeeded: learning is
   );
   assert.notEqual((await factoryRunRow(sql)).status, "succeeded", "gathering does not finish the run");
 
+  // A stop that waits for a person is approved here, as approveFactoryStage records it, and the stage runs again from its wait. Every
+  // stop is approved once, so the run reaches learning.
   for (const stage of STAGES_AFTER_DISCOVER) {
     await executeFactoryJob(sql, factoryJob(stage), { runId: FACTORY_TEST_RUN });
-    const row = await factoryRunRow(sql);
+    let row = await factoryRunRow(sql);
+    if (row.status === "awaiting_approval") {
+      assert.equal(row.current_stage, stage, "the run waits at the stage that ran");
+      await approveStop(sql, stage);
+      await executeFactoryJob(sql, factoryJob(stage), { runId: FACTORY_TEST_RUN });
+      row = await factoryRunRow(sql);
+    }
     assert.notEqual(row.status, "succeeded", `the run must not read finished after ${stage}`);
+    assert.notEqual(row.status, "awaiting_approval", `${stage} runs once it is approved`);
   }
 
-  // The budget test records what it would do and waits for a person, so the run stops there, and learning is held behind it. The run is
-  // waiting, not finished. Learning's own reason is checked by the learn test below.
+  // Learning is reached and says it is not built. The run is running, never finished, and the reason is on the row.
   const finished = await factoryRunRow(sql);
-  assert.equal(finished.status, "awaiting_approval", "the budget test waits for a person in every mode");
-  assert.equal(finished.current_stage, "factory.test");
-  assert.match(finished.error, /budget test is recorded for a person to approve/, "the reason the run waits is on the run row");
-  assert.notEqual(finished.error, LEARN_NOT_BUILT, "learning has not been reached, so its reason is not on the row");
+  assert.equal(finished.status, "running", "learning is not built, so the run stays running");
+  assert.equal(finished.current_stage, "factory.learn");
+  assert.equal(finished.error, LEARN_NOT_BUILT, "the reason the run is unfinished is on the run row");
 });
+
+/** A person's approval of one stop, recorded the way approveFactoryStage records it, and the run released from its wait. */
+async function approveStop(sql: Sql, stage: string): Promise<void> {
+  await sql`
+    insert into factory_approvals (id, organization_id, brand_id, run_id, stage, approved_by)
+    values (${`approval-${stage}`}, ${FACTORY_TEST_ORG}, ${FACTORY_TEST_BRAND}, ${FACTORY_TEST_RUN}, ${stage}, 'user-1')
+  `;
+  await sql`
+    update factory_runs set status = 'queued', error = '', updated_at = now()
+    where id = ${FACTORY_TEST_RUN} and status = 'awaiting_approval'
+  `;
+}
 
 test("learn returns the reason and writes it to the run row, and nothing else", async () => {
   const sql = await makeFactoryTestSql();
