@@ -23,6 +23,7 @@ import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
 import { factoryRunSourcesFor, RECENT_RUNS_LIMIT } from "./gather.ts";
 import { isApprovableStage } from "./approval.ts";
+import { listLinkedMetrics } from "../measurement/creative-linkage.ts";
 import { trendReport } from "./trends.ts";
 import { weeklyStrategistReport } from "./report.ts";
 import { hypitVideoEngine } from "@/lib/meridian/video/engine";
@@ -121,6 +122,47 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
       order by created_at desc
       limit 40
     `;
+    // The publish receipts and the measured rows of this brand's Factory creatives. A receipt is what the channel or the paid publisher
+    // returned. A metric the source did not report is null, and the board says so rather than showing zero.
+    const factoryCreatives = await sql<{ creative_id: string; run_id: string; format: string }>`
+      select creative_id, run_id, format from factory_creatives
+      where organization_id = ${organizationId} and brand_id = ${data.brandId}
+      order by created_at desc
+      limit 40
+    `;
+    const creativeIds = factoryCreatives.map((row) => row.creative_id);
+    const organicReceipts = creativeIds.length === 0 ? [] : await sql<{ creative_id: string; platform: string; status: string; external_id: string | null; error: string | null }>`
+      select creative_id, platform, status, external_id, error from organic_posts
+      where organization_id = ${organizationId} and brand_id = ${data.brandId} and surface = 'organic'
+        and creative_id = any(${creativeIds})
+      order by created_at desc
+      limit 200
+    `;
+    const paidReceipts = creativeIds.length === 0 ? [] : await sql<{ idempotency_key: string; provider: string; status: string; external_id: string; last_error: string }>`
+      select idempotency_key, provider, status, external_id, last_error from provider_objects
+      where organization_id = ${organizationId} and brand_id = ${data.brandId} and surface = 'paid' and object_type = 'ad'
+        and idempotency_key = any(${creativeIds})
+      order by created_at desc
+      limit 200
+    `;
+    const measuredRows = await listLinkedMetrics(sql, { organizationId, brandId: data.brandId }, creativeIds);
+    const publishing = factoryCreatives.map((creative) => ({
+      creativeId: creative.creative_id,
+      runId: creative.run_id,
+      format: creative.format,
+      receipts: [
+        ...organicReceipts
+          .filter((row) => row.creative_id === creative.creative_id)
+          .map((row) => ({ surface: "organic" as const, platform: row.platform, status: row.status, externalId: row.external_id ?? "", reason: row.error ?? "" })),
+        ...paidReceipts
+          .filter((row) => row.idempotency_key === creative.creative_id)
+          .map((row) => ({ surface: "paid" as const, platform: row.provider, status: row.status, externalId: row.external_id, reason: row.last_error })),
+      ],
+      measurements: measuredRows
+        .filter((row) => row.creativeId === creative.creative_id)
+        .map((row) => ({ surface: row.surface, platform: row.platform, recordedAt: row.recordedAt, metrics: row.metrics })),
+    }));
+
     const yieldRows = await sql<{
       search_terms: string;
       collected_count: number;
@@ -265,6 +307,7 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
         gateResult: row.gate_result,
       })),
       costs: costs.map((row) => ({ stage: row.stage, cents: row.cents, seconds: row.seconds })),
+      publishing,
       note: ads.length
         ? "Scores and trends below use stored Ad Library rows only. They are not live account results."
         : "No tracked ads yet. Connect Ad Library, a first-party account, or upload a swipe file. Nothing is invented to fill this board.",

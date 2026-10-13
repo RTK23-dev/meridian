@@ -14,6 +14,7 @@ import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQu
 import { approveFactoryStage, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian/factory/approval";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
+import { metricLine, receiptLine } from "@/components/factory/measurement-model";
 import { HeldReservationsPanel } from "@/components/held-reservations-panel";
 import { FACTORY_GRAPH } from "@/lib/meridian/factory/pipeline";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
@@ -290,6 +291,31 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 {board.variants.map((item) => (
                   <li key={item.id} className="rounded-md border border-line p-3 text-sm">
                     <span className="font-semibold">{item.gateResult}</span> · hook {item.hook || "unset"} · CTA {item.cta || "unset"} · {item.presenter || "no presenter"} · {item.lengthMs} ms
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="space-y-3">
+            <h2 className="text-section font-semibold">Publishing and measurement</h2>
+            <p className="text-muted">Each receipt is what a channel or the paid publisher returned. A channel with no connection is listed as not connected. A metric the source did not report reads not reported.</p>
+            {board.publishing.length === 0 ? <p className="text-muted">No Factory creative has a receipt yet.</p> : (
+              <ul className="space-y-2">
+                {board.publishing.map((item) => (
+                  <li key={item.creativeId} className="rounded-md border border-line p-3 text-sm">
+                    <span className="font-semibold">{item.format} creative</span> · run {item.runId}
+                    <ul className="mt-1">
+                      {item.receipts.map((receipt, index) => (
+                        <li key={`${receipt.surface}-${receipt.platform}-${index}`}>{receiptLine(receipt)}</li>
+                      ))}
+                    </ul>
+                    {item.measurements.length === 0 ? <p className="mt-1 text-muted">Not measured yet.</p> : (
+                      <ul className="mt-1">
+                        {item.measurements.map((row, index) => (
+                          <li key={`${row.surface}-${row.recordedAt}-${index}`}>{row.surface} {row.platform}: {metricLine(row.surface, row.metrics)}</li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 ))}
               </ul>
