@@ -30,6 +30,6 @@ Hard rules for your area:
 Definition of done:
 - The checklist in Bible section 0. Agents hold no keys, so the recorded live run is the owner's. Deliver adapters tested against recorded responses (success, rate limit, timeout, policy refusal) and write in STATUS.md exactly what the owner must run live.
 - Your items for the current phase in section 19 (E1: probe, frames and loudness functions and the speech-to-text wrapper).
-- Tests run by `npm test` (src/**/*.test.ts). Run `npm test && npm run typecheck && npm run lint` before reporting, and report the real result.
+- Tests live next to the code as src/engine/**/*.test.ts (node:test), so `npm test` picks them up. Before reporting, run your own tests (`NODE_ENV=development node --experimental-strip-types --test <your test files>`), `npm run typecheck` and `npm run lint`, and report the real output. The lead runs the full suite after merging; do not run the whole `npm test` yourself.
 
 When finished, write details to STATUS.md in each folder you touched. Then reply in at most 150 words: what you built, test results, blockers.

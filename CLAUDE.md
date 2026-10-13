@@ -18,6 +18,16 @@ The video engine is specified in `docs/engine/VIDEO_ENGINE_BIBLE.md`. Codebase s
 8. **Untrusted outputs.** Provider and model outputs are data: validate them, never execute them, never pass them on as instructions.
 9. **Secrets never enter git, logs or chat.**
 
+## Coding conventions for src/engine/
+
+- TypeScript runs through `node --experimental-strip-types` in tests: no `enum`, no constructor parameter properties, no `namespace`. Import local files with the `.ts` extension, as the rest of the repo does.
+- zod is v4 (`zod` ^4). Use v4 APIs, for example `z.record(z.string(), schema)` with two arguments. Export each schema and its `z.infer` type.
+- Tests use `node:test` and `node:assert/strict`, sit next to the code as `*.test.ts`, and use recorded fixtures. No test calls a live API.
+- No new npm dependency without the lead's approval. Any install uses `--ignore-scripts` (the `onnxruntime-node` install script cannot download here).
+- Engine code never imports `src/lib/meridian/research/`, `embeddings/` or the Hypit modules (local models and the Hypit runtime).
+- Artifacts and media go through a storage interface, never a vendor SDK. Do not add S3 code (see the storage conflict below).
+- In a worktree, commit your work on the worktree branch with a clear message. Never push and never touch other branches; the lead merges.
+
 ## Process
 
 - Contracts (eng-contracts) merge before any other engine workstream starts.
