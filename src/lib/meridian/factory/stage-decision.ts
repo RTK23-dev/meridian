@@ -26,6 +26,23 @@ export type StageDecisionInput = {
 };
 
 /**
+ * The reason a spend is refused because a cap is reached, or null while spend is inside every cap that is set. A zero or absent cap
+ * is not set. The produce stage checks this before each provider call, and the stage check uses it before the stage runs.
+ */
+export function capStopReason(input: {
+  capCents: number | null;
+  spentCents: number;
+  dailyCapCents?: number | null;
+  dailySpentCents?: number;
+}): string | null {
+  const totalCap = input.capCents ?? 0;
+  const dailyCap = input.dailyCapCents ?? 0;
+  if (totalCap > 0 && input.spentCents >= totalCap) return "The spend cap for this run is reached.";
+  if (dailyCap > 0 && (input.dailySpentCents ?? 0) >= dailyCap) return "The daily spend cap for this brand is reached.";
+  return null;
+}
+
+/**
  * Decides whether one stage may run now (NORTH_STAR §4 and §5 step 7).
  *
  * - The kill switch stops every stage, not only the spend ones.
@@ -47,10 +64,8 @@ export function stageDecision(input: StageDecisionInput): StageDecision {
   const totalCap = input.capCents ?? 0;
   const dailyCap = input.dailyCapCents ?? 0;
   if (spends) {
-    if (totalCap > 0 && input.spentCents >= totalCap) return { action: "stop", reason: "The spend cap for this run is reached." };
-    if (dailyCap > 0 && (input.dailySpentCents ?? 0) >= dailyCap) {
-      return { action: "stop", reason: "The daily spend cap for this brand is reached." };
-    }
+    const reached = capStopReason(input);
+    if (reached) return { action: "stop", reason: reached };
   }
   if (input.automation === "full") {
     if (!spends) return { action: "run" };

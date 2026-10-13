@@ -1,6 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { stageDecision, type StageDecisionInput } from "./stage-decision.ts";
+import { capStopReason, stageDecision, type StageDecisionInput } from "./stage-decision.ts";
+
+test("capStopReason refuses spend at or over a set cap, and is null while spend is inside every cap", () => {
+  assert.equal(capStopReason({ capCents: 40, spentCents: 39 }), null, "under the total cap");
+  assert.equal(capStopReason({ capCents: 40, spentCents: 40 }), "The spend cap for this run is reached.", "at the total cap");
+  assert.equal(capStopReason({ capCents: 40, spentCents: 41 }), "The spend cap for this run is reached.", "over the total cap");
+  assert.equal(capStopReason({ capCents: null, spentCents: 10_000 }), null, "no total cap is set, so no total is refused");
+  assert.equal(capStopReason({ capCents: 0, spentCents: 10_000 }), null, "a zero cap is not set");
+  assert.equal(
+    capStopReason({ capCents: null, spentCents: 0, dailyCapCents: 30, dailySpentCents: 30 }),
+    "The daily spend cap for this brand is reached.",
+    "at the daily cap",
+  );
+  assert.equal(
+    capStopReason({ capCents: 100, spentCents: 10, dailyCapCents: 30, dailySpentCents: 29 }),
+    null,
+    "inside both caps",
+  );
+  assert.equal(
+    capStopReason({ capCents: 100, spentCents: 10, dailyCapCents: 30, dailySpentCents: 0 }),
+    null,
+    "a daily cap is read only from the daily spend, not the total",
+  );
+});
+
+test("stageDecision refuses a spend stage with the reason capStopReason gives", () => {
+  const input = { automation: "manual" as const, stage: "factory.produce" as const, approved: true, killSwitchEngaged: false };
+  const reached = { capCents: 40, spentCents: 40 };
+  const decision = stageDecision({ ...input, ...reached });
+  assert.deepEqual(decision, { action: "stop", reason: capStopReason(reached) });
+});
 
 const base: StageDecisionInput = {
   automation: "manual",
