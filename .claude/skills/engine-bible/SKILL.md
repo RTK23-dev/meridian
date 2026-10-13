@@ -242,6 +242,27 @@ type VariantMatrix = {
 };
 ```
 
+### v1 additions (lead decisions, 2026-10-13)
+
+Implemented in `src/engine/contracts/` as version 1. Nothing earlier exists, so there is no migration. These types are named in the Bible text or needed by it, but are not defined there. The lead approved them.
+
+- `ArtifactEnvelope` (`envelope.ts`): `{ artifactId 'art_', type, schema, workspaceId, requestId, parentIds, contentHash, createdAt, body }`. Its `schema` must equal the body's `schema` literal.
+- `AssetSpec`, `meridian.asset_spec/v1` (`assets.ts`): `{ specId 'asp_', shotId, modelClass, prompt, refs, firstFrame?, lastFrame?, durationMs, aspect '9:16', width 1080, height 1920, seed, takes 1 | 2 }`, with `assetCacheKey(spec, providerId)` as section 10.4 defines it.
+- `ProviderAdapter` (the section 10.1 interface) and `ProviderError` (`assets.ts`).
+- `ValidatedRequest`, `meridian.validated_request/v1`, and `IntakeRejection` (`request.ts`).
+- `BudgetReservation`, `meridian.budget_reservation/v1` (`ledger.ts`). `reservedUsd` is the live hold. A paused reservation holds nothing and names its `pausedReason`. A released one shrinks to the amount committed.
+- `LedgerEntry` (`ledger.ts`): the section 4.4 fields exactly, plus `actualIsEstimate?: boolean` for list-price fallbacks (section 14.1 step 4).
+- `Composition`, `meridian.composition/v1` (`render.ts`). Its `contentHash` is the hash of its files, and it is the render idempotency key.
+- `ReviewResult`, `meridian.review_result/v1` (`gate.ts`).
+- Kits of section 13 (`kits.ts`).
+- Id prefixes `art_`, `asp_`, `res_`, `cmp_`, `led_`.
+
+Invariants added in v1 (the schemas enforce them):
+
+- A `GateResult` or `TakeVerdict` passes only with at least one check and every check passing (section 12: unknown means fail).
+- A `BudgetReservation.estimateUsd` equals the sum of its lines.
+- Money carries at most four decimals.
+
 
 ## 5. Jobs, queue, artifacts and gates
 
@@ -340,4 +361,5 @@ migrations/           engine_* tables
 | End-to-end | 3 reference reels × 3 scripts × 2 pages with real APIs; manifests and costs checked | Phase gates | Each phase |
 
 **CI must block** on unit, contract, adapter, component and integration failures. Live smoke failures page the owner but don't block merges.
+
 

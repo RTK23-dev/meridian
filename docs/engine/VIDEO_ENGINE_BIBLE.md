@@ -564,7 +564,7 @@ Runs inside `analyze_reference` on the ffmpeg and speech-to-text outputs.
 | Caption timing | On screen no later than the word starts, off no earlier than it ends |
 | Safe zones | No caption or graphic in the top 10%, bottom 20% or right 12% of the frame |
 | Face | Captions don't overlap the presenter's face box |
-| Loudness | −14 LUFS integrated, true peak ≤1 dBTP |
+| Loudness | −14 LUFS integrated, true peak ≤ −1 dBTP |
 | Black frames | None longer than 1 frame |
 | Same shot type | Not more than 3 shots in a row (except `ugc_presenter` beats) |
 
