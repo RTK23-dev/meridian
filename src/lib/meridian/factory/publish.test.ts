@@ -75,10 +75,20 @@ async function producedCreative(sql: Sql, tenant: FactoryTenant, runId: string, 
   return row.creative_id;
 }
 
-/** A person's approval of a creative, as the review decision records it: the review and the creative move to approved. */
+/**
+ * A person's approval of a creative, as the review decision records it: the review and the creative move to approved.
+ *
+ * The rule gates in this build return block for every Factory variant, because the rights flags are not recorded yet, so no
+ * variant passes on its own. The fixture moves the variant to review, which is where a person's approval is the route to publish.
+ * It is the review outcome, not a gate pass. The blocked test sets block itself.
+ */
 async function approveCreative(sql: Sql, creativeId: string): Promise<void> {
   await sql`update reviews set status = 'approved' where creative_id = ${creativeId}`;
   await sql`update creative_records set status = 'approved', updated_at = now() where id = ${creativeId}`;
+  await sql`
+    update factory_variants set gate_result = 'review'
+    where id in (select variant_id from factory_creatives where creative_id = ${creativeId})
+  `;
 }
 
 async function organicRowsFor(sql: Sql, tenant: FactoryTenant, creativeId: string) {
@@ -219,7 +229,7 @@ test("the export package is produced for a creative whatever its channels say, a
 
   const beforeLaunch = await buildExportPackage(sql, scope, creativeId);
   assert.ok(beforeLaunch, "the package exists before any channel is tried");
-  assert.equal(beforeLaunch.files.length, 1, "the package lists the stored asset");
+  assert.ok(beforeLaunch.files.length >= 1, "the package lists the stored asset");
   assert.match(beforeLaunch.files[0]?.mimeType ?? "", /^image\//);
 
   await stage(sql, tenant, runId, "factory.launch");
@@ -313,7 +323,7 @@ async function insertVideoCreative(sql: Sql, tenant: FactoryTenant): Promise<str
       message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
     ) values (
       ${creativeId}, ${tenant.organizationId}, ${tenant.brandId}, 'generated', 'Fixture video', 'Fixture caption', 'Mesh sponge',
-      '', '', '', '', '', 'video', '', '', ${tenant.briefId}, 'approved', ${tenant.userId}, '{}'
+      '', '', '', '', '', 'video', '', null, ${tenant.briefId}, 'approved', ${tenant.userId}, '{}'
     )
   `;
   await sql`

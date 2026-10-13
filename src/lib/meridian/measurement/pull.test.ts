@@ -66,7 +66,7 @@ async function creativeOf(sql: Sql, tenant: FactoryTenant, runId: string, label:
       message, cta, format, proof_type, opportunity_id, brief_id, status, created_by, workflow
     ) values (
       ${creativeId}, ${tenant.organizationId}, ${tenant.brandId}, 'generated', ${`Fixture ${label}`}, 'Fixture copy', 'Mesh sponge',
-      '', '', '', '', '', 'image', '', '', ${tenant.briefId}, 'approved', ${tenant.userId}, '{}'
+      '', '', '', '', '', 'image', '', null, ${tenant.briefId}, 'approved', ${tenant.userId}, '{}'
     )
   `;
   await sql`
