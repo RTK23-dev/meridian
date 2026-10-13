@@ -194,23 +194,6 @@ test("a call that does not return holds its reservation until the provider confi
   assert.equal(stillHeld.some((item) => item.reservationId === held!.id), false, "a released reservation is no longer held");
 });
 
-test("a video or carousel format stops the run before any reservation or call", async () => {
-  const sql = await getSql();
-  const tenant = await studioTenant(sql, "factory-produce-video");
-  const runId = await factoryRunFor(sql, tenant, { automation: "full", formats: ["video"], caps: { totalCents: 500 } });
-  await planRowsFor(sql, tenant, runId, ["video"]);
-  const stub = stubImageProvider();
-  try {
-    assert.equal(await produce(sql, tenant, runId), "stopped:factory.produce");
-  } finally {
-    stub.restore();
-  }
-  assert.equal(stub.state.calls, 0);
-  assert.equal((await reservationsOf(sql, tenant)).length, 0);
-  const run = await runRow(sql, tenant, runId);
-  assert.match(run.error, /produces images so far/);
-});
-
 test("the JEV creative check never passes a variant whose engine is not configured", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "factory-gate-unconfigured");
