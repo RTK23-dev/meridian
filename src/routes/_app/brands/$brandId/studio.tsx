@@ -116,7 +116,9 @@ function Studio({ brandId }: { brandId: string }) {
 
   const reviewPending = actions.reviewVariant.isPending;
   const publishPending = actions.publishTest.isPending || actions.publishMulti.isPending;
-  const organicPosts = organicQuery.data ?? [];
+  // A post a channel did not take (not connected, or failed) is a receipt, not a publication. The learning panel lists publications
+  // only, so its telemetry action is enabled for posts that exist.
+  const organicPosts = (organicQuery.data ?? []).filter((post) => post.status === "published" || post.status === "scheduled");
 
   return (
     <div className="space-y-6">

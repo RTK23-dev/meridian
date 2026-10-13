@@ -8,7 +8,7 @@ import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { connectAccountSchema, type ConnectAccountInput } from "@/components/forms/client-schemas";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, DisabledReason, Field, ErrorNotice, Card, SelectInput, ScreenSkeleton, Input } from "@/components/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, DisabledReason, EmptyState, Field, ErrorNotice, Card, SelectInput, ScreenSkeleton, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { usePendingVariables, usePlatformAccountsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
@@ -148,7 +148,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
           </p>
         </div>
         {canEdit ? (
-          <Button type="button" onClick={() => setAddModalOpen(true)}>
+          <Button type="button" variant={accounts.length === 0 ? "secondary" : "primary"} onClick={() => setAddModalOpen(true)}>
             Connect Account
           </Button>
         ) : null}
@@ -157,19 +157,15 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       {query.isPending && !query.data ? (
         <ScreenSkeleton label="Loading accounts" shape="rows" />
       ) : accounts.length === 0 ? (
-        <Card className="p-8 text-center">
-          <p className="text-lg font-semibold">No accounts connected yet</p>
-          <p className="mt-1 text-sm text-muted">
-            Connect an Instagram page, YouTube channel, TikTok account, or ad account to enable multi-channel publishing and automated performance telemetry.
-          </p>
-          {canEdit ? (
-            <div className="mt-4">
-              <Button type="button" onClick={() => setAddModalOpen(true)}>
-                Connect First Account
-              </Button>
-            </div>
-          ) : null}
-        </Card>
+        <EmptyState
+          title="No accounts connected yet"
+          reason="Connect an Instagram page, YouTube channel, TikTok account, or ad account to enable multi-channel publishing and automated performance telemetry."
+          action={canEdit ? (
+            <Button type="button" onClick={() => setAddModalOpen(true)}>
+              Connect First Account
+            </Button>
+          ) : undefined}
+        />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {accounts.map((account) => {

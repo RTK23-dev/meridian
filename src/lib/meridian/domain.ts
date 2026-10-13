@@ -33,6 +33,8 @@ export type PerformanceRow = {
   conversions: number;
   spendCents: number;
   revenueCents: number | null;
+  /** The channel (platform) the row was measured on. Absent or '' when the row names none. */
+  channel?: string;
 };
 
 export type OrganicObservationRow = {
@@ -45,9 +47,14 @@ export type OrganicObservationRow = {
   shares: number | null;
   likes?: number | null;
   comments?: number | null;
+  /** The channel (platform) the row was measured on. Absent or '' when the row names none. */
+  channel?: string;
 };
 
 export type LearningState = "OBSERVED" | "INFERRED" | "VALIDATED";
+
+/** The two surfaces learning keeps apart. A metric names its surface: see surfaceOfMetric in learning/engine.ts. */
+export type LearningSurface = "organic" | "paid";
 
 export type LearnedPattern = {
   attribute: string;
@@ -69,6 +76,10 @@ export type LearnedPattern = {
   brandId?: string;
   /** Brand scope is used by default. Organization scope applies only after an explicit opt-in. Global never applies. */
   scope?: "brand" | "organization" | "global";
+  /** The surface the pattern was learned on. A pattern is applied only to a run or plan on the same surface. */
+  surface?: LearningSurface;
+  /** The channel (platform) the pattern was learned on, or '' for every channel of its surface. */
+  channel?: string;
   /** P(this bucket beats the brand baseline). Uncalibrated until a report says otherwise. */
   pBeat?: number;
   /** 95% credible interval for relative lift. */

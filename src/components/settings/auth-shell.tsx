@@ -27,7 +27,7 @@ export function BrandStage({ headline = "Find what works. Make the next one.", l
       </div>
       <div className="space-y-4">
         <p className="eyebrow">An advertising factory that learns</p>
-        <h2 className="text-3xl font-semibold leading-tight text-fg sm:text-4xl">{headline}</h2>
+        <h2 className="text-2xl font-semibold leading-tight text-fg sm:text-3xl">{headline}</h2>
         <p className="max-w-prose text-lg text-fg-muted">
           {lead ?? "Add a brand and what you know about it. Meridian gathers what already works in its niche, grades it, makes new creatives, and learns from what happens next."}
         </p>
@@ -39,7 +39,7 @@ export function BrandStage({ headline = "Find what works. Make the next one.", l
             className="stagger-in flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-sm font-medium text-fg"
             style={{ animationDelay: `${120 + index * 90}ms` }}
           >
-            <span className="size-1.5 rounded-full bg-accent" aria-hidden="true" />
+            <span className="size-1.5 rounded-full bg-fg-muted" aria-hidden="true" />
             {stage}
             {index < LOOP.length - 1 ? <span aria-hidden="true" className="text-fg-muted">→</span> : null}
           </li>
@@ -69,7 +69,7 @@ export function AuthShell({ title, description, children, footer }: {
           <h1 className="page-title">{title}</h1>
           {description ? <p className="text-fg-muted">{description}</p> : null}
         </div>
-        <div className="surface-rise space-y-6 rounded-2xl border border-border bg-surface p-6 shadow-lg md:p-7">{children}</div>
+        <div className="surface-rise space-y-6 rounded-xl border border-border bg-surface p-6 md:p-7">{children}</div>
         {footer ? <div className="text-sm text-fg-muted">{footer}</div> : null}
       </div>
     </main>

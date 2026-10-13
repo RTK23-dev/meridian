@@ -17,14 +17,37 @@ export type StageDecisionInput = {
   killSwitchEngaged: boolean;
   /** The total spend cap for the run, in cents, or null when none is set. */
   capCents: number | null;
-  /** Metered spend recorded against that cap so far, in cents. */
+  /** Metered spend recorded for this run, in cents: the sum of its factory_costs rows. */
   spentCents: number;
+  /** The daily spend cap, in cents, or null when none is set. */
+  dailyCapCents?: number | null;
+  /** Metered spend for this run in the last 24 hours, in cents. */
+  dailySpentCents?: number;
 };
+
+/**
+ * The reason a spend is refused because a cap is reached, or null while spend is inside every cap that is set. A zero or absent cap
+ * is not set. The produce stage checks this before each provider call, and the stage check uses it before the stage runs.
+ */
+export function capStopReason(input: {
+  capCents: number | null;
+  spentCents: number;
+  dailyCapCents?: number | null;
+  dailySpentCents?: number;
+}): string | null {
+  const totalCap = input.capCents ?? 0;
+  const dailyCap = input.dailyCapCents ?? 0;
+  if (totalCap > 0 && input.spentCents >= totalCap) return "The spend cap for this run is reached.";
+  if (dailyCap > 0 && (input.dailySpentCents ?? 0) >= dailyCap) return "The daily spend cap for this brand is reached.";
+  return null;
+}
 
 /**
  * Decides whether one stage may run now (NORTH_STAR §4 and §5 step 7).
  *
  * - The kill switch stops every stage, not only the spend ones.
+ * - A spend or publish stage stops when a cap is reached. The check is made before the stage, in every mode, so a cap is never
+ *   exceeded by the stage that reaches it. A daily cap and a total cap are each checked.
  * - manual: a person approves each spend or publish stage, and the review stage.
  * - semi: a person approves each spend or publish stage once for the run. Review runs on its own, and the gates still block.
  * - full: runs without a person, but only while a spend cap is set and not yet reached. A full run with no cap stops.
@@ -38,12 +61,17 @@ export function stageDecision(input: StageDecisionInput): StageDecision {
   }
   const spends = SPEND_OR_PUBLISH.has(input.stage);
   const review = input.stage === "factory.review";
+  const totalCap = input.capCents ?? 0;
+  const dailyCap = input.dailyCapCents ?? 0;
+  if (spends) {
+    const reached = capStopReason(input);
+    if (reached) return { action: "stop", reason: reached };
+  }
   if (input.automation === "full") {
     if (!spends) return { action: "run" };
-    if (input.capCents == null || input.capCents <= 0) {
+    if (totalCap <= 0 && dailyCap <= 0) {
       return { action: "stop", reason: "Full automation needs a spend cap before it spends or publishes. Set one, then start again." };
     }
-    if (input.spentCents >= input.capCents) return { action: "stop", reason: "The spend cap for this run is reached." };
     return { action: "run" };
   }
   const needsApproval = spends || (input.automation === "manual" && review);

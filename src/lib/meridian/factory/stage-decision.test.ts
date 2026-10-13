@@ -1,6 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { stageDecision, type StageDecisionInput } from "./stage-decision.ts";
+import { capStopReason, stageDecision, type StageDecisionInput } from "./stage-decision.ts";
+
+test("capStopReason refuses spend at or over a set cap, and is null while spend is inside every cap", () => {
+  assert.equal(capStopReason({ capCents: 40, spentCents: 39 }), null, "under the total cap");
+  assert.equal(capStopReason({ capCents: 40, spentCents: 40 }), "The spend cap for this run is reached.", "at the total cap");
+  assert.equal(capStopReason({ capCents: 40, spentCents: 41 }), "The spend cap for this run is reached.", "over the total cap");
+  assert.equal(capStopReason({ capCents: null, spentCents: 10_000 }), null, "no total cap is set, so no total is refused");
+  assert.equal(capStopReason({ capCents: 0, spentCents: 10_000 }), null, "a zero cap is not set");
+  assert.equal(
+    capStopReason({ capCents: null, spentCents: 0, dailyCapCents: 30, dailySpentCents: 30 }),
+    "The daily spend cap for this brand is reached.",
+    "at the daily cap",
+  );
+  assert.equal(
+    capStopReason({ capCents: 100, spentCents: 10, dailyCapCents: 30, dailySpentCents: 29 }),
+    null,
+    "inside both caps",
+  );
+  assert.equal(
+    capStopReason({ capCents: 100, spentCents: 10, dailyCapCents: 30, dailySpentCents: 0 }),
+    null,
+    "a daily cap is read only from the daily spend, not the total",
+  );
+});
+
+test("stageDecision refuses a spend stage with the reason capStopReason gives", () => {
+  const input = { automation: "manual" as const, stage: "factory.produce" as const, approved: true, killSwitchEngaged: false };
+  const reached = { capCents: 40, spentCents: 40 };
+  const decision = stageDecision({ ...input, ...reached });
+  assert.deepEqual(decision, { action: "stop", reason: capStopReason(reached) });
+});
 
 const base: StageDecisionInput = {
   automation: "manual",
@@ -55,6 +85,27 @@ test("the kill switch stops every stage in every mode, approved or not", () => {
       assert.equal(decision.action, "stop", `${automation} ${stage} is stopped by the kill switch`);
     }
   }
+});
+
+test("a reached total cap stops a spend stage before it runs, in every mode, even once approved", () => {
+  for (const automation of ["manual", "semi", "full"] as const) {
+    const decision = stageDecision({ ...base, automation, stage: "factory.produce", approved: true, spentCents: 10_000 });
+    assert.equal(decision.action, "stop", `${automation} stops at a reached cap`);
+    if (decision.action === "stop") assert.equal(decision.reason, "The spend cap for this run is reached.");
+  }
+  // A stage that spends nothing is not held by the cap.
+  assert.equal(stageDecision({ ...base, automation: "manual", stage: "factory.grade", spentCents: 10_000 }).action, "run");
+});
+
+test("a reached daily cap stops a spend stage, and a daily cap alone lets a full run spend inside it", () => {
+  const daily = stageDecision({ ...base, automation: "manual", stage: "factory.produce", approved: true, capCents: null, dailyCapCents: 500, dailySpentCents: 500 });
+  assert.equal(daily.action, "stop");
+  if (daily.action === "stop") assert.match(daily.reason, /daily spend cap/);
+  assert.equal(
+    stageDecision({ ...base, automation: "full", stage: "factory.produce", capCents: null, dailyCapCents: 500, dailySpentCents: 499 }).action,
+    "run",
+    "a daily cap alone is a cap for full automation",
+  );
 });
 
 test("a stage that waits is not a failure: the decision never fails the run", () => {

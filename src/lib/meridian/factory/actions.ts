@@ -4,13 +4,14 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
-import { FACTORY_GRAPH, factoryRunJobs, type FactoryStage } from "./pipeline.ts";
+import { FACTORY_GRAPH, factoryRunJobs, isFactoryStage, type FactoryStage } from "./pipeline.ts";
 import {
   automationFromFactoryLevel,
   factoryLevelOfAutomation,
   mergeRunSettings,
   parseRunSettings,
   parseStoredSettings,
+  runSettingsFromStorage,
 } from "./run-settings.ts";
 import {
   parseFactoryLevel,
@@ -21,7 +22,10 @@ import {
 } from "./autopilot.ts";
 import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
+import { factoryRunSourcesFor, RECENT_RUNS_LIMIT } from "./gather.ts";
 import { isApprovableStage } from "./approval.ts";
+import { queueStagesFrom } from "./queue-stages.ts";
+import { listLinkedMetrics } from "../measurement/creative-linkage.ts";
 import { trendReport } from "./trends.ts";
 import { weeklyStrategistReport } from "./report.ts";
 import { hypitVideoEngine } from "@/lib/meridian/video/engine";
@@ -80,12 +84,14 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
       order by captured_at desc
       limit 80
     `;
-    const runs = await sql<{ id: string; status: string; current_stage: string; niche: string; error: string; created_at: unknown }>`
-      select id, status, current_stage, niche, error, created_at from factory_runs
+    const runs = await sql<{ id: string; status: string; current_stage: string; niche: string; error: string; created_at: unknown; level: number; settings: string }>`
+      select id, status, current_stage, niche, error, created_at, level, settings from factory_runs
       where organization_id = ${organizationId} and brand_id = ${data.brandId}
       order by created_at desc
-      limit 8
+      limit ${RECENT_RUNS_LIMIT}
     `;
+    // Each listed run's source states. A run that has not gathered yet has none, and the board says so rather than showing a guess.
+    const runSourcesById = await factoryRunSourcesFor(sql, organizationId, data.brandId);
     const settings = await sql<{ level: number; ceiling: number }>`
       select level, ceiling from factory_settings
       where organization_id = ${organizationId} and brand_id = ${data.brandId}
@@ -118,6 +124,47 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
       order by created_at desc
       limit 40
     `;
+    // The publish receipts and the measured rows of this brand's Factory creatives. A receipt is what the channel or the paid publisher
+    // returned. A metric the source did not report is null, and the board says so rather than showing zero.
+    const factoryCreatives = await sql<{ creative_id: string; run_id: string; format: string }>`
+      select creative_id, run_id, format from factory_creatives
+      where organization_id = ${organizationId} and brand_id = ${data.brandId}
+      order by created_at desc
+      limit 40
+    `;
+    const creativeIds = factoryCreatives.map((row) => row.creative_id);
+    const organicReceipts = creativeIds.length === 0 ? [] : await sql<{ creative_id: string; platform: string; status: string; external_id: string | null; error: string | null }>`
+      select creative_id, platform, status, external_id, error from organic_posts
+      where organization_id = ${organizationId} and brand_id = ${data.brandId} and surface = 'organic'
+        and creative_id = any(${creativeIds})
+      order by created_at desc
+      limit 200
+    `;
+    const paidReceipts = creativeIds.length === 0 ? [] : await sql<{ idempotency_key: string; provider: string; status: string; external_id: string; last_error: string }>`
+      select idempotency_key, provider, status, external_id, last_error from provider_objects
+      where organization_id = ${organizationId} and brand_id = ${data.brandId} and surface = 'paid' and object_type = 'ad'
+        and idempotency_key = any(${creativeIds})
+      order by created_at desc
+      limit 200
+    `;
+    const measuredRows = await listLinkedMetrics(sql, { organizationId, brandId: data.brandId }, creativeIds);
+    const publishing = factoryCreatives.map((creative) => ({
+      creativeId: creative.creative_id,
+      runId: creative.run_id,
+      format: creative.format,
+      receipts: [
+        ...organicReceipts
+          .filter((row) => row.creative_id === creative.creative_id)
+          .map((row) => ({ surface: "organic" as const, platform: row.platform, status: row.status, externalId: row.external_id ?? "", reason: row.error ?? "" })),
+        ...paidReceipts
+          .filter((row) => row.idempotency_key === creative.creative_id)
+          .map((row) => ({ surface: "paid" as const, platform: row.provider, status: row.status, externalId: row.external_id, reason: row.last_error })),
+      ],
+      measurements: measuredRows
+        .filter((row) => row.creativeId === creative.creative_id)
+        .map((row) => ({ surface: row.surface, platform: row.platform, recordedAt: row.recordedAt, metrics: row.metrics })),
+    }));
+
     const yieldRows = await sql<{
       search_terms: string;
       collected_count: number;
@@ -201,6 +248,9 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
       trends,
       queuedTemplates: [],
     });
+    const brandRunDefaults = await sql<{ run_defaults: string }>`
+      select run_defaults from brands where id = ${data.brandId} and organization_id = ${organizationId} limit 1
+    `;
     const level = (settings[0]?.level ?? 0) as FactoryLevel;
     const ceiling = (settings[0]?.ceiling ?? 1) as FactoryLevel;
     const video = hypitVideoEngine().status();
@@ -221,6 +271,8 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
       video,
       libraryStatus: libraryToken ? "CONFIGURED" : "NOT_CONNECTED",
       libraryError: libraryToken ? "" : "META_AD_LIBRARY_TOKEN is not configured. No ads were collected.",
+      // The brand's run defaults, with the built-in defaults under them. The run builder starts from these.
+      runDefaults: mergeRunSettings(parseStoredSettings(brandRunDefaults[0]?.run_defaults), null),
       runs: runs.map((row) => ({
         id: row.id,
         status: row.status,
@@ -228,6 +280,10 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
         niche: row.niche,
         error: row.error,
         createdAt: String(row.created_at),
+        /** The settings the run started with. A run stored before settings existed is read from its level. */
+        settings: runSettingsFromStorage(row.settings, row.level),
+        /** Each source's state for this run: ok, not_connected or failed with its reason. Empty until the run gathers. */
+        runSources: runSourcesById.get(row.id) ?? [],
       })),
       winners,
       trends,
@@ -260,6 +316,7 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
         gateResult: row.gate_result,
       })),
       costs: costs.map((row) => ({ stage: row.stage, cents: row.cents, seconds: row.seconds })),
+      publishing,
       note: ads.length
         ? "Scores and trends below use stored Ad Library rows only. They are not live account results."
         : "No tracked ads yet. Connect Ad Library, a first-party account, or upload a swipe file. Nothing is invented to fill this board.",
@@ -368,24 +425,101 @@ export const approveFactoryStage = createServerFn({ method: "POST" })
       update factory_runs set status = 'queued', error = '', updated_at = now()
       where id = ${data.runId} and organization_id = ${organizationId} and brand_id = ${data.brandId} and status = 'awaiting_approval'
     `;
-    const remaining = FACTORY_GRAPH.slice(FACTORY_GRAPH.findIndex((spec) => spec.type === data.stage));
-    const idByKey = new Map<string, string>();
-    for (const spec of remaining) {
-      const id = crypto.randomUUID();
-      const key = `factory:${data.brandId}:${data.runId}:${spec.type}:approval:${approvalId}`;
-      idByKey.set(key, id);
-      const dependsOnKey = spec.type === data.stage ? null : `factory:${data.brandId}:${data.runId}:${spec.dependsOn}:approval:${approvalId}`;
-      await sql`
-        insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload, max_attempts, depends_on, priority)
-        values (
-          ${id}, ${organizationId}, ${data.brandId}, ${spec.type}, ${key}, 'queued',
-          ${JSON.stringify({ organizationId, brandId: data.brandId, runId: data.runId, niche: runs[0]!.niche, stage: spec.type })},
-          ${spec.maxAttempts}, ${dependsOnKey ? idByKey.get(dependsOnKey) ?? "" : ""}, ${20 + FACTORY_GRAPH.indexOf(spec)}
-        )
-        on conflict (organization_id, idempotency_key) do nothing
-      `;
+    const requeued = await queueStagesFrom(sql, {
+      organizationId,
+      brandId: data.brandId,
+      runId: data.runId,
+      niche: runs[0]!.niche,
+      fromStage: data.stage,
+      kind: "approval",
+      token: approvalId,
+    });
+    return { runId: data.runId, stage: data.stage, requeued };
+  });
+
+/**
+ * Starts a paused run again from the stage it stopped at. A paused run is stopped by its spend cap, a provider that is not ready,
+ * or the kill switch. The kill switch must be clear. A spend cap still reached stops the run again, at the same stage, with the same reason.
+ */
+export const resumeFactoryRun = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      runId: clip(body.runId, 80, "Run", true),
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "member");
+    const runs = await sql<{ niche: string; status: string; current_stage: string }>`
+      select niche, status, current_stage from factory_runs
+      where id = ${data.runId} and organization_id = ${organizationId} and brand_id = ${data.brandId}
+      limit 1
+    `;
+    const run = runs[0];
+    if (!run) throw new Error("That factory run is not in this brand.");
+    if (run.status !== "paused") throw new Error("Only a paused run starts again. A run that waits for approval is approved instead.");
+    if (!isFactoryStage(run.current_stage)) throw new Error("This run has no stopped stage to start from.");
+    const kill = await sql<{ n: number }>`
+      select count(*)::int as n from factory_kill_switches
+      where organization_id = ${organizationId} and engaged = true and (brand_id is null or brand_id = ${data.brandId})
+    `;
+    if ((kill[0]?.n ?? 0) > 0) throw new Error("The kill switch is on. Clear it before this run starts again.");
+    const requeued = await queueStagesFrom(sql, {
+      organizationId,
+      brandId: data.brandId,
+      runId: data.runId,
+      niche: run.niche,
+      fromStage: run.current_stage,
+      kind: "resume",
+      token: crypto.randomUUID(),
+    });
+    await sql`
+      update factory_runs set status = 'queued', error = '', updated_at = now()
+      where id = ${data.runId} and organization_id = ${organizationId} and brand_id = ${data.brandId} and status = 'paused'
+    `;
+    return { runId: data.runId, stage: run.current_stage, requeued };
+  });
+
+/**
+ * Queues the learn stage again for a run that waits for a measured outcome of its own creatives. Learning runs once in the queue,
+ * before the measurement pull has stored anything, so this is how a waiting run is checked again. It acts only on a running run at
+ * its learn step.
+ */
+export const checkFactoryLearning = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      runId: clip(body.runId, 80, "Run", true),
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "member");
+    const runs = await sql<{ niche: string; status: string; current_stage: string }>`
+      select niche, status, current_stage from factory_runs
+      where id = ${data.runId} and organization_id = ${organizationId} and brand_id = ${data.brandId}
+      limit 1
+    `;
+    const run = runs[0];
+    if (!run) throw new Error("That factory run is not in this brand.");
+    if (run.status !== "running" || run.current_stage !== "factory.learn") {
+      throw new Error("Learning is checked again only while the run is running at its learn step.");
     }
-    return { runId: data.runId, stage: data.stage, requeued: remaining.length };
+    const spec = FACTORY_GRAPH.find((item) => item.type === "factory.learn");
+    if (!spec) throw new Error("This run has no learn step.");
+    const id = crypto.randomUUID();
+    await sql`
+      insert into jobs (id, organization_id, brand_id, job_type, idempotency_key, status, payload, max_attempts, depends_on, priority)
+      values (
+        ${id}, ${organizationId}, ${data.brandId}, 'factory.learn', ${`factory:${data.brandId}:${data.runId}:factory.learn:check:${crypto.randomUUID()}`},
+        'queued', ${JSON.stringify({ organizationId, brandId: data.brandId, runId: data.runId, niche: run.niche, stage: "factory.learn" })},
+        ${spec.maxAttempts}, '', ${20 + FACTORY_GRAPH.indexOf(spec)}
+      )
+    `;
+    return { runId: data.runId, queued: 1 };
   });
 
 export const setFactoryControls = createServerFn({ method: "POST" })

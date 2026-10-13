@@ -529,8 +529,10 @@ export async function syncTelemetryToLearning(
       continue;
     }
 
-    // A paid row needs at least one paid metric. Views are reach, so they never stand in for impressions.
-    const paidMeasured = r.impressions != null || r.clicks != null || r.conversions != null || r.spendCents != null;
+    // A paid row needs at least one paid metric. Views are reach, so they never stand in for impressions. Only a paid row is a paid
+    // observation: an organic row that carries an impression count is still an organic outcome, and must not train paid learning.
+    const paidMeasured =
+      r.sourceType === "paid" && (r.impressions != null || r.clicks != null || r.conversions != null || r.spendCents != null);
     const existing = paidMeasured
       ? await sql`
           select id from performance_observations

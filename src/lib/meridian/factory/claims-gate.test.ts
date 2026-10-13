@@ -35,9 +35,9 @@ function gateDatabase(variants: Array<{ id: string; storyboard: string | null }>
   const gateWrites: Array<{ id: string; result: string }> = [];
   const sql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.join("?");
-    if (text.includes("select id, status, niche, level, settings from factory_runs")) {
+    if (text.includes("select id, status, niche, level, settings, created_by, current_stage from factory_runs")) {
       // No stored settings: the run is read from its level, 3, which is full automation. Gate is not a spend stage, so it runs.
-      return [{ id: "run-1", status: "running", niche: "skincare", level: 3, settings: "{}" }];
+      return [{ id: "run-1", status: "running", niche: "skincare", level: 3, settings: "{}", created_by: "user-1" }];
     }
     if (text.includes("from factory_kill_switches")) return [];
     if (text.includes("from products p")) return [{ allowed_claims: productClaims.allowed, prohibited_claims: productClaims.prohibited }];

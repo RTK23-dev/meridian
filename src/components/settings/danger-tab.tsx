@@ -20,7 +20,7 @@ export function DangerTab({ brands, canDelete }: { brands: BrandSummary[]; canDe
             {brands.map((brand) => (
               <li key={brand.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
                 <span className="font-semibold text-fg">{brand.name}</span>
-                <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="inline-flex min-h-11 items-center font-semibold text-accent hover:underline">
+                <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="inline-flex min-h-11 items-center font-semibold text-fg underline underline-offset-4 hover:no-underline">
                   Open {brand.name} to delete it<span className="sr-only"> from its overview</span>
                 </Link>
               </li>

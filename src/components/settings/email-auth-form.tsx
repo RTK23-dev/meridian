@@ -17,7 +17,7 @@ export function EmailAuthForm({ initialMode = "up" }: { initialMode?: "in" | "up
       {mode === "in" ? <SignInForm /> : <SignUpForm />}
       <button
         type="button"
-        className="inline-flex min-h-11 items-center text-sm font-semibold text-accent underline-offset-4 hover:underline"
+        className="inline-flex min-h-11 items-center text-sm font-semibold text-fg underline underline-offset-4 hover:no-underline"
         onClick={() => setMode(mode === "in" ? "up" : "in")}
       >
         {mode === "in" ? "Create an account instead" : "I already have an account"}
@@ -132,7 +132,7 @@ function PasswordToggle({ visible, onToggle }: { visible: boolean; onToggle: () 
       aria-label="Show password"
       aria-pressed={visible}
       onClick={onToggle}
-      className="absolute right-1 top-1/2 inline-flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-md px-3 text-sm font-semibold text-accent hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="absolute right-1 top-1/2 inline-flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-md px-3 text-sm font-semibold text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       {visible ? "Hide" : "Show"}
     </button>

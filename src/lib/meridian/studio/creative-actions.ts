@@ -11,7 +11,7 @@ import { promptById } from "@/lib/meridian/prompts/registry";
 import { contentHash } from "@/lib/meridian/assets/lifecycle";
 import { loadLibraryCreatives } from "@/lib/meridian/library/listing";
 import { persistBrandLogo } from "@/lib/meridian/brand/logo-store";
-import { deriveMetrics } from "@/lib/meridian/performance/metrics";
+import { deriveMetrics, metricOf, performanceTotalsOf } from "@/lib/meridian/performance/metrics";
 import { summarizeIntelligence } from "@/lib/meridian/intelligence/summary";
 import { inspectImage } from "@/lib/meridian/assets/images";
 import {
@@ -389,20 +389,15 @@ export const getTrace = createServerFn({ method: "POST" })
         question: `${asText(row.question_id)}.${asText(row.question_version)}`,
         subject: asText(row.subject_type),
         decision: asText(row.decision),
-        probability: asNumber(row.probability),
-        confidence: asNumber(row.confidence),
+        // An unknown probability or confidence is stored as null (migration 0053), so it is read as null.
+        probability: metricOf(row.probability),
+        confidence: metricOf(row.confidence),
         reasons: asJson<string[]>(row.reasons, []),
         createdAt: asText(row.created_at),
       })),
       observations: observations.map((row) => {
-        const totals = {
-          impressions: asNumber(row.impressions),
-          reach: asNumber(row.reach),
-          clicks: asNumber(row.clicks),
-          conversions: asNumber(row.conversions),
-          spendCents: asNumber(row.spend_cents),
-          revenueCents: asNumber(row.revenue_cents),
-        };
+        // A metric the source did not report is null here, never zero.
+        const totals = performanceTotalsOf(row);
         return {
           ...totals,
           ...deriveMetrics(totals),

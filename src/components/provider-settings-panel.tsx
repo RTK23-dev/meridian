@@ -237,7 +237,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                   setMessage(null);
                   setDiscardRequested(false);
                 }}
-                className={`rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
+                className={`max-sm:min-h-11 pointer-coarse:min-h-11 rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
                   activeTab === tab
                     ? "bg-paper text-fg shadow-sm"
                     : "text-muted hover:text-fg hover:bg-panel"
@@ -255,7 +255,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
       {activeSummary ? (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded border border-line bg-panel p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-lg capitalize">{activeTab} Provider Status</h3>
@@ -368,7 +368,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 />
               </Field>
 
-              <div className="sm:col-span-2 rounded border border-line bg-panel p-3 text-xs text-muted">
+              <div className="sm:col-span-2 border-t border-line pt-3 text-xs text-muted">
                 <strong>Read-only observation</strong>: Cyclone observations are read-only. Meridian
                 never automates likes, follows, comments, DMs, or competitor interactions.
               </div>

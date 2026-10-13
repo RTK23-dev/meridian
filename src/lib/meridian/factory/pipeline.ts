@@ -18,6 +18,14 @@ export const FACTORY_STAGES = [
 
 export type FactoryStage = (typeof FACTORY_STAGES)[number];
 
+/**
+ * The only way a run finishes is the learn stage doing its real work (NORTH_STAR section 5, step 10). Until that stage is built,
+ * it returns this reason, the run stays `running`, and the reason is kept on the run row. No other stage marks a run succeeded.
+ */
+
+/** The reason a run stays running at learn: none of its own creatives has a measured outcome stored yet. Read by the Factory screen too. */
+export const LEARN_WAITING = "Learning waits for a measured outcome from this run's creatives. None is stored yet, so the run stays running.";
+
 export type FactoryStageSpec = {
   type: FactoryStage;
   label: string;

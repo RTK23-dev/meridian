@@ -2,26 +2,50 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, DisabledReason, Field, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, Input } from "@/components/ui";
+import { Button, Field, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, Input } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
-import { factoryControlsPayload, factoryControlsSchema, factoryRunSchema, type FactoryControlsInput, type FactoryRunInput } from "@/components/factory/factory-forms";
+import { factoryControlsPayload, factoryControlsSchema, type FactoryControlsInput } from "@/components/factory/factory-forms";
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
 import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
-import { approveFactoryStage, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
-import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian/factory/approval";
+import { approveFactoryStage, checkFactoryLearning, resumeFactoryRun, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
+import { metricLine, receiptLine } from "@/components/factory/measurement-model";
+import { HeldReservationsPanel } from "@/components/held-reservations-panel";
 import { FACTORY_GRAPH } from "@/lib/meridian/factory/pipeline";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
+import { RunBuilder } from "@/components/factory/run-builder";
+import { RunList, type RunListItem } from "@/components/factory/run-list";
+import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { qk } from "@/lib/query/keys";
 
 export const Route = createFileRoute("/_app/brands/$brandId/factory")({ staticData: { pageTitle: "Factory" }, component: Page });
 
 function dollars(cents: number): string {
   return `$${(Math.max(0, cents) / 100).toFixed(2)}`;
+}
+
+type FactoryBoard = NonNullable<ReturnType<typeof useFactoryQuery>["data"]>;
+
+/** Each run with the receipts and measured rows of its own creatives, as the run view shows them. */
+function runListItems(board: FactoryBoard): RunListItem[] {
+  return board.runs.map((run) => {
+    const creatives = board.publishing.filter((item) => item.runId === run.id);
+    return {
+      id: run.id,
+      status: run.status,
+      stage: run.stage,
+      niche: run.niche,
+      error: run.error,
+      settings: run.settings,
+      runSources: run.runSources,
+      receiptLines: creatives.flatMap((item) => item.receipts.map((receipt) => `${item.format} creative: ${receiptLine(receipt)}`)),
+      measurementLines: creatives.flatMap((item) => item.measurements.map((row) => `${row.surface} ${row.platform}: ${metricLine(row.surface, row.metrics)}`)),
+    };
+  });
 }
 
 function Page() {
@@ -38,24 +62,38 @@ function FactoryPage({ brandId }: { brandId: string }) {
   // Workspace provider summary: the Gemini production key and the Google Drive setting, for the engine states.
   const settingsQuery = useProviderSettingsQuery(board?.organizationId ?? "", Boolean(board));
   const [note, setNote] = useState<string | null>(null);
-  const nicheForm = useForm<FactoryRunInput>({ resolver: zodResolver(factoryRunSchema), defaultValues: { niche: "" }, mode: "onBlur" });
+  // The run builder keeps its own draft and reports whether it differs from the brand's defaults, so the page can guard it.
+  const [builderDirty, setBuilderDirty] = useState(false);
+  // A queued run resets the builder to the brand's defaults. Remounting it is how the draft returns to them.
+  const [builderKey, setBuilderKey] = useState(0);
   const controlsForm = useForm<FactoryControlsInput>({
     resolver: zodResolver(factoryControlsSchema),
     defaultValues: { level: "0", ceiling: "1", daily: "", total: "" },
     mode: "onBlur",
   });
-  const niche = nicheForm.watch("niche");
-  const factoryFormsDirty = nicheForm.formState.isDirty || controlsForm.formState.isDirty;
+  const factoryFormsDirty = builderDirty || controlsForm.formState.isDirty;
   const factoryKey = (name: string) => ["mutation", `factory.${name}`, brandId] as const;
   const startRun = useScopedMutation({
     mutationKey: factoryKey("run"),
-    mutationFn: (vars: { niche: string; level: FactoryLevel }) => startFactoryRun({ data: { brandId, niche: vars.niche, level: vars.level } }),
+    mutationFn: (vars: { niche: string; settings: RunSettings }) => startFactoryRun({ data: { brandId, niche: vars.niche, level: 0, settings: vars.settings } }),
     // A run queues jobs and may produce research and creatives, so the jobs, market and studio screens change with it.
     invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.studio(brandId)],
     onSuccess: (result) => {
       setNote(`Queued ${result.jobs} factory jobs as run ${result.runId}.`);
-      nicheForm.reset({ niche: "" });
+      setBuilderKey((key) => key + 1);
     },
+  });
+  const startAgain = useScopedMutation({
+    mutationKey: factoryKey("start-again"),
+    mutationFn: (runId: string) => resumeFactoryRun({ data: { brandId, runId } }),
+    invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
+    onSuccess: (result) => setNote(`Started again from ${FACTORY_GRAPH.find((spec) => spec.type === result.stage)?.label ?? result.stage}. ${result.requeued} steps are queued.`),
+  });
+  const checkLearning = useScopedMutation({
+    mutationKey: factoryKey("check-learning"),
+    mutationFn: (runId: string) => checkFactoryLearning({ data: { brandId, runId } }),
+    invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
+    onSuccess: () => setNote("Learning is queued for this run. The run updates when the learn step finishes."),
   });
   const saveControls = useScopedMutation({
     mutationKey: factoryKey("controls"),
@@ -76,7 +114,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
     onSuccess: (result) => setNote(`Approved. ${result.requeued} steps are queued again from ${FACTORY_GRAPH.find((spec) => spec.type === result.stage)?.label ?? result.stage}.`),
   });
-  const failures = [startRun, saveControls, killSwitch, approveStage].map((action) => action.error).filter((error): error is Error => Boolean(error));
+  const failures = [startRun, startAgain, checkLearning, saveControls, killSwitch, approveStage].map((action) => action.error).filter((error): error is Error => Boolean(error));
 
   if (query.isError && !board) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!board) return <ScreenSkeleton label="Loading factory" shape="cards" />;
@@ -146,53 +184,30 @@ function FactoryPage({ brandId }: { brandId: string }) {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-section font-semibold">Watch a niche</h2>
-            {canEdit ? (
-              <form
-                className="flex flex-wrap items-end gap-3"
-                onSubmit={nicheForm.handleSubmit((values) => { void startRun.mutateAsync({ niche: values.niche, level: board.level }).catch(() => undefined); })}
-                onKeyDown={(event) => submitOnShortcut(event)}
-              >
-                <Field label="Niche" required error={nicheForm.formState.errors.niche?.message}>
-                  <Input {...nicheForm.register("niche")} maxLength={80} required placeholder="skincare" />
-                </Field>
-                <Button type="submit" disabled={startRun.isPending || nicheForm.formState.isSubmitting || !niche.trim()} aria-describedby={niche.trim() ? undefined : "factory-run-reason"}>{startRun.isPending || nicheForm.formState.isSubmitting ? "Queueing…" : "Queue factory run"}</Button>
-                {niche.trim() || startRun.isPending ? null : <DisabledReason id="factory-run-reason" className="basis-full">Type a niche, such as skincare, to queue a run.</DisabledReason>}
-                <FormDiscardBar dirty={nicheForm.formState.isDirty} subject="niche" onDiscard={() => nicheForm.reset({ niche: "" })} className="basis-full" />
-              </form>
-            ) : <p className="text-sm text-muted">Viewers cannot queue runs.</p>}
-            {board.runs.length === 0 ? <p className="text-sm text-muted">No factory runs are stored.</p> : (
-              <ul className="space-y-2">
-                {board.runs.map((run) => {
-                  const waitingOn = pendingApproval(run);
-                  const stageLabel = FACTORY_GRAPH.find((spec) => spec.type === run.stage)?.label ?? run.stage;
-                  return (
-                    <li key={run.id} className="space-y-2 rounded-md border border-line p-3 text-sm">
-                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                        <span className="font-semibold">{run.niche || "unspecified niche"}</span>
-                        <span className={waitingOn ? "font-semibold text-fg" : "text-muted"}>
-                          {runStatusLabel(run.status)}{stageLabel ? ` · ${stageLabel}` : ""}
-                        </span>
-                      </div>
-                      {run.error ? <p className="text-muted">{run.error}</p> : null}
-                      {waitingOn ? (
-                        canEdit ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={approveStage.isPending}
-                            loading={approveStage.isPending}
-                            onClick={() => void approveStage.mutateAsync({ runId: run.id, stage: waitingOn }).catch(() => undefined)}
-                          >
-                            {APPROVAL_LABELS[waitingOn]}
-                          </Button>
-                        ) : <p className="text-muted">Only a member can approve this step.</p>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <h2 className="text-section font-semibold">Start a run</h2>
+            <p className="text-muted">A run starts from the brand's defaults. Every choice you change here is stored with the run, so a later change to the defaults does not change it.</p>
+            <RunBuilder
+              key={builderKey}
+              defaults={board.runDefaults}
+              channels={(channelsQuery.data ?? []).map((channel) => ({ id: channel.id, name: channel.name, connected: channel.connected }))}
+              channelsState={channelsQuery.isPending ? "loading" : channelsQuery.isError ? "error" : "ready"}
+              canEdit={canEdit}
+              busy={startRun.isPending}
+              onStart={({ niche, settings }) => { void startRun.mutateAsync({ niche, settings }).catch(() => undefined); }}
+              onDirtyChange={setBuilderDirty}
+            />
+            <h3 className="font-semibold">Runs</h3>
+            <RunList
+              runs={runListItems(board)}
+              actions={{
+                canEdit,
+                killSwitchOn: killOn,
+                busy: { approve: approveStage.isPending, startAgain: startAgain.isPending, checkLearning: checkLearning.isPending },
+                onApprove: (runId, stage) => void approveStage.mutateAsync({ runId, stage }).catch(() => undefined),
+                onStartAgain: (runId) => void startAgain.mutateAsync(runId).catch(() => undefined),
+                onCheckLearning: (runId) => void checkLearning.mutateAsync(runId).catch(() => undefined),
+              }}
+            />
           </section>
 
           <section className="space-y-4">
@@ -294,6 +309,31 @@ function FactoryPage({ brandId }: { brandId: string }) {
               </ul>
             )}
           </section>
+          <section className="space-y-3">
+            <h2 className="text-section font-semibold">Publishing and measurement</h2>
+            <p className="text-muted">Each receipt is what a channel or the paid publisher returned. A channel with no connection is listed as not connected. A metric the source did not report reads not reported.</p>
+            {board.publishing.length === 0 ? <p className="text-muted">No Factory creative has a receipt yet.</p> : (
+              <ul className="space-y-2">
+                {board.publishing.map((item) => (
+                  <li key={item.creativeId} className="rounded-md border border-line p-3 text-sm">
+                    <span className="font-semibold">{item.format} creative</span> · run {item.runId}
+                    <ul className="mt-1">
+                      {item.receipts.map((receipt, index) => (
+                        <li key={`${receipt.surface}-${receipt.platform}-${index}`}>{receiptLine(receipt)}</li>
+                      ))}
+                    </ul>
+                    {item.measurements.length === 0 ? <p className="mt-1 text-muted">Not measured yet.</p> : (
+                      <ul className="mt-1">
+                        {item.measurements.map((row, index) => (
+                          <li key={`${row.surface}-${row.recordedAt}-${index}`}>{row.surface} {row.platform}: {metricLine(row.surface, row.metrics)}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </TabsContent>
 
         <TabsContent value="tests" className="space-y-4">
@@ -334,6 +374,18 @@ function FactoryPage({ brandId }: { brandId: string }) {
                 {board.killSwitch.brand ? "Clear brand kill switch" : "Engage brand kill switch"}
               </Button>
             ) : null}
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-section font-semibold">Held budget</h2>
+            <p className="text-muted">
+              A provider call whose outcome is unknown keeps its reserved budget held. Nothing releases it automatically, not even when its submission expires. An admin releases it here.
+            </p>
+            {canAdmin ? <HeldReservationsPanel brandId={brandId} /> : (
+              <p className="text-sm text-muted">
+                Only a workspace admin or owner can see and release held budget. Releasing it returns the reserved budget to the ledger, so the control is limited to them. Your role is {board.role}.
+              </p>
+            )}
           </section>
 
           <section className="space-y-4">

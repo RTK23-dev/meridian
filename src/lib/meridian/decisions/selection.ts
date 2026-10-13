@@ -16,7 +16,8 @@ import { isDecisionEngineId, type DecisionEngineId } from "./types.ts";
 export const DECISION_ENGINE_ENV = "DECISION_ENGINE";
 export const DEFAULT_DECISION_ENGINE: DecisionEngineId = "jev";
 
-export type DecisionEngineSource = "workspace" | "deployment" | "default";
+/** "run": the engine a Factory run chose in its own settings, which overrides the workspace for that run only. */
+export type DecisionEngineSource = "workspace" | "deployment" | "default" | "run";
 
 export type EngineSelection = {
   engineId: DecisionEngineId;

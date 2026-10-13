@@ -49,7 +49,7 @@ export function HoldBadge() {
 
 /** The server reports a hold, so the banner appears only when at least one row is held. */
 export function HoldBanner({ brandId }: { brandId: string }) {
-  return <section aria-labelledby="opportunity-hold-title" className="rounded-lg border border-brass/60 bg-panel p-4">
+  return <section aria-labelledby="opportunity-hold-title" className="space-y-1 border-l-2 border-warning pl-4">
     <h2 id="opportunity-hold-title" className="font-semibold">On hold: clear under Reviews</h2>
     <p className="mt-1 text-sm text-muted">A human review decision is blocking these opportunities from moving to a brief.</p>
     <Link className="mt-2 inline-flex min-h-11 items-center font-semibold underline underline-offset-4" to="/brands/$brandId/reviews" params={{ brandId }}>Open the review queue</Link>
@@ -74,7 +74,7 @@ export function CategoryLegend() {
 export function CategoryFilter({ value, onChange }: { value: OpportunityCategory | "all"; onChange: (value: OpportunityCategory | "all") => void }) {
   const options: Array<{ key: OpportunityCategory | "all"; label: string }> = [{ key: "all", label: "All" }, ...CATEGORY_LEGEND.map((item) => ({ key: item.key, label: item.label }))];
   return <div role="group" aria-label="Filter by category" className="flex flex-wrap gap-2">
-    {options.map((option) => <Button key={option.key} type="button" size="sm" variant={value === option.key ? "primary" : "secondary"} aria-pressed={value === option.key} onClick={() => onChange(option.key)}>{option.label}</Button>)}
+    {options.map((option) => <Button key={option.key} type="button" size="sm" variant="secondary" className={value === option.key ? "border-fg bg-surface-2" : undefined} aria-pressed={value === option.key} onClick={() => onChange(option.key)}>{option.label}</Button>)}
   </div>;
 }
 

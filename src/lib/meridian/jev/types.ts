@@ -50,6 +50,12 @@ export type JevQuestionSpec = {
     unresolvedOutcome?: "HUMAN_REVIEW" | "REJECT";
     /** An answer below this confidence goes to human review. */
     minConfidence?: number;
+    /**
+     * "uncalibrated" when the thresholds above have no calibration report. A probability or score judged under such a mapping
+     * goes to human review whatever the engine reports, and never approves or rejects. Absent, the engine's reported
+     * calibration decides, as it did before this field existed.
+     */
+    thresholdCalibration?: "uncalibrated" | "calibrated";
   };
 };
 
@@ -206,25 +212,6 @@ export type JevDecisionResponse = {
     disagreements: Record<string, { primary: unknown; compared: unknown }>;
     comparedResponse: JevDecisionResponse;
   };
-};
-
-export type JevPolicyThresholds = {
-  autoApprove: number;
-  humanReview: number;
-  minConfidenceForAuto: number;
-};
-
-export type JevDecisionOutcome = "AUTO_APPROVE" | "HUMAN_REVIEW" | "REJECT";
-
-export type JevPolicyEvaluation = {
-  decision: JevDecisionOutcome;
-  reason: string;
-  policyVersion: string;
-  thresholds: JevPolicyThresholds;
-  supportingCount: number;
-  violationCount: number;
-  uncertainCount: number;
-  evidenceRefs: EvidenceRef[];
 };
 
 export interface JevClient {

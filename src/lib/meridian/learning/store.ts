@@ -1,4 +1,4 @@
-import type { ObservedCreative, PerformanceRow, OrganicObservationRow } from "../domain.ts";
+import type { LearnedPattern, LearningSurface, ObservedCreative, PerformanceRow, OrganicObservationRow } from "../domain.ts";
 import { learnPatterns } from "./engine.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
@@ -34,11 +34,17 @@ function optionalNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** What one recomputation stored, per surface: the patterns kept, and the measured outcomes they were learned from. */
+export type LearningSummary = {
+  patterns: number;
+  bySurface: Record<LearningSurface, { patterns: number; outcomes: number }>;
+};
+
 /**
- * Recompute brand-scoped patterns from stored rows.
+ * Recompute brand-scoped patterns from stored rows, per surface and channel (NORTH_STAR section 8, item 10).
  * Does not mark jobs succeeded. The process that claimed the job records its own result.
  */
-export async function applyLearnedPatterns(sql: Sql, organizationId: string, brandId: string): Promise<number> {
+export async function applyLearnedPatternsBySurface(sql: Sql, organizationId: string, brandId: string): Promise<LearningSummary> {
   const creativeRows = await sql<Record<string, unknown>>`
     select id, organization_id, brand_id, origin, angle, hook_type, format, proof_type, offer, cta,
            visual_style, platform, emotion, product_name, claim, raw_text
@@ -49,7 +55,7 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
   // loop is simulated end to end, they are the learning input, so they are kept there.
   const includeTestSources = isTestingRuntimeNow();
   const observationRows = await sql<Record<string, unknown>>`
-    select creative_id, organization_id, brand_id, impressions, clicks, conversions, spend_cents, revenue_cents
+    select creative_id, organization_id, brand_id, impressions, clicks, conversions, spend_cents, revenue_cents, platform
     from performance_observations
     where brand_id = ${brandId} and organization_id = ${organizationId}
       and (${includeTestSources}::boolean or source not like 'test:%')
@@ -84,11 +90,12 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
     conversions: asNumber(row.conversions),
     spendCents: asNumber(row.spend_cents),
     revenueCents: row.revenue_cents == null ? null : asNumber(row.revenue_cents),
+    channel: asText(row.platform),
   }));
   let organicObservations: OrganicObservationRow[] = [];
   try {
     const organicRows = await sql<Record<string, unknown>>`
-      select creative_id, organization_id, brand_id, views, three_second_views, completion_rate, shares, likes, comments
+      select creative_id, organization_id, brand_id, platform, views, three_second_views, completion_rate, shares, likes, comments
       from organic_observations
       where brand_id = ${brandId} and organization_id = ${organizationId} and creative_id is not null
     `;
@@ -96,6 +103,7 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
       creativeId: asText(row.creative_id),
       organizationId: asText(row.organization_id),
       brandId: asText(row.brand_id),
+      channel: asText(row.platform),
       views: optionalNumber(row.views),
       threeSecondViews: optionalNumber(row.three_second_views),
       completionRate: optionalNumber(row.completion_rate),
@@ -106,7 +114,31 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
   } catch {
     organicObservations = [];
   }
-  const patterns = learnPatterns({ organizationId, brandId, creatives, observations, organicObservations });
+  // Learned once over every channel (channel ''), and once per channel that a row names. A channel set holds only its own rows, so a
+  // pattern for one platform never comes from another platform's outcomes. Paid and organic metrics are disjoint, so each call
+  // learns each surface from its own rows only.
+  const channels = [...new Set([...observations, ...organicObservations].map((row) => row.channel ?? "").filter(Boolean))].sort();
+  const patterns: LearnedPattern[] = [];
+  for (const channel of ["", ...channels]) {
+    const set = learnPatterns({
+      organizationId,
+      brandId,
+      creatives,
+      observations: observations.filter((row) => channel === "" || (row.channel ?? "") === channel),
+      organicObservations: organicObservations.filter((row) => channel === "" || (row.channel ?? "") === channel),
+    });
+    for (const pattern of set) patterns.push({ ...pattern, channel });
+  }
+  const bySurface: Record<LearningSurface, { patterns: number; outcomes: number }> = {
+    organic: {
+      patterns: patterns.filter((pattern) => pattern.surface === "organic").length,
+      outcomes: organicObservations.filter(hasOrganicMetric).length,
+    },
+    paid: {
+      patterns: patterns.filter((pattern) => pattern.surface === "paid").length,
+      outcomes: observations.length,
+    },
+  };
   // Read, compute, then replace in one transaction. A failed insert rolls the delete back, so readers never see an empty
   // or half-written set. The advisory lock serializes two replacements for the same brand: without it, both would delete
   // the old rows and both would insert, leaving duplicates.
@@ -114,18 +146,31 @@ export async function applyLearnedPatterns(sql: Sql, organizationId: string, bra
     await tx`select pg_advisory_xact_lock(hashtext(${`learned_patterns:${organizationId}:${brandId}`}))`;
     await tx`delete from learned_patterns where brand_id = ${brandId} and organization_id = ${organizationId} and scope = 'brand'`;
     for (const pattern of patterns) {
+      // A pattern with no surface cannot be kept apart from another surface's, so it is not stored.
+      if (!pattern.surface) continue;
       await tx`
         insert into learned_patterns (
           id, organization_id, brand_id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary,
-          state, clicks, conversions, spend_cents, revenue_cents, scope, p_beat, ci_low, ci_high, q_value
+          state, clicks, conversions, spend_cents, revenue_cents, scope, p_beat, ci_low, ci_high, q_value, surface, channel
         ) values (
           ${globalThis.crypto.randomUUID()}, ${organizationId}, ${brandId}, ${pattern.attribute}, ${pattern.value}, ${pattern.metric},
           ${pattern.lift}, ${pattern.sampleSize}, ${pattern.baseline}, ${pattern.observed}, ${pattern.impressions}, ${pattern.summary},
           ${pattern.state ?? "INFERRED"}, ${pattern.clicks ?? 0}, ${pattern.conversions ?? 0}, ${pattern.spendCents ?? 0}, ${pattern.revenueCents ?? 0},
-          ${pattern.scope ?? "brand"}, ${pattern.pBeat ?? null}, ${pattern.ciLow ?? null}, ${pattern.ciHigh ?? null}, ${pattern.qValue ?? null}
+          ${pattern.scope ?? "brand"}, ${pattern.pBeat ?? null}, ${pattern.ciLow ?? null}, ${pattern.ciHigh ?? null}, ${pattern.qValue ?? null},
+          ${pattern.surface}, ${pattern.channel ?? ""}
         )
       `;
     }
   });
-  return patterns.length;
+  return { patterns: patterns.length, bySurface };
+}
+
+/** The number of patterns stored, across both surfaces. Callers that do not report per surface use this. */
+export async function applyLearnedPatterns(sql: Sql, organizationId: string, brandId: string): Promise<number> {
+  return (await applyLearnedPatternsBySurface(sql, organizationId, brandId)).patterns;
+}
+
+/** Whether an organic observation carries at least one measured organic metric. An all-unknown row is not an outcome. */
+function hasOrganicMetric(row: OrganicObservationRow): boolean {
+  return row.views != null || row.threeSecondViews != null || row.completionRate != null || row.shares != null;
 }
