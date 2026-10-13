@@ -731,8 +731,8 @@ async function brandClaimRules(sql: Sql, organizationId: string, brandId: string
 export function variantGateVerdicts(input: {
   storyboard: string | null;
   rules: { approved: string[]; banned: string[] };
-  /** The licences attested for the variant's creatives (rights.ts). */
-  rights: { musicLicensed: boolean; footageLicensed: boolean };
+  /** The rights recorded for the variant's creatives: the two licences and the AI-label confirmation (rights.ts). */
+  rights: { musicLicensed: boolean; footageLicensed: boolean; aiLabeled: boolean };
 }): GateVerdict[] {
   return [
     originalityGate({ frameHashDistance: null, embeddingDistance: null, textSimilarity: null }),
@@ -740,9 +740,8 @@ export function variantGateVerdicts(input: {
     claimsGate({ claims: recordedClaimsOf(input.storyboard ?? ""), approvedClaims: input.rules.approved, bannedWords: input.rules.banned }),
     // This job runs no policy check, so no flag is known. Unknown is review; it is never recorded as a pass.
     policyGate({ beforeAfter: null, personalAttribute: null, healthClaim: null, financeClaim: null }),
-    // The licences come from the attestations (rights.ts). aiLabeled keeps its source, which has no AI-label input yet, so it is false.
-    // Until that source exists, a variant that has both licences attested is still blocked on its AI labelling.
-    rightsGate({ musicLicensed: input.rights.musicLicensed, footageLicensed: input.rights.footageLicensed, aiLabeled: false }),
+    // The three inputs come from the records for the variant's creatives (rights.ts): the two licences and the AI-label confirmation.
+    rightsGate({ musicLicensed: input.rights.musicLicensed, footageLicensed: input.rights.footageLicensed, aiLabeled: input.rights.aiLabeled }),
   ];
 }
 
@@ -807,6 +806,19 @@ export async function regateVariantsForCreative(sql: Sql, organizationId: string
     join factory_variants v on v.id = fc.variant_id and v.organization_id = fc.organization_id and v.brand_id = fc.brand_id
     left join factory_templates t on t.id = v.template_id and t.organization_id = v.organization_id
     where fc.creative_id = ${creativeId} and fc.organization_id = ${organizationId} and fc.brand_id = ${brandId}
+  `;
+  if (variants.length === 0) return 0;
+  const rules = await brandClaimRules(sql, organizationId, brandId);
+  return gateVariantRows(sql, organizationId, brandId, variants, rules);
+}
+
+/** Gates one variant again, after its AI label was confirmed or revoked. Returns 1 when the variant exists in this brand, else 0. */
+export async function regateVariantById(sql: Sql, organizationId: string, brandId: string, variantId: string): Promise<number> {
+  const variants = await sql<{ id: string; storyboard: string | null }>`
+    select v.id, t.storyboard
+    from factory_variants v
+    left join factory_templates t on t.id = v.template_id and t.organization_id = v.organization_id
+    where v.id = ${variantId} and v.organization_id = ${organizationId} and v.brand_id = ${brandId}
   `;
   if (variants.length === 0) return 0;
   const rules = await brandClaimRules(sql, organizationId, brandId);

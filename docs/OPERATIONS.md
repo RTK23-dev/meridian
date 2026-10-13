@@ -95,8 +95,8 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
   when a Factory learn stage runs, or when an admin presses **Recompute from outcomes**. Until one of these runs, the screen shows the counts
   measured now.
 - **A Factory run says learning waits for a measured outcome.** None of the run's creatives has a stored metric yet. The measurement pull runs every six hours after a launch, and a run with no published creative never gets one. Once a metric is stored, use **Check learning again** on the run. The button is offered only while the run is running at its learn step.
-- **A Factory variant is blocked with a rights reason.** A licence is not attested for its creative, or it was revoked. A member attests
-  it on the Factory run view. Attested licences still block until AI labelling has a source (FACTORY.md, Licences).
+- **A Factory variant is blocked with a rights reason.** A licence is not attested for its creative, the AI label is not confirmed for the
+  variant, or a record was revoked. A member records it on the Factory run view (FACTORY.md, Licences).
 - **An Instagram or TikTok post reports not connected with a link reason.** Set `MEDIA_LINK_SECRET` (32 characters or more), `APP_URL`
   (https), and for TikTok the deployment's host in `TIKTOK_VERIFIED_MEDIA_DOMAINS`. Nothing was sent.
 - **A TikTok or YouTube post reports not connected.** The saved token does not grant the scope the publish needs (`video.publish` for

@@ -64,7 +64,7 @@ const GATE_JOB: ExecutableJob = {
 test("the claims verdict follows the recorded claim text: block for a banned or unapproved claim, review for none, pass for an approved one", () => {
   const rules = { approved: ["Washes hands daily"], banned: ["cures"] };
   const claimsOf = (storyboard: string | null) =>
-    variantGateVerdicts({ storyboard, rules, rights: { musicLicensed: false, footageLicensed: false } }).find((verdict) => verdict.gate === "claims");
+    variantGateVerdicts({ storyboard, rules, rights: { musicLicensed: false, footageLicensed: false, aiLabeled: false } }).find((verdict) => verdict.gate === "claims");
   assert.equal(claimsOf(JSON.stringify({ claims: ["This cures eczema"] }))?.result, "block");
   assert.equal(claimsOf(JSON.stringify({ claims: ["Lasts a year"] }))?.result, "block");
   assert.equal(claimsOf(JSON.stringify({ schema: "meridian.storyboard.v1", beats: [] }))?.result, "review");
@@ -80,7 +80,7 @@ test("a policy flag that was never checked is review, never pass, and a flag tha
   assert.equal(policyGate({ ...unchecked, beforeAfter: true }).result, "block", "a found flag blocks even when others are unchecked");
   assert.equal(policyGate({ beforeAfter: false, personalAttribute: false, healthClaim: true, financeClaim: false }).result, "review");
   // This job runs no policy check, so a variant's policy verdict is review, not the pass it used to record.
-  const policy = variantGateVerdicts({ storyboard: JSON.stringify({ claims: ["Washes hands daily"] }), rules: { approved: ["Washes hands daily"], banned: [] }, rights: { musicLicensed: false, footageLicensed: false } })
+  const policy = variantGateVerdicts({ storyboard: JSON.stringify({ claims: ["Washes hands daily"] }), rules: { approved: ["Washes hands daily"], banned: [] }, rights: { musicLicensed: false, footageLicensed: false, aiLabeled: false } })
     .find((verdict) => verdict.gate === "policy");
   assert.equal(policy?.result, "review");
 });

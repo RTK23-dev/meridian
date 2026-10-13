@@ -178,7 +178,7 @@ export async function factoryRunViewsFor(
         cta: row.cta,
         gateResult: row.gate_result,
         creatives: [],
-        rights: { blockedBy: null, creatives: [] },
+        rights: { blockedBy: null, aiLabel: { confirmed: false, canConfirm: false }, creatives: [] },
       };
       variantById.set(row.id, variant);
       pick.variants.push(variant);

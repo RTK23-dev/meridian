@@ -11,7 +11,7 @@ import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
 import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
-import { approveFactoryStage, attestFactoryLicence, checkFactoryLearning, resumeFactoryRun, revokeFactoryLicence, saveFactoryRunDefaults, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import { approveFactoryStage, attestFactoryLicence, checkFactoryLearning, confirmFactoryAiLabel, resumeFactoryRun, revokeFactoryAiLabel, revokeFactoryLicence, saveFactoryRunDefaults, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import type { LicenceKind } from "@/lib/meridian/factory/rights-wording";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
 import { metricLine, receiptLine } from "@/components/factory/measurement-model";
@@ -54,6 +54,7 @@ function picksOf(board: FactoryBoard, runPicks: FactoryBoard["runs"][number]["pi
       gate: gateText(variant.gateResult),
       // The rights gate's reason, when it blocks the variant: a missing licence is named, and a licence that is attested is not.
       rightsLine: variant.rights.blockedBy,
+      aiLabel: { variantId: variant.id, confirmed: variant.rights.aiLabel.confirmed, canConfirm: variant.rights.aiLabel.canConfirm },
       creatives: variant.creatives.map((created) => {
         const publishing = board.publishing.find((item) => item.creativeId === created.creativeId);
         const licence = variant.rights.creatives.find((item) => item.creativeId === created.creativeId);
@@ -182,7 +183,20 @@ function FactoryPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.factory(brandId)],
     onSuccess: () => setNote("Licence revoked. The variant is gated again."),
   });
-  const failures = [startRun, saveRunDefaults, startAgain, checkLearning, saveControls, killSwitch, approveStage, attestLicence, revokeLicence]
+  const confirmAiLabel = useScopedMutation({
+    mutationKey: factoryKey("confirm-ai-label"),
+    mutationFn: (variantId: string) => confirmFactoryAiLabel({ data: { brandId, variantId } }),
+    // A confirmed AI label changes the variant's rights and gate result, so the run list changes.
+    invalidate: () => [qk.factory(brandId)],
+    onSuccess: (result) => setNote(result.created > 0 ? "AI label confirmed. The variant is gated again." : "The AI label was already confirmed."),
+  });
+  const revokeAiLabel = useScopedMutation({
+    mutationKey: factoryKey("revoke-ai-label"),
+    mutationFn: (variantId: string) => revokeFactoryAiLabel({ data: { brandId, variantId } }),
+    invalidate: () => [qk.factory(brandId)],
+    onSuccess: () => setNote("AI label revoked. The variant is gated again."),
+  });
+  const failures = [startRun, saveRunDefaults, startAgain, checkLearning, saveControls, killSwitch, approveStage, attestLicence, revokeLicence, confirmAiLabel, revokeAiLabel]
     .map((action) => action.error).filter((error): error is Error => Boolean(error));
 
   if (query.isError && !board) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
@@ -280,12 +294,16 @@ function FactoryPage({ brandId }: { brandId: string }) {
                   checkLearning: checkLearning.isPending,
                   attest: attestLicence.isPending,
                   revoke: revokeLicence.isPending,
+                  confirmAiLabel: confirmAiLabel.isPending,
+                  revokeAiLabel: revokeAiLabel.isPending,
                 },
                 onApprove: (runId, stage) => void approveStage.mutateAsync({ runId, stage }).catch(() => undefined),
                 onStartAgain: (runId) => void startAgain.mutateAsync(runId).catch(() => undefined),
                 onCheckLearning: (runId) => void checkLearning.mutateAsync(runId).catch(() => undefined),
                 onAttest: (creativeId, kind) => void attestLicence.mutateAsync({ creativeId, kind }).catch(() => undefined),
                 onRevoke: (attestationId) => void revokeLicence.mutateAsync(attestationId).catch(() => undefined),
+                onConfirmAiLabel: (variantId) => void confirmAiLabel.mutateAsync(variantId).catch(() => undefined),
+                onRevokeAiLabel: (variantId) => void revokeAiLabel.mutateAsync(variantId).catch(() => undefined),
               }}
             />
           </section>

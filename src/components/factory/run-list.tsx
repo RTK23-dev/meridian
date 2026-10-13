@@ -22,7 +22,14 @@ export type RunPickLine = {
   plan: string;
   /** The measured rows of the creatives this pick produced. Empty until one is measured. */
   measuredLines: string[];
-  variants: Array<{ heading: string; gate: string; rightsLine: string | null; creatives: RunCreativeLine[] }>;
+  variants: Array<{
+    heading: string;
+    gate: string;
+    rightsLine: string | null;
+    /** The AI-label confirmation of the variant. It can be confirmed only when the variant has a creative to label. */
+    aiLabel: { variantId: string; confirmed: boolean; canConfirm: boolean };
+    creatives: RunCreativeLine[];
+  }>;
 };
 
 /** One run as the Factory screen shows it. Receipt and metric lines are rendered by the page, so this module keeps no board types. */
@@ -44,13 +51,58 @@ export type RunListItem = {
 export type RunListActions = {
   canEdit: boolean;
   killSwitchOn: boolean;
-  busy: { approve: boolean; startAgain: boolean; checkLearning: boolean; attest: boolean; revoke: boolean };
+  busy: { approve: boolean; startAgain: boolean; checkLearning: boolean; attest: boolean; revoke: boolean; confirmAiLabel: boolean; revokeAiLabel: boolean };
   onApprove: (runId: string, stage: string) => void;
   onStartAgain: (runId: string) => void;
   onCheckLearning: (runId: string) => void;
   onAttest: (creativeId: string, kind: LicenceKind) => void;
   onRevoke: (attestationId: string) => void;
+  onConfirmAiLabel: (variantId: string) => void;
+  onRevokeAiLabel: (variantId: string) => void;
 };
+
+/**
+ * The AI-label confirmation of one variant. A member confirms it under the wording shown, or revokes it. A viewer sees both controls
+ * disabled, with the reason. A variant with no creative has nothing to label, so it says so and offers no control.
+ */
+function AiLabelControls({ aiLabel, actions }: { aiLabel: RunPickLine["variants"][number]["aiLabel"]; actions: RunListActions }) {
+  const label = "AI label";
+  if (!aiLabel.canConfirm) return <p className="text-muted">{label}: no creative for this variant yet, so there is nothing to label.</p>;
+  if (aiLabel.confirmed) {
+    const reasonId = `ai-label-revoke-reason-${aiLabel.variantId}`;
+    return (
+      <div className="space-y-0.5">
+        <p>{label} confirmed.</p>
+        {actions.canEdit ? (
+          <Button size="sm" variant="secondary" disabled={actions.busy.revokeAiLabel} loading={actions.busy.revokeAiLabel} onClick={() => actions.onRevokeAiLabel(aiLabel.variantId)}>
+            Revoke AI label
+          </Button>
+        ) : (
+          <>
+            <Button size="sm" variant="secondary" disabled aria-describedby={reasonId}>Revoke AI label</Button>
+            <DisabledReason id={reasonId}>Only a member can revoke the AI label.</DisabledReason>
+          </>
+        )}
+      </div>
+    );
+  }
+  const reasonId = `ai-label-confirm-reason-${aiLabel.variantId}`;
+  return (
+    <div className="space-y-0.5">
+      <p>{label} not confirmed. Confirming it says: <span className="text-muted">{ATTESTATION_WORDING.ai_label}</span></p>
+      {actions.canEdit ? (
+        <Button size="sm" disabled={actions.busy.confirmAiLabel} loading={actions.busy.confirmAiLabel} onClick={() => actions.onConfirmAiLabel(aiLabel.variantId)}>
+          Confirm AI label
+        </Button>
+      ) : (
+        <>
+          <Button size="sm" disabled aria-describedby={reasonId}>Confirm AI label</Button>
+          <DisabledReason id={reasonId}>Only a member can confirm the AI label.</DisabledReason>
+        </>
+      )}
+    </div>
+  );
+}
 
 /**
  * The licence controls of one creative. An attested licence can be revoked. A licence that is not attested shows the wording it is
@@ -211,6 +263,7 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                                 <li key={variantIndex} className="space-y-0.5 border-l border-line pl-2">
                                   <p>{variant.heading} <span className="text-muted">· {variant.gate}</span></p>
                                   {variant.rightsLine ? <p className="text-muted">Rights: {variant.rightsLine}</p> : null}
+                                  <AiLabelControls aiLabel={variant.aiLabel} actions={actions} />
                                   {variant.creatives.length === 0 ? <p className="text-muted">Not produced yet.</p> : variant.creatives.map((creative, creativeIndex) => (
                                     <div key={creativeIndex} className="space-y-0.5">
                                       <p className="text-muted">{creative.label}</p>

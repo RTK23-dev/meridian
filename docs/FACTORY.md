@@ -121,16 +121,19 @@ or whose thresholds are not calibrated, routes to review in that record, so the 
 
 ## Licences
 
-The rights gate blocks a variant until a person has attested that the brand holds the licence for the music and for the footage in each
-creative the variant made (NORTH_STAR section 2, decision B). A member attests a licence on the Factory run view, under the fixed wording
-shown there, and the server stores that wording with the attestation. A revoke keeps the row with its time, and the variant is gated again
-at once. Attestations are per creative, and a licence attested for one brand never counts for another. A variant with no creative has no
-licence, so it is blocked. The rules of the rights gate (`factory/gates.ts`) are unchanged: only where its two licence inputs come from has
-changed.
+The rights gate blocks a variant until a person has recorded three things about the creatives it made (NORTH_STAR section 2, decision B).
+A member attests that the brand holds the licence for the music and for the footage in each creative. A member also confirms that each
+creative is labelled as AI-generated where the platform requires it. The gate reads these records. Its rules (`factory/gates.ts`) are
+unchanged. Only the source of its three inputs has changed.
 
-AI labelling has no source yet, so the gate keeps its AI-labelling input false. A variant with both licences attested is still blocked, with
-the reason "AI-generated content is not labelled where the platform requires it." No Factory variant passes the rights gate until that
-source exists. The table accepts a brand asset id too, but no variant references a brand asset yet, so only creative attestations count.
+Each record is stored with the fixed wording shown on the run view, the person who recorded it, and the time. A revoke keeps the row with its
+time, and the variant is gated again at once. Licences are attested per creative. The AI label is confirmed per variant, and the confirmation
+is recorded on each creative the variant made (kind `ai_label`, migration 0075). A variant with no creative has nothing to record, so it is
+blocked. A record for one brand never counts for another.
+
+A variant passes the rights gate only when both licences and the AI label are recorded for its creatives. Until then the reason names what is
+missing: a licence first, then the AI label. The table accepts a brand asset id too, but no variant references a brand asset yet, so only
+creative records count.
 
 ## What grading uses
 

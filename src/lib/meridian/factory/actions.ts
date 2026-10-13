@@ -531,6 +531,39 @@ export const revokeFactoryLicence = createServerFn({ method: "POST" })
   });
 
 /**
+ * Confirms that the variant's creatives are labelled as AI-generated where the platform requires it. A member confirms, under the fixed
+ * wording the server stores (rights.ts). The gate reads the confirmation at once (rights-service.ts).
+ */
+export const confirmFactoryAiLabel = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      variantId: clip(body.variantId, 180, "Variant", true),
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { confirmAiLabel } = await import("./rights-service.ts");
+    return confirmAiLabel(await getSql(), context.userId, data);
+  });
+
+/** Revokes the AI-label confirmation of a variant. The records are kept, and the variant is gated again. A member revokes. */
+export const revokeFactoryAiLabel = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      variantId: clip(body.variantId, 180, "Variant", true),
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { revokeAiLabel } = await import("./rights-service.ts");
+    return revokeAiLabel(await getSql(), context.userId, data);
+  });
+
+/**
  * Starts a paused run again from the stage it stopped at. A paused run is stopped by its spend cap, a provider that is not ready,
  * or the kill switch. The kill switch must be clear. A spend cap still reached stops the run again, at the same stage, with the same reason.
  */
