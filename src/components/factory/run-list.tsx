@@ -4,6 +4,22 @@ import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian
 import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { FORMAT_LABELS, INTENT_DESCRIPTIONS } from "@/lib/meridian/factory/run-builder-model";
 
+/** A creative a variant produced, with its receipts and measured rows already in words. */
+export type RunCreativeLine = { label: string; receiptLines: string[]; measurementLines: string[] };
+
+/** One pick of a run: its concept, its grade as a prediction, its status, its measured outcome, and its variants. */
+export type RunPickLine = {
+  concept: string;
+  /** "Organic", "Paid", or '' when the run learned from no surface. */
+  surface: string;
+  prediction: string;
+  predictionNote: string;
+  plan: string;
+  /** The measured rows of the creatives this pick produced. Empty until one is measured. */
+  measuredLines: string[];
+  variants: Array<{ heading: string; gate: string; creatives: RunCreativeLine[] }>;
+};
+
 /** One run as the Factory screen shows it. Receipt and metric lines are rendered by the page, so this module keeps no board types. */
 export type RunListItem = {
   id: string;
@@ -13,6 +29,7 @@ export type RunListItem = {
   error: string;
   settings: RunSettings;
   runSources: Array<{ source: string; state: string; reason: string; items: number }>;
+  picks: RunPickLine[];
   receiptLines: string[];
   measurementLines: string[];
 };
@@ -106,6 +123,50 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                     <ul className="space-y-0.5">{run.runSources.map((source) => <li key={source.source}>{sourceLine(source)}</li>)}</ul>
                   )}
                 </section>
+                <section className="space-y-2">
+                  <h3 className="font-semibold">Grades and variants</h3>
+                  <p className="text-xs text-muted">
+                    Each pick shows the grade it was made under as a prediction. Its measured rows come from the creatives its variants produced.
+                  </p>
+                  {run.picks.length === 0 ? <p className="text-muted">This run has no picked concept yet.</p> : (
+                    <ul className="space-y-3">
+                      {run.picks.map((pick, pickIndex) => (
+                        <li key={pickIndex} className="space-y-1 rounded-md border border-line p-2">
+                          <p className="font-medium">{pick.concept}{pick.surface ? ` · ${pick.surface}` : ""}</p>
+                          <p>{pick.prediction}</p>
+                          <p className="text-muted">{pick.predictionNote}</p>
+                          <p className="text-muted">{pick.plan}</p>
+                          <div className="space-y-0.5">
+                            <p className="font-medium">Measured</p>
+                            {pick.measuredLines.length === 0 ? <p className="text-muted">Not measured yet, or not reported.</p> : (
+                              <ul className="space-y-0.5">{pick.measuredLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
+                            )}
+                          </div>
+                          {pick.variants.length === 0 ? <p className="text-muted">No variant has been made for this pick.</p> : (
+                            <ul className="space-y-2">
+                              {pick.variants.map((variant, variantIndex) => (
+                                <li key={variantIndex} className="space-y-0.5 border-l border-line pl-2">
+                                  <p>{variant.heading} <span className="text-muted">· {variant.gate}</span></p>
+                                  {variant.creatives.length === 0 ? <p className="text-muted">Not produced yet.</p> : variant.creatives.map((creative, creativeIndex) => (
+                                    <div key={creativeIndex} className="space-y-0.5">
+                                      <p className="text-muted">{creative.label}</p>
+                                      {creative.receiptLines.length === 0 ? <p className="text-muted">No receipt yet.</p> : (
+                                        <ul className="space-y-0.5">{creative.receiptLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
+                                      )}
+                                      {creative.measurementLines.length === 0 ? null : (
+                                        <ul className="space-y-0.5">{creative.measurementLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
+                                      )}
+                                    </div>
+                                  ))}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
                 <section className="space-y-1">
                   <h3 className="font-semibold">Receipts and metrics</h3>
                   {run.receiptLines.length === 0 ? <p className="text-muted">No creative of this run has a receipt yet.</p> : (
@@ -115,7 +176,6 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                     <ul className="space-y-0.5">{run.measurementLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
                   )}
                 </section>
-                <p className="text-xs text-muted">Grades and variants are listed for the brand, not per run, on this screen.</p>
               </div>
             </details>
 

@@ -23,6 +23,7 @@ import {
 import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
 import { factoryRunSourcesFor, RECENT_RUNS_LIMIT } from "./gather.ts";
+import { factoryRunViewsFor } from "./run-view.ts";
 import { isApprovableStage } from "./approval.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
 import { listLinkedMetrics } from "../measurement/creative-linkage.ts";
@@ -92,6 +93,8 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
     `;
     // Each listed run's source states. A run that has not gathered yet has none, and the board says so rather than showing a guess.
     const runSourcesById = await factoryRunSourcesFor(sql, organizationId, data.brandId);
+    // Each listed run's picks, with the grade each was made under and the variants each pick produced (run-view.ts).
+    const runViews = await factoryRunViewsFor(sql, { organizationId, brandId: data.brandId }, runs.map((row) => row.id));
     const settings = await sql<{ level: number; ceiling: number }>`
       select level, ceiling from factory_settings
       where organization_id = ${organizationId} and brand_id = ${data.brandId}
@@ -284,6 +287,8 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
         settings: runSettingsFromStorage(row.settings, row.level),
         /** Each source's state for this run: ok, not_connected or failed with its reason. Empty until the run gathers. */
         runSources: runSourcesById.get(row.id) ?? [],
+        /** The run's picks: each concept with the JEV prediction it was made under, its status, and its variants. */
+        picks: runViews.get(row.id)?.picks ?? [],
       })),
       winners,
       trends,

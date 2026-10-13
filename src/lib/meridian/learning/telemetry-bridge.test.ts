@@ -59,8 +59,13 @@ async function bridgeDatabase(): Promise<Sql> {
       reach integer,
       observed_on text not null,
       source text not null default 'manual',
-      created_by text not null
+      created_by text not null,
+      external_id text not null default ''
     );
+
+    create unique index if not exists performance_external_idx
+      on performance_observations (organization_id, external_id)
+      where external_id <> '';
 
     create table if not exists organic_posts (
       id text primary key,
@@ -256,4 +261,143 @@ test("Telemetry bridge: running the sync twice does not duplicate a post or its 
   assert.equal(posts.length, 1);
   const observed = await sql<{ id: string }>`select id from organic_observations where organization_id = ${organizationId}`;
   assert.equal(observed.length, 1);
+});
+
+test("Telemetry bridge: a later paid measurement of a creative reaches learning, and repeated syncs count each measurement once", async () => {
+  const sql = await bridgeDatabase();
+  const organizationId = "org_bridge_paid_later";
+  const brandId = "brand_bridge_paid_later";
+
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "meta",
+    sourceType: "paid",
+    creativeId: "cr_paid_two",
+    impressions: 3000,
+    clicks: 90,
+    spendCents: 1500,
+    recordedAt: "2026-10-01T00:00:00.000Z",
+  });
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+
+  // The second measurement of the same creative, on the next day. The earlier bridge dropped it, because the creative already had a row.
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "meta",
+    sourceType: "paid",
+    creativeId: "cr_paid_two",
+    impressions: 4200,
+    clicks: 130,
+    spendCents: 2100,
+    recordedAt: "2026-10-02T00:00:00.000Z",
+  });
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+
+  const rows = await sql<{ impressions: number | null; clicks: number | null; observed_on: string; external_id: string }>`
+    select impressions, clicks, observed_on, external_id from performance_observations
+    where organization_id = ${organizationId} and creative_id = 'cr_paid_two'
+    order by observed_on
+  `;
+  assert.equal(rows.length, 2, "both measurements reach learning, and the repeated syncs add nothing");
+  assert.deepEqual(rows.map((row) => Number(row.impressions)), [3000, 4200]);
+  assert.deepEqual(rows.map((row) => Number(row.clicks)), [90, 130]);
+  assert.deepEqual(rows.map((row) => row.observed_on), ["2026-10-01", "2026-10-02"], "each measurement keeps its own day");
+  assert.equal(new Set(rows.map((row) => row.external_id)).size, 2, "each observation is keyed by its own telemetry row");
+  assert.ok(rows.every((row) => row.external_id.startsWith("telemetry:")));
+});
+
+test("Telemetry bridge: a measurement bridged by the earlier code is adopted by its key, so it is not counted twice", async () => {
+  const sql = await bridgeDatabase();
+  const organizationId = "org_bridge_legacy";
+  const brandId = "brand_bridge_legacy";
+
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "meta",
+    sourceType: "paid",
+    creativeId: "cr_legacy",
+    impressions: 3000,
+    clicks: 90,
+    spendCents: 1500,
+    recordedAt: "2026-10-01T00:00:00.000Z",
+  });
+  // The row the earlier code wrote for that measurement: one observation per creative, with no key, and conversions not reported.
+  await sql`
+    insert into performance_observations (
+      id, organization_id, brand_id, creative_id, impressions, clicks, conversions, spend_cents, revenue_cents, reach,
+      observed_on, source, created_by, external_id
+    ) values (
+      'obs-legacy', ${organizationId}, ${brandId}, 'cr_legacy', 3000, 90, null, 1500, null, null,
+      '2026-10-01', 'meta', 'telemetry.sync', ''
+    )
+  `;
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "meta",
+    sourceType: "paid",
+    creativeId: "cr_legacy",
+    impressions: 4200,
+    clicks: 130,
+    spendCents: 2100,
+    recordedAt: "2026-10-02T00:00:00.000Z",
+  });
+
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+
+  const rows = await sql<{ id: string; impressions: number | null; external_id: string }>`
+    select id, impressions, external_id from performance_observations
+    where organization_id = ${organizationId} and creative_id = 'cr_legacy'
+    order by observed_on
+  `;
+  assert.equal(rows.length, 2, "only the new measurement is added to the one the earlier code wrote");
+  assert.equal(rows[0]!.id, "obs-legacy", "the earlier row is kept, not copied");
+  assert.ok(rows[0]!.external_id.startsWith("telemetry:"), "the earlier row is adopted by its measurement's key");
+  assert.deepEqual(rows.map((row) => Number(row.impressions)), [3000, 4200]);
+});
+
+test("Telemetry bridge: a later measurement with an unreported metric stores that metric as null, not zero", async () => {
+  const sql = await bridgeDatabase();
+  const organizationId = "org_bridge_later_null";
+  const brandId = "brand_bridge_later_null";
+
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "meta",
+    sourceType: "paid",
+    creativeId: "cr_later_null",
+    impressions: 1000,
+    clicks: 20,
+    conversions: 2,
+    spendCents: 500,
+    recordedAt: "2026-10-01T00:00:00.000Z",
+  });
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "meta",
+    sourceType: "paid",
+    creativeId: "cr_later_null",
+    impressions: 1500,
+    recordedAt: "2026-10-02T00:00:00.000Z",
+  });
+
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+
+  const rows = await sql<{ impressions: number | null; clicks: number | null; conversions: number | null; spend_cents: number | null }>`
+    select impressions, clicks, conversions, spend_cents from performance_observations
+    where organization_id = ${organizationId} and creative_id = 'cr_later_null'
+    order by observed_on
+  `;
+  assert.equal(rows.length, 2);
+  assert.equal(Number(rows[1]!.impressions), 1500);
+  assert.equal(rows[1]!.clicks, null, "a click count the second measurement did not report is unknown, not zero");
+  assert.equal(rows[1]!.conversions, null);
+  assert.equal(rows[1]!.spend_cents, null);
 });

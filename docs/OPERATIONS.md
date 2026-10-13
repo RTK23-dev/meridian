@@ -90,3 +90,7 @@ source data. `0065` adds run settings, the approvals table, and the `awaiting_ap
 working from their level.
 
 This release adds migration `0070`. It gives `learned_patterns` a `surface` (organic or paid) and a `channel`, and fills the surface of each existing pattern from its metric. Every brand's patterns are rebuilt by the next recomputation (the telemetry sync, the organic bridge, or a Factory learn stage), which replaces the whole set. A pattern whose metric names neither surface stays `unassigned` until then, and it is not applied. Nothing else in the database changes.
+
+This release adds migration `0071`. It gives `factory_picks` a `surface` and a `grade_fingerprint`. Both are empty for every pick written before it, and the Factory screen says the prediction of such a pick is not known. No existing row is rewritten.
+
+The telemetry sync now writes one paid observation per measured row, keyed in `performance_observations.external_id` as `telemetry:<row id>`. A paid observation written before this release has no key. The next sync adopts it by its creative, day and values, so the first measurement is not counted twice. Nothing has to be run by hand.

@@ -13,7 +13,8 @@ deploying. See [CHANGELOG.md](CHANGELOG.md).
 - **Studio.** A brief passes a gate before it can generate. Variants carry their evidence, decision and review. Video uses Gemini Omni by default.
 - **Decisions.** One engine per workspace, TypeSafe JEV or OpenAI Decisions. A versioned policy turns answers into approve, review or reject.
 - **Content Factory (partial).** One run settings object with brand defaults. `manual`, `semi` and `full` automation stop at the steps that
-  spend or publish, and a person approves a stop. Ads are graded from their observed stop time. See [docs/FACTORY.md](docs/FACTORY.md).
+  spend or publish, and a person approves a stop. Ads are graded from their observed stop time and, with a decision engine, by JEV, both
+  stored side by side. Each run's picks, their grades and their variants are on the Factory screen. See [docs/FACTORY.md](docs/FACTORY.md).
 - **Publishing.** Paid ads are created paused, and Meridian never switches them on. Regular posts go to a Facebook Page, Instagram, YouTube
   or TikTok account that is connected per brand.
 - **Library and exports.** Creatives, their lineage, and an export package for manual posting.
@@ -25,8 +26,8 @@ deploying. See [CHANGELOG.md](CHANGELOG.md).
 - Instagram Reels posting reports not connected. Facebook Page, YouTube Shorts and TikTok regular videos go through a connected account, but
   no live call was made in this release. The export package is the delivery path for everything else.
 - Live source APIs are built and tested against fixtures. No live key was used, so their live responses are unverified.
-- Factory spend caps are declared, not enforced: no stage writes metered spend yet. The JEV grade is not built. Live organic metrics are not
-  pulled from any platform.
+- Factory spend caps are declared, not enforced: no stage writes metered spend yet. Without a decision engine, a Factory ad is graded on its
+  observed signal only, and no engine grade is calibrated. Live organic metrics are not pulled from any platform.
 - Calibration. Every probability and score is uncalibrated, so none approves or rejects on its own.
 
 [ROADMAP.md](docs/ROADMAP.md) lists what is open, with the reason for each item.

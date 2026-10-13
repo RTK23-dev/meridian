@@ -32,7 +32,7 @@ import { winnerScore } from "./winner-score.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
 import { loadFactoryBrain } from "./brain-facts.ts";
-import { learningScopeOf, pickConceptsForRun } from "./pick.ts";
+import { learningScopesOf, pickConceptsForRun } from "./pick.ts";
 import {
   gradeColumnsOf,
   gradeItemWithEngine,
@@ -174,13 +174,14 @@ export async function executeFactoryJob(
   if (job.job_type === "factory.pick") {
     // The picks are the concepts this run makes next, chosen from the graded ads (pick.ts). At most the run's variant cap of
     // concepts is picked, because each pick produces at least one variant.
-    // The learned weights are read on the run's own surface only (learningScopeOf). A run with intent both has none.
+    // The learned weights are read per surface (learningScopesOf): an organic run reads organic patterns, a paid run paid patterns, and
+    // a run with intent both reads each surface for its own arm of a concept, never the other's.
     const picked = await pickConceptsForRun(sql, {
       organizationId: job.organization_id,
       brandId: job.brand_id,
       runId,
       maxPicks: settings.caps.maxVariants,
-      learning: learningScopeOf(settings),
+      learning: learningScopesOf(settings),
     });
     return `picked:${picked.picks.length}`;
   }
