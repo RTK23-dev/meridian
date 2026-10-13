@@ -9,6 +9,7 @@
 
 import type { Sql } from "../learning/store.ts";
 import { predictionOf, predictionStatusOf, type GradeRecord, type PredictionStatus, type PredictionView } from "./prediction.ts";
+import { licencesForCreatives, variantRightsView, type VariantRights } from "./rights.ts";
 
 /** One variant of a pick. `attribute` is the one attribute the variant changes against its control: '' for a row from before that. */
 export type RunVariantView = {
@@ -22,6 +23,8 @@ export type RunVariantView = {
   gateResult: string;
   /** The creatives this variant produced, one per format. Empty while the variant is not produced. */
   creatives: Array<{ creativeId: string; format: string }>;
+  /** The rights gate's state: what blocks the variant, and each creative's attested licences. */
+  rights: VariantRights;
 };
 
 export type RunPickView = {
@@ -175,11 +178,18 @@ export async function factoryRunViewsFor(
         cta: row.cta,
         gateResult: row.gate_result,
         creatives: [],
+        rights: { blockedBy: null, aiLabel: { confirmed: false, canConfirm: false }, creatives: [] },
       };
       variantById.set(row.id, variant);
       pick.variants.push(variant);
     }
     if (row.creative_id) variant.creatives.push({ creativeId: row.creative_id, format: row.creative_format ?? "" });
+  }
+  // The attested licences of every creative on the board are read once, and each variant's rights state is computed from them.
+  const creativeIds = [...new Set([...variantById.values()].flatMap((variant) => variant.creatives.map((item) => item.creativeId)))];
+  const licences = await licencesForCreatives(sql, scope.organizationId, scope.brandId, creativeIds);
+  for (const variant of variantById.values()) {
+    variant.rights = variantRightsView(variant.creatives.map((item) => item.creativeId), licences);
   }
   return views;
 }

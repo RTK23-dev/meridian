@@ -23,6 +23,12 @@ export type PolicyOutcome = "AUTO_APPROVE" | "HUMAN_REVIEW" | "REJECT";
 
 export type CalibrationStatus = "uncalibrated" | "calibrated" | "not_applicable";
 
+/**
+ * A threshold calibrated from one brand's stored report (calibration/question-method.ts). It replaces the registry's approve
+ * threshold for that brand and question, and the vote it produces names the report it came from.
+ */
+export type AppliedCalibration = { reportId: string; sampleSize: number; threshold: number };
+
 export type DecisionPolicy = {
   /** Policy version recorded with every evaluation. Changing thresholds means a new version. */
   version: string;
@@ -49,6 +55,8 @@ export type DecisionPolicy = {
    * whatever the engine reports. Absent, the engine's reported calibration decides.
    */
   thresholdCalibration?: "uncalibrated" | "calibrated";
+  /** Set only when the brand's newest report for this question is calibrated. See applyCalibratedThreshold. */
+  calibration?: AppliedCalibration;
 };
 
 export type PolicyVote = {
@@ -56,6 +64,8 @@ export type PolicyVote = {
   outcome: PolicyOutcome;
   reason: string;
   calibrationStatus: CalibrationStatus;
+  /** The report the threshold came from, on a vote made under a calibrated threshold. */
+  calibration?: AppliedCalibration;
 };
 
 export type PolicyUnresolved = {
@@ -101,15 +111,45 @@ export function calibrationStatusOf(answer: JevAnswer): CalibrationStatus {
 
 /**
  * The calibration a vote is judged under. A policy whose thresholds are marked uncalibrated in their spec keeps every
- * probability and score under review, whatever the engine reports. A categorical answer has no threshold, so it is unchanged.
+ * probability and score under review, whatever the engine reports, unless the brand has a calibrated threshold for it. A
+ * categorical answer has no threshold, so it is unchanged.
  */
 function calibrationOf(answer: JevAnswer, policy: DecisionPolicy): CalibrationStatus {
   const reported = calibrationStatusOf(answer);
-  if (policy.thresholdCalibration === "uncalibrated" && reported !== "not_applicable") return "uncalibrated";
+  if (reported === "not_applicable") return reported;
+  if (policy.calibration) return "calibrated";
+  if (policy.thresholdCalibration === "uncalibrated") return "uncalibrated";
   return reported;
 }
 
+/**
+ * Whether a calibrated threshold may replace the registry's approve threshold. Calibration may only raise the bar. It applies only
+ * when the calibrated value is at least the registry's review threshold and at least the registry's approve threshold, which is the
+ * bar it sets. A lower value leaves the registry's threshold in place. A question with no registry approve threshold, or a predicate
+ * that is not pass-if-true, is never calibrated this way.
+ */
+export function calibrationRaisesBar(policy: DecisionPolicy, threshold: number): boolean {
+  if (policy.predicateDirection !== "pass_if_true") return false;
+  if (policy.approveMinProbability === undefined) return false;
+  return threshold >= policy.reviewMinProbability && threshold >= policy.approveMinProbability;
+}
+
+/**
+ * The policy with a brand's calibrated approve threshold in place of the registry's, when calibrationRaisesBar allows it. Otherwise
+ * the policy is returned as it was, with no calibration, so its votes stay uncalibrated.
+ */
+export function applyCalibratedThreshold(policy: DecisionPolicy, calibration: AppliedCalibration): DecisionPolicy {
+  if (!calibrationRaisesBar(policy, calibration.threshold)) return policy;
+  return { ...policy, approveMinProbability: calibration.threshold, calibration };
+}
+
 function voteFor(answer: JevAnswer, policy: DecisionPolicy): PolicyVote | null {
+  const vote = voteForAnswer(answer, policy);
+  if (vote && vote.calibrationStatus === "calibrated" && policy.calibration) return { ...vote, calibration: policy.calibration };
+  return vote;
+}
+
+function voteForAnswer(answer: JevAnswer, policy: DecisionPolicy): PolicyVote | null {
   if (answer.status !== "answered") return null;
   const calibrationStatus = calibrationOf(answer, policy);
   if (policy.minConfidence !== undefined && typeof answer.confidence === "number" && answer.confidence < policy.minConfidence) {

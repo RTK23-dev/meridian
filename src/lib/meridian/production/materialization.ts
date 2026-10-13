@@ -22,6 +22,7 @@ import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
 import { accountSnapshots, competitorCopy, factsFor, generatedImageVisual, visualFacts, writeJudgment, type QcBrandContext } from "../studio/image-qc.server.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
+import { recordDecisionSpend } from "../factory/decision-spend.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { CreativeSpec, ProductionModality } from "./types.ts";
 
@@ -385,6 +386,22 @@ export async function materializeImageArtifact(
     engines: options.engines,
   });
   const status = judged.rollup === "REJECT" ? "rejected" : judged.rollup === "AUTO_APPROVE" ? "approved" : "in_review";
+  // The judgment is the decision a Factory image makes. Its tokens are metered for the Factory run that made it. A Studio image is not.
+  if (text(input.kind) === "factory_image") {
+    await recordDecisionSpend(sql, {
+      organizationId: ref.organizationId,
+      brandId: ref.brandId,
+      runId,
+      stage: "factory.produce",
+      productionJobId: job.id,
+      gateRecordId: judged.gateRecordId,
+      engineCalled: judged.gateEngineCalled,
+      engineId: judged.gateEngineId,
+      requestedModel: judged.gateRequestedModel,
+      returnedModel: judged.gateReturnedModel,
+      usage: judged.gateUsage ?? undefined,
+    });
+  }
 
   await sql`
     insert into creative_records (
@@ -505,7 +522,10 @@ export async function completeProductionJob(
         ? await materializeImageArtifact(sql, ref, options)
         : null;
   if (!materialized) throw new Error(`Production job modality '${modality}' has no materializer yet.`);
-  if (materialized.reviewRequired && options.openReview !== false) {
+  // A Factory video is reviewed by the Factory once its own creative_qa judgment is recorded (factory/produce-video.ts). The plan of a
+  // Factory run names a gate record, and a review must cite a jev_decisions row (reviews.decision_id), so no review is opened here for it.
+  const reviewOpensHere = options.openReview !== false && shape.kind !== "factory_video";
+  if (materialized.reviewRequired && reviewOpensHere) {
     await openProductionReview(sql, {
       organizationId: ref.organizationId,
       brandId: ref.brandId,
@@ -528,16 +548,18 @@ export async function completeProductionJob(
 interface JobShape {
   modality: ProductionModality;
   parentJobId: string | null;
+  /** The kind the stage that made the job recorded in its input, such as factory_video. Empty when the job records none. */
+  kind: string;
 }
 
 async function jobShapeOf(sql: Sql, ref: ProductionJobRef): Promise<JobShape> {
-  const rows = await sql<{ modality: ProductionModality; parent_job_id: string | null }>`
-    select modality, parent_job_id from production_jobs
+  const rows = await sql<{ modality: ProductionModality; parent_job_id: string | null; input: unknown }>`
+    select modality, parent_job_id, input from production_jobs
     where id = ${ref.productionJobId} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
     limit 1
   `;
   if (!rows[0]) throw new Error("Production job was not found in this tenant.");
-  return { modality: rows[0].modality, parentJobId: rows[0].parent_job_id };
+  return { modality: rows[0].modality, parentJobId: rows[0].parent_job_id, kind: text(parseJson(rows[0].input).kind) };
 }
 
 export type PlanSettlement = "pending" | "completed" | "partially_completed" | "failed" | "unchanged";
@@ -693,7 +715,9 @@ export async function settleCarouselParent(
     )
     on conflict (id) do nothing
   `;
-  if (status === "in_review") {
+  // A Factory carousel is judged through its slides, and each slide's review cites its own judgment. The carousel opens no review of its
+  // own, because the plan's gate record is not a jev_decisions row that a review may cite (factory/produce-carousel.ts).
+  if (status === "in_review" && text(parseJson(parent.input).kind) !== "factory_carousel") {
     await openProductionReview(sql, {
       organizationId: ref.organizationId,
       brandId: ref.brandId,

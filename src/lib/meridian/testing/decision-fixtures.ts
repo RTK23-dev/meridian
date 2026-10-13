@@ -17,6 +17,7 @@ import type {
   DecisionEngineId,
   DecisionRequest,
   DecisionResult,
+  DecisionUsage,
 } from "../decisions/types.ts";
 import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 
@@ -33,6 +34,11 @@ export type FixtureEngineOptions = {
   respond?: (spec: JevQuestionSpec) => FixtureAnswer;
   /** The calibration the answers report. The engines report uncalibrated today, so the default is uncalibrated. */
   calibrationStatus?: "calibrated" | "uncalibrated";
+  /**
+   * The token usage each request reports, as the OpenAI engine reports it. Absent, the engine reports no usage, as the JEV engine does.
+   * A test that sets it sees the spend the decision records, so the usage is a fixture value, not a price.
+   */
+  usage?: DecisionUsage;
 };
 
 export class FixtureDecisionEngine implements DecisionEngine {
@@ -60,7 +66,7 @@ export class FixtureDecisionEngine implements DecisionEngine {
       maxImageBytes: 0,
       imageMimeTypes: [],
       batchQuestions: true,
-      reportsUsage: false,
+      reportsUsage: this.options.usage !== undefined,
       semantics: { predicate: "probability", choice: "categorical_with_confidence", score: "ordered_level_expectation" },
     };
   }
@@ -129,6 +135,7 @@ export class FixtureDecisionEngine implements DecisionEngine {
       inputModality: "text",
       imageCount: 0,
       imagesOmitted: request.images?.length ?? 0,
+      ...(this.options.usage ? { usage: { ...this.options.usage } } : {}),
     };
   }
 }

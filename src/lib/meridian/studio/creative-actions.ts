@@ -6,7 +6,7 @@ import { decideForTenant } from "@/lib/meridian/jev/engine";
 import { creativeQa } from "@/lib/meridian/jev/questions";
 import { loadQuestionPolicy } from "@/lib/meridian/jev/policy";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
-import { assessCopy } from "@/lib/meridian/production/assess";
+import { applyClaimCheck, copyReasonCode, judgeCopy } from "@/lib/meridian/production/assess";
 import { promptById } from "@/lib/meridian/prompts/registry";
 import { contentHash } from "@/lib/meridian/assets/lifecycle";
 import { loadLibraryCreatives } from "@/lib/meridian/library/listing";
@@ -113,18 +113,25 @@ export async function produceCreative(
     if (stored) hookType = stored;
   }
   const text = [input.hook, input.script, input.offer, input.cta, ...input.claims].join("\n");
-  const assessed = assessCopy({
-    text,
-    productName: product?.name || productName,
-    allowedClaims: product?.allowedClaims || "",
-    prohibitedClaims: [loaded.brain.prohibitedClaims, product?.prohibitedClaims || ""].filter(Boolean).join("\n"),
-    requiredDisclaimers: loaded.brain.requiredDisclaimers,
-    wordsToAvoid: loaded.brain.wordsToAvoid,
-    hook: input.hook,
-    cta: input.cta,
+  // The claim question goes through the engine gate. A claim with no engine answer is not judged, and it keeps the copy out of approval.
+  const judged = await judgeCopy({
+    sql,
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    subject: { type: "brief", id: input.briefId },
+    copy: {
+      text,
+      productName: product?.name || productName,
+      allowedClaims: product?.allowedClaims || "",
+      prohibitedClaims: [loaded.brain.prohibitedClaims, product?.prohibitedClaims || ""].filter(Boolean).join("\n"),
+      requiredDisclaimers: loaded.brain.requiredDisclaimers,
+      wordsToAvoid: loaded.brain.wordsToAvoid,
+      hook: input.hook,
+      cta: input.cta,
+    },
   });
   const textPolicy = await loadQuestionPolicy(sql, input.organizationId, creativeQa);
-  const decision = decideForTenant(textPolicy.question, assessed.evidence, {
+  const scored = decideForTenant(textPolicy.question, judged.evidence, {
     organizationId: input.organizationId,
     brandId: input.brandId,
     evidence: loaded.creatives,
@@ -134,6 +141,9 @@ export async function produceCreative(
     provider: input.provider || "jev",
     model: input.model || "creative-qa",
   });
+  // The recorded decision is the copy QA decision with the claim check applied. A rejected or not-judged claim cannot be approved over.
+  const decision = applyClaimCheck(scored, judged.claim);
+  const reasonCode = copyReasonCode(decision.decision, judged.evidence, judged.claim);
   const creativeId = id();
   const decisionId = id();
   const correlationId = id();
@@ -154,7 +164,7 @@ export async function produceCreative(
     questionVersion: decision.questionVersion,
     subjectType: "creative",
     subjectId: creativeId,
-    input: assessed.evidence,
+    input: judged.evidence,
     evidence: decision.evidence,
     probability: decision.probability,
     confidence: decision.confidence,
@@ -207,7 +217,7 @@ export async function produceCreative(
       insert into rejections (id, organization_id, brand_id, creative_id, decision_id, reason_code, note, rejected_by)
       values (
         ${id()}, ${input.organizationId}, ${input.brandId}, ${creativeId}, ${decisionId},
-        ${assessed.reasonCode || "other"}, ${decision.reasons.join(" ").slice(0, 500)}, ${"jev"}
+        ${reasonCode || "other"}, ${decision.reasons.join(" ").slice(0, 500)}, ${"jev"}
       )
     `;
   }

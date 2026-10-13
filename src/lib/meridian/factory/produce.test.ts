@@ -14,7 +14,7 @@ enableAppAliases();
 const { executeFactoryJob, creativeQaVerdict } = await import("./worker.ts");
 const { loadLibraryCreatives } = await import("../library/listing.ts");
 const { loadReviewPage } = await import("../reviews/listing.ts");
-const { listHeldReservations } = await import("../security/held-reservations.ts");
+const { listHeldReservations, releaseExpiredHolds } = await import("../security/held-reservations.ts");
 
 async function produce(sql: Sql, tenant: FactoryTenant, runId: string) {
   return executeFactoryJob(sql, stageJob(tenant, runId, "factory.produce"), { runId });
@@ -144,7 +144,7 @@ test("a reached cap stops the run before the next provider call", async () => {
   assert.equal(run.error, "The spend cap for this run is reached.");
 });
 
-test("a call that does not return holds its reservation for a person, and nothing releases it automatically", async () => {
+test("a call that does not return holds its reservation until the provider confirms no job exists, and the sweep then releases it", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "factory-produce-unknown");
   const runId = await factoryRunFor(sql, tenant, { automation: "full", formats: ["image"], providers: { image: "google_nano_banana" }, caps: { totalCents: 500 } });
@@ -158,35 +158,40 @@ test("a call that does not return holds its reservation for a person, and nothin
   const [held] = await reservationsOf(sql, tenant);
   assert.equal(held?.status, "RESERVED", "an outcome that is unknown keeps its reservation");
 
-  // The submission is past its window. Nothing settles it: it stays held.
-  await sql`update budget_reservations set expires_at = now() - interval '2 days' where id = ${held!.id}`;
-  const [afterExpiry] = await reservationsOf(sql, tenant);
-  assert.equal(afterExpiry?.status, "RESERVED", "an expired submission is not released by the system");
-
-  // The screen's list shows the held amount to an admin.
+  // The screen's list shows the held amount to an admin. Nothing has been checked yet, because the window has not passed.
   await sql`update memberships set role = 'admin' where user_id = ${tenant.userId} and organization_id = ${tenant.organizationId}`;
   const listed = await listHeldReservations(sql, tenant.userId, tenant.brandId);
   const row = listed.find((item) => item.reservationId === held!.id);
   assert.ok(row, "the held reservation is listed");
   assert.equal(row?.amountUsd, 1, "the held amount is the reserved amount");
   assert.equal(row?.jobStatus, "SUBMISSION_UNKNOWN");
-});
+  assert.equal(row?.lastCheck, null, "a hold is not checked before its window has passed");
 
-test("a video or carousel format stops the run before any reservation or call", async () => {
-  const sql = await getSql();
-  const tenant = await studioTenant(sql, "factory-produce-video");
-  const runId = await factoryRunFor(sql, tenant, { automation: "full", formats: ["video"], caps: { totalCents: 500 } });
-  await planRowsFor(sql, tenant, runId, ["video"]);
-  const stub = stubImageProvider();
-  try {
-    assert.equal(await produce(sql, tenant, runId), "stopped:factory.produce");
-  } finally {
-    stub.restore();
-  }
-  assert.equal(stub.state.calls, 0);
-  assert.equal((await reservationsOf(sql, tenant)).length, 0);
-  const run = await runRow(sql, tenant, runId);
-  assert.match(run.error, /produces images so far/);
+  // The window has passed, and no provider lookup exists for this provider, so the hold stays and the check records why.
+  // (Owner decision, NORTH_STAR section 2, decision D: a hold is released only when the provider confirms no job exists.)
+  await sql`update budget_reservations set expires_at = now() - interval '2 days' where id = ${held!.id}`;
+  await releaseExpiredHolds(sql, { checkIntervalMinutes: 0 });
+  assert.equal((await reservationsOf(sql, tenant))[0]?.status, "RESERVED", "with no lookup, the hold stays");
+  const afterNoLookup = await listHeldReservations(sql, tenant.userId, tenant.brandId);
+  assert.equal(afterNoLookup.find((item) => item.reservationId === held!.id)?.lastCheck?.result, "no_lookup", "the panel shows why it stays");
+
+  // The provider's lookup confirms it holds no job for this submission. The hold is released once, with the reason and the actor.
+  const confirmedAbsent = async () => ({ kind: "absent" as const });
+  await releaseExpiredHolds(sql, { lookupFor: () => confirmedAbsent, checkIntervalMinutes: 0 });
+  const [afterSweep] = await reservationsOf(sql, tenant);
+  assert.equal(afterSweep?.status, "RELEASED", "a hold the provider confirms absent is released by the sweep");
+  const releases = await sql<{ reason: string; actor: string }>`
+    select metadata->>'reason' as reason, metadata->>'actor' as actor from budget_ledger_entries
+    where reservation_id = ${held!.id} and entry_type = 'RESERVATION_RELEASED'
+  `;
+  assert.deepEqual(releases.map((item) => ({ reason: item.reason, actor: item.actor })), [{ reason: "window_expired", actor: "system" }]);
+  await releaseExpiredHolds(sql, { lookupFor: () => confirmedAbsent, checkIntervalMinutes: 0 });
+  const [afterSecondSweep] = await sql<{ n: number }>`
+    select count(*)::int as n from budget_ledger_entries where reservation_id = ${held!.id} and entry_type = 'RESERVATION_RELEASED'
+  `;
+  assert.equal(afterSecondSweep?.n, 1, "a second sweep releases nothing more");
+  const stillHeld = await listHeldReservations(sql, tenant.userId, tenant.brandId);
+  assert.equal(stillHeld.some((item) => item.reservationId === held!.id), false, "a released reservation is no longer held");
 });
 
 test("the JEV creative check never passes a variant whose engine is not configured", async () => {

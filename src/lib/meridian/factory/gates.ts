@@ -193,13 +193,20 @@ export function policyGate(input: {
   return { gate: "policy", result: "pass", reason: "No blocked policy flags were present." };
 }
 
+/**
+ * Blocks a variant whose music or footage licence is not attested, and one whose AI labelling is missing. A licence is attested by a
+ * person (rights_attestations, factory/rights.ts). The reason names the first licence that is missing.
+ */
 export function rightsGate(input: {
   musicLicensed: boolean;
   footageLicensed: boolean;
   aiLabeled: boolean;
 }): GateVerdict {
-  if (!input.musicLicensed || !input.footageLicensed) {
-    return { gate: "rights", result: "block", reason: "Music or footage licence is missing." };
+  if (!input.musicLicensed) {
+    return { gate: "rights", result: "block", reason: "no licence attested for music" };
+  }
+  if (!input.footageLicensed) {
+    return { gate: "rights", result: "block", reason: "no licence attested for footage" };
   }
   if (!input.aiLabeled) {
     return { gate: "rights", result: "block", reason: "AI-generated content is not labelled where the platform requires it." };

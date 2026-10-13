@@ -3,9 +3,14 @@ import { FACTORY_GRAPH, LEARN_WAITING } from "@/lib/meridian/factory/pipeline";
 import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian/factory/approval";
 import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { FORMAT_LABELS, INTENT_DESCRIPTIONS } from "@/lib/meridian/factory/run-builder-model";
+import { ATTESTATION_WORDING, LICENCE_KINDS, LICENCE_LABELS, type LicenceKind } from "@/lib/meridian/factory/rights-wording";
+import { spendLinesOf, type SpendFigures } from "@/lib/meridian/factory/spend-lines";
+
+/** The licences attested for one creative of a variant. Each is the attestation id, or null where that licence is not attested. */
+export type RunCreativeLicence = { creativeId: string; music: string | null; footage: string | null };
 
 /** A creative a variant produced, with its receipts and measured rows already in words. */
-export type RunCreativeLine = { label: string; receiptLines: string[]; measurementLines: string[] };
+export type RunCreativeLine = { label: string; receiptLines: string[]; measurementLines: string[]; licence?: RunCreativeLicence };
 
 /** One pick of a run: its concept, its grade as a prediction, its status, its measured outcome, and its variants. */
 export type RunPickLine = {
@@ -17,7 +22,14 @@ export type RunPickLine = {
   plan: string;
   /** The measured rows of the creatives this pick produced. Empty until one is measured. */
   measuredLines: string[];
-  variants: Array<{ heading: string; gate: string; creatives: RunCreativeLine[] }>;
+  variants: Array<{
+    heading: string;
+    gate: string;
+    rightsLine: string | null;
+    /** The AI-label confirmation of the variant. It can be confirmed only when the variant has a creative to label. */
+    aiLabel: { variantId: string; confirmed: boolean; canConfirm: boolean };
+    creatives: RunCreativeLine[];
+  }>;
 };
 
 /** One run as the Factory screen shows it. Receipt and metric lines are rendered by the page, so this module keeps no board types. */
@@ -28,6 +40,8 @@ export type RunListItem = {
   niche: string;
   error: string;
   settings: RunSettings;
+  /** The run's spend, from its cost rows: priced cost, tokens only, and provider-reported cents. */
+  spend: SpendFigures;
   runSources: Array<{ source: string; state: string; reason: string; items: number }>;
   picks: RunPickLine[];
   receiptLines: string[];
@@ -37,11 +51,106 @@ export type RunListItem = {
 export type RunListActions = {
   canEdit: boolean;
   killSwitchOn: boolean;
-  busy: { approve: boolean; startAgain: boolean; checkLearning: boolean };
+  busy: { approve: boolean; startAgain: boolean; checkLearning: boolean; attest: boolean; revoke: boolean; confirmAiLabel: boolean; revokeAiLabel: boolean };
   onApprove: (runId: string, stage: string) => void;
   onStartAgain: (runId: string) => void;
   onCheckLearning: (runId: string) => void;
+  onAttest: (creativeId: string, kind: LicenceKind) => void;
+  onRevoke: (attestationId: string) => void;
+  onConfirmAiLabel: (variantId: string) => void;
+  onRevokeAiLabel: (variantId: string) => void;
 };
+
+/**
+ * The AI-label confirmation of one variant. A member confirms it under the wording shown, or revokes it. A viewer sees both controls
+ * disabled, with the reason. A variant with no creative has nothing to label, so it says so and offers no control.
+ */
+function AiLabelControls({ aiLabel, actions }: { aiLabel: RunPickLine["variants"][number]["aiLabel"]; actions: RunListActions }) {
+  const label = "AI label";
+  if (!aiLabel.canConfirm) return <p className="text-muted">{label}: no creative for this variant yet, so there is nothing to label.</p>;
+  if (aiLabel.confirmed) {
+    const reasonId = `ai-label-revoke-reason-${aiLabel.variantId}`;
+    return (
+      <div className="space-y-0.5">
+        <p>{label} confirmed.</p>
+        {actions.canEdit ? (
+          <Button size="sm" variant="secondary" disabled={actions.busy.revokeAiLabel} loading={actions.busy.revokeAiLabel} onClick={() => actions.onRevokeAiLabel(aiLabel.variantId)}>
+            Revoke AI label
+          </Button>
+        ) : (
+          <>
+            <Button size="sm" variant="secondary" disabled aria-describedby={reasonId}>Revoke AI label</Button>
+            <DisabledReason id={reasonId}>Only a member can revoke the AI label.</DisabledReason>
+          </>
+        )}
+      </div>
+    );
+  }
+  const reasonId = `ai-label-confirm-reason-${aiLabel.variantId}`;
+  return (
+    <div className="space-y-0.5">
+      <p>{label} not confirmed. Confirming it says: <span className="text-muted">{ATTESTATION_WORDING.ai_label}</span></p>
+      {actions.canEdit ? (
+        <Button size="sm" disabled={actions.busy.confirmAiLabel} loading={actions.busy.confirmAiLabel} onClick={() => actions.onConfirmAiLabel(aiLabel.variantId)}>
+          Confirm AI label
+        </Button>
+      ) : (
+        <>
+          <Button size="sm" disabled aria-describedby={reasonId}>Confirm AI label</Button>
+          <DisabledReason id={reasonId}>Only a member can confirm the AI label.</DisabledReason>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The licence controls of one creative. An attested licence can be revoked. A licence that is not attested shows the wording it is
+ * attested under, and an attest control. A viewer sees both controls disabled, with the reason.
+ */
+function LicenceControls({ licence, actions }: { licence: RunCreativeLicence; actions: RunListActions }) {
+  return (
+    <div className="space-y-1 pt-1">
+      {LICENCE_KINDS.map((kind) => {
+        const attestationId = licence[kind];
+        const label = LICENCE_LABELS[kind];
+        const reasonId = `licence-reason-${licence.creativeId}-${kind}`;
+        if (attestationId) {
+          return (
+            <div key={kind} className="space-y-0.5">
+              <p>{label} licence attested.</p>
+              {actions.canEdit ? (
+                <Button size="sm" variant="secondary" disabled={actions.busy.revoke} loading={actions.busy.revoke} onClick={() => actions.onRevoke(attestationId)}>
+                  Revoke {label.toLowerCase()} licence
+                </Button>
+              ) : (
+                <>
+                  <Button size="sm" variant="secondary" disabled aria-describedby={reasonId}>Revoke {label.toLowerCase()} licence</Button>
+                  <DisabledReason id={reasonId}>Only a member can revoke a licence.</DisabledReason>
+                </>
+              )}
+            </div>
+          );
+        }
+        return (
+          <div key={kind} className="space-y-0.5">
+            <p>{label} licence not attested. Attesting it says: <span className="text-muted">{ATTESTATION_WORDING[kind]}</span></p>
+            {actions.canEdit ? (
+              <Button size="sm" disabled={actions.busy.attest} loading={actions.busy.attest} onClick={() => actions.onAttest(licence.creativeId, kind)}>
+                Attest {label.toLowerCase()} licence
+              </Button>
+            ) : (
+              <>
+                <Button size="sm" disabled aria-describedby={reasonId}>Attest {label.toLowerCase()} licence</Button>
+                <DisabledReason id={reasonId}>Only a member can attest a licence.</DisabledReason>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const AUTOMATION_WORDS: Record<RunSettings["automation"], string> = { manual: "Manual", semi: "Semi", full: "Full" };
 const INTENT_WORDS: Record<RunSettings["intent"], string> = { organic: "Organic", ad: "Paid ads", both: "Organic and paid" };
@@ -53,11 +162,14 @@ function stageLabelOf(type: string): string {
 /** The run's settings in one line, in the words the builder uses. */
 function settingsLine(settings: RunSettings): string {
   const platforms = settings.platforms.length > 0 ? settings.platforms.join(", ") : "every organic platform";
+  // Paid runs name their countries; a run with none says so, because a live paid publish is refused without one.
+  const countries = settings.targetingCountries.length > 0 ? settings.targetingCountries.join(", ") : "none set";
   return [
     `${AUTOMATION_WORDS[settings.automation]} automation`,
     INTENT_WORDS[settings.intent],
     `formats ${settings.formats.map((format) => FORMAT_LABELS[format]).join(", ")}`,
     `platforms ${platforms}`,
+    `countries ${countries}`,
   ].join(" · ");
 }
 
@@ -101,6 +213,9 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
             </div>
             <p className="text-muted">{settingsLine(run.settings)}</p>
             <p className="text-xs text-muted">Intent: {INTENT_WORDS[run.settings.intent]}. {INTENT_DESCRIPTIONS[run.settings.intent]}</p>
+            <ul className="space-y-1 text-xs text-muted" aria-label="Spend of this run">
+              {spendLinesOf(run.spend).map((line) => <li key={line}>{line}</li>)}
+            </ul>
             {run.error ? <p className="text-muted">{run.error}</p> : null}
 
             <details>
@@ -147,6 +262,8 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                               {pick.variants.map((variant, variantIndex) => (
                                 <li key={variantIndex} className="space-y-0.5 border-l border-line pl-2">
                                   <p>{variant.heading} <span className="text-muted">· {variant.gate}</span></p>
+                                  {variant.rightsLine ? <p className="text-muted">Rights: {variant.rightsLine}</p> : null}
+                                  <AiLabelControls aiLabel={variant.aiLabel} actions={actions} />
                                   {variant.creatives.length === 0 ? <p className="text-muted">Not produced yet.</p> : variant.creatives.map((creative, creativeIndex) => (
                                     <div key={creativeIndex} className="space-y-0.5">
                                       <p className="text-muted">{creative.label}</p>
@@ -156,6 +273,7 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                                       {creative.measurementLines.length === 0 ? null : (
                                         <ul className="space-y-0.5">{creative.measurementLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
                                       )}
+                                      {creative.licence ? <LicenceControls licence={creative.licence} actions={actions} /> : null}
                                     </div>
                                   ))}
                                 </li>

@@ -25,10 +25,22 @@ import type { Sql } from "../learning/store.ts";
 import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 import { checkEvidenceSufficiency } from "../jev/client.ts";
 import { decideWithActiveEngine, type DecisionEngineRegistry } from "./dispatcher.ts";
-import { calibrationStatusOf, evaluateQuestionPolicies, policyForQuestion, policyVersionOf, type CalibrationStatus, type PolicyOutcome } from "./policy.ts";
+import {
+  applyCalibratedThreshold,
+  calibrationStatusOf,
+  evaluateQuestionPolicies,
+  policyForQuestion,
+  policyVersionOf,
+  type AppliedCalibration,
+  type CalibrationStatus,
+  type DecisionPolicy,
+  type PolicyOutcome,
+} from "./policy.ts";
 import { resolveActiveEngine, type EngineSelection } from "./selection.ts";
 import { abstainAll, type DecisionImageInput, type DecisionRequest, type DecisionUsage } from "./types.ts";
 import { checkImageBytes } from "../media/image-input.ts";
+import { calibratedThresholdsOf } from "../calibration/question-store.ts";
+import { questionKeyOf } from "../calibration/question-outcomes.ts";
 
 /** The scope name of image evidence. A question scoped to it receives every image item the gate was given. */
 export const IMAGE_SCOPE = "image";
@@ -142,7 +154,11 @@ export type GateResult = {
   lineagePersisted: boolean;
   /** Normalized answers from the engine, keyed by the caller's question key. Locally refused answers are included. */
   answers: Record<string, JevAnswer>;
-  votes: Array<GateProvenance & { questionId: string; outcome: PolicyOutcome; reason: string; calibrationStatus: CalibrationStatus }>;
+  /**
+   * One entry per vote. A vote made under the brand's calibrated threshold has calibrationStatus "calibrated" and names the report
+   * it came from, with its sample size and the threshold the gate used.
+   */
+  votes: Array<GateProvenance & { questionId: string; outcome: PolicyOutcome; reason: string; calibrationStatus: CalibrationStatus; calibration?: AppliedCalibration }>;
   unresolved: Array<GateProvenance & { questionId: string; status: string; reason: string; calibrationStatus: CalibrationStatus }>;
   evidence: GateEvidence[];
   /** One entry per evidence scope: the engine calls the gate made, and the calls it did not send. */
@@ -234,6 +250,23 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
   }
   const engineAcceptsImages = selection.engineId === "openai-decisions";
   const images = engineAcceptsImages ? (input.images ?? []) : [];
+
+  // 2b. The brand's calibrated thresholds: the newest stored report for each question version, read for this brand only. A question
+  //     with no calibrated report keeps its registry policy. A read that fails keeps every policy as it was, so nothing is approved on
+  //     a report that could not be read.
+  // A calibrated report applies only where applyCalibratedThreshold allows it: calibration may raise the registry's bar, never lower it.
+  const calibrated = input.sql ? await readCalibratedThresholds(input.sql, input.organizationId, input.brandId, input.questions) : new Map<string, AppliedCalibration>();
+  const policyOf = (question: GateQuestion): DecisionPolicy | null => {
+    const policy = policyForQuestion(question.spec);
+    const applied = calibrated.get(questionKeyOf(question.spec.id, question.spec.version));
+    return policy && applied ? applyCalibratedThreshold(policy, applied) : policy;
+  };
+  // A question whose calibrated threshold was applied names the report in its policy version, so the record shows which threshold
+  // decided it. A report that was not applied leaves the version as the registry's.
+  const versionOf = (question: GateQuestion): string => {
+    const calibration = policyOf(question)?.calibration;
+    return calibration ? `${policyVersionOf(question.spec)}+calibrated:${calibration.reportId}` : policyVersionOf(question.spec);
+  };
 
   // 3. Plan. Each question gets its own scope, is checked against it, and is grouped with the questions that share it.
   const localAnswers: Record<string, JevAnswer> = {};
@@ -408,7 +441,7 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
     allAnswers,
     gating.map((question) => ({
       questionId: question.spec.id,
-      policy: policyForQuestion(question.spec),
+      policy: policyOf(question),
       scopePresent: scopeOfKey.get(question.key)?.present ?? false,
     })),
   );
@@ -438,7 +471,7 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
     model: uniqueJoin(calledCalls.map((call) => call.model)),
     requestedModel: uniqueJoin(calledCalls.map((call) => call.requestedModel)),
     returnedModel: uniqueJoin(calledCalls.map((call) => call.returnedModel)),
-    policyVersion,
+    policyVersion: gating.map(versionOf).join(","),
     questionVersions,
     lineagePersisted: calledCalls.length > 0 && lineagePersisted,
     answers: allAnswers,
@@ -447,6 +480,7 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
       outcome: vote.outcome,
       reason: vote.reason,
       calibrationStatus: vote.calibrationStatus,
+      ...(vote.calibration ? { calibration: vote.calibration } : {}),
       ...provenanceOf(vote.questionId),
     })),
     unresolved: evaluation.unresolved.map((item) => {
@@ -467,6 +501,28 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
     usage,
     failureKind: firstFailure,
   });
+}
+
+/**
+ * The calibrated thresholds of this brand for the gate's questions. A failed read returns none, so every question keeps its
+ * uncalibrated policy and goes to review where the registry says so. The failure is logged, not thrown: the decision still stands.
+ */
+async function readCalibratedThresholds(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  questions: GateQuestion[],
+): Promise<Map<string, AppliedCalibration>> {
+  try {
+    return await calibratedThresholdsOf(
+      sql,
+      { organizationId, brandId },
+      questions.map((question) => ({ questionId: question.spec.id, questionVersion: question.spec.version })),
+    );
+  } catch (error) {
+    console.warn("[decisions] Calibrated thresholds could not be read; every question keeps its uncalibrated policy:", error instanceof Error ? error.message : error);
+    return new Map();
+  }
 }
 
 /** The answer a question gets when the gate refuses it without asking the engine. */

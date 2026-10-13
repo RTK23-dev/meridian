@@ -35,9 +35,9 @@ function gateDatabase(variants: Array<{ id: string; storyboard: string | null }>
   const gateWrites: Array<{ id: string; result: string }> = [];
   const sql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.join("?");
-    if (text.includes("select id, status, niche, level, settings, created_by, current_stage from factory_runs")) {
+    if (text.includes("select id, status, niche, level, settings, created_by, current_stage, waiting_on from factory_runs")) {
       // No stored settings: the run is read from its level, 3, which is full automation. Gate is not a spend stage, so it runs.
-      return [{ id: "run-1", status: "running", niche: "skincare", level: 3, settings: "{}", created_by: "user-1" }];
+      return [{ id: "run-1", status: "running", niche: "skincare", level: 3, settings: "{}", created_by: "user-1", current_stage: "", waiting_on: "" }];
     }
     if (text.includes("from factory_kill_switches")) return [];
     if (text.includes("from products p")) return [{ allowed_claims: productClaims.allowed, prohibited_claims: productClaims.prohibited }];
@@ -63,7 +63,8 @@ const GATE_JOB: ExecutableJob = {
 
 test("the claims verdict follows the recorded claim text: block for a banned or unapproved claim, review for none, pass for an approved one", () => {
   const rules = { approved: ["Washes hands daily"], banned: ["cures"] };
-  const claimsOf = (storyboard: string | null) => variantGateVerdicts({ storyboard, rules }).find((verdict) => verdict.gate === "claims");
+  const claimsOf = (storyboard: string | null) =>
+    variantGateVerdicts({ storyboard, rules, rights: { musicLicensed: false, footageLicensed: false, aiLabeled: false } }).find((verdict) => verdict.gate === "claims");
   assert.equal(claimsOf(JSON.stringify({ claims: ["This cures eczema"] }))?.result, "block");
   assert.equal(claimsOf(JSON.stringify({ claims: ["Lasts a year"] }))?.result, "block");
   assert.equal(claimsOf(JSON.stringify({ schema: "meridian.storyboard.v1", beats: [] }))?.result, "review");
@@ -79,7 +80,7 @@ test("a policy flag that was never checked is review, never pass, and a flag tha
   assert.equal(policyGate({ ...unchecked, beforeAfter: true }).result, "block", "a found flag blocks even when others are unchecked");
   assert.equal(policyGate({ beforeAfter: false, personalAttribute: false, healthClaim: true, financeClaim: false }).result, "review");
   // This job runs no policy check, so a variant's policy verdict is review, not the pass it used to record.
-  const policy = variantGateVerdicts({ storyboard: JSON.stringify({ claims: ["Washes hands daily"] }), rules: { approved: ["Washes hands daily"], banned: [] } })
+  const policy = variantGateVerdicts({ storyboard: JSON.stringify({ claims: ["Washes hands daily"] }), rules: { approved: ["Washes hands daily"], banned: [] }, rights: { musicLicensed: false, footageLicensed: false, aiLabeled: false } })
     .find((verdict) => verdict.gate === "policy");
   assert.equal(policy?.result, "review");
 });

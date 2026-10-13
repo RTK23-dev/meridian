@@ -41,6 +41,7 @@ import type { ImageGenerationOutcome } from "../production/image-providers.ts";
 import type { CreativeSpec } from "../production/types.ts";
 import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
 import { resolveProductionTarget } from "../production/target.ts";
+import { submitWithPreflight, type SubmitWithPreflightResult } from "../production/submit.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
 import { accountSnapshots, competitorCopy, factsFor, frameLike, qcBrandOf, videoVisualEvidence, visualFacts, writeJudgment } from "./image-qc.server.ts";
@@ -1244,11 +1245,12 @@ export async function executeApprovedCreativePlan(
           )
           on conflict (id) do nothing
         `;
-        let submittedJob: import("../production/types.ts").ProductionJob;
+        let submission: SubmitWithPreflightResult;
         const videoReservation = reservations.get(deliv.id);
         if (videoReservation) videoReservation.held = true;
         try {
-          submittedJob = await provider.submitJob(creativeSpec);
+          // Preflight runs inside submitWithPreflight, before the provider is called. A refusal calls no provider.
+          submission = await submitWithPreflight(provider, creativeSpec);
         } catch (submitError) {
           providerSubmissionUnknown = true;
           await sql`
@@ -1259,6 +1261,19 @@ export async function executeApprovedCreativePlan(
           `;
           throw new Error("Provider submission outcome is unknown. The durable job and budget reservation are held for reconciliation; it was not resubmitted.");
         }
+        if (submission.refused) {
+          // Refused by preflight before any provider call: nothing was sent, so nothing was spent. The job records the reasons,
+          // and the reservation is released, as for a definitive provider rejection.
+          if (videoReservation) videoReservation.held = false;
+          const refusalReasons = submission.reasons.join(" ");
+          await sql`
+            update production_jobs set status = 'PREFLIGHT_FAILED', error_code = 'PREFLIGHT_BLOCKED',
+              error_message = ${refusalReasons}, updated_at = now()
+            where id = ${prodJobId} and organization_id = ${access.organizationId} and brand_id = ${brandId}
+          `;
+          throw new Error(`Video production refused by preflight before any provider call: ${refusalReasons}`);
+        }
+        const submittedJob = submission.job;
         if (submittedJob.status === "SUBMISSION_UNKNOWN") {
           providerSubmissionUnknown = true;
           await sql`
