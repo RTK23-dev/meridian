@@ -4,8 +4,8 @@
  * A concept is one creative angle, with its format and hook type, read from the creative DNA of the graded ads. A pick
  * - is filtered out when the brand's own brain rules the concept out: the brain is too thin to confirm fit, or the concept's words
  *   include one the brand avoids;
- * - is weighted by what the brand has already learned, from its learned patterns (learning/engine.ts), by the direction and the
- *   evidence behind each pattern that names one of its attributes;
+ * - is weighted by what the brand has already learned on the run's own surface (organic or paid) and channels, from its learned
+ *   patterns (learning/engine.ts), by the direction and the evidence behind each pattern that names one of its attributes;
  * - gets one Thompson draw from its delivery record (thompson.ts). A concept with proven delivery and one with none both have a
  *   chance, so the run balances proven angles against untested ones. The seed is the run id, so a run's picks can be reproduced.
  *
@@ -14,12 +14,13 @@
 
 import type { Sql } from "../learning/store.ts";
 import { learningDirection, patternInfluence } from "../learning/engine.ts";
-import type { LearnedPattern } from "../domain.ts";
+import type { LearnedPattern, LearningSurface } from "../domain.ts";
 import { brandFitQuestion } from "../jev/questions.ts";
 import type { BrainKey } from "../brain.ts";
 import { CREATIVE_DNA_VERSION, type CreativeDna } from "./creative-dna.ts";
 import { linesOf, loadFactoryBrain } from "./brain-facts.ts";
 import { thompsonRank, type ThompsonArm } from "./thompson.ts";
+import type { Intent } from "./run-settings.ts";
 
 /** How far a learned pattern moves a concept's weight at most. A ranking scale, uncalibrated. */
 export const LEARNED_WEIGHT_SCALE = 0.5;
@@ -101,14 +102,29 @@ export type LearnedRow = {
   p_beat: number | null;
   ci_low: number | null;
   ci_high: number | null;
+  surface: string;
+  channel: string;
 };
 
-/** The weight of a concept from the patterns the brand has learned about its angle, hook type and format. */
-export function learnedWeightOf(concept: Concept, rows: LearnedRow[]): { weight: number; notes: string[] } {
+/**
+ * The surface and channels a run learns from. A pattern counts only when it was learned on this surface, and on a channel the run
+ * names or on every channel (channel ''). A run with no single surface (intent both) has no scope, so no pattern counts for it.
+ */
+export type LearningScope = { surface: LearningSurface; platforms: readonly string[] };
+
+/** Whether a learned pattern may move a run's pick: the same surface, and a channel the run names or every channel. */
+export function patternInScope(row: { surface: string; channel: string }, scope: LearningScope): boolean {
+  if (row.surface !== scope.surface) return false;
+  return row.channel === "" || scope.platforms.includes(row.channel);
+}
+
+/** The weight of a concept from the patterns the brand has learned about its angle, hook type and format, on the run's scope. */
+export function learnedWeightOf(concept: Concept, rows: LearnedRow[], scope: LearningScope | null): { weight: number; notes: string[] } {
   const attributes: Record<string, string> = { angle: concept.angle, hookType: concept.hookType, format: concept.format };
   let adjustment = 0;
   const notes: string[] = [];
   for (const row of rows) {
+    if (!scope || !patternInScope(row, scope)) continue;
     const own = attributes[row.attribute];
     if (own === undefined || own === "" || row.value.trim().toLowerCase() !== own.trim().toLowerCase()) continue;
     const pattern: LearnedPattern = {
@@ -130,13 +146,24 @@ export function learnedWeightOf(concept: Concept, rows: LearnedRow[]): { weight:
     const influence = patternInfluence(pattern);
     if (direction === "POSITIVE") {
       adjustment += influence * Math.min(1, Math.max(0, row.lift));
-      notes.push(`${row.attribute} ${row.value} has learned to win`);
+      notes.push(`${row.attribute} ${row.value} has learned to win on ${row.surface}`);
     } else if (direction === "NEGATIVE") {
       adjustment -= influence * Math.min(1, Math.max(0, -row.lift));
-      notes.push(`${row.attribute} ${row.value} has learned to lose`);
+      notes.push(`${row.attribute} ${row.value} has learned to lose on ${row.surface}`);
     }
   }
   return { weight: Math.max(MIN_LEARNED_WEIGHT, 1 + LEARNED_WEIGHT_SCALE * adjustment), notes };
+}
+
+/**
+ * The learning scope of a run from its intent. An organic run learns from organic outcomes, and an ad run from paid outcomes. A run
+ * with intent both publishes on both surfaces, so no single surface's patterns describe it: it gets no learned weight, and the run
+ * says so in its pick notes rather than blend the two.
+ */
+export function learningScopeOf(settings: { intent: Intent; platforms: readonly string[] }): LearningScope | null {
+  if (settings.intent === "organic") return { surface: "organic", platforms: settings.platforms };
+  if (settings.intent === "ad") return { surface: "paid", platforms: settings.platforms };
+  return null;
 }
 
 type Candidate = {
@@ -164,7 +191,7 @@ export type PickResult = {
  */
 export async function pickConceptsForRun(
   sql: Sql,
-  input: { organizationId: string; brandId: string; runId: string; maxPicks: number },
+  input: { organizationId: string; brandId: string; runId: string; maxPicks: number; learning: LearningScope | null },
 ): Promise<PickResult> {
   const rows = await sql<{ research_ad_id: string; record: string; winner_score: number; still_running: boolean | null }>`
     select d.research_ad_id, d.record, t.winner_score, t.still_running
@@ -204,11 +231,16 @@ export async function pickConceptsForRun(
   }
 
   const brain = await loadFactoryBrain(sql, input.organizationId, input.brandId);
-  const learned = await sql<LearnedRow>`
-    select attribute, value, metric, lift, sample_size, impressions, state, p_beat, ci_low, ci_high
-    from learned_patterns
-    where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and scope = 'brand'
-  `;
+  // Only the run's own surface is read, and only the channels it names (or every channel). The filter is in the query and again in
+  // learnedWeightOf, so a pattern from another surface can never move this run's weights. No scope reads no pattern at all.
+  const learned = input.learning
+    ? await sql<LearnedRow>`
+        select attribute, value, metric, lift, sample_size, impressions, state, p_beat, ci_low, ci_high, surface, channel
+        from learned_patterns
+        where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and scope = 'brand'
+          and surface = ${input.learning.surface} and (channel = '' or channel = any(${[...input.learning.platforms]}))
+      `
+    : [];
   const filtered: Array<{ concept: string; reason: string }> = [];
   const arms: ThompsonArm[] = [];
   const byKey = new Map<string, Candidate & { weight: number }>();
@@ -218,7 +250,7 @@ export async function pickConceptsForRun(
       filtered.push({ concept: candidate.concept.label, reason: fit.reason });
       continue;
     }
-    const { weight } = learnedWeightOf(candidate.concept, learned);
+    const { weight } = learnedWeightOf(candidate.concept, learned, input.learning);
     arms.push({ id: candidate.concept.key, successes: candidate.running, failures: candidate.known - candidate.running, weight });
     byKey.set(candidate.concept.key, { ...candidate, weight });
   }

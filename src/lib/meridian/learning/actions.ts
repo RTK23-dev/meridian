@@ -265,7 +265,7 @@ export const sharePatternWithOrganization = createServerFn({ method: "POST" })
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "admin");
     const rows = await sql<Record<string, unknown>>`
-      select attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary, state, clicks, conversions, spend_cents, revenue_cents, scope
+      select attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary, state, clicks, conversions, spend_cents, revenue_cents, scope, surface, channel
       from learned_patterns
       where id = ${data.patternId} and brand_id = ${data.brandId} and organization_id = ${access.organizationId}
       limit 1
@@ -276,19 +276,19 @@ export const sharePatternWithOrganization = createServerFn({ method: "POST" })
     const existing = await sql<{ id: string }>`
       select id from learned_patterns
       where brand_id = ${data.brandId} and attribute = ${asText(row.attribute)} and value = ${asText(row.value)}
-        and metric = ${asText(row.metric)} and scope = 'organization'
+        and metric = ${asText(row.metric)} and scope = 'organization' and surface = ${asText(row.surface)} and channel = ${asText(row.channel)}
       limit 1
     `;
     if (existing[0]) return { status: "already" as const };
     await sql`
       insert into learned_patterns (
         id, organization_id, brand_id, attribute, value, metric, lift, sample_size, baseline, observed, impressions, summary,
-        state, clicks, conversions, spend_cents, revenue_cents, scope
+        state, clicks, conversions, spend_cents, revenue_cents, scope, surface, channel
       ) values (
         ${id()}, ${access.organizationId}, ${data.brandId}, ${asText(row.attribute)}, ${asText(row.value)}, ${asText(row.metric)},
         ${asNumber(row.lift)}, ${asNumber(row.sample_size)}, ${asNumber(row.baseline)}, ${asNumber(row.observed)}, ${asNumber(row.impressions)},
         ${asText(row.summary)}, ${asText(row.state) || "INFERRED"}, ${asNumber(row.clicks)}, ${asNumber(row.conversions)},
-        ${asNumber(row.spend_cents)}, ${asNumber(row.revenue_cents)}, 'organization'
+        ${asNumber(row.spend_cents)}, ${asNumber(row.revenue_cents)}, 'organization', ${asText(row.surface) || "unassigned"}, ${asText(row.channel)}
       )
     `;
     return { status: "shared" as const };

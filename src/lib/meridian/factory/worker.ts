@@ -6,7 +6,8 @@ import { decodeVideoDna } from "./decode.ts";
 import type { ResearchSegment } from "../research/schema.ts";
 import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate, type GateVerdict } from "./gates.ts";
 import { adsMustPause } from "./kill-switch.ts";
-import { isFactoryStage, LEARN_NOT_BUILT } from "./pipeline.ts";
+import { isFactoryStage } from "./pipeline.ts";
+import { learnForRun } from "./learn.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { stageDecision } from "./stage-decision.ts";
 import { effectiveCap, meteredSpendOf, spendCapsOf } from "./spend.ts";
@@ -31,7 +32,7 @@ import { winnerScore } from "./winner-score.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
 import { loadFactoryBrain } from "./brain-facts.ts";
-import { pickConceptsForRun } from "./pick.ts";
+import { learningScopeOf, pickConceptsForRun } from "./pick.ts";
 import {
   gradeColumnsOf,
   gradeItemWithEngine,
@@ -173,15 +174,17 @@ export async function executeFactoryJob(
   if (job.job_type === "factory.pick") {
     // The picks are the concepts this run makes next, chosen from the graded ads (pick.ts). At most the run's variant cap of
     // concepts is picked, because each pick produces at least one variant.
+    // The learned weights are read on the run's own surface only (learningScopeOf). A run with intent both has none.
     const picked = await pickConceptsForRun(sql, {
       organizationId: job.organization_id,
       brandId: job.brand_id,
       runId,
       maxPicks: settings.caps.maxVariants,
+      learning: learningScopeOf(settings),
     });
     return `picked:${picked.picks.length}`;
   }
-  // No stage below marks the run succeeded. The run finishes only when learn does its real work (see LEARN_NOT_BUILT).
+  // No stage below marks the run succeeded. The run finishes only when learn finds a measured outcome of its own (see learn.ts).
   if (job.job_type === "factory.template") {
     const planned = await persistTemplates(sql, job.organization_id, job.brand_id, runId, {
       formats: settings.formats,
@@ -263,13 +266,9 @@ export async function executeFactoryJob(
     });
   }
   if (job.job_type === "factory.learn") {
-    // Learning is not built (NORTH_STAR section 8, item 10). Nothing was learned, so the run is not finished. It stays running,
-    // and the reason is on the run row where the Factory screen reads it.
-    await sql`
-      update factory_runs set error = ${LEARN_NOT_BUILT}, updated_at = now()
-      where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
-    `;
-    return LEARN_NOT_BUILT;
+    // Learning recomputes the brand's patterns per surface. The run finishes here only when its own creatives have a measured outcome;
+    // otherwise it stays running, and the run row says what it waits for (learn.ts).
+    return learnForRun(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
   }
   return `queued:${job.job_type}`;
 }

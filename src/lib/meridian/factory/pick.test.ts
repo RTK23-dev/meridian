@@ -42,7 +42,12 @@ const LEARNED_WIN: LearnedRow = {
   p_beat: 0.9,
   ci_low: 0.1,
   ci_high: 0.9,
+  surface: "paid",
+  channel: "",
 };
+
+/** A paid run that names no platform: it reads paid patterns on every channel. */
+const PAID_RUN = { surface: "paid" as const, platforms: [] as string[] };
 
 test("a concept is filtered out when the brain is too thin to confirm its fit", () => {
   const concept = conceptOf(dnaFor("ad-1", "demo", "question", "problem-solution"));
@@ -67,13 +72,13 @@ test("a concept that uses a word the brand avoids is filtered out, and a concept
 test("a learned win on the concept's angle raises its weight, and a learned loss lowers it", () => {
   const concept = conceptOf(dnaFor("ad-4", "demo", "question", "problem-solution"));
   assert.ok(concept);
-  const winner = learnedWeightOf(concept, [LEARNED_WIN]);
+  const winner = learnedWeightOf(concept, [LEARNED_WIN], PAID_RUN);
   assert.ok(winner.weight > 1, `a learned win raises the weight to ${winner.weight}`);
   assert.ok(winner.notes.some((note) => /learned to win/.test(note)));
 
   const loser = learnedWeightOf(concept, [
     { ...LEARNED_WIN, lift: -0.4, p_beat: 0.1, ci_low: -0.6, ci_high: -0.2, state: "INFERRED" },
-  ]);
+  ], PAID_RUN);
   assert.ok(loser.weight < 1, `a learned loss lowers the weight to ${loser.weight}`);
   assert.ok(loser.weight >= 0.1, "a learned loss never removes the concept outright");
 });
@@ -81,8 +86,8 @@ test("a learned win on the concept's angle raises its weight, and a learned loss
 test("a pattern on another value, or on no attribute the concept has, leaves the weight at one", () => {
   const concept = conceptOf(dnaFor("ad-5", "demo", "question", "problem-solution"));
   assert.ok(concept);
-  assert.equal(learnedWeightOf(concept, [{ ...LEARNED_WIN, value: "social-proof" }]).weight, 1);
-  assert.equal(learnedWeightOf(concept, [{ ...LEARNED_WIN, attribute: "offer" }]).weight, 1);
+  assert.equal(learnedWeightOf(concept, [{ ...LEARNED_WIN, value: "social-proof" }], PAID_RUN).weight, 1);
+  assert.equal(learnedWeightOf(concept, [{ ...LEARNED_WIN, attribute: "offer" }], PAID_RUN).weight, 1);
 });
 
 test("a DNA with no angle is not a concept, because a concept needs an angle", () => {
