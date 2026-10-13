@@ -9,6 +9,8 @@ import { adsMustPause } from "./kill-switch.ts";
 import { isFactoryStage, LEARN_NOT_BUILT } from "./pipeline.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { stageDecision } from "./stage-decision.ts";
+import { effectiveCap, meteredSpendOf, spendCapsOf } from "./spend.ts";
+import { produceFactoryCreatives } from "./produce.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { recordedClaimsOf, templateFromDna } from "./template.ts";
 import {
@@ -190,7 +192,28 @@ export async function executeFactoryJob(
   }
   if (job.job_type === "factory.produce") {
     const made = await persistVariants(sql, job.organization_id, job.brand_id, runId, settings.caps.maxVariants);
-    return `variants:${made}`;
+    // Each variant is materialized through the production router with the run's provider choice. A named provider that is not ready,
+    // a cap that is reached, or a budget that refuses the reservation stops the run here, with the reason on the run row.
+    const produced = await produceFactoryCreatives(sql, {
+      organizationId: job.organization_id,
+      brandId: job.brand_id,
+      runId,
+      formats: settings.formats,
+      providers: settings.providers,
+      caps: {
+        totalCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
+        dailyCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
+      },
+      engines: seams.decisionEngines,
+    });
+    if (produced.stop) {
+      await sql`
+        update factory_runs set status = 'paused', current_stage = ${job.job_type}, error = ${produced.stop}, updated_at = now()
+        where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+      `;
+      return `stopped:${job.job_type}`;
+    }
+    return `variants:${made};creatives:${produced.produced}`;
   }
   if (job.job_type === "factory.gate") {
     const gated = await gateVariants(sql, job.organization_id, job.brand_id);
@@ -205,15 +228,10 @@ export async function executeFactoryJob(
     return `review:${rows[0]?.n ?? 0}`;
   }
   if (job.job_type === "factory.launch") {
-    const caps = await sql<{ daily_cents: number; total_cents: number }>`
-      select daily_cents, total_cents from factory_spend_caps
-      where organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
-      limit 1
-    `;
-    if (!caps[0] || (caps[0].daily_cents <= 0 && caps[0].total_cents <= 0)) {
-      return "launch:blocked-no-cap";
-    }
-    return "launch:paused-until-owner";
+    // Launch needs a cap, the run's own or the brand's, as the stage decision reads it. Publishing stays paused until the owner acts.
+    const capped =
+      effectiveCap(settings.caps.totalCents, caps.totalCents) !== null || effectiveCap(settings.caps.dailyCents, caps.dailyCents) !== null;
+    return capped ? "launch:paused-until-owner" : "launch:blocked-no-cap";
   }
   if (job.job_type === "factory.test") {
     return "test:awaiting-live-results";
@@ -680,7 +698,43 @@ export function variantGateVerdicts(input: {
   ];
 }
 
-/** Gates each recent variant with variantGateVerdicts and records the combined result. */
+/**
+ * The JEV creative_qa verdict for one variant (NORTH_STAR section 5, gate). The creative questions, the text ones and the visual ones
+ * (creative.visual_quality.v1 and creative.product_visible.v1), run once, through the engine gate, when the variant's image is
+ * judged at produce. That judgment writes the creative_qa gate record. This stage reads the record and does not ask the engine
+ * again, so the engine is paid for once. A variant with no creative, or a creative with no recorded decision, has no evidence and is
+ * review. An engine that is not configured, or whose thresholds are not calibrated, routes to review in the record, so it is never a
+ * pass here.
+ */
+export async function creativeQaVerdict(sql: Sql, organizationId: string, brandId: string, variantId: string): Promise<GateVerdict> {
+  const rows = await sql<{ creative_id: string; action: string | null }>`
+    select fc.creative_id, g.action
+    from factory_creatives fc
+    left join lateral (
+      select d.action from decision_gate_records d
+      where d.organization_id = fc.organization_id and d.subject_type = 'creative' and d.subject_id = fc.creative_id
+        and d.gate = 'creative_qa'
+      order by d.created_at desc
+      limit 1
+    ) g on true
+    where fc.variant_id = ${variantId} and fc.organization_id = ${organizationId} and fc.brand_id = ${brandId}
+  `;
+  if (rows.length === 0) {
+    return { gate: "jev", result: "review", reason: "No creative was made for this variant, so the JEV creative check has no evidence." };
+  }
+  if (rows.some((row) => row.action == null)) {
+    return { gate: "jev", result: "review", reason: "The JEV creative check has no recorded decision for a creative of this variant." };
+  }
+  if (rows.some((row) => row.action === "REJECT")) {
+    return { gate: "jev", result: "block", reason: "The JEV creative check rejected a creative of this variant." };
+  }
+  if (rows.some((row) => row.action !== "AUTO_APPROVE")) {
+    return { gate: "jev", result: "review", reason: "The JEV creative check sent a creative of this variant to a person." };
+  }
+  return { gate: "jev", result: "pass", reason: "The JEV creative check approved every creative of this variant." };
+}
+
+/** Gates each recent variant with the rule gates and the JEV creative check, and records the combined result. */
 async function gateVariants(sql: Sql, organizationId: string, brandId: string): Promise<number> {
   const rules = await brandClaimRules(sql, organizationId, brandId);
   const variants = await sql<{ id: string; storyboard: string | null }>`
@@ -693,7 +747,8 @@ async function gateVariants(sql: Sql, organizationId: string, brandId: string): 
   `;
   let count = 0;
   for (const variant of variants) {
-    const combined = combineGates(variantGateVerdicts({ storyboard: variant.storyboard, rules }));
+    const jev = await creativeQaVerdict(sql, organizationId, brandId, variant.id);
+    const combined = combineGates([...variantGateVerdicts({ storyboard: variant.storyboard, rules }), jev]);
     await sql`
       update factory_variants set gate_result = ${combined.result}
       where id = ${variant.id} and organization_id = ${organizationId} and brand_id = ${brandId}
@@ -703,43 +758,6 @@ async function gateVariants(sql: Sql, organizationId: string, brandId: string): 
   return count;
 }
 
-/**
- * The metered spend of one run, in cents: the sum of the factory_costs rows the run's provider calls wrote, and the part of it in the
- * last 24 hours. A stage that made no metered call adds nothing. A provider that reports no cost adds nothing either.
- */
-export async function meteredSpendOf(
-  sql: Sql,
-  organizationId: string,
-  brandId: string,
-  runId: string,
-): Promise<{ totalCents: number; dailyCents: number }> {
-  const rows = await sql<{ total: number; daily: number }>`
-    select coalesce(sum(cents), 0)::int as total,
-      coalesce(sum(cents) filter (where created_at >= now() - interval '1 day'), 0)::int as daily
-    from factory_costs
-    where organization_id = ${organizationId} and brand_id = ${brandId} and run_id = ${runId}
-  `;
-  return { totalCents: Number(rows[0]?.total ?? 0), dailyCents: Number(rows[0]?.daily ?? 0) };
-}
-
-/** The brand's declared caps, from factory_spend_caps. A brand with no row has none, which reads as zero. */
-export async function spendCapsOf(sql: Sql, organizationId: string, brandId: string): Promise<{ totalCents: number; dailyCents: number }> {
-  const rows = await sql<{ daily_cents: number; total_cents: number }>`
-    select daily_cents, total_cents from factory_spend_caps
-    where organization_id = ${organizationId} and brand_id = ${brandId}
-    limit 1
-  `;
-  return { totalCents: Number(rows[0]?.total_cents ?? 0), dailyCents: Number(rows[0]?.daily_cents ?? 0) };
-}
-
-/**
- * The cap a run is held to, in cents: the stricter of the run's own cap and the brand's declared cap, counting only the caps that are
- * set. Null when neither is set, which is how a full run without a cap is recognised.
- */
-export function effectiveCap(runCents: number, brandCents: number): number | null {
-  const set = [runCents, brandCents].filter((value) => value > 0);
-  return set.length === 0 ? null : Math.min(...set);
-}
 
 async function killSwitchPaused(sql: Sql, organizationId: string, brandId: string): Promise<boolean> {
   const rows = await sql<{ scope: string; engaged: boolean }>`
