@@ -386,13 +386,6 @@ async function produceOne(
  * the Plan stage wrote them. Returns how many creatives the run now has, and the reason it stops, if it does.
  */
 export async function produceFactoryCreatives(sql: Sql, input: ProduceInput): Promise<ProduceOutcome> {
-  const unsupported = input.formats.filter((format) => format !== "image");
-  if (unsupported.length > 0) {
-    return {
-      produced: 0,
-      stop: `The Factory produces images so far. ${unsupported.join(" and ")} is not routed through it yet, so nothing was spent. Start the run with image as its format.`,
-    };
-  }
   const scope: Scope = { organizationId: input.organizationId, brandId: input.brandId };
   const variants = await sql<VariantRow>`
     select v.id, v.template_id, v.hook, v.cta, v.proof, v.angle, v.tests_attribute, t.plan
@@ -403,6 +396,15 @@ export async function produceFactoryCreatives(sql: Sql, input: ProduceInput): Pr
     order by v.created_at asc, v.id asc
   `;
   if (variants.length === 0) return { produced: 0, stop: null };
+  // A run with variants to make stops here when it asks for a format that is not produced yet, before any spend. A run with nothing
+  // to make has nothing to stop.
+  const unsupported = input.formats.filter((format) => format !== "image");
+  if (unsupported.length > 0) {
+    return {
+      produced: 0,
+      stop: `The Factory produces images so far. ${unsupported.join(" and ")} is not routed through it yet, so nothing was spent. Start the run with image as its format.`,
+    };
+  }
   const qcBrand = qcBrandOf(await loadBrandContext(sql, scope.organizationId, scope.brandId));
   const approver = await approverOf(sql, scope, input.runId);
 

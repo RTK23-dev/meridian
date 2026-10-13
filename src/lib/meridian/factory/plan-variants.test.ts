@@ -101,7 +101,9 @@ test("the grade, pick, template and produce stages plan one pick, and every vari
   assert.equal(stored.creativePlan.lineage.decisionId, template.gate, "the plan is made under the grade's engine decision");
   assert.equal(stored.creativePlan.productionContext?.productName, "Glow Serum");
 
-  assert.equal(await executeFactoryJob(sql, factoryJob("factory.produce"), payload), "variants:6");
+  // The run makes video by default, and produce makes images only so far. Produce writes the planned variants, then stops before any
+  // spend, with that reason. The variants below are what this test checks.
+  assert.equal(await executeFactoryJob(sql, factoryJob("factory.produce"), payload), "stopped:factory.produce");
   const rows = await sql<VariantRow>`
     select hook, cta, presenter, length_ms, angle, format, proof, tests_attribute from factory_variants
     where template_id = ${`tpl:${FACTORY_TEST_RUN}:ad-1`} order by id
@@ -166,7 +168,7 @@ test("a pick with no engine decision behind it gets no plan, and so no variant",
   assert.equal(await executeFactoryJob(sql, factoryJob("factory.template"), payload), "templates:1;plans:0;refused:1");
   const [template] = await sql<{ plan: string }>`select plan from factory_templates where id = ${`tpl:${FACTORY_TEST_RUN}:ad-1`}`;
   assert.equal(template?.plan, "", "no plan is stored without a decision");
-  assert.equal(await executeFactoryJob(sql, factoryJob("factory.produce"), payload), "variants:0");
+  assert.equal(await executeFactoryJob(sql, factoryJob("factory.produce"), payload), "variants:0;creatives:0");
   const [count] = await sql<{ n: number }>`select count(*)::int as n from factory_variants where organization_id = ${FACTORY_TEST_ORG}`;
   assert.equal(count?.n, 0, "no variant is written without a plan");
 });
