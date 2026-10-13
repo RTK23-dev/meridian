@@ -112,10 +112,12 @@ test("gathered items land in the existing evidence tables, and the ads reach gra
   assert.equal(collection[0]?.status, "succeeded");
   assert.equal(Number(collection[0]?.collected_count), 2);
 
+  // Discovered items belong to the discovery run the gather opened, not to the Factory run, so the query is by tenant and platform.
   const posts = await sql<{ n: number }>`
-    select count(*)::int as n from discovered_items where run_id = ${FACTORY_TEST_RUN} and source = 'tiktok'
+    select count(*)::int as n from discovered_items
+    where organization_id = ${FACTORY_TEST_ORG} and brand_id = ${FACTORY_TEST_BRAND} and source = 'tiktok'
   `;
-  assert.equal(posts[0]?.n, 1, "the scraped post is a discovered item of the run");
+  assert.equal(posts[0]?.n, 1, "the scraped post is a discovered item of the brand");
 
   const pageEvidence = await sql<{ n: number }>`
     select count(*)::int as n from discovered_page_evidence
