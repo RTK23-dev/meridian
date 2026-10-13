@@ -3,9 +3,13 @@ import { FACTORY_GRAPH, LEARN_WAITING } from "@/lib/meridian/factory/pipeline";
 import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian/factory/approval";
 import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { FORMAT_LABELS, INTENT_DESCRIPTIONS } from "@/lib/meridian/factory/run-builder-model";
+import { ATTESTATION_WORDING, LICENCE_KINDS, LICENCE_LABELS, type LicenceKind } from "@/lib/meridian/factory/rights-wording";
+
+/** The licences attested for one creative of a variant. Each is the attestation id, or null where that licence is not attested. */
+export type RunCreativeLicence = { creativeId: string; music: string | null; footage: string | null };
 
 /** A creative a variant produced, with its receipts and measured rows already in words. */
-export type RunCreativeLine = { label: string; receiptLines: string[]; measurementLines: string[] };
+export type RunCreativeLine = { label: string; receiptLines: string[]; measurementLines: string[]; licence?: RunCreativeLicence };
 
 /** One pick of a run: its concept, its grade as a prediction, its status, its measured outcome, and its variants. */
 export type RunPickLine = {
@@ -17,7 +21,7 @@ export type RunPickLine = {
   plan: string;
   /** The measured rows of the creatives this pick produced. Empty until one is measured. */
   measuredLines: string[];
-  variants: Array<{ heading: string; gate: string; creatives: RunCreativeLine[] }>;
+  variants: Array<{ heading: string; gate: string; rightsLine: string | null; creatives: RunCreativeLine[] }>;
 };
 
 /** One run as the Factory screen shows it. Receipt and metric lines are rendered by the page, so this module keeps no board types. */
@@ -37,11 +41,61 @@ export type RunListItem = {
 export type RunListActions = {
   canEdit: boolean;
   killSwitchOn: boolean;
-  busy: { approve: boolean; startAgain: boolean; checkLearning: boolean };
+  busy: { approve: boolean; startAgain: boolean; checkLearning: boolean; attest: boolean; revoke: boolean };
   onApprove: (runId: string, stage: string) => void;
   onStartAgain: (runId: string) => void;
   onCheckLearning: (runId: string) => void;
+  onAttest: (creativeId: string, kind: LicenceKind) => void;
+  onRevoke: (attestationId: string) => void;
 };
+
+/**
+ * The licence controls of one creative. An attested licence can be revoked. A licence that is not attested shows the wording it is
+ * attested under, and an attest control. A viewer sees both controls disabled, with the reason.
+ */
+function LicenceControls({ licence, actions }: { licence: RunCreativeLicence; actions: RunListActions }) {
+  return (
+    <div className="space-y-1 pt-1">
+      {LICENCE_KINDS.map((kind) => {
+        const attestationId = licence[kind];
+        const label = LICENCE_LABELS[kind];
+        const reasonId = `licence-reason-${licence.creativeId}-${kind}`;
+        if (attestationId) {
+          return (
+            <div key={kind} className="space-y-0.5">
+              <p>{label} licence attested.</p>
+              {actions.canEdit ? (
+                <Button size="sm" variant="secondary" disabled={actions.busy.revoke} loading={actions.busy.revoke} onClick={() => actions.onRevoke(attestationId)}>
+                  Revoke {label.toLowerCase()} licence
+                </Button>
+              ) : (
+                <>
+                  <Button size="sm" variant="secondary" disabled aria-describedby={reasonId}>Revoke {label.toLowerCase()} licence</Button>
+                  <DisabledReason id={reasonId}>Only a member can revoke a licence.</DisabledReason>
+                </>
+              )}
+            </div>
+          );
+        }
+        return (
+          <div key={kind} className="space-y-0.5">
+            <p>{label} licence not attested. Attesting it says: <span className="text-muted">{ATTESTATION_WORDING[kind]}</span></p>
+            {actions.canEdit ? (
+              <Button size="sm" disabled={actions.busy.attest} loading={actions.busy.attest} onClick={() => actions.onAttest(licence.creativeId, kind)}>
+                Attest {label.toLowerCase()} licence
+              </Button>
+            ) : (
+              <>
+                <Button size="sm" disabled aria-describedby={reasonId}>Attest {label.toLowerCase()} licence</Button>
+                <DisabledReason id={reasonId}>Only a member can attest a licence.</DisabledReason>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const AUTOMATION_WORDS: Record<RunSettings["automation"], string> = { manual: "Manual", semi: "Semi", full: "Full" };
 const INTENT_WORDS: Record<RunSettings["intent"], string> = { organic: "Organic", ad: "Paid ads", both: "Organic and paid" };
@@ -147,6 +201,7 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                               {pick.variants.map((variant, variantIndex) => (
                                 <li key={variantIndex} className="space-y-0.5 border-l border-line pl-2">
                                   <p>{variant.heading} <span className="text-muted">· {variant.gate}</span></p>
+                                  {variant.rightsLine ? <p className="text-muted">Rights: {variant.rightsLine}</p> : null}
                                   {variant.creatives.length === 0 ? <p className="text-muted">Not produced yet.</p> : variant.creatives.map((creative, creativeIndex) => (
                                     <div key={creativeIndex} className="space-y-0.5">
                                       <p className="text-muted">{creative.label}</p>
@@ -156,6 +211,7 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                                       {creative.measurementLines.length === 0 ? null : (
                                         <ul className="space-y-0.5">{creative.measurementLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
                                       )}
+                                      {creative.licence ? <LicenceControls licence={creative.licence} actions={actions} /> : null}
                                     </div>
                                   ))}
                                 </li>

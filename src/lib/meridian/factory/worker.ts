@@ -5,6 +5,7 @@ import { CREATIVE_DNA_VERSION, dnaFromTranscript, type AdFormat, type CreativeDn
 import { decodeVideoDna } from "./decode.ts";
 import type { ResearchSegment } from "../research/schema.ts";
 import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate, type GateVerdict } from "./gates.ts";
+import { creativeIdsOfVariant, licencesForCreatives, variantLicenceFlags } from "./rights.ts";
 import { adsMustPause } from "./kill-switch.ts";
 import { isFactoryStage } from "./pipeline.ts";
 import { learnForRun } from "./learn.ts";
@@ -713,6 +714,8 @@ async function brandClaimRules(sql: Sql, organizationId: string, brandId: string
 export function variantGateVerdicts(input: {
   storyboard: string | null;
   rules: { approved: string[]; banned: string[] };
+  /** The licences attested for the variant's creatives (rights.ts). */
+  rights: { musicLicensed: boolean; footageLicensed: boolean };
 }): GateVerdict[] {
   return [
     originalityGate({ frameHashDistance: null, embeddingDistance: null, textSimilarity: null }),
@@ -720,7 +723,9 @@ export function variantGateVerdicts(input: {
     claimsGate({ claims: recordedClaimsOf(input.storyboard ?? ""), approvedClaims: input.rules.approved, bannedWords: input.rules.banned }),
     // This job runs no policy check, so no flag is known. Unknown is review; it is never recorded as a pass.
     policyGate({ beforeAfter: null, personalAttribute: null, healthClaim: null, financeClaim: null }),
-    rightsGate({ musicLicensed: false, footageLicensed: false, aiLabeled: false }),
+    // The licences come from the attestations (rights.ts). aiLabeled keeps its source, which has no AI-label input yet, so it is false.
+    // Until that source exists, a variant that has both licences attested is still blocked on its AI labelling.
+    rightsGate({ musicLicensed: input.rights.musicLicensed, footageLicensed: input.rights.footageLicensed, aiLabeled: false }),
   ];
 }
 
@@ -771,10 +776,40 @@ async function gateVariants(sql: Sql, organizationId: string, brandId: string): 
     order by v.created_at desc
     limit 40
   `;
+  return gateVariantRows(sql, organizationId, brandId, variants, rules);
+}
+
+/**
+ * Gates the variants that made this creative again. Called when a licence for the creative is attested or revoked, so the stored
+ * gate result follows the attestation at once and not at the next gate stage. Returns how many variants were gated.
+ */
+export async function regateVariantsForCreative(sql: Sql, organizationId: string, brandId: string, creativeId: string): Promise<number> {
+  const variants = await sql<{ id: string; storyboard: string | null }>`
+    select v.id, t.storyboard
+    from factory_creatives fc
+    join factory_variants v on v.id = fc.variant_id and v.organization_id = fc.organization_id and v.brand_id = fc.brand_id
+    left join factory_templates t on t.id = v.template_id and t.organization_id = v.organization_id
+    where fc.creative_id = ${creativeId} and fc.organization_id = ${organizationId} and fc.brand_id = ${brandId}
+  `;
+  if (variants.length === 0) return 0;
+  const rules = await brandClaimRules(sql, organizationId, brandId);
+  return gateVariantRows(sql, organizationId, brandId, variants, rules);
+}
+
+async function gateVariantRows(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  variants: Array<{ id: string; storyboard: string | null }>,
+  rules: { approved: string[]; banned: string[] },
+): Promise<number> {
   let count = 0;
   for (const variant of variants) {
     const jev = await creativeQaVerdict(sql, organizationId, brandId, variant.id);
-    const combined = combineGates([...variantGateVerdicts({ storyboard: variant.storyboard, rules }), jev]);
+    const creativeIds = await creativeIdsOfVariant(sql, organizationId, brandId, variant.id);
+    const licences = await licencesForCreatives(sql, organizationId, brandId, creativeIds);
+    const rights = variantLicenceFlags(creativeIds, licences);
+    const combined = combineGates([...variantGateVerdicts({ storyboard: variant.storyboard, rules, rights }), jev]);
     await sql`
       update factory_variants set gate_result = ${combined.result}
       where id = ${variant.id} and organization_id = ${organizationId} and brand_id = ${brandId}

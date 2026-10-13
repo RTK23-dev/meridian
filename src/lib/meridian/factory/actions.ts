@@ -443,6 +443,40 @@ export const approveFactoryStage = createServerFn({ method: "POST" })
   });
 
 /**
+ * Attests that the brand holds the licence for the music or the footage in one creative. A member attests, and the server stores the
+ * fixed wording for the kind (rights.ts). The gate reads the attestation at once (rights-service.ts).
+ */
+export const attestFactoryLicence = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      creativeId: clip(body.creativeId, 80, "Creative", true),
+      kind: typeof body.kind === "string" ? body.kind : "",
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { attestLicence } = await import("./rights-service.ts");
+    return attestLicence(await getSql(), context.userId, data);
+  });
+
+/** Revokes an active licence attestation. The row is kept, and the variants of its creative are gated again. A member revokes. */
+export const revokeFactoryLicence = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      attestationId: clip(body.attestationId, 80, "Attestation", true),
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { revokeLicence } = await import("./rights-service.ts");
+    return revokeLicence(await getSql(), context.userId, data);
+  });
+
+/**
  * Starts a paused run again from the stage it stopped at. A paused run is stopped by its spend cap, a provider that is not ready,
  * or the kill switch. The kill switch must be clear. A spend cap still reached stops the run again, at the same stage, with the same reason.
  */

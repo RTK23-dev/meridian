@@ -11,7 +11,8 @@ import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
 import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
-import { approveFactoryStage, checkFactoryLearning, resumeFactoryRun, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import { approveFactoryStage, attestFactoryLicence, checkFactoryLearning, resumeFactoryRun, revokeFactoryLicence, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import type { LicenceKind } from "@/lib/meridian/factory/rights-wording";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
 import { metricLine, receiptLine } from "@/components/factory/measurement-model";
 import { gateText, planText, predictionStatusText, predictionText, variantHeading } from "@/components/factory/grades-model";
@@ -40,12 +41,16 @@ function picksOf(board: FactoryBoard, runPicks: FactoryBoard["runs"][number]["pi
     const variants = pick.variants.map((variant) => ({
       heading: variantHeading(variant),
       gate: gateText(variant.gateResult),
+      // The rights gate's reason, when it blocks the variant: a missing licence is named, and a licence that is attested is not.
+      rightsLine: variant.rights.blockedBy,
       creatives: variant.creatives.map((created) => {
         const publishing = board.publishing.find((item) => item.creativeId === created.creativeId);
+        const licence = variant.rights.creatives.find((item) => item.creativeId === created.creativeId);
         return {
           label: `${created.format || publishing?.format || "creative"} creative`,
           receiptLines: (publishing?.receipts ?? []).map((receipt) => receiptLine(receipt)),
           measurementLines: (publishing?.measurements ?? []).map((row) => `${row.surface} ${row.platform}: ${metricLine(row.surface, row.metrics)}`),
+          licence: licence ? { creativeId: licence.creativeId, music: licence.music, footage: licence.footage } : undefined,
         };
       }),
     }));
@@ -146,7 +151,21 @@ function FactoryPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
     onSuccess: (result) => setNote(`Approved. ${result.requeued} steps are queued again from ${FACTORY_GRAPH.find((spec) => spec.type === result.stage)?.label ?? result.stage}.`),
   });
-  const failures = [startRun, startAgain, checkLearning, saveControls, killSwitch, approveStage].map((action) => action.error).filter((error): error is Error => Boolean(error));
+  const attestLicence = useScopedMutation({
+    mutationKey: factoryKey("attest-licence"),
+    mutationFn: (vars: { creativeId: string; kind: LicenceKind }) => attestFactoryLicence({ data: { brandId, creativeId: vars.creativeId, kind: vars.kind } }),
+    // An attested licence changes the variant's rights and gate result, so the run list changes.
+    invalidate: () => [qk.factory(brandId)],
+    onSuccess: (result) => setNote(result.created ? "Licence attested. The variant is gated again." : "That licence was already attested."),
+  });
+  const revokeLicence = useScopedMutation({
+    mutationKey: factoryKey("revoke-licence"),
+    mutationFn: (attestationId: string) => revokeFactoryLicence({ data: { brandId, attestationId } }),
+    invalidate: () => [qk.factory(brandId)],
+    onSuccess: () => setNote("Licence revoked. The variant is gated again."),
+  });
+  const failures = [startRun, startAgain, checkLearning, saveControls, killSwitch, approveStage, attestLicence, revokeLicence]
+    .map((action) => action.error).filter((error): error is Error => Boolean(error));
 
   if (query.isError && !board) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!board) return <ScreenSkeleton label="Loading factory" shape="cards" />;
@@ -234,10 +253,18 @@ function FactoryPage({ brandId }: { brandId: string }) {
               actions={{
                 canEdit,
                 killSwitchOn: killOn,
-                busy: { approve: approveStage.isPending, startAgain: startAgain.isPending, checkLearning: checkLearning.isPending },
+                busy: {
+                  approve: approveStage.isPending,
+                  startAgain: startAgain.isPending,
+                  checkLearning: checkLearning.isPending,
+                  attest: attestLicence.isPending,
+                  revoke: revokeLicence.isPending,
+                },
                 onApprove: (runId, stage) => void approveStage.mutateAsync({ runId, stage }).catch(() => undefined),
                 onStartAgain: (runId) => void startAgain.mutateAsync(runId).catch(() => undefined),
                 onCheckLearning: (runId) => void checkLearning.mutateAsync(runId).catch(() => undefined),
+                onAttest: (creativeId, kind) => void attestLicence.mutateAsync({ creativeId, kind }).catch(() => undefined),
+                onRevoke: (attestationId) => void revokeLicence.mutateAsync(attestationId).catch(() => undefined),
               }}
             />
           </section>

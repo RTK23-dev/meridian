@@ -14,6 +14,8 @@ What is still open in this release. Each item says whether it is built and verif
 ## Open
 
 - **Instagram Reels token scope.** The connected-account check does not read `instagram_content_publish`, so a token without it fails at Meta, not in Meridian. The media route is built (see above).
+- **AI labelling input for the rights gate.** It has no source, so the rights gate blocks every Factory variant on AI labelling, even when
+  the music and footage licences are attested. The licence attestation itself is built (FACTORY.md, Licences).
 - **TikTok app audit.** Until TikTok audits the app, posts are private and TikTok returns no public post id, so this channel reports them as unconfirmed. Check the audit status before expecting a published receipt.
 - **Facebook Page token.** Meta sign-in requests only ads scopes, so the Page token has to be pasted.
 - **YouTube upload visibility.** Uploads default to public. Confirm that default before release.

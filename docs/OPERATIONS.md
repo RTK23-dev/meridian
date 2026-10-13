@@ -79,6 +79,8 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
   spend cap, or has reached it. The reason on the run says which.
 - **A paused Factory run does not start again.** The kill switch is on, which refuses **Start again** until it is cleared (Live tests, an admin). A spend cap that is still reached stops the run again at the same stage, with the same reason.
 - **A Factory run says learning waits for a measured outcome.** None of the run's creatives has a stored metric yet. The measurement pull runs every six hours after a launch, and a run with no published creative never gets one. Once a metric is stored, use **Check learning again** on the run. The button is offered only while the run is running at its learn step.
+- **A Factory variant is blocked with a rights reason.** A licence is not attested for its creative, or it was revoked. A member attests
+  it on the Factory run view. Attested licences still block until AI labelling has a source (FACTORY.md, Licences).
 - **An Instagram or TikTok post reports not connected with a link reason.** Set `MEDIA_LINK_SECRET` (32 characters or more), `APP_URL`
   (https), and for TikTok the deployment's host in `TIKTOK_VERIFIED_MEDIA_DOMAINS`. Nothing was sent.
 - **A TikTok or YouTube post reports not connected.** The saved token does not grant the scope the publish needs (`video.publish` for

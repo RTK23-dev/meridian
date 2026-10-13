@@ -96,6 +96,19 @@ The gate stage reads the JEV `creative_qa` record for each creative. That record
 not ask again. A variant with no creative, or whose creative has no recorded decision, is review. An engine that is not configured,
 or whose thresholds are not calibrated, routes to review in that record, so the gate never passes it.
 
+## Licences
+
+The rights gate blocks a variant until a person has attested that the brand holds the licence for the music and for the footage in each
+creative the variant made (NORTH_STAR section 2, decision B). A member attests a licence on the Factory run view, under the fixed wording
+shown there, and the server stores that wording with the attestation. A revoke keeps the row with its time, and the variant is gated again
+at once. Attestations are per creative, and a licence attested for one brand never counts for another. A variant with no creative has no
+licence, so it is blocked. The rules of the rights gate (`factory/gates.ts`) are unchanged: only where its two licence inputs come from has
+changed.
+
+AI labelling has no source yet, so the gate keeps its AI-labelling input false. A variant with both licences attested is still blocked, with
+the reason "AI-generated content is not labelled where the platform requires it." No Factory variant passes the rights gate until that
+source exists. The table accepts a brand asset id too, but no variant references a brand asset yet, so only creative attestations count.
+
 ## What grading uses
 
 The grade stage scores each ad from what the source reported. The Meta Ad Library collector requests the ad's stop time and the countries
