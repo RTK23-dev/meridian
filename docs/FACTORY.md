@@ -79,8 +79,28 @@ release has no stop time stored, so its delivery is unknown.
 - Days running run from the first sighting to the last. An ad is not counted as running up to today.
 - The advertiser's track record is the share of its ads, among those with a known delivery, that are still delivering.
 
-The JEV grade is not implemented. It needs the owner's choice of grading questions and thresholds, which NORTH_STAR section 9 lists as an
-open question. Until then every grade is the observed signal only.
+Beside the observed signal, each ad gets a JEV grade. The run's engine answers five grading questions through the engine gate:
+`market.competitive_strength.v1`, `production.reproducibility.v1`, `creative.brand_fit.v1`, `brand.positioning_fit.v1` and
+`safety.policy_risk_level.v1`. The grade is stored in the `jev_*` columns of `ad_timelines`, next to `winner_score`, with the engine, the
+model and the question versions it was asked under. The two are never blended into one number.
+
+The thresholds of the first two questions are not calibrated. Their specs mark them `thresholdCalibration: "uncalibrated"`, so every
+probability they return goes to review, whatever the engine reports. The other three thresholds are the registry's existing values. The
+engines report their answers as uncalibrated today, so those route to review as well. Nothing approves on an uncalibrated threshold.
+
+With no engine ready for the workspace, the row says `graded on observed signal only: no decision engine configured`. An ad that the same
+engine has already graded with the same questions is not asked again.
+
+## Pick and plan
+
+Pick chooses what to make next from the graded ads. A concept is an angle, hook type and format from the ad's creative DNA. The brand's
+brain filters out a concept it cannot judge, or one that uses a word the brand avoids. Each concept is weighted by the patterns the brand
+has learned, and ranked with a Thompson draw seeded by the run id, so a run's picks reproduce. The picks are stored in `factory_picks`.
+
+Plan turns each pick into a CreativePlan for the brand's product, made under the engine decision the ad was graded under. A pick with no
+such decision, or no product, gets a storyboard and no plan, and the reason is recorded on the run. The control takes its hook type,
+angle and format from the winning ad's framework, never its words. Each variant changes one attribute (hook, angle, format, proof or CTA)
+to a line the brand wrote in its brain, and records that attribute in `tests_attribute`. A brain field with no line gives no variant.
 
 ## When a run finishes
 
@@ -91,10 +111,9 @@ kill switch stops is `paused`.
 
 ## Not built yet
 
-Work-queue items 5, 6, 8, 9, 10 and 11 of NORTH_STAR section 8 are open. In short: Pick and Plan do not use grades and Thompson allocation,
-and variants still come from a fixed hook and CTA list; produce does not materialize through the production router into the Studio
-creative tables; publish and measure both paths are not built; learning is not per surface; and the Factory screen does not show the
-run settings or the approve action. Uploads are not connected to Gather. See [ROADMAP.md](ROADMAP.md).
+Work-queue items 6, 8, 9, 10 and 11 of NORTH_STAR section 8 are open. In short: produce does not materialize plans through the production
+router into the Studio creative tables; publish and measure both paths are not built; learning is not per surface; and the Factory screen
+does not show the run settings or the approve action. Uploads are not connected to Gather. See [ROADMAP.md](ROADMAP.md).
 
 ## Gather
 

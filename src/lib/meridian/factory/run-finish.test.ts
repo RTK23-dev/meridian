@@ -71,7 +71,7 @@ test("a level 0 run that builds its templates is not finished by the template st
   const sql = await makeFactoryTestSql();
   await seedFactoryRun(sql, { settings: MANUAL, level: 0 });
   const result = await executeFactoryJob(sql, factoryJob("factory.template"), { runId: FACTORY_TEST_RUN });
-  assert.equal(result, "templates:0", "no DNA is stored, so no template is written");
+  assert.equal(result, "templates:0;plans:0;refused:0", "no pick is stored, so no template or plan is written");
   const row = await factoryRunRow(sql);
   assert.notEqual(row.status, "succeeded", "a template stage that did not finish the work does not finish the run");
   assert.equal(row.status, "running");
