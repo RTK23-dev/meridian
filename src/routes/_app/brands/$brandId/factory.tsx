@@ -14,11 +14,12 @@ import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQu
 import { approveFactoryStage, checkFactoryLearning, resumeFactoryRun, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
 import { metricLine, receiptLine } from "@/components/factory/measurement-model";
+import { gateText, planText, predictionStatusText, predictionText, variantHeading } from "@/components/factory/grades-model";
 import { HeldReservationsPanel } from "@/components/held-reservations-panel";
 import { FACTORY_GRAPH } from "@/lib/meridian/factory/pipeline";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { RunBuilder } from "@/components/factory/run-builder";
-import { RunList, type RunListItem } from "@/components/factory/run-list";
+import { RunList, type RunListItem, type RunPickLine } from "@/components/factory/run-list";
 import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { qk } from "@/lib/query/keys";
 
@@ -30,7 +31,37 @@ function dollars(cents: number): string {
 
 type FactoryBoard = NonNullable<ReturnType<typeof useFactoryQuery>["data"]>;
 
-/** Each run with the receipts and measured rows of its own creatives, as the run view shows them. */
+/**
+ * Each run's picks, as the run view shows them: the grade each was made under, its status, its variants, and the receipts and measured
+ * rows of the creatives those variants produced. The creatives' rows come from the board's publishing list, read once per creative.
+ */
+function picksOf(board: FactoryBoard, runPicks: FactoryBoard["runs"][number]["picks"]): RunPickLine[] {
+  return runPicks.map((pick) => {
+    const variants = pick.variants.map((variant) => ({
+      heading: variantHeading(variant),
+      gate: gateText(variant.gateResult),
+      creatives: variant.creatives.map((created) => {
+        const publishing = board.publishing.find((item) => item.creativeId === created.creativeId);
+        return {
+          label: `${created.format || publishing?.format || "creative"} creative`,
+          receiptLines: (publishing?.receipts ?? []).map((receipt) => receiptLine(receipt)),
+          measurementLines: (publishing?.measurements ?? []).map((row) => `${row.surface} ${row.platform}: ${metricLine(row.surface, row.metrics)}`),
+        };
+      }),
+    }));
+    return {
+      concept: pick.concept,
+      surface: pick.surface === "organic" ? "Organic" : pick.surface === "paid" ? "Paid" : "",
+      prediction: predictionText(pick.prediction),
+      predictionNote: predictionStatusText(pick.predictionStatus),
+      plan: planText(pick.plan, pick.planReason),
+      measuredLines: variants.flatMap((variant) => variant.creatives.flatMap((creative) => creative.measurementLines)),
+      variants,
+    };
+  });
+}
+
+/** Each run with its picks, and the receipts and measured rows of its own creatives, as the run view shows them. */
 function runListItems(board: FactoryBoard): RunListItem[] {
   return board.runs.map((run) => {
     const creatives = board.publishing.filter((item) => item.runId === run.id);
@@ -42,6 +73,7 @@ function runListItems(board: FactoryBoard): RunListItem[] {
       error: run.error,
       settings: run.settings,
       runSources: run.runSources,
+      picks: picksOf(board, run.picks),
       receiptLines: creatives.flatMap((item) => item.receipts.map((receipt) => `${item.format} creative: ${receiptLine(receipt)}`)),
       measurementLines: creatives.flatMap((item) => item.measurements.map((row) => `${row.surface} ${row.platform}: ${metricLine(row.surface, row.metrics)}`)),
     };
