@@ -7,6 +7,7 @@
 
 import type { Sql } from "../learning/store.ts";
 import { applyLearnedPatternsBySurface, type LearningSummary } from "../learning/store.ts";
+import { recalibrateForJob } from "../calibration/question-recalibrate.ts";
 import { LEARN_WAITING } from "./pipeline.ts";
 
 export type RunOutcomes = { organic: number; paid: number };
@@ -44,6 +45,8 @@ export async function runOutcomesOf(sql: Sql, input: { organizationId: string; b
  */
 export async function learnForRun(sql: Sql, input: { organizationId: string; brandId: string; runId: string }): Promise<string> {
   const learned: LearningSummary = await applyLearnedPatternsBySurface(sql, input.organizationId, input.brandId);
+  // The brand's grading calibration follows the outcomes this learn stage just read. A failure is named in the result, not thrown.
+  const calibration = await recalibrateForJob(sql, { organizationId: input.organizationId, brandId: input.brandId });
   const outcomes = await runOutcomesOf(sql, input);
   const perSurface = `organic ${learned.bySurface.organic.patterns} patterns from ${learned.bySurface.organic.outcomes} outcomes; `
     + `paid ${learned.bySurface.paid.patterns} patterns from ${learned.bySurface.paid.outcomes} outcomes`;
@@ -52,11 +55,11 @@ export async function learnForRun(sql: Sql, input: { organizationId: string; bra
       update factory_runs set error = ${LEARN_WAITING}, updated_at = now()
       where id = ${input.runId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
     `;
-    return `learn:waiting;${perSurface}`;
+    return `learn:waiting;${perSurface};${calibration}`;
   }
   await sql`
     update factory_runs set status = 'succeeded', error = '', updated_at = now()
     where id = ${input.runId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
   `;
-  return `learned:${learned.patterns};run outcomes organic ${outcomes.organic}, paid ${outcomes.paid};${perSurface}`;
+  return `learned:${learned.patterns};run outcomes organic ${outcomes.organic}, paid ${outcomes.paid};${perSurface};${calibration}`;
 }

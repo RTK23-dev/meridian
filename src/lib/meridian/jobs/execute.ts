@@ -48,7 +48,11 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   if (job.job_type === "learning.update") {
     if (!job.brand_id) throw new Error("Learning needs a brand.");
     const count = await applyLearnedPatterns(sql, job.organization_id, job.brand_id);
-    return `patterns:${count}`;
+    // The brand's grading calibration follows its measured outcomes. A failure is named in the job's result, and it does not fail the
+    // pattern update that already ran.
+    const { recalibrateForJob } = await import("../calibration/question-recalibrate.ts");
+    const calibration = await recalibrateForJob(sql, { organizationId: job.organization_id, brandId: job.brand_id });
+    return `patterns:${count} ${calibration}`;
   }
   if (job.job_type === "opportunity.refresh") {
     if (!job.brand_id) throw new Error("Ranking needs a brand.");

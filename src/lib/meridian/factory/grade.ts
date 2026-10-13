@@ -10,7 +10,7 @@
 import type { Sql } from "../learning/store.ts";
 import { runEngineGate, type GateEvidenceInput, type GateQuestion, type GateResult } from "../decisions/gate.ts";
 import { createDecisionEngines, type DecisionEngineRegistry } from "../decisions/dispatcher.ts";
-import type { PolicyOutcome } from "../decisions/policy.ts";
+import type { AppliedCalibration, PolicyOutcome } from "../decisions/policy.ts";
 import { resolveActiveEngine, type EngineSelection } from "../decisions/selection.ts";
 import type { DecisionEngineId } from "../decisions/types.ts";
 import type { JevQuestionSpec } from "../jev/types.ts";
@@ -95,6 +95,8 @@ export type GradeVote = {
   outcome: string;
   reason: string;
   calibrationStatus: string;
+  /** Present when the vote was made under the brand's calibrated threshold: the report, its sample size and the threshold. */
+  calibration?: AppliedCalibration;
 };
 
 export type ItemGrade =
@@ -252,6 +254,7 @@ export async function gradeItemWithEngine(
       outcome: vote.outcome,
       reason: vote.reason,
       calibrationStatus: vote.calibrationStatus,
+      ...(vote.calibration ? { calibration: vote.calibration } : {}),
     })),
     ...gate.unresolved.map((item) => ({
       question: keyOfSpec.get(item.questionId) ?? item.questionId,

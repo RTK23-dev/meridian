@@ -7,6 +7,7 @@ import { hasRole } from "@/lib/meridian/access";
 import { decideCalibration, proposeCalibration } from "@/lib/meridian/calibration/actions";
 import { getDecisionCalibrationReport } from "@/lib/meridian/learning/calibration-report-actions";
 import { calibrationStateText } from "@/lib/meridian/learning/calibration-report";
+import { getQuestionCalibration, recomputeQuestionCalibration, type QuestionCalibrationView } from "@/lib/meridian/calibration/question-actions";
 import { qk } from "@/lib/query/keys";
 import { useCalibrationVersionsQuery, useLearningQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 import { timestampLabel, pageSpan } from "./format";
@@ -29,6 +30,19 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
     enabled: canAdmin,
   });
   const calibrationKey = ["mutation", "calibration", brandId] as const;
+  const questionCalibration = useQuery({
+    queryKey: ["calibration", "question-reports", brandId],
+    queryFn: () => getQuestionCalibration({ data: { brandId } }),
+    enabled: canAdmin,
+  });
+  const recomputeQuestions = useScopedMutation({
+    mutationKey: [...calibrationKey, "question-recompute"],
+    mutationFn: () => recomputeQuestionCalibration({ data: { brandId } }),
+    onSuccess: async () => {
+      setNote("Grading calibration recomputed from the recorded outcomes. A report that matches the newest one is not stored again.");
+      await questionCalibration.refetch();
+    },
+  });
 
   const propose = useScopedMutation({
     mutationKey: [...calibrationKey, "propose"],
@@ -55,7 +69,7 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
     },
   });
   const deciding = usePendingVariables<{ proposalId: string }>([...calibrationKey, "decide"]).map((vars) => vars.proposalId);
-  const busy = propose.isPending || decide.isPending;
+  const busy = propose.isPending || decide.isPending || recomputeQuestions.isPending;
 
   if (learning.isError && !learning.data) return <PlainErrorState error={learning.error} onRetry={() => void learning.refetch()} />;
   if (!learning.data) return <ScreenSkeleton label="Loading calibration" shape="rows" />;
@@ -102,6 +116,24 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
           <p className="text-sm">Decision calibration: {decisionLine}</p>
           <p className="text-sm text-fg-muted">Thresholds are stored per workspace, not per brand. The active version is the baseline for every brand in this workspace.</p>
         </Card>
+      </section>
+
+      <section aria-labelledby="grading-heading" className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="grading-heading" className="text-section font-semibold">Grading questions</h2>
+          <Button type="button" variant="secondary" size="md" loading={recomputeQuestions.isPending} disabled={busy} onClick={() => void recomputeQuestions.mutateAsync().catch(() => undefined)}>Recompute from outcomes</Button>
+        </div>
+        <p className="text-sm text-fg-muted">
+          Each grading question is calibrated from this brand&apos;s own measured outcomes. Until a question has enough outcomes, its grades stay uncalibrated and go to review. A calibrated threshold applies to the grades made after its report; a grade already stored is not asked again.
+        </p>
+        {questionCalibration.isError && !questionCalibration.data ? <PlainErrorState error={questionCalibration.error} onRetry={() => void questionCalibration.refetch()} /> : null}
+        {questionCalibration.data ? (
+          <ul className="space-y-4">
+            {questionCalibration.data.questions.map((question) => (
+              <GradingQuestionCard key={question.questionId} question={question} minimumSample={questionCalibration.data.minimumSample} />
+            ))}
+          </ul>
+        ) : questionCalibration.isLoading ? <p className="text-sm text-fg-muted">Checking the grading calibration.</p> : null}
       </section>
 
       <section aria-labelledby="rules-heading" className="space-y-3">
@@ -167,6 +199,87 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
           </Card>
         )}
       </section>
+    </div>
+  );
+}
+
+type ReliabilityBins = NonNullable<QuestionCalibrationView["latest"]>["reliability"];
+
+/**
+ * One grading question. A threshold is shown only for a calibrated report. Anything else says how many outcomes were measured
+ * against how many are needed, and never shows a threshold.
+ */
+function GradingQuestionCard({ question, minimumSample }: { question: QuestionCalibrationView; minimumSample: number }) {
+  if (!question.calibratable) {
+    return (
+      <li className="space-y-2 panel">
+        <h3 className="font-semibold">{question.label}</h3>
+        <p className="text-sm text-fg-muted">Not calibrated. This question answers with a category, not a probability, so it has no threshold to calibrate.</p>
+      </li>
+    );
+  }
+  const report = question.latest;
+  if (report && report.status === "calibrated" && report.threshold !== null) {
+    return (
+      <li className="space-y-3 panel">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-semibold">{question.label}</h3>
+          <Badge variant="success"><CheckCircle2 aria-hidden="true" className="size-3.5" /><span>Calibrated</span></Badge>
+        </div>
+        <dl className="grid gap-2 text-sm sm:grid-cols-4">
+          <div><dt className="font-semibold">Approve at or above</dt><dd className="tabular-nums">{report.threshold.toFixed(3)}</dd></div>
+          <div><dt className="font-semibold">Sample size</dt><dd className="text-fg-muted">{report.sampleSize} outcomes</dd></div>
+          <div><dt className="font-semibold">Report date</dt><dd className="text-fg-muted">{timestampLabel(report.createdAt)}</dd></div>
+          <div><dt className="font-semibold">Method</dt><dd className="text-fg-muted">{report.methodVersion}</dd></div>
+        </dl>
+        <p className="text-sm text-fg-muted">{report.reason}</p>
+        <ReliabilityTable bins={report.reliability} />
+      </li>
+    );
+  }
+  const measured = report ? report.sampleSize : question.measured;
+  let line: string;
+  if (measured < minimumSample) line = `Not enough outcomes: ${measured} of ${minimumSample} measured.`;
+  else if (report) line = report.reason;
+  else line = `${measured} of ${minimumSample} outcomes measured. Recompute from outcomes to store a report.`;
+  return (
+    <li className="space-y-2 panel">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold">{question.label}</h3>
+        <Badge variant="info"><Clock3 aria-hidden="true" className="size-3.5" /><span>Uncalibrated</span></Badge>
+      </div>
+      <p className="text-sm">{line}</p>
+      <p className="text-sm text-fg-muted">Grades on this question go to review until it is calibrated.</p>
+    </li>
+  );
+}
+
+function ReliabilityTable({ bins }: { bins: ReliabilityBins }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[32rem] text-left text-sm">
+        <caption className="sr-only">Stated probability against observed success, by bin</caption>
+        <thead className="text-fg-muted">
+          <tr>
+            <th scope="col" className="py-1 pr-3 font-medium">Stated probability</th>
+            <th scope="col" className="py-1 pr-3 font-medium">Outcomes</th>
+            <th scope="col" className="py-1 pr-3 font-medium">Succeeded</th>
+            <th scope="col" className="py-1 pr-3 font-medium">Mean stated</th>
+            <th scope="col" className="py-1 font-medium">Meets target</th>
+          </tr>
+        </thead>
+        <tbody>
+          {bins.map((bin) => (
+            <tr key={bin.from} className="border-t border-border">
+              <td className="py-1 pr-3 tabular-nums">{bin.from.toFixed(1)} to {bin.to.toFixed(1)}</td>
+              <td className="py-1 pr-3 tabular-nums">{bin.count}</td>
+              <td className="py-1 pr-3 tabular-nums">{bin.successRate === null ? "none" : `${Math.round(bin.successRate * 100)}%`}</td>
+              <td className="py-1 pr-3 tabular-nums">{bin.meanPredicted === null ? "none" : bin.meanPredicted.toFixed(3)}</td>
+              <td className="py-1">{bin.meetsTarget ? "Yes" : "No"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

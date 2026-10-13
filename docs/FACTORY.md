@@ -112,7 +112,8 @@ Beside the observed signal, each ad gets a JEV grade. The run's engine answers f
 model and the question versions it was asked under. The two are never blended into one number.
 
 The thresholds of the first two questions are not calibrated. Their specs mark them `thresholdCalibration: "uncalibrated"`, so every
-probability they return goes to review, whatever the engine reports. The other three thresholds are the registry's existing values. The
+probability they return goes to review, whatever the engine reports, unless the brand has a calibrated report for the question (see
+[Calibration per brand and question](#calibration-per-brand-and-question)). The other three thresholds are the registry's existing values. The
 engines report their answers as uncalibrated today, so those route to review as well. Nothing approves on an uncalibrated threshold.
 
 With no engine ready for the workspace, the row says `graded on observed signal only: no decision engine configured`. An ad that the same
@@ -249,6 +250,60 @@ Its controls:
 Viewers see the runs, their grades and variants, and the reason they cannot act. The run view is read through `getFactoryBoard`, which checks
 that the brand belongs to the caller's workspace, and every row it reads is scoped to that workspace and brand (`factory/run-view.ts`).
 
+## Calibration per brand and question
+
+A grading question's threshold can be calibrated from the brand's own measured outcomes. Until it is, the question's grades go to review,
+as they did before. The code is `calibration/question-method.ts` (the method and its constants), `calibration/question-outcomes.ts` (the
+observations, pure), `calibration/question-store.ts` (reads, storage and the gate's lookup) and `calibration/question-recalibrate.ts` (the
+recomputation).
+
+**Observations.** A pick is one observation for each grading question its ad was answered on, when all of these hold:
+
+- its stored `grade_fingerprint` is the ad's grade now. A pick whose ad was graded again, or that was written before migration 0071, has no
+  known prediction, so it is not an observation;
+- its control creative (`factory_variants.tests_attribute = 'control'`) has a measured row on the pick's surface that reports the surface's
+  metric. The newest such row is the outcome. A metric the source did not report is never counted;
+- the question's answer is `answered` with a probability in [0, 1]. A choice question has no probability, so it has no calibration.
+
+A row whose metadata marks it `synthetic` or `simulated` is never a measured outcome, and never sets a baseline.
+
+**Success.** No question in the registry defines what success is, so one rule applies to every grading question: a creative succeeds when its
+metric is above the median of the brand's measured creatives on the same surface. Paid uses click-through rate (clicks divided by
+impressions, both reported, impressions above zero). Organic uses completion rate. A surface with fewer than two measured creatives has no
+baseline, so its picks are not observations.
+
+**Method** (`question-calibration.v1`). Stated probabilities fall into five bins of width 0.2. A bin qualifies when it holds at least 10
+observations and at least 70% of them succeeded. The threshold is the lower edge of the lowest bin from which every bin up to the top one
+qualifies, so a threshold means that every stated probability at or above it has been seen to succeed at the target rate. A brand needs at
+least 100 observations for a question before any threshold is set. Below that the report is uncalibrated and says "n of 100 observations
+measured". A report also carries its reliability table: the count, the success rate and the mean stated probability of each bin.
+
+**Constants, for owner review.** The owner did not set these. They were chosen for the first method and are named in
+`question-method.ts` and `question-outcomes.ts`: 100 minimum observations per brand and question; five bins; 10 observations per bin; a 70%
+target; two measured creatives for a baseline; and the success rule above (median, click-through rate for paid, completion rate for
+organic). A change to any of them is a new method version. These are the questions NORTH_STAR section 9 asks the owner to decide.
+
+**Storage and recomputation.** Reports are stored in `question_calibration_reports` (migration 0074). The name is not `calibration_reports`,
+which migration 0045 already uses for the learned-parameter reports read by `learning/calibration-gate.ts`. A recomputation writes a report
+for each question version only when its content differs from the newest one, so the newest report is the one read, and the same data stores
+nothing new. Recomputation runs in the `learning.update` job after patterns are recomputed, in the Factory learn stage, and from **Recompute
+from outcomes** on the Calibration screen. That button needs the admin role and writes an audit row. A failed recomputation is named in the
+job's or the stage's result and does not fail the pattern update.
+
+**Gate use.** The decision gate reads the newest report for the brand and question version whenever it decides a question. A calibrated
+report replaces that question's approve threshold for the brand. The vote then records `calibrationStatus: "calibrated"`, the report id, its
+sample size and the threshold. The question's policy version is `<question>@<version>+calibrated:<report id>`, so the decision record names
+the threshold it used. A question with no calibrated report, a report that is uncalibrated or uses another method version, or a read that
+fails, keeps its registry policy, and its threshold stays uncalibrated. The gate never reads another brand's report. Only the probability
+questions can be calibrated this way. A question whose predicate is a defect (reject if true) keeps its policy.
+
+A calibrated threshold applies to grades decided after its report. A grade already stored under the same question versions is not asked
+again, so existing grades keep the threshold they were made under.
+
+**The Calibration screen.** Each grading question shows either its calibrated report (the threshold, the reliability table, the sample size,
+the report date and the method version), or "Not enough outcomes: n of 100 measured", with the number counted now. A threshold is never shown
+for an uncalibrated brand.
+
 ## Not built yet
 
 What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
@@ -269,6 +324,13 @@ What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
 - Live Instagram and TikTok publishing is not connected, by the owner's decision. A live paid publish from a run needs a targeting country the
   run does not carry.
 - Uploads are not connected to Gather.
+- Re-grading stored grades when a brand's calibrated report changes. A stored grade keeps the threshold it was made under until its ad is
+  graded again by a new run.
+- Calibration beyond the five grading questions (creative QA and the others), and a success definition per question. The one rule above
+  applies to every grading question.
+- Live outcomes. Organic channels return no metrics, and the test publisher has no insights source, so a brand is calibrated only from paid
+  rows that a stored token has measured. The Calibration screen shows how many outcomes each brand has. Until a brand reaches the minimum,
+  its grades stay uncalibrated.
 
 See [ROADMAP.md](ROADMAP.md).
 

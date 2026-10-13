@@ -88,7 +88,7 @@ test("learn with no measured outcome of the run's own waits, writes the reason t
   const sql = await makeFactoryTestSql();
   await seedFactoryRun(sql, { settings: FULL_WITH_CAP, level: 3 });
   const result = await executeFactoryJob(sql, factoryJob("factory.learn"), { runId: FACTORY_TEST_RUN });
-  assert.match(result, /^learn:waiting;organic 0 patterns from 0 outcomes; paid 0 patterns from 0 outcomes$/);
+  assert.match(result, /^learn:waiting;organic 0 patterns from 0 outcomes; paid 0 patterns from 0 outcomes;calibration:0 of 4 calibrated, \d+ stored$/);
   const row = await factoryRunRow(sql);
   assert.equal(row.status, "running");
   assert.equal(row.error, LEARN_WAITING);
