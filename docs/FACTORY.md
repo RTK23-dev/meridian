@@ -82,6 +82,13 @@ release has no stop time stored, so its delivery is unknown.
 The JEV grade is not implemented. It needs the owner's choice of grading questions and thresholds, which NORTH_STAR section 9 lists as an
 open question. Until then every grade is the observed signal only.
 
+## When a run finishes
+
+A run is finished only when the learn stage does its real work. Learning is not built yet, so a run that reaches the end of the
+graph stays `running`, and the run row says `learn:not-built`. No other stage marks a run finished. Review counts the variants that
+wait for a person and leaves the run where the stop points put it. A run that waits at a stop is `awaiting_approval`, and a run the
+kill switch stops is `paused`.
+
 ## Not built yet
 
 Work-queue items 3, 5, 6, 8, 9, 10 and 11 of NORTH_STAR section 8 are open. In short: Gather does not yet call the sourcing stack for each
