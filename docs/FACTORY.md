@@ -62,12 +62,39 @@ The Factory screen shows an **Approve** button on a run that is waiting at one o
 only where the server would accept the approval: a paused or stopped run has nothing to approve, because it needs its spend cap or the kill
 switch cleared first. The server function remains the way to approve from a script.
 
-## Spend caps: a caveat
+## Spend caps
 
-`full` runs only while a cap is set, and it stops when metered spend reaches that cap. Metered spend is the rows in `factory_costs`.
-No stage writes a metered cost yet. The fixed estimates that used to fill that table were removed, because they were not measured.
-So in this release a `full` run with a cap set runs until the caps are reached in the ledger, and the ledger records no spend from the
-Factory stages. Treat the cap as declared, not enforced, until the produce stage routes its provider calls through the budget ledger.
+A run is held to the stricter of its own cap and the brand's cap in `factory_spend_caps`, counting only the caps that are set. Each
+cap is checked two ways: a total over the run, and a daily total over the last 24 hours. Spend is the metered rows in
+`factory_costs` for the run. A spend or publish stage is refused with the reason before it runs, in every mode, when either cap is
+reached. Produce checks the caps again before each provider call, so the call that would pass the cap is never made.
+
+`full` also needs a cap to be set. A `full` run with no cap stops before any spend, with "Full automation needs a spend cap".
+
+A metered row is written only from a provider call that reported its own cost (`factory_costs.basis` is `provider_reported`). A
+provider that reports no cost writes no row, and the caps cannot see its spend. The Google image provider reports no cost today, so a
+Factory run that uses it is not counted against its caps. Its reservation is still held in the budget ledger, at the per-image
+ceiling of $1 (`FACTORY_IMAGE_CEILING_USD`), and settles at that ceiling. That ceiling is a guard, not a price.
+
+## Produce
+
+Produce materializes each variant of the run for each format the run makes, through the production router
+(`src/lib/meridian/factory/produce.ts`):
+
+- Only images are produced. A run whose formats include video or carousel stops at produce, before any spend, with that reason. The
+  video path completes asynchronously through the poller, and the Factory does not wait on it yet.
+- The provider is the run's choice for the format. `auto` lets the capability matrix choose. A named provider that is not configured
+  or not connected stops the run, and the run row carries the provider's reason. No other provider is used in its place.
+- The budget is reserved before the provider is called. A call that returns a failure releases the reservation. A call that does not
+  return keeps its reservation held. Nothing releases a held reservation on its own, including when the submission expires. An admin
+  releases it on the Factory screen, in the Held budget panel.
+- The image is stored, judged and recorded by the materializer that Studio uses. The creative is in `creative_records`, its review is
+  in `reviews`, and `factory_creatives` links it to its run and variant. Library and Reviews read it from there.
+
+The gate stage reads the JEV `creative_qa` record for each creative. That record holds the text questions and the visual questions
+(`creative.visual_quality.v1` and `creative.product_visible.v1`). The engine answers once, when the image is judged, so the gate does
+not ask again. A variant with no creative, or whose creative has no recorded decision, is review. An engine that is not configured,
+or whose thresholds are not calibrated, routes to review in that record, so the gate never passes it.
 
 ## What grading uses
 
@@ -111,9 +138,16 @@ kill switch stops is `paused`.
 
 ## Not built yet
 
-Work-queue items 6, 8, 9, 10 and 11 of NORTH_STAR section 8 are open. In short: produce does not materialize plans through the production
-router into the Studio creative tables; publish and measure both paths are not built; learning is not per surface; and the Factory screen
-does not show the run settings or the approve action. Uploads are not connected to Gather. See [ROADMAP.md](ROADMAP.md).
+Work-queue items 8, 9, 10 and 11 of NORTH_STAR section 8 are open, and item 6 covers images only. In short: produce does not yet
+materialize video or carousel; publish and measure both paths are not built; learning is not per surface; and the Factory screen does
+not show the run settings or the approve action. Uploads are not connected to Gather. See [ROADMAP.md](ROADMAP.md).
+
+## Waiting and stopping
+
+A stage that waits, or a run that is stopped, holds the stages after it. Each of those stages returns without running, and the run
+keeps the stage it stopped at. A stage that is stopped by a cap, the kill switch or a provider that is not ready records the reason on
+the run row. A person approves a waiting stage, and the stage and the stages after it are queued again. Nothing queues a stopped stage
+again on its own: once its reason is cleared, the run must be started again. The Factory screen has no control for that yet.
 
 ## Gather
 
