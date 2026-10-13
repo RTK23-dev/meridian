@@ -56,10 +56,13 @@ review, and post it by hand.
 A workspace has a budget ledger. Generation reserves its estimated cost before the provider call, and releases the reservation when the
 call fails. The Usage screen shows what has been spent. A budget that is exhausted stops new generation; it does not stop reading.
 
-A reservation whose provider call did not return is held. Owner decision (NORTH_STAR section 2, decision D): when its submission window
-(30 minutes from the reservation) expires with no outcome from the provider, the worker releases it on its next tick. The release is recorded
-with the reason `window_expired` and the actor `system`, and the Held budget panel lists it under "Released automatically". A submission
-the provider answered, or that produced a creative, is never released this way. An admin resolves those on the panel.
+A reservation whose provider call did not return is held. Owner decision (NORTH_STAR section 2, decision D): once its submission window
+(30 minutes from the reservation) has passed with no outcome from the provider, the worker asks the provider's own lookup whether it holds a
+job for the submission. The hold is released only when the provider confirms it holds none, with the reason `window_expired` and the actor
+`system`, and the Held budget panel lists it under "Released after the provider confirmed no job". A provider that has no lookup, a lookup
+that does not answer, and a provider that reports a job all keep the hold, and the panel shows the last check beside it. No provider has a
+lookup for a submission whose response never arrived yet (`SUBMISSION_LOOKUPS` in `security/held-reservations.ts` lists the lookups that exist), so every such hold stays for an admin. A submission the
+provider answered, or that produced a creative, is never checked or released this way.
 
 ## Sign-in and the first admin
 

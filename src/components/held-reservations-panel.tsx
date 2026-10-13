@@ -37,7 +37,23 @@ type ResolveVars = {
   observed: number | undefined;
 };
 
-type HeldRow = { reservationId: string; amountUsd: number; provider: string; jobStatus: string; errorCode?: string | null; heldSince: string };
+type HeldRow = {
+  reservationId: string;
+  amountUsd: number;
+  provider: string;
+  jobStatus: string;
+  errorCode?: string | null;
+  heldSince: string;
+  lastCheck: { result: "absent" | "present" | "no_lookup" | "failed"; checkedAt: string; providerJobId: string | null } | null;
+};
+
+/** The last provider check of a held budget, in words an admin can act on. A release is never shown here, because the hold is gone. */
+function checkText(check: HeldRow["lastCheck"]): string {
+  if (!check) return "Not checked yet. The provider is asked once the submission window has passed.";
+  if (check.result === "present") return "The provider holds a job for this submission, so the hold stays and the job keeps its state.";
+  if (check.result === "failed") return "The provider lookup did not answer, so the hold stays for an admin to resolve.";
+  return "No provider lookup exists for this submission, so the hold stays for an admin to resolve.";
+}
 
 /**
  * Admin-only list of budget reservations held for an uncertain provider outcome. Each row is
@@ -79,8 +95,8 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
     <Card>
       <h3 className="text-base font-semibold">Held budget reservations</h3>
       <p className="mt-1 text-sm text-muted">
-        Budget held for a submission with no outcome from the provider is released automatically when its submission window expires. Until
-        then, an admin resolves each held reservation below.
+        Held budget is released only when the provider's own lookup confirms it holds no job for the submission. Until that happens,
+        an admin resolves each held reservation below, and the last check is shown with it.
       </p>
       {resolveAction.error ? <PlainErrorNotice error={resolveAction.error} /> : null}
       {notice ? <p role="status" className="mt-2 text-sm">{notice}</p> : null}
@@ -99,7 +115,7 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
       </ul>
       {releasedRows.length === 0 ? null : (
         <div className="mt-6 space-y-2">
-          <h4 className="text-sm font-semibold">Released automatically</h4>
+          <h4 className="text-sm font-semibold">Released after the provider confirmed no job</h4>
           <ul className="space-y-1 text-sm">
             {releasedRows.map((row) => (
               <li key={row.reservationId}>
@@ -137,6 +153,7 @@ function HeldReservationRow({ row, busy, onResolve }: {
         <strong>${row.amountUsd.toFixed(2)}</strong> reserved for {row.provider}. Job status: {row.jobStatus}
         {row.errorCode ? ` (${row.errorCode})` : ""}. Held since {new Date(row.heldSince).toLocaleString()}.
       </p>
+      <p className="text-sm text-muted">{checkText(row.lastCheck)}</p>
       <Field label="Why this outcome was resolved" hint="Required. At least 10 characters." required error={errors.note?.message}>
         <Textarea {...register("note")} />
       </Field>

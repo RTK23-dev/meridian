@@ -144,7 +144,7 @@ test("a reached cap stops the run before the next provider call", async () => {
   assert.equal(run.error, "The spend cap for this run is reached.");
 });
 
-test("a call that does not return holds its reservation until its window expires, and the window sweep then releases it", async () => {
+test("a call that does not return holds its reservation until the provider confirms no job exists, and the sweep then releases it", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "factory-produce-unknown");
   const runId = await factoryRunFor(sql, tenant, { automation: "full", formats: ["image"], providers: { image: "google_nano_banana" }, caps: { totalCents: 500 } });
@@ -158,26 +158,34 @@ test("a call that does not return holds its reservation until its window expires
   const [held] = await reservationsOf(sql, tenant);
   assert.equal(held?.status, "RESERVED", "an outcome that is unknown keeps its reservation");
 
-  // The screen's list shows the held amount to an admin, until the window expires.
+  // The screen's list shows the held amount to an admin. Nothing has been checked yet, because the window has not passed.
   await sql`update memberships set role = 'admin' where user_id = ${tenant.userId} and organization_id = ${tenant.organizationId}`;
   const listed = await listHeldReservations(sql, tenant.userId, tenant.brandId);
   const row = listed.find((item) => item.reservationId === held!.id);
   assert.ok(row, "the held reservation is listed");
   assert.equal(row?.amountUsd, 1, "the held amount is the reserved amount");
   assert.equal(row?.jobStatus, "SUBMISSION_UNKNOWN");
+  assert.equal(row?.lastCheck, null, "a hold is not checked before its window has passed");
 
-  // The submission is past its window with no outcome. Owner decision (NORTH_STAR section 2, decision D): the window sweep releases it,
-  // once, and records why and by whom.
+  // The window has passed, and no provider lookup exists for this provider, so the hold stays and the check records why.
+  // (Owner decision, NORTH_STAR section 2, decision D: a hold is released only when the provider confirms no job exists.)
   await sql`update budget_reservations set expires_at = now() - interval '2 days' where id = ${held!.id}`;
-  await releaseExpiredHolds(sql);
+  await releaseExpiredHolds(sql, { checkIntervalMinutes: 0 });
+  assert.equal((await reservationsOf(sql, tenant))[0]?.status, "RESERVED", "with no lookup, the hold stays");
+  const afterNoLookup = await listHeldReservations(sql, tenant.userId, tenant.brandId);
+  assert.equal(afterNoLookup.find((item) => item.reservationId === held!.id)?.lastCheck?.result, "no_lookup", "the panel shows why it stays");
+
+  // The provider's lookup confirms it holds no job for this submission. The hold is released once, with the reason and the actor.
+  const confirmedAbsent = async () => ({ kind: "absent" as const });
+  await releaseExpiredHolds(sql, { lookupFor: () => confirmedAbsent, checkIntervalMinutes: 0 });
   const [afterSweep] = await reservationsOf(sql, tenant);
-  assert.equal(afterSweep?.status, "RELEASED", "an expired submission with no outcome is released by the window sweep");
+  assert.equal(afterSweep?.status, "RELEASED", "a hold the provider confirms absent is released by the sweep");
   const releases = await sql<{ reason: string; actor: string }>`
     select metadata->>'reason' as reason, metadata->>'actor' as actor from budget_ledger_entries
     where reservation_id = ${held!.id} and entry_type = 'RESERVATION_RELEASED'
   `;
   assert.deepEqual(releases.map((item) => ({ reason: item.reason, actor: item.actor })), [{ reason: "window_expired", actor: "system" }]);
-  await releaseExpiredHolds(sql);
+  await releaseExpiredHolds(sql, { lookupFor: () => confirmedAbsent, checkIntervalMinutes: 0 });
   const [afterSecondSweep] = await sql<{ n: number }>`
     select count(*)::int as n from budget_ledger_entries where reservation_id = ${held!.id} and entry_type = 'RESERVATION_RELEASED'
   `;

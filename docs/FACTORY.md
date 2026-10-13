@@ -109,7 +109,7 @@ Produce materializes each variant of the run for each format the run makes, thro
 - The provider is the run's choice for the format. `auto` lets the capability matrix choose. A named provider that is not configured
   or not connected stops the run, and the run row carries the provider's reason. No other provider is used in its place.
 - The budget is reserved before the provider is called. A call that returns a failure releases the reservation. A call that does not
-  return keeps its reservation held. The window sweep releases a held reservation on its own when its submission window expires with no outcome (see [OPERATIONS.md](OPERATIONS.md), Budgets). An admin or owner
+  return keeps its reservation held. A held reservation is released on its own only when the provider's own lookup confirms it holds no job for the submission. The sweep asks once the submission window has passed. No provider has such a lookup yet, so every held reservation stays for an admin, who sees the last check on the panel (see [OPERATIONS.md](OPERATIONS.md), Budgets). An admin or owner
   releases it on the Factory screen, in the Held budget panel. Other roles see the panel's rule and the reason they cannot release it.
 - The image is stored, judged and recorded by the materializer that Studio uses. The creative is in `creative_records`, its review is
   in `reviews`, and `factory_creatives` links it to its run and variant. Library and Reviews read it from there.

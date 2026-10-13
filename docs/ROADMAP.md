@@ -17,6 +17,7 @@ What is still open in this release. Each item says whether it is built and verif
 - **Instagram Reels token scope.** The connected-account check does not read `instagram_content_publish`, so a token without it fails at Meta, not in Meridian. The media route is built (see above).
 - **AI labelling input for the rights gate.** It has no source, so the rights gate blocks every Factory variant on AI labelling, even when
   the music and footage licences are attested. The licence attestation itself is built (FACTORY.md, Licences).
+- **Provider lookup for held budget.** Held budget is released only when a provider's own lookup confirms it holds no job for the submission. None of the wired providers has a documented lookup for a submission whose response never arrived: Google's Interactions API (image and omni) finds an interaction only by its server id, Higgsfield's documented paths use a request id, and Hypit's status path is by job id. Until one is registered in `SUBMISSION_LOOKUPS`, every such hold stays for an admin.
 - **TikTok app audit.** Until TikTok audits the app, posts are private and TikTok returns no public post id, so this channel reports them as unconfirmed. Check the audit status before expecting a published receipt.
 - **Facebook Page token.** Meta sign-in requests only ads scopes, so the Page token has to be pasted.
 - **YouTube upload visibility.** Uploads default to public. Confirm that default before release.

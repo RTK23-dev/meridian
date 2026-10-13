@@ -4,7 +4,7 @@
  * The poller gathers evidence about such a job (a provider answer for the job's stored provider id, or none), and this module
  * turns that evidence into one outcome. It does no I/O and moves no money. A reservation is never released or settled here:
  * a held reservation is resolved by an operator through security/held-reservations.ts, or released by its window sweep there when
- * the submission has no outcome after its window.
+ * the provider's lookup confirms it holds no job for the submission.
  */
 
 /**
