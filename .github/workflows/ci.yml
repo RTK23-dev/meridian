@@ -51,7 +51,45 @@ jobs:
           path: artifacts/
           if-no-files-found: ignore
 
-  check:
+  # The test suite in six shards that run in parallel. scripts/test-shard.mjs gives each shard its own files, and it fails the
+  # shard if the split would skip a test file. The shard count is the size of this matrix (strategy.job-total), so the matrix
+  # and the split cannot disagree. scripts/test-shard.test.mjs checks that the shard indexes run from 0 to n-1.
+  tests:
+    name: tests (shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run this shard of the tests
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          node scripts/test-shard.mjs --group scripts --index "$SHARD_INDEX" --count "$SHARD_COUNT" > "$RUNNER_TEMP/scripts-tests.txt"
+          node scripts/test-shard.mjs --group src --index "$SHARD_INDEX" --count "$SHARD_COUNT" > "$RUNNER_TEMP/src-tests.txt"
+          mapfile -t scripts_tests < "$RUNNER_TEMP/scripts-tests.txt"
+          mapfile -t src_tests < "$RUNNER_TEMP/src-tests.txt"
+          # With no file arguments, node --test searches the whole repository, so an empty list must stop the step here.
+          if [ "${#scripts_tests[@]}" -eq 0 ] || [ "${#src_tests[@]}" -eq 0 ]; then
+            echo "Shard $SHARD_INDEX has no test files." >&2
+            exit 1
+          fi
+          # The same two commands as `npm test`, each given only this shard's files.
+          NODE_ENV=development node --test "${scripts_tests[@]}"
+          NODE_ENV=development node --experimental-strip-types --test "${src_tests[@]}"
+
+  # Typecheck, lint and build run beside the test shards, so the slowest path is the longer of the two, not their sum.
+  static:
+    name: typecheck, lint and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,10 +98,25 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+
+  # The gate that e2e waits on. It passes only when every test shard and the static checks pass. It keeps the name `check`,
+  # which docs/TESTING.md names as the job that decides whether code can merge.
+  check:
+    needs: [tests, static]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every test shard and the static checks to pass
+        env:
+          TESTS_RESULT: ${{ needs.tests.result }}
+          STATIC_RESULT: ${{ needs.static.result }}
+        run: |
+          echo "tests: $TESTS_RESULT; typecheck, lint and build: $STATIC_RESULT"
+          test "$TESTS_RESULT" = success
+          test "$STATIC_RESULT" = success
 
   sidecar:
     runs-on: ubuntu-latest

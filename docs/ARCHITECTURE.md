@@ -19,7 +19,8 @@ process. Every piece of data belongs to one workspace (organization), and most r
   - `storage/` writes artifacts and exports, and serves media.
   - `measurement/`, `learning/` and `publishing/` record what happened after publishing and feed it back.
 - `src/lib/db.ts` picks the database. A `DATABASE_URL` selects PostgreSQL. Without one, development and tests use an embedded
-  PostgreSQL (PGlite). Any other environment refuses to start (OPERATIONS.md).
+  PostgreSQL (PGlite): on disk in `.data/pglite` under `npm run dev` (`MERIDIAN_LOCAL_DATA_DIR`), and in memory otherwise. Any other
+  environment refuses to start (OPERATIONS.md).
 
 ## Data
 
@@ -32,7 +33,8 @@ process. Every piece of data belongs to one workspace (organization), and most r
 ## Workers and scheduling
 
 - The web process does not run jobs. `npm run worker` runs the durable job loop (`scripts/worker-entry.ts`). Jobs are claimed
-  under a lease, so a crashed worker's job is picked up again.
+  under a lease, so a crashed worker's job is picked up again. The one exception is the local trial: with `DATABASE_URL` unset, the
+  dev server runs the same pass (`vite.config.ts`, `localJobsPlugin`), because the embedded database cannot be shared with a worker.
 - `npm run scheduler` enqueues the periodic work (`scripts/scheduler-entry.ts`), such as discovery runs and performance syncs.
 - Both processes need the same `DATABASE_URL` as the web process.
 

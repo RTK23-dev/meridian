@@ -8,7 +8,24 @@
 | Worker | `npm run worker` | Queued jobs: research collection, generation, publishing and the rest |
 | Scheduler | `npm run scheduler` | Periodic work: discovery runs and performance syncs |
 
-All three read the same `.env` and the same `DATABASE_URL`. The web process never runs jobs.
+The web, worker and scheduler read the same `.env` and the same `DATABASE_URL`. With `DATABASE_URL` set, the web process never runs
+jobs: the worker does. Without it (a local trial), `npm run dev` runs the queued jobs itself, because the embedded database can be
+opened by one process only. See [Local trial](#local-trial).
+
+## Local trial
+
+With `DATABASE_URL` unset, `npm run dev` (`scripts/dev.mjs`) does three things:
+
+- keeps the embedded database on disk in `.data/pglite` (`MERIDIAN_LOCAL_DATA_DIR`), so a restart keeps the data;
+- loads `.env`, so `BETTER_AUTH_SECRET` and `TOKEN_ENCRYPTION_KEY` are the same after a restart: sign-in sessions and saved keys survive it;
+- runs the queued jobs in the dev server (`vite.config.ts`, `localJobsPlugin`, through `scripts/local-jobs.mjs`). The log shows
+  `[jobs] Ran N job(s).` when it runs some. A failed pass is logged as `[jobs] A job pass failed`, the next pass waits longer each time
+  (10 s, 20 s, up to 60 s), and the server keeps running. `[jobs] The job pass works again.` shows the recovery.
+
+To start again empty, stop the server and delete `.data/pglite`. To back it up, stop the server and copy that folder. Do not run
+`npm run db:local` at the same time, because it opens the same folder.
+
+A local trial does not run periodic work. The scheduler needs `DATABASE_URL`.
 
 ## Health
 
@@ -44,7 +61,9 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
 ## Troubleshooting
 
 - **Not configured / not connected.** The screen says which key, connection or variable is missing. Settings → General → Setup lists them.
-- **A job stays queued.** The worker is not running, or it cannot reach `DATABASE_URL`. Check its log.
+- **A job stays queued.** With `DATABASE_URL`, the worker is not running, or it cannot reach the database: check its log. In a local
+  trial, the dev server runs the jobs: its log has `[jobs]` lines, and a failing pass says why. A job that keeps failing is marked
+  `dead` after its attempts, with the reason on the job.
 - **A decision is in review.** The policy sent it to review: the question has no policy, the answer is unresolved, or the number is not
   calibrated. The decision record says which.
 - **The app refuses to start.** Without `DATABASE_URL`, production (any `NODE_ENV` other than `development` or `test`) refuses to start.

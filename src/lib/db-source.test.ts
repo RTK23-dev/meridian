@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { resolveDbSource } from "./db-source.ts";
+import { localDataDirFrom, resolveDbSource } from "./db-source.ts";
 
 test("an unset or unlisted NODE_ENV without DATABASE_URL refuses the in-memory database", () => {
   // The old policy opened PGLite whenever NODE_ENV was not "production", so a deploy that
@@ -64,4 +64,18 @@ test("a real DATABASE_URL selects Neon in every environment", () => {
     resolveDbSource({ DATABASE_URL: "postgres://localhost/meridian", NODE_ENV: "development" }),
     "neon",
   );
+});
+
+test("the embedded database is on disk only when MERIDIAN_LOCAL_DATA_DIR names a folder", () => {
+  // Tests and CI never set the variable, so they keep the in-memory database. Only `npm run dev` sets it.
+  assert.equal(localDataDirFrom({}), undefined);
+  assert.equal(localDataDirFrom({ MERIDIAN_LOCAL_DATA_DIR: "" }), undefined);
+  assert.equal(localDataDirFrom({ MERIDIAN_LOCAL_DATA_DIR: "   " }), undefined);
+  assert.equal(localDataDirFrom({ MERIDIAN_LOCAL_DATA_DIR: " /work/meridian/.data/pglite " }), "/work/meridian/.data/pglite");
+});
+
+test("a data folder never reaches production: without DATABASE_URL, production still refuses to start", () => {
+  // Assigned to a variable so the object-literal check does not reject the extra key. The folder is read by db.ts, not by the policy.
+  const production = { NODE_ENV: "production", MERIDIAN_LOCAL_DATA_DIR: "/work/meridian/.data/pglite" };
+  assert.throws(() => resolveDbSource(production), /Refusing to start without DATABASE_URL/);
 });
