@@ -35,7 +35,7 @@ export function ResearchFilterBar({ filters, update, reset, topics, activeCount,
       <CapturedDateFilter from={filters.capturedFrom} to={filters.capturedTo} onChange={(range) => { update("capturedFrom", range.from); update("capturedTo", range.to); }} />
     </div>
 
-    <details className="rounded-md border border-border p-3">
+    <details className="border-t border-border py-3">
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold">More filters</summary>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Has analysis field"><SelectInput value={filters.field} onChange={(event) => update("field", event.currentTarget.value)}>

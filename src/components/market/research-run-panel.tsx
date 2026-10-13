@@ -50,13 +50,13 @@ function CapMeter({ label, value, cap, unit, note }: { label: string; value: num
       <span className="text-fg-muted">{text}</span>
     </div>
     {value === null ? <p className="text-xs text-fg-muted">{note}</p> : <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={cap} aria-valuenow={value} aria-valuetext={text} className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-      <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, Math.round((value / cap) * 100))}%` }} />
+      <div className="h-full rounded-full bg-fg-muted" style={{ width: `${Math.min(100, Math.round((value / cap) * 100))}%` }} />
     </div>}
   </div>;
 }
 
 function StageRow({ label, icon: Icon, detail }: { label: string; icon: LucideIcon; detail: string }) {
-  return <li className="flex items-start gap-3 rounded-md border border-border p-3">
+  return <li className="flex items-start gap-3 border-t border-border py-3 first:border-t-0 first:pt-0">
     <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-fg-muted" />
     <div className="min-w-0">
       <p className="font-semibold">{label}</p>
@@ -100,7 +100,7 @@ export function ResearchRunPanel({ runs, ads, canEdit, retryLimit, retryingRunId
       <h4 className="text-sm font-semibold">Failures</h4>
       {failedRuns.length === 0 && adErrors.length === 0 ? <p className="text-sm text-fg-muted">No failed runs or ad errors are stored.</p> : null}
       {failedRuns.length ? <ul className="space-y-2">
-        {failedRuns.map((run) => <li key={run.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
+        {failedRuns.map((run) => <li key={run.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-border py-3 first:border-t-0 first:pt-0">
           <div className="min-w-0 text-sm">
             <p className="font-semibold">{run.searchTerms} · {run.country}</p>
             <p className="text-fg-muted">{runStatusLabel(run.status)}{run.error ? `: ${run.error}` : ""}</p>
