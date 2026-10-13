@@ -10,6 +10,7 @@ import { adsMustPause } from "./kill-switch.ts";
 import { isFactoryStage } from "./pipeline.ts";
 import { learnForRun } from "./learn.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
+import { recordDecisionSpend } from "./decision-spend.ts";
 import { stageDecision } from "./stage-decision.ts";
 import { effectiveCap, meteredSpendOf, spendCapsOf } from "./spend.ts";
 import { produceFactoryCreatives } from "./produce.ts";
@@ -150,8 +151,8 @@ export async function executeFactoryJob(
     const allowed = snapshotMediaAllowed();
     return allowed ? "ingest:snapshot-media-opt-in" : "ingest:metadata-only";
   }
-  // The stages below record no cost. Nothing measures what they spend, so no figure is written. A cost row comes from the
-  // budget ledger once a stage makes a metered provider call.
+  // The stages below record no cost of their own. The grade stage meters each engine decision's tokens (decision-spend.ts), and the
+  // produce stage meters each image judgment. A provider call that reports its own cost is metered where it is made.
   if (job.job_type === "factory.decode") {
     const decoded = await decodeStoredAds(sql, job.organization_id, job.brand_id);
     return `decoded:${decoded}`;
@@ -521,6 +522,22 @@ async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string,
       };
       const judged = await gradeItemWithEngine(sql, { organizationId, brandId, item: grade }, engine);
       stored = { ...gradeColumnsOf(judged), gradedBy: options.runId };
+      // The decision's tokens are metered for this run. A grade the engine answered from its own record never reaches this line, so a
+      // rerun writes no row for it.
+      if (judged.status === "engine") {
+        await recordDecisionSpend(sql, {
+          organizationId,
+          brandId,
+          runId: options.runId,
+          stage: "factory.grade",
+          gateRecordId: judged.gateRecordId,
+          engineCalled: judged.engineCalled,
+          engineId: judged.engineId,
+          requestedModel: judged.requestedModel,
+          returnedModel: judged.returnedModel,
+          usage: judged.usage ?? undefined,
+        });
+      }
     }
     const id = `tl:${brandId}:${ad.id}`;
     await sql`

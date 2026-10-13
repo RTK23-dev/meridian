@@ -17,9 +17,14 @@ A run stores the settings it started with, so a later change to the brand does n
 | `platforms` | for example `instagram`, `facebook`, `youtube`, `tiktok` | A platform with no connection is reported as not connected. |
 | `providers` | per format: `auto` or a provider id | `auto` lets the capability matrix choose. A named provider that is not ready stops the run with its reason. |
 | `caps` | `dailyCents`, `totalCents`, `maxVariants` | Spend caps and the variant limit. See the caveat on caps below. |
+| `targetingCountries` | ISO 3166-1 alpha-2 codes in capitals, such as `US` and `GB` | The countries a paid ad is targeted to. Empty means none is set. A live paid publish needs at least one. |
 
 The server checks every value. An unknown automation, intent or format, a platform id that is not lowercase letters, a provider id
-outside the allowed pattern, or a negative cap is refused with the reason. Nothing is coerced.
+outside the allowed pattern, a negative cap, or a country code that is not an officially assigned ISO code (or is not in capitals) is
+refused with the reason. Nothing is coerced.
+
+A brand has run defaults, saved from the run builder with **Save as brand defaults** (an admin or owner). A run starts from them, and
+each choice the builder changes is stored with the run. The defaults include the country list.
 
 The three older vocabularies map onto `automation`:
 
@@ -71,10 +76,28 @@ reached. Produce checks the caps again before each provider call, so the call th
 
 `full` also needs a cap to be set. A `full` run with no cap stops before any spend, with "Full automation needs a spend cap".
 
-A metered row is written only from a provider call that reported its own cost (`factory_costs.basis` is `provider_reported`). A
-provider that reports no cost writes no row, and the caps cannot see its spend. The Google image provider reports no cost today, so a
-Factory run that uses it is not counted against its caps. Its reservation is still held in the budget ledger, at the per-image
-ceiling of $1 (`FACTORY_IMAGE_CEILING_USD`), and settles at that ceiling. That ceiling is a guard, not a price.
+A metered row is written from one of two things, and its basis says which (`factory_costs.basis`):
+
+- `provider_reported`: a provider call that reported its own cost in cents.
+- `tokens`: a decision that called an engine and reported its token usage. Each decision writes one row for its run: the grade of an
+  ad (`factory.grade`) and the judgment of a generated image (`factory.produce`). The row names the engine and the model and holds the
+  prompt and completion tokens. A decision row is keyed by its gate record, so a rerun of a graded ad writes nothing.
+
+A token row's dollar cost is written only when the price table (`factory/price-table.ts`) has an entry for the engine and the model.
+The table is versioned, and each entry names the provider's pricing page and the date it was read. The OpenAI Decisions default model,
+`gpt-6-luna`, is priced from that page: $0.10 input, $0.01 cached input and $0.50 output per million tokens, with the long-context rates
+above 272,000 input tokens, read on 2026-10-13. A model with no entry is **tokens only, not priced**: its cost is null, never zero, and
+the run view says so. The JEV engine reports no token usage, so its decisions write no row, and the run says its spend is not measured.
+
+Caps count only priced cost. Unpriced spend is not counted. The priced cost is rounded up to a whole cent when it is compared with a cap,
+so a cap is never under-counted. The run view states this rule.
+
+A provider call that reports no cost writes no row, and the caps cannot see its spend. The Google image provider reports no cost today, so
+a Factory run that uses it is not counted against its caps. Its reservation is still held in the budget ledger, at the per-image ceiling of
+$1 (`FACTORY_IMAGE_CEILING_USD`), and settles at that ceiling. That ceiling is a guard, not a price.
+
+The price table does not cover cache writes. The engine reports none, so a request that wrote to the prompt cache is priced only for its
+input, cached input and output, and its cost can be lower than the invoice.
 
 ## Produce
 
@@ -125,7 +148,8 @@ Beside the observed signal, each ad gets a JEV grade. The run's engine answers f
 model and the question versions it was asked under. The two are never blended into one number.
 
 The thresholds of the first two questions are not calibrated. Their specs mark them `thresholdCalibration: "uncalibrated"`, so every
-probability they return goes to review, whatever the engine reports. The other three thresholds are the registry's existing values. The
+probability they return goes to review, whatever the engine reports, unless the brand has a calibrated report for the question (see
+[Calibration per brand and question](#calibration-per-brand-and-question)). The other three thresholds are the registry's existing values. The
 engines report their answers as uncalibrated today, so those route to review as well. Nothing approves on an uncalibrated threshold.
 
 With no engine ready for the workspace, the row says `graded on observed signal only: no decision engine configured`. An ad that the same
@@ -173,9 +197,15 @@ launch summary and is never sent.
   connection records `not_connected` with its reason, and sends nothing. It is never counted as published. A post is recorded in
   `organic_posts` with surface `organic`.
 - **Paid** (`ad`, `both`): the campaign, ad set, ad creative and ad are created with status PAUSED, and each is recorded in
-  `provider_objects` with surface `paid` and status `paused`. In the testing runtime the fixture engine in `publishing/engine.ts` answers.
-  Outside it, a paid publish needs a stored Meta token and a targeting country. A Factory run does not carry a country yet, so the
-  publish is refused with that reason. Nothing in the Factory sets an ad or a campaign to ACTIVE.
+  `provider_objects` with surface `paid` and status `paused`. In the testing runtime the fixture engine in `publishing/engine.ts` answers,
+  and it takes the run's targeting countries unchanged. Outside it (`liveRouteFor` in `factory/publish.ts`), the checks run in order and
+  each refusal is recorded as a failed receipt, before the publisher is called:
+  - no stored Meta token: **not connected**, with the reason;
+  - no targeting country on the run: refused with **no targeting country**;
+  - no Facebook Page id or destination link: refused, because a Factory run carries neither yet. Without them the ad creative cannot be
+    created after the campaign and ad set, which would leave paused objects behind.
+  Only when all three pass does the Meta publisher run. Its ad set carries the run's countries as `targeting.geo_locations.countries`
+  (`providers/meta.ts`). Nothing in the Factory sets an ad or a campaign to ACTIVE.
 - **Instagram and TikTok** publish by URL, not by upload. The service signs a link to the approved creative (`storage/media-link.ts`): an
   HMAC-SHA256 over the creative id and an expiry, made with `MEDIA_LINK_SECRET`, valid for 15 minutes. The platform fetches the file through
   `/api/media-links/:creativeId`, which checks the signature and the expiry before it reads anything, and serves only an approved or testing
@@ -269,6 +299,60 @@ Its controls:
 Viewers see the runs, their grades and variants, and the reason they cannot act. The run view is read through `getFactoryBoard`, which checks
 that the brand belongs to the caller's workspace, and every row it reads is scoped to that workspace and brand (`factory/run-view.ts`).
 
+## Calibration per brand and question
+
+A grading question's threshold can be calibrated from the brand's own measured outcomes. Until it is, the question's grades go to review,
+as they did before. The code is `calibration/question-method.ts` (the method and its constants), `calibration/question-outcomes.ts` (the
+observations, pure), `calibration/question-store.ts` (reads, storage and the gate's lookup) and `calibration/question-recalibrate.ts` (the
+recomputation).
+
+**Observations.** A pick is one observation for each grading question its ad was answered on, when all of these hold:
+
+- its stored `grade_fingerprint` is the ad's grade now. A pick whose ad was graded again, or that was written before migration 0071, has no
+  known prediction, so it is not an observation;
+- its control creative (`factory_variants.tests_attribute = 'control'`) has a measured row on the pick's surface that reports the surface's
+  metric. The newest such row is the outcome. A metric the source did not report is never counted;
+- the question's answer is `answered` with a probability in [0, 1]. A choice question has no probability, so it has no calibration.
+
+A row whose metadata marks it `synthetic` or `simulated` is never a measured outcome, and never sets a baseline.
+
+**Success.** No question in the registry defines what success is, so one rule applies to every grading question: a creative succeeds when its
+metric is above the median of the brand's measured creatives on the same surface. Paid uses click-through rate (clicks divided by
+impressions, both reported, impressions above zero). Organic uses completion rate. A surface with fewer than two measured creatives has no
+baseline, so its picks are not observations.
+
+**Method** (`question-calibration.v1`). Stated probabilities fall into five bins of width 0.2. A bin qualifies when it holds at least 10
+observations and at least 70% of them succeeded. The threshold is the lower edge of the lowest bin from which every bin up to the top one
+qualifies, so a threshold means that every stated probability at or above it has been seen to succeed at the target rate. A brand needs at
+least 100 observations for a question before any threshold is set. Below that the report is uncalibrated and says "n of 100 observations
+measured". A report also carries its reliability table: the count, the success rate and the mean stated probability of each bin.
+
+**Constants, for owner review.** The owner did not set these. They were chosen for the first method and are named in
+`question-method.ts` and `question-outcomes.ts`: 100 minimum observations per brand and question; five bins; 10 observations per bin; a 70%
+target; two measured creatives for a baseline; and the success rule above (median, click-through rate for paid, completion rate for
+organic). A change to any of them is a new method version. These are the questions NORTH_STAR section 9 asks the owner to decide.
+
+**Storage and recomputation.** Reports are stored in `question_calibration_reports` (migration 0074). The name is not `calibration_reports`,
+which migration 0045 already uses for the learned-parameter reports read by `learning/calibration-gate.ts`. A recomputation writes a report
+for each question version only when its content differs from the newest one, so the newest report is the one read, and the same data stores
+nothing new. Recomputation runs in the `learning.update` job after patterns are recomputed, in the Factory learn stage, and from **Recompute
+from outcomes** on the Calibration screen. That button needs the admin role and writes an audit row. A failed recomputation is named in the
+job's or the stage's result and does not fail the pattern update.
+
+**Gate use.** The decision gate reads the newest report for the brand and question version whenever it decides a question. A calibrated
+report replaces that question's approve threshold for the brand. The vote then records `calibrationStatus: "calibrated"`, the report id, its
+sample size and the threshold. The question's policy version is `<question>@<version>+calibrated:<report id>`, so the decision record names
+the threshold it used. A question with no calibrated report, a report that is uncalibrated or uses another method version, or a read that
+fails, keeps its registry policy, and its threshold stays uncalibrated. The gate never reads another brand's report. Only the probability
+questions can be calibrated this way. A question whose predicate is a defect (reject if true) keeps its policy.
+
+A calibrated threshold applies to grades decided after its report. A grade already stored under the same question versions is not asked
+again, so existing grades keep the threshold they were made under.
+
+**The Calibration screen.** Each grading question shows either its calibrated report (the threshold, the reliability table, the sample size,
+the report date and the method version), or "Not enough outcomes: n of 100 measured", with the number counted now. A threshold is never shown
+for an uncalibrated brand.
+
 ## Not built yet
 
 What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
@@ -282,12 +366,21 @@ What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
   the ad was graded again. Keeping every grade needs a grade history table, which is not built.
 - Organic outcomes are still one observation per post. A later organic measurement of the same post is not added to `organic_observations`.
   The paid path is per measurement (see [Learning per surface](#learning-per-surface)).
+- Spend from perception reads is not metered. A perception read is a separate call from the decision, and it writes no row.
 - The Factory screen was not checked in a browser from this branch. Its before and after screenshots, and the button audit, need a run of
   the app that this change did not make.
 - The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
 - The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
-- A live paid publish from a run needs a targeting country the run does not carry.
+- A live paid publish from a run is refused until the run carries a Facebook Page id and a destination link. A run has a targeting country
+  now; the Page and link are the next gap.
 - Uploads are not connected to Gather.
+- Re-grading stored grades when a brand's calibrated report changes. A stored grade keeps the threshold it was made under until its ad is
+  graded again by a new run.
+- Calibration beyond the five grading questions (creative QA and the others), and a success definition per question. The one rule above
+  applies to every grading question.
+- Live outcomes. Organic channels return no metrics, and the test publisher has no insights source, so a brand is calibrated only from paid
+  rows that a stored token has measured. The Calibration screen shows how many outcomes each brand has. Until a brand reaches the minimum,
+  its grades stay uncalibrated.
 
 See [ROADMAP.md](ROADMAP.md).
 

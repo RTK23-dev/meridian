@@ -4,6 +4,7 @@ import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian
 import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { FORMAT_LABELS, INTENT_DESCRIPTIONS } from "@/lib/meridian/factory/run-builder-model";
 import { ATTESTATION_WORDING, LICENCE_KINDS, LICENCE_LABELS, type LicenceKind } from "@/lib/meridian/factory/rights-wording";
+import { spendLinesOf, type SpendFigures } from "@/lib/meridian/factory/spend-lines";
 
 /** The licences attested for one creative of a variant. Each is the attestation id, or null where that licence is not attested. */
 export type RunCreativeLicence = { creativeId: string; music: string | null; footage: string | null };
@@ -32,6 +33,8 @@ export type RunListItem = {
   niche: string;
   error: string;
   settings: RunSettings;
+  /** The run's spend, from its cost rows: priced cost, tokens only, and provider-reported cents. */
+  spend: SpendFigures;
   runSources: Array<{ source: string; state: string; reason: string; items: number }>;
   picks: RunPickLine[];
   receiptLines: string[];
@@ -107,11 +110,14 @@ function stageLabelOf(type: string): string {
 /** The run's settings in one line, in the words the builder uses. */
 function settingsLine(settings: RunSettings): string {
   const platforms = settings.platforms.length > 0 ? settings.platforms.join(", ") : "every organic platform";
+  // Paid runs name their countries; a run with none says so, because a live paid publish is refused without one.
+  const countries = settings.targetingCountries.length > 0 ? settings.targetingCountries.join(", ") : "none set";
   return [
     `${AUTOMATION_WORDS[settings.automation]} automation`,
     INTENT_WORDS[settings.intent],
     `formats ${settings.formats.map((format) => FORMAT_LABELS[format]).join(", ")}`,
     `platforms ${platforms}`,
+    `countries ${countries}`,
   ].join(" · ");
 }
 
@@ -155,6 +161,9 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
             </div>
             <p className="text-muted">{settingsLine(run.settings)}</p>
             <p className="text-xs text-muted">Intent: {INTENT_WORDS[run.settings.intent]}. {INTENT_DESCRIPTIONS[run.settings.intent]}</p>
+            <ul className="space-y-1 text-xs text-muted" aria-label="Spend of this run">
+              {spendLinesOf(run.spend).map((line) => <li key={line}>{line}</li>)}
+            </ul>
             {run.error ? <p className="text-muted">{run.error}</p> : null}
 
             <details>

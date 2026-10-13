@@ -83,6 +83,14 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
 - **A Factory run says paused or stopped.** Either the kill switch is engaged (every stage stops, in every mode) or a `full` run has no
   spend cap, or has reached it. The reason on the run says which.
 - **A paused Factory run does not start again.** The kill switch is on, which refuses **Start again** until it is cleared (Live tests, an admin). A spend cap that is still reached stops the run again at the same stage, with the same reason.
+- **A grade is in review and the Calibration screen says "Not enough outcomes: n of 100 measured".** The brand has fewer measured outcomes
+  than the minimum for that grading question, so its threshold is not calibrated and the grade goes to review. Outcomes are measured rows
+  on the control creative of a graded pick, on the pick's surface, that report the surface's metric. A pick whose ad was graded again after
+  the pick, or that was picked before migration 0071, is not counted. Rows marked synthetic are never counted. See
+  [FACTORY.md](FACTORY.md#calibration-per-brand-and-question).
+- **The Calibration screen shows no report, only counts, after a release.** A report is stored when the brand's `learning.update` job runs,
+  when a Factory learn stage runs, or when an admin presses **Recompute from outcomes**. Until one of these runs, the screen shows the counts
+  measured now.
 - **A Factory run says learning waits for a measured outcome.** None of the run's creatives has a stored metric yet. The measurement pull runs every six hours after a launch, and a run with no published creative never gets one. Once a metric is stored, use **Check learning again** on the run. The button is offered only while the run is running at its learn step.
 - **A Factory variant is blocked with a rights reason.** A licence is not attested for its creative, or it was revoked. A member attests
   it on the Factory run view. Attested licences still block until AI labelling has a source (FACTORY.md, Licences).
@@ -104,5 +112,11 @@ working from their level.
 This release adds migration `0070`. It gives `learned_patterns` a `surface` (organic or paid) and a `channel`, and fills the surface of each existing pattern from its metric. Every brand's patterns are rebuilt by the next recomputation (the telemetry sync, the organic bridge, or a Factory learn stage), which replaces the whole set. A pattern whose metric names neither surface stays `unassigned` until then, and it is not applied. Nothing else in the database changes.
 
 This release adds migration `0071`. It gives `factory_picks` a `surface` and a `grade_fingerprint`. Both are empty for every pick written before it, and the Factory screen says the prediction of such a pick is not known. No existing row is rewritten.
+
+This release adds migration `0072`. It makes `factory_costs.cents` nullable and adds the `tokens` basis, with `micros` (the priced cost in millionths of a dollar), the engine, model, prompt and completion tokens, the price table version and the gate record id. Existing rows keep their cents and have no micros. Nothing is rewritten. A token row with no price has a null cost, which the Factory screen shows as "tokens only, not priced".
+
+This release adds migration `0074`. It creates `question_calibration_reports`, the per-brand, per-question calibration reports for the
+grading questions (see [FACTORY.md](FACTORY.md#calibration-per-brand-and-question)). Nothing existing is rewritten. The table is not
+`calibration_reports`, which migration `0045` already uses. No report is calibrated until a brand has the minimum measured outcomes.
 
 The telemetry sync now writes one paid observation per measured row, keyed in `performance_observations.external_id` as `telemetry:<row id>`. A paid observation written before this release has no key. The next sync adopts it by its creative, day and values, so the first measurement is not counted twice. Nothing has to be run by hand.

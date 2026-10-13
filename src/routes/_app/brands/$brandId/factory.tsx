@@ -11,13 +11,14 @@ import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
 import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
-import { approveFactoryStage, attestFactoryLicence, checkFactoryLearning, resumeFactoryRun, revokeFactoryLicence, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import { approveFactoryStage, attestFactoryLicence, checkFactoryLearning, resumeFactoryRun, revokeFactoryLicence, saveFactoryRunDefaults, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import type { LicenceKind } from "@/lib/meridian/factory/rights-wording";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
 import { metricLine, receiptLine } from "@/components/factory/measurement-model";
 import { gateText, planText, predictionStatusText, predictionText, variantHeading } from "@/components/factory/grades-model";
 import { HeldReservationsPanel } from "@/components/held-reservations-panel";
 import { FACTORY_GRAPH } from "@/lib/meridian/factory/pipeline";
+import { usdOfMicros } from "@/lib/meridian/factory/spend-lines";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { RunBuilder } from "@/components/factory/run-builder";
 import { RunList, type RunListItem, type RunPickLine } from "@/components/factory/run-list";
@@ -28,6 +29,16 @@ export const Route = createFileRoute("/_app/brands/$brandId/factory")({ staticDa
 
 function dollars(cents: number): string {
   return `$${(Math.max(0, cents) / 100).toFixed(2)}`;
+}
+
+/**
+ * One cost row, in plain words. A provider row shows its cents. A token row shows its tokens and its priced cost, or says it is tokens
+ * only and not priced, because no price exists for its model. Its cost is unknown then, not zero.
+ */
+function costLine(row: FactoryBoard["costs"][number]): string {
+  if (row.basis !== "tokens") return `${row.stage}: ${dollars(row.cents ?? 0)} · ${row.seconds}s`;
+  const priced = row.micros === null ? "tokens only, not priced" : usdOfMicros(row.micros);
+  return `${row.stage} · ${row.engine} ${row.model || "model not reported"} · ${row.tokens ?? 0} tokens · ${priced}`;
 }
 
 type FactoryBoard = NonNullable<ReturnType<typeof useFactoryQuery>["data"]>;
@@ -77,6 +88,7 @@ function runListItems(board: FactoryBoard): RunListItem[] {
       niche: run.niche,
       error: run.error,
       settings: run.settings,
+      spend: run.spend,
       runSources: run.runSources,
       picks: picksOf(board, run.picks),
       receiptLines: creatives.flatMap((item) => item.receipts.map((receipt) => `${item.format} creative: ${receiptLine(receipt)}`)),
@@ -119,6 +131,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
       setNote(`Queued ${result.jobs} factory jobs as run ${result.runId}.`);
       setBuilderKey((key) => key + 1);
     },
+  });
+  const saveRunDefaults = useScopedMutation({
+    mutationKey: factoryKey("run-defaults"),
+    mutationFn: (settings: RunSettings) => saveFactoryRunDefaults({ data: { brandId, settings } }),
+    invalidate: () => [qk.factory(brandId)],
+    onSuccess: () => setNote("Saved as the brand's run defaults. A run already started keeps the settings it was started with."),
   });
   const startAgain = useScopedMutation({
     mutationKey: factoryKey("start-again"),
@@ -164,7 +182,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.factory(brandId)],
     onSuccess: () => setNote("Licence revoked. The variant is gated again."),
   });
-  const failures = [startRun, startAgain, checkLearning, saveControls, killSwitch, approveStage, attestLicence, revokeLicence]
+  const failures = [startRun, saveRunDefaults, startAgain, checkLearning, saveControls, killSwitch, approveStage, attestLicence, revokeLicence]
     .map((action) => action.error).filter((error): error is Error => Boolean(error));
 
   if (query.isError && !board) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
@@ -243,8 +261,11 @@ function FactoryPage({ brandId }: { brandId: string }) {
               channels={(channelsQuery.data ?? []).map((channel) => ({ id: channel.id, name: channel.name, connected: channel.connected }))}
               channelsState={channelsQuery.isPending ? "loading" : channelsQuery.isError ? "error" : "ready"}
               canEdit={canEdit}
+              canAdmin={canAdmin}
               busy={startRun.isPending}
+              savingDefaults={saveRunDefaults.isPending}
               onStart={({ niche, settings }) => { void startRun.mutateAsync({ niche, settings }).catch(() => undefined); }}
+              onSaveDefaults={(settings) => { void saveRunDefaults.mutateAsync(settings).catch(() => undefined); }}
               onDirtyChange={setBuilderDirty}
             />
             <h3 className="font-semibold">Runs</h3>
@@ -347,7 +368,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
             {board.costs.length === 0 ? <p className="text-muted">No production costs are recorded yet.</p> : (
               <ul className="text-sm">
                 {board.costs.map((row, index) => (
-                  <li key={`${row.stage}-${index}`}>{row.stage}: {dollars(row.cents)} · {row.seconds}s</li>
+                  <li key={`${row.stage}-${index}`}>{costLine(row)}</li>
                 ))}
               </ul>
             )}
