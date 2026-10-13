@@ -16,6 +16,7 @@ import { winnerScore } from "./winner-score.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
 import { loadFactoryBrain } from "./brain-facts.ts";
+import { pickConceptsForRun } from "./pick.ts";
 import {
   gradeColumnsOf,
   gradeItemWithEngine,
@@ -144,11 +145,15 @@ export async function executeFactoryJob(
     return `clustered:${clusters.length}`;
   }
   if (job.job_type === "factory.pick") {
-    const rows = await sql<{ n: number }>`
-      select count(*)::int as n from ad_timelines
-      where organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and winner_score is not null
-    `;
-    return `picked:${rows[0]?.n ?? 0}`;
+    // The picks are the concepts this run makes next, chosen from the graded ads (pick.ts). At most the run's variant cap of
+    // concepts is picked, because each pick produces at least one variant.
+    const picked = await pickConceptsForRun(sql, {
+      organizationId: job.organization_id,
+      brandId: job.brand_id,
+      runId,
+      maxPicks: settings.caps.maxVariants,
+    });
+    return `picked:${picked.picks.length}`;
   }
   // No stage below marks the run succeeded. The run finishes only when learn does its real work (see LEARN_NOT_BUILT).
   if (job.job_type === "factory.template") {
