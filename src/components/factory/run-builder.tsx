@@ -134,7 +134,9 @@ export function RunBuilder({
           ))}
         </div>
         {draft.formats.includes("video") || draft.formats.includes("carousel") ? (
-          <p className="text-sm text-muted">Video and carousel are not produced yet. A run with them stops at production, before any spend, with that reason.</p>
+          <p className="text-sm text-muted">
+            Video and carousel are made through the provider you choose below. A video that is still rendering keeps the run running and waiting, and the run says why. A provider that is not ready stops the run before any spend.
+          </p>
         ) : null}
       </fieldset>
 

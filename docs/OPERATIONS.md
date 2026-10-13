@@ -94,6 +94,7 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
 - **The Calibration screen shows no report, only counts, after a release.** A report is stored when the brand's `learning.update` job runs,
   when a Factory learn stage runs, or when an admin presses **Recompute from outcomes**. Until one of these runs, the screen shows the counts
   measured now.
+- **A Factory run is running with a reason but not moving.** Its `waiting_on` is set to produce: a video is still at its provider. The run checks again about every ten minutes, and the worker's poller reads the video's job. A video that never finishes is failed by the poller after its age limit, and the run then goes on without that video, as it does for a failed image. A paused run is the other kind of stop: it has a Start again control.
 - **A Factory run says learning waits for a measured outcome.** None of the run's creatives has a stored metric yet. The measurement pull runs every six hours after a launch, and a run with no published creative never gets one. Once a metric is stored, use **Check learning again** on the run. The button is offered only while the run is running at its learn step.
 - **A Factory variant is blocked with a rights reason.** A licence is not attested for its creative, or it was revoked. A member attests
   it on the Factory run view. Attested licences still block until AI labelling has a source (FACTORY.md, Licences).
@@ -115,6 +116,8 @@ working from their level.
 This release adds migration `0070`. It gives `learned_patterns` a `surface` (organic or paid) and a `channel`, and fills the surface of each existing pattern from its metric. Every brand's patterns are rebuilt by the next recomputation (the telemetry sync, the organic bridge, or a Factory learn stage), which replaces the whole set. A pattern whose metric names neither surface stays `unassigned` until then, and it is not applied. Nothing else in the database changes.
 
 This release adds migration `0071`. It gives `factory_picks` a `surface` and a `grade_fingerprint`. Both are empty for every pick written before it, and the Factory screen says the prediction of such a pick is not known. No existing row is rewritten.
+
+This release adds migration `0073`. `factory_creatives` gains `slide_index` (-1 for a creative that is not a carousel slide) and its key becomes (variant, format, slide), so a carousel's slides are linked beside its carousel row. `factory_runs` gains `waiting_on`, which is empty for a run that is not waiting. No existing row is rewritten.
 
 This release adds migration `0072`. It makes `factory_costs.cents` nullable and adds the `tokens` basis, with `micros` (the priced cost in millionths of a dollar), the engine, model, prompt and completion tokens, the price table version and the gate record id. Existing rows keep their cents and have no micros. Nothing is rewritten. A token row with no price has a null cost, which the Factory screen shows as "tokens only, not priced".
 
