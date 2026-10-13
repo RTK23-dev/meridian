@@ -14,8 +14,8 @@ import type {
 const LABEL = "Instagram";
 const NOT_CONNECTED_REASON =
   "No Instagram account is connected for this brand. Add the Instagram account ID and an access token with content publishing permission in Accounts.";
-const NO_PUBLIC_URL_REASON =
-  "Instagram Reels needs a public https URL for the video. Meridian does not serve stored media at a public URL yet, so nothing was sent. Export the package and post it by hand.";
+const NO_MEDIA_LINK_REASON =
+  "No signed media link was made for this Reel, so nothing was sent. Check MEDIA_LINK_SECRET and the public origin on the server.";
 
 export type InstagramOptions = {
   transport?: Transport;
@@ -26,9 +26,17 @@ export type InstagramOptions = {
 };
 
 /**
- * Publishes a Reel through the Instagram container flow: create a container from a public video URL, wait until it is
+ * Publishes a Reel through the Instagram container flow: create a container from the signed media link, wait until it is
  * FINISHED, then publish it. The receipt id is the media id the publish call returns. The channel reports NOT_CONNECTED
- * until a connected account and a public video URL are both present, so the flow runs only with a real account and a real URL.
+ * until a connected account and an https media link are both present, so the flow runs only with a real account and a real link.
+ *
+ * Documentation read 2026-10-13:
+ *   container: POST /{ig-user-id}/media with media_type=REELS and video_url. The platform cURLs video_url, so it must be public.
+ *     https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
+ *   status: status_code FINISHED means the upload succeeded.
+ *   publish: POST /{ig-user-id}/media_publish with creation_id; the response id is the published media id.
+ *     https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media_publish
+ * The reference page used Graph v25.0 in its examples. GRAPH_BASE (graph.ts) stays on v21.0 and is not changed here.
  */
 export class InstagramReelsChannel implements DistributionChannel {
   public readonly id = "instagram-reels";
@@ -82,8 +90,8 @@ export class InstagramReelsChannel implements DistributionChannel {
     if (request.scheduledFor) {
       return failure("instagram", "REJECTED", "Instagram Reels cannot be scheduled by this channel yet. Publish now, or export the package and post it by hand.");
     }
-    const videoUrl = publicVideoUrl(request.metadata);
-    if (!videoUrl) return failure("instagram", "NOT_CONNECTED", NO_PUBLIC_URL_REASON);
+    const videoUrl = httpsMediaUrl(request.mediaUrl);
+    if (!videoUrl) return failure("instagram", "NOT_CONNECTED", NO_MEDIA_LINK_REASON);
 
     return publishInstagramReel(this.options, {
       igUserId: connection.accountId,
@@ -101,10 +109,14 @@ export class InstagramReelsChannel implements DistributionChannel {
   }
 }
 
-/** The public https URL the container fetches the video from. Anything else is not accepted. */
-export function publicVideoUrl(metadata: Record<string, unknown> | undefined): string {
-  const value = metadata?.publicVideoUrl;
-  return typeof value === "string" && value.startsWith("https://") ? value : "";
+/** The https link the container fetches the video from. Anything else, or nothing, is not sent. */
+export function httpsMediaUrl(value: string | undefined): string {
+  if (!value) return "";
+  try {
+    return new URL(value).protocol === "https:" ? value : "";
+  } catch {
+    return "";
+  }
 }
 
 type Sent = { ok: true; json: unknown } | { ok: false; receipt: OrganicPublishReceipt };

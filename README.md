@@ -23,8 +23,9 @@ deploying. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What is not connected or not verified
 
-- Instagram Reels posting reports not connected. Facebook Page, YouTube Shorts and TikTok regular videos go through a connected account, but
-  no live call was made in this release. The export package is the delivery path for everything else.
+- Instagram Reels and TikTok regular videos publish through a connected account and a signed media link (`MEDIA_LINK_SECRET`, `APP_URL`,
+  and for TikTok `TIKTOK_VERIFIED_MEDIA_DOMAINS`), and show not connected until those are set. Facebook Page and YouTube Shorts go through a
+  connected account too. No live call was made to any of them in this release. The export package is the delivery path for everything else.
 - Live source APIs are built and tested against fixtures. No live key was used, so their live responses are unverified.
 - Factory spend caps are declared, not enforced: no stage writes metered spend yet. Without a decision engine, a Factory ad is graded on its
   observed signal only, and no engine grade is calibrated. Live organic metrics are not pulled from any platform.

@@ -42,6 +42,13 @@ export type OrganicPublishRequest = {
   allowTestProvider?: boolean;
   /** Resolved by the service before the call. A channel never reads the database or the environment for a token. */
   connection?: OrganicConnection;
+  /**
+   * A signed, short-lived https link to the approved file (storage/media-link.ts). Set by the service for a channel that publishes
+   * by URL, Instagram and TikTok. The platform fetches it, so the channel sends it and never the bytes.
+   */
+  mediaUrl?: string;
+  /** The hostnames TikTok has verified for this app, from TIKTOK_VERIFIED_MEDIA_DOMAINS. A TikTok channel refuses a URL outside them. */
+  verifiedMediaDomains?: string[];
 };
 
 /**

@@ -5,13 +5,16 @@ import { CREATIVE_DNA_VERSION, dnaFromTranscript, type AdFormat, type CreativeDn
 import { decodeVideoDna } from "./decode.ts";
 import type { ResearchSegment } from "../research/schema.ts";
 import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, brandGate, type GateVerdict } from "./gates.ts";
+import { creativeIdsOfVariant, licencesForCreatives, variantLicenceFlags } from "./rights.ts";
 import { adsMustPause } from "./kill-switch.ts";
 import { isFactoryStage } from "./pipeline.ts";
 import { learnForRun } from "./learn.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
+import { recordDecisionSpend } from "./decision-spend.ts";
+import { queueStagesFrom } from "./queue-stages.ts";
 import { stageDecision } from "./stage-decision.ts";
 import { effectiveCap, meteredSpendOf, spendCapsOf } from "./spend.ts";
-import { produceFactoryCreatives } from "./produce.ts";
+import { produceFactoryCreatives, scheduleProduceRecheck } from "./produce.ts";
 import { launchFactoryRun, recordTestPlan, scheduleRunMeasurement } from "./publish.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { recordedClaimsOf, templateFromDna } from "./template.ts";
@@ -80,12 +83,17 @@ export async function executeFactoryJob(
   if (!job.brand_id) throw new Error("Factory jobs need a brand.");
   const runId = text(payload.runId);
   if (!runId) throw new Error("Factory jobs need a run id.");
-  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string; created_by: string; current_stage: string }>`
-    select id, status, niche, level, settings, created_by, current_stage from factory_runs
+  const owned = await sql<{ id: string; status: string; niche: string; level: number; settings: string; created_by: string; current_stage: string; waiting_on: string }>`
+    select id, status, niche, level, settings, created_by, current_stage, waiting_on from factory_runs
     where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
     limit 1
   `;
   if (!owned[0]) throw new Error("Factory run is not owned by this organization and brand.");
+  // A run waiting for a provider job (a video still at the provider) holds every stage but the one it waits at. The waiting stage checks
+  // again on its own schedule, and it is the only stage that may run until the wait clears.
+  if (owned[0].waiting_on !== "" && owned[0].waiting_on !== job.job_type) {
+    return `held:${job.job_type}`;
+  }
   // A run that is waiting for a person, or stopped, holds every stage after the one it stopped at. A stage returns successfully, so
   // the queue would otherwise run the stages after it, and the run would be marked running again. Only the stage it waits at may
   // decide, and it does so when it is run again after an approval or a cleared stop.
@@ -149,8 +157,8 @@ export async function executeFactoryJob(
     const allowed = snapshotMediaAllowed();
     return allowed ? "ingest:snapshot-media-opt-in" : "ingest:metadata-only";
   }
-  // The stages below record no cost. Nothing measures what they spend, so no figure is written. A cost row comes from the
-  // budget ledger once a stage makes a metered provider call.
+  // The stages below record no cost of their own. The grade stage meters each engine decision's tokens (decision-spend.ts), and the
+  // produce stage meters each image judgment. A provider call that reports its own cost is metered where it is made.
   if (job.job_type === "factory.decode") {
     const decoded = await decodeStoredAds(sql, job.organization_id, job.brand_id);
     return `decoded:${decoded}`;
@@ -213,10 +221,38 @@ export async function executeFactoryJob(
     });
     if (produced.stop) {
       await sql`
-        update factory_runs set status = 'paused', current_stage = ${job.job_type}, error = ${produced.stop}, updated_at = now()
+        update factory_runs set status = 'paused', current_stage = ${job.job_type}, waiting_on = '', error = ${produced.stop}, updated_at = now()
         where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
       `;
       return `stopped:${job.job_type}`;
+    }
+    if (produced.waiting) {
+      // A video is still at its provider. The run stays running with the reason, the stages after produce are held, and the stage checks
+      // again later. Nothing is marked produced.
+      await sql`
+        update factory_runs set status = 'running', current_stage = ${job.job_type}, waiting_on = ${job.job_type}, error = ${produced.waiting}, updated_at = now()
+        where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+      `;
+      await scheduleProduceRecheck(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId, niche: owned[0].niche });
+      return `waiting:${job.job_type};creatives:${produced.produced}`;
+    }
+    // Every variant is produced or has its reason. The wait, if there was one, is over, so the stages after produce are queued from gate.
+    const wasWaiting = owned[0].waiting_on !== "";
+    await sql`
+      update factory_runs set waiting_on = '', error = '', updated_at = now()
+      where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+    `;
+    if (wasWaiting && payload.resumeWait === true) {
+      const queued = await queueStagesFrom(sql, {
+        organizationId: job.organization_id,
+        brandId: job.brand_id,
+        runId,
+        niche: owned[0].niche,
+        fromStage: "factory.gate",
+        kind: "resume",
+        token: job.id,
+      });
+      return `variants:${made};creatives:${produced.produced};resumed:${queued}`;
     }
     return `variants:${made};creatives:${produced.produced}`;
   }
@@ -520,6 +556,22 @@ async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string,
       };
       const judged = await gradeItemWithEngine(sql, { organizationId, brandId, item: grade }, engine);
       stored = { ...gradeColumnsOf(judged), gradedBy: options.runId };
+      // The decision's tokens are metered for this run. A grade the engine answered from its own record never reaches this line, so a
+      // rerun writes no row for it.
+      if (judged.status === "engine") {
+        await recordDecisionSpend(sql, {
+          organizationId,
+          brandId,
+          runId: options.runId,
+          stage: "factory.grade",
+          gateRecordId: judged.gateRecordId,
+          engineCalled: judged.engineCalled,
+          engineId: judged.engineId,
+          requestedModel: judged.requestedModel,
+          returnedModel: judged.returnedModel,
+          usage: judged.usage ?? undefined,
+        });
+      }
     }
     const id = `tl:${brandId}:${ad.id}`;
     await sql`
@@ -713,6 +765,8 @@ async function brandClaimRules(sql: Sql, organizationId: string, brandId: string
 export function variantGateVerdicts(input: {
   storyboard: string | null;
   rules: { approved: string[]; banned: string[] };
+  /** The licences attested for the variant's creatives (rights.ts). */
+  rights: { musicLicensed: boolean; footageLicensed: boolean };
 }): GateVerdict[] {
   return [
     originalityGate({ frameHashDistance: null, embeddingDistance: null, textSimilarity: null }),
@@ -720,7 +774,9 @@ export function variantGateVerdicts(input: {
     claimsGate({ claims: recordedClaimsOf(input.storyboard ?? ""), approvedClaims: input.rules.approved, bannedWords: input.rules.banned }),
     // This job runs no policy check, so no flag is known. Unknown is review; it is never recorded as a pass.
     policyGate({ beforeAfter: null, personalAttribute: null, healthClaim: null, financeClaim: null }),
-    rightsGate({ musicLicensed: false, footageLicensed: false, aiLabeled: false }),
+    // The licences come from the attestations (rights.ts). aiLabeled keeps its source, which has no AI-label input yet, so it is false.
+    // Until that source exists, a variant that has both licences attested is still blocked on its AI labelling.
+    rightsGate({ musicLicensed: input.rights.musicLicensed, footageLicensed: input.rights.footageLicensed, aiLabeled: false }),
   ];
 }
 
@@ -743,7 +799,10 @@ export async function creativeQaVerdict(sql: Sql, organizationId: string, brandI
       order by d.created_at desc
       limit 1
     ) g on true
+    -- A carousel is judged through its slides, which are images with their own judgment (produce-carousel.ts). Its carousel row is an
+    -- aggregate, so it has no judgment of its own and is left out here; a variant whose carousel has no slides is still review.
     where fc.variant_id = ${variantId} and fc.organization_id = ${organizationId} and fc.brand_id = ${brandId}
+      and not (fc.format = 'carousel' and fc.slide_index = -1)
   `;
   if (rows.length === 0) {
     return { gate: "jev", result: "review", reason: "No creative was made for this variant, so the JEV creative check has no evidence." };
@@ -771,10 +830,40 @@ async function gateVariants(sql: Sql, organizationId: string, brandId: string): 
     order by v.created_at desc
     limit 40
   `;
+  return gateVariantRows(sql, organizationId, brandId, variants, rules);
+}
+
+/**
+ * Gates the variants that made this creative again. Called when a licence for the creative is attested or revoked, so the stored
+ * gate result follows the attestation at once and not at the next gate stage. Returns how many variants were gated.
+ */
+export async function regateVariantsForCreative(sql: Sql, organizationId: string, brandId: string, creativeId: string): Promise<number> {
+  const variants = await sql<{ id: string; storyboard: string | null }>`
+    select v.id, t.storyboard
+    from factory_creatives fc
+    join factory_variants v on v.id = fc.variant_id and v.organization_id = fc.organization_id and v.brand_id = fc.brand_id
+    left join factory_templates t on t.id = v.template_id and t.organization_id = v.organization_id
+    where fc.creative_id = ${creativeId} and fc.organization_id = ${organizationId} and fc.brand_id = ${brandId}
+  `;
+  if (variants.length === 0) return 0;
+  const rules = await brandClaimRules(sql, organizationId, brandId);
+  return gateVariantRows(sql, organizationId, brandId, variants, rules);
+}
+
+async function gateVariantRows(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  variants: Array<{ id: string; storyboard: string | null }>,
+  rules: { approved: string[]; banned: string[] },
+): Promise<number> {
   let count = 0;
   for (const variant of variants) {
     const jev = await creativeQaVerdict(sql, organizationId, brandId, variant.id);
-    const combined = combineGates([...variantGateVerdicts({ storyboard: variant.storyboard, rules }), jev]);
+    const creativeIds = await creativeIdsOfVariant(sql, organizationId, brandId, variant.id);
+    const licences = await licencesForCreatives(sql, organizationId, brandId, creativeIds);
+    const rights = variantLicenceFlags(creativeIds, licences);
+    const combined = combineGates([...variantGateVerdicts({ storyboard: variant.storyboard, rules, rights }), jev]);
     await sql`
       update factory_variants set gate_result = ${combined.result}
       where id = ${variant.id} and organization_id = ${organizationId} and brand_id = ${brandId}

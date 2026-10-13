@@ -43,7 +43,10 @@ form behind a public load balancer.
 ## Artifacts and exports
 
 Rendered media and export packages go to Google Drive when the server connects it. S3 is retired. A storage object row in Postgres records each
-one. The media route `/api/assets/:assetId` serves an artifact to a member of its workspace only.
+one. The media route `/api/assets/:assetId` serves an artifact to a member of its workspace only. `/api/media-links/:creativeId` serves one
+approved creative to Instagram and TikTok through a signed link that expires 15 minutes after it is made. It needs `MEDIA_LINK_SECRET` (32
+characters or more, never committed) and `APP_URL` (an https origin). For TikTok, the host must also be listed in
+`TIKTOK_VERIFIED_MEDIA_DOMAINS`, which TikTok has verified for the app.
 
 Where live posting is not available, the manual export package is the delivery path. Export the package from the Library or the Studio
 review, and post it by hand.
@@ -52,6 +55,11 @@ review, and post it by hand.
 
 A workspace has a budget ledger. Generation reserves its estimated cost before the provider call, and releases the reservation when the
 call fails. The Usage screen shows what has been spent. A budget that is exhausted stops new generation; it does not stop reading.
+
+A reservation whose provider call did not return is held. Owner decision (NORTH_STAR section 2, decision D): when its submission window
+(30 minutes from the reservation) expires with no outcome from the provider, the worker releases it on its next tick. The release is recorded
+with the reason `window_expired` and the actor `system`, and the Held budget panel lists it under "Released automatically". A submission
+the provider answered, or that produced a creative, is never released this way. An admin resolves those on the panel.
 
 ## Sign-in and the first admin
 
@@ -75,7 +83,20 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
 - **A Factory run says paused or stopped.** Either the kill switch is engaged (every stage stops, in every mode) or a `full` run has no
   spend cap, or has reached it. The reason on the run says which.
 - **A paused Factory run does not start again.** The kill switch is on, which refuses **Start again** until it is cleared (Live tests, an admin). A spend cap that is still reached stops the run again at the same stage, with the same reason.
+- **A grade is in review and the Calibration screen says "Not enough outcomes: n of 100 measured".** The brand has fewer measured outcomes
+  than the minimum for that grading question, so its threshold is not calibrated and the grade goes to review. Outcomes are measured rows
+  on the control creative of a graded pick, on the pick's surface, that report the surface's metric. A pick whose ad was graded again after
+  the pick, or that was picked before migration 0071, is not counted. Rows marked synthetic are never counted. See
+  [FACTORY.md](FACTORY.md#calibration-per-brand-and-question).
+- **The Calibration screen shows no report, only counts, after a release.** A report is stored when the brand's `learning.update` job runs,
+  when a Factory learn stage runs, or when an admin presses **Recompute from outcomes**. Until one of these runs, the screen shows the counts
+  measured now.
+- **A Factory run is running with a reason but not moving.** Its `waiting_on` is set to produce: a video is still at its provider. The run checks again about every ten minutes, and the worker's poller reads the video's job. A video that never finishes is failed by the poller after its age limit, and the run then goes on without that video, as it does for a failed image. A paused run is the other kind of stop: it has a Start again control.
 - **A Factory run says learning waits for a measured outcome.** None of the run's creatives has a stored metric yet. The measurement pull runs every six hours after a launch, and a run with no published creative never gets one. Once a metric is stored, use **Check learning again** on the run. The button is offered only while the run is running at its learn step.
+- **A Factory variant is blocked with a rights reason.** A licence is not attested for its creative, or it was revoked. A member attests
+  it on the Factory run view. Attested licences still block until AI labelling has a source (FACTORY.md, Licences).
+- **An Instagram or TikTok post reports not connected with a link reason.** Set `MEDIA_LINK_SECRET` (32 characters or more), `APP_URL`
+  (https), and for TikTok the deployment's host in `TIKTOK_VERIFIED_MEDIA_DOMAINS`. Nothing was sent.
 - **A TikTok or YouTube post reports not connected.** The saved token does not grant the scope the publish needs (`video.publish` for
   TikTok, the upload scope for YouTube). Save a token that grants it on Connected accounts.
 
@@ -92,5 +113,13 @@ working from their level.
 This release adds migration `0070`. It gives `learned_patterns` a `surface` (organic or paid) and a `channel`, and fills the surface of each existing pattern from its metric. Every brand's patterns are rebuilt by the next recomputation (the telemetry sync, the organic bridge, or a Factory learn stage), which replaces the whole set. A pattern whose metric names neither surface stays `unassigned` until then, and it is not applied. Nothing else in the database changes.
 
 This release adds migration `0071`. It gives `factory_picks` a `surface` and a `grade_fingerprint`. Both are empty for every pick written before it, and the Factory screen says the prediction of such a pick is not known. No existing row is rewritten.
+
+This release adds migration `0073`. `factory_creatives` gains `slide_index` (-1 for a creative that is not a carousel slide) and its key becomes (variant, format, slide), so a carousel's slides are linked beside its carousel row. `factory_runs` gains `waiting_on`, which is empty for a run that is not waiting. No existing row is rewritten.
+
+This release adds migration `0072`. It makes `factory_costs.cents` nullable and adds the `tokens` basis, with `micros` (the priced cost in millionths of a dollar), the engine, model, prompt and completion tokens, the price table version and the gate record id. Existing rows keep their cents and have no micros. Nothing is rewritten. A token row with no price has a null cost, which the Factory screen shows as "tokens only, not priced".
+
+This release adds migration `0074`. It creates `question_calibration_reports`, the per-brand, per-question calibration reports for the
+grading questions (see [FACTORY.md](FACTORY.md#calibration-per-brand-and-question)). Nothing existing is rewritten. The table is not
+`calibration_reports`, which migration `0045` already uses. No report is calibrated until a brand has the minimum measured outcomes.
 
 The telemetry sync now writes one paid observation per measured row, keyed in `performance_observations.external_id` as `telemetry:<row id>`. A paid observation written before this release has no key. The next sync adopts it by its creative, day and values, so the first measurement is not counted twice. Nothing has to be run by hand.

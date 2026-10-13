@@ -11,12 +11,14 @@ import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
 import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
-import { approveFactoryStage, checkFactoryLearning, resumeFactoryRun, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import { approveFactoryStage, attestFactoryLicence, checkFactoryLearning, resumeFactoryRun, revokeFactoryLicence, saveFactoryRunDefaults, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import type { LicenceKind } from "@/lib/meridian/factory/rights-wording";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
 import { metricLine, receiptLine } from "@/components/factory/measurement-model";
 import { gateText, planText, predictionStatusText, predictionText, variantHeading } from "@/components/factory/grades-model";
 import { HeldReservationsPanel } from "@/components/held-reservations-panel";
 import { FACTORY_GRAPH } from "@/lib/meridian/factory/pipeline";
+import { usdOfMicros } from "@/lib/meridian/factory/spend-lines";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { RunBuilder } from "@/components/factory/run-builder";
 import { RunList, type RunListItem, type RunPickLine } from "@/components/factory/run-list";
@@ -27,6 +29,16 @@ export const Route = createFileRoute("/_app/brands/$brandId/factory")({ staticDa
 
 function dollars(cents: number): string {
   return `$${(Math.max(0, cents) / 100).toFixed(2)}`;
+}
+
+/**
+ * One cost row, in plain words. A provider row shows its cents. A token row shows its tokens and its priced cost, or says it is tokens
+ * only and not priced, because no price exists for its model. Its cost is unknown then, not zero.
+ */
+function costLine(row: FactoryBoard["costs"][number]): string {
+  if (row.basis !== "tokens") return `${row.stage}: ${dollars(row.cents ?? 0)} · ${row.seconds}s`;
+  const priced = row.micros === null ? "tokens only, not priced" : usdOfMicros(row.micros);
+  return `${row.stage} · ${row.engine} ${row.model || "model not reported"} · ${row.tokens ?? 0} tokens · ${priced}`;
 }
 
 type FactoryBoard = NonNullable<ReturnType<typeof useFactoryQuery>["data"]>;
@@ -40,12 +52,16 @@ function picksOf(board: FactoryBoard, runPicks: FactoryBoard["runs"][number]["pi
     const variants = pick.variants.map((variant) => ({
       heading: variantHeading(variant),
       gate: gateText(variant.gateResult),
+      // The rights gate's reason, when it blocks the variant: a missing licence is named, and a licence that is attested is not.
+      rightsLine: variant.rights.blockedBy,
       creatives: variant.creatives.map((created) => {
         const publishing = board.publishing.find((item) => item.creativeId === created.creativeId);
+        const licence = variant.rights.creatives.find((item) => item.creativeId === created.creativeId);
         return {
           label: `${created.format || publishing?.format || "creative"} creative`,
           receiptLines: (publishing?.receipts ?? []).map((receipt) => receiptLine(receipt)),
           measurementLines: (publishing?.measurements ?? []).map((row) => `${row.surface} ${row.platform}: ${metricLine(row.surface, row.metrics)}`),
+          licence: licence ? { creativeId: licence.creativeId, music: licence.music, footage: licence.footage } : undefined,
         };
       }),
     }));
@@ -72,6 +88,7 @@ function runListItems(board: FactoryBoard): RunListItem[] {
       niche: run.niche,
       error: run.error,
       settings: run.settings,
+      spend: run.spend,
       runSources: run.runSources,
       picks: picksOf(board, run.picks),
       receiptLines: creatives.flatMap((item) => item.receipts.map((receipt) => `${item.format} creative: ${receiptLine(receipt)}`)),
@@ -115,6 +132,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
       setBuilderKey((key) => key + 1);
     },
   });
+  const saveRunDefaults = useScopedMutation({
+    mutationKey: factoryKey("run-defaults"),
+    mutationFn: (settings: RunSettings) => saveFactoryRunDefaults({ data: { brandId, settings } }),
+    invalidate: () => [qk.factory(brandId)],
+    onSuccess: () => setNote("Saved as the brand's run defaults. A run already started keeps the settings it was started with."),
+  });
   const startAgain = useScopedMutation({
     mutationKey: factoryKey("start-again"),
     mutationFn: (runId: string) => resumeFactoryRun({ data: { brandId, runId } }),
@@ -146,7 +169,21 @@ function FactoryPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
     onSuccess: (result) => setNote(`Approved. ${result.requeued} steps are queued again from ${FACTORY_GRAPH.find((spec) => spec.type === result.stage)?.label ?? result.stage}.`),
   });
-  const failures = [startRun, startAgain, checkLearning, saveControls, killSwitch, approveStage].map((action) => action.error).filter((error): error is Error => Boolean(error));
+  const attestLicence = useScopedMutation({
+    mutationKey: factoryKey("attest-licence"),
+    mutationFn: (vars: { creativeId: string; kind: LicenceKind }) => attestFactoryLicence({ data: { brandId, creativeId: vars.creativeId, kind: vars.kind } }),
+    // An attested licence changes the variant's rights and gate result, so the run list changes.
+    invalidate: () => [qk.factory(brandId)],
+    onSuccess: (result) => setNote(result.created ? "Licence attested. The variant is gated again." : "That licence was already attested."),
+  });
+  const revokeLicence = useScopedMutation({
+    mutationKey: factoryKey("revoke-licence"),
+    mutationFn: (attestationId: string) => revokeFactoryLicence({ data: { brandId, attestationId } }),
+    invalidate: () => [qk.factory(brandId)],
+    onSuccess: () => setNote("Licence revoked. The variant is gated again."),
+  });
+  const failures = [startRun, saveRunDefaults, startAgain, checkLearning, saveControls, killSwitch, approveStage, attestLicence, revokeLicence]
+    .map((action) => action.error).filter((error): error is Error => Boolean(error));
 
   if (query.isError && !board) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!board) return <ScreenSkeleton label="Loading factory" shape="cards" />;
@@ -224,8 +261,11 @@ function FactoryPage({ brandId }: { brandId: string }) {
               channels={(channelsQuery.data ?? []).map((channel) => ({ id: channel.id, name: channel.name, connected: channel.connected }))}
               channelsState={channelsQuery.isPending ? "loading" : channelsQuery.isError ? "error" : "ready"}
               canEdit={canEdit}
+              canAdmin={canAdmin}
               busy={startRun.isPending}
+              savingDefaults={saveRunDefaults.isPending}
               onStart={({ niche, settings }) => { void startRun.mutateAsync({ niche, settings }).catch(() => undefined); }}
+              onSaveDefaults={(settings) => { void saveRunDefaults.mutateAsync(settings).catch(() => undefined); }}
               onDirtyChange={setBuilderDirty}
             />
             <h3 className="font-semibold">Runs</h3>
@@ -234,10 +274,18 @@ function FactoryPage({ brandId }: { brandId: string }) {
               actions={{
                 canEdit,
                 killSwitchOn: killOn,
-                busy: { approve: approveStage.isPending, startAgain: startAgain.isPending, checkLearning: checkLearning.isPending },
+                busy: {
+                  approve: approveStage.isPending,
+                  startAgain: startAgain.isPending,
+                  checkLearning: checkLearning.isPending,
+                  attest: attestLicence.isPending,
+                  revoke: revokeLicence.isPending,
+                },
                 onApprove: (runId, stage) => void approveStage.mutateAsync({ runId, stage }).catch(() => undefined),
                 onStartAgain: (runId) => void startAgain.mutateAsync(runId).catch(() => undefined),
                 onCheckLearning: (runId) => void checkLearning.mutateAsync(runId).catch(() => undefined),
+                onAttest: (creativeId, kind) => void attestLicence.mutateAsync({ creativeId, kind }).catch(() => undefined),
+                onRevoke: (attestationId) => void revokeLicence.mutateAsync(attestationId).catch(() => undefined),
               }}
             />
           </section>
@@ -320,7 +368,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
             {board.costs.length === 0 ? <p className="text-muted">No production costs are recorded yet.</p> : (
               <ul className="text-sm">
                 {board.costs.map((row, index) => (
-                  <li key={`${row.stage}-${index}`}>{row.stage}: {dollars(row.cents)} · {row.seconds}s</li>
+                  <li key={`${row.stage}-${index}`}>{costLine(row)}</li>
                 ))}
               </ul>
             )}

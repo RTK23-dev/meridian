@@ -83,6 +83,14 @@ export async function tickSqlJobs(sql: Sql): Promise<{ claimed: number; stopped:
   } catch {
     // Non-blocking in case production_jobs is not yet migrated or DB error
   }
+  try {
+    // The window sweep releases held budget whose submission window passed with no outcome (security/held-reservations.ts). It runs
+    // on every tick, across workspaces, and a failure is logged and retried on the next tick.
+    const { releaseExpiredHolds } = await import("../security/held-reservations.ts");
+    await releaseExpiredHolds(sql);
+  } catch (error) {
+    console.error("[jobs] The held-budget window sweep failed:", error instanceof Error ? error.message : "unknown error");
+  }
   const due = await sql<ExecutableJob>`
     select id, organization_id, brand_id, job_type, payload, attempts, max_attempts
     from jobs

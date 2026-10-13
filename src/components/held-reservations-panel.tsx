@@ -9,7 +9,7 @@ import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { resolveHeldBudgetReservation } from "@/lib/meridian/studio/actions";
 import type { HeldReservationResolution } from "@/lib/meridian/security/held-reservations";
 import { qk } from "@/lib/query/keys";
-import { useHeldReservationsQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
+import { useHeldReleasesQuery, useHeldReservationsQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
 
 /**
  * The resolution note is trimmed and must be 10 to 500 characters, as resolveHeldReservation reads it. The billed amount is
@@ -46,6 +46,8 @@ type HeldRow = { reservationId: string; amountUsd: number; provider: string; job
  */
 export function HeldReservationsPanel({ brandId }: { brandId: string }) {
   const held = useHeldReservationsQuery(brandId);
+  const released = useHeldReleasesQuery(brandId);
+  const releasedRows = released.data ?? [];
   const resolveKey = ["mutation", "held-reservation.resolve", brandId] as const;
   const resolving = usePendingVariables<ResolveVars>(resolveKey).map((vars) => vars.reservationId);
   const [notice, setNotice] = useState<string | null>(null);
@@ -71,13 +73,14 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
   if (held.isPending) return null;
   if (held.isError && !held.data) return <ErrorState message="Held budget reservations could not be loaded." onRetry={() => void held.refetch()} />;
   if (!held.data) return null;
-  if (held.data.length === 0 && !notice) return null;
+  if (held.data.length === 0 && releasedRows.length === 0 && !notice) return null;
 
   return (
     <Card>
       <h3 className="text-base font-semibold">Held budget reservations</h3>
       <p className="mt-1 text-sm text-muted">
-        The provider outcome is uncertain, so this budget stays reserved until an admin resolves it. Nothing settles on its own.
+        Budget held for a submission with no outcome from the provider is released automatically when its submission window expires. Until
+        then, an admin resolves each held reservation below.
       </p>
       {resolveAction.error ? <PlainErrorNotice error={resolveAction.error} /> : null}
       {notice ? <p role="status" className="mt-2 text-sm">{notice}</p> : null}
@@ -94,6 +97,19 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
           />
         ))}
       </ul>
+      {releasedRows.length === 0 ? null : (
+        <div className="mt-6 space-y-2">
+          <h4 className="text-sm font-semibold">Released automatically</h4>
+          <ul className="space-y-1 text-sm">
+            {releasedRows.map((row) => (
+              <li key={row.reservationId}>
+                <strong>${row.amountUsd.toFixed(2)}</strong> for {row.provider} released {new Date(row.releasedAt).toLocaleString()}.
+                Reason: {row.reason}. Recorded by {row.actor}.
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Card>
   );
 }
