@@ -356,11 +356,9 @@ from outcomes** on the Calibration screen. That button needs the admin role and 
 job's or the stage's result and does not fail the pattern update.
 
 **Gate use.** The decision gate reads the newest report for the brand and question version whenever it decides a question. A calibrated
-threshold replaces that question's approve threshold for the brand only when it is at least the registry's approve threshold, and at least
-the registry's review threshold. Calibration may only raise the bar. A calibrated value below the registry's threshold is not applied: the
-registry's threshold stands, and the vote stays uncalibrated. The owner's decision was stated against the review threshold. The build applies
-it against the approve threshold, because a value between the two review and approve thresholds would otherwise lower the approve bar, which
-the same decision rules out. This reading is pending the owner's confirmation. Where a calibrated threshold is applied, the vote records
+threshold replaces that question's approve threshold for the brand only when the calibrated value is at least the registry's approve
+threshold, so calibration can only raise the bar. A calibrated value below the registry's approve threshold is not applied: the registry's
+threshold stands, and the vote stays uncalibrated. Where a calibrated threshold is applied, the vote records
 `calibrationStatus: "calibrated"`, the report id, its sample size and the threshold. The question's policy version is
 `<question>@<version>+calibrated:<report id>`, so the decision record names the threshold it used. A question with no calibrated report, a
 report that is uncalibrated or uses another method version, a report whose value is not applied, or a read that fails, keeps its registry
