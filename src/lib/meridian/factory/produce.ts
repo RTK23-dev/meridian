@@ -8,7 +8,8 @@
  * completes asynchronously through the poller, and the Factory does not wait on it yet.
  *
  * A provider is called once per variant and format. A call that returns a failure releases its reservation. A call that does not
- * return at all keeps its reservation held for a person to release: an expired or unknown submission is never released by the system.
+ * return at all keeps its reservation held until its submission window expires with no outcome. The window sweep then releases it
+ * (security/held-reservations.ts, releaseExpiredHolds). A submission the provider answered, or that produced a creative, is never released.
  * A provider that reports a cost writes one metered factory_costs row. A provider that reports none writes none.
  */
 import { randomUUID } from "node:crypto";
@@ -320,7 +321,7 @@ async function produceOne(
     await markJob(sql, scope, jobId, "SUBMISSION_UNKNOWN", "PROVIDER_CALL_AMBIGUOUS", message);
     return {
       kind: "stop",
-      reason: `The ${chosen.id} call did not return, so its outcome is unknown. The ${amount} reserved for it is held until a person releases it. ${message}`,
+      reason: `The ${chosen.id} call did not return, so its outcome is unknown. The ${amount} reserved for it is held until its submission window expires with no outcome, when it is released automatically. ${message}`,
     };
   }
   if (outcome.status === "NOT_CONNECTED") {

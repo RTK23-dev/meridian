@@ -182,6 +182,20 @@ export const listHeldBudgetReservations = createServerFn({ method: "POST" })
     return api.listHeldReservations(await getSql(), context.userId, data.brandId);
   });
 
+/** The reservations the window sweep released in this brand, with the reason and the actor it recorded. Admin only. */
+export const listWindowReleasedBudget = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const brandId = clip((input as { brandId?: unknown })?.brandId);
+    if (!brandId) throw new Error("Choose a brand.");
+    return { brandId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { getSql } = await import("../../db.ts");
+    const api = await import("../security/held-reservations.ts");
+    return api.listWindowReleases(await getSql(), context.userId, data.brandId);
+  });
+
 export const resolveHeldBudgetReservation = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const raw = (input ?? {}) as Record<string, unknown>;

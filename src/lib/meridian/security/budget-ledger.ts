@@ -412,6 +412,8 @@ export class BudgetLedgerService {
     params: {
       reservationId: string;
       reason: string;
+      /** Who released it: "system" for the window sweep, otherwise the caller's own note. Recorded on the ledger entry when given. */
+      actor?: string;
     }
   ): Promise<boolean> {
     const released = await sql<{ id: string }>`
@@ -435,7 +437,7 @@ export class BudgetLedgerService {
           delta_spent_micros, delta_reserved_micros, balance_spent_micros, balance_reserved_micros, metadata
         )
         select ${randomUUID()}, c.organization_id, c.brand_id, c.account_id, c.id, 'RESERVATION_RELEASED', 0,
-          -c.amount_micros, a.spent_micros, a.reserved_micros, ${JSON.stringify({ reason: params.reason })}::jsonb
+          -c.amount_micros, a.spent_micros, a.reserved_micros, ${JSON.stringify({ reason: params.reason, ...(params.actor ? { actor: params.actor } : {}) })}::jsonb
         from claimed c join updated_account a on a.id = c.account_id returning id
       )
       select c.id from claimed c join inserted_ledger l on true

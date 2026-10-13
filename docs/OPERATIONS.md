@@ -56,6 +56,11 @@ review, and post it by hand.
 A workspace has a budget ledger. Generation reserves its estimated cost before the provider call, and releases the reservation when the
 call fails. The Usage screen shows what has been spent. A budget that is exhausted stops new generation; it does not stop reading.
 
+A reservation whose provider call did not return is held. Owner decision (NORTH_STAR section 2, decision D): when its submission window
+(30 minutes from the reservation) expires with no outcome from the provider, the worker releases it on its next tick. The release is recorded
+with the reason `window_expired` and the actor `system`, and the Held budget panel lists it under "Released automatically". A submission
+the provider answered, or that produced a creative, is never released this way. An admin resolves those on the panel.
+
 ## Sign-in and the first admin
 
 Sign-in uses better-auth with `BETTER_AUTH_URL` and `BETTER_AUTH_SECRET`. The first account creates a workspace and is its owner.

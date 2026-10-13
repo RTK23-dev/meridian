@@ -32,6 +32,7 @@ export const qk = {
   telemetry: (brandId: string, platform?: string) => platform ? ["telemetry", brandId, platform] as const : ["telemetry", brandId] as const,
   pipelineConfig: (brandId: string) => ["pipeline-config", brandId] as const,
   heldReservations: (brandId: string) => ["held-reservations", brandId] as const,
+  heldReleases: (brandId: string) => ["held-releases", brandId] as const,
   alerts: (organizationId: string) => ["alerts", organizationId] as const,
   providerSettings: (organizationId: string) => ["provider-settings", organizationId] as const,
   decisionEngines: (organizationId: string) => ["decision-engines", organizationId] as const,
