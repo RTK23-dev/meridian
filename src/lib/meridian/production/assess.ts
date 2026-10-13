@@ -1,6 +1,6 @@
 import { guardianTextEvidence, rejectionCode, type GuardianTextInput } from "../guardian/text.ts";
 import { copyClaimRejections, type DeterministicRejection } from "../decisions/deterministic.ts";
-import { runEngineGate, type GateEvidenceInput, type GateResult } from "../decisions/gate.ts";
+import type { GateEvidenceInput, GateResult } from "../decisions/gate.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { EngineSelection } from "../decisions/selection.ts";
 import type { Sql } from "../learning/store.ts";
@@ -141,6 +141,9 @@ async function judgeClaim(input: JudgeCopyInput, evidence: TextQaInput): Promise
     });
   }
 
+  // Loaded when a claim is judged, not at import. The gate reaches the engine clients, which use Node's crypto, and this module is
+  // also loaded by the browser through the Studio actions. A top-level import would run that code in the page.
+  const { runEngineGate } = await import("../decisions/gate.ts");
   const spec = CREATIVE_QUESTIONS[COPY_CLAIM_QUESTION_ID];
   const gate = await runEngineGate({
     sql: input.sql,

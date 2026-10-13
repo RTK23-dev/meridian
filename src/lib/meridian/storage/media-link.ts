@@ -8,6 +8,7 @@
  * clock is passed in too, so the tests are exact.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { hostIsVerified } from "./media-host.ts";
 
 /** A signed link is valid for this long after it is signed: 15 minutes. */
 export const MEDIA_LINK_TTL_SECONDS = 15 * 60;
@@ -91,18 +92,7 @@ export function tiktokVerifiedDomains(env: NodeJS.ProcessEnv = process.env): str
     .filter((item) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(item));
 }
 
-/** True when the URL's host is a verified domain or a subdomain of one. TikTok covers subdomains of a verified domain. */
-export function hostIsVerified(url: string, verifiedDomains: readonly string[]): boolean {
-  let host: string;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return false;
-    host = parsed.hostname.toLowerCase();
-  } catch {
-    return false;
-  }
-  return verifiedDomains.some((domain) => host === domain || host.endsWith(`.${domain}`));
-}
+export { hostIsVerified };
 
 /** The state of the signed-link delivery for one platform. Not ready carries the reason, which never includes the secret. */
 export type MediaDelivery =

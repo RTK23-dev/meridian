@@ -22,7 +22,7 @@
 import { createHash } from "node:crypto";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
-import { hostIsVerified } from "../storage/media-link.ts";
+import { hostIsVerified } from "../storage/media-host.ts";
 import { TIKTOK_POSTING_SCOPE } from "./connection.ts";
 import { classifyFailure, failure, parseJsonBody, unconfirmed } from "./graph.ts";
 import type {
