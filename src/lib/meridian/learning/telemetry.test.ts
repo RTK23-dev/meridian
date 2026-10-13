@@ -262,13 +262,15 @@ test("Telemetry Engine: syncs unified telemetry into JEV profile benchmarks dyna
       organization_id text not null,
       brand_id text not null,
       creative_id text not null,
-      impressions integer not null default 0,
-      clicks integer not null default 0,
-      conversions integer not null default 0,
-      spend_cents integer not null default 0,
+      impressions integer,
+      clicks integer,
+      conversions integer,
+      spend_cents integer,
       revenue_cents integer,
+      reach integer,
       observed_on text not null,
-      source text not null default 'manual'
+      source text not null default 'manual',
+      created_by text not null
     );
 
     create table if not exists jev_account_profiles (
@@ -341,12 +343,12 @@ test("Telemetry Engine: syncs unified telemetry into JEV profile benchmarks dyna
   const result = await syncTelemetryToLearning(sql, orgId, brandId);
   assert.equal(result.syncedRecords, 2);
 
-  // Check that performance_observations were populated
+  // Organic records carry impressions here, but an organic row is never a paid observation, so paid learning reads none of them
   const observations = await sql`
     select * from performance_observations
     where organization_id = ${orgId} and brand_id = ${brandId}
   `;
-  assert.equal(observations.length, 2);
+  assert.equal(observations.length, 0);
 
   // Check that jev_account_profiles was updated with the top hook
   const profiles = await sql`

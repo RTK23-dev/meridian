@@ -2,11 +2,13 @@ import type { DistributionChannel, PlatformId, OrganicPublishRequest, OrganicPub
 import { InstagramReelsChannel } from "./instagram.ts";
 import { FacebookPagesChannel } from "./facebook.ts";
 import { YouTubeShortsChannel } from "./youtube.ts";
+import { TikTokOrganicChannel } from "./tiktok.ts";
 
 const builtInChannels = new Map<string, DistributionChannel>([
   ["instagram-reels", new InstagramReelsChannel()],
   ["facebook-pages", new FacebookPagesChannel()],
   ["youtube-shorts", new YouTubeShortsChannel()],
+  ["tiktok-organic", new TikTokOrganicChannel()],
 ]);
 
 export function getDistributionChannel(channelId: string): DistributionChannel | undefined {

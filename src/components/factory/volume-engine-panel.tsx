@@ -44,7 +44,7 @@ export function VolumeEnginePanel({
   const durationKnown = (DURATION_OPTIONS as readonly number[]).includes(params.durationSeconds);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <ChoiceGroup<number>
         legend="Videos per concept"
         hint="How many variants each winning concept should produce."
@@ -139,7 +139,7 @@ export function VolumeEnginePanel({
                       disabled={!row.selectable}
                       aria-describedby={detailId}
                       onChange={() => onChange({ provider: row.id })}
-                      className="size-5 accent-accent"
+                      className="size-5 accent-fg"
                     />
                     {row.label}
                   </label>

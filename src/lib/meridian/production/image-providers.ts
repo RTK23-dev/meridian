@@ -37,6 +37,11 @@ export type ImageGenerationOutcome =
       bytes: Uint8Array;
       width: number;
       height: number;
+      /**
+       * The cost the provider reported for this call, in cents. Absent or null when the provider reported none. A cost is recorded
+       * only from this value, so a missing one is never turned into a figure.
+       */
+      costCents?: number | null;
     }
   /** No credentials: the provider was never called, so nothing was submitted and nothing can be billed. */
   | { status: "NOT_CONNECTED"; provider: string; error: string }
@@ -164,7 +169,9 @@ export class TestImageProvider implements ProductionImageProvider {
       model: input.model,
       aspectRatio: input.aspectRatio,
     });
-    return toOutcome(result);
+    // The double declares a zero price, and a declaration is not a cost the call reported. It reports no cost.
+    const outcome = toOutcome(result);
+    return outcome.status === "ready" ? { ...outcome, costCents: null } : outcome;
   }
 }
 
@@ -181,6 +188,7 @@ function toOutcome(result: GeneratedImage): ImageGenerationOutcome {
       bytes: result.bytes,
       width: result.width,
       height: result.height,
+      costCents: result.costCents,
     };
   }
   if (result.status === "NOT_CONNECTED") return { status: "NOT_CONNECTED", provider: result.provider, error: result.error };

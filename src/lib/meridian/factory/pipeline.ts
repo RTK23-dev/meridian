@@ -18,6 +18,14 @@ export const FACTORY_STAGES = [
 
 export type FactoryStage = (typeof FACTORY_STAGES)[number];
 
+/**
+ * The only way a run finishes is the learn stage doing its real work (NORTH_STAR section 5, step 10). Until that stage is built,
+ * it returns this reason, the run stays `running`, and the reason is kept on the run row. No other stage marks a run succeeded.
+ */
+
+/** The reason a run stays running at learn: none of its own creatives has a measured outcome stored yet. Read by the Factory screen too. */
+export const LEARN_WAITING = "Learning waits for a measured outcome from this run's creatives. None is stored yet, so the run stays running.";
+
 export type FactoryStageSpec = {
   type: FactoryStage;
   label: string;
@@ -63,21 +71,23 @@ export function factoryStageAllowed(level: number, stage: FactoryStage): boolean
   return level >= minimumLevel(stage);
 }
 
+/**
+ * The job graph for one run. Every mode gets every stage: the run's automation decides where it waits for a person, and
+ * stageDecision enforces that at each stage (NORTH_STAR §4 and §5 step 7). A run without a level-trimmed graph can still reach
+ * launch once a person has approved it.
+ */
 export function factoryRunJobs(input: {
   organizationId: string;
   brandId: string;
   runId: string;
   niche: string;
-  level?: 0 | 1 | 2 | 3;
 }): FactoryJobDraft[] {
   const org = input.organizationId.trim();
   const brand = input.brandId.trim();
   const run = input.runId.trim();
   if (!org || !brand || !run) throw new Error("A factory run needs an organization, brand, and run id.");
   const niche = input.niche.trim().slice(0, 80);
-  const level = input.level ?? 3;
-  const stages = FACTORY_GRAPH.filter((stage) => factoryStageAllowed(level, stage.type));
-  return stages.map((stage, index) => ({
+  return FACTORY_GRAPH.map((stage, index) => ({
     jobType: stage.type,
     idempotencyKey: `factory:${brand}:${run}:${stage.type}`,
     payload: {

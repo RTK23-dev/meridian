@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button, ErrorState, Field, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
@@ -19,7 +20,7 @@ import {
 
 const STATUS_PRESENTATION: Record<SetupStatus, { label: string; className: string }> = {
   usable: { label: "Usable", className: "bg-success-soft text-success" },
-  deployment_shared_default: { label: "Deployment shared default", className: "bg-accent-soft text-accent" },
+  deployment_shared_default: { label: "Deployment shared default", className: "bg-info-soft text-info" },
   unusable: { label: "Unusable", className: "bg-danger-soft text-danger" },
   not_configured: { label: "Not configured", className: "bg-surface-2 text-fg-muted" },
 };
@@ -58,9 +59,12 @@ export function SetupPanel({ organizationId, canAdmin }: SetupPanelProps) {
   const rows = setupRows({ summaries, engines: engineStatus });
 
   return (
-    <section aria-labelledby="setup-title" className="space-y-6 rounded-lg border border-border bg-surface p-5">
+    <section aria-labelledby="setup-title" className="space-y-6 panel">
       <div className="space-y-2">
-        <h2 id="setup-title" className="text-section font-semibold text-fg">Setup</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="setup-title" className="text-section font-semibold text-fg">Setup</h2>
+          <Button asChild variant="secondary"><Link to="/setup">Open the guided setup</Link></Button>
+        </div>
         <p className="text-sm text-fg-muted">
           Each row is the server&apos;s own state for that provider, with the reason. A key is saved here, encrypted, and is never
           shown again. Saving a key needs TOKEN_ENCRYPTION_KEY on the server; <code className="font-mono text-xs">npm run setup</code>{" "}
@@ -74,7 +78,7 @@ export function SetupPanel({ organizationId, canAdmin }: SetupPanelProps) {
         <GroupBlock key={group.id} group={group.id} label={group.label} hint={group.hint} rows={rowsIn(rows, group.id)} organizationId={organizationId} canAdmin={canAdmin} />
       ))}
 
-      <details className="rounded border border-border p-4">
+      <details className="border-t border-border pt-4">
         <summary className="cursor-pointer text-sm font-semibold text-fg">
           Other source connectors ({rowsIn(rows, "other_sources").length})
         </summary>
@@ -124,7 +128,7 @@ function GroupBlock({
 function SetupRowItem({ row, organizationId, canAdmin }: { row: SetupRow; organizationId: string; canAdmin: boolean }) {
   const presentation = STATUS_PRESENTATION[row.status];
   return (
-    <li className="space-y-3 rounded border border-border p-4" data-row={row.id}>
+    <li className="space-y-3 border-t border-border py-4 first:border-t-0 first:pt-0" data-row={row.id}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1">
           <p className="font-semibold text-fg">{row.label}</p>
@@ -172,7 +176,7 @@ function RowAction({ row, organizationId, canAdmin }: { row: SetupRow; organizat
  * The key form for one provider. The key is sent once and cleared. The field is never filled from the server, because a key
  * is never sent back. A save without a key is not offered, so the stored key is never replaced by an empty one.
  */
-function KeyForm({ row, organizationId, canAdmin, category }: { row: SetupRow; organizationId: string; canAdmin: boolean; category: string }) {
+export function KeyForm({ row, organizationId, canAdmin, category }: { row: Pick<SetupRow, "label" | "fingerprint" | "removable">; organizationId: string; canAdmin: boolean; category: string }) {
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -216,7 +220,7 @@ function KeyForm({ row, organizationId, canAdmin, category }: { row: SetupRow; o
           void save.mutateAsync(trimmed).catch(() => undefined);
         }}
       >
-        <div className="min-w-[16rem] flex-1">
+        <div className="min-w-0 flex-1 basis-full sm:min-w-[16rem] sm:basis-auto">
           <Field label={`${row.label} API key`} hint="Leave blank to keep the saved key. Only an admin can save a key.">
             <Input
               type="password"
@@ -229,7 +233,7 @@ function KeyForm({ row, organizationId, canAdmin, category }: { row: SetupRow; o
             />
           </Field>
         </div>
-        <Button type="submit" disabled={!trimmed || busy}>
+        <Button type="submit" variant="secondary" disabled={!trimmed || busy}>
           {save.isPending ? "Saving..." : row.fingerprint ? "Replace key" : "Save key"}
         </Button>
         {row.removable ? (

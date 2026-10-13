@@ -44,7 +44,7 @@ export function DiscoveryRunList({ runs }: { runs: readonly DiscoveryRunSummary[
   return (
     <ul className="space-y-3">
       {runs.map((run) => (
-        <li key={run.id} className="rounded-md border border-border p-4">
+        <li key={run.id} className="border-t border-border py-4 first:border-t-0 first:pt-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={run.status} label="Run status" />
             <span className="text-sm font-semibold">{SCOPE_LABEL[run.scope] ?? run.scope}</span>
@@ -57,7 +57,7 @@ export function DiscoveryRunList({ runs }: { runs: readonly DiscoveryRunSummary[
               {run.sources.map((source) => {
                 const badge = STATE_BADGE[source.status];
                 return (
-                  <li key={`${source.adapterId}:${source.seed}`} className="rounded border border-border p-2 text-sm">
+                  <li key={`${source.adapterId}:${source.seed}`} className="border-t border-border py-2 text-sm first:border-t-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold">{source.adapterId}</span>
                       <span className="text-fg-muted [overflow-wrap:anywhere]">{source.seed}</span>

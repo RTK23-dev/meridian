@@ -173,20 +173,30 @@ test("a provider rejection carries the provider's message, redacted, and is REJE
 
 // ---- Instagram Reels container flow ----
 
-const reelUrl = { publicVideoUrl: "https://cdn.example.test/reel.mp4" };
+// A signed, short-lived link to an approved creative (storage/media-link.ts). The platform fetches it, so it is the only video reference.
+const signedReel = `https://media.example.test/api/media-links/cr-1?expires=1900000000&sig=${"a".repeat(64)}`;
 
 test("Instagram without a connection sends nothing", async () => {
   const { transport, requests } = scripted([]);
-  const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep }).publish(request({ metadata: reelUrl }));
+  const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep }).publish(request({ mediaUrl: signedReel }));
   assert.equal(receipt.code, "NOT_CONNECTED");
   assert.equal(requests.length, 0);
 });
 
-test("Instagram without a public video URL reports NOT_CONNECTED and sends nothing", async () => {
+test("Instagram without a signed media link reports NOT_CONNECTED and sends nothing", async () => {
   const { transport, requests } = scripted([]);
   const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep }).publish(request({ connection: connected("instagram", "ig-1") }));
   assert.equal(receipt.code, "NOT_CONNECTED");
-  assert.match(receipt.error ?? "", /public https URL/);
+  assert.match(receipt.error ?? "", /signed media link/);
+  assert.equal(requests.length, 0);
+});
+
+test("Instagram refuses a media link that is not https, and sends nothing", async () => {
+  const { transport, requests } = scripted([]);
+  const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep }).publish(
+    request({ connection: connected("instagram", "ig-1"), mediaUrl: "http://media.example.test/x?expires=1&sig=b" }),
+  );
+  assert.equal(receipt.code, "NOT_CONNECTED");
   assert.equal(requests.length, 0);
 });
 
@@ -198,7 +208,7 @@ test("Instagram creates a Reel container, waits until it is finished, then publi
     reply(200, { id: "media-5" }),
   ]);
   const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep }).publish(
-    request({ connection: connected("instagram", "ig-1"), metadata: reelUrl }),
+    request({ connection: connected("instagram", "ig-1"), mediaUrl: signedReel }),
   );
   assert.equal(receipt.status, "published");
   assert.equal(receipt.externalId, "media-5");
@@ -207,7 +217,7 @@ test("Instagram creates a Reel container, waits until it is finished, then publi
   assert.equal(requests[0]!.url, "https://graph.facebook.com/v21.0/ig-1/media");
   const containerBody = new URLSearchParams(String(requests[0]!.body));
   assert.equal(containerBody.get("media_type"), "REELS");
-  assert.equal(containerBody.get("video_url"), reelUrl.publicVideoUrl);
+  assert.equal(containerBody.get("video_url"), signedReel, "the container fetches the signed link, not the bytes");
   assert.equal(requests[3]!.url, "https://graph.facebook.com/v21.0/ig-1/media_publish");
   assert.equal(new URLSearchParams(String(requests[3]!.body)).get("creation_id"), "container-1");
   assert.ok(requests.every((sent) => sent.headers.Authorization === "Bearer token-123"));
@@ -216,7 +226,7 @@ test("Instagram creates a Reel container, waits until it is finished, then publi
 test("Instagram stops with an error when the container fails processing, and does not publish", async () => {
   const { transport, requests } = scripted([reply(200, { id: "container-2" }), reply(200, { status_code: "ERROR" })]);
   const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep }).publish(
-    request({ connection: connected("instagram", "ig-1"), metadata: reelUrl }),
+    request({ connection: connected("instagram", "ig-1"), mediaUrl: signedReel }),
   );
   assert.equal(receipt.code, "REJECTED");
   assert.equal(requests.length, 2);
@@ -229,7 +239,7 @@ test("Instagram that never finishes processing is retryable and is not published
     reply(200, { status_code: "IN_PROGRESS" }),
   ]);
   const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep, polls: 2 }).publish(
-    request({ connection: connected("instagram", "ig-1"), metadata: reelUrl }),
+    request({ connection: connected("instagram", "ig-1"), mediaUrl: signedReel }),
   );
   assert.equal(receipt.code, "RETRYABLE");
   assert.equal(requests.length, 3);
@@ -238,7 +248,7 @@ test("Instagram that never finishes processing is retryable and is not published
 test("Instagram maps a 401 on the container step to an auth failure", async () => {
   const { transport, requests } = scripted([reply(401, { error: { message: "Invalid token", code: 190 } })]);
   const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep }).publish(
-    request({ connection: connected("instagram", "ig-1"), metadata: reelUrl }),
+    request({ connection: connected("instagram", "ig-1"), mediaUrl: signedReel }),
   );
   assert.equal(receipt.code, "AUTH_FAILED");
   assert.equal(requests.length, 1);
@@ -251,7 +261,7 @@ test("Instagram does not report a publish after a 500 on the publish step", asyn
     reply(500, { error: { message: "internal" } }),
   ]);
   const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep }).publish(
-    request({ connection: connected("instagram", "ig-1"), metadata: reelUrl }),
+    request({ connection: connected("instagram", "ig-1"), mediaUrl: signedReel }),
   );
   assert.equal(receipt.status, "failed");
   assert.equal(receipt.code, "UNCONFIRMED");
@@ -261,7 +271,7 @@ test("Instagram does not report a publish after a 500 on the publish step", asyn
 test("Instagram refuses a schedule, since this channel does not schedule Reels", async () => {
   const { transport, requests } = scripted([]);
   const receipt = await new InstagramReelsChannel({ transport, sleep: noSleep }).publish(
-    request({ connection: connected("instagram", "ig-1"), metadata: reelUrl, scheduledFor: new Date(Date.now() + 3_600_000).toISOString() }),
+    request({ connection: connected("instagram", "ig-1"), mediaUrl: signedReel, scheduledFor: new Date(Date.now() + 3_600_000).toISOString() }),
   );
   assert.equal(receipt.code, "REJECTED");
   assert.equal(requests.length, 0);

@@ -1,0 +1,82 @@
+# The whole stack: web, worker, scheduler and PostgreSQL 16.
+#
+#   cp .env.example .env     (or npm run setup, which also fills the two secrets)
+#   docker compose up --build
+#   then open http://127.0.0.1:8080
+#
+# Every Meridian service reads .env (env_file). DATABASE_URL is set below for each of them, so they use the postgres service here
+# whatever .env says. The password is a local default. Change it, and the DATABASE_URL lines, before any shared deployment.
+#
+# The web service applies the migrations when it starts. The worker and the scheduler start once the web service answers.
+name: meridian
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: meridian
+      POSTGRES_DB: meridian
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian -d meridian"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  web:
+    build: .
+    image: meridian:local
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://meridian:meridian@postgres:5432/meridian?sslmode=disable
+    command:
+      ["sh", "-c", "node scripts/migrate.mjs && npm run preview -- --host 0.0.0.0 --port 8080"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    build: .
+    image: meridian:local
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://meridian:meridian@postgres:5432/meridian?sslmode=disable
+    command: ["node", "--experimental-strip-types", "scripts/worker-entry.ts"]
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build: .
+    image: meridian:local
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://meridian:meridian@postgres:5432/meridian?sslmode=disable
+    command: ["node", "--experimental-strip-types", "scripts/scheduler-entry.ts"]
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

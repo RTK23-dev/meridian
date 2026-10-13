@@ -14,46 +14,57 @@ export function brandIdFromPath(pathname: string): string | undefined {
 }
 
 /**
- * Sidebar groups in workflow order. Brand groups exist only on brand pages. A badge appears only for a real count
- * above zero: a null count (not loaded yet, or failed) and a zero count both show no badge.
+ * Screens that were in the sidebar and now sit under Settings. The Settings screen lists them, so each one is still one
+ * step from Settings, the command palette finds them, and no route changes. Labels are the accessible names, so they stay.
+ */
+export const SETTINGS_SCREEN_LINKS: NavItem[] = [
+  { id: "usage", label: "Usage & cost", to: "/usage" },
+  { id: "alerts", label: "Alerts center", to: "/alerts" },
+  { id: "audit", label: "Audit log", to: "/audit" },
+  { id: "webhooks", label: "Webhook events", to: "/webhooks" },
+  { id: "exports", label: "Exports", to: "/exports" },
+  { id: "notifications", label: "Notification preferences", to: "/notifications" },
+];
+
+/**
+ * Sidebar groups: Brand, Research, Create, Review, Results, then Settings. Brand groups exist only on brand pages, so a
+ * workspace page shows the workspace overview and Settings. A badge appears only for a real count above zero: a null
+ * count (not loaded yet, or failed) and a zero count both show no badge.
  */
 export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; reviewCount: number | null }): NavGroup[] {
-  const workspace: NavGroup = {
-    id: "workspace",
-    label: "Workspace",
+  const settings: NavGroup = {
+    id: "settings",
+    label: "Settings",
     items: [
-      { id: "jobs", label: "Jobs & health", to: "/jobs" },
-      { id: "usage", label: "Usage & cost", to: "/usage" },
-      { id: "alerts", label: "Alerts center", to: "/alerts" },
+      { id: "setup", label: "Setup guide", to: "/setup" },
       { id: "integrations", label: "Integrations", to: "/integrations" },
+      { id: "jobs", label: "Jobs & health", to: "/jobs" },
       { id: "settings", label: "Settings", to: "/settings" },
-      { id: "audit", label: "Audit log", to: "/audit" },
-      { id: "exports", label: "Exports", to: "/exports" },
-      { id: "webhooks", label: "Webhook events", to: "/webhooks" },
-      { id: "notifications", label: "Notification preferences", to: "/notifications" },
     ],
   };
   if (!brandId) {
-    return [{ id: "overview", label: "Overview", items: [{ id: "overview", label: "Overview", to: "/" }] }, workspace];
+    return [{ id: "overview", label: "Overview", items: [{ id: "overview", label: "Workspace overview", to: "/" }] }, settings];
   }
   const base = `/brands/${brandId}`;
   const openReviews = reviewCount !== null && reviewCount > 0 ? reviewCount : undefined;
   return [
-    { id: "overview", label: "Overview", items: [{ id: "brand-overview", label: "Overview", to: base }] },
+    {
+      id: "brand",
+      label: "Brand",
+      items: [
+        { id: "brand-overview", label: "Overview", to: base },
+        { id: "brain", label: "Brand brain", to: `${base}/brain` },
+        { id: "products", label: "Products", to: `${base}/products` },
+        // Brand-scoped, so it sits here rather than in the workspace-level account menu.
+        { id: "accounts", label: "Connected accounts", to: `${base}/accounts` },
+      ],
+    },
     {
       id: "research",
       label: "Research",
       items: [
         { id: "market", label: "Market", to: `${base}/market` },
         { id: "intelligence", label: "Intelligence", to: `${base}/intelligence` },
-      ],
-    },
-    {
-      id: "decide",
-      label: "Decide",
-      items: [
-        { id: "opportunities", label: "Opportunities", to: `${base}/opportunities` },
-        { id: "reviews", label: "Reviews", to: `${base}/reviews`, badge: openReviews },
       ],
     },
     {
@@ -66,25 +77,59 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
       ],
     },
     {
-      id: "learn",
-      label: "Learn",
+      id: "review",
+      label: "Review",
+      items: [
+        { id: "opportunities", label: "Opportunities", to: `${base}/opportunities` },
+        { id: "reviews", label: "Reviews", to: `${base}/reviews`, badge: openReviews },
+      ],
+    },
+    {
+      id: "results",
+      label: "Results",
       items: [
         { id: "learning", label: "Learning", to: `${base}/learning` },
         { id: "calibration", label: "Calibration", to: `${base}/calibration` },
       ],
     },
-    {
-      id: "brand",
-      label: "Brand",
-      items: [
-        { id: "brain", label: "Brand brain", to: `${base}/brain` },
-        { id: "products", label: "Products", to: `${base}/products` },
-        // Brand-scoped, so it sits here rather than in the workspace-level account menu.
-        { id: "accounts", label: "Connected accounts", to: `${base}/accounts` },
-      ],
-    },
-    workspace,
+    settings,
   ];
+}
+
+/**
+ * The screen a person goes to next, keyed by the current sidebar item id. The loop runs Opportunities, Studio, Reviews,
+ * Library, Learning, Calibration, then back to Opportunities. The brand overview is not listed: its own next-action card
+ * names the next step from stored data, so a second link would contradict it.
+ */
+const BRAND_NEXT: Record<string, string> = {
+  brain: "products",
+  products: "accounts",
+  accounts: "market",
+  market: "intelligence",
+  intelligence: "opportunities",
+  opportunities: "studio",
+  studio: "reviews",
+  factory: "reviews",
+  reviews: "library",
+  library: "learning",
+  learning: "calibration",
+  calibration: "opportunities",
+};
+
+const WORKSPACE_NEXT: Record<string, string> = { setup: "overview" };
+
+/** The next screen after the current one, or null when the current page is not in the sidebar or has no next step. */
+export function nextStep({ pathname, brandId }: { pathname: string; brandId?: string }): NavItem | null {
+  const items = sidebarGroups({ brandId, reviewCount: null }).flatMap((group) => group.items);
+  const current = items.find((item) => isCurrentPath(pathname, item.to));
+  if (!current) return null;
+  const nextId = brandId ? BRAND_NEXT[current.id] : WORKSPACE_NEXT[current.id];
+  return (nextId ? items.find((item) => item.id === nextId) : undefined) ?? null;
+}
+
+/** Every screen the command palette can open: the sidebar screens for this page, then the screens listed under Settings. */
+export function paletteScreens(brandId?: string): NavItem[] {
+  return [...sidebarGroups({ brandId, reviewCount: null }).flatMap((group) => group.items), ...SETTINGS_SCREEN_LINKS];
 }
 
 /** The four bottom-bar tabs. The More tab is added by the shell and opens the full navigation sheet. */
@@ -92,8 +137,8 @@ export function bottomTabs(brandId?: string): NavItem[] {
   if (!brandId) {
     return [
       { id: "overview", label: "Overview", to: "/" },
+      { id: "setup", label: "Setup", to: "/setup" },
       { id: "alerts", label: "Alerts", to: "/alerts" },
-      { id: "integrations", label: "Integrations", to: "/integrations" },
       { id: "settings", label: "Settings", to: "/settings" },
     ];
   }

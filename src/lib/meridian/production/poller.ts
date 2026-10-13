@@ -275,7 +275,8 @@ async function gatherSubmissionEvidence(
  * - CONFIRMED: the job returns to the queue with its provider job id.
  * - FAILED: the job is failed with the provider's error. Its reservation stays held.
  * - EXPIRED or REVIEW: the job is marked for a person, and the pass never claims it again.
- * This pass never touches a budget reservation. Whatever the outcome, the spend is released or settled only by an operator.
+ * This pass never touches a budget reservation. The window sweep (security/held-reservations.ts) is the only automatic release, and it
+ * releases only when the provider's own lookup confirms it holds no job for the submission. Otherwise an operator settles the spend.
  */
 async function reconcileSubmissions(
   sql: Sql,

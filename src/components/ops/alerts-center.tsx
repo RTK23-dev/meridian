@@ -2,7 +2,7 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { AlertCircle, CheckCheck, Clock3, Info, TriangleAlert } from "lucide-react";
-import { Badge, Button, Card, DisabledReason, Field, PageHeader, ScreenSkeleton, SelectInput, StatusBadge, Input } from "@/components/ui";
+import { Badge, Button, Card, DisabledReason, EmptyState, Field, PageHeader, ScreenSkeleton, SelectInput, StatusBadge, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -90,7 +90,7 @@ export function AlertsCenter() {
   });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <UnsavedChangesGuard dirty={targetForm.formState.isDirty} />
       <PageHeader
         title="Alerts center"
@@ -115,9 +115,9 @@ export function AlertsCenter() {
         </div>
 
         {data.alerts.length === 0 ? (
-          <Card><p className="text-sm text-fg-muted">No alerts are stored. Check systems to record any condition that is true now.</p></Card>
+          <EmptyState title="No alerts are stored yet" reason="Check systems to record any condition that is true now." />
         ) : visible.length === 0 ? (
-          <Card><p className="text-sm text-fg-muted">No {filter === "open" ? "open" : "acknowledged"} alerts. Change the filter to see the others.</p></Card>
+          <EmptyState title={filter === "open" ? "No open alerts" : "No acknowledged alerts"} reason="Change the filter to see the others." />
         ) : (
           <ul className="space-y-3">
             {visible.map((alert) => (
@@ -161,7 +161,7 @@ function AlertItem({ alert, busy, onAcknowledge }: { alert: AlertRow; busy: bool
   const severity = severityCopy(alert.severity);
   const SeverityIcon = severity.icon === "critical" ? AlertCircle : severity.icon === "warning" ? TriangleAlert : Info;
   return (
-    <li className="space-y-3 rounded-lg border border-border bg-surface p-4">
+    <li className="space-y-3 panel">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={severity.tone}><SeverityIcon aria-hidden="true" className="size-3.5" /><span>{severity.label}</span></Badge>
         <span className="break-all font-mono text-xs text-fg-muted">{alert.code}</span>

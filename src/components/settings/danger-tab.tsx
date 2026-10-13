@@ -20,7 +20,7 @@ export function DangerTab({ brands, canDelete }: { brands: BrandSummary[]; canDe
             {brands.map((brand) => (
               <li key={brand.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
                 <span className="font-semibold text-fg">{brand.name}</span>
-                <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="inline-flex min-h-11 items-center font-semibold text-accent hover:underline">
+                <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="inline-flex min-h-11 items-center font-semibold text-fg underline underline-offset-4 hover:no-underline">
                   Open {brand.name} to delete it<span className="sr-only"> from its overview</span>
                 </Link>
               </li>
@@ -29,7 +29,7 @@ export function DangerTab({ brands, canDelete }: { brands: BrandSummary[]; canDe
         ) : null}
       </section>
 
-      <section aria-labelledby="danger-workspace-title" className="space-y-2 rounded-lg border border-border bg-surface p-5">
+      <section aria-labelledby="danger-workspace-title" className="space-y-2 panel">
         <h2 id="danger-workspace-title" className="text-section font-semibold text-fg">Delete this workspace</h2>
         <p className="text-sm text-fg-muted">
           This build does not delete a workspace, so no control is offered here. Brands can be deleted one at a time, as above.

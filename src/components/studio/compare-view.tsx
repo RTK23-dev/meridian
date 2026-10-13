@@ -34,7 +34,7 @@ export function CompareView({ variants, first, second, onChangeFirst, onChangeSe
 
   return (
     <section aria-labelledby="compare-heading" className="space-y-4">
-      <h3 id="compare-heading" className="font-display text-xl">Compare two variants</h3>
+      <h3 id="compare-heading" className="text-base font-semibold">Compare two variants</h3>
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="First variant">
           <SelectInput value={first} onChange={(event) => onChangeFirst(event.currentTarget.value)}>

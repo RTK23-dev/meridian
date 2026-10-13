@@ -35,7 +35,7 @@ export function CompetitorCandidates({ candidates, canEdit, pendingIds, onDecide
           tabIndex={canEdit ? 0 : undefined}
           aria-keyshortcuts={canEdit ? "A R" : undefined}
           onKeyDown={handleKey}
-          className="flex flex-wrap items-center gap-2 rounded-md border border-border p-3 focus-visible:outline-2 focus-visible:outline-accent"
+          className="flex flex-wrap items-center gap-2 border-t border-border py-3 first:border-t-0 first:pt-0 focus-visible:outline-2 focus-visible:outline-accent"
         >
           <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Candidate</span>
           <span className="font-semibold">{item.name}</span>

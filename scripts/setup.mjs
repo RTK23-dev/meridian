@@ -78,11 +78,11 @@ export function setupSummary(facts) {
     migrated: "DATABASE_URL is set, and the migrations are applied.",
     failed: "DATABASE_URL is set, but the migrations failed. The error is printed above. Fix it, then run npm run setup again.",
     notSet:
-      "DATABASE_URL is not set. Meridian will use the embedded PGlite database, created and migrated on the first start. " +
+      "DATABASE_URL is not set. Meridian will use the embedded PGlite database, kept in .data/pglite and created on the first start. " +
       "Set DATABASE_URL in .env to use a durable Postgres database.",
   }[facts.database] ?? "The database state was not reported.";
   const baseUrl = facts.baseUrl || DEFAULT_BASE_URL;
-  return [
+  const lines = [
     "Meridian setup",
     `  Node.js:              ${facts.nodeVersion} (${facts.nodeOk ? "ok" : "too old"})`,
     `  Dependencies:         ${facts.dependencies}`,
@@ -90,17 +90,22 @@ export function setupSummary(facts) {
     `  TOKEN_ENCRYPTION_KEY: ${facts.tokenKey} (the value is never printed)`,
     `  BETTER_AUTH_SECRET:   ${facts.authSecret} (the value is never printed)`,
     `  Database:             ${database}`,
-    "",
-    "Next steps",
-    "  1. Start the app:          npm run dev   (port 8080)",
-    `  2. Sign in:                open ${baseUrl}/login`,
-    "  3. Save provider keys:     Settings, General, Setup. Only a workspace admin can save a key.",
-    "                             Keys are encrypted, never shown again, and nothing is connected until a key is saved or set on the server.",
-    "  4. Background jobs:        npm run worker and npm run scheduler. Both need DATABASE_URL.",
-    "  5. Check the code:         npm test",
-    "",
-    ".env holds local secrets. It is ignored by git. Never commit it.",
   ];
+  // `npm run dev` prints its own steps when it runs setup for the first time, so setup does not repeat them then.
+  if (facts.showNextSteps !== false) {
+    lines.push(
+      "",
+      "Next steps",
+      "  1. Start the app:          npm run dev   (port 8080). Without DATABASE_URL it also runs the queued jobs.",
+      `  2. Sign in:                open ${baseUrl}/login`,
+      "  3. Save provider keys:     the Setup guide (sidebar), or Settings, General, Setup. Only a workspace admin can save a key.",
+      "                             Keys are encrypted, never shown again, and nothing is connected until a key is saved or set on the server.",
+      "  4. Background jobs:        with DATABASE_URL, start npm run worker and npm run scheduler. Both need it.",
+      "  5. Check the code:         npm test",
+    );
+  }
+  lines.push("", ".env holds local secrets. It is ignored by git. Never commit it.");
+  return lines;
 }
 
 function isDirectRun() {
@@ -167,6 +172,7 @@ function main() {
     authSecret: auth.filled ? "generated" : "already set",
     database,
     baseUrl: process.env.BETTER_AUTH_URL?.trim() || DEFAULT_BASE_URL,
+    showNextSteps: !process.argv.includes("--from-dev"),
   });
   console.log(`\n${summary.join("\n")}`);
   process.exit(database === "failed" ? 1 : 0);

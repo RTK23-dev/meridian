@@ -55,7 +55,7 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
   return (
     <Card className="space-y-4" aria-labelledby={`brief-review-${briefId}`}>
       <div>
-        <h2 id={`brief-review-${briefId}`} className="font-display text-xl">Held for review: {title}</h2>
+        <h2 id={`brief-review-${briefId}`} className="text-section font-semibold">Held for review: {title}</h2>
         <p className="mt-1 text-sm text-muted">
           The decision engine could not judge this brief. Planning and production are blocked until a person reviews it.
         </p>

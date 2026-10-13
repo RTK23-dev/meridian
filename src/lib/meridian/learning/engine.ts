@@ -2,6 +2,7 @@ import {
   assertSameTenant,
   type LearnedPattern,
   type LearningState,
+  type LearningSurface,
   type ObservedCreative,
   type PerformanceRow,
   type OrganicObservationRow,
@@ -29,6 +30,21 @@ export const DEFAULT_LEARNING_POLICY = {
   validatedMinImpressions: 2000,
   validatedMinPBeat: 0.95,
 };
+
+/** The paid metrics: a click, a conversion and a return on spend, all from paid observations. */
+const PAID_METRICS: ReadonlySet<string> = new Set(["ctr", "cvr", "roas"]);
+/** The organic metrics: three-second retention, completion and shares, all from organic observations. */
+const ORGANIC_METRICS: ReadonlySet<string> = new Set(["retention_3s", "completion_rate", "shares"]);
+
+/**
+ * The surface a metric belongs to. Each metric is measured on one surface only, so a pattern's surface follows from its metric and
+ * is never chosen by the caller. Null for a metric neither set names.
+ */
+export function surfaceOfMetric(metric: string): LearningSurface | null {
+  if (PAID_METRICS.has(metric)) return "paid";
+  if (ORGANIC_METRICS.has(metric)) return "organic";
+  return null;
+}
 
 const ATTRIBUTES = ["angle", "hookType", "format", "proofType", "visualStyle", "platform", "offer", "cta"] as const;
 
@@ -295,6 +311,7 @@ function toPattern(candidate: Candidate, qValue: number, policy: Policy): Learne
     organizationId: candidate.organizationId,
     brandId: candidate.brandId,
     scope: "brand",
+    surface: surfaceOfMetric(candidate.metric) ?? undefined,
     attribute: candidate.attribute,
     value: candidate.value,
     metric: candidate.metric,

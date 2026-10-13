@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BRAIN_FIELDS, REQUIRED_BRAIN_KEYS, brainCompleteness, emptyBrain, type BrainKey } from "../../lib/meridian/brain.ts";
-import { missingItems, nextBestAction, pipelineStages, type PipelineCounts } from "./pipeline.ts";
+import { missingItems, nextBestAction, pipelineStages, stageProgressPercent, type PipelineCounts } from "./pipeline.ts";
 
 const EMPTY: PipelineCounts = {
   competitors: 0, documents: 0, observations: 0, creatives: 0, openOpportunities: 0, reviews: 0, patterns: 0, performanceRows: 0,
@@ -75,4 +75,14 @@ test("the pipeline proceeds once every required field has content, even with opt
   const action = nextBestAction({ brain: COMPLETE, stages, recommendation: null });
   assert.notEqual(action.title, "Complete the brand brain");
   assert.equal(action.to, "/brands/$brandId/market", "the first stage that has not started");
+});
+
+test("the progress track is the done share of the stages, and an empty pipeline is 0", () => {
+  assert.equal(stageProgressPercent([]), 0);
+  const none = pipelineStages(NO_STAGES_DONE);
+  assert.equal(stageProgressPercent(none), 0);
+  const some = pipelineStages({ counts: { ...EMPTY, reviews: 1, decidedReviews: 1 }, operating: { generationRuns: 1, publishedTests: 0 } });
+  const done = some.filter((stage) => stage.state === "done").length;
+  assert.ok(done > 0, "the fixture has at least one done stage");
+  assert.equal(stageProgressPercent(some), Math.round((done / some.length) * 100));
 });

@@ -73,12 +73,12 @@ export function OpportunityTable(props: TableProps) {
     <ul className="grid gap-3 md:hidden">
       {rows.map((item) => {
         const eligible = canEdit && isBulkSelectable(item.status);
-        return <li key={item.id} className="space-y-3 rounded-lg border border-border bg-surface p-4">
+        return <li key={item.id} className="space-y-3 panel">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-fg-muted">Rank {positions.get(item.id) ?? "-"}</p>
             <OpportunityStatusBadge status={item.status} />
           </div>
-          <button type="button" onClick={() => onOpen(item.id)} className="block min-h-11 w-full text-left font-display text-xl">{item.label}</button>
+          <button type="button" onClick={() => onOpen(item.id)} className="block min-h-11 w-full text-left text-xl">{item.label}</button>
           <div className="flex flex-wrap gap-2"><CategoryChip category={item.category} />{isHeld(item) ? <HoldBadge /> : null}</div>
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <div><dt className="text-xs font-semibold text-fg-muted">Rank score</dt><dd className="mt-1"><ScoreValue value={finiteOrNull(item.expectedValue)} /></dd></div>

@@ -11,6 +11,9 @@ export type PublishResult = {
   detail: string;
 };
 
+/** What the deployment reports about publishing. Publishing is chosen per channel, so no single status describes it. */
+export const CHANNEL_PUBLISHING_DETAIL = "Publishing is set per channel. Regular posts use the Facebook Page, Instagram, YouTube or TikTok accounts you connect on Connected accounts. Paid ads use a Meta or TikTok key. Nothing is published until you choose a channel.";
+
 export function publishingProviderStatus(): PublishResult {
   return {
     status: "NOT_CONNECTED",

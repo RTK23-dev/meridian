@@ -62,7 +62,7 @@ export function LogoUploader({ brandId, canEdit }: { brandId: string; canEdit: b
     }
   }
 
-  return <section aria-labelledby="brain-logo-title" className="space-y-4 rounded-lg border border-border bg-surface p-5">
+  return <section aria-labelledby="brain-logo-title" className="space-y-4 panel">
     <div className="space-y-1">
       <h3 id="brain-logo-title" className="text-base font-semibold">Logo</h3>
       <p id="brain-logo-hint" className="text-sm text-fg-muted">PNG, JPEG, or WEBP, under 800 KB. It is checked from the file bytes and stored with this brand. There is no separate file store.</p>
@@ -105,10 +105,10 @@ export function LogoUploader({ brandId, canEdit }: { brandId: string; canEdit: b
         {problem?.raw ? <TechnicalDetails>{problem.raw}</TechnicalDetails> : null}
         {selected ? (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" disabled={uploadLogoMutation.isPending} onClick={() => void save()}>
+            <Button type="button" variant="secondary" disabled={uploadLogoMutation.isPending} onClick={() => void save()}>
               {uploadLogoMutation.isPending ? "Saving logo…" : "Save logo"}
             </Button>
-            <Button type="button" variant="secondary" disabled={uploadLogoMutation.isPending} onClick={clearSelection}>Cancel</Button>
+            <Button type="button" variant="quiet" disabled={uploadLogoMutation.isPending} onClick={clearSelection}>Cancel</Button>
           </div>
         ) : null}
       </div>

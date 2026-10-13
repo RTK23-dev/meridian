@@ -96,9 +96,9 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
         : "the default";
 
   return (
-    <div className="space-y-4 rounded border border-line bg-panel p-4">
+    <div className="space-y-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-brass">Decision engine</p>
+        <p className="eyebrow">Decision engine</p>
         <h3 className="font-semibold text-lg">Active: {activeLabel}</h3>
         <p className="text-sm text-muted">
           Only the active engine receives decisions. Meridian never calls the other engine for the same decision, and never
@@ -114,9 +114,9 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
       {error ? <PlainErrorMessage message={error.message} raw={error.raw} /> : null}
       {message ? <p className="text-sm text-success" role="status">{message}</p> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
         {status.engines.map((engine) => (
-          <div key={engine.id} className="rounded border border-line p-3 text-sm space-y-1">
+          <div key={engine.id} className="border-t border-line pt-3 text-sm space-y-1">
             <div className="flex items-center justify-between gap-2">
               <strong>{engine.label}</strong>
               <span
@@ -129,7 +129,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
                 {engine.health.status}
               </span>
             </div>
-            {engine.isActive ? <p className="text-xs font-semibold text-brass">ACTIVE</p> : null}
+            {engine.isActive ? <p className="text-xs font-semibold text-success">ACTIVE</p> : null}
             <p className="text-xs text-muted">{engine.health.message}</p>
             <p className="text-xs text-muted">
               Questions: {engine.capabilities.questionKinds.join(", ")} · Inputs: {engine.capabilities.inputModalities.join(", ")}
@@ -154,7 +154,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
               </SelectInput>
             </Field>
           </div>
-          <Button type="button" onClick={handleSave} disabled={saving || choice === status.active.engineId} aria-describedby={choice === status.active.engineId ? "engine-save-reason" : undefined}>
+          <Button type="button" variant="secondary" onClick={handleSave} disabled={saving || choice === status.active.engineId} aria-describedby={choice === status.active.engineId ? "engine-save-reason" : undefined}>
             {saving ? "Saving..." : "Save engine"}
           </Button>
           {choice === status.active.engineId && !saving ? <DisabledReason id="engine-save-reason">This engine is already active. Choose a different engine to save.</DisabledReason> : null}

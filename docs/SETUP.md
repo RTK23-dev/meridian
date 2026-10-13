@@ -2,29 +2,41 @@
 
 ## Requirements
 
-- Node.js 22 (CI uses 22).
-- PostgreSQL 16 for anything beyond a local trial. Development can run without one, on an embedded database.
+- Node.js 22 (CI uses 22). Nothing else for a local trial.
+- PostgreSQL 16 for a real deployment. A local trial needs no database server: it uses an embedded PostgreSQL (PGlite), kept on disk.
 
 ## Install and first run
 
 ```bash
-npm run setup
 npm run dev
 ```
 
-`npm run setup` (`scripts/setup.mjs`) is safe to run again. It:
+On a fresh clone, that one command does the first run. `npm run dev` (`scripts/dev.mjs`):
 
-- checks the Node version and installs dependencies only if `node_modules` is missing;
-- creates `.env` from `.env.example` if `.env` does not exist, and never overwrites it;
-- generates `TOKEN_ENCRYPTION_KEY` and `BETTER_AUTH_SECRET` into `.env` only when they are empty. It never prints them;
-- runs the migrations when `DATABASE_URL` is set, and says so when it is not;
-- prints the next steps.
+- installs the dependencies with `npm ci` if `node_modules` is missing;
+- creates `.env` from `.env.example` if `.env` does not exist, and generates `TOKEN_ENCRYPTION_KEY` and `BETTER_AUTH_SECRET` into it.
+  Setup never overwrites a `.env` and never prints a secret;
+- loads `.env`. A variable already set in your shell wins;
+- starts the app on http://127.0.0.1:8080, and once it answers, says what is running. On a first start it also prints three steps:
+  open the address, create an account, create a workspace and a brand.
 
-Then open http://127.0.0.1:8080, create an account, create a workspace and create a brand. The brand brain is the first screen to
-complete: the four required fields are positioning, target customers, tone and prohibited claims.
+`npm run setup` (`scripts/setup.mjs`) does the setup part on its own, and is safe to run again. It also runs the migrations when
+`DATABASE_URL` is set, and says so when it is not.
 
-Without `DATABASE_URL`, development uses an embedded PostgreSQL (PGlite), which keeps its data in memory. Production refuses to start without
-`DATABASE_URL`, unless `NODE_ENV` is explicitly `development` or `test`.
+The brand brain is the first screen to complete: the four required fields are positioning, target customers, tone and prohibited claims.
+
+### The local trial (no `DATABASE_URL`)
+
+- **The database is kept on disk** in `.data/pglite`. `npm run dev` sets `MERIDIAN_LOCAL_DATA_DIR` to that folder when `DATABASE_URL`
+  is blank. Accounts, workspaces, brands and sign-in sessions survive a restart. Stop the server, delete `.data/pglite`, and start again
+  to begin empty. Anything that does not set `MERIDIAN_LOCAL_DATA_DIR` keeps the database in memory, which is what the tests use.
+- **The queued jobs run inside `npm run dev`**: Factory runs, research and generation. No `npm run worker` is needed. The log says so
+  (`[jobs]` lines). A failed pass is logged and retried with a back-off, and the server keeps running.
+- **Periodic work does not run.** Scheduled discovery and performance syncs need `npm run scheduler`, which needs `DATABASE_URL`.
+- **Use one dev server per data folder.** `npm run db:local` opens the same `.data/pglite` folder, so do not run it while `npm run dev` runs.
+- Production refuses to start without `DATABASE_URL`, unless `NODE_ENV` is explicitly `development` or `test`. `npm run dev` runs in
+  `development`, because Vite sets that when `NODE_ENV` is not already set. With `NODE_ENV=production`, a missing `DATABASE_URL` stops
+  the start, whatever `MERIDIAN_LOCAL_DATA_DIR` says.
 
 ## Saving provider keys
 
@@ -51,6 +63,15 @@ To connect with OAuth from the app instead, set `GOOGLE_CLIENT_ID` and `GOOGLE_C
 `<your origin>/api/drive/callback` as the redirect URI. An admin then connects from Settings → General. Uploads over 5 MB need
 `TOKEN_ENCRYPTION_KEY`, which `npm run setup` generates.
 
+## Publishing and approving work
+
+Publishing is optional. Paid ads (Meta, TikTok, Google) are created paused, and Meridian never switches them on. Regular posts go to a
+Facebook Page, Instagram, YouTube or TikTok account, connected per brand on Connected accounts. The account and token each platform
+needs are in [PROVIDERS.md](PROVIDERS.md#organic-publishing-accounts). The export package works without any account.
+
+A Factory run waits at each step that spends or publishes, unless its automation is `full` with a spend cap. A waiting run shows
+`awaiting approval` and the reason. The approval is recorded for that run and stage. See [FACTORY.md](FACTORY.md).
+
 ## Deploying
 
 1. Create a PostgreSQL 16 database and set `DATABASE_URL`.
@@ -59,7 +80,28 @@ To connect with OAuth from the app instead, set `GOOGLE_CLIENT_ID` and `GOOGLE_C
 3. Set `NODE_ENV=production`. Do not set `MERIDIAN_TESTING_RUNTIME`; it enables the test providers.
 4. `npm run build` compiles the app and applies the migrations.
 5. Start the web process, then start the worker (`npm run worker`) and the scheduler (`npm run scheduler`). Without the worker,
-   queued jobs wait. Without the scheduler, periodic work never starts.
+   queued jobs wait. Without the scheduler, periodic work never starts. The Docker Compose stack below does all three.
+
+## Docker Compose (not yet verified)
+
+`docker-compose.yml` runs the whole stack: `web` (port 8080), `worker`, `scheduler`, and `postgres` (PostgreSQL 16, with a healthcheck).
+The three Meridian services use one image, built from `Dockerfile` (Node 22), and each reads `.env`. Compose sets `DATABASE_URL` for
+each of them to the `postgres` service, so `.env` does not need a database URL.
+
+```bash
+cp .env.example .env      # or npm run setup, which also fills the two secrets
+docker compose up --build
+```
+
+Then open http://127.0.0.1:8080. The web service applies the migrations when it starts. The worker and the scheduler start once the web
+service answers `/api/health`. The Postgres password in `docker-compose.yml` is a local default: change it, and the `DATABASE_URL` lines,
+before any shared deployment.
+
+**This stack has not been built or run in the repository's own checks.** The environment that wrote it had no Docker daemon. The compose
+file was checked for its YAML structure only. The first `docker compose up --build` is the real test: check `docker compose ps` for the
+healthchecks, and check that the web service serves the built app on port 8080 (it runs `npm run preview`, which serves the output of
+`npm run build`). If something differs, fix the Dockerfile and this section together.
 
 `.env.example` lists every variable the code reads, with a comment saying whether it is infrastructure, deployment configuration
-or a per-workspace key.
+or a per-workspace key. It has two parts: "Needed to start", which a local trial reads and which is all optional, and "Needed for a
+real deployment".

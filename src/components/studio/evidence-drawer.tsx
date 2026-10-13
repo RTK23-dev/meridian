@@ -12,7 +12,7 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
       <SheetContent className="left-auto right-0 top-0 bottom-0 max-h-none w-full max-w-3xl rounded-none border-l border-t-0">
         {variant ? (
           <>
-            <SheetTitle className="font-display text-2xl">Evidence for {variant.title || variant.kind}</SheetTitle>
+            <SheetTitle className="text-section font-semibold">Evidence for {variant.title || variant.kind}</SheetTitle>
             <SheetDescription className="mt-2 text-sm">{summarizeEvidence(questions)}</SheetDescription>
             <div className="mt-4 hidden overflow-x-auto rounded-md border border-border md:block">
               <table className="w-full min-w-[44rem] text-left text-sm">

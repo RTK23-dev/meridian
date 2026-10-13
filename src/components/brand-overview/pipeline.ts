@@ -201,7 +201,8 @@ export function doneCount(stages: PipelineStage[]): number {
   return stages.filter((stage) => stage.state === "done").length;
 }
 
-/** Approved and rejected reviews in a stored review list. An open review is waiting, not decided. */
-export function countDecidedReviews(reviews: ReadonlyArray<{ status: string }>): number {
-  return reviews.filter((review) => review.status === "approved" || review.status === "rejected").length;
+/** Whole-number share of the stages that are done, for the progress track. An empty pipeline is 0, not NaN. */
+export function stageProgressPercent(stages: PipelineStage[]): number {
+  if (!stages.length) return 0;
+  return Math.round((doneCount(stages) / stages.length) * 100);
 }

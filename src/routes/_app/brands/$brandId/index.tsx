@@ -44,7 +44,7 @@ function BrandHome({ brandId }: { brandId: string }) {
   const stages = machine ? pipelineStages({ counts: machine.counts, operating: machine.operating }) : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         breadcrumbs={[{ label: "All brands", to: "/" }]}
         title={detail.identity.name}
@@ -53,7 +53,7 @@ function BrandHome({ brandId }: { brandId: string }) {
         ) : (
           <>Brand brain not complete · {known.requiredFilled} of {known.requiredTotal} required fields · Version {detail.version || 1}</>
         )}
-        actions={<Button asChild><Link to="/brands/$brandId/brain" params={{ brandId }}>Open brand brain</Link></Button>}
+        actions={<Button asChild variant="secondary"><Link to="/brands/$brandId/brain" params={{ brandId }}>Open brand brain</Link></Button>}
       />
 
       {stages ? <PipelineStepper brandId={brandId} stages={stages} /> : <Skeleton variant="card" />}

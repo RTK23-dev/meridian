@@ -23,7 +23,7 @@ export function ChartFigure({ id, title, description, summary, table, children }
   table: ReactNode;
   children: ReactNode;
 }) {
-  return <section aria-labelledby={`${id}-title`} className="space-y-3 rounded-lg border border-border bg-surface p-5">
+  return <section aria-labelledby={`${id}-title`} className="space-y-3 panel">
     <div className="space-y-1">
       <h3 id={`${id}-title`} className="text-base font-semibold text-fg">{title}</h3>
       <p className="text-sm text-fg-muted">{description}</p>

@@ -7,7 +7,7 @@ export type PlatformId = "instagram" | "facebook" | "youtube" | "tiktok";
 export type AspectRatio = "9:16" | "1:1" | "16:9" | "4:5";
 
 /** The organic platforms that have a connected-account publisher. */
-export type OrganicPlatform = "instagram" | "facebook" | "youtube";
+export type OrganicPlatform = "instagram" | "facebook" | "youtube" | "tiktok";
 
 /**
  * A workspace's connected organic account, resolved from `platform_accounts` and its encrypted `credential_vault` token by
@@ -42,6 +42,13 @@ export type OrganicPublishRequest = {
   allowTestProvider?: boolean;
   /** Resolved by the service before the call. A channel never reads the database or the environment for a token. */
   connection?: OrganicConnection;
+  /**
+   * A signed, short-lived https link to the approved file (storage/media-link.ts). Set by the service for a channel that publishes
+   * by URL, Instagram and TikTok. The platform fetches it, so the channel sends it and never the bytes.
+   */
+  mediaUrl?: string;
+  /** The hostnames TikTok has verified for this app, from TIKTOK_VERIFIED_MEDIA_DOMAINS. A TikTok channel refuses a URL outside them. */
+  verifiedMediaDomains?: string[];
 };
 
 /**
@@ -64,16 +71,20 @@ export type OrganicPublishReceipt = {
 
 export type ConnectionCheck = { connected: boolean; accountName?: string; reason?: string; code?: ReceiptCode };
 
+/**
+ * The metrics a platform reported for one post. A metric the platform did not report is null, never zero. The channels that
+ * have no live metric client return null for the whole object, so nothing is stored for them.
+ */
 export type OrganicTelemetryMetrics = {
-  views: number;
-  reach: number;
-  threeSecondViews?: number;
-  averageWatchTimeSeconds?: number;
-  completionRate?: number;
-  likes: number;
-  comments: number;
-  shares: number;
-  saves?: number;
+  views: number | null;
+  reach: number | null;
+  threeSecondViews: number | null;
+  averageWatchTimeSeconds: number | null;
+  completionRate: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
 };
 
 export interface DistributionChannel {

@@ -162,10 +162,10 @@ function Integrations() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Integrations</p>
-        <h1 className="font-display text-4xl">What is actually connected</h1>
+        <h1 className="page-title">What is actually connected</h1>
         <p className="text-fg-muted">
           A credential in the environment is not a connection. A provider shows as connected only after a request to it succeeds, and it changes again when someone disconnects it.
         </p>
@@ -207,7 +207,7 @@ function Integrations() {
                 <h3 className="text-sm font-semibold text-fg">Background processes</h3>
                 <ul className="grid gap-2 md:grid-cols-3">
                   {processRows(status).map((row) => (
-                    <li key={row.id} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+                    <li key={row.id} className="flex flex-col gap-2 panel">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-fg">{row.label}</span>
                         <StatusBadge status={row.status} label={row.label} />

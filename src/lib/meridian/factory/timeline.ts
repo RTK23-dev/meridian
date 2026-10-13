@@ -1,19 +1,20 @@
 import type { Sql } from "../learning/store.ts";
 import { winnerScore } from "./winner-score.ts";
 
+/** One observation of an ad. `stillRunning` is null when the source did not report whether the ad was delivering. */
 export type AdSighting = {
   seenAt: string;
   platforms: string[];
   countries: string[];
   reachLow: number | null;
   reachHigh: number | null;
-  stillRunning: boolean;
+  stillRunning: boolean | null;
 };
 
 export type AdTimeline = {
   firstSeen: string;
   lastSeen: string;
-  stillRunning: boolean;
+  stillRunning: boolean | null;
   daysRunning: number;
   siblingVariants: number;
   platforms: string[];
@@ -27,10 +28,13 @@ function parseTime(value: string): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
+/**
+ * Days running are measured between the first and the last observation. Nothing after the last observation is known, so an
+ * ad that was still delivering at its last sighting is not counted as running today. A newer sighting extends the run.
+ */
 export function buildAdTimeline(input: {
   sightings: AdSighting[];
   siblingVariants?: number;
-  now?: string;
 }): AdTimeline | null {
   const dated = input.sightings
     .map((row) => ({ row, time: parseTime(row.seenAt) }))
@@ -39,18 +43,17 @@ export function buildAdTimeline(input: {
   if (dated.length === 0) return null;
   const first = dated[0]!;
   const last = dated[dated.length - 1]!;
-  const now = parseTime(input.now ?? "") ?? Date.now();
   const platforms = [...new Set(dated.flatMap((item) => item.row.platforms.map((value) => value.trim()).filter(Boolean)))];
   const countries = [...new Set(dated.flatMap((item) => item.row.countries.map((value) => value.trim()).filter(Boolean)))];
   const reachLows = dated.map((item) => item.row.reachLow).filter((value): value is number => value != null);
   const reachHighs = dated.map((item) => item.row.reachHigh).filter((value): value is number => value != null);
-  const stillRunning = last.row.stillRunning;
-  const end = stillRunning ? now : last.time;
   return {
-    firstSeen: first.row.seenAt,
-    lastSeen: last.row.seenAt,
-    stillRunning,
-    daysRunning: Math.max(0, Math.round((end - first.time) / 86_400_000)),
+    // The sighting times are stored as ISO text. A driver can hand back a Date object here, and a Date passed as a query
+    // parameter is written as its toString() form, which Postgres refuses.
+    firstSeen: new Date(first.time).toISOString(),
+    lastSeen: new Date(last.time).toISOString(),
+    stillRunning: last.row.stillRunning,
+    daysRunning: Math.max(0, Math.round((last.time - first.time) / 86_400_000)),
     siblingVariants: Math.max(0, input.siblingVariants ?? 0),
     platforms,
     countries,
@@ -60,36 +63,35 @@ export function buildAdTimeline(input: {
 }
 
 /**
- * Daily timeline re-check job:
- * Recalculates days running and updates Winner Score based on current date.
+ * Daily timeline re-check job. It re-scores each stored timeline from its own first and last sighting. A re-check sees no new
+ * evidence, so it never lengthens an ad's run: days running stay measured to the last sighting until a newer collection adds one.
  */
 export async function recheckAdTimelines(
   sql: Sql,
-  input: { organizationId: string; brandId: string; now?: string },
+  input: { organizationId: string; brandId: string },
 ): Promise<{ recheckedCount: number }> {
   const rows = await sql<{
     id: string;
-    first_seen: string;
-    last_seen: string;
-    still_running: boolean;
-    days_running: number;
+    first_seen: unknown;
+    last_seen: unknown;
+    still_running: boolean | null;
     sibling_variants: number;
     platforms: string;
     countries: string;
   }>`
-    select id, first_seen, last_seen, still_running, days_running, sibling_variants, platforms, countries
+    select id, first_seen, last_seen, still_running, sibling_variants, platforms, countries
     from ad_timelines
     where organization_id = ${input.organizationId} and brand_id = ${input.brandId}
   `;
 
-  const now = input.now ? new Date(input.now).getTime() : Date.now();
   let recheckedCount = 0;
 
   for (const row of rows) {
-    const firstTime = Date.parse(row.first_seen);
-    if (!Number.isFinite(firstTime)) continue;
+    const firstTime = new Date(String(row.first_seen)).getTime();
+    const lastTime = new Date(String(row.last_seen)).getTime();
+    if (!Number.isFinite(firstTime) || !Number.isFinite(lastTime)) continue;
 
-    const daysRunning = Math.max(0, Math.round((now - firstTime) / 86_400_000));
+    const daysRunning = Math.max(0, Math.round((lastTime - firstTime) / 86_400_000));
     let platforms: string[] = [];
     let countries: string[] = [];
     try {

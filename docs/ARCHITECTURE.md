@@ -12,14 +12,15 @@ process. Every piece of data belongs to one workspace (organization), and most r
   - `credentials/` resolves every provider key for a workspace (see PROVIDERS.md).
   - `decisions/` and `jev/` hold the decision engines, the policy gate and the evidence scopes (see DECISIONS.md).
   - `studio/` builds briefs and variants, and records reviews and publishing.
-  - `production/` routes a creative to a production provider (Gemini Omni, Hypit, Higgsfield, manual cloud, image providers).
+  - `production/` routes a creative to a production provider (Gemini Omni, Hypit, Higgsfield, manual cloud, image providers). A video spec passes preflight in `production/submit.ts` before any provider is called, and the copy check judges its claims through the engine gate (`production/assess.ts`). Images are not preflighted, and see ROADMAP for what is still open.
   - `sources/`, `discovery/`, `research/` and `evidence/` collect public sources and store evidence with its provenance.
   - `brand/` stores the brand brain, its versions and its onboarding progress.
   - `settings/` holds the provider settings summary and the save and test actions.
   - `storage/` writes artifacts and exports, and serves media.
   - `measurement/`, `learning/` and `publishing/` record what happened after publishing and feed it back.
 - `src/lib/db.ts` picks the database. A `DATABASE_URL` selects PostgreSQL. Without one, development and tests use an embedded
-  PostgreSQL (PGlite). Any other environment refuses to start (OPERATIONS.md).
+  PostgreSQL (PGlite): on disk in `.data/pglite` under `npm run dev` (`MERIDIAN_LOCAL_DATA_DIR`), and in memory otherwise. Any other
+  environment refuses to start (OPERATIONS.md).
 
 ## Data
 
@@ -32,13 +33,14 @@ process. Every piece of data belongs to one workspace (organization), and most r
 ## Workers and scheduling
 
 - The web process does not run jobs. `npm run worker` runs the durable job loop (`scripts/worker-entry.ts`). Jobs are claimed
-  under a lease, so a crashed worker's job is picked up again.
+  under a lease, so a crashed worker's job is picked up again. The one exception is the local trial: with `DATABASE_URL` unset, the
+  dev server runs the same pass (`vite.config.ts`, `localJobsPlugin`), because the embedded database cannot be shared with a worker.
 - `npm run scheduler` enqueues the periodic work (`scripts/scheduler-entry.ts`), such as discovery runs and performance syncs.
 - Both processes need the same `DATABASE_URL` as the web process.
 
 ## Storage and media
 
-- Postgres holds every row. Google Drive and S3 hold only artifacts and exports (rendered media, export packages, uploaded
+- Postgres holds every row. Google Drive holds only artifacts and exports (rendered media, export packages, uploaded
   source files). An upload is resumable: its session is recorded in Postgres, and an interrupted upload continues from the
   last confirmed byte.
 - Media is served from `/api/assets/:assetId`. The route checks tenancy and supports byte ranges and cache validators.

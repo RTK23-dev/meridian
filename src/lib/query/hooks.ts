@@ -6,7 +6,7 @@ import { getBrand } from "@/lib/meridian/api";
 import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, listLibrary, listOpportunities, listReviews, getTrace, resolveReview, dismissOpportunity } from "@/lib/meridian/machine";
 import { getCalibration, listCalibrationVersions } from "@/lib/meridian/calibration/actions";
 import { getFactoryBoard } from "@/lib/meridian/factory/actions";
-import { getStudioBriefReview, getStudioSession, listHeldBudgetReservations } from "@/lib/meridian/studio/actions";
+import { getStudioBriefReview, getStudioSession, listHeldBudgetReservations, listWindowReleasedBudget } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
 import { getJevAccountIntelligenceFn, updateWhitespaceStatusFn, runAccountIntelligenceAnalysisFn } from "@/lib/meridian/jev/actions";
@@ -130,6 +130,10 @@ export const pipelineConfigQueryOptions = (userId: string | null | undefined, br
 export const heldReservationsQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.heldReservations(brandId)),
   queryFn: () => listHeldBudgetReservations({ data: { brandId } }),
+});
+export const heldReleasesQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.heldReleases(brandId)),
+  queryFn: () => listWindowReleasedBudget({ data: { brandId } }),
 });
 export const alertsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.alerts(organizationId)),
@@ -328,6 +332,11 @@ export const usePipelineConfigQuery = (brandId: string, enabled = true) => {
 export const useHeldReservationsQuery = (brandId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...heldReservationsQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
+};
+
+export const useHeldReleasesQuery = (brandId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...heldReleasesQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
 
 export const useAlertsQuery = (organizationId: string, enabled = true) => {

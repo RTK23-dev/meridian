@@ -61,7 +61,7 @@ export function UsageScreen() {
   const dayColumns = groupColumns<(typeof daily)[number]>("Day (UTC)", maxDayTokens, (row) => dayLabel(row.day));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         title="Usage & cost"
         description="Model runs recorded for this workspace. A cost a run did not report stays unknown. It is never counted as zero."
@@ -115,7 +115,7 @@ function TokenCell({ tokens, missingTokens, max }: { tokens: number; missingToke
       <span className="tabular-nums">{tokensLabel(tokens, missingTokens)}</span>
       {percent !== null ? (
         <span aria-hidden="true" className="block h-2 flex-1 rounded-full bg-surface-2">
-          <span className="block h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
+          <span className="block h-full rounded-full bg-fg-muted" style={{ width: `${percent}%` }} />
         </span>
       ) : null}
     </div>

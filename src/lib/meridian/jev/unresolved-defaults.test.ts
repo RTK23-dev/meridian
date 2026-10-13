@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { decide, type DecisionContext } from "./engine.ts";
-import { evaluatePolicy } from "./policy.ts";
 import { brandFitQuestion, historicalSupport, opportunityGate, positioningFit, visualQa, competitiveStrength } from "./questions.ts";
 import { judgeFeatures, PRIOR_JUDGMENT, QUESTION_SPECS } from "./judgment.ts";
-import type { JevAnswer } from "./types.ts";
 
 // The largest calibration offset the policy layer allows. A missing value must not be lifted into a decision band by it.
 const LIFT: DecisionContext = { calibration: { version: "lift.test.v1", apply: (score: number) => score + 0.5 } };
@@ -107,24 +105,6 @@ test("an opportunity whose parts are all measured still scores from the measures
   );
   assert.notEqual(output.evidenceState, "missing");
   assert.ok(output.score > 0);
-});
-
-test("the legacy policy does not invent a probability: booleans alone cannot approve", () => {
-  const answered = (key: string, answer: boolean): JevAnswer => ({
-    questionId: key,
-    questionVersion: "1.0.0",
-    type: "noul",
-    model: "stub",
-    provider: "stub",
-    status: "answered",
-    answer,
-    evidenceRefs: [],
-    evaluatedAt: new Date().toISOString(),
-  });
-  const evaluation = evaluatePolicy({ a: answered("unmapped.a", true), b: answered("unmapped.b", true) });
-  assert.equal(evaluation.decision, "HUMAN_REVIEW");
-  assert.notEqual(evaluation.decision, "AUTO_APPROVE");
-  assert.match(evaluation.reason, /No probability was returned/);
 });
 
 test("a judgment with no evidence has no reading: the probability is zero and nothing is clamped into the review band", () => {

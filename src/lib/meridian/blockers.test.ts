@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,7 +24,6 @@ import { createPoolSql, toSql, transactionSql } from "./learning/pool-sql.ts";
 import { rankOpportunities } from "./opportunity/engine.ts";
 import { ingestPerformance, publishThrough } from "./providers/boundaries.ts";
 import { createFilesystemObjectStore, migrateBlob } from "./storage/filesystem.ts";
-import { createS3ObjectStore, s3ConnectionState } from "./storage/s3.ts";
 import { compareLogoPng } from "./vision/logo.ts";
 import { videoGenerationStatus, videoQa } from "./video/provider.ts";
 import { PNG } from "pngjs";
@@ -215,7 +213,6 @@ test("experiments allocate traffic and disconnected providers invent nothing", (
   assert.equal(configuredVideo.provider, "hypit");
   assert.match(configuredVideo.detail, /bytes/);
   assert.equal(videoQa(null).decision, "HUMAN_REVIEW");
-  assert.equal(s3ConnectionState({}).status, "NOT_CONNECTED");
 });
 
 test("calibration proposes a version and does not apply it", () => {
@@ -255,64 +252,6 @@ test("filesystem storage versions bytes and migrates a database blob", () => {
   assert.equal(store.get(org, "migrated/note.txt")?.checksum, migrated.checksum);
   store.delete(org, "brand/logo.png");
   assert.equal(store.exists(org, "brand/logo.png"), false);
-});
-
-test("an S3-compatible client stores only what the endpoint accepts", async () => {
-  const objects = new Map<string, Uint8Array>();
-  const server = createServer((request, response) => {
-    const chunks: Buffer[] = [];
-    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    request.on("end", () => {
-      const path = request.url ?? "";
-      if (!request.headers.authorization?.toString().startsWith("AWS4-HMAC-SHA256")) {
-        response.writeHead(401);
-        response.end();
-        return;
-      }
-      if (request.method === "PUT") {
-        objects.set(path, Buffer.concat(chunks));
-        response.writeHead(200);
-        response.end();
-        return;
-      }
-      if (request.method === "GET") {
-        const body = objects.get(path);
-        if (!body) {
-          response.writeHead(404);
-          response.end();
-          return;
-        }
-        response.writeHead(200);
-        response.end(body);
-        return;
-      }
-      if (request.method === "DELETE") {
-        objects.delete(path);
-        response.writeHead(204);
-        response.end();
-        return;
-      }
-      response.writeHead(200);
-      response.end();
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  if (!address || typeof address === "string") throw new Error("No port.");
-  const client = createS3ObjectStore({
-    endpoint: `http://127.0.0.1:${address.port}`,
-    bucket: "meridian",
-    accessKeyId: "test-key",
-    secretAccessKey: "test-secret",
-    region: "us-east-1",
-  });
-  await client.put("brand/logo.png", Uint8Array.from([9, 8, 7]), "image/png");
-  const loaded = await client.get("brand/logo.png");
-  assert.deepEqual(Array.from(loaded ?? []), [9, 8, 7]);
-  assert.equal(await client.exists("brand/logo.png"), true);
-  await client.delete("brand/logo.png");
-  assert.equal(await client.get("brand/logo.png"), null);
-  server.close();
 });
 
 test("pdf text is extracted and instruction lines are not obeyed", async () => {

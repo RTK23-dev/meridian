@@ -45,7 +45,7 @@ export function GenerateStep({ brief, usage, canEdit, form, testImageAllowed, pr
 
   return (
     <Card>
-      <h2 className="font-display text-2xl">Generate from the approved brief</h2>
+      <h2 className="text-section font-semibold">Generate from the approved brief</h2>
       {brief ? (
         <p className="mt-2 text-sm text-fg-muted">Current brief: {brief.title}. A brief that is not ready cannot be used for generation.</p>
       ) : (
@@ -53,13 +53,13 @@ export function GenerateStep({ brief, usage, canEdit, form, testImageAllowed, pr
       )}
 
       {retryNotice ? (
-        <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent bg-accent-soft p-3 text-sm">
+        <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border-strong bg-surface-2 p-3 text-sm">
           <span>{retryNotice}</span>
           <Button type="button" variant="quiet" size="sm" onClick={onDismissRetry}>Dismiss</Button>
         </div>
       ) : null}
 
-      <div className="mt-4 space-y-3 rounded-md border border-border p-3">
+      <div className="mt-4 space-y-3 border-t border-border pt-4">
         <p className="text-sm font-semibold">Generation limits for this workspace</p>
         <UsageMeter label="Runs in the last day" used={usage?.runsToday ?? null} limit={DAILY_GENERATION_LIMIT} unit="runs" />
         <UsageMeter label="Runs in progress" used={usage?.running ?? null} limit={GENERATION_CONCURRENCY} unit="runs at once" />

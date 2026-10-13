@@ -4,7 +4,7 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-semibold transition-[background-color,border-color,color,box-shadow,transform,filter] duration-150 ease-out active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
@@ -13,7 +13,7 @@ const buttonVariants = cva(
         quiet: "text-fg hover:bg-surface-2",
         ghost: "text-fg hover:bg-surface-2",
         danger: "border border-danger bg-surface text-danger hover:bg-danger-soft",
-        link: "text-accent underline-offset-4 hover:underline",
+        link: "text-fg underline underline-offset-4 hover:no-underline",
       },
       size: {
         sm: "min-h-8 px-3 text-xs",

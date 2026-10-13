@@ -125,12 +125,12 @@ export function JobsScreen() {
             <HealthCard label="Scheduler" copy={heartbeatCopy(health.data.scheduler)} />
             <Card className="space-y-2">
               <p className="text-sm text-fg-muted">Queue depth</p>
-              <p className="flex items-center gap-2 font-display text-2xl tabular-nums"><Clock3 aria-hidden="true" className="size-5 text-fg-muted" />{health.data.queue.depth}</p>
+              <p className="flex items-center gap-2 text-2xl tabular-nums"><Clock3 aria-hidden="true" className="size-5 text-fg-muted" />{health.data.queue.depth}</p>
               <p className="text-sm text-fg-muted">{queueCopy(health.data.queue)}</p>
             </Card>
             <Card className="space-y-2">
               <p className="text-sm text-fg-muted">Dead letter</p>
-              <p className="flex items-center gap-2 font-display text-2xl tabular-nums">
+              <p className="flex items-center gap-2 text-2xl tabular-nums">
                 {health.data.deadLetter > 0 ? <AlertTriangle aria-hidden="true" className="size-5 text-warning" /> : <CheckCircle2 aria-hidden="true" className="size-5 text-success" />}
                 {health.data.deadLetter}
               </p>
@@ -150,7 +150,7 @@ export function JobsScreen() {
 
       <section aria-labelledby="jobs-heading" className="space-y-3">
         <h2 id="jobs-heading" className="text-section font-semibold">Jobs</h2>
-        <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-2 xl:grid-cols-4" onSubmit={applyFilters}>
+        <form className="grid gap-3 panel sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.5fr_auto]" onSubmit={applyFilters}>
           <Field label="Status">
             <SelectInput value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value })}>
               {JOB_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -220,7 +220,7 @@ function HealthCard({ label, copy }: { label: string; copy: HealthCopy }) {
   return (
     <Card className="space-y-2">
       <p className="text-sm text-fg-muted">{label}</p>
-      <p className="flex items-center gap-2 font-display text-2xl"><Icon aria-hidden="true" className={`size-5 ${tone}`} />{copy.value}</p>
+      <p className="flex items-center gap-2 text-2xl"><Icon aria-hidden="true" className={`size-5 ${tone}`} />{copy.value}</p>
       <p className="text-sm text-fg-muted">{copy.detail}</p>
     </Card>
   );

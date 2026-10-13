@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ChartSkeleton, ErrorState, KpiCard, ScreenSkeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ChartSkeleton, EmptyState, ErrorState, KpiCard, ScreenSkeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { plainError } from "@/lib/copy";
 import {
   useAccountIntelligenceQuery,
@@ -78,20 +78,20 @@ function Intelligence({ brandId }: { brandId: string }) {
   const analyses = accountData.analyses;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
 
       {/* Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-widest text-brass">
+            <span className="eyebrow">
               JEV Cognitive Engine
             </span>
             <Badge variant="info">
               Multimodal 2.0
             </Badge>
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+          <h1 className="page-title">
             Account & Creative Intelligence
           </h1>
           <p className="mt-1 text-sm text-muted">
@@ -102,16 +102,16 @@ function Intelligence({ brandId }: { brandId: string }) {
       </div>
 
       <Tabs defaultValue="account" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
-          <TabsTrigger value="account" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-3 max-w-xl">
+          <TabsTrigger value="account" className="flex items-center gap-2 sm:whitespace-nowrap">
             <Activity className="h-4 w-4" />
             <span>Account DNA</span>
           </TabsTrigger>
-          <TabsTrigger value="whitespace" className="flex items-center gap-2">
+          <TabsTrigger value="whitespace" className="flex items-center gap-2 sm:whitespace-nowrap">
             <Compass className="h-4 w-4" />
             <span>Whitespace ({whitespace.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="semantic" className="flex items-center gap-2">
+          <TabsTrigger value="semantic" className="flex items-center gap-2 sm:whitespace-nowrap">
             <Layers className="h-4 w-4" />
             <span>Semantic Memory</span>
           </TabsTrigger>
@@ -121,15 +121,15 @@ function Intelligence({ brandId }: { brandId: string }) {
         <TabsContent value="account" className="space-y-6">
           {/* Platform Selector Bar */}
           <div className="flex flex-wrap items-center gap-2 border-b border-line pb-4">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted">Platform:</span>
+            <span className="eyebrow">Platform:</span>
             {["instagram", "tiktok", "youtube"].map((p) => (
               <Button
                 key={p}
                 size="sm"
-                variant={platform === p ? "primary" : "secondary"}
+                variant="secondary"
                 aria-pressed={platform === p}
                 onClick={() => setPlatform(p)}
-                className="capitalize"
+                className={platform === p ? "capitalize border-fg bg-surface-2" : "capitalize"}
               >
                 {p === "youtube" ? "YouTube Shorts" : p}
               </Button>
@@ -165,8 +165,8 @@ function Intelligence({ brandId }: { brandId: string }) {
                       Brand Archetype
                     </span>
                     <div className="mt-2 flex items-center gap-2">
-                      <Sparkles className="h-5 w-5 text-brass" />
-                      <span className="font-display text-xl font-semibold capitalize text-foreground">
+                      <Sparkles className="h-5 w-5 text-fg-muted" />
+                      <span className="text-xl font-semibold capitalize text-fg">
                         {profile.brandArchetype.replace(/_/g, " ") || "UGC Authentic"}
                       </span>
                     </div>
@@ -214,7 +214,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                      <Zap className="h-4 w-4 text-brass" />
+                      <Zap className="h-4 w-4 text-fg-muted" />
                       Top Hooks & Angle Saturation
                     </CardTitle>
                     <CardDescription>
@@ -261,7 +261,7 @@ function Intelligence({ brandId }: { brandId: string }) {
               {/* Multimodal Decomposition Feed */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display text-lg font-semibold text-foreground">
+                  <h3 className="text-lg font-semibold text-fg">
                     Multimodal Creative DNA Stream
                   </h3>
                   <span className="text-xs text-muted">
@@ -270,11 +270,10 @@ function Intelligence({ brandId }: { brandId: string }) {
                 </div>
 
                 {analyses.length === 0 ? (
-                  <Card>
-                    <p className="text-sm text-muted">
-                      No individual post analyses stored yet. Connect an account in the Accounts tab to ingest content.
-                    </p>
-                  </Card>
+                  <EmptyState
+                    title="No individual post analyses yet"
+                    reason="Connect an account in the Accounts tab to ingest content."
+                  />
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {analyses.map((item) => (
@@ -289,15 +288,15 @@ function Intelligence({ brandId }: { brandId: string }) {
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="rounded bg-panel/80 p-2">
+                          <div className="border-l border-border pl-3">
                             <span className="text-muted block">3s Retention</span>
                             <span className="font-semibold text-success">
                               {((item.threeSecondRetention ?? 0) * 100).toFixed(1)}%
                             </span>
                           </div>
-                          <div className="rounded bg-panel/80 p-2">
+                          <div className="border-l border-border pl-3">
                             <span className="text-muted block">Hook Visual</span>
-                            <span className="font-semibold text-brass">
+                            <span className="font-semibold text-fg">
                               {((item.hookVisualScore ?? 0) * 100).toFixed(0)} / 100
                             </span>
                           </div>
@@ -331,20 +330,18 @@ function Intelligence({ brandId }: { brandId: string }) {
               </div>
             </>
           ) : (
-            <Card className="space-y-3 py-8 text-center">
-              <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
-              <h3 className="font-display text-lg font-semibold">No profile for {platform}</h3>
-              <p className="mx-auto max-w-md text-sm text-muted">
-                JEV computes rolling portfolio profiles automatically once accounts are connected and content is ingested.
-              </p>
-              <div className="pt-2">
-                <Button variant="secondary" asChild>
+            <EmptyState
+              icon={<Compass aria-hidden="true" className="size-5" />}
+              title={`No profile for ${platform}`}
+              reason="JEV computes rolling portfolio profiles automatically once accounts are connected and content is ingested."
+              action={
+                <Button asChild>
                   <Link to="/brands/$brandId/accounts" params={{ brandId }}>
                     Connect {platform} account &rarr;
                   </Link>
                 </Button>
-              </div>
-            </Card>
+              }
+            />
           )}
         </TabsContent>
 
@@ -352,7 +349,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         <TabsContent value="whitespace" className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-display text-xl font-semibold">Competitor Whitespace Radar</h2>
+              <h2 className="text-section font-semibold">Competitor Whitespace Radar</h2>
               <p className="text-sm text-muted">
                 Unsaturated angles ranked by expected win probability from market observation and creative gap analysis.
               </p>
@@ -360,13 +357,11 @@ function Intelligence({ brandId }: { brandId: string }) {
           </div>
 
           {whitespace.length === 0 ? (
-            <Card className="py-8 text-center">
-              <Compass className="mx-auto h-8 w-8 text-brass" aria-hidden="true" />
-              <h3 className="mt-3 font-display text-lg font-semibold">No whitespace opportunities detected</h3>
-              <p className="mt-1 text-sm text-muted">
-                As market evidence and competitor campaigns are collected, JEV automatically flags high-probability gaps.
-              </p>
-            </Card>
+            <EmptyState
+              icon={<Compass aria-hidden="true" className="size-5" />}
+              title="No whitespace opportunities detected"
+              reason="As market evidence and competitor campaigns are collected, JEV automatically flags high-probability gaps."
+            />
           ) : (
             <WhitespaceRanking
               items={whitespace}
@@ -381,7 +376,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         {/* TAB 3: SEMANTIC MEMORY & NOTICES */}
         <TabsContent value="semantic" className="space-y-6">
           <div className="max-w-2xl space-y-2">
-            <h2 className="font-display text-2xl">Stored Semantic Memory</h2>
+            <h2 className="text-section font-semibold">Stored Semantic Memory</h2>
             <p className="text-muted text-sm">
               {baseData.semanticNote} Structured angle counts below are fingerprints. They are not a substitute for local:semantic vectors.
             </p>
@@ -389,15 +384,15 @@ function Intelligence({ brandId }: { brandId: string }) {
 
           <div className="grid gap-3 md:grid-cols-3">
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">Competitor rows</p>
-              <p className="mt-2 font-display text-3xl">{baseData.competitorCount}</p>
+              <p className="eyebrow">Competitor rows</p>
+              <p className="mt-2 text-3xl">{baseData.competitorCount}</p>
             </Card>
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">This brand</p>
-              <p className="mt-2 font-display text-3xl">{baseData.ownCount}</p>
+              <p className="eyebrow">This brand</p>
+              <p className="mt-2 text-3xl">{baseData.ownCount}</p>
             </Card>
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-widest text-brass">Angle Gaps</p>
+              <p className="eyebrow">Angle Gaps</p>
               <p className="mt-2 text-sm">
                 {baseData.whitespace.length === 0
                   ? "No competitor angle is missing from this brand."
@@ -409,7 +404,7 @@ function Intelligence({ brandId }: { brandId: string }) {
           <ClusterCards angleClusters={baseData.angleClusters} semanticClusters={baseData.semanticClusters} />
 
           <Card>
-            <h3 className="font-display text-lg font-semibold">System Notices</h3>
+            <h3 className="text-lg font-semibold">System Notices</h3>
             {baseData.notifications.length === 0 ? (
               <p className="mt-2 text-muted text-sm">No notices yet.</p>
             ) : (

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { PageHeader, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { Button, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { GeneralTab } from "@/components/settings/general-tab";
 import { MembersTab } from "@/components/settings/members-tab";
@@ -8,6 +8,7 @@ import { WeightsTab } from "@/components/settings/weights-tab";
 import { LearningTab } from "@/components/settings/learning-tab";
 import { DangerTab } from "@/components/settings/danger-tab";
 import { hasRole } from "@/lib/meridian/access";
+import { SETTINGS_SCREEN_LINKS } from "@/lib/navigation/model";
 
 export const Route = createFileRoute("/_app/settings")({ staticData: { pageTitle: "Settings" }, component: SettingsPage });
 
@@ -36,6 +37,13 @@ function SettingsPage() {
         description={`You are ${active.role}. Permission checks run on the server, not only in this screen.`}
         breadcrumbs={[{ label: "Overview", to: "/" }]}
       />
+      {/* Screens that moved out of the sidebar. Each keeps its own role checks; this list only links to them. */}
+      <nav aria-label="Other screens in Settings" className="space-y-3">
+        <p className="eyebrow">Also in Settings</p>
+        <div className="flex flex-wrap gap-2">
+          {SETTINGS_SCREEN_LINKS.map((link) => <Button key={link.to} asChild variant="secondary" size="md"><Link to={link.to as never}>{link.label}</Link></Button>)}
+        </div>
+      </nav>
       <Tabs value={tab} onValueChange={(value) => setTab(value as SettingsTab)} className="space-y-6">
         <TabsList aria-label="Settings sections" className="w-full flex-nowrap overflow-x-auto border-border">
           {TABS.map((item) => (

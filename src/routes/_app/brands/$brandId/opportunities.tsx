@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button, DisabledReason, ErrorState, Field, Card, ScreenSkeleton, SelectInput } from "@/components/ui";
+import { Button, DisabledReason, EmptyState, ErrorState, Field, Card, ScreenSkeleton, SelectInput } from "@/components/ui";
 import { PlainErrorNotice } from "@/components/plain-error";
 import { copy, plainError } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
@@ -128,13 +128,13 @@ function Opportunities({ brandId }: { brandId: string }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-3">
-          <p className="text-sm font-semibold uppercase tracking-widest text-brass">Opportunities</p>
-          <h1 className="font-display text-4xl">What to make next</h1>
+          <p className="eyebrow">Opportunities</p>
+          <h1 className="page-title">What to make next</h1>
           <p className="text-muted">
-            {copy.opportunities.intro}
+            {copy.opportunities.intro}{" "}
             Make image and video variants in <Link className="font-semibold" to="/brands/$brandId/studio" params={{ brandId }}>Studio</Link>, not from a script form.
           </p>
         </div>
@@ -154,7 +154,10 @@ function Opportunities({ brandId }: { brandId: string }) {
       {dismiss.error ? <PlainErrorNotice error={dismiss.error} /> : null}
       {hasHold ? <HoldBanner brandId={brandId} /> : null}
       {rows.length === 0 ? (
-        <Card>{copy.opportunities.empty}</Card>
+        <EmptyState
+          title={canEdit ? "Rank opportunities to fill this list" : "No opportunities ranked yet"}
+          reason={copy.opportunities.empty}
+        />
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">

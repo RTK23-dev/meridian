@@ -62,7 +62,7 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
     <Dialog open={!!target} onOpenChange={dismiss.requestOpenChange}>
       {target ? (
         <DialogContent aria-describedby={descriptionId} className="max-w-lg">
-          <DialogTitle className="font-display text-2xl">{reviewDialogTitle(action)}</DialogTitle>
+          <DialogTitle className="text-section font-semibold">{reviewDialogTitle(action)}</DialogTitle>
           <DialogDescription id={descriptionId} className="mt-2 text-sm text-fg-muted">
             {target.title}. The decision, the reason and the note stay with this review.
           </DialogDescription>
@@ -75,7 +75,7 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
                     key={option}
                     className={cn(
                       "flex min-h-11 cursor-pointer items-center gap-2 rounded-md border p-3 text-sm",
-                      action === option ? "border-accent bg-accent-soft font-semibold" : "border-border bg-surface",
+                      action === option ? "border-fg bg-surface-2 font-semibold" : "border-border bg-surface",
                     )}
                   >
                     <input

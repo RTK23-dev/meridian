@@ -6,6 +6,7 @@ import { publishThrough } from "../providers/boundaries.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { isOrganicPlatform, resolveOrganicConnection, resolveOrganicConnections } from "./connection.ts";
 import type { OrganicPlatform } from "./types.ts";
+import { mediaDeliveryFor, signMediaLink, signedMediaUrl } from "../storage/media-link.ts";
 
 export async function requireBrandAccess(
   sql: Sql,
@@ -51,11 +52,17 @@ export type PublishMultiChannelInput = {
   userId: string;
 };
 
+/**
+ * One channel's receipt. `published` and `scheduled` are organic posts the provider confirmed. `paused` is a paid object the
+ * provider created with its status PAUSED: it is never live, and it is not an organic publish. `not_connected` means nothing was
+ * sent, and the reason says why. It is never counted as published.
+ */
 export type PublishChannelResult = {
   channelId: string;
   platform: string;
   type: "organic" | "paid";
-  status: "published" | "scheduled" | "failed";
+  surface: "organic" | "paid";
+  status: "published" | "scheduled" | "paused" | "not_connected" | "failed";
   externalId?: string;
   url?: string;
   error?: string;
@@ -73,20 +80,23 @@ export type OrganicPostSummary = {
   scheduledFor: string | null;
   publishedAt: string | null;
   createdAt: string;
-  views: number;
-  threeSecondViews: number;
-  completionRate: number;
-  shares: number;
-  likes: number;
+  // A metric the platform did not report is null. It is never shown or summed as zero.
+  views: number | null;
+  threeSecondViews: number | null;
+  completionRate: number | null;
+  shares: number | null;
+  likes: number | null;
 };
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
 }
 
-function asNumber(value: unknown): number {
+/** A stored metric, or null when it was never reported. Zero is a value, so it stays zero. */
+function asMetric(value: unknown): number | null {
+  if (value == null) return null;
   const number = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(number) ? number : 0;
+  return Number.isFinite(number) ? number : null;
 }
 
 /**
@@ -118,6 +128,13 @@ export async function listAvailableChannels(
     return state.connected
       ? { connected: true, accountName: state.accountName, reason: undefined }
       : { connected: false, accountName: undefined, reason: state.reason };
+  };
+  // A channel that publishes by URL (Instagram, TikTok) is connected only when its signed media link can be delivered. A missing
+  // secret, origin, or unverified TikTok domain shows not connected, with the reason.
+  const byUrlState = (platform: "instagram" | "tiktok", state: Pick<ChannelDefinition, "connected" | "accountName" | "reason">) => {
+    if (!state.connected) return state;
+    const delivery = mediaDeliveryFor(platform);
+    return delivery.ready ? state : { connected: false, accountName: undefined, reason: delivery.reason };
   };
   const paidReason = (label: string) => `No ${label} account is connected for this workspace. Connect it on the Integrations screen.`;
 
@@ -170,7 +187,7 @@ export async function listAvailableChannels(
       type: "organic",
       platform: "instagram",
       description: "Full-screen vertical short-form organic video (9:16) with captions and hashtag targeting.",
-      ...organicState("instagram"),
+      ...byUrlState("instagram", organicState("instagram")),
     },
     {
       id: "facebook-pages",
@@ -188,7 +205,31 @@ export async function listAvailableChannels(
       description: "Organic short-form vertical video (<=60s) published to the brand's official YouTube channel.",
       ...organicState("youtube"),
     },
+    {
+      id: "tiktok-organic",
+      name: "TikTok (regular video)",
+      type: "organic",
+      platform: "tiktok",
+      description: "Organic MP4 or MOV video posted to the brand's TikTok account. Posts stay private until TikTok approves the app for public posting.",
+      ...byUrlState("tiktok", organicState("tiktok")),
+    },
   ];
+}
+
+/** Records a channel that was not connected, or could not be given a link, as a not_connected receipt. It is never counted as published. */
+async function recordNotConnectedPost(
+  sql: Sql,
+  row: { organizationId: string; brandId: string; creativeId: string; assetId: string | null; platform: string; caption: string; title: string; error: string },
+): Promise<void> {
+  await sql`
+    insert into organic_posts (
+      id, organization_id, brand_id, creative_id, asset_id, platform, external_id, post_url, caption, title, aspect_ratio,
+      status, scheduled_for, published_at, error, surface
+    ) values (
+      ${globalThis.crypto.randomUUID()}, ${row.organizationId}, ${row.brandId}, ${row.creativeId}, ${row.assetId},
+      ${row.platform}, null, null, ${row.caption}, ${row.title}, '9:16', 'not_connected', null, null, ${row.error}, 'organic'
+    )
+  `;
 }
 
 /**
@@ -242,12 +283,13 @@ export async function publishCreativeToChannels(
         }
         const published = publishThrough({ provider: "test", creativeId: input.creativeId, allowTestProvider: true });
         extId = published.externalId ?? "";
+        // The test ad is created paused, the same as a live paid object. Nothing here switches it on.
         await sql`
           insert into provider_objects (
-            id, organization_id, brand_id, provider, object_type, idempotency_key, external_id, status
+            id, organization_id, brand_id, provider, object_type, idempotency_key, external_id, status, surface
           ) values (
             ${globalThis.crypto.randomUUID()}, ${access.organizationId}, ${input.brandId}, 'test', 'ad', ${input.creativeId},
-            ${extId}, 'active'
+            ${extId}, 'paused', 'paid'
           )
         `;
       }
@@ -255,7 +297,8 @@ export async function publishCreativeToChannels(
         channelId: "test-publisher",
         platform: "test",
         type: "paid",
-        status: "published",
+        surface: "paid",
+        status: "paused",
         externalId: extId,
         url: extId ? `https://ads.test.meridian.internal/campaigns/${extId}` : undefined,
       });
@@ -263,11 +306,13 @@ export async function publishCreativeToChannels(
     }
 
     if (channelId === "meta-ads" || channelId === "tiktok-ads" || channelId === "google-ads") {
+      // A live paid account is not connected for this workspace in this build, so nothing is sent. The receipt says so.
       results.push({
         channelId,
         platform: channelId.replace("-ads", ""),
         type: "paid",
-        status: "failed",
+        surface: "paid",
+        status: "not_connected",
         error: `No live ${channelId.replace("-ads", "")} ad account connected. Connect credentials in Settings.`,
       });
       continue;
@@ -280,6 +325,7 @@ export async function publishCreativeToChannels(
         channelId,
         platform: "unknown",
         type: "organic",
+        surface: "organic",
         status: "failed",
         error: `Channel "${channelId}" is not a recognized distribution destination.`,
       });
@@ -288,25 +334,85 @@ export async function publishCreativeToChannels(
 
     const scheduledDate = input.scheduledFor ? new Date(input.scheduledFor) : undefined;
 
+    // The connection is resolved first, for this brand. A channel with no usable connection records not_connected with its reason,
+    // before any media is read, and no request is sent. It is never counted as published.
+    const connection = isOrganicPlatform(organicChannel.platform)
+      ? await resolveOrganicConnection(sql, { organizationId: access.organizationId, brandId: input.brandId, platform: organicChannel.platform })
+      : undefined;
+    const check = organicChannel.checkConnection(connection);
+    if (!check.connected) {
+      const error = check.reason ?? "This channel is not connected. Nothing was sent.";
+      await recordNotConnectedPost(sql, {
+        organizationId: access.organizationId,
+        brandId: input.brandId,
+        creativeId: input.creativeId,
+        assetId: asset?.id ?? null,
+        platform: organicChannel.platform,
+        caption,
+        title,
+        error,
+      });
+      results.push({
+        channelId,
+        platform: organicChannel.platform,
+        type: "organic",
+        surface: "organic",
+        status: "not_connected",
+        error,
+      });
+      continue;
+    }
+
     if (!asset) {
       results.push({
         channelId,
         platform: organicChannel.platform,
         type: "organic",
+        surface: "organic",
         status: "failed",
         error: "Missing video asset for creative. Stored artifact required for publishing.",
       });
       continue;
     }
 
+    // A channel that publishes by URL gets a signed, short-lived link to this approved creative. The platform fetches the file through
+    // the link, so the link is the only thing sent. When no link can be delivered, nothing is sent and the receipt says why. The link is
+    // never stored or logged.
+    let mediaUrl: string | undefined;
+    let verifiedMediaDomains: string[] | undefined;
+    if (organicChannel.platform === "instagram" || organicChannel.platform === "tiktok") {
+      const delivery = mediaDeliveryFor(organicChannel.platform);
+      if (!delivery.ready) {
+        await recordNotConnectedPost(sql, {
+          organizationId: access.organizationId,
+          brandId: input.brandId,
+          creativeId: input.creativeId,
+          assetId: asset.id,
+          platform: organicChannel.platform,
+          caption,
+          title,
+          error: delivery.reason,
+        });
+        results.push({ channelId, platform: organicChannel.platform, type: "organic", surface: "organic", status: "not_connected", error: delivery.reason });
+        continue;
+      }
+      const signed = signMediaLink({ creativeId: input.creativeId, nowSeconds: Math.floor(Date.now() / 1000), secret: delivery.secret });
+      mediaUrl = signedMediaUrl({ origin: delivery.origin, creativeId: input.creativeId, expires: signed.expires, sig: signed.sig });
+      verifiedMediaDomains = delivery.verifiedDomains;
+    }
+
     let mediaBytes: Uint8Array | null = null;
     try {
-      const { createFilesystemObjectStore } = await import("../storage/filesystem.ts");
-      const store = createFilesystemObjectStore(process.env.STORAGE_ROOT || ".meridian/storage");
-      const stored = store.get(access.organizationId, asset.storage_key);
-      if (stored?.bytes && stored.bytes.byteLength > 0) {
-        mediaBytes = stored.bytes;
-      }
+      // The bytes live in Postgres (asset_blobs) or in Google Drive, located by the storage_objects row. This is the same read a
+      // download makes, so a publish sends the file that the person can see.
+      const { loadStoredSource } = await import("../storage/asset-response.ts");
+      const { defaultArtifactDrive } = await import("../storage/artifact-drive.ts");
+      const stored = await loadStoredSource(sql, async () => defaultArtifactDrive(), {
+        storageKey: asset.storage_key,
+        organizationId: access.organizationId,
+        brandId: input.brandId,
+      });
+      if (stored && stored.bytes.byteLength > 0) mediaBytes = stored.bytes;
     } catch {
       // storage unavailable
     }
@@ -316,6 +422,7 @@ export async function publishCreativeToChannels(
         channelId,
         platform: organicChannel.platform,
         type: "organic",
+        surface: "organic",
         status: "failed",
         error: "Stored media artifact bytes not found. Cannot publish empty or placeholder media.",
       });
@@ -323,11 +430,7 @@ export async function publishCreativeToChannels(
     }
 
     try {
-      // The connection is resolved here, for this brand, and handed to the channel. A missing or unusable token is a
-      // NOT_CONNECTED receipt with its reason, and no request is sent.
-      const connection = isOrganicPlatform(organicChannel.platform)
-        ? await resolveOrganicConnection(sql, { organizationId: access.organizationId, brandId: input.brandId, platform: organicChannel.platform })
-        : undefined;
+      // The channel receives the connection the service resolved above. It never reads a token itself.
       const publishReceipt = await organicChannel.publish({
         brandId: input.brandId,
         organizationId: access.organizationId,
@@ -341,19 +444,25 @@ export async function publishCreativeToChannels(
         aspectRatio: "9:16",
         allowTestProvider: false,
         connection,
+        mediaUrl,
+        verifiedMediaDomains,
       });
 
+      // A channel that reports NOT_CONNECTED sent nothing, for example Instagram without a public media URL. That is a not_connected
+      // receipt, not a failed publish.
+      const receiptStatus = publishReceipt.code === "NOT_CONNECTED" ? "not_connected" : publishReceipt.status;
       const postId = globalThis.crypto.randomUUID();
       await sql`
         insert into organic_posts (
           id, organization_id, brand_id, creative_id, asset_id, platform, external_id,
-          post_url, caption, title, aspect_ratio, status, scheduled_for, published_at
+          post_url, caption, title, aspect_ratio, status, scheduled_for, published_at, error, surface
         ) values (
           ${postId}, ${access.organizationId}, ${input.brandId}, ${input.creativeId},
           ${asset?.id ?? null}, ${publishReceipt.platform}, ${publishReceipt.externalId || null},
           ${publishReceipt.postUrl || null}, ${caption}, ${title}, '9:16',
-          ${publishReceipt.status}, ${scheduledDate ? scheduledDate.toISOString() : null},
-          ${publishReceipt.status === "published" ? new Date().toISOString() : null}
+          ${receiptStatus}, ${scheduledDate ? scheduledDate.toISOString() : null},
+          ${receiptStatus === "published" ? new Date().toISOString() : null},
+          ${publishReceipt.error || null}, 'organic'
         )
       `;
 
@@ -361,7 +470,8 @@ export async function publishCreativeToChannels(
         channelId,
         platform: publishReceipt.platform,
         type: "organic",
-        status: publishReceipt.status,
+        surface: "organic",
+        status: receiptStatus,
         externalId: publishReceipt.externalId,
         url: publishReceipt.postUrl,
         error: publishReceipt.error,
@@ -371,14 +481,15 @@ export async function publishCreativeToChannels(
         channelId,
         platform: organicChannel.platform,
         type: "organic",
+        surface: "organic",
         status: "failed",
         error: err instanceof Error ? err.message : String(err),
       });
     }
   }
 
-  // If any channel succeeded, transition creative and asset
-  const anySuccess = results.some((r) => r.status === "published" || r.status === "scheduled");
+  // If any channel succeeded, transition creative and asset. A paused paid ad counts: the creative has been sent to a channel.
+  const anySuccess = results.some((r) => r.status === "published" || r.status === "scheduled" || r.status === "paused");
   if (anySuccess) {
     await sql`update creative_records set status = 'testing', updated_at = now() where id = ${input.creativeId}`;
     await sql`
@@ -401,11 +512,7 @@ export async function listOrganicPosts(
   const posts = await sql<Record<string, unknown>>`
     select p.id, p.creative_id, p.platform, p.external_id, p.post_url, p.caption, p.title,
            p.status, p.scheduled_for, p.published_at, p.created_at,
-           coalesce(o.views, 0) as views,
-           coalesce(o.three_second_views, 0) as three_second_views,
-           coalesce(o.completion_rate, 0) as completion_rate,
-           coalesce(o.shares, 0) as shares,
-           coalesce(o.likes, 0) as likes
+           o.views, o.three_second_views, o.completion_rate, o.shares, o.likes
     from organic_posts p
     left join lateral (
       select views, three_second_views, completion_rate, shares, likes
@@ -430,17 +537,17 @@ export async function listOrganicPosts(
     scheduledFor: row.scheduled_for ? asText(row.scheduled_for) : null,
     publishedAt: row.published_at ? asText(row.published_at) : null,
     createdAt: asText(row.created_at),
-    views: asNumber(row.views),
-    threeSecondViews: asNumber(row.three_second_views),
-    completionRate: asNumber(row.completion_rate),
-    shares: asNumber(row.shares),
-    likes: asNumber(row.likes),
+    views: asMetric(row.views),
+    threeSecondViews: asMetric(row.three_second_views),
+    completionRate: asMetric(row.completion_rate),
+    shares: asMetric(row.shares),
+    likes: asMetric(row.likes),
   }));
 }
 
 /**
- * Simulates or records realistic organic observations for published organic posts,
- * then invokes applyLearnedPatterns so the feedback loop immediately trains JEV.
+ * Counts the real (not synthetic, not simulated) organic observations, then runs applyLearnedPatterns so the feedback loop
+ * trains from them. It writes no observation of its own: `recorded` is the count already stored, not a count of new rows.
  */
 export async function recordOrganicTelemetryAndLearn(
   sql: Sql,

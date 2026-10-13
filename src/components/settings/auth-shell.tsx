@@ -12,7 +12,47 @@ export function MeridianMark({ className = "size-9" }: { className?: string }) {
   );
 }
 
-/** A centred sign-in layout: the mark, a page title, a card for the form, and an optional footer. */
+const LOOP = ["Gather", "Grade", "Make", "Publish", "Learn"] as const;
+
+/**
+ * The left side of the sign-in and welcome screens. It says what Meridian does in one sentence, shows the loop it runs, and states
+ * the two things people ask about first: where keys live, and that ads start paused.
+ */
+export function BrandStage({ headline = "Find what works. Make the next one.", lead }: { headline?: string; lead?: ReactNode }) {
+  return (
+    <section aria-label="About Meridian" className="space-y-8">
+      <div className="flex items-center gap-3">
+        <MeridianMark className="size-10" />
+        <span className="font-wordmark text-2xl font-semibold tracking-tight text-fg">Meridian</span>
+      </div>
+      <div className="space-y-4">
+        <p className="eyebrow">An advertising factory that learns</p>
+        <h2 className="text-2xl font-semibold leading-tight text-fg sm:text-3xl">{headline}</h2>
+        <p className="max-w-prose text-lg text-fg-muted">
+          {lead ?? "Add a brand and what you know about it. Meridian gathers what already works in its niche, grades it, makes new creatives, and learns from what happens next."}
+        </p>
+      </div>
+      <ol className="flex flex-wrap items-center gap-2" aria-label="The loop Meridian runs">
+        {LOOP.map((stage, index) => (
+          <li
+            key={stage}
+            className="stagger-in flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-sm font-medium text-fg"
+            style={{ animationDelay: `${120 + index * 90}ms` }}
+          >
+            <span className="size-1.5 rounded-full bg-fg-muted" aria-hidden="true" />
+            {stage}
+            {index < LOOP.length - 1 ? <span aria-hidden="true" className="text-fg-muted">→</span> : null}
+          </li>
+        ))}
+      </ol>
+      <p className="max-w-prose text-sm text-fg-muted">
+        Each decision is stored with the engine and the evidence it used. New paid ads are created paused. Keys are saved encrypted on the server, and they are never shown again.
+      </p>
+    </section>
+  );
+}
+
+/** A split layout: the brand stage on the left and the form on the right. It stacks on a phone, with the form first. */
 export function AuthShell({ title, description, children, footer }: {
   title: string;
   description?: ReactNode;
@@ -20,17 +60,18 @@ export function AuthShell({ title, description, children, footer }: {
   footer?: ReactNode;
 }) {
   return (
-    <main id="main" tabIndex={-1} className="mx-auto grid min-h-screen w-full max-w-md content-center gap-6 px-4 py-10 sm:px-6">
-      <div className="flex items-center gap-3">
-        <MeridianMark />
-        <span className="font-display text-xl font-semibold tracking-tight text-fg">Meridian</span>
+    <main id="main" tabIndex={-1} className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 lg:py-16">
+      <div className="order-2 lg:order-1">
+        <BrandStage />
       </div>
-      <div className="space-y-2">
-        <h1 className="font-display text-4xl leading-tight text-fg">{title}</h1>
-        {description ? <p className="text-fg-muted">{description}</p> : null}
+      <div className="page-enter order-1 mx-auto w-full max-w-md space-y-6 lg:order-2">
+        <div className="space-y-2">
+          <h1 className="page-title">{title}</h1>
+          {description ? <p className="text-fg-muted">{description}</p> : null}
+        </div>
+        <div className="surface-rise space-y-6 rounded-xl border border-border bg-surface p-6 md:p-7">{children}</div>
+        {footer ? <div className="text-sm text-fg-muted">{footer}</div> : null}
       </div>
-      <div className="space-y-6 rounded-lg border border-border bg-surface p-6 shadow-sm">{children}</div>
-      {footer ? <div className="text-sm text-fg-muted">{footer}</div> : null}
     </main>
   );
 }

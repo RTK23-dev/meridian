@@ -35,7 +35,7 @@ function percentText(value: number | null): string {
 function Meter({ value }: { value: number | null }) {
   if (value === null) return null;
   const width = Math.round(Math.min(1, Math.max(0, value)) * 100);
-  return <span aria-hidden="true" className="mt-2 block h-1.5 w-full overflow-hidden rounded-full bg-surface"><span className="block h-full rounded-full bg-accent" style={{ width: `${width}%` }} /></span>;
+  return <span aria-hidden="true" className="mt-2 block h-1.5 w-full overflow-hidden rounded-full bg-surface-2"><span className="block h-full rounded-full bg-fg-muted" style={{ width: `${width}%` }} /></span>;
 }
 
 /** Whitespace as an ordered list. Accept and reject are member actions. Each row's pending state covers only that row. */
@@ -47,14 +47,14 @@ export function WhitespaceRanking({ items, brandId, canEdit, pendingIds, onStatu
   onStatus: (id: string, status: "accepted" | "rejected") => void;
 }) {
   const ranked = rankWhitespace(items);
-  return <ol aria-label="Whitespace ranked by expected win probability" className="space-y-3">
+  return <ol aria-label="Whitespace ranked by expected win probability" className="divide-y divide-border">
     {ranked.map((opportunity, index) => {
       const presentation = STATUS[opportunity.status] ?? STATUS.proposed;
       const StatusIcon = presentation.icon;
       const busy = pendingIds.includes(opportunity.id);
       const probability = finite(opportunity.expectedWinProbability);
       const saturation = finite(opportunity.competitorSaturationScore);
-      return <li key={opportunity.id} className="rounded-lg border border-border bg-surface p-5">
+      return <li key={opportunity.id} className="py-5 first:pt-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -62,20 +62,20 @@ export function WhitespaceRanking({ items, brandId, canEdit, pendingIds, onStatu
               <Badge variant="neutral" className="capitalize">{opportunity.category || "uncategorised"}</Badge>
               <Badge variant={presentation.variant}><StatusIcon aria-hidden="true" className="size-3.5" />{presentation.label}</Badge>
             </div>
-            <h3 className="font-display text-lg capitalize">{opportunity.unsaturatedAngle.replace(/_/g, " ")}</h3>
+            <h3 className="text-lg capitalize">{opportunity.unsaturatedAngle.replace(/_/g, " ")}</h3>
           </div>
-          <Button size="sm" variant="primary" className="h-9 text-xs" asChild>
+          <Button size="sm" variant="secondary" className="h-9 text-xs" asChild>
             <Link to="/brands/$brandId/studio" params={{ brandId }}>Create brief <ArrowUpRight aria-hidden="true" className="ml-1 size-3.5" /></Link>
           </Button>
         </div>
 
         <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-md bg-surface-2 p-3">
+          <div className="border-l border-border pl-3">
             <dt className="text-xs text-fg-muted">Expected win probability</dt>
             <dd className="mt-1 font-semibold tabular-nums">{percentText(probability)}<Meter value={probability} /></dd>
             <dd className="mt-1 text-[11px] text-fg-muted">Bayesian prior model</dd>
           </div>
-          <div className="rounded-md bg-surface-2 p-3">
+          <div className="border-l border-border pl-3">
             <dt className="text-xs text-fg-muted">Competitor saturation</dt>
             <dd className="mt-1 font-semibold tabular-nums">{percentText(saturation)}<Meter value={saturation} /></dd>
             <dd className="mt-1 text-[11px] text-fg-muted">Low saturation is favorable</dd>

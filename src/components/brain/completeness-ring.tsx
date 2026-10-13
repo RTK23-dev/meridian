@@ -16,7 +16,7 @@ export function CompletenessRing({ filled, total }: { filled: number; total: num
         fill="none"
         strokeWidth="8"
         strokeLinecap="round"
-        className="stroke-accent transition-[stroke-dashoffset] duration-200 motion-reduce:transition-none"
+        className="stroke-fg transition-[stroke-dashoffset] duration-200 motion-reduce:transition-none"
         strokeDasharray={circumference}
         strokeDashoffset={circumference * (1 - ratio)}
       />

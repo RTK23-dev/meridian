@@ -1,41 +1,9 @@
 import { Command } from "cmdk";
 import type { PageCommand } from "@/components/page-commands";
+import { paletteScreens } from "@/lib/navigation/model";
 
 export type PaletteBrand = { id: string; name: string };
 export type PaletteWorkspace = { id: string; name: string };
-
-/** Screens inside a brand. Every path needs a brand id, so the list is built per brand. */
-export function brandScreenLinks(brandId: string): { label: string; to: string }[] {
-  const base = `/brands/${brandId}`;
-  return [
-    { label: "Overview", to: base },
-    { label: "Market", to: `${base}/market` },
-    { label: "Intelligence", to: `${base}/intelligence` },
-    { label: "Opportunities", to: `${base}/opportunities` },
-    { label: "Reviews", to: `${base}/reviews` },
-    { label: "Studio", to: `${base}/studio` },
-    { label: "Library", to: `${base}/library` },
-    { label: "Learning", to: `${base}/learning` },
-    { label: "Calibration", to: `${base}/calibration` },
-    { label: "Brand brain", to: `${base}/brain` },
-    { label: "Products", to: `${base}/products` },
-    { label: "Connected accounts", to: `${base}/accounts` },
-    { label: "Factory", to: `${base}/factory` },
-  ];
-}
-
-export const WORKSPACE_SCREEN_LINKS: { label: string; to: string }[] = [
-  { label: "Workspace overview", to: "/" },
-  { label: "Jobs & health", to: "/jobs" },
-  { label: "Usage & cost", to: "/usage" },
-  { label: "Alerts center", to: "/alerts" },
-  { label: "Integrations", to: "/integrations" },
-  { label: "Settings", to: "/settings" },
-  { label: "Audit log", to: "/audit" },
-  { label: "Exports", to: "/exports" },
-  { label: "Webhook events", to: "/webhooks" },
-  { label: "Notification preferences", to: "/notifications" },
-];
 
 // Menus inside Command.Group: the heading gets the eyebrow treatment, the items stay in normal case.
 const GROUP_CLASS = "px-1 py-2 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-fg-muted";
@@ -102,10 +70,7 @@ export function CommandPalette({
             </Command.Group>
           ) : null}
           <Command.Group heading="Go to" className={GROUP_CLASS}>
-            {brandId ? brandScreenLinks(brandId).map((screen) => (
-              <Command.Item key={screen.to} value={`Go to ${screen.label}`} onSelect={choose(() => onNavigate(screen.to))} className={ITEM_CLASS}>{screen.label}</Command.Item>
-            )) : null}
-            {WORKSPACE_SCREEN_LINKS.map((screen) => (
+            {paletteScreens(brandId).map((screen) => (
               <Command.Item key={screen.to} value={`Go to ${screen.label}`} onSelect={choose(() => onNavigate(screen.to))} className={ITEM_CLASS}>{screen.label}</Command.Item>
             ))}
           </Command.Group>

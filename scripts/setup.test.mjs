@@ -120,6 +120,22 @@ test("the summary reads only the named facts, so a database URL or a key in the 
   assert.equal(lines.includes("sk-live-123"), false);
 });
 
+test("the next steps say that npm run dev runs the jobs without DATABASE_URL, and that a database URL needs the worker and scheduler", () => {
+  const lines = setupSummary(summaryFacts()).join("\n");
+  assert.match(lines, /npm run dev {3}\(port 8080\)\. Without DATABASE_URL it also runs the queued jobs\./);
+  assert.match(lines, /with DATABASE_URL, start npm run worker and npm run scheduler\. Both need it\./);
+});
+
+test("npm run dev runs setup with --from-dev, so the summary leaves out the next steps that dev prints itself", () => {
+  const quiet = setupSummary({ ...summaryFacts(), showNextSteps: false }).join("\n");
+  assert.doesNotMatch(quiet, /Next steps/);
+  assert.match(quiet, /TOKEN_ENCRYPTION_KEY: already set \(the value is never printed\)/);
+  assert.match(quiet, /\.env holds local secrets\. It is ignored by git\. Never commit it\./);
+
+  const full = setupSummary(summaryFacts()).join("\n");
+  assert.match(full, /Next steps/);
+});
+
 test("the summary uses the default origin when none is given, and says a state that was not reported", () => {
   assert.match(setupSummary(summaryFacts({ baseUrl: "" })).join("\n"), /open http:\/\/127\.0\.0\.1:8080\/login/);
   assert.match(setupSummary(summaryFacts({ database: "unknown" })).join("\n"), /The database state was not reported/);

@@ -91,17 +91,18 @@ Current state, stage by stage (`factory/worker.ts`):
 
 | Stage                 | Today                                                                                   | Problem                                           |
 | --------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| discover              | returns whether a Meta key exists                                                       | gathers nothing                                   |
+| discover              | gathers the crawler, social scraper, registry adapters and Ad Library; records each source's state on the run | uploads are not connected: no upload intake stores one yet |
 | ingest                | returns whether media snapshots are allowed                                             | ingests nothing                                   |
 | decode                | decodes stored research ads into DNA                                                    | works; keep                                       |
-| grade                 | winner score with `stillRunning: true` always, `countries: []`, quality fixed at `0.45` | fixed values; JEV not used                        |
+| grade                 | winner score from the delivery the source stored: `stillRunning` is unknown (null) when the source gave no stop time, countries come from the source, quality is null | observed signal only; JEV not used                |
 | trend                 | clusters stored DNA                                                                     | works; keep                                       |
 | pick                  | counts rows                                                                             | picks nothing                                     |
 | template              | storyboards the 10 newest DNA rows                                                      | ignores the grades                                |
 | produce               | writes 8 rows per template from a fixed list of hooks and CTAs                          | produces no media; not linked to Studio creatives |
 | gate                  | runs the rule gates on storyboards                                                      | keep; add JEV QA                                  |
-| launch / test / learn | return fixed strings                                                                    | no publish, no measure, no learn                  |
-| costs                 | `decoded * 2`, `made * 12` cents                                                        | made-up numbers, breaks contract 8.2              |
+| review                | counts the variants waiting for a person; never finishes the run                        | JEV QA is not in the gate (section 8, item 7)     |
+| launch / test / learn | launch and test return fixed strings; learn returns `learn:not-built` and the run stays running | no publish, no measure, no learn; no run finishes |
+| costs                 | no figure is written; a stage writes a cost only from a metered provider call, and none does yet | spend caps are declared, not enforced (FACTORY.md) |
 
 Target behaviour:
 
@@ -193,11 +194,16 @@ Each item is one PR. Acceptance criteria are what the reviewer checks.
     source's state, grades, variants, receipts and metrics.
     _Accept:_ every control acts or says why it cannot (`npm run ui:button-audit`).
 
-## 9. Open questions for the owner
+## 9. Owner decisions
 
-Ask in the PR, do not decide in code:
+The owner answered these on 2026-10-13. The answers are binding, and the code follows them.
 
-- Instagram and TikTok publishing need a media URL the platform can fetch. With Postgres and Drive as storage, which
-  route should serve it?
-- Should an expired provider submission release its held budget automatically?
-- Which grading questions, and which thresholds, should the owner's first calibration use?
+- **Media for live Instagram and TikTok publishing.** A signed, short-lived link from the app, valid for 15 minutes. No link is
+  signed unless the signing secret is at least 32 characters.
+- **Held budget.** Released only when the provider confirms that no job exists for the submission. When the provider cannot be
+  asked, the hold stays for an admin. No provider lookup is registered yet, so every hold stays for an admin until one is.
+- **Grading thresholds.** Calibrated per brand from that brand's own measured outcomes. A calibrated threshold may only raise the
+  bar, never lower it. Until a brand has enough outcomes, its grades stay uncalibrated and go to review. The first constants are
+  accepted for now and will be reviewed once real outcomes exist.
+- **Rights gate.** An operator attests each licence (music, footage) and confirms the AI label for each variant. Each record names
+  who confirmed it and when, and each can be revoked.

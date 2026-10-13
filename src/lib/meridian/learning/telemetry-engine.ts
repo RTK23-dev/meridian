@@ -501,6 +501,82 @@ export function summarizeTelemetry(records: TelemetryRecord[]): TelemetrySummary
 // Closed-Loop Synchronization Flywheel
 // ---------------------------------------------------------------------------
 
+/** The external id a paid observation carries: the unified telemetry row it was bridged from. One measurement is one key. */
+export function paidObservationKey(telemetryRowId: string): string {
+  return `telemetry:${telemetryRowId}`;
+}
+
+/**
+ * The calendar day of a measurement, as YYYY-MM-DD. A value that starts with its ISO date keeps that date; a Date is read in UTC; any
+ * other text is parsed. Telemetry rows are written in UTC, so the day is the UTC day.
+ */
+function dayOf(value: unknown): string {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? "" : value.toISOString().slice(0, 10);
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? text.slice(0, 10) : parsed.toISOString().slice(0, 10);
+}
+
+/** Two nullable counts match when both are unknown, or both are the same number. An unknown count never matches a zero. */
+function sameCount(stored: unknown, value: number | null | undefined): boolean {
+  if (stored == null) return value == null;
+  return value != null && Number(stored) === value;
+}
+
+/**
+ * Writes the paid observation of one measured telemetry row. The observation is keyed by that row, so a later measurement of the same
+ * creative is a new observation, and running the sync again adds nothing. The earlier code wrote one observation per creative with no
+ * key. Such a row is adopted by this key when its day and values match, so that measurement is not counted a second time.
+ */
+async function bridgePaidObservation(sql: Sql, organizationId: string, brandId: string, record: TelemetryRecord): Promise<void> {
+  const key = paidObservationKey(record.id);
+  const keyed = await sql<{ id: string }>`
+    select id from performance_observations
+    where organization_id = ${organizationId} and brand_id = ${brandId} and external_id = ${key}
+    limit 1
+  `;
+  if (keyed.length > 0) return;
+
+  const day = dayOf(record.recordedAt);
+  const earlier = await sql<{
+    id: string;
+    observed_on: unknown;
+    impressions: unknown;
+    clicks: unknown;
+    conversions: unknown;
+    spend_cents: unknown;
+    reach: unknown;
+  }>`
+    select id, observed_on, impressions, clicks, conversions, spend_cents, reach from performance_observations
+    where organization_id = ${organizationId} and brand_id = ${brandId} and creative_id = ${record.creativeId}
+      and created_by = 'telemetry.sync' and external_id = ''
+  `;
+  const adopted = earlier.find((row) =>
+    dayOf(row.observed_on) === day
+    && sameCount(row.impressions, record.impressions)
+    && sameCount(row.clicks, record.clicks)
+    && sameCount(row.conversions, record.conversions)
+    && sameCount(row.spend_cents, record.spendCents)
+    && sameCount(row.reach, record.reach));
+  if (adopted) {
+    await sql`update performance_observations set external_id = ${key} where id = ${adopted.id} and external_id = ''`;
+    return;
+  }
+
+  await sql`
+    insert into performance_observations (
+      id, organization_id, brand_id, creative_id, impressions, clicks, conversions,
+      spend_cents, revenue_cents, reach, observed_on, source, created_by, external_id
+    ) values (
+      ${randomUUID()}, ${organizationId}, ${brandId}, ${record.creativeId},
+      ${record.impressions ?? null}, ${record.clicks ?? null}, ${record.conversions ?? null},
+      ${record.spendCents ?? null}, ${(record.revenueCents && record.revenueCents > 0) ? record.revenueCents : null}, ${record.reach ?? null},
+      ${day}, ${record.platform}, 'telemetry.sync', ${key}
+    )
+  `;
+}
+
 /**
  * Synchronizes unified telemetry into standard learning pattern stores
  * and dynamically updates JEV account profiles with learned priors.
@@ -520,7 +596,8 @@ export async function syncTelemetryToLearning(
     };
   }
 
-  // 1. Bridge telemetry records that have creativeId into performance_observations
+  // 1. Bridge telemetry records that have creativeId into performance_observations and organic_observations. A metric the
+  // source did not report is stored as null: never zero, and never copied from another metric.
   for (const r of records) {
     if (!r.creativeId) continue;
     if (r.metadata?.synthetic === true || r.metadata?.simulated === true) {
@@ -528,70 +605,58 @@ export async function syncTelemetryToLearning(
       continue;
     }
 
-    // Check if observation exists for this creative
-    const existing = await sql`
-      select id from performance_observations
-      where organization_id = ${organizationId}
-        and brand_id = ${brandId}
-        and creative_id = ${r.creativeId}
-      limit 1
-    `;
+    // A paid row needs at least one paid metric. Views are reach, so they never stand in for impressions. Only a paid row is a paid
+    // observation: an organic row that carries an impression count is still an organic outcome, and must not train paid learning.
+    const paidMeasured =
+      r.sourceType === "paid" && (r.impressions != null || r.clicks != null || r.conversions != null || r.spendCents != null);
+    // One paid observation per measured row, so a later measurement of the same creative is counted, and a repeated sync is not.
+    if (paidMeasured) await bridgePaidObservation(sql, organizationId, brandId, r);
 
-    if (!existing || existing.length === 0) {
-      await sql`
-        insert into performance_observations (
-          id, organization_id, brand_id, creative_id, impressions, clicks, conversions,
-          spend_cents, revenue_cents, observed_on, source
-        ) values (
-          ${randomUUID()}, ${organizationId}, ${brandId}, ${r.creativeId},
-          ${Math.max(r.impressions ?? 0, r.views ?? 0)}, ${r.clicks ?? 0}, ${r.conversions ?? 0},
-          ${r.spendCents ?? 0}, ${(r.revenueCents && r.revenueCents > 0) ? r.revenueCents : null},
-          ${r.recordedAt.slice(0, 10)}, ${r.platform}
-        )
-      `;
-    }
-
-    // Bridge organic records directly into organic_observations for JEV retention & shares learning
-    if (r.sourceType === "organic" || ((r.views ?? 0) > 0 && (r.spendCents ?? 0) === 0)) {
+    // Organic records bridge into organic_posts and organic_observations, for JEV retention and shares learning. A post row
+    // needs the platform's own post id, which is the receipt. Without one, nothing is written for the record.
+    const externalPostId = (r.externalPostId ?? "").trim();
+    const organicMeasured = r.views != null || r.engagements != null || r.shares != null || r.saves != null;
+    if (r.sourceType === "organic" && externalPostId && organicMeasured) {
       try {
-        const existingOrg = await sql`
-          select id from organic_observations
-          where organization_id = ${organizationId}
-            and brand_id = ${brandId}
-            and creative_id = ${r.creativeId}
+        const posts = await sql<{ id: string }>`
+          select id from organic_posts
+          where organization_id = ${organizationId} and platform = ${r.platform} and external_id = ${externalPostId}
           limit 1
         `;
-        if (!existingOrg || existingOrg.length === 0) {
-          const postId = r.externalPostId || `post_${r.creativeId}`;
-          try {
-            await sql`
-              insert into organic_posts (
-                id, organization_id, brand_id, creative_id, platform, caption, status
-              ) values (
-                ${postId}, ${organizationId}, ${brandId}, ${r.creativeId}, ${r.platform}, '', 'published'
-              )
-              on conflict (id) do nothing
-            `;
-          } catch {
-            // Optional FK
-          }
+        let postId = posts[0]?.id;
+        if (!postId) {
+          postId = randomUUID();
+          await sql`
+            insert into organic_posts (
+              id, organization_id, brand_id, creative_id, platform, external_id, caption, status
+            ) values (
+              ${postId}, ${organizationId}, ${brandId}, ${r.creativeId}, ${r.platform}, ${externalPostId}, '', 'published'
+            )
+          `;
+        }
 
-          const threeSecViews = (r.views != null && r.hookRetention3s != null) ? Math.round(r.views * r.hookRetention3s) : null;
-          const compRate = r.completionRate != null ? r.completionRate : null;
+        const observed = await sql`
+          select id from organic_observations
+          where organization_id = ${organizationId} and brand_id = ${brandId} and organic_post_id = ${postId}
+          limit 1
+        `;
+        if (observed.length === 0) {
+          const threeSecViews = r.views != null && r.hookRetention3s != null ? Math.round(r.views * r.hookRetention3s) : null;
           await sql`
             insert into organic_observations (
               id, organization_id, brand_id, organic_post_id, creative_id, platform,
-              views, three_second_views, completion_rate, shares, likes, comments, saves,
+              views, reach, three_second_views, completion_rate, shares, likes, comments, saves,
               observed_on, created_at
             ) values (
               ${randomUUID()}, ${organizationId}, ${brandId}, ${postId}, ${r.creativeId}, ${r.platform},
-              ${r.views}, ${threeSecViews}, ${compRate}, ${r.shares}, ${r.engagements},
-              0, ${r.saves}, current_date, now()
+              ${r.views ?? null}, ${r.reach ?? null}, ${threeSecViews}, ${r.completionRate ?? null},
+              ${r.shares ?? null}, ${r.engagements ?? null}, null, ${r.saves ?? null},
+              current_date, now()
             )
           `;
         }
       } catch {
-        // Continue gracefully if organic_observations unavailable
+        // Continue gracefully if the organic tables are unavailable
       }
     }
   }

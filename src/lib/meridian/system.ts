@@ -3,9 +3,9 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { localSemanticModel, embeddingProviderState } from "@/lib/meridian/embeddings/provider";
 import { INTEGRATIONS } from "@/lib/meridian/providers/integrations";
-import { externalObjectStorageStatus } from "@/lib/meridian/storage/object-store";
+import { objectStorageStatus } from "@/lib/meridian/storage/object-store";
 import { emailDeliveryState, isoOrNull } from "@/lib/meridian/notifications/email-state";
-import { publishingProviderStatus } from "@/lib/meridian/publishing/provider";
+import { CHANNEL_PUBLISHING_DETAIL, publishingProviderStatus } from "@/lib/meridian/publishing/provider";
 import { accountProviderState } from "@/lib/meridian/providers/boundaries";
 import { isLiveProvider, phaseForProbe, providerConfigured, type LiveProvider } from "@/lib/meridian/providers/live";
 
@@ -23,13 +23,8 @@ export const getSystemStatus = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const embeddings = embeddingProviderState({ url: process.env.EXTERNAL_SEMANTIC_URL, key: process.env.EXTERNAL_SEMANTIC_KEY });
-    const publishing = publishingProviderStatus();
-    const objectStorage = externalObjectStorageStatus({
-      bucket: process.env.S3_BUCKET,
-      accessKeyId: process.env.S3_ACCESS_KEY_ID,
-      endpoint: process.env.S3_ENDPOINT,
-      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
-    });
+    const publishing = { ...publishingProviderStatus(), detail: CHANNEL_PUBLISHING_DETAIL };
+    const objectStorage = objectStorageStatus();
     const now = Date.now();
     let worker: "running" | "stopped" = "stopped";
     let scheduler: "running" | "stopped" = "stopped";
@@ -102,7 +97,7 @@ export const getSystemStatus = createServerFn({ method: "POST" })
       database,
       objectStorage: {
         database: "MIGRATION_SOURCE" as const,
-        active: objectStorage.status === "CONFIGURED" ? ("s3" as const) : ("filesystem" as const),
+        active: "postgres" as const,
         external: objectStorage.status,
         detail: objectStorage.detail,
       },

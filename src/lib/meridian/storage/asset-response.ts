@@ -44,7 +44,7 @@ type StoredSource = {
  * in asset_blobs. Production artifacts land as bytes in the artifact store (Google Drive). Their storage_objects row in
  * Postgres locates them, so the bytes are read through that row when no blob exists. Call this only after the caller has been checked against the workspace.
  */
-async function loadStoredSource(
+export async function loadStoredSource(
   sql: Sql,
   loadArtifactFiles: AssetRequest["loadArtifactFiles"],
   scope: { storageKey: string; organizationId: string; brandId: string },

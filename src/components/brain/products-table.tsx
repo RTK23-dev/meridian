@@ -58,7 +58,7 @@ export function ProductsTable({ brandId, products, canEdit, onEdit }: {
     />
     <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
       <AlertDialogContent aria-describedby="delete-product-description">
-        <AlertDialogTitle className="font-display text-xl">Delete {pendingDelete?.name ?? "this product"}?</AlertDialogTitle>
+        <AlertDialogTitle className="text-section font-semibold">Delete {pendingDelete?.name ?? "this product"}?</AlertDialogTitle>
         <AlertDialogDescription id="delete-product-description" className="mt-2 text-sm text-fg-muted">
           This hides the product from this brand's product list.
         </AlertDialogDescription>

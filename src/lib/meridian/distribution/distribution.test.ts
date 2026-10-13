@@ -99,4 +99,9 @@ test("distribution service lists both paid and organic channels", async () => {
   assert.ok(channels.some((c) => c.id === "instagram-reels" && c.type === "organic"));
   assert.ok(channels.some((c) => c.id === "youtube-shorts" && c.type === "organic"));
   assert.ok(channels.some((c) => c.id === "meta-ads" && c.type === "paid"));
+  // With no stored account, TikTok is listed and says why it is not connected.
+  const tiktok = channels.find((c) => c.id === "tiktok-organic");
+  assert.equal(tiktok?.type, "organic");
+  assert.equal(tiktok?.connected, false);
+  assert.ok(tiktok?.reason);
 });

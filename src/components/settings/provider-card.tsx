@@ -13,7 +13,7 @@ export function ProviderCard({ card, actions = [], link, note }: {
   note?: string;
 }) {
   return (
-    <li className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+    <li className="flex flex-col gap-3 panel">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-base font-semibold text-fg">{card.label}</h3>
         <StatusBadge status={card.status} label={card.label} />
@@ -21,7 +21,7 @@ export function ProviderCard({ card, actions = [], link, note }: {
       <p className="text-sm text-fg-muted">{card.summary}</p>
       {card.facts.map((fact) => <p key={fact} className="text-sm text-fg">{fact}</p>)}
       {card.missing ? (
-        <div className="rounded-md border border-border bg-surface-2 p-3 text-sm">
+        <div className="border-t border-border pt-3 text-sm">
           <p className="flex items-center gap-2 font-semibold text-fg">
             <Circle aria-hidden="true" className="size-3 text-fg-muted" />What is missing
           </p>

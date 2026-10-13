@@ -41,6 +41,8 @@ interface RunContext {
   /** Content hashes already handled in this run, so one run never stores an item twice. */
   seenHashes: Set<string>;
   items: DiscoveredItem[];
+  /** When set, a niche, profile or URL-list run plans only these adapters. Unset, every registered adapter is planned. */
+  adapterIds?: ReadonlySet<string>;
 }
 
 interface FrontierOutcome {
@@ -186,6 +188,11 @@ export class DiscoveryService {
     scope: DiscoveryScope;
     seeds: string[];
     budget?: Partial<CrawlBudget>;
+    /**
+     * For a niche, profile or URL-list run: plan only these adapter ids. The Content Factory uses it to leave the Meta Ad Library
+     * to its own collector, which stores the ads that grading reads. Unset plans every registered adapter.
+     */
+    adapterIds?: string[];
     sql: Sql;
   }): Promise<{
     run: DiscoveryRun;
@@ -231,7 +238,13 @@ export class DiscoveryService {
       )
     `;
 
-    const ctx: RunContext = { sql, run, seenHashes: new Set(), items: [] };
+    const ctx: RunContext = {
+      sql,
+      run,
+      seenHashes: new Set(),
+      items: [],
+      adapterIds: input.adapterIds ? new Set(input.adapterIds) : undefined,
+    };
     let frontier: FrontierOutcome | undefined;
     let fatal = false;
     try {
@@ -411,6 +424,7 @@ export class DiscoveryService {
     const websiteStatus = await this.healthStatusOf("website");
 
     for (const exec of plan.executions) {
+      if (ctx.adapterIds && !ctx.adapterIds.has(exec.adapterId)) continue;
       if (exec.status !== "eligible") {
         const reason = exec.reason || `Source ${exec.adapterId} not configured.`;
         run.perSourceErrors[exec.adapterId] = reason;

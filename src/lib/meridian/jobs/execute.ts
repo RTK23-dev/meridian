@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { assessCopy } from "../production/assess.ts";
+import { judgeCopy } from "../production/assess.ts";
 import { collectMarket, publishThrough } from "../providers/boundaries.ts";
 import { applyLearnedPatterns, type Sql } from "../learning/store.ts";
 import { collectAdLibrarySource } from "../market/pipeline.ts";
@@ -48,7 +48,11 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   if (job.job_type === "learning.update") {
     if (!job.brand_id) throw new Error("Learning needs a brand.");
     const count = await applyLearnedPatterns(sql, job.organization_id, job.brand_id);
-    return `patterns:${count}`;
+    // The brand's grading calibration follows its measured outcomes. A failure is named in the job's result, and it does not fail the
+    // pattern update that already ran.
+    const { recalibrateForJob } = await import("../calibration/question-recalibrate.ts");
+    const calibration = await recalibrateForJob(sql, { organizationId: job.organization_id, brandId: job.brand_id });
+    return `patterns:${count} ${calibration}`;
   }
   if (job.job_type === "opportunity.refresh") {
     if (!job.brand_id) throw new Error("Ranking needs a brand.");
@@ -164,6 +168,15 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     const { runPerformanceSync } = await import("../performance/job.ts");
     return runPerformanceSync(sql, job, payload);
   }
+  if (job.job_type === "measurement.pull") {
+    // The scheduled pull for one Factory run. It reads the run's published posts and paused ads, and stores what they report.
+    if (!job.brand_id) throw new Error("Measurement needs a brand.");
+    const runId = typeof payload.runId === "string" ? payload.runId : "";
+    if (!runId) throw new Error("Measurement needs a Factory run.");
+    const { pullRunMeasurements } = await import("../measurement/pull.ts");
+    const pulled = await pullRunMeasurements(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
+    return pulled.summary;
+  }
   if (job.job_type === "experiment.process") {
     const variants = Array.isArray(payload.variants) ? (payload.variants as TrafficVariant[]) : [];
     const bucket = typeof payload.bucketKey === "string" ? payload.bucketKey : job.id;
@@ -172,17 +185,24 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   if (job.job_type === "guardian.check") {
     const text = typeof payload.text === "string" ? payload.text : "";
     if (!text.trim()) return "HUMAN_REVIEW:missing-text";
-    const assessed = assessCopy({
-      text,
-      productName: typeof payload.productName === "string" ? payload.productName : "",
-      allowedClaims: typeof payload.allowedClaims === "string" ? payload.allowedClaims : "",
-      prohibitedClaims: typeof payload.prohibitedClaims === "string" ? payload.prohibitedClaims : "",
-      requiredDisclaimers: typeof payload.requiredDisclaimers === "string" ? payload.requiredDisclaimers : "",
-      wordsToAvoid: typeof payload.wordsToAvoid === "string" ? payload.wordsToAvoid : "",
-      hook: typeof payload.hook === "string" ? payload.hook : "",
-      cta: typeof payload.cta === "string" ? payload.cta : "",
+    // The claim question goes through the engine gate. With no brand on the job, no claim question is asked (see judgeCopy).
+    const judged = await judgeCopy({
+      sql,
+      organizationId: job.organization_id,
+      brandId: job.brand_id,
+      subject: { type: "guardian_check", id: job.id },
+      copy: {
+        text,
+        productName: typeof payload.productName === "string" ? payload.productName : "",
+        allowedClaims: typeof payload.allowedClaims === "string" ? payload.allowedClaims : "",
+        prohibitedClaims: typeof payload.prohibitedClaims === "string" ? payload.prohibitedClaims : "",
+        requiredDisclaimers: typeof payload.requiredDisclaimers === "string" ? payload.requiredDisclaimers : "",
+        wordsToAvoid: typeof payload.wordsToAvoid === "string" ? payload.wordsToAvoid : "",
+        hook: typeof payload.hook === "string" ? payload.hook : "",
+        cta: typeof payload.cta === "string" ? payload.cta : "",
+      },
     });
-    return assessed.decision.decision;
+    return judged.decision.decision;
   }
   if (job.job_type === "vision.analyze") {
     return "HUMAN_REVIEW:missing-logo-bytes";

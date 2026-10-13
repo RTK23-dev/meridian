@@ -13,7 +13,7 @@ screenshots
 docs/ui-baseline/
 artifacts
 attachments
-.grok
+.meridian/
 coverage
 .data
 .cache

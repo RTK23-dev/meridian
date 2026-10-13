@@ -26,30 +26,31 @@ test("a factory run is a job graph with tenant-scoped idempotency", () => {
   assert.ok(jobs.every((job) => job.payload.organizationId === "org-1"));
   assert.ok(isFactoryStage("factory.gate"));
   assert.equal(isFactoryStage("video.generate"), false);
-  const suggest = factoryRunJobs({ organizationId: "org-1", brandId: "brand-1", runId: "run-2", niche: "skincare", level: 0 });
-  assert.ok(suggest.some((job) => job.jobType === "factory.template"));
-  assert.ok(suggest.every((job) => !["factory.produce", "factory.gate", "factory.review", "factory.launch"].includes(job.jobType)));
-  const produce = factoryRunJobs({ organizationId: "org-1", brandId: "brand-1", runId: "run-3", niche: "skincare", level: 1 });
-  assert.ok(produce.some((job) => job.jobType === "factory.review"));
-  assert.ok(produce.every((job) => !["factory.launch", "factory.test", "factory.learn"].includes(job.jobType)));
+  // Every mode gets the same graph. The automation mode decides where a run waits, and the worker enforces it.
+  const manual = factoryRunJobs({ organizationId: "org-1", brandId: "brand-1", runId: "run-2", niche: "skincare" });
+  assert.equal(manual.length, 13);
+  assert.ok(manual.some((job) => job.jobType === "factory.launch"), "a manual run can still reach launch after approval");
   assert.equal(factoryStageAllowed(0, "factory.produce"), false);
   assert.equal(factoryStageAllowed(1, "factory.review"), true);
   assert.throws(() => factoryRunJobs({ organizationId: "", brandId: "b", runId: "r", niche: "x" }), /organization/);
 });
 
-test("persisted factory jobs cannot execute beyond their run level", async () => {
+test("a manual run waits at a spend stage for approval, and writes no variant before it", async () => {
   const queries: string[] = [];
   const sql = (async (strings: TemplateStringsArray) => {
     queries.push(strings.join(" "));
-    if (strings.join(" ").includes("select id, status, niche, level")) return [{ id: "run-1", status: "running", niche: "skincare", level: 0 }];
+    if (strings.join(" ").includes("select id, status, niche, level")) {
+      return [{ id: "run-1", status: "running", niche: "skincare", level: 0, settings: "{}", created_by: "user-1", current_stage: "", waiting_on: "" }];
+    }
     return [];
   }) as unknown as Sql;
   const job: ExecutableJob = {
     id: "job-1", organization_id: "org-1", brand_id: "brand-1", job_type: "factory.produce",
     payload: JSON.stringify({ runId: "run-1" }), attempts: 0, max_attempts: 3,
   };
-  assert.equal(await executeFactoryJob(sql, job, { runId: "run-1" }), "skipped:above-level-0");
-  assert.equal(queries.length, 1);
+  assert.equal(await executeFactoryJob(sql, job, { runId: "run-1" }), "awaiting-approval:factory.produce");
+  assert.ok(queries.some((text) => text.includes("update factory_runs set status")), "the run records that it is waiting");
+  assert.equal(queries.some((text) => text.includes("insert into factory_variants")), false, "no variant is written before approval");
 });
 
 test("winner score shows a range and evidence, never a bare number", () => {
@@ -64,7 +65,7 @@ test("winner score shows a range and evidence, never a bare number", () => {
   });
   assert.ok(scored.score > 0.5);
   assert.ok(scored.low <= scored.score && scored.high >= scored.score);
-  assert.ok(scored.evidence.some((item) => item.includes("live 41 days")));
+  assert.ok(scored.evidence.some((item) => item.includes("ran 41 days; still delivering at its last sighting")));
   assert.ok(scored.evidence.some((item) => item.includes("6 variants")));
   const backtest = backtestWinnerScore([
     ...Array.from({ length: 20 }, (_, index) => ({ score: 0.9 - index * 0.01, stillLiveAfter30Days: index < 12 })),
@@ -81,10 +82,11 @@ test("ad timelines refuse to invent first-seen when no sighting exists", () => {
       { seenAt: "2026-10-01T00:00:00.000Z", platforms: ["instagram"], countries: ["US", "CA"], reachLow: 2000, reachHigh: 8000, stillRunning: true },
     ],
     siblingVariants: 3,
-    now: "2026-10-07T00:00:00.000Z",
   });
   assert.ok(timeline);
-  assert.equal(timeline.daysRunning, 36);
+  // Measured between the two sightings, not up to today: nothing after the last sighting is known.
+  assert.equal(timeline.daysRunning, 30);
+  assert.equal(timeline.stillRunning, true);
   assert.deepEqual(timeline.platforms.sort(), ["facebook", "instagram"]);
   assert.equal(timeline.siblingVariants, 3);
 });

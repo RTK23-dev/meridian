@@ -92,15 +92,16 @@ test("Timelines: daily re-check job updates days_running and recalculates Winner
   await sql`insert into organizations (id, name, slug, created_by) values (${org}, 'Org', 'org-time', 'user')`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brand}, ${org}, 'Brand', 'user')`;
 
-  // Seed timeline with first_seen 10 days ago
+  // Seeded from a first sighting 10 days ago and a last sighting 2 days ago
   const firstSeen = new Date(Date.now() - 10 * 86_400_000).toISOString();
+  const lastSeen = new Date(Date.now() - 2 * 86_400_000).toISOString();
   const timelineId = "timeline-1";
   await sql`
     insert into ad_timelines (
       id, organization_id, brand_id, first_seen, last_seen, still_running, days_running,
       sibling_variants, platforms, countries, winner_score
     ) values (
-      ${timelineId}, ${org}, ${brand}, ${firstSeen}, ${firstSeen}, true, 0,
+      ${timelineId}, ${org}, ${brand}, ${firstSeen}, ${lastSeen}, true, 0,
       3, '["facebook","instagram"]', '["US","CA"]', 0.2
     )
   `;
@@ -119,9 +120,9 @@ test("Timelines: daily re-check job updates days_running and recalculates Winner
   `;
 
   assert.ok(updated[0]);
-  assert.ok(updated[0].days_running >= 9 && updated[0].days_running <= 11);
-  assert.ok(updated[0].winner_score > 0.2); // Score increased due to survival days
-  assert.match(updated[0].evidence, /live \d+ days/);
+  // Days run from the first sighting to the last one, not to today.
+  assert.ok(updated[0].days_running >= 7 && updated[0].days_running <= 9);
+  assert.match(updated[0].evidence, /ran \d+ days; still delivering/);
 });
 
 test("Winner Score: backtest calculates top 20% vs random baseline and reports honestly", () => {

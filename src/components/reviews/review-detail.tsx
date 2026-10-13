@@ -71,11 +71,11 @@ export function ReviewDetail({
         <Badge variant={priority.high ? "warning" : "neutral"}>{priority.label}</Badge>
         <Badge variant={confidence.tone}>{confidence.label}</Badge>
       </div>
-      <p className="text-xs font-semibold uppercase tracking-widest text-brass">
+      <p className="eyebrow">
         {describeQuestion(item.question)} · {decisionOutcome(item.decision)} · answer {item.answer || "unrecorded"} · probability {percentOrUnknown(item.probability)} · <Term id="confidence" /> {percentOrUnknown(item.confidence)}
       </p>
       <TechnicalDetails>Question {item.question}. Decision code {item.decision || "none"}.</TechnicalDetails>
-      <h2 id="review-detail-title" className="font-display text-2xl">{item.label || "Untitled"}</h2>
+      <h2 id="review-detail-title" className="text-2xl">{item.label || "Untitled"}</h2>
       <p className="text-sm text-muted">Opened {formatOpened(item.createdAt)}. {priority.because}</p>
       <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
         {item.reasons.map((reasonLine, index) => <li key={`${index}-${reasonLine}`}>{reasonLine}</li>)}

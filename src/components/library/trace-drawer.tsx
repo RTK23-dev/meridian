@@ -74,7 +74,7 @@ export function TraceDrawer(props: TraceDrawerProps) {
       <SheetContent className="flex max-h-[90vh] w-full flex-col overflow-hidden p-0 sm:mx-auto sm:max-w-xl">
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
         <div className="space-y-1 pr-8">
-          <SheetTitle className="font-display text-2xl">{title}</SheetTitle>
+          <SheetTitle className="text-2xl">{title}</SheetTitle>
           <SheetDescription className="text-sm text-muted">{summary}</SheetDescription>
         </div>
         {error ? <ErrorState message={error.message} detail={error.raw} onRetry={onRetry} /> : null}

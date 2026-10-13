@@ -33,3 +33,12 @@ export function resolveDbSource(env: DbSourceEnv): DbSource {
     `Refusing to start without DATABASE_URL. The in-memory database is allowed only when NODE_ENV is explicitly "development" or "test"; NODE_ENV is ${declared ? `"${declared}"` : "unset"}. Set DATABASE_URL to a real Postgres instance.`,
   );
 }
+
+/**
+ * The folder the embedded database is kept in, when this process keeps it on disk. Unset or blank keeps it in memory, which is
+ * what tests and CI get: they do not set MERIDIAN_LOCAL_DATA_DIR. `npm run dev` sets it when DATABASE_URL is blank (scripts/dev.mjs).
+ * It only applies on the embedded path, so it never changes which database production uses.
+ */
+export function localDataDirFrom(env: { MERIDIAN_LOCAL_DATA_DIR?: string }): string | undefined {
+  return trimmed(env.MERIDIAN_LOCAL_DATA_DIR);
+}

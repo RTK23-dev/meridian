@@ -31,7 +31,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
   const disabledReason = !trimmed
     ? "Enter a search phrase or a public page URL to start a run."
     : !isPage && !anyConnected
-      ? "No discovery source is connected for this workspace. Save a YouTube, SerpAPI or Meta Ad Library key in Settings, or enter a public page URL instead."
+      ? "No discovery source is connected for this workspace. Save a YouTube, SerpAPI or Meta Ad Library key in the Setup guide, or enter a public page URL instead."
       : null;
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -61,10 +61,10 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
       {!canEdit ? <DisabledReason id={reasonId}>Only workspace members can start a discovery run.</DisabledReason> : null}
       {canEdit && disabledReason ? <DisabledReason id={reasonId}>{disabledReason}</DisabledReason> : null}
       <div>
-        <h3 className="font-display text-lg">Sources for this workspace</h3>
-        <ul className="mt-2 grid gap-2 md:grid-cols-2">
+        <h3 className="text-lg">Sources for this workspace</h3>
+        <ul className="mt-2 grid gap-x-6 md:grid-cols-2">
           {sources.map((source) => (
-            <li key={source.adapterId} className="rounded-md border border-border p-3">
+            <li key={source.adapterId} className="border-t border-border py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{source.label}</span>
                 <StatusBadge status={source.connected ? "connected" : source.status === "failed" ? "failed" : "not_connected"} />
@@ -73,7 +73,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
             </li>
           ))}
         </ul>
-        <p className="mt-2 text-xs text-fg-muted">Public pages need no key. Keyed sources read the key saved for this workspace only. A key is checked when a request is made.</p>
+        <p className="mt-2 text-xs text-fg-muted">Public pages need no key. Meridian reads each site's robots.txt first, and a bot check is reported, never bypassed. Keyed sources read the key saved for this workspace only. A key is checked when a request is made.</p>
       </div>
     </div>
   );

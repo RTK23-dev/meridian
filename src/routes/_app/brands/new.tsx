@@ -63,10 +63,10 @@ function NewBrand() {
       >
         <div className="space-y-2">
           <p className="eyebrow">New brand</p>
-          <h1 className="font-display text-4xl">Start with what you know</h1>
+          <h1 className="page-title">Start with what you know</h1>
           <p className="text-fg-muted">
-            The brand name and what you sell are required. Everything else is optional, and nothing else is inferred.
-            A website is stored as a reference, not scraped.
+            Two things are needed: the brand name and what you sell. Everything else can wait for the brand brain.
+            A website is kept as a reference. Nothing is scraped from it here.
           </p>
         </div>
 
@@ -79,20 +79,28 @@ function NewBrand() {
         <Field label="What do you sell?" error={errors.sells?.message} required>
           <Textarea {...register("sells")} required maxLength={500} />
         </Field>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Industry" error={errors.industry?.message}>
-            <Input {...register("industry")} maxLength={120} />
-          </Field>
-          <Field label="Country or market" error={errors.country?.message}>
-            <Input {...register("country")} maxLength={80} />
-          </Field>
-        </div>
-        <Field label="Target customer" error={errors.targetCustomers?.message}>
-          <Textarea {...register("targetCustomers")} maxLength={1000} />
-        </Field>
-        <Field label="Anything else" hint="Optional." error={errors.description?.message}>
-          <Textarea {...register("description")} maxLength={2000} />
-        </Field>
+        {/* The optional fields stay in the form, so they still save, but they stay folded until someone wants them. */}
+        <details className="group panel">
+          <summary className="cursor-pointer text-sm font-semibold text-fg">
+            Add more detail <span className="font-normal text-fg-muted">(optional: industry, market, customers, notes)</span>
+          </summary>
+          <div className="mt-5 space-y-6">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Industry" error={errors.industry?.message}>
+                <Input {...register("industry")} maxLength={120} />
+              </Field>
+              <Field label="Country or market" error={errors.country?.message}>
+                <Input {...register("country")} maxLength={80} />
+              </Field>
+            </div>
+            <Field label="Target customer" error={errors.targetCustomers?.message}>
+              <Textarea {...register("targetCustomers")} maxLength={1000} />
+            </Field>
+            <Field label="Anything else" hint="Optional." error={errors.description?.message}>
+              <Textarea {...register("description")} maxLength={2000} />
+            </Field>
+          </div>
+        </details>
 
         <UnsavedChangesBar
           dirty={isDirty}

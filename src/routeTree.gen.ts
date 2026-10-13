@@ -22,6 +22,7 @@ import { Route as AppInviteRouteImport } from './routes/_app/invite'
 import { Route as AppJobsRouteImport } from './routes/_app/jobs'
 import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppSetupRouteImport } from './routes/_app/setup'
 import { Route as AppUsageRouteImport } from './routes/_app/usage'
 import { Route as AppWebhooksRouteImport } from './routes/_app/webhooks'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
@@ -30,6 +31,7 @@ import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$asset
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDriveCallbackRouteImport } from './routes/api/drive/callback'
 import { Route as ApiDriveConnectRouteImport } from './routes/api/drive/connect'
+import { Route as ApiMediaLinksCreativeIdRouteImport } from './routes/api/media-links/$creativeId'
 import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
 import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
 import { Route as AppBrandsBrandIdIndexRouteImport } from './routes/_app/brands/$brandId/index'
@@ -110,6 +112,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSetupRoute = AppSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppUsageRoute = AppUsageRouteImport.update({
   id: '/usage',
   path: '/usage',
@@ -148,6 +155,11 @@ const ApiDriveCallbackRoute = ApiDriveCallbackRouteImport.update({
 const ApiDriveConnectRoute = ApiDriveConnectRouteImport.update({
   id: '/api/drive/connect',
   path: '/api/drive/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMediaLinksCreativeIdRoute = ApiMediaLinksCreativeIdRouteImport.update({
+  id: '/api/media-links/$creativeId',
+  path: '/api/media-links/$creativeId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOauthCallbackRoute = ApiOauthCallbackRouteImport.update({
@@ -245,6 +257,7 @@ export interface FileRoutesByFullPath {
   '/jobs': typeof AppJobsRoute
   '/notifications': typeof AppNotificationsRoute
   '/settings': typeof AppSettingsRoute
+  '/setup': typeof AppSetupRoute
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
   '/api/health': typeof ApiHealthRoute
@@ -253,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
+  '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
@@ -281,6 +295,7 @@ export interface FileRoutesByTo {
   '/jobs': typeof AppJobsRoute
   '/notifications': typeof AppNotificationsRoute
   '/settings': typeof AppSettingsRoute
+  '/setup': typeof AppSetupRoute
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
   '/api/health': typeof ApiHealthRoute
@@ -290,6 +305,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
+  '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
@@ -320,6 +336,7 @@ export interface FileRoutesById {
   '/_app/jobs': typeof AppJobsRoute
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/setup': typeof AppSetupRoute
   '/_app/usage': typeof AppUsageRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/api/health': typeof ApiHealthRoute
@@ -329,6 +346,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
+  '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/_app/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
@@ -360,6 +378,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/notifications'
     | '/settings'
+    | '/setup'
     | '/usage'
     | '/webhooks'
     | '/api/health'
@@ -368,6 +387,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/drive/callback'
     | '/api/drive/connect'
+    | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/brands/$brandId/accounts'
@@ -396,6 +416,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/notifications'
     | '/settings'
+    | '/setup'
     | '/usage'
     | '/webhooks'
     | '/api/health'
@@ -405,6 +426,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/drive/callback'
     | '/api/drive/connect'
+    | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/brands/$brandId/accounts'
@@ -434,6 +456,7 @@ export interface FileRouteTypes {
     | '/_app/jobs'
     | '/_app/notifications'
     | '/_app/settings'
+    | '/_app/setup'
     | '/_app/usage'
     | '/_app/webhooks'
     | '/api/health'
@@ -443,6 +466,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/drive/callback'
     | '/api/drive/connect'
+    | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/_app/brands/$brandId/accounts'
@@ -469,6 +493,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDriveCallbackRoute: typeof ApiDriveCallbackRoute
   ApiDriveConnectRoute: typeof ApiDriveConnectRoute
+  ApiMediaLinksCreativeIdRoute: typeof ApiMediaLinksCreativeIdRoute
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
 }
@@ -566,6 +591,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/setup': {
+      id: '/_app/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof AppSetupRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/usage': {
       id: '/_app/usage'
       path: '/usage'
@@ -620,6 +652,13 @@ declare module '@tanstack/react-router' {
       path: '/api/drive/connect'
       fullPath: '/api/drive/connect'
       preLoaderRoute: typeof ApiDriveConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/media-links/$creativeId': {
+      id: '/api/media-links/$creativeId'
+      path: '/api/media-links/$creativeId'
+      fullPath: '/api/media-links/$creativeId'
+      preLoaderRoute: typeof ApiMediaLinksCreativeIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/oauth/callback': {
@@ -740,6 +779,7 @@ interface AppRouteChildren {
   AppJobsRoute: typeof AppJobsRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppSetupRoute: typeof AppSetupRoute
   AppUsageRoute: typeof AppUsageRoute
   AppWebhooksRoute: typeof AppWebhooksRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -769,6 +809,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppJobsRoute: AppJobsRoute,
   AppNotificationsRoute: AppNotificationsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppSetupRoute: AppSetupRoute,
   AppUsageRoute: AppUsageRoute,
   AppWebhooksRoute: AppWebhooksRoute,
   AppIndexRoute: AppIndexRoute,
@@ -799,6 +840,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDriveCallbackRoute: ApiDriveCallbackRoute,
   ApiDriveConnectRoute: ApiDriveConnectRoute,
+  ApiMediaLinksCreativeIdRoute: ApiMediaLinksCreativeIdRoute,
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,
 }

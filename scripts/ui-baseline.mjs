@@ -5,6 +5,7 @@ import { resolve, join, relative, extname, sep } from "node:path";
 import { chromium } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
+import { settleAnimations } from "./page-settle.mjs";
 
 const baseUrl = checkedUrl(process.env.UI_BASELINE_URL || "http://127.0.0.1:8080/");
 const root = resolve(process.env.UI_BASELINE_DIR || "docs/ui-baseline");
@@ -215,6 +216,7 @@ try {
         });
         if (overflow.horizontal) throw new Error(`Route ${new URL(url).pathname} overflows horizontally at ${width}px (${theme}). Elements: ${overflow.elements.join("; ")}`);
         if (width === 1440) {
+          await settleAnimations(page);
           const { violations } = await new AxeBuilder({ page })
             .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
             .analyze();

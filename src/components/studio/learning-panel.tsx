@@ -3,6 +3,7 @@ import { InfoTip } from "@/components/glossary";
 import { Button, ChartSkeleton, Card, DisabledReason } from "@/components/ui";
 import { copy } from "@/lib/copy";
 import { learningRows } from "./learning-rows.ts";
+import { organicMetricsLine } from "./organic-metrics.ts";
 import type { StudioPattern, StudioPublication } from "./types.ts";
 
 const LearningBars = lazy(() => import("./learning-bars.tsx"));
@@ -12,10 +13,10 @@ export type OrganicPostSummary = {
   platform: string;
   status: string;
   caption?: string | null;
-  views: number;
-  threeSecondViews: number;
-  completionRate: number;
-  shares: number;
+  views: number | null;
+  threeSecondViews: number | null;
+  completionRate: number | null;
+  shares: number | null;
 };
 
 type LearningPanelProps = {
@@ -38,7 +39,7 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
   const ordered = [...charted, ...unplotted];
   return (
     <Card>
-      <h2 className="font-display text-2xl">What Meridian learned</h2>
+      <h2 className="text-section font-semibold">What Meridian learned</h2>
       {patterns.length === 0 ? (
         <p className="mt-2 text-sm text-fg-muted">
           {copy.learning.noPattern} <InfoTip label="What counts as a pattern" text={copy.learning.patternRule} />
@@ -71,16 +72,16 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
       ) : <p className="mt-3 text-sm text-fg-muted">{copy.learning.noTestPublication}</p>}
       {organicPosts.length > 0 ? (
         <div className="mt-4 border-t border-border pt-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-accent">Organic social publications</h3>
-          <ul className="mt-2 space-y-2 text-sm">
+          <h3 className="eyebrow">Organic social publications</h3>
+          <ul className="mt-2 divide-y divide-border text-sm">
             {organicPosts.map((post) => (
-              <li key={post.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
+              <li key={post.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <div>
                   <span className="font-semibold capitalize">{post.platform}</span> · <span className="text-fg-muted">{post.status}</span>
                   <p className="mt-0.5 text-xs text-fg-muted">{post.caption ? post.caption.slice(0, 70) : "No caption"}</p>
                 </div>
                 <div className="text-xs">
-                  <span>{post.views} views · {post.threeSecondViews} (3s hook) · {(post.completionRate * 100).toFixed(1)}% completion · {post.shares} shares</span>
+                  <span>{organicMetricsLine(post)}</span>
                 </div>
               </li>
             ))}
@@ -90,7 +91,7 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
       {canEdit ? (
         <div className="mt-4 space-y-2">
           <div className="flex flex-wrap gap-2">
-            <Button type="button" disabled={recordingTest || publications.length === 0} aria-describedby={publications.length === 0 ? "test-learning-reason" : undefined} onClick={onRecordTest}>
+            <Button type="button" variant="secondary" disabled={recordingTest || publications.length === 0} aria-describedby={publications.length === 0 ? "test-learning-reason" : undefined} onClick={onRecordTest}>
               Record test-provider performance and learn
             </Button>
             <Button type="button" variant="quiet" disabled={recordingOrganic || organicPosts.length === 0} aria-describedby={organicPosts.length === 0 ? "organic-learning-reason" : undefined} onClick={onRecordOrganic}>

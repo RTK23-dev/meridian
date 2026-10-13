@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Button, Card, DisabledReason, Field, PageHeader, SelectInput } from "@/components/ui";
+import { Button, Card, DisabledReason, EmptyState, Field, PageHeader, SelectInput } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { downloadCsvText } from "@/lib/csv";
 import { hasRole } from "@/lib/meridian/access";
@@ -55,7 +55,7 @@ export function ExportsScreen() {
   if (!workspace?.active) return null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         title="Exports"
         description="Exports are generated when you click. Each file is built from the records in this workspace and downloads to this device."
@@ -68,7 +68,7 @@ export function ExportsScreen() {
           </SelectInput>
         </Field>
       ) : (
-        <Card><p className="text-sm text-fg-muted">Create a brand to export its opportunities and library.</p></Card>
+        <EmptyState title="No brand to export yet" reason="Create a brand to export its opportunities and library." />
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -93,7 +93,7 @@ export function ExportsScreen() {
             id="audit-export"
             title="Audit log"
             description="The newest audit entries for this workspace, up to the export cap of 5,000 rows. Filter the audit log first to export a narrower set."
-            action={<div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" size="md" loading={auditExport.isPending} onClick={() => auditExport.mutate()}>Export audit log</Button><Link to="/audit" className="inline-flex min-h-11 items-center text-sm font-semibold text-accent underline-offset-4 hover:underline">Filter the audit log first</Link></div>}
+            action={<div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" size="md" loading={auditExport.isPending} onClick={() => auditExport.mutate()}>Export audit log</Button><Link to="/audit" className="inline-flex min-h-11 items-center text-sm font-semibold text-fg underline underline-offset-4 hover:no-underline">Filter the audit log first</Link></div>}
             result={auditExport.data ? auditExportNote(auditExport.data) : null}
             error={auditExport.error}
           />

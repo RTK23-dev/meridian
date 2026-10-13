@@ -122,7 +122,7 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty, onPasteDirt
     })();
   }
 
-  return <div className="space-y-5 rounded-lg border border-border bg-surface p-5">
+  return <div className="space-y-5 panel">
     <div className="space-y-1">
       <h3 className="text-base font-semibold">Suggest from document</h3>
       <p className="text-sm text-fg-muted">Plain text, Markdown, DOCX, and PDF text can be stored. Instruction-like lines are dropped. An image-only PDF fails. The file is stored as untrusted text. It does not change the brain.</p>
@@ -134,7 +134,7 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty, onPasteDirt
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         aria-describedby="material-drop-hint"
-        className={cn("space-y-3 rounded-lg border-2 border-dashed p-5", dragging ? "border-accent bg-accent-soft" : "border-border-strong")}
+        className={cn("space-y-3 rounded-lg border-2 border-dashed p-5", dragging ? "border-fg bg-surface-2" : "border-border-strong")}
       >
         <p className="font-semibold">{dragging ? "Release to store and suggest from this file" : "Drop a document here"}</p>
         <p id="material-drop-hint" className="text-sm text-fg-muted">Suggestions wait in the list below. Nothing changes until you accept one.</p>

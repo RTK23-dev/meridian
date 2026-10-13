@@ -58,10 +58,10 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
     <div className="space-y-5">
       {recommendation ? (
         <Card>
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent">
+          <p className="eyebrow">
             Discovered · {recommendation.posture === "exploitation" ? "Builds on past results" : "Tests something new"} · {recommendation.angle}
           </p>
-          <h2 className="mt-2 font-display text-3xl">{recommendation.label}</h2>
+          <h2 className="mt-2 text-section font-semibold">{recommendation.label}</h2>
           <p className="mt-3">{recommendation.reason}</p>
           <p className="mt-2 text-sm">{recommendation.because}</p>
           <p className="mt-2 text-sm text-fg-muted">{recommendation.uncertainty}</p>
@@ -113,7 +113,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
         </Card>
       ) : (
         <Card>
-          <h2 className="font-display text-2xl">No discovered opportunity</h2>
+          <h2 className="text-section font-semibold">No discovered opportunity</h2>
           <p className="mt-2 text-sm text-fg-muted">
             {session.observationCount === 0
               ? "Add competitor ads you have seen. An empty library is not whitespace."
@@ -128,7 +128,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
 
       {recommendation ? (
         <Card>
-          <h2 className="font-display text-2xl">Other directions</h2>
+          <h2 className="text-section font-semibold">Other directions</h2>
           <p className="mt-2 text-sm text-fg-muted">
             The brief is always written from the recommended direction. These are the other open opportunities, for comparison.
             Choosing one here is not available: the server writes the brief from the recommendation.
@@ -140,9 +140,9 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
           ) : alternatives.length === 0 ? (
             <p className="mt-3 text-sm text-fg-muted">No other open opportunity is stored for this brand.</p>
           ) : (
-            <ul className="mt-3 space-y-2 text-sm">
+            <ul className="mt-3 divide-y divide-border text-sm">
               {alternatives.map((item) => (
-                <li key={item.id} className="rounded-md border border-border p-3">
+                <li key={item.id} className="py-3">
                   <p className="font-semibold">{item.label}</p>
                   <p className="text-fg-muted">{item.angle} · {item.source === "discovered" ? directionSourceLabel(item.source) : <IdeaToTestBadge />} · rank {item.expectedValue.toFixed(2)}</p>
                 </li>
@@ -154,7 +154,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
 
       {session.semantic.clusters.length > 0 ? (
         <Card>
-          <h2 className="font-display text-2xl">Semantic clusters</h2>
+          <h2 className="text-section font-semibold">Semantic clusters</h2>
           <p className="mt-2 text-sm text-fg-muted">{session.semantic.note}</p>
           <ul className="mt-3 space-y-2 text-sm">
             {session.semantic.clusters.map((cluster) => <li key={cluster.label}>{cluster.summary}</li>)}
@@ -166,7 +166,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
 
       {session.whitespace.length > 0 ? (
         <Card>
-          <h2 className="font-display text-2xl">Whitespace in the stored set</h2>
+          <h2 className="text-section font-semibold">Whitespace in the stored set</h2>
           <ul className="mt-3 space-y-2 text-sm">
             {session.whitespace.map((item) => <li key={item.underused}>{item.whyTest}</li>)}
           </ul>

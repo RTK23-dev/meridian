@@ -65,7 +65,7 @@ export function ProviderCardGroup<Value extends string>({
               htmlFor={inputId}
               className={cn(
                 "flex min-h-11 gap-3 rounded-md border p-3 text-sm",
-                checked ? "border-accent bg-accent-soft" : "border-border bg-surface",
+                checked ? "border-fg bg-surface-2" : "border-border bg-surface",
                 card.disabled ? "cursor-not-allowed opacity-75" : "cursor-pointer",
               )}
             >
@@ -78,7 +78,7 @@ export function ProviderCardGroup<Value extends string>({
                 disabled={card.disabled}
                 aria-describedby={card.disabled && card.disabledReason ? reasonId : undefined}
                 onChange={() => onChange(card.value)}
-                className="mt-1 size-4 shrink-0"
+                className="mt-1 size-4 shrink-0 accent-fg"
               />
               <span className="min-w-0 space-y-1">
                 <span className="block font-semibold">

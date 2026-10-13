@@ -8,7 +8,7 @@ import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { connectAccountSchema, type ConnectAccountInput } from "@/components/forms/client-schemas";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, DisabledReason, Field, ErrorNotice, Card, SelectInput, ScreenSkeleton, Input } from "@/components/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, DisabledReason, EmptyState, Field, ErrorNotice, Card, SelectInput, ScreenSkeleton, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { usePendingVariables, usePlatformAccountsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
@@ -137,18 +137,18 @@ function BrandAccounts({ brandId }: { brandId: string }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="max-w-2xl space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-widest text-brass">Account Vault</p>
-          <h1 className="font-display text-4xl">Connected Platform Accounts</h1>
+          <p className="eyebrow">Account Vault</p>
+          <h1 className="page-title">Connected Platform Accounts</h1>
           <p className="text-muted">
             Manage multiple social pages, creator profiles, and advertising accounts for this brand.
             All tokens are encrypted in the database with AES-256-GCM.
           </p>
         </div>
         {canEdit ? (
-          <Button type="button" onClick={() => setAddModalOpen(true)}>
+          <Button type="button" variant={accounts.length === 0 ? "secondary" : "primary"} onClick={() => setAddModalOpen(true)}>
             Connect Account
           </Button>
         ) : null}
@@ -157,19 +157,15 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       {query.isPending && !query.data ? (
         <ScreenSkeleton label="Loading accounts" shape="rows" />
       ) : accounts.length === 0 ? (
-        <Card className="p-8 text-center">
-          <p className="text-lg font-semibold">No accounts connected yet</p>
-          <p className="mt-1 text-sm text-muted">
-            Connect an Instagram page, YouTube channel, TikTok account, or ad account to enable multi-channel publishing and automated performance telemetry.
-          </p>
-          {canEdit ? (
-            <div className="mt-4">
-              <Button type="button" onClick={() => setAddModalOpen(true)}>
-                Connect First Account
-              </Button>
-            </div>
-          ) : null}
-        </Card>
+        <EmptyState
+          title="No accounts connected yet"
+          reason="Connect an Instagram page, YouTube channel, TikTok account, or ad account to enable multi-channel publishing and automated performance telemetry."
+          action={canEdit ? (
+            <Button type="button" onClick={() => setAddModalOpen(true)}>
+              Connect First Account
+            </Button>
+          ) : undefined}
+        />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {accounts.map((account) => {
@@ -178,14 +174,14 @@ function BrandAccounts({ brandId }: { brandId: string }) {
               <Card key={account.id} className="flex flex-col justify-between p-5 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-widest text-brass">
+                    <span className="eyebrow">
                       {account.platform.replace("_", " ")}
                     </span>
                     <Badge variant={isConnected ? "success" : "danger"}>
                       {account.status}
                     </Badge>
                   </div>
-                  <h3 className="font-display text-xl">{account.name}</h3>
+                  <h3 className="text-xl">{account.name}</h3>
                   {account.handle ? (
                     <p className="text-sm text-muted">{account.handle}</p>
                   ) : null}

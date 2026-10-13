@@ -126,7 +126,7 @@ export function WeightsTab({ organizationId, saved, canAdmin }: { organizationId
           })}
         </fieldset>
 
-        <aside aria-labelledby="weights-preview-title" className="h-fit space-y-4 rounded-lg border border-border bg-surface p-4">
+        <aside aria-labelledby="weights-preview-title" className="h-fit space-y-4 panel">
           <div>
             <h3 id="weights-preview-title" className="text-base font-semibold text-fg">Live preview</h3>
             <p className="mt-1 text-xs text-fg-muted">Each factor’s share of the total weight. Penalties are drawn dashed.</p>
@@ -141,7 +141,7 @@ export function WeightsTab({ organizationId, saved, canAdmin }: { organizationId
                 <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
                   <div
                     aria-hidden="true"
-                    className={row.penalty ? "h-full rounded-full border border-dashed border-border-strong bg-transparent" : "h-full rounded-full bg-accent"}
+                    className={row.penalty ? "h-full rounded-full border border-dashed border-border-strong bg-transparent" : "h-full rounded-full bg-fg-muted"}
                     style={{ width: `${Math.round(row.share * 100)}%` }}
                   />
                 </div>
