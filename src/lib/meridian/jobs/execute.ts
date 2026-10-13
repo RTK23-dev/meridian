@@ -164,6 +164,15 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     const { runPerformanceSync } = await import("../performance/job.ts");
     return runPerformanceSync(sql, job, payload);
   }
+  if (job.job_type === "measurement.pull") {
+    // The scheduled pull for one Factory run. It reads the run's published posts and paused ads, and stores what they report.
+    if (!job.brand_id) throw new Error("Measurement needs a brand.");
+    const runId = typeof payload.runId === "string" ? payload.runId : "";
+    if (!runId) throw new Error("Measurement needs a Factory run.");
+    const { pullRunMeasurements } = await import("../measurement/pull.ts");
+    const pulled = await pullRunMeasurements(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
+    return pulled.summary;
+  }
   if (job.job_type === "experiment.process") {
     const variants = Array.isArray(payload.variants) ? (payload.variants as TrafficVariant[]) : [];
     const bucket = typeof payload.bucketKey === "string" ? payload.bucketKey : job.id;
