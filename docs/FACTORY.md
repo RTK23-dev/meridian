@@ -17,9 +17,14 @@ A run stores the settings it started with, so a later change to the brand does n
 | `platforms` | for example `instagram`, `facebook`, `youtube`, `tiktok` | A platform with no connection is reported as not connected. |
 | `providers` | per format: `auto` or a provider id | `auto` lets the capability matrix choose. A named provider that is not ready stops the run with its reason. |
 | `caps` | `dailyCents`, `totalCents`, `maxVariants` | Spend caps and the variant limit. See the caveat on caps below. |
+| `targetingCountries` | ISO 3166-1 alpha-2 codes in capitals, such as `US` and `GB` | The countries a paid ad is targeted to. Empty means none is set. A live paid publish needs at least one. |
 
 The server checks every value. An unknown automation, intent or format, a platform id that is not lowercase letters, a provider id
-outside the allowed pattern, or a negative cap is refused with the reason. Nothing is coerced.
+outside the allowed pattern, a negative cap, or a country code that is not an officially assigned ISO code (or is not in capitals) is
+refused with the reason. Nothing is coerced.
+
+A brand has run defaults, saved from the run builder with **Save as brand defaults** (an admin or owner). A run starts from them, and
+each choice the builder changes is stored with the run. The defaults include the country list.
 
 The three older vocabularies map onto `automation`:
 
@@ -160,9 +165,15 @@ launch summary and is never sent.
   connection records `not_connected` with its reason, and sends nothing. It is never counted as published. A post is recorded in
   `organic_posts` with surface `organic`.
 - **Paid** (`ad`, `both`): the campaign, ad set, ad creative and ad are created with status PAUSED, and each is recorded in
-  `provider_objects` with surface `paid` and status `paused`. In the testing runtime the fixture engine in `publishing/engine.ts` answers.
-  Outside it, a paid publish needs a stored Meta token and a targeting country. A Factory run does not carry a country yet, so the
-  publish is refused with that reason. Nothing in the Factory sets an ad or a campaign to ACTIVE.
+  `provider_objects` with surface `paid` and status `paused`. In the testing runtime the fixture engine in `publishing/engine.ts` answers,
+  and it takes the run's targeting countries unchanged. Outside it (`liveRouteFor` in `factory/publish.ts`), the checks run in order and
+  each refusal is recorded as a failed receipt, before the publisher is called:
+  - no stored Meta token: **not connected**, with the reason;
+  - no targeting country on the run: refused with **no targeting country**;
+  - no Facebook Page id or destination link: refused, because a Factory run carries neither yet. Without them the ad creative cannot be
+    created after the campaign and ad set, which would leave paused objects behind.
+  Only when all three pass does the Meta publisher run. Its ad set carries the run's countries as `targeting.geo_locations.countries`
+  (`providers/meta.ts`). Nothing in the Factory sets an ad or a campaign to ACTIVE.
 - **Receipts:** `organic_posts` and `provider_objects` both carry a `surface` column (migration 0069). A failure is recorded as a
   receipt with no external id, so a retry can publish the creative again without overwriting a confirmed object.
 
@@ -266,8 +277,9 @@ What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
   the app that this change did not make.
 - The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
 - The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
-- Live Instagram and TikTok publishing is not connected, by the owner's decision. A live paid publish from a run needs a targeting country the
-  run does not carry.
+- Live Instagram and TikTok publishing is not connected, by the owner's decision.
+- A live paid publish from a run is refused until the run carries a Facebook Page id and a destination link. A run has a targeting country
+  now; the Page and link are the next gap.
 - Uploads are not connected to Gather.
 
 See [ROADMAP.md](ROADMAP.md).

@@ -5,8 +5,9 @@
  * - organic (intent `organic` or `both`): distribution/service.ts publishes the creative to the run's organic channels. A channel
  *   with no connection records `not_connected` with its reason. A channel that takes video refuses an image with its reason.
  * - paid (intent `ad` or `both`): publishing/engine.ts creates a campaign, an ad set, an ad creative and an ad, each PAUSED. In the
- *   testing runtime that is the fixture engine. Outside it, the live Meta publisher needs a stored token and a targeting country, and
- *   a Factory run does not carry a country yet, so the paid publish is refused with that reason.
+ *   testing runtime that is the fixture engine. Outside it, the live Meta publisher needs a stored token, at least one targeting
+ *   country (the run's own setting), and a Facebook Page and a link. A Factory run carries no Page or link yet, so a live paid publish
+ *   is refused before any request, with that reason.
  *
  * An unapproved creative never reaches publish. A creative whose gate result is `block` does not either, even when it is approved.
  * Each path writes its own receipt: organic_posts for an organic post, and provider_objects with surface `paid` for a paid object. A
@@ -14,7 +15,7 @@
  */
 import type { Sql } from "../learning/store.ts";
 import { publishCreativeToChannels, type PublishChannelResult } from "../distribution/service.ts";
-import { publishEngineById, type PublishEngine, type PublishEngineResult } from "../publishing/engine.ts";
+import { metaPublishEngine, publishEngineById, type PublishEngine, type PublishEngineResult } from "../publishing/engine.ts";
 import { loadTenantProviderToken } from "../performance/ownership.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import type { RunSettings } from "./run-settings.ts";
@@ -142,21 +143,42 @@ async function publishOrganic(
   }
 }
 
-type PaidRoute = { engine: PublishEngine } | { notConnected: string } | { refused: string };
+type PaidRoute = { engine: PublishEngine; accessToken: string | null } | { notConnected: string } | { refused: string };
+
+/** The reason a live paid publish is refused when the run names no targeting country. It is the reason the run view shows. */
+export const NO_TARGETING_COUNTRY_REASON = "A live paid publish was refused: no targeting country. Name at least one targeting country on the run. Nothing was sent.";
+
+/** The reason a live paid publish is refused when a Factory run has no Facebook Page or link to create the ad creative with. */
+export const NO_PAGE_OR_LINK_REASON =
+  "A live paid publish needs a Facebook Page and a destination link, and a Factory run does not carry them yet. Nothing was sent.";
 
 /**
- * The paid engine for this run. The testing runtime uses the fixture engine. Outside it, a stored Meta token is required. A Factory run
- * does not carry the targeting country a paused Meta campaign needs, so a live paid publish is refused before any request is made.
+ * The live paid route, decided from what is known. It reads nothing and sends nothing. The checks run in order: a stored Meta token,
+ * then at least one targeting country, then a Page and a link. A failed check is refused before the publisher is called, so no campaign
+ * or ad set is created that the later steps cannot finish.
  */
-export async function paidRouteFor(sql: Sql, scope: Scope): Promise<PaidRoute> {
-  if (isTestingRuntimeNow()) return { engine: publishEngineById("test") };
-  const credential = await loadTenantProviderToken(sql, scope.organizationId, "meta", process.env.TOKEN_ENCRYPTION_KEY ?? "");
-  if (credential.status === "NOT_CONNECTED") {
+export function liveRouteFor(input: { accessToken: string | null; countries: readonly string[]; pageId: string; link: string }): PaidRoute {
+  if (!input.accessToken) {
     return { notConnected: "No Meta ads account is connected for this workspace. Connect it in Settings. Nothing was sent." };
   }
-  return {
-    refused: "A paused Meta campaign needs a targeting country, and a Factory run does not set one yet. Nothing was sent.",
-  };
+  if (input.countries.length === 0) return { refused: NO_TARGETING_COUNTRY_REASON };
+  if (!input.pageId.trim() || !input.link.trim()) return { refused: NO_PAGE_OR_LINK_REASON };
+  return { engine: metaPublishEngine(), accessToken: input.accessToken };
+}
+
+/**
+ * The paid engine for this run. The testing runtime uses the fixture engine, which needs no token, country or Page, so it is unchanged.
+ * Outside it, the route is the live one (liveRouteFor).
+ */
+export async function paidRouteFor(sql: Sql, scope: Scope, input: { countries: readonly string[]; pageId: string; link: string }): Promise<PaidRoute> {
+  if (isTestingRuntimeNow()) return { engine: publishEngineById("test"), accessToken: null };
+  const credential = await loadTenantProviderToken(sql, scope.organizationId, "meta", process.env.TOKEN_ENCRYPTION_KEY ?? "");
+  return liveRouteFor({
+    accessToken: credential.status === "connected" ? credential.accessToken : null,
+    countries: input.countries,
+    pageId: input.pageId,
+    link: input.link,
+  });
 }
 
 /** Records a paid publish's stages. A stage the provider confirmed is a paused object. Any other stage is a failure with its reason. */
@@ -215,12 +237,15 @@ async function recordPaidFailure(
   `;
 }
 
-/** Publishes one creative as paused paid objects, unless the creative already has a confirmed paid object for this run's brand. */
+/**
+ * Publishes one creative as paused paid objects, unless the creative already has a confirmed paid object for this run's brand. The run's
+ * targeting countries go to the publisher, which puts them in the ad set's targeting.
+ */
 async function publishPaid(
   sql: Sql,
   scope: Scope,
   creativeId: string,
-  dailyCents: number,
+  input: { dailyCents: number; countries: readonly string[] },
 ): Promise<{ outcome: "paused" | "not_connected" | "failed" | "already"; error: string }> {
   const existing = await sql<{ external_id: string }>`
     select external_id from provider_objects
@@ -230,7 +255,8 @@ async function publishPaid(
   `;
   if (existing[0]) return { outcome: "already", error: "" };
 
-  const route = await paidRouteFor(sql, scope);
+  // The Factory carries no Facebook Page or link, so the live route gets empty ones and refuses with that reason.
+  const route = await paidRouteFor(sql, scope, { countries: input.countries, pageId: "", link: "" });
   if ("notConnected" in route) {
     const provider = "meta";
     await recordPaidFailure(sql, scope, { provider, creativeId, objectType: "ad", status: "not_connected", reason: route.notConnected });
@@ -244,11 +270,12 @@ async function publishPaid(
   try {
     result = await route.engine.publishPaused({
       name: `Meridian Factory ${creativeId}`,
-      dailyBudgetCents: dailyCents,
-      countries: [],
+      dailyBudgetCents: input.dailyCents,
+      countries: [...input.countries],
       pageId: "",
       link: "",
       message: "",
+      accessToken: route.accessToken ?? undefined,
     });
   } catch (error) {
     const reason = `The paid publisher did not return. Nothing is reported as paused. ${errorText(error)}`;
@@ -302,7 +329,10 @@ export async function launchFactoryRun(
       }
     }
     if (wantsPaid) {
-      const paid = await publishPaid(sql, scope, creative.creativeId, input.settings.caps.dailyCents);
+      const paid = await publishPaid(sql, scope, creative.creativeId, {
+        dailyCents: input.settings.caps.dailyCents,
+        countries: input.settings.targetingCountries,
+      });
       if (paid.outcome === "paused") {
         outcome.paid.paused += 1;
         outcome.receipts += 1;

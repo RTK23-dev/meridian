@@ -53,11 +53,14 @@ function stageLabelOf(type: string): string {
 /** The run's settings in one line, in the words the builder uses. */
 function settingsLine(settings: RunSettings): string {
   const platforms = settings.platforms.length > 0 ? settings.platforms.join(", ") : "every organic platform";
+  // Paid runs name their countries; a run with none says so, because a live paid publish is refused without one.
+  const countries = settings.targetingCountries.length > 0 ? settings.targetingCountries.join(", ") : "none set";
   return [
     `${AUTOMATION_WORDS[settings.automation]} automation`,
     INTENT_WORDS[settings.intent],
     `formats ${settings.formats.map((format) => FORMAT_LABELS[format]).join(", ")}`,
     `platforms ${platforms}`,
+    `countries ${countries}`,
   ].join(" · ");
 }
 

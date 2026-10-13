@@ -6,6 +6,7 @@ import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
 import { FACTORY_GRAPH, factoryRunJobs, isFactoryStage, type FactoryStage } from "./pipeline.ts";
 import {
+  DEFAULT_RUN_SETTINGS,
   automationFromFactoryLevel,
   factoryLevelOfAutomation,
   mergeRunSettings,
@@ -385,6 +386,31 @@ export const startFactoryRun = createServerFn({ method: "POST" })
       `;
     }
     return { runId, status: "queued" as const, jobs: jobs.length };
+  });
+
+/**
+ * Saves the brand's run defaults: the settings a new run starts from. The settings are checked by the same rules a run's own settings
+ * are, and the whole checked object is stored, so a later change to the defaults does not change a run already started. An admin or
+ * owner saves them. A viewer or member reads them and cannot change them.
+ */
+export const saveFactoryRunDefaults = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      settings: body.settings,
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
+    const parsed = parseRunSettings(data.settings, DEFAULT_RUN_SETTINGS);
+    if (!parsed.ok) throw new Error(parsed.error);
+    await sql`
+      update brands set run_defaults = ${JSON.stringify(parsed.value)}
+      where id = ${data.brandId} and organization_id = ${organizationId} and deleted_at is null
+    `;
+    return { ok: true as const, settings: parsed.value };
   });
 
 /**

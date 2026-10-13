@@ -11,7 +11,7 @@ import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
 import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
-import { approveFactoryStage, checkFactoryLearning, resumeFactoryRun, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
+import { approveFactoryStage, checkFactoryLearning, resumeFactoryRun, saveFactoryRunDefaults, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
 import { metricLine, receiptLine } from "@/components/factory/measurement-model";
 import { gateText, planText, predictionStatusText, predictionText, variantHeading } from "@/components/factory/grades-model";
@@ -115,6 +115,12 @@ function FactoryPage({ brandId }: { brandId: string }) {
       setBuilderKey((key) => key + 1);
     },
   });
+  const saveRunDefaults = useScopedMutation({
+    mutationKey: factoryKey("run-defaults"),
+    mutationFn: (settings: RunSettings) => saveFactoryRunDefaults({ data: { brandId, settings } }),
+    invalidate: () => [qk.factory(brandId)],
+    onSuccess: () => setNote("Saved as the brand's run defaults. A run already started keeps the settings it was started with."),
+  });
   const startAgain = useScopedMutation({
     mutationKey: factoryKey("start-again"),
     mutationFn: (runId: string) => resumeFactoryRun({ data: { brandId, runId } }),
@@ -146,7 +152,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? "")],
     onSuccess: (result) => setNote(`Approved. ${result.requeued} steps are queued again from ${FACTORY_GRAPH.find((spec) => spec.type === result.stage)?.label ?? result.stage}.`),
   });
-  const failures = [startRun, startAgain, checkLearning, saveControls, killSwitch, approveStage].map((action) => action.error).filter((error): error is Error => Boolean(error));
+  const failures = [startRun, saveRunDefaults, startAgain, checkLearning, saveControls, killSwitch, approveStage].map((action) => action.error).filter((error): error is Error => Boolean(error));
 
   if (query.isError && !board) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!board) return <ScreenSkeleton label="Loading factory" shape="cards" />;
@@ -224,8 +230,11 @@ function FactoryPage({ brandId }: { brandId: string }) {
               channels={(channelsQuery.data ?? []).map((channel) => ({ id: channel.id, name: channel.name, connected: channel.connected }))}
               channelsState={channelsQuery.isPending ? "loading" : channelsQuery.isError ? "error" : "ready"}
               canEdit={canEdit}
+              canAdmin={canAdmin}
               busy={startRun.isPending}
+              savingDefaults={saveRunDefaults.isPending}
               onStart={({ niche, settings }) => { void startRun.mutateAsync({ niche, settings }).catch(() => undefined); }}
+              onSaveDefaults={(settings) => { void saveRunDefaults.mutateAsync(settings).catch(() => undefined); }}
               onDirtyChange={setBuilderDirty}
             />
             <h3 className="font-semibold">Runs</h3>
