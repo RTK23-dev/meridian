@@ -19,7 +19,7 @@ const COLLECT_JOB = "job-research-collect";
 const NOT_CONFIGURED = { status: "NOT_CONFIGURED" as const, message: "No key is saved for this workspace." };
 
 /** A run that makes video in every stage, with a spend cap set, so produce runs without an approval the test cannot give. */
-const FULL_WITH_CAP = { automation: "full", caps: { dailyCents: 0, totalCents: 1000, maxVariants: 8 } };
+const FULL_WITH_CAP = { automation: "full", decisionEngine: "jev", caps: { dailyCents: 0, totalCents: 1000, maxVariants: 8 } };
 
 type VariantRow = {
   hook: string;

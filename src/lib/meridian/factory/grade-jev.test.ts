@@ -15,7 +15,8 @@ import { CREATIVE_DNA_VERSION, dnaField, emptyCreativeDna, type AdFormat } from 
 import { gradingQuestionVersions, NO_DNA_GRADE, NO_ENGINE_GRADE } from "./grade.ts";
 import { executeFactoryJob, type FactorySeams } from "./worker.ts";
 
-const MANUAL = { automation: "manual" };
+// The engine is named, so a deployment's DECISION_ENGINE value cannot change which fixture is asked.
+const MANUAL = { automation: "manual", decisionEngine: "jev" };
 const COLLECT_JOB = "job-research-collect";
 const NOT_CONFIGURED = { status: "NOT_CONFIGURED" as const, message: "No TypeSafe key is saved for this workspace." };
 
