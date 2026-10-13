@@ -83,7 +83,8 @@ test("full: runs end to end inside its cap, and nothing waits for a person", asy
   assert.equal(stub.state.calls, 1);
   assert.match(await stage(sql, tenant, runId, "factory.gate"), /^gated:/);
   assert.match(await stage(sql, tenant, runId, "factory.review"), /^review:/);
-  assert.equal(await stage(sql, tenant, runId, "factory.launch"), "launch:paused-until-owner", "full reaches launch inside its cap");
+  // Full reaches launch inside its cap. Launch reports what it sent, and an unapproved creative is counted, not sent.
+  assert.match(await stage(sql, tenant, runId, "factory.launch"), /^launched:/, "full reaches launch inside its cap");
   const run = await runRow(sql, tenant, runId);
   assert.equal(run.status, "running", "no stop was recorded");
 });

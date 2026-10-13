@@ -11,6 +11,7 @@ import { runSettingsFromStorage } from "./run-settings.ts";
 import { stageDecision } from "./stage-decision.ts";
 import { effectiveCap, meteredSpendOf, spendCapsOf } from "./spend.ts";
 import { produceFactoryCreatives } from "./produce.ts";
+import { launchFactoryRun, recordTestPlan, scheduleRunMeasurement } from "./publish.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { recordedClaimsOf, templateFromDna } from "./template.ts";
 import {
@@ -228,13 +229,38 @@ export async function executeFactoryJob(
     return `review:${rows[0]?.n ?? 0}`;
   }
   if (job.job_type === "factory.launch") {
-    // Launch needs a cap, the run's own or the brand's, as the stage decision reads it. Publishing stays paused until the owner acts.
-    const capped =
-      effectiveCap(settings.caps.totalCents, caps.totalCents) !== null || effectiveCap(settings.caps.dailyCents, caps.dailyCents) !== null;
-    return capped ? "launch:paused-until-owner" : "launch:blocked-no-cap";
+    // The approved creatives go down the paths the run's intent names. Organic posts go through the distribution service, and paid
+    // objects through the publishing engine, created paused. An unapproved creative is not sent. A creative with a receipt to measure
+    // schedules the run's measurement pull.
+    const launched = await launchFactoryRun(sql, {
+      organizationId: job.organization_id,
+      brandId: job.brand_id,
+      runId,
+      actorId: owned[0].created_by,
+      settings,
+    });
+    if (launched.receipts > 0) {
+      await scheduleRunMeasurement(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
+    }
+    return launched.summary;
   }
   if (job.job_type === "factory.test") {
-    return "test:awaiting-live-results";
+    // The budget test is recorded and waits for a person in every mode. Nothing is switched on here: the record names the paused ads
+    // the run holds, and the switched-on count is always zero.
+    if ((approvals[0]?.n ?? 0) === 0) {
+      const reason = "The budget test is recorded for a person to approve. Nothing is switched on.";
+      await sql`
+        update factory_runs set status = 'awaiting_approval', current_stage = ${job.job_type}, error = ${reason}, updated_at = now()
+        where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+      `;
+      return `awaiting-approval:${job.job_type}`;
+    }
+    return recordTestPlan(sql, {
+      organizationId: job.organization_id,
+      brandId: job.brand_id,
+      runId,
+      actorId: owned[0].created_by,
+    });
   }
   if (job.job_type === "factory.learn") {
     // Learning is not built (NORTH_STAR section 8, item 10). Nothing was learned, so the run is not finished. It stays running,
