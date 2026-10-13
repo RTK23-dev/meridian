@@ -17,6 +17,7 @@ import { metricLine, receiptLine } from "@/components/factory/measurement-model"
 import { gateText, planText, predictionStatusText, predictionText, variantHeading } from "@/components/factory/grades-model";
 import { HeldReservationsPanel } from "@/components/held-reservations-panel";
 import { FACTORY_GRAPH } from "@/lib/meridian/factory/pipeline";
+import { usdOfMicros } from "@/lib/meridian/factory/spend-lines";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { RunBuilder } from "@/components/factory/run-builder";
 import { RunList, type RunListItem, type RunPickLine } from "@/components/factory/run-list";
@@ -27,6 +28,16 @@ export const Route = createFileRoute("/_app/brands/$brandId/factory")({ staticDa
 
 function dollars(cents: number): string {
   return `$${(Math.max(0, cents) / 100).toFixed(2)}`;
+}
+
+/**
+ * One cost row, in plain words. A provider row shows its cents. A token row shows its tokens and its priced cost, or says it is tokens
+ * only and not priced, because no price exists for its model. Its cost is unknown then, not zero.
+ */
+function costLine(row: FactoryBoard["costs"][number]): string {
+  if (row.basis !== "tokens") return `${row.stage}: ${dollars(row.cents ?? 0)} · ${row.seconds}s`;
+  const priced = row.micros === null ? "tokens only, not priced" : usdOfMicros(row.micros);
+  return `${row.stage} · ${row.engine} ${row.model || "model not reported"} · ${row.tokens ?? 0} tokens · ${priced}`;
 }
 
 type FactoryBoard = NonNullable<ReturnType<typeof useFactoryQuery>["data"]>;
@@ -72,6 +83,7 @@ function runListItems(board: FactoryBoard): RunListItem[] {
       niche: run.niche,
       error: run.error,
       settings: run.settings,
+      spend: run.spend,
       runSources: run.runSources,
       picks: picksOf(board, run.picks),
       receiptLines: creatives.flatMap((item) => item.receipts.map((receipt) => `${item.format} creative: ${receiptLine(receipt)}`)),
@@ -329,7 +341,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
             {board.costs.length === 0 ? <p className="text-muted">No production costs are recorded yet.</p> : (
               <ul className="text-sm">
                 {board.costs.map((row, index) => (
-                  <li key={`${row.stage}-${index}`}>{row.stage}: {dollars(row.cents)} · {row.seconds}s</li>
+                  <li key={`${row.stage}-${index}`}>{costLine(row)}</li>
                 ))}
               </ul>
             )}

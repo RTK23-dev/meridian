@@ -93,4 +93,6 @@ This release adds migration `0070`. It gives `learned_patterns` a `surface` (org
 
 This release adds migration `0071`. It gives `factory_picks` a `surface` and a `grade_fingerprint`. Both are empty for every pick written before it, and the Factory screen says the prediction of such a pick is not known. No existing row is rewritten.
 
+This release adds migration `0072`. It makes `factory_costs.cents` nullable and adds the `tokens` basis, with `micros` (the priced cost in millionths of a dollar), the engine, model, prompt and completion tokens, the price table version and the gate record id. Existing rows keep their cents and have no micros. Nothing is rewritten. A token row with no price has a null cost, which the Factory screen shows as "tokens only, not priced".
+
 The telemetry sync now writes one paid observation per measured row, keyed in `performance_observations.external_id` as `telemetry:<row id>`. A paid observation written before this release has no key. The next sync adopts it by its creative, day and values, so the first measurement is not counted twice. Nothing has to be run by hand.

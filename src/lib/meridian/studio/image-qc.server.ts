@@ -28,6 +28,7 @@ import { selectRepresentativeFrames, sha256Hex } from "../decisions/frames.ts";
 import { sampleVideoFrames, type FrameExtractor } from "../video/sample-frames.ts";
 import { resolveActiveEngine, type EngineSelection } from "../decisions/selection.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
+import type { DecisionUsage } from "../decisions/types.ts";
 import { judgmentDecisionId, type RecordedDecision } from "./judgment-decision.ts";
 
 export type QcBrandContext = {
@@ -169,6 +170,11 @@ export type CreativeJudgment = {
   gateRecordId: string | null;
   gateAction: PolicyOutcome;
   gateEngineCalled: boolean;
+  /** The engine gate's spend: the engine, the models asked and reported, and the tokens the engine reported. Null usage when none. */
+  gateEngineId: string | null;
+  gateRequestedModel: string | null;
+  gateReturnedModel: string | null;
+  gateUsage: DecisionUsage | null;
   /** The perception run, when one was made. Absent when the engine received the media itself. */
   perceptionRunId: string | null;
 };
@@ -386,6 +392,10 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     gateRecordId: gate.gateRecordId,
     gateAction: gate.action,
     gateEngineCalled: gate.engineCalled,
+    gateEngineId: gate.engineId,
+    gateRequestedModel: gate.requestedModel,
+    gateReturnedModel: gate.returnedModel,
+    gateUsage: gate.usage ?? null,
     perceptionRunId,
   };
 }

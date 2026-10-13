@@ -76,10 +76,28 @@ reached. Produce checks the caps again before each provider call, so the call th
 
 `full` also needs a cap to be set. A `full` run with no cap stops before any spend, with "Full automation needs a spend cap".
 
-A metered row is written only from a provider call that reported its own cost (`factory_costs.basis` is `provider_reported`). A
-provider that reports no cost writes no row, and the caps cannot see its spend. The Google image provider reports no cost today, so a
-Factory run that uses it is not counted against its caps. Its reservation is still held in the budget ledger, at the per-image
-ceiling of $1 (`FACTORY_IMAGE_CEILING_USD`), and settles at that ceiling. That ceiling is a guard, not a price.
+A metered row is written from one of two things, and its basis says which (`factory_costs.basis`):
+
+- `provider_reported`: a provider call that reported its own cost in cents.
+- `tokens`: a decision that called an engine and reported its token usage. Each decision writes one row for its run: the grade of an
+  ad (`factory.grade`) and the judgment of a generated image (`factory.produce`). The row names the engine and the model and holds the
+  prompt and completion tokens. A decision row is keyed by its gate record, so a rerun of a graded ad writes nothing.
+
+A token row's dollar cost is written only when the price table (`factory/price-table.ts`) has an entry for the engine and the model.
+The table is versioned, and each entry names the provider's pricing page and the date it was read. The OpenAI Decisions default model,
+`gpt-6-luna`, is priced from that page: $0.10 input, $0.01 cached input and $0.50 output per million tokens, with the long-context rates
+above 272,000 input tokens, read on 2026-10-13. A model with no entry is **tokens only, not priced**: its cost is null, never zero, and
+the run view says so. The JEV engine reports no token usage, so its decisions write no row, and the run says its spend is not measured.
+
+Caps count only priced cost. Unpriced spend is not counted. The priced cost is rounded up to a whole cent when it is compared with a cap,
+so a cap is never under-counted. The run view states this rule.
+
+A provider call that reports no cost writes no row, and the caps cannot see its spend. The Google image provider reports no cost today, so
+a Factory run that uses it is not counted against its caps. Its reservation is still held in the budget ledger, at the per-image ceiling of
+$1 (`FACTORY_IMAGE_CEILING_USD`), and settles at that ceiling. That ceiling is a guard, not a price.
+
+The price table does not cover cache writes. The engine reports none, so a request that wrote to the prompt cache is priced only for its
+input, cached input and output, and its cost can be lower than the invoice.
 
 ## Produce
 
@@ -273,6 +291,7 @@ What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
   the ad was graded again. Keeping every grade needs a grade history table, which is not built.
 - Organic outcomes are still one observation per post. A later organic measurement of the same post is not added to `organic_observations`.
   The paid path is per measurement (see [Learning per surface](#learning-per-surface)).
+- Spend from perception reads is not metered. A perception read is a separate call from the decision, and it writes no row.
 - The Factory screen was not checked in a browser from this branch. Its before and after screenshots, and the button audit, need a run of
   the app that this change did not make.
 - The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.

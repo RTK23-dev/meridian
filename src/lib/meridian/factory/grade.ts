@@ -12,7 +12,7 @@ import { runEngineGate, type GateEvidenceInput, type GateQuestion, type GateResu
 import { createDecisionEngines, type DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
 import { resolveActiveEngine, type EngineSelection } from "../decisions/selection.ts";
-import type { DecisionEngineId } from "../decisions/types.ts";
+import type { DecisionEngineId, DecisionUsage } from "../decisions/types.ts";
 import type { JevQuestionSpec } from "../jev/types.ts";
 import { BRAND_QUESTIONS } from "../jev/questions/brand.ts";
 import { CREATIVE_QUESTIONS } from "../jev/questions/creative.ts";
@@ -109,6 +109,13 @@ export type ItemGrade =
       policyVersion: string;
       gateRecordId: string | null;
       votes: GradeVote[];
+      /** Whether the gate called the engine. A grade answered from the engine's own record did not, and spent nothing. */
+      engineCalled: boolean;
+      /** The model asked for, and the model the provider reported. Both are needed to price the tokens. */
+      requestedModel: string | null;
+      returnedModel: string | null;
+      /** The token usage the engine reported over the grade's calls. Null when the engine reports none. */
+      usage: DecisionUsage | null;
     };
 
 /** The stored form of a grade, one value per jev_* column of ad_timelines. */
@@ -271,5 +278,9 @@ export async function gradeItemWithEngine(
     policyVersion: gate.policyVersion,
     gateRecordId: gate.gateRecordId,
     votes,
+    engineCalled: gate.engineCalled,
+    requestedModel: gate.requestedModel,
+    returnedModel: gate.returnedModel,
+    usage: gate.usage ?? null,
   };
 }

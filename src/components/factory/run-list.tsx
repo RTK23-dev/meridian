@@ -3,6 +3,7 @@ import { FACTORY_GRAPH, LEARN_WAITING } from "@/lib/meridian/factory/pipeline";
 import { APPROVAL_LABELS, pendingApproval, runStatusLabel } from "@/lib/meridian/factory/approval";
 import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { FORMAT_LABELS, INTENT_DESCRIPTIONS } from "@/lib/meridian/factory/run-builder-model";
+import { spendLinesOf, type SpendFigures } from "@/lib/meridian/factory/spend-lines";
 
 /** A creative a variant produced, with its receipts and measured rows already in words. */
 export type RunCreativeLine = { label: string; receiptLines: string[]; measurementLines: string[] };
@@ -28,6 +29,8 @@ export type RunListItem = {
   niche: string;
   error: string;
   settings: RunSettings;
+  /** The run's spend, from its cost rows: priced cost, tokens only, and provider-reported cents. */
+  spend: SpendFigures;
   runSources: Array<{ source: string; state: string; reason: string; items: number }>;
   picks: RunPickLine[];
   receiptLines: string[];
@@ -104,6 +107,9 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
             </div>
             <p className="text-muted">{settingsLine(run.settings)}</p>
             <p className="text-xs text-muted">Intent: {INTENT_WORDS[run.settings.intent]}. {INTENT_DESCRIPTIONS[run.settings.intent]}</p>
+            <ul className="space-y-1 text-xs text-muted" aria-label="Spend of this run">
+              {spendLinesOf(run.spend).map((line) => <li key={line}>{line}</li>)}
+            </ul>
             {run.error ? <p className="text-muted">{run.error}</p> : null}
 
             <details>

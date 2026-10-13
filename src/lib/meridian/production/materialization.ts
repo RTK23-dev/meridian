@@ -22,6 +22,7 @@ import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
 import { accountSnapshots, competitorCopy, factsFor, generatedImageVisual, visualFacts, writeJudgment, type QcBrandContext } from "../studio/image-qc.server.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
+import { recordDecisionSpend } from "../factory/decision-spend.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { CreativeSpec, ProductionModality } from "./types.ts";
 
@@ -385,6 +386,22 @@ export async function materializeImageArtifact(
     engines: options.engines,
   });
   const status = judged.rollup === "REJECT" ? "rejected" : judged.rollup === "AUTO_APPROVE" ? "approved" : "in_review";
+  // The judgment is the decision a Factory image makes. Its tokens are metered for the Factory run that made it. A Studio image is not.
+  if (text(input.kind) === "factory_image") {
+    await recordDecisionSpend(sql, {
+      organizationId: ref.organizationId,
+      brandId: ref.brandId,
+      runId,
+      stage: "factory.produce",
+      productionJobId: job.id,
+      gateRecordId: judged.gateRecordId,
+      engineCalled: judged.gateEngineCalled,
+      engineId: judged.gateEngineId,
+      requestedModel: judged.gateRequestedModel,
+      returnedModel: judged.gateReturnedModel,
+      usage: judged.gateUsage ?? undefined,
+    });
+  }
 
   await sql`
     insert into creative_records (
