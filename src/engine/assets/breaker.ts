@@ -7,7 +7,8 @@
 
 import type { ProviderStats } from "./stats.ts";
 
-export type BreakerSettings = { failureShare: number; windowMs: number; skipMs: number };
+/** minSample: the breaker trips only after this many provider-side attempts in the window (thresholds@2). */
+export type BreakerSettings = { failureShare: number; windowMs: number; skipMs: number; minSample: number };
 
 export type BreakerState = { trippedAtMs: number; openUntilMs: number };
 
@@ -52,7 +53,7 @@ export async function evaluateBreaker(
   // not counted, so a recovered provider gets a clean window rather than a re-trip from its own in-flight retries.
   const windowStart = Math.max(nowMs - settings.windowMs, state?.openUntilMs ?? Number.NEGATIVE_INFINITY);
   const window = (await stats.since(providerId, windowStart)).filter((record) => record.outcome !== "request_refused");
-  if (window.length === 0) return null;
+  if (window.length === 0 || window.length < settings.minSample) return null;
   const failures = window.filter((record) => record.outcome === "provider_failure").length;
   if (failures / window.length <= settings.failureShare) return null;
   const tripped: BreakerState = { trippedAtMs: nowMs, openUntilMs: nowMs + settings.skipMs };

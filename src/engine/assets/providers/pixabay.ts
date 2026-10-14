@@ -2,6 +2,7 @@
 // only on Pixabay's own host. Candidates must be portrait, long enough, and offered at 1080 pixels or more in a size the
 // response lists. The page URL and the author (user) are kept with every clip. Pixabay has no author URL in the listing.
 
+import { adapters } from "../../config/adapters.ts";
 import { z } from "zod";
 import type { ProviderError } from "../../contracts/assets.ts";
 import type { Gateway } from "../../gateway/gateway.ts";
@@ -12,7 +13,7 @@ import { normaliseHttpsUrl } from "../normalise.ts";
 import type { StockClip, StockProvider, StockSearch } from "../stock.ts";
 
 const PROVIDER = "pixabay";
-export const PIXABAY_TIMEOUT_MS = 30_000;
+export const PIXABAY_TIMEOUT_MS = adapters.timeoutsMs.pixabay.value;
 const PER_PAGE = 20;
 const MIN_WIDTH = 1080;
 const MIN_HEIGHT = 1920;

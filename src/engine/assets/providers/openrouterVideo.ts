@@ -8,6 +8,7 @@
 // The idempotency key is not sent: PROVIDER_APIS.md documents no idempotency header for video. It is recorded in the ledger
 // only (see STATUS.md, the open risk of a billed retry).
 
+import { adapters } from "../../config/adapters.ts";
 import { z } from "zod";
 import { EngineError } from "../../contracts/errors.ts";
 import type { AssetSpec, ProviderCapabilities, ProviderPoll } from "../../contracts/assets.ts";
@@ -22,7 +23,7 @@ import { normaliseHttpsUrl } from "../normalise.ts";
 const PROVIDER = "openrouter";
 
 /** The submit call has its own timeout. A poll is bounded by the router's poll deadline. */
-export const VIDEO_SUBMIT_TIMEOUT_MS = 60_000;
+export const VIDEO_SUBMIT_TIMEOUT_MS = adapters.timeoutsMs.videoSubmit.value;
 
 /** The resolution and aspect the engine asks for (1080 x 1920, Bible section 1). */
 export const VIDEO_RESOLUTION = "1080p";

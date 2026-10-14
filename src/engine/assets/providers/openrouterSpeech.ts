@@ -5,6 +5,7 @@
 // The voice is a per-page setting (the voice kit), so the adapter takes it at construction. No voice means not connected:
 // a request without a voice is never sent. Voice cloning (input_references) is not used without the owner's approval.
 
+import { adapters } from "../../config/adapters.ts";
 import { EngineError } from "../../contracts/errors.ts";
 import type { AssetSpec, ProviderPoll } from "../../contracts/assets.ts";
 import type { ModelClass } from "../../contracts/plan.ts";
@@ -16,7 +17,7 @@ import { excerpt } from "../classify.ts";
 
 const PROVIDER = "openrouter";
 
-export const SPEECH_TIMEOUT_MS = 120_000;
+export const SPEECH_TIMEOUT_MS = adapters.timeoutsMs.speech.value;
 
 export type OpenRouterSpeechOptions = {
   gateway: Gateway;

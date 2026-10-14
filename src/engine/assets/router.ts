@@ -15,6 +15,7 @@
 //
 // The router never sends a request itself: every call is an adapter's, and every adapter calls only the gateway.
 
+import { adapters } from "../config/adapters.ts";
 import { EngineError } from "../contracts/errors.ts";
 import { assetCacheKey, type AssetSpec, type ProviderError, type ProviderPoll } from "../contracts/assets.ts";
 import { sumUsd } from "../contracts/money.ts";
@@ -46,12 +47,12 @@ import {
 import { adapterFor, type AdapterContext } from "./providers/index.ts";
 import type { VideoProfile } from "./providers/openrouterVideo.ts";
 
-/** Values this file owns. They are not in config yet; each is listed in STATUS.md for the lead to move. */
+/** The router's timing values, read from config/adapters.ts (adapters@1). */
 export const ROUTER_CONSTANTS = {
-  pollIntervalMs: 5_000,
-  backoffBaseMs: 1_000,
-  backoffCapMs: 30_000,
-  reliabilityWindowMs: 7 * 24 * 60 * 60 * 1000,
+  pollIntervalMs: adapters.polling.intervalMs.value,
+  backoffBaseMs: adapters.retry.backoffBaseMs.value,
+  backoffCapMs: adapters.retry.backoffCapMs.value,
+  reliabilityWindowMs: adapters.reliabilityWindowMs,
 } as const;
 
 export type RouterSettings = {
@@ -79,6 +80,7 @@ export function defaultRouterSettings(): RouterSettings {
       failureShare: thresholds.router.breaker.failureShare,
       windowMs: thresholds.router.breaker.windowMs,
       skipMs: thresholds.router.breaker.skipMs,
+      minSample: thresholds.router.breaker.minSample.value,
     },
     concurrency: { video: thresholds.router.concurrency.video, image: thresholds.router.concurrency.image, tts: thresholds.router.concurrency.tts },
     reliabilityWindowMs: ROUTER_CONSTANTS.reliabilityWindowMs,

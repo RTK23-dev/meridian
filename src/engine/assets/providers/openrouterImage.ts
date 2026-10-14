@@ -7,6 +7,7 @@
 // Reference images (input_references) are not sent: their shape is not in PROVIDER_APIS.md, so a spec with references or
 // frames is refused before any call. Every call asks for one image; a second take is the caller's second call with a new seed.
 
+import { adapters } from "../../config/adapters.ts";
 import { z } from "zod";
 import { EngineError } from "../../contracts/errors.ts";
 import type { AssetSpec, ProviderPoll } from "../../contracts/assets.ts";
@@ -21,7 +22,7 @@ import { excerpt } from "../classify.ts";
 const PROVIDER = "openrouter";
 
 /** Image calls are synchronous but can take a while. */
-export const IMAGE_TIMEOUT_MS = 120_000;
+export const IMAGE_TIMEOUT_MS = adapters.timeoutsMs.image.value;
 
 const imageAnswer = z.looseObject({
   data: z

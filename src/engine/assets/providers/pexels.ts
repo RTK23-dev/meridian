@@ -2,6 +2,7 @@
 // adds. Candidates must be portrait, long enough, and offered as an mp4 file at 1080 pixels or more; the page URL and the author
 // are kept with every clip. HLS streams are not used.
 
+import { adapters } from "../../config/adapters.ts";
 import { z } from "zod";
 import type { ProviderError } from "../../contracts/assets.ts";
 import type { Gateway } from "../../gateway/gateway.ts";
@@ -12,7 +13,7 @@ import { normaliseHttpsUrl } from "../normalise.ts";
 import type { StockClip, StockProvider, StockSearch } from "../stock.ts";
 
 const PROVIDER = "pexels";
-export const PEXELS_TIMEOUT_MS = 30_000;
+export const PEXELS_TIMEOUT_MS = adapters.timeoutsMs.pexels.value;
 const PER_PAGE = 15;
 const MIN_FILE_HEIGHT = 1080;
 const OUTPUT_HEIGHT = 1920;

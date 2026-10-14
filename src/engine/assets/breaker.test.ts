@@ -4,7 +4,7 @@ import { evaluateBreaker, memoryBreakerStore, openBreaker, type BreakerSettings 
 import { memoryProviderStats, medianLatencyMs, successRate, type AttemptRecord } from "./stats.ts";
 import { memoryBucketStore, bucketClassFor } from "./buckets.ts";
 
-const SETTINGS: BreakerSettings = { failureShare: 0.3, windowMs: 600_000, skipMs: 600_000 };
+const SETTINGS: BreakerSettings = { failureShare: 0.3, windowMs: 600_000, skipMs: 600_000, minSample: 1 };
 const T0 = 1_000_000;
 const ID = "openrouter:kwaivgi/kling-v3.0-std";
 
@@ -23,6 +23,16 @@ describe("circuit breaker", () => {
     assert.deepEqual(tripped, { trippedAtMs: T0 + 1000, openUntilMs: T0 + 1000 + 600_000 });
     assert.ok(await openBreaker(breakers, ID, T0 + 300_000));
     assert.equal(await openBreaker(breakers, ID, T0 + 1000 + 600_000), null);
+  });
+
+  it("does not trip below the minimum sample, however bad the share", async () => {
+    const stats = memoryProviderStats();
+    const breakers = memoryBreakerStore();
+    const settings = { ...SETTINGS, minSample: 5 };
+    for (let i = 0; i < 4; i += 1) await stats.record(record(T0 + i, "provider_failure"));
+    assert.equal(await evaluateBreaker(stats, breakers, ID, T0 + 4, settings), null, "4 failures of 4 is under the 5-attempt minimum");
+    await stats.record(record(T0 + 5, "provider_failure"));
+    assert.ok(await evaluateBreaker(stats, breakers, ID, T0 + 5, settings), "the fifth failure trips it");
   });
 
   it("does not trip at exactly the limit, and does not count refused requests", async () => {

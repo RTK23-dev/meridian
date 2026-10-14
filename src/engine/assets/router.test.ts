@@ -8,6 +8,7 @@ import { createAssetRouter, type ProduceInput, type RouterSignals, type RouterSe
 import { memoryAssetCache, type AssetCache } from "./cache.ts";
 import { memoryProviderStats } from "./stats.ts";
 import { memoryBreakerStore } from "./breaker.ts";
+import { defaultRouterSettings } from "./router.ts";
 import { memoryBucketStore } from "./buckets.ts";
 import { memoryMediaStore } from "./adapter.ts";
 import { videoProfilesFromListing } from "./providers/openrouterVideo.ts";
@@ -360,7 +361,10 @@ describe("concurrency buckets and the breaker", () => {
 
   it("trips after the failure share is over the limit, skips the provider while open, and recovers after the skip", async () => {
     let healthy = false;
+    // Three failed submits make the window; the minimum sample is lowered to 3 so this one request can trip it.
+    const breaker = { ...defaultRouterSettings().breaker, minSample: 3 };
     const h = await harness({
+      settings: { breaker },
       script: {
         "POST /api/v1/videos": (request) => {
           const model = (JSON.parse(String(request.body)) as { model: string }).model;
