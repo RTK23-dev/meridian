@@ -68,10 +68,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The video engine's media tests run real ffmpeg and ffprobe on generated clips (src/engine/media).
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Run this shard of the tests
         env:
           SHARD_INDEX: ${{ matrix.shard }}
           SHARD_COUNT: ${{ strategy.job-total }}
+          # A missing ffmpeg fails the run instead of skipping the media tests.
+          MERIDIAN_REQUIRE_FFMPEG: "1"
         run: |
           set -euo pipefail
           node scripts/test-shard.mjs --group scripts --index "$SHARD_INDEX" --count "$SHARD_COUNT" > "$RUNNER_TEMP/scripts-tests.txt"

@@ -45,3 +45,13 @@ Interim handling of open conflicts (owner may overrule):
   - Bible conflict for the owner: section 6.4 says a $0.50 budget yields an all-code plan that still delivers, but section 14.2 puts the fixed cost of every master at about $0.52. The test asserts the all-code plan and documents the clash.
   - Persona and voice consent cannot be checked yet: the contracts carry kit ids, not consent records. Intake must load kits (section 13 `consentRecord`) in E3.
   - The `cartoon_generated` keyframe price is unknown (null), so that type is excluded from budget fitting until priced.
+
+## 2026-10-14 Wave B: W4 merged
+
+- eng-media-assets delivered `functions/ffmpeg/` (probe, frames, loudness and cut handlers, each a pure argument builder plus parser, with URL policy and temp-dir cleanup) and `src/engine/media/` (one `MediaFunctions` interface; an HTTP client for the serverless deployment; an in-process implementation for tests only; the render-integrity gate; a `SpeechToText` interface with a recorded adapter and no vendor). Commit 66e1511. Shared generated-media fixtures live in `src/engine/test/`.
+- Lead review: changes stay in its folders plus the shared engine test fixtures. After merge, with ffmpeg required: 496 engine tests pass, none skipped. Typecheck clean, lint 0 errors.
+- Lead change: CI test shards now install ffmpeg and set `MERIDIAN_REQUIRE_FFMPEG=1`, so a missing ffmpeg fails CI instead of silently skipping the media tests.
+- Follow-ups recorded:
+  - `media/config.ts` holds the scene score and timeouts; eng-contracts moves them into `src/engine/config/` with the plan tables.
+  - The platform size limit is null, so render integrity fails closed until the owner sets it.
+  - Still for the owner: the speech-to-text vendor (Bible 20.2) and where the ffmpeg functions are deployed.
