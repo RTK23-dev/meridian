@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MODEL_CLASSES } from "../contracts/plan.ts";
 import { EngineError, sumUsd } from "../contracts/index.ts";
+import { adapters } from "./adapters.ts";
 import { budgets } from "./budgets.ts";
 import { CONTRACTS_VERSION } from "../contracts/version.ts";
 import { prices, priceFor, type PriceKey } from "./prices.ts";
@@ -30,7 +31,8 @@ test("every Tunable in the config has floor <= value <= ceiling", () => {
   collectTunables(thresholds, "thresholds", found);
   collectTunables(weights, "weights", found);
   collectTunables(budgets, "budgets", found);
-  assert.ok(found.length >= 30, `expected many tunables, found ${found.length}`);
+  collectTunables(adapters, "adapters", found);
+  assert.equal(found.length, 51, `expected 51 tunables (thresholds 19, weights 16, budgets 1, adapters 15), found ${found.length}`);
   for (const [path, value] of found) {
     assert.ok(value.floor <= value.value && value.value <= value.ceiling, `${path} is outside its bounds`);
     assert.ok(Number.isFinite(value.value), `${path} is not finite`);
@@ -38,14 +40,67 @@ test("every Tunable in the config has floor <= value <= ceiling", () => {
 });
 
 test("each config file carries its version string", () => {
-  assert.equal(thresholds.version, "thresholds@1");
+  assert.equal(thresholds.version, "thresholds@2");
   assert.equal(weights.version, "weights@1");
   assert.equal(prices.version, "prices@2");
   assert.equal(budgets.version, "budgets@1");
+  assert.equal(adapters.version, "adapters@1");
 });
 
-test("the contract set is at version 2 (LedgerEntry role fields and VoiceKit wordsPerMinute, E2)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@2");
+test("the contract set is at version 3 (manifest roleCalls, E3)", () => {
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@3");
+});
+
+test("the assets constants moved to config keep the values assets/STATUS.md recorded", () => {
+  assert.equal(adapters.polling.intervalMs.value, 5_000);
+  assert.equal(adapters.retry.backoffBaseMs.value, 1_000);
+  assert.equal(adapters.retry.backoffCapMs.value, 30_000);
+  assert.equal(adapters.reliabilityWindowMs, 7 * 24 * 60 * 60 * 1000);
+  assert.equal(adapters.timeoutsMs.videoSubmit.value, 60_000);
+  assert.equal(adapters.timeoutsMs.image.value, 120_000);
+  assert.equal(adapters.timeoutsMs.speech.value, 120_000);
+  assert.equal(adapters.timeoutsMs.pexels.value, 30_000);
+  assert.equal(adapters.timeoutsMs.pixabay.value, 30_000);
+  assert.equal(adapters.outputLimits.imageMinBytes.value, 1024);
+  assert.equal(adapters.outputLimits.imageMaxBytes.value, 32 * 1024 * 1024);
+  assert.equal(adapters.outputLimits.speechMinBytes.value, 1024);
+  assert.equal(adapters.outputLimits.speechMaxBytes.value, 64 * 1024 * 1024);
+  assert.equal(adapters.outputLimits.urlMaxLength.value, 2048);
+  assert.equal(adapters.stock.pexels.perPage.value, 15);
+  assert.equal(adapters.stock.pixabay.perPage.value, 20);
+  assert.deepEqual(adapters.output, { width: 1080, height: 1920 });
+});
+
+test("the Bible gives 1080 x 1920 output, the 7-day reliability window and the lease times; the rest is Tunable", () => {
+  assert.equal(adapters.output.width, 1080);
+  assert.equal(adapters.output.height, 1920);
+  assert.equal(thresholds.jobs.leaseMs.generation, 600_000);
+  assert.equal(thresholds.jobs.leaseMs.claude, 120_000);
+  assert.equal(thresholds.jobs.leaseMs.render, 300_000);
+});
+
+test("the breaker minimum sample and the scoring minimum are integers inside their bounds (E3 initial values)", () => {
+  const minSample = thresholds.router.breaker.minSample;
+  const minAttempts = thresholds.router.minAttempts;
+  assert.equal(minSample.value, 5);
+  assert.equal(minAttempts.value, 10);
+  for (const tuned of [minSample, minAttempts, adapters.stock.pexels.perPage, adapters.stock.pixabay.perPage]) {
+    assert.ok(Number.isInteger(tuned.value), `${tuned.value} must be an integer`);
+  }
+  for (const bytes of [
+    adapters.outputLimits.imageMinBytes,
+    adapters.outputLimits.imageMaxBytes,
+    adapters.outputLimits.speechMinBytes,
+    adapters.outputLimits.speechMaxBytes,
+    adapters.outputLimits.urlMaxLength,
+  ]) {
+    assert.ok(Number.isInteger(bytes.value), `${bytes.value} must be an integer`);
+  }
+});
+
+test("the Pixabay page size is inside its documented range (3 to 200, PROVIDER_APIS.md)", () => {
+  assert.equal(adapters.stock.pixabay.perPage.floor, 3);
+  assert.equal(adapters.stock.pixabay.perPage.ceiling, 200);
 });
 
 test("tunable refuses an initial value outside its own bounds", () => {

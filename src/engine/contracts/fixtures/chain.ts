@@ -17,6 +17,7 @@ import {
   type GateResult,
   type LedgerEntry,
   type Manifest,
+  type ManifestRoleCall,
   type ProductionRequest,
   type RenderedVideo,
   type ReviewResult,
@@ -783,8 +784,46 @@ export const ledgerClaudeFixture: LedgerEntry = {
 
 const generatedUsd = takesFixture.map((take) => take.costUsd);
 
+// Role calls of the video (manifest v2). The planner is the ledger's planner call (ledgerClaudeFixture): same cost. The
+// director check is an invalid answer: no answer was used, its cost is unknown, so it is held as the estimate and stays null.
+export const manifestRoleCallsFixture: ManifestRoleCall[] = [
+  {
+    role: "planner",
+    promptVersion: "planner@1",
+    model: "anthropic/claude-opus-5.5",
+    answeredBy: "anthropic/claude-opus-5.5",
+    generationId: "gen-fixture-planner-1",
+    tokens: { prompt: 19000, completion: 3300 },
+    costUsd: 0.142,
+    actualIsEstimate: false,
+    verdict: "answered",
+  },
+  {
+    role: "critic_take",
+    promptVersion: "critic_take@1",
+    model: "anthropic/claude-haiku-5.5",
+    answeredBy: "anthropic/claude-haiku-5.5",
+    generationId: "gen-fixture-critic-1",
+    tokens: { prompt: 2100, completion: 180 },
+    costUsd: 0.003,
+    actualIsEstimate: false,
+    verdict: "answered",
+  },
+  {
+    role: "director_check",
+    promptVersion: "director_check@1",
+    model: "anthropic/claude-opus-5.5",
+    answeredBy: null,
+    generationId: "gen-fixture-director-1",
+    tokens: { prompt: null, completion: null },
+    costUsd: null,
+    actualIsEstimate: true,
+    verdict: "invalid_answer",
+  },
+];
+
 export const manifestFixture: Manifest = {
-  schema: "meridian.manifest/v1",
+  schema: "meridian.manifest/v2",
   videoId: ID.video,
   requestId: ID.request,
   formatId: "fmt_fixture_rank",
@@ -824,4 +863,5 @@ export const manifestFixture: Manifest = {
     render: 96000,
     post_render_review: 30000,
   },
+  roleCalls: manifestRoleCallsFixture,
 };

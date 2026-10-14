@@ -31,6 +31,13 @@ version bump, a note in Bible section 4 and the lead's approval.
 - A passing review has no failures. A paused reservation names its reason.
 - A composition's `contentHash` is the hash of its files, and its `rootFile` is one of them.
 - A manifest's `cost.total` is the sum of its four parts.
+- A manifest's role calls (v2, optional `roleCalls`) name a Bible 11.1 role. Each call's prompt version is the one `promptVersions`
+  records for its role. An unknown cost, and an invalid answer, are held as the estimate (`actualIsEstimate: true`).
+
+## Contract v3 (`CONTRACTS_VERSION`, see Bible section 4 "v3 changes and migration")
+
+- `Manifest` is `meridian.manifest/v2`. It takes an optional `roleCalls` array of `ManifestRoleCall` (exported from `manifest.ts`):
+  the Claude role calls of the video, from the role-call journal. Without it a v2 manifest is valid.
 
 ## Contract v2 (`CONTRACTS_VERSION`, see Bible section 4 "v2 changes and migration")
 

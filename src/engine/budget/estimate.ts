@@ -95,8 +95,11 @@ function lineForShot(shot: ShotSpec): { line: BudgetLine; generated: boolean } {
   };
 }
 
-/** The fixed per-master lines (14.2): Claude roles, critic, render, and speech-to-text with ffmpeg. */
-function fixedLines(): BudgetLine[] {
+/**
+ * The fixed per-master lines (14.2): Claude roles, critic, render, and speech-to-text with ffmpeg. Exported for the
+ * pre-flight hold (preflight.ts): intake reserves these lines alone, and estimate_reserve later replaces them with the plan's.
+ */
+export function fixedBudgetLines(): BudgetLine[] {
   return [
     { stage: budgets.fixedStages.claudeRoles, estimateUsd: budgets.fixedPerMasterUsd.claudeRoles },
     { stage: budgets.fixedStages.critic, estimateUsd: budgets.fixedPerMasterUsd.critic },
@@ -120,7 +123,7 @@ export function estimatePlan(plan: ScenePlan): Estimate {
   const shotResults = parsed.data.shots.map(lineForShot);
   const shotLines = shotResults.map((result) => result.line);
   const generatedLines = shotResults.filter((result) => result.generated).map((result) => result.line);
-  const fixed = fixedLines();
+  const fixed = fixedBudgetLines();
 
   const shotsUsd = sumUsd(shotLines.map((line) => line.estimateUsd));
   const generatedUsd = sumUsd(generatedLines.map((line) => line.estimateUsd));

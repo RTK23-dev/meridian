@@ -155,6 +155,61 @@ const cases: Case[] = [
   { name: "manifest: zero attempts", schema: manifestSchema, value: edit(manifestFixture, (d) => (d.shots[0].attempts = 0)) },
   { name: "manifest: unknown gate in gates", schema: manifestSchema, value: edit(manifestFixture, (d) => (d.gates[0].gate = "lint")) },
 
+  // Manifest v2 (engine-contracts@3): the schema literal and the optional role calls.
+  { name: "manifest: the v1 literal is refused now", schema: manifestSchema, value: edit(manifestFixture, (d) => (d.schema = "meridian.manifest/v1")) },
+  { name: "manifest: role call outside the Bible 11.1 list", schema: manifestSchema, value: edit(manifestFixture, (d) => (d.roleCalls[0].role = "copywriter")) },
+  {
+    name: "manifest: role call with another role's prompt version",
+    schema: manifestSchema,
+    value: edit(manifestFixture, (d) => (d.roleCalls[0].promptVersion = "critic_take@1")),
+  },
+  {
+    name: "manifest: role call whose prompt version is not recorded in promptVersions",
+    schema: manifestSchema,
+    value: edit(manifestFixture, (d) => {
+      delete d.promptVersions.planner;
+    }),
+  },
+  {
+    name: "manifest: role call prompt version differs from promptVersions",
+    schema: manifestSchema,
+    value: edit(manifestFixture, (d) => (d.promptVersions.planner = "planner@2")),
+  },
+  {
+    name: "manifest: unknown cost not flagged as an estimate",
+    schema: manifestSchema,
+    value: edit(manifestFixture, (d) => (d.roleCalls[2].actualIsEstimate = false)),
+  },
+  {
+    name: "manifest: invalid answer held as a bill",
+    schema: manifestSchema,
+    value: edit(manifestFixture, (d) => {
+      d.roleCalls[2].costUsd = 0.04;
+      d.roleCalls[2].actualIsEstimate = false;
+    }),
+  },
+  {
+    name: "manifest: negative prompt token count",
+    schema: manifestSchema,
+    value: edit(manifestFixture, (d) => (d.roleCalls[0].tokens.prompt = -1)),
+  },
+  { name: "manifest: role call verdict outside the journal's two", schema: manifestSchema, value: edit(manifestFixture, (d) => (d.roleCalls[0].verdict = "refused")) },
+  { name: "manifest: role call cost with five decimals", schema: manifestSchema, value: edit(manifestFixture, (d) => (d.roleCalls[0].costUsd = 0.14201)) },
+  {
+    name: "manifest: role call without its model",
+    schema: manifestSchema,
+    value: edit(manifestFixture, (d) => {
+      delete d.roleCalls[0].model;
+    }),
+  },
+  {
+    name: "manifest: role call without its tokens object",
+    schema: manifestSchema,
+    value: edit(manifestFixture, (d) => {
+      delete d.roleCalls[0].tokens;
+    }),
+  },
+
   // Budget reservation and ledger entry.
   { name: "reservation: paused without a reason", schema: budgetReservationSchema, value: edit(budgetReservationFixture, (d) => (d.state = "paused")) },
   { name: "reservation: estimate differs from the lines", schema: budgetReservationSchema, value: edit(budgetReservationFixture, (d) => (d.estimateUsd = 0.5)) },
@@ -229,4 +284,17 @@ test("a Claude ledger row keeps its role and prompt version through a parse", ()
   const parsed = ledgerEntrySchema.parse(ledgerClaudeFixture);
   assert.equal(parsed.role, "planner");
   assert.equal(parsed.promptVersion, "planner@1");
+});
+
+test("contract v3 is additive for manifests: a manifest without role calls still parses as v2", () => {
+  assert.equal(manifestSchema.safeParse(without(manifestFixture, "roleCalls")).success, true);
+  assert.equal(manifestSchema.safeParse(edit(manifestFixture, (d) => (d.roleCalls = []))).success, true);
+});
+
+test("manifest v2: an unknown cost and an unknown token count stay null, and are never 0", () => {
+  const parsed = manifestSchema.parse(manifestFixture);
+  const director = parsed.roleCalls?.find((call) => call.role === "director_check");
+  assert.equal(director?.costUsd, null);
+  assert.equal(director?.tokens.prompt, null);
+  assert.equal(director?.actualIsEstimate, true);
 });
