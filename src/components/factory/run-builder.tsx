@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, Checkbox, DisabledReason, Field, Input, SelectInput } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { submitOnShortcut } from "@/components/forms/shortcut";
-import { AUTOMATION_MODES, DECISION_ENGINE_CHOICES, FORMATS, INTENTS, type AutomationMode, type DecisionEngineChoice, type Format, type Intent, type RunSettings } from "@/lib/meridian/factory/run-settings";
+import { AUTOMATION_MODES, DECISION_ENGINE_CHOICES, ENGINE_VIDEO_PROVIDER_ID, FORMATS, INTENTS, type AutomationMode, type DecisionEngineChoice, type Format, type Intent, type RunSettings } from "@/lib/meridian/factory/run-settings";
 import {
   AUTOMATION_DESCRIPTIONS,
   ENGINE_LABELS,
@@ -14,6 +14,7 @@ import {
   draftFromDefaults,
   draftProblems,
   paidCountryNote,
+  videoProviderOptions,
   type BuilderDraft,
 } from "@/lib/meridian/factory/run-builder-model";
 
@@ -162,17 +163,34 @@ export function RunBuilder({
       {draft.formats.length > 0 ? (
         <fieldset className="grid gap-4 md:grid-cols-3">
           <legend className="text-sm font-semibold">Provider per format</legend>
-          {draft.formats.map((format) => (
-            <Field key={format} label={`${FORMAT_LABELS[format]} provider`}>
-              <Input
-                value={draft.providers[format] ?? ""}
-                placeholder="auto"
-                disabled={!canEdit}
-                onChange={(event) => update("providers", { ...draft.providers, [format]: event.target.value })}
-              />
-            </Field>
-          ))}
-          <p className="text-sm text-muted md:col-span-3">Leave a provider blank or type auto to let the capability matrix choose. A named provider that is not ready stops the run with its reason.</p>
+          {draft.formats.map((format) =>
+            format === "video" ? (
+              <Field key={format} label={`${FORMAT_LABELS[format]} provider`}>
+                <SelectInput
+                  value={(draft.providers.video ?? "").trim() || "auto"}
+                  disabled={!canEdit}
+                  onChange={(event) => update("providers", { ...draft.providers, video: event.target.value })}
+                >
+                  {videoProviderOptions(draft.providers.video).map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </SelectInput>
+                {draft.providers.video === ENGINE_VIDEO_PROVIDER_ID ? (
+                  <p className="text-sm text-muted">The Meridian video engine is not connected yet. A run that names it stops before any spend, with the reason.</p>
+                ) : null}
+              </Field>
+            ) : (
+              <Field key={format} label={`${FORMAT_LABELS[format]} provider`}>
+                <Input
+                  value={draft.providers[format] ?? ""}
+                  placeholder="auto"
+                  disabled={!canEdit}
+                  onChange={(event) => update("providers", { ...draft.providers, [format]: event.target.value })}
+                />
+              </Field>
+            ),
+          )}
+          <p className="text-sm text-muted md:col-span-3">Choose auto to let the capability matrix choose, or name a provider. A named provider that is not ready stops the run with its reason.</p>
         </fieldset>
       ) : null}
 

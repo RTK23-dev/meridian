@@ -8,6 +8,7 @@
 import {
   AUTOMATION_MODES,
   DECISION_ENGINE_CHOICES,
+  FACTORY_VIDEO_PROVIDERS,
   INTENTS,
   parseRunSettings,
   parseTargetingCountries,
@@ -91,6 +92,17 @@ export function paidCountryNote(intent: Intent, countries: string): string {
   const parsed = countriesFromText(countries);
   if (!parsed.ok || parsed.value.length > 0) return "";
   return "Paid ads are created paused and need a targeting country. Without one, the paid publish is refused with the reason no targeting country.";
+}
+
+/**
+ * The options the video provider choice offers: the Factory's video providers. A video provider already named in the draft that is not
+ * in the list is kept as an option of its own, so the choice never shows a provider the draft does not hold.
+ */
+export function videoProviderOptions(current: string | undefined): Array<{ id: string; label: string }> {
+  const options = [...FACTORY_VIDEO_PROVIDERS];
+  const named = (current ?? "").trim() || "auto";
+  if (!options.some((option) => option.id === named)) options.push({ id: named, label: named });
+  return options;
 }
 
 const PROVIDER_ID = /^[a-z0-9][a-z0-9_:.-]{1,59}$/;

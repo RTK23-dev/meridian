@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DEFAULT_RUN_SETTINGS, parseRunSettings } from "./run-settings.ts";
-import { checkedSettings, draftFromDefaults, draftProblems, settingsFromDraft, type BuilderDraft } from "./run-builder-model.ts";
+import { checkedSettings, draftFromDefaults, draftProblems, settingsFromDraft, videoProviderOptions, type BuilderDraft } from "./run-builder-model.ts";
 
 const READY: BuilderDraft = {
   ...draftFromDefaults(DEFAULT_RUN_SETTINGS),
@@ -69,4 +69,22 @@ test("the draft starts from the brand's defaults, so a run inherits what the bra
   assert.equal(draft.dailyDollars, "5");
   assert.equal(draft.totalDollars, "");
   assert.equal(draft.maxVariants, "12");
+});
+
+test("the video provider choice offers the Meridian video engine, labelled as such, beside the other video providers", () => {
+  const options = videoProviderOptions(undefined);
+  assert.deepEqual(options.map((option) => option.id), ["auto", "engine", "google_omni", "hypit", "higgsfield", "manual_cloud"]);
+  assert.deepEqual(options.find((option) => option.id === "engine"), { id: "engine", label: "Meridian video engine" });
+});
+
+test("a blank video choice is auto, and a video provider the draft names that is not listed stays as an option of its own", () => {
+  assert.equal(videoProviderOptions("  ")[0]?.id, "auto");
+  const named = videoProviderOptions("custom_video");
+  assert.deepEqual(named[named.length - 1], { id: "custom_video", label: "custom_video" });
+});
+
+test("the engine is a provider a run can name: the draft keeps it, and the server accepts it", () => {
+  const settings = settingsFromDraft({ ...READY, formats: ["video"], providers: { video: "engine" } });
+  assert.equal(settings.providers.video, "engine");
+  assert.equal(parseRunSettings(settings).ok, true);
 });
