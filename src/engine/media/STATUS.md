@@ -8,7 +8,7 @@ the tests and fixtures under `src/engine/test/`. See `README.md` for the file li
 - `MediaFunctions` interface (`interface.ts`): probe, frames, loudness and cuts. Every call validates its input and its
   answer, and fails with a typed `EngineError`.
 - `httpMediaFunctions(baseUrl, transport)` (`http.ts`, `wire-client.ts`): the production implementation over an injected
-  transport. `fetchTransport()` is the fetch-based transport. Failures map as follows: 429, 5xx, timeouts and unreachable
+  transport. The network transport now lives in the API gateway (`src/engine/gateway`). Failures map as follows: 429, 5xx, timeouts and unreachable
   hosts are retryable provider errors; a refused URL or a bad request is invalid_input; a 200 that fails the result
   schema, a frame that is not the declared PNG, or a frame count that does not match the request, is a non-retryable
   provider error. Inline bytes over 4 MB are refused before any request is sent.

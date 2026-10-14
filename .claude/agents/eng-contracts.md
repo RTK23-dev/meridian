@@ -14,7 +14,7 @@ Read sections 1, 4 and 14 in full. Read sections 5, 17 and 19 (phase E1) for how
 
 You own, and may write only here:
 - src/engine/contracts/ (W1): one zod schema per type in section 4, exact field names, a `schema` version field on every versioned type, `z.infer` types, an index.ts exporting all, and a valid and an invalid fixture for every schema.
-- src/engine/config/ (W1): thresholds.ts, weights.ts, prices.ts, budgets.ts, each versioned, holding every number the Bible marks initial. Logic elsewhere reads these; nothing hard-codes them.
+- src/engine/config/ (W1): thresholds.ts, weights.ts, prices.ts, budgets.ts and routes.ts (the gateway's capability-to-provider-and-model table; OpenRouter by default), each versioned, holding every number the Bible marks initial. Logic elsewhere reads these; nothing hard-codes them.
 - src/engine/budget/ (W12): estimate.ts, reserve.ts, reconcile.ts and cap mode, per section 14. Reserve before any paid call; reconcile actual cost; release the unused part.
 
 Budget code is pure logic over a `LedgerStore` interface that you define in src/engine/budget/, with an in-memory implementation for tests. You write no migrations: eng-pipeline implements `LedgerStore` on the `engine_ledger` table (Bible 5.4). Do not touch Meridian's existing budget ledger or usage tables.

@@ -112,3 +112,16 @@ Extra work done in E1 beyond the checklist: W7 visual decision steps 1 to 4 and 
 - Intake refuses a budget below the format minimum (the fixed per-master cost plus the cheapest plan for the request's beats) and tells the user the minimum. The engine never raises a budget by itself; the budget engine's cap mode keeps spend inside it.
 - Applied: Bible sections 6.4, 14.4, 19 (E3 acceptance) and 20.2 updated; `requestDefaultUsd` removed from `src/engine/config/budgets.ts`; the planner test renamed. This also settles the earlier $0.50 clash between sections 6.4 and 14.2.
 - Still to build: the "cost per master" input in the factory run screen that fills `budgetUsd` (with the minimum shown beside it) when the factory is wired to the engine.
+
+## 2026-10-14 Owner decision: OpenRouter as the go-to platform, behind one API gateway
+
+- The owner chose OpenRouter as the default platform for every model API, with room to switch models or providers later
+  and to use OAuth instead of a key. The engine stays in its own folder (`src/engine/`) and stays connected to Meridian.
+- This replaces Bible L2's "Claude via the Anthropic API": Claude roles now default to OpenRouter. The Anthropic API stays
+  in the provider registry as a route target.
+- Built `src/engine/gateway/` (owned by eng-pipeline) and `src/engine/config/routes.ts` (owned by eng-contracts). See
+  `src/engine/gateway/STATUS.md`. The render and media adapters lost their own `fetch` transports and take one from the
+  gateway. A boundary test keeps `fetch` inside `gateway/transport.ts`.
+- Applied: Bible L2, L3, section 2 table, 10, 11 and 17; `CLAUDE.md` rule 3; the five agent files; the engine-bible skill.
+- Waiting on the owner: credential categories for a per-workspace OpenRouter key, HeyGen and Anthropic; the live run in
+  `src/engine/gateway/STATUS.md` (verifies the model ids and the cost reporting).

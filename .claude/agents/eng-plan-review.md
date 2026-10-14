@@ -18,6 +18,7 @@ You own, and may write only here:
 - src/engine/variants/ (W13): expand.ts and diff.ts. src/engine/deliver/ (manifest writer and ledger reconcile call) and src/engine/events/ (emit.ts, section 16).
 
 You consume, and must not change:
+- The API gateway in src/engine/gateway/ (owned by eng-pipeline). Every network call goes through it (`gateway.transportFor`, `structuredChat`, `submitVideo`/`pollVideo`); never call fetch, and never pick a provider or model in code: use `gateway.route(capability)`.
 - The contracts in src/engine/contracts/ and the budget functions in src/engine/budget/ (owned by eng-contracts).
 - The Claude client and prompts (owned by eng-pipeline). Request new roles from the lead; do not add them yourself.
 - The orchestrator in src/engine/jobs/ (owned by eng-pipeline). Your gates return GateResult; the orchestrator routes.

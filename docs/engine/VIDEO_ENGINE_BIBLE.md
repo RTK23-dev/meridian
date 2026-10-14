@@ -65,8 +65,8 @@ Oct 12, 2026 · @Victor
 | # | Decision |
 | --- | --- |
 | L1 | Orchestration is Meridian's Postgres job queue in TypeScript, not a coding-agent session per video |
-| L2 | Claude via the Anthropic API: Opus for direction, Sonnet for analysis and structured writing, Haiku for checks and volume |
-| L3 | Pixels via OpenRouter (video, avatar, image, voice); stock via Pexels and Pixabay APIs |
+| L2 | Claude via OpenRouter by default, through the engine's one API gateway (owner decision 2026-10-14, replacing "via the Anthropic API"): Opus for direction, Sonnet for analysis and structured writing, Haiku for checks and volume. The route table can move any role to the Anthropic API directly or to another provider |
+| L3 | Pixels via OpenRouter (video, avatar, image, voice), through the same gateway; stock via Pexels and Pixabay APIs |
 | L4 | Render with HyperFrames on HeyGen's cloud render API; Remotion Lambda and Shotstack as fallbacks behind the same compiler |
 | L5 | Our own clean-room contracts and code. Ideas from Hypit, OpenMontage and master-skills are reused; their code is not (Hypit's licence restricts multi-tenant use; OpenMontage is AGPL-3.0) |
 | L6 | Claude never writes render code per video; it selects components and fills props |
@@ -85,7 +85,8 @@ The engine is a set of stateless workers inside Meridian that pull jobs from the
 | Router | Picks a provider per asset request by weighted score; enforces concurrency per provider | Extends Meridian's cost-mode router and rate limiter |
 | Credential resolver | One key set per workspace; no key in logs | Meridian, from PR #39 |
 | Cost ledger | Estimate, reserve, reconcile per call | Meridian usage tables, extended |
-| Claude adapter | Anthropic SDK with prompt caching, Batch API, structured output, versioned prompts | New |
+| API gateway | The one way to the network: route table (capability to provider and model, OpenRouter by default), credentials from the resolver, API-key and OAuth auth, ledger on every paid call | New (`engine/gateway/`, `engine/config/routes.ts`) |
+| Claude adapter | Structured output through the API gateway, versioned prompts; prompt caching and Batch API where the route supports them (20.3 item 6) | New |
 | Pixel adapters | One interface, many providers: OpenRouter video, avatar, image, TTS; stock APIs; lip-sync, background removal, upscaling APIs | New |
 | Media functions | Serverless ffmpeg (probe, cut detection, frame sampling, loudness, motion and flicker metrics), speech-to-text, embeddings | New, scale to zero |
 | Compiler and render adapters | Edit decision list to HyperFrames composition; render via cloud; fallbacks | New `VideoEngine` implementations |
@@ -621,7 +622,7 @@ Every component lives in `engine/compose/components/<name>/` with `component.htm
 
 ## 10. Asset router and provider adapters
 
-Every paid media call goes through one router (`engine/assets/router.ts`) that picks a provider for a model class, enforces concurrency, applies the cache, and writes the ledger. Adapters (`engine/assets/providers/<name>.ts`) hide each vendor's API behind one interface.
+Every paid media call goes through one router (`engine/assets/router.ts`) that picks a provider for a model class from the gateway's route table (`engine/config/routes.ts`), enforces concurrency, applies the cache, and writes the ledger. Adapters (`engine/assets/providers/<name>.ts`) hide each vendor's API behind one interface.
 
 ### 10.1 Adapter interface
 
@@ -683,7 +684,7 @@ Prices live in `engine/config/prices.ts` and are overwritten by reconciled actua
 
 ## 11. Claude roles
 
-Claude is called through one adapter (`engine/claude/`) with structured output on every call: each role has a zod schema for its answer, and an answer that doesn't parse is retried once with the validation error, then fails the stage. Claude never returns free text that another stage acts on.
+Claude is called through one adapter (`engine/claude/`), which sends every call through the API gateway (`engine/gateway/`, OpenRouter by default), with structured output on every call: each role has a zod schema for its answer, and an answer that doesn't parse is retried once with the validation error, then fails the stage. Claude never returns free text that another stage acts on.
 
 ### 11.1 Roles
 
@@ -970,7 +971,8 @@ Written to `engine_events` (append-only) at the moment they happen:
 ```text
 src/engine/
   contracts/          zod schemas for every type in section 4; index.ts exports all
-  config/             thresholds.ts, weights.ts, prices.ts, budgets.ts (all versioned)
+  config/             thresholds.ts, weights.ts, prices.ts, budgets.ts, routes.ts (all versioned)
+  gateway/            the one API gateway: transport.ts (the only fetch), providers, auth, OpenRouter client, Meridian credentials
   jobs/               registry.ts, orchestrator.ts (advance, route failures), poller.ts
   intake/             validate.ts, cacheLookup.ts
   analyze/            reference.ts, segmenter.ts (Claude), genome.ts (Claude)

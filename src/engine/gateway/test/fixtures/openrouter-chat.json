@@ -1,0 +1,13 @@
+{
+  "id": "gen-1760440000-abcdefghijklmnopqrst",
+  "model": "anthropic/claude-haiku-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": { "role": "assistant", "content": "{\"properties\":[\"real_product\",\"person_talking\"]}" }
+    }
+  ],
+  "usage": { "prompt_tokens": 812, "completion_tokens": 24, "total_tokens": 836, "cost": 0.000932 }
+}

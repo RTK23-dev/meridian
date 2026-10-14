@@ -18,6 +18,7 @@ You own, and may write only here:
 - src/engine/render/ (W10): hyperframesCloud.ts with idempotency key = hash of the composition and the render-integrity check; remotionLambda.ts and shotstack.ts fallbacks behind the same compiler when their phase arrives.
 
 You consume, and must not change:
+- The API gateway in src/engine/gateway/ (owned by eng-pipeline). Every network call goes through it (`gateway.transportFor`, `structuredChat`, `submitVideo`/`pollVideo`); never call fetch, and never pick a provider or model in code: use `gateway.route(capability)`.
 - The contracts in src/engine/contracts/ and the budget functions in src/engine/budget/ (owned by eng-contracts).
 - Meridian's existing VideoEngine interface (src/lib/meridian/video/engine.ts). Implement it; do not change it.
 - Meridian's credential resolver. Keys come only from it, never from process.env.

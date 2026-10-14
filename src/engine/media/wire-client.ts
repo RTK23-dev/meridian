@@ -1,6 +1,7 @@
 // The HTTP side of the media functions. The transport is injected, so tests replay recorded responses and production
-// passes fetchTransport(). Every response is untrusted: a 200 must match the result schema, and every failure becomes a
-// typed EngineError (retryable for rate limits, server errors, timeouts and unreachable hosts).
+// passes textTransport(gateway.transportFor("media_functions", organizationId)) from src/engine/gateway. Every response is
+// untrusted: a 200 must match the result schema, and every failure becomes a typed EngineError (retryable for rate limits,
+// server errors, timeouts and unreachable hosts).
 
 import { z, type ZodType } from "zod";
 import { EngineError, ENGINE_ERROR_KINDS, type EngineErrorKind } from "../contracts/errors.ts";
@@ -20,19 +21,6 @@ export type MediaTransportResponse = { status: number; body: string };
  * the client turns that into a retryable provider error.
  */
 export type MediaTransport = (request: MediaTransportRequest) => Promise<MediaTransportResponse>;
-
-/** The transport for production: fetch with a timeout. Credentials, if any, come from the caller's resolver. */
-export function fetchTransport(fetchImpl: typeof fetch = fetch): MediaTransport {
-  return async (request) => {
-    const response = await fetchImpl(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      signal: AbortSignal.timeout(request.timeoutMs),
-    });
-    return { status: response.status, body: await response.text() };
-  };
-}
 
 export type WirePost = <Body>(
   path: string,

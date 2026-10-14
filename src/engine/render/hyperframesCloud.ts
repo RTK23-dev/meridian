@@ -73,17 +73,11 @@ export type TransportRequest = {
 
 export type TransportResponse = { status: number; body: Uint8Array };
 
-/** The one way this module talks to the network. Tests inject recorded responses; production uses fetchTransport. */
+/**
+ * The one way this module talks to the network. Tests inject recorded responses; production passes the API gateway's
+ * gateway.transportFor("heygen", organizationId) (src/engine/gateway), which is structurally the same type.
+ */
 export type RenderTransport = (request: TransportRequest) => Promise<TransportResponse>;
-
-export const fetchTransport: RenderTransport = async (request) => {
-  const response = await fetch(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body: request.body === undefined ? undefined : typeof request.body === "string" ? request.body : new Uint8Array(request.body),
-  });
-  return { status: response.status, body: new Uint8Array(await response.arrayBuffer()) };
-};
 
 // ---- the adapter interface ------------------------------------------------------------------------------------
 

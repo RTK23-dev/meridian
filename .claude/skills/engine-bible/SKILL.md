@@ -71,8 +71,8 @@ The text below is copied verbatim from `docs/engine/VIDEO_ENGINE_BIBLE.md` (sect
 | # | Decision |
 | --- | --- |
 | L1 | Orchestration is Meridian's Postgres job queue in TypeScript, not a coding-agent session per video |
-| L2 | Claude via the Anthropic API: Opus for direction, Sonnet for analysis and structured writing, Haiku for checks and volume |
-| L3 | Pixels via OpenRouter (video, avatar, image, voice); stock via Pexels and Pixabay APIs |
+| L2 | Claude via OpenRouter by default, through the engine's one API gateway (owner decision 2026-10-14, replacing "via the Anthropic API"): Opus for direction, Sonnet for analysis and structured writing, Haiku for checks and volume. The route table can move any role to the Anthropic API directly or to another provider |
+| L3 | Pixels via OpenRouter (video, avatar, image, voice), through the same gateway; stock via Pexels and Pixabay APIs |
 | L4 | Render with HyperFrames on HeyGen's cloud render API; Remotion Lambda and Shotstack as fallbacks behind the same compiler |
 | L5 | Our own clean-room contracts and code. Ideas from Hypit, OpenMontage and master-skills are reused; their code is not (Hypit's licence restricts multi-tenant use; OpenMontage is AGPL-3.0) |
 | L6 | Claude never writes render code per video; it selects components and fills props |

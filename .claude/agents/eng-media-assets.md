@@ -18,6 +18,7 @@ You own, and may write only here:
 - src/engine/analyze/, src/engine/voice/ and src/engine/edit/grammar.ts (W6). The rest of src/engine/edit/ belongs to eng-edit-compose; do not touch it.
 
 You consume, and must not change:
+- The API gateway in src/engine/gateway/ (owned by eng-pipeline). Every network call goes through it (`gateway.transportFor`, `structuredChat`, `submitVideo`/`pollVideo`); never call fetch, and never pick a provider or model in code: use `gateway.route(capability)`.
 - The contracts in src/engine/contracts/ and the budget functions in src/engine/budget/ (owned by eng-contracts).
 - The Claude client in src/engine/claude/ (owned by eng-pipeline).
 - Meridian's credential resolver. Keys come only from it, never from process.env.

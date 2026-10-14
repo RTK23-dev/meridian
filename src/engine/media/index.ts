@@ -16,7 +16,6 @@ export type {
 } from "./interface.ts";
 export { httpMediaFunctions, type HttpMediaFunctions } from "./http.ts";
 export {
-  fetchTransport,
   type MediaTransport,
   type MediaTransportRequest,
   type MediaTransportResponse,

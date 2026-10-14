@@ -30,8 +30,8 @@ Details: `README.md` in this folder.
 
 ## Owner's live run (E1 acceptance, Bible 6.11 and 19)
 
-1. Call `renderComposition` with `fetchTransport`, a key from the credential resolver, and a real reservation from
-   `reserve()`. Use the E1 acceptance EDL (one stock clip, one TTS voice, three components). Record the render id, the
+1. Call `renderComposition` with `gateway.transportFor("heygen", organizationId)` and
+   `gateway.secretFor("heygen", organizationId)` from the API gateway, and a real reservation from `reserve()`. Use the E1 acceptance EDL (one stock clip, one TTS voice, three components). Record the render id, the
    video id, the cost in the ledger, the artifact ids, and the output file.
 2. Run `ffprobe` on the output: 1080 × 1920, 30 fps, duration within 100 ms of the EDL, audio present.
 3. Ten test renders: record each bill. Set `render_hyperframes_cloud` in `prices.ts` to a verified price. Until then

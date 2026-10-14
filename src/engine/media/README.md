@@ -11,7 +11,7 @@ vendor is open, so no vendor is wired here).
 - `interface.ts`: `MediaFunctions`, the one interface production code takes. Its four methods (probe, frames, loudness,
   cuts) return validated results or reject with a typed `EngineError`. Nothing resolves with a default for a failure.
 - `http.ts`: `httpMediaFunctions(baseUrl, transport)`, the production implementation. The transport is injected. Tests
-  pass recorded responses, and production passes `fetchTransport()` from `wire-client.ts`.
+  pass recorded responses, and production passes `textTransport(gateway.transportFor("media_functions", organizationId))` from `src/engine/gateway`.
 - `wire-client.ts`: `wirePost`. Every response is untrusted: a 200 must match the result schema, and every failure
   becomes a typed error (a 429 or 5xx, a timeout, or an unreachable host is retryable; a bad request or a refused URL is
   not).
