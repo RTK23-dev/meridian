@@ -11,7 +11,7 @@ import {
   writeArtifact,
   type MediaStorePort,
 } from "./artifact-store.ts";
-import { createTestDatabase, seedWorkspace, type TestDatabase } from "./test-db.ts";
+import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 
 let db: TestDatabase;
 const WS = "ws_fixture";

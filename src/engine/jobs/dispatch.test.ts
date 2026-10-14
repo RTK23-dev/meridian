@@ -6,7 +6,7 @@ import type { ExecutableJob } from "../../lib/meridian/jobs/execute.ts";
 import { executeJob } from "../../lib/meridian/jobs/execute.ts";
 import { executeEngineJob } from "./dispatch.ts";
 import { readEngineRequest, startEngineRequest } from "./orchestrator-sql.ts";
-import { createTestDatabase, seedWorkspace, type TestDatabase } from "./test-db.ts";
+import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import type { EngineRuntime, StageHandler, StageRunResult } from "./types.ts";
 import { withTimeout } from "./types.ts";
 

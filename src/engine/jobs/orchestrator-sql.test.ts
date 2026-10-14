@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 import { EngineError, type GateResult } from "../contracts/index.ts";
 import { fixtureId } from "../contracts/fixtures/index.ts";
 import { applyEngineEvent, readEngineRequest, recordDeadEngineJobs, startEngineRequest } from "./orchestrator-sql.ts";
-import { createTestDatabase, seedWorkspace, type TestDatabase } from "./test-db.ts";
+import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 
 let db: TestDatabase;

@@ -9,6 +9,7 @@ export const ENGINE_ERROR_KINDS = [
   "config",
   "provider",
   "internal",
+  "not_implemented",
 ] as const;
 
 export type EngineErrorKind = (typeof ENGINE_ERROR_KINDS)[number];

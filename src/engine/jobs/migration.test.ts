@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { createTestDatabase, migrationFiles, type TestDatabase } from "./test-db.ts";
+import { createTestDatabase, migrationFiles, type TestDatabase } from "../test/pg-test-db.ts";
 
 /** The engine tables of Bible 5.4 as this workstream names them (engine_jobs is the existing jobs table, so it is absent). */
 const ENGINE_TABLES = [

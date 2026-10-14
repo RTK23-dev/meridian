@@ -55,3 +55,17 @@ Interim handling of open conflicts (owner may overrule):
   - `media/config.ts` holds the scene score and timeouts; eng-contracts moves them into `src/engine/config/` with the plan tables.
   - The platform size limit is null, so render integrity fails closed until the owner sets it.
   - Still for the owner: the speech-to-text vendor (Bible 20.2) and where the ffmpeg functions are deployed.
+
+## 2026-10-14 Wave B: W2 merged
+
+- eng-pipeline delivered `migrations/0077_engine_core.sql` (11 `engine_*` tables, every one scoped by `organization_id` with composite foreign keys, the ledger idempotency key unique per organization, and a trigger that refuses UPDATE on `engine_artifacts`) and `src/engine/jobs/` (14 stage job types plus `engine.poll`; a pure orchestrator with the section 5.3 redo, downgrade and escalate routing that refuses paid stages without a reservation; the SQL layer; dispatch; the async poller; the artifact store over Meridian's object store; and the Postgres `LedgerStore`). Commit 329a3a0.
+- Lead review: outside `src/engine/`, only the migration and one lazily imported `engine.` branch in `src/lib/meridian/jobs/execute.ts`.
+- Lead fixes after merge:
+  - Added `not_implemented` to the contract's `ENGINE_ERROR_KINDS` and removed the cast in `jobs/types.ts`.
+  - Moved the test-only PostgreSQL helper from `jobs/test-db.ts` to `src/engine/test/pg-test-db.ts`. W4's boundary test, which rightly forbids environment reads in production engine files, had flagged it.
+  - Result: 597 engine and job tests pass, typecheck clean, lint 0 errors.
+- Follow-ups recorded:
+  - The migration and the PostgreSQL-backed engine tests have run only on PGlite here. The owner runs them on real PostgreSQL with `MERIDIAN_PG_TEST_URL`.
+  - Priority and poll-backoff values sit in `jobs/settings.ts`; they move into `src/engine/config/` with the other stray settings.
+  - The intake handler must create the pre-flight reservation.
+  - No stage handlers are registered yet, so every `engine.*` job is refused as not implemented until E2 and E3 add them.

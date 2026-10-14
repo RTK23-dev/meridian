@@ -6,7 +6,7 @@ import { authorizeCall, reserve, type CallInput, type ReserveInput } from "../bu
 import { reconcileCall } from "../budget/reconcile.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
 import { withReservationLedger, withWorkspaceLedger } from "./sql-ledger-store.ts";
-import { createTestDatabase, seedWorkspace, type TestDatabase } from "./test-db.ts";
+import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 
 let db: TestDatabase;
 const NOW = "2026-10-13T09:00:00.000Z";

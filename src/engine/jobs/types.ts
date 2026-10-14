@@ -134,14 +134,9 @@ export type EngineRuntime = {
   now: () => number;
 };
 
-/**
- * Bible 17.2 rule 5 types errors by kind. eng-contracts has not yet added 'not_implemented' to ENGINE_ERROR_KINDS (see
- * STATUS.md), so the kind is set here. The error is still an EngineError with retryable false.
- */
+/** Bible 17.2 rule 5 types errors by kind. A stage with no handler is refused as not_implemented, never retried. */
 export function notImplementedError(message: string, stage?: string): EngineError {
-  const error = new EngineError("internal", message, { stage, retryable: false });
-  error.kind = "not_implemented" as unknown as EngineError["kind"];
-  return error;
+  return new EngineError("not_implemented", message, { stage, retryable: false });
 }
 
 /**
