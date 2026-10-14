@@ -1,0 +1,174 @@
+{
+  "timeline": {
+    "background": "#000000",
+    "tracks": [
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "title",
+              "text": "Send BLEND today",
+              "style": "minimal",
+              "color": "#ffffff"
+            },
+            "start": 0,
+            "length": 3,
+            "position": "center",
+            "alias": "c_cap_1"
+          },
+          {
+            "asset": {
+              "type": "title",
+              "text": "to get the link",
+              "style": "minimal",
+              "color": "#ffffff"
+            },
+            "start": 3,
+            "length": 3,
+            "position": "center",
+            "alias": "c_cap_2"
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "title",
+              "text": "Fixture Blender",
+              "style": "minimal",
+              "color": "#ffffff"
+            },
+            "start": 21,
+            "length": 3,
+            "position": "center",
+            "alias": "c_gfx_1"
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "video",
+              "src": "https://media.example.test/fixture/store-takes-presenter-1.webm?X-Amz-Signature=fixture",
+              "trim": 0,
+              "volume": 0
+            },
+            "start": 0,
+            "length": 6,
+            "fit": "cover",
+            "alias": "c_pres_1"
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "image",
+              "src": "https://media.example.test/fixture/store-takes-cutaway-1.png?X-Amz-Signature=fixture"
+            },
+            "start": 9,
+            "length": 3,
+            "fit": "cover",
+            "alias": "c_cut_1"
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "video",
+              "src": "https://media.example.test/fixture/store-takes-base-1.mp4?X-Amz-Signature=fixture",
+              "trim": 0.5,
+              "volume": 0
+            },
+            "start": 0,
+            "length": 9,
+            "fit": "cover",
+            "alias": "c_base_1"
+          },
+          {
+            "asset": {
+              "type": "video",
+              "src": "https://media.example.test/fixture/store-takes-base-2.mp4?X-Amz-Signature=fixture",
+              "trim": 0,
+              "volume": 0
+            },
+            "start": 9,
+            "length": 6,
+            "fit": "cover",
+            "alias": "c_base_2"
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "audio",
+              "src": "https://media.example.test/fixture/store-voice-fixture-voice.wav?X-Amz-Signature=fixture",
+              "volume": 1
+            },
+            "start": 0,
+            "length": 24
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "audio",
+              "src": "https://media.example.test/fixture/store-music-fixture-bed.wav?X-Amz-Signature=fixture",
+              "volume": 0.251188643150958
+            },
+            "start": 0,
+            "length": 24
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "audio",
+              "src": "https://media.example.test/fixture/store-sfx-whoosh.wav?X-Amz-Signature=fixture",
+              "volume": 0.5011872336272722
+            },
+            "start": 8.95,
+            "length": 0.65
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "audio",
+              "src": "https://media.example.test/fixture/store-sfx-whoosh.wav?X-Amz-Signature=fixture",
+              "volume": 0.5011872336272722
+            },
+            "start": 9,
+            "length": 0.3
+          }
+        ]
+      }
+    ]
+  },
+  "output": {
+    "format": "mp4",
+    "size": {
+      "width": 1080,
+      "height": 1920
+    },
+    "fps": 30
+  },
+  "dropped": [
+    "box on c_pres_1 is not mapped (picture-in-picture)",
+    "transition hard on c_base_1 is not mapped",
+    "effect punch_in at 1200 ms is not mapped"
+  ]
+}
