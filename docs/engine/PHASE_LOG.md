@@ -180,3 +180,31 @@ Extra work done in E1 beyond the checklist: W7 visual decision steps 1 to 4 and 
 - **Discovery provider (delegated to the lead):** Apify, for pay-per-use pricing with no contract at the planned volume
   (about 1,000 candidates per niche per week). It is added as a gateway provider like any other, so moving to Bright Data
   later is a provider entry and a route change.
+
+## 2026-10-14 E2 code complete on fixtures (acceptance needs a live run)
+
+Merged: contracts (07c5419), pipeline fixes (9976978), take gate (e67ff3e), asset router and adapters (4cf4a56),
+five components (f85742f), plus the lead's gateway prep (a4b04c7) and contract follow-up (2fd56b0).
+Checks on de63cef: engine tests 1,166 pass, 0 fail; `npm run engine:golden` 30 of 30; typecheck clean; lint 0 errors.
+
+E2 checklist (Bible 19):
+- [x] W5 router, cache, circuit breaker; adapters for OpenRouter video, image and speech, Pexels and Pixabay (Avatar IV is
+      NOT_CONNECTED: no verified OpenRouter API for it).
+- [x] W5 first-and-last-frame harness (GET /videos/models plus one test per model); the results are a live step.
+- [x] W11 take gate: code checks, similarity interface, critic_take (Haiku rubric), gold-set loader, review-inbox payload.
+- [x] W9 react.layout, list.tierBoard, compare.split, price.reveal, chat.thread with golden frames.
+- [ ] Stock licence check for commercial social use: owner.
+
+Acceptance (not met; live): one shot each for ugc_presenter, product_hero, stock_footage and coded_graphics produced,
+checked and passing; a deliberately warped product fails the take gate. Today the warped product goes to review, not
+fail, because no take check has gold-set accuracy yet (Bible 12 rule), and the black-frame, flicker, motion and
+similarity measurements have no media function or vendor yet.
+
+Follow-ups:
+- The video adapter calls the gateway directly to send a fallback model and `frame_images` (submitVideo does not take them).
+- The breaker has no minimum sample; config constants for retries and the breaker move to config (E3 contracts task).
+- A retried 429 keeps its estimate on the ledger; paidCall cannot mark a partly estimated actual.
+- Stock is not a ProviderAdapter because ModelClass has no stock class; the router handles it beside the adapters.
+- Router stores are in-memory; Postgres stores are in the E3 pipeline task.
+- Lead decision for paid pre-plan stages: intake holds the fixed per-master cost (pre-flight) and estimate_reserve
+  raises the same reservation to the plan estimate (E3 contracts and pipeline tasks).
