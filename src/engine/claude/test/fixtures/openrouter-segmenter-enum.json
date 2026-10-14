@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440240-segmenterenum",
+  "model": "anthropic/claude-sonnet-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"segments\":[{\"segId\":\"s1\",\"startMs\":0,\"endMs\":12000,\"wordIds\":[\"w1\",\"w2\"],\"shotType\":\"BAD-ANSWER-MARKER\",\"layers\":{\"base\":\"a person\"}}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 25873,
+    "completion_tokens": 120,
+    "total_tokens": 25993,
+    "cost": 0.057446
+  }
+}
