@@ -14,6 +14,41 @@ import { getDecisionEngineStatus } from "../decisions/status.ts";
 import { createDecisionEngines } from "../decisions/dispatcher.ts";
 import { isDecisionEngineId } from "../decisions/types.ts";
 import { saveWorkspaceEngine } from "../decisions/selection.ts";
+import { readWorkspaceVideoBudget, saveWorkspaceVideoBudget } from "./video-budget.ts";
+
+/** The workspace's monthly video budget in US dollars, or null when none is set. Any member may read it. */
+export const getVideoBudget = createServerFn({ method: "GET" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    return { organizationId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    // The membership check (viewer or above) runs inside, before the read.
+    return readWorkspaceVideoBudget(sql, { userId: context.userId, organizationId: data.organizationId });
+  });
+
+/** Saves, or clears with a blank value, the workspace's monthly video budget. Admin only; the role is checked on the server. */
+export const saveVideoBudget = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    const value = obj.monthlyVideoBudgetUsd;
+    if (value !== null && value !== undefined && typeof value !== "string" && typeof value !== "number") {
+      throw new Error("The monthly video budget must be a number or blank.");
+    }
+    return { organizationId, monthlyVideoBudgetUsd: (value ?? null) as string | number | null };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    // The admin check runs inside, before the value is parsed or written.
+    return saveWorkspaceVideoBudget(sql, { userId: context.userId, organizationId: data.organizationId, value: data.monthlyVideoBudgetUsd });
+  });
 
 export const getProviderSettings = createServerFn({ method: "GET" })
   .validator((input: unknown) => {

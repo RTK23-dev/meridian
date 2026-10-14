@@ -32,11 +32,13 @@ after(async () => {
   await db.close();
 });
 
-test("the engine migration is numbered after the highest existing migration and is the only 0077", () => {
+test("the engine migration is numbered after the migrations it builds on and is the only 0077", () => {
+  // Later migrations (0078_monthly_video_budget.sql onward) may follow it; it must still come right after 0076.
   const files = migrationFiles();
-  assert.equal(files.at(-1), "0077_engine_core.sql");
+  const index = files.indexOf("0077_engine_core.sql");
+  assert.ok(index > 0, "0077_engine_core.sql exists");
   assert.equal(files.filter((file) => file.startsWith("0077_")).length, 1);
-  assert.equal(files.at(-2), "0076_factory_video_carousel.sql");
+  assert.equal(files[index - 1], "0076_factory_video_carousel.sql");
 });
 
 test("every Bible 5.4 engine table exists and carries the tenant column organization_id, not null", async () => {

@@ -5,15 +5,25 @@
  * reasons and fingerprints only.
  */
 import type { ProviderCategory, ProviderConfigSummary } from "@/lib/meridian/settings/provider-config";
-import { SHARED_DEFAULT_ENV, SOURCE_CREDENTIAL_CATEGORIES, type CredentialCategory } from "../../lib/meridian/credentials/contract.ts";
+import {
+  SHARED_DEFAULT_ENV,
+  SOURCE_CREDENTIAL_CATEGORIES,
+  VIDEO_ENGINE_CREDENTIAL_CATEGORIES,
+  type CredentialCategory,
+} from "../../lib/meridian/credentials/contract.ts";
 
 export type SetupStatus = "usable" | "deployment_shared_default" | "unusable" | "not_configured";
 
-export type SetupGroup = "decisions" | "media" | "sources" | "other_sources" | "storage";
+export type SetupGroup = "decisions" | "media" | "video" | "sources" | "other_sources" | "storage";
 
 export const SETUP_GROUPS: ReadonlyArray<{ id: SetupGroup; label: string; hint: string }> = [
   { id: "decisions", label: "Decisions", hint: "One engine answers each decision. Its key is saved here." },
   { id: "media", label: "Perception and production", hint: "Gemini reads images and video frames and makes Omni media. Hypit runs as a separate process." },
+  {
+    id: "video",
+    label: "Video engine",
+    hint: "The video engine reaches its models through OpenRouter, avatars through HeyGen and Claude through Anthropic. Each key is this workspace's own.",
+  },
   { id: "sources", label: "Research sources", hint: "Meta Ad Library reads the public ad library." },
   { id: "other_sources", label: "Other source connectors", hint: "Each connector keeps its own key. Public page sources need none." },
   { id: "storage", label: "Storage", hint: "Google Drive is configured on the server and shared by the deployment." },
@@ -43,6 +53,8 @@ export type SetupRow = {
   save: SetupSave;
   /** True when a saved workspace key is in the entry, so an admin can remove it. */
   removable: boolean;
+  /** True when the row offers Test Connection. The video engine rows do; their test reads the key and calls no provider. */
+  testable: boolean;
 };
 
 /** The decision-engine status the model reads. The health of the active engine is the one that matters for the row. */
@@ -62,6 +74,9 @@ const KEYED_LABEL: Record<CredentialCategory, string> = {
   perception: "Gemini perception",
   production: "Gemini production",
   hypit: "Hypit video",
+  openrouter: "OpenRouter",
+  heygen: "HeyGen",
+  anthropic: "Anthropic",
   meta_ad_library: "Meta Ad Library",
   meta_graph: "Meta Graph",
   instagram: "Instagram",
@@ -82,6 +97,9 @@ const SPECIFIC_GROUP: Partial<Record<CredentialCategory, SetupGroup>> = {
   perception: "media",
   production: "media",
   hypit: "media",
+  openrouter: "video",
+  heygen: "video",
+  anthropic: "video",
   meta_ad_library: "sources",
 };
 
@@ -130,6 +148,7 @@ function keyedRow(category: CredentialCategory, summary: ProviderConfigSummary):
     note,
     save: { kind: "form", category },
     removable: state === "unusable" || workspaceKey,
+    testable: (VIDEO_ENGINE_CREDENTIAL_CATEGORIES as readonly string[]).includes(category),
   };
 }
 
@@ -158,6 +177,7 @@ function decisionEngineRow(engines: SetupEngines): SetupRow {
     note: invalid ? `DECISION_ENGINE is set to "${invalid}", which is not an engine. The default is in use.` : null,
     save: { kind: "engine" },
     removable: false,
+    testable: false,
   };
 }
 
@@ -176,6 +196,7 @@ function driveRow(summary: ProviderConfigSummary): SetupRow {
     note: null,
     save: { kind: "deployment", variables: DRIVE_VARIABLES },
     removable: false,
+    testable: false,
   };
 }
 
@@ -189,6 +210,7 @@ export function setupRows(input: SetupInput): SetupRow[] {
     keyedRow("perception", summaries.perception),
     keyedRow("production", summaries.production),
     keyedRow("hypit", summaries.hypit),
+    ...VIDEO_ENGINE_CREDENTIAL_CATEGORIES.map((category) => keyedRow(category, summaries[category])),
     keyedRow("meta_ad_library", summaries.meta_ad_library),
     ...SOURCE_CREDENTIAL_CATEGORIES.filter((category) => category !== "meta_ad_library").map((category) =>
       keyedRow(category, summaries[category]),
