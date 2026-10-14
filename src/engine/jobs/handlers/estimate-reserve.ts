@@ -7,14 +7,16 @@
 // reservation and the gate come out. createEstimateReserveHandler is the stage: it reads the scene_plan artifact (its only
 // input, Bible 5.1), reserves under the workspace lock (withWorkspaceLedger), and writes the budget_reservation artifact.
 //
-// The request budget is not in the stage's input. The registry gives estimate_reserve only the scene_plan artifact, and the
-// engine_requests row holds no budget, so the budget comes through a port (BudgetPort). See handlers/STATUS.md.
+// The request budget is ProductionRequest.constraints.budgetUsd, read from the production_request artifact (the registry passes
+// it, next to the plan). The workspace's monthly budget has no owner-decided source yet, so it comes from a WorkspaceBudgetSource.
+// The default source is not connected, and then the stage refuses to reserve with that reason (Bible 14.4, 20.2).
 
 import { createHash } from "node:crypto";
 import { budgets } from "../../config/budgets.ts";
 import {
   EngineError,
   encodeUlid,
+  productionRequestSchema,
   scenePlanSchema,
   type ArtifactType,
   type BudgetReservation,
@@ -98,16 +100,36 @@ export async function reserveForPlan(store: LedgerStore, input: ReserveForPlanIn
   }
 }
 
-/** The budgets the stage needs, for one request. Null when the request or the workspace has none set (fail closed). */
-export type BudgetLimits = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number };
+/**
+ * The workspace's monthly budget for the month of `now`. Two answers. "known" carries the USD amount. "not_connected" carries the
+ * reason, and the stage then reserves nothing and refuses with that reason. A made-up amount is never returned (Bible 14.4).
+ */
+export type WorkspaceMonthBudget = { status: "known"; usd: number } | { status: "not_connected"; reason: string };
+
+export type WorkspaceBudgetScope = { organizationId: string; requestId: string; now: string };
+
+/** The source of the workspace monthly budget. Where that budget is set is an open owner question (Bible 20.2). */
+export interface WorkspaceBudgetSource {
+  monthBudget(scope: WorkspaceBudgetScope): Promise<WorkspaceMonthBudget>;
+}
 
 /**
- * The port that gives the budgets. Null when they are not known, so the stage refuses to reserve. Meridian has no workspace
- * monthly budget yet, and the request budget is not in this stage's input, so the port is what the worker must supply.
+ * The default source. Nothing in Meridian sets a workspace monthly budget yet, so this source is not connected. The stage refuses
+ * to reserve until the owner decides where the budget is set and a source is wired in.
  */
-export type BudgetPort = (input: { organizationId: string; requestId: string }) => Promise<BudgetLimits | null>;
+export const notConnectedWorkspaceBudget: WorkspaceBudgetSource = {
+  async monthBudget() {
+    return {
+      status: "not_connected",
+      reason: "the workspace monthly budget is not connected: no source sets it yet (an open owner decision, Bible 20.2)",
+    };
+  },
+};
 
-export type EstimateReservePorts = { budgets: BudgetPort };
+export type EstimateReservePorts = {
+  /** Optional. Absent means the default source, which is not connected, so nothing is reserved. */
+  workspaceBudget?: WorkspaceBudgetSource;
+};
 
 /** The one input artifact of a type. An input that is not of that type is skipped; none of the type is refused. */
 async function readInputOfType(ctx: StageContext, type: ArtifactType): Promise<StoredArtifact> {
@@ -118,38 +140,51 @@ async function readInputOfType(ctx: StageContext, type: ArtifactType): Promise<S
   throw new EngineError("invalid_input", `${ctx.stage} needs its ${type} input artifact, and none of its inputs is one`, { stage: ctx.stage });
 }
 
-/** The estimate_reserve stage. It refuses to reserve when the budgets are not known. */
-export function createEstimateReserveHandler(ports: EstimateReservePorts): StageHandler {
+/** A refusal before anything is reserved: the gate fails with the reason, no reservation id is returned, nothing is stored. */
+function refusedBeforeReserving(ctx: StageContext, reason: string): StageRunResult {
+  return {
+    kind: "done",
+    output: {
+      stage: "estimate_reserve",
+      subjectId: ctx.subjectId,
+      artifacts: {},
+      gate: gateResult("budget", ctx.requestId, [check("reservation_succeeded", false, { detail: `nothing is reserved: ${reason}` })]),
+      budgetReservationId: null,
+    },
+  };
+}
+
+/**
+ * The estimate_reserve stage. It reads the scene plan and the production request (for its budget). It refuses to reserve when the
+ * workspace monthly budget is not connected, or is not a usable amount: the reason is the gate's detail.
+ */
+export function createEstimateReserveHandler(ports: EstimateReservePorts = {}): StageHandler {
+  const source = ports.workspaceBudget ?? notConnectedWorkspaceBudget;
   return {
     async run(ctx: StageContext): Promise<StageRunResult> {
       const planArtifact = await readInputOfType(ctx, "scene_plan");
-      const limits = await ports.budgets({ organizationId: ctx.organizationId, requestId: ctx.requestId });
-      if (limits === null) {
-        return {
-          kind: "done",
-          output: {
-            stage: "estimate_reserve",
-            subjectId: ctx.subjectId,
-            artifacts: {},
-            gate: gateResult("budget", ctx.requestId, [
-              check("reservation_succeeded", false, {
-                detail: "the request budget or the workspace monthly budget is not known to this stage, so nothing is reserved",
-              }),
-            ]),
-            budgetReservationId: null,
-          },
-        };
+      const requestArtifact = await readInputOfType(ctx, "production_request");
+      const parsedRequest = productionRequestSchema.safeParse(requestArtifact.envelope.body);
+      if (!parsedRequest.success) {
+        throw new EngineError("invalid_input", `the production request artifact does not parse: ${parsedRequest.error.message}`, {
+          stage: ctx.stage,
+        });
+      }
+      const now = new Date().toISOString();
+      const month = await source.monthBudget({ organizationId: ctx.organizationId, requestId: ctx.requestId, now });
+      if (month.status !== "known") return refusedBeforeReserving(ctx, month.reason);
+      if (!Number.isFinite(month.usd) || month.usd < 0) {
+        return refusedBeforeReserving(ctx, `the workspace monthly budget source returned ${String(month.usd)}, which is not a usable amount`);
       }
 
-      const now = new Date().toISOString();
       const result = await withWorkspaceLedger(ctx.sql, ctx.organizationId, (store) =>
         reserveForPlan(store, {
           requestId: ctx.requestId,
           workspaceId: ctx.organizationId,
           planArtifactId: planArtifact.envelope.artifactId,
           plan: planArtifact.envelope.body,
-          requestBudgetUsd: limits.requestBudgetUsd,
-          workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
+          requestBudgetUsd: parsedRequest.data.constraints.budgetUsd,
+          workspaceMonthBudgetUsd: month.usd,
           now,
         }),
       );

@@ -166,13 +166,51 @@ test("a failing intake rejects the request with its reasons and queues nothing",
   assert.match(rejected.reasons[0] ?? "", /request\.broken: free text from a check/);
 });
 
-test("an intake that passes without a reservation pauses on budget, so no paid job is queued (fail closed)", () => {
+test("a passing intake advances without a reservation: intake is passed, and no intake pause is set", () => {
+  const flow = new Flow().apply(start());
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: null, artifacts: {} });
+  assert.equal(flow.current.nodes.intake.status, "passed");
+  assert.equal(flow.current.budgetReservationId, null, "intake holds nothing");
+  assert.notEqual(flow.current.pause?.stage, "intake");
+});
+
+test("a passing intake with no reservation pauses on the first paid stage, which is named, and queues no paid job (fail closed)", () => {
   const flow = new Flow().apply(start());
   flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: null, artifacts: {} });
   assert.equal(flow.current.status, "paused");
   assert.equal(flow.current.pause?.kind, "budget");
-  assert.equal(flow.current.nodes.intake.status, "idle");
+  assert.equal(flow.current.pause?.stage, "analyze_reference", "analysis is the first paid stage");
+  assert.match(flow.current.pause?.reason ?? "", /analyze_reference is a paid stage and needs a budget reservation/);
   assert.equal(flow.jobs.length, 0);
+  assert.equal(flow.history.filter((job) => job.paid).length, 0, "no paid job was ever queued");
+});
+
+test("with a cached VideoDNA and no reservation, voice is the paid stage that waits, and it is named", () => {
+  const flow = new Flow().apply(start({ cachedDna: true, cachedDnaArtifactId: fixtureId("art_", 45) }));
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: null, artifacts: {} });
+  assert.equal(flow.current.status, "paused");
+  assert.equal(flow.current.pause?.stage, "voice");
+  assert.equal(flow.jobs.length, 0);
+});
+
+test("a reservation that analysis and voice need is accepted from intake: they queue on it, and the plan waits for both", () => {
+  const flow = new Flow().apply(start());
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  assert.equal(flow.current.status, "running");
+  assert.deepEqual(flow.jobs.map((job) => job.stage).sort(), ["analyze_reference", "voice"]);
+  assert.equal(flow.current.budgetReservationId, RES);
+});
+
+test("estimate_reserve is queued with the plan and the request artifacts, so it can read the request budget", () => {
+  const flow = new Flow().apply(start());
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", true), artifacts: { dna: fixtureId("art_", 42) } });
+  flow.succeed({ stage: "voice", subjectId: REQ, gate: gate("voice", true), artifacts: { voice: fixtureId("art_", 43) } });
+  flow.succeed({ stage: "plan", subjectId: REQ, gate: gate("plan", true), shots: [shot({ shotId: SHOT_A, sourceKind: "component", modelClass: null, visualType: "coded_graphics", downgradeTo: null })], artifacts: { plan: fixtureId("art_", 44) } });
+  const [estimate] = flow.jobsFor("estimate_reserve");
+  assert.ok(estimate, "estimate_reserve is queued once the plan passes");
+  assert.deepEqual(estimate.payload.inputArtifactIds.slice().sort(), [fixtureId("art_", 44), REQUEST_ART].sort());
+  assert.equal(estimate.paid, false);
 });
 
 test("plan waits for both analysis and voice, whichever finishes first", () => {

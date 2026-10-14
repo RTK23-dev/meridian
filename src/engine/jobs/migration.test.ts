@@ -18,6 +18,7 @@ const ENGINE_TABLES = [
   "engine_kits",
   "engine_cache_index",
   "engine_events",
+  "engine_role_calls",
 ] as const;
 
 const MIGRATION = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "migrations", "0077_engine_core.sql");
@@ -32,11 +33,13 @@ after(async () => {
   await db.close();
 });
 
-test("the engine migration is numbered after the highest existing migration and is the only 0077", () => {
+test("the engine migrations are numbered after the highest existing migration, each number once", () => {
   const files = migrationFiles();
-  assert.equal(files.at(-1), "0077_engine_core.sql");
+  assert.equal(files.at(-1), "0078_engine_role_calls.sql");
+  assert.equal(files.at(-2), "0077_engine_core.sql");
+  assert.equal(files.at(-3), "0076_factory_video_carousel.sql");
   assert.equal(files.filter((file) => file.startsWith("0077_")).length, 1);
-  assert.equal(files.at(-2), "0076_factory_video_carousel.sql");
+  assert.equal(files.filter((file) => file.startsWith("0078_")).length, 1);
 });
 
 test("every Bible 5.4 engine table exists and carries the tenant column organization_id, not null", async () => {

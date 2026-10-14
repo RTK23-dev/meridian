@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 import { estimatePlan } from "../../budget/estimate.ts";
 import { memoryLedgerStore, type LedgerStore } from "../../budget/store.ts";
 import { idSchema, type GateResult, type ScenePlan } from "../../contracts/index.ts";
-import { FIXTURE_IDS, scenePlanFixture } from "../../contracts/fixtures/index.ts";
+import { FIXTURE_IDS, productionRequestFixture, scenePlanFixture } from "../../contracts/fixtures/index.ts";
 import { readArtifact, writeArtifact } from "../artifact-store.ts";
 import { sqlLedgerStore } from "../sql-ledger-store.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../test/pg-test-db.ts";
@@ -11,10 +11,12 @@ import type { EnginePayload, StageContext, StageOutput } from "../types.ts";
 import { validateStageOutput } from "../validate.ts";
 import {
   createEstimateReserveHandler,
+  notConnectedWorkspaceBudget,
   planReservationId,
   reserveForPlan,
-  type BudgetPort,
   type ReserveForPlanInput,
+  type WorkspaceBudgetSource,
+  type WorkspaceMonthBudget,
 } from "./estimate-reserve.ts";
 
 const REQ = FIXTURE_IDS.request;
@@ -112,7 +114,12 @@ test("a plan that does not parse is refused as invalid input", async () => {
 
 let db: TestDatabase;
 const CREATED = "2026-10-13T09:00:05.000Z";
-const fundedBudgets: BudgetPort = async () => ({ requestBudgetUsd: 4, workspaceMonthBudgetUsd: 100 });
+
+/** A workspace monthly budget the test sets. It is known, so the stage may reserve. */
+function monthSource(usd: number): WorkspaceBudgetSource {
+  return { monthBudget: async (): Promise<WorkspaceMonthBudget> => ({ status: "known", usd }) };
+}
+const fundedWorkspace = monthSource(100);
 
 before(async () => {
   db = await createTestDatabase();
@@ -134,6 +141,19 @@ async function storePlan(plan: unknown): Promise<string> {
     stage: "plan",
     type: "scene_plan",
     body: plan,
+    createdAt: CREATED,
+  });
+  return stored.artifactId;
+}
+
+/** Stores a production request whose constraints.budgetUsd is the given amount, and returns its artifact id. */
+async function storeRequest(budgetUsd: number, body: unknown = { ...productionRequestFixture, constraints: { ...productionRequestFixture.constraints, budgetUsd } }): Promise<string> {
+  const stored = await writeArtifact(db.sql, {
+    organizationId: WS,
+    requestId: REQ,
+    stage: "intake",
+    type: "production_request",
+    body,
     createdAt: CREATED,
   });
   return stored.artifactId;
@@ -165,9 +185,14 @@ function contextFor(inputArtifactIds: string[]): StageContext {
   };
 }
 
-async function runEstimate(planArtifactId: string, budgets: BudgetPort): Promise<{ output: Extract<StageOutput, { stage: "estimate_reserve" }>; ctx: StageContext }> {
-  const ctx = contextFor([planArtifactId]);
-  const result = await createEstimateReserveHandler({ budgets }).run(ctx);
+async function runEstimate(
+  planArtifactId: string,
+  options: { source?: WorkspaceBudgetSource; requestBudgetUsd?: number } = {},
+): Promise<{ output: Extract<StageOutput, { stage: "estimate_reserve" }>; ctx: StageContext }> {
+  const requestArtifactId = await storeRequest(options.requestBudgetUsd ?? 4);
+  const ctx = contextFor([planArtifactId, requestArtifactId]);
+  const handler = createEstimateReserveHandler(options.source === undefined ? {} : { workspaceBudget: options.source });
+  const result = await handler.run(ctx);
   assert.equal(result.kind, "done");
   if (result.kind !== "done" || result.output.stage !== "estimate_reserve") assert.fail("expected an estimate_reserve output");
   return { output: result.output, ctx };
@@ -180,7 +205,7 @@ async function reservationRows(id: string): Promise<number> {
 
 test("a funded plan reserves through the ledger, returns the reservation id, and writes the budget_reservation artifact", async () => {
   const planId = await storePlan(scenePlanFixture);
-  const { output, ctx } = await runEstimate(planId, fundedBudgets);
+  const { output, ctx } = await runEstimate(planId, { source: fundedWorkspace });
 
   assert.equal(output.gate.pass, true, JSON.stringify(output.gate.checks.filter((item) => !item.pass)));
   const reservationId = planReservationId(REQ, planId);
@@ -199,8 +224,8 @@ test("a funded plan reserves through the ledger, returns the reservation id, and
 
 test("running the same job again returns the same reservation and stores no second row", async () => {
   const planId = await storePlan(scenePlanFixture);
-  const first = await runEstimate(planId, fundedBudgets);
-  const second = await runEstimate(planId, fundedBudgets);
+  const first = await runEstimate(planId, { source: fundedWorkspace });
+  const second = await runEstimate(planId, { source: fundedWorkspace });
   assert.equal(second.output.budgetReservationId, first.output.budgetReservationId);
   assert.equal(second.output.gate.pass, true);
   assert.equal(await reservationRows(planReservationId(REQ, planId)), 1);
@@ -208,8 +233,7 @@ test("running the same job again returns the same reservation and stores no seco
 
 test("a paused reservation returns no id and fails the gate; the paused reservation is stored with its reason", async () => {
   const planId = await storePlan(scenePlanFixture);
-  const tight: BudgetPort = async () => ({ requestBudgetUsd: 0.6, workspaceMonthBudgetUsd: 100 });
-  const { output } = await runEstimate(planId, tight);
+  const { output } = await runEstimate(planId, { source: fundedWorkspace, requestBudgetUsd: 0.6 });
 
   assert.equal(output.gate.pass, false);
   assert.equal(output.budgetReservationId, null, "no usable reservation id is returned for a paused stage");
@@ -219,21 +243,43 @@ test("a paused reservation returns no id and fails the gate; the paused reservat
   assert.ok(output.artifacts.budget?.startsWith("art_"));
 });
 
-test("when the budgets are not known, nothing is reserved and the gate says so", async () => {
+test("when the workspace monthly budget is not connected (the default), nothing is reserved and the gate gives the reason", async () => {
   const planId = await storePlan(scenePlanFixture);
-  const unknown: BudgetPort = async () => null;
-  const { output } = await runEstimate(planId, unknown);
+  const { output } = await runEstimate(planId);
 
   assert.equal(output.gate.pass, false);
   assert.equal(output.budgetReservationId, null);
   assert.deepEqual(output.artifacts, {});
-  assert.match(checkOf(output.gate, "reservation_succeeded").detail ?? "", /not known to this stage/);
+  assert.match(checkOf(output.gate, "reservation_succeeded").detail ?? "", /nothing is reserved: the workspace monthly budget is not connected/);
   assert.equal(await reservationRows(planReservationId(REQ, planId)), 0);
+});
+
+test("the default source is not connected, and a source that says so refuses with its reason", async () => {
+  const answer = await notConnectedWorkspaceBudget.monthBudget({ organizationId: WS, requestId: REQ, now: NOW });
+  assert.equal(answer.status, "not_connected");
+  const planId = await storePlan(scenePlanFixture);
+  const { output } = await runEstimate(planId, {
+    source: { monthBudget: async () => ({ status: "not_connected", reason: "the test source has no budget" }) },
+  });
+  assert.equal(output.gate.pass, false);
+  assert.match(checkOf(output.gate, "reservation_succeeded").detail ?? "", /the test source has no budget/);
+  assert.equal(await reservationRows(planReservationId(REQ, planId)), 0);
+});
+
+test("a monthly budget that is not a usable amount is refused before anything is stored", async () => {
+  for (const usd of [Number.NaN, -1]) {
+    const planId = await storePlan(scenePlanFixture);
+    const { output } = await runEstimate(planId, { source: monthSource(usd) });
+    assert.equal(output.gate.pass, false, `usd ${usd} fails the gate`);
+    assert.equal(output.budgetReservationId, null);
+    assert.match(checkOf(output.gate, "reservation_succeeded").detail ?? "", /not a usable amount/);
+    assert.equal(await reservationRows(planReservationId(REQ, planId)), 0);
+  }
 });
 
 test("an unknown price fails the gate, names the shot, and stores no reservation", async () => {
   const planId = await storePlan(planWithUnknownPrice());
-  const { output } = await runEstimate(planId, fundedBudgets);
+  const { output } = await runEstimate(planId, { source: fundedWorkspace });
 
   assert.equal(output.gate.pass, false);
   assert.equal(output.budgetReservationId, null);
@@ -243,7 +289,17 @@ test("an unknown price fails the gate, names the shot, and stores no reservation
 
 test("a stage with no scene_plan among its inputs is refused, not guessed", async () => {
   await assert.rejects(
-    () => createEstimateReserveHandler({ budgets: fundedBudgets }).run(contextFor([])),
+    () => createEstimateReserveHandler({ workspaceBudget: fundedWorkspace }).run(contextFor([])),
     (error: unknown) => error instanceof Error && /scene_plan input artifact/.test(error.message),
   );
 });
+
+test("a stage with no production_request among its inputs is refused: the request budget is not guessed", async () => {
+  const planId = await storePlan(scenePlanFixture);
+  await assert.rejects(
+    () => createEstimateReserveHandler({ workspaceBudget: fundedWorkspace }).run(contextFor([planId])),
+    (error: unknown) => error instanceof Error && /production_request input artifact/.test(error.message),
+  );
+  assert.equal(await reservationRows(planReservationId(REQ, planId)), 0);
+});
+

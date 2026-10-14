@@ -19,8 +19,11 @@ import { paidCall } from "../gateway/paid.ts";
 import { StructuredOutputError, structuredChat, type ChatMessage, type ChatUsage, type StructuredChatResult } from "../gateway/openrouter.ts";
 import { loadPrompt } from "../prompts/load.ts";
 import { RoleAnswerError } from "./errors.ts";
+import { type JournalEntry, type RoleCall, type RoleCallJournal } from "./journal.ts";
 import { estimateClaudeUsd } from "./rates.ts";
 import type { RoleDefinition } from "./role.ts";
+
+export type { JournalEntry, RoleCall, RoleCallJournal } from "./journal.ts";
 
 /** The longest list of failed checks the retry shows the model (initial). The rest is counted, not listed. */
 const MAX_RETRY_ISSUES = 20;
@@ -30,6 +33,11 @@ export type RoleDeps = {
   ledger: LedgerStore;
   /** The clock, as an ISO time. It becomes the ledger entry's `at`. */
   now: () => string;
+  /**
+   * The persisted record of the calls (Bible 11, 14.1). Optional: without it nothing is stored and nothing is resumed. With it,
+   * every paid call is written before it is made and after it settles, and a stored answer is reused instead of called again.
+   */
+  journal?: RoleCallJournal;
 };
 
 export type RoleRequest<Input> = {
@@ -48,33 +56,16 @@ export type RoleRequest<Input> = {
   input: Input;
 };
 
-/** One paid call of a role, as recorded for the manifest. The ledger row holds the money; this holds the rest. */
-export type RoleCall = {
-  idempotencyKey: string;
-  ledgerEntryId: string;
-  /** For example "segmenter@1" (Manifest.promptVersions). */
-  promptVersion: string;
-  /** The routed model (config/routes.ts). */
-  model: string;
-  /** The model OpenRouter says answered; it can differ from the routed one on a fallback. Null when there was no answer. */
-  answeredBy: string | null;
-  generationId: string | null;
-  promptTokens: number | null;
-  completionTokens: number | null;
-  /** OpenRouter's usage.cost. Null when the provider reported none, or the answer was invalid (its usage is not kept). */
-  costUsd: number | null;
-  /** True when the ledger holds the estimate instead of a bill (a null cost, or an invalid answer). */
-  actualIsEstimate: boolean;
-  verdict: "answered" | "invalid_answer";
-  /** Paths and codes of the checks an invalid answer failed. Never the model's text. */
-  issues: string[];
-};
-
 type OutcomeBase = {
   role: string;
   promptVersion: string;
-  /** Every call made by this run, in order. A duplicate or refusal made none of them. */
+  /** Every call this run made, in order. A duplicate or refusal made none of them. */
   calls: RoleCall[];
+  /**
+   * Stored calls this run used instead of calling again (a resume, Bible 14.1): a reused answer, or the first answer that failed
+   * its contract when only the retry was sent. They are already on the ledger and cost nothing now.
+   */
+  resumed: RoleCall[];
   alerts: BudgetAlert[];
 };
 
@@ -157,7 +148,11 @@ async function settle<Input, Answer>(
   ctx: CallContext<Input, Answer>,
   messages: ChatMessage[],
   idempotencyKey: string,
+  retryOfKey: string | undefined,
 ): Promise<Settled<Answer>> {
+  const journal = (fields: Pick<JournalEntry, "status" | "call" | "answer" | "refusedReason">): Promise<void> =>
+    recordJournal(ctx, { idempotencyKey, retryOfKey: retryOfKey ?? null, ...fields });
+
   const outcome = await paidCall<Verdict<Answer>>(
     {
       ledger: ctx.deps.ledger,
@@ -171,6 +166,9 @@ async function settle<Input, Answer>(
       promptVersion: ctx.promptVersion,
     },
     async () => {
+      // Written before the network is asked, so a call that never came back is visible as pending. A failed write throws here,
+      // before any request is sent.
+      await journal({ status: "pending", call: null, answer: null, refusedReason: null });
       try {
         const answer = await structuredChat(ctx.deps.gateway, {
           organizationId: ctx.workspaceId,
@@ -195,7 +193,11 @@ async function settle<Input, Answer>(
     },
   );
 
-  if (outcome.status === "refused") return { status: "refused", reason: outcome.reason, alerts: outcome.alerts };
+  if (outcome.status === "refused") {
+    await journal({ status: "refused", call: null, answer: null, refusedReason: outcome.reason });
+    return { status: "refused", reason: outcome.reason, alerts: outcome.alerts };
+  }
+  // A duplicate is not journaled here: its key is already on the ledger, and the journal holds whatever it stored.
   if (outcome.status === "duplicate") return { status: "duplicate", entry: outcome.entry, samePayload: outcome.samePayload };
 
   const { value, entry } = outcome;
@@ -215,7 +217,48 @@ async function settle<Input, Answer>(
     verdict: value.verdict === "answered" ? "answered" : "invalid_answer",
     issues: value.verdict === "invalid" ? [...value.issues] : [],
   };
+  // The answer is stored before the caller sees it, so a job that crashes after this point resumes with the same answer.
+  await journal(
+    value.verdict === "answered"
+      ? { status: "answered", call, answer: value.answer.value, refusedReason: null }
+      : { status: "invalid_answer", call, answer: null, refusedReason: null },
+  );
   return { status: "settled", verdict: value, call, alerts: outcome.alerts };
+}
+
+/** Writes one journal entry for this call, when the deps carry a journal. The role, version and model come from the context. */
+async function recordJournal<Input, Answer>(
+  ctx: CallContext<Input, Answer>,
+  fields: Pick<JournalEntry, "idempotencyKey" | "retryOfKey" | "status" | "call" | "answer" | "refusedReason">,
+): Promise<void> {
+  if (ctx.deps.journal === undefined) return;
+  await ctx.deps.journal.record({
+    ...fields,
+    role: ctx.role.role,
+    stage: ctx.role.stage,
+    promptVersion: ctx.promptVersion,
+    model: ctx.route.model,
+    reservationId: ctx.reservationId,
+  });
+}
+
+/** The stored answer of a key, or null. Without a journal there is nothing stored. */
+async function storedCall(deps: RoleDeps, idempotencyKey: string): Promise<JournalEntry | null> {
+  return deps.journal === undefined ? null : deps.journal.find(idempotencyKey);
+}
+
+/**
+ * A stored answer, checked again against the role's contract before it is used. The stored text is data: a row that no longer
+ * matches is an internal error, and no call is made to replace it.
+ */
+function reusedAnswer<Input, Answer>(ctx: CallContext<Input, Answer>, stored: JournalEntry): Answer {
+  const parsed = ctx.answer.safeParse(stored.answer);
+  if (!parsed.success) {
+    throw new EngineError("internal", `the stored answer of ${ctx.role.role} no longer matches its contract; no call is made`, {
+      stage: ctx.role.stage,
+    });
+  }
+  return parsed.data;
 }
 
 /**
@@ -293,32 +336,64 @@ export async function runRole<Input, Answer>(
   ];
   const head = { role: role.role, promptVersion: prompt.id };
   const calls: RoleCall[] = [];
+  const resumed: RoleCall[] = [];
   const alerts: BudgetAlert[] = [];
 
-  const first = await settle(ctx, base, callKey(ctx, undefined));
-  if (first.status === "refused") return { ...head, status: "refused", reason: first.reason, calls, alerts: first.alerts };
-  if (first.status === "duplicate") {
-    return { ...head, status: "duplicate", entry: first.entry, samePayload: first.samePayload, calls, alerts };
-  }
-  calls.push(first.call);
-  alerts.push(...first.alerts);
-  if (first.verdict.verdict === "answered") {
-    return { ...head, status: "done", value: first.verdict.answer.value, calls, alerts };
+  // Resume (Bible 14.1). A stored answer is reused without a call. A stored first answer that failed its contract was billed,
+  // so only its retry is sent. Anything else (no entry, a refusal, or a call that was started and never came back) is called
+  // as usual: a started call is a duplicate on the ledger, so it makes no second call and reports as duplicate.
+  const firstKey = callKey(ctx, undefined);
+  const storedFirst = await storedCall(deps, firstKey);
+  if (storedFirst?.status === "answered" && storedFirst.call !== null) {
+    resumed.push(storedFirst.call);
+    return { ...head, status: "done", value: reusedAnswer(ctx, storedFirst), calls, resumed, alerts };
   }
 
-  const retryMessages: ChatMessage[] = [
-    ...base,
-    { role: "user", content: retryMessage(role.retryRule, first.verdict.issues) },
-  ];
-  const retry = await settle(ctx, retryMessages, callKey(ctx, first.call.idempotencyKey));
-  if (retry.status === "refused") return { ...head, status: "refused", reason: retry.reason, calls, alerts: [...alerts, ...retry.alerts] };
+  let failedIssues: string[];
+  let failedKey: string;
+  if (storedFirst?.status === "invalid_answer" && storedFirst.call !== null) {
+    resumed.push(storedFirst.call);
+    failedIssues = [...storedFirst.call.issues];
+    failedKey = firstKey;
+  } else {
+    const first = await settle(ctx, base, firstKey, undefined);
+    if (first.status === "refused") return { ...head, status: "refused", reason: first.reason, calls, resumed, alerts: first.alerts };
+    if (first.status === "duplicate") {
+      return { ...head, status: "duplicate", entry: first.entry, samePayload: first.samePayload, calls, resumed, alerts };
+    }
+    calls.push(first.call);
+    alerts.push(...first.alerts);
+    if (first.verdict.verdict === "answered") {
+      return { ...head, status: "done", value: first.verdict.answer.value, calls, resumed, alerts };
+    }
+    failedIssues = first.verdict.issues;
+    failedKey = first.call.idempotencyKey;
+  }
+
+  const retryKey = callKey(ctx, failedKey);
+  const storedRetry = await storedCall(deps, retryKey);
+  if (storedRetry?.status === "answered" && storedRetry.call !== null) {
+    resumed.push(storedRetry.call);
+    return { ...head, status: "done", value: reusedAnswer(ctx, storedRetry), calls, resumed, alerts };
+  }
+  if (storedRetry?.status === "invalid_answer" && storedRetry.call !== null) {
+    // The stage already failed its one retry. Resuming it makes no call and fails it again with the same checks.
+    resumed.push(storedRetry.call);
+    throw new RoleAnswerError(role.role, calls.length + resumed.length, [...storedRetry.call.issues], stage);
+  }
+
+  const retryMessages: ChatMessage[] = [...base, { role: "user", content: retryMessage(role.retryRule, failedIssues) }];
+  const retry = await settle(ctx, retryMessages, retryKey, failedKey);
+  if (retry.status === "refused") {
+    return { ...head, status: "refused", reason: retry.reason, calls, resumed, alerts: [...alerts, ...retry.alerts] };
+  }
   if (retry.status === "duplicate") {
-    return { ...head, status: "duplicate", entry: retry.entry, samePayload: retry.samePayload, calls, alerts };
+    return { ...head, status: "duplicate", entry: retry.entry, samePayload: retry.samePayload, calls, resumed, alerts };
   }
   calls.push(retry.call);
   alerts.push(...retry.alerts);
   if (retry.verdict.verdict === "answered") {
-    return { ...head, status: "done", value: retry.verdict.answer.value, calls, alerts };
+    return { ...head, status: "done", value: retry.verdict.answer.value, calls, resumed, alerts };
   }
-  throw new RoleAnswerError(role.role, calls.length, retry.verdict.issues, stage);
+  throw new RoleAnswerError(role.role, calls.length + resumed.length, retry.verdict.issues, stage);
 }

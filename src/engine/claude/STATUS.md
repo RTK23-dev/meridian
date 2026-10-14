@@ -38,6 +38,21 @@ Built 2026-10-14 by eng-pipeline on branch `eng-a5-claude-client`, cut from `cod
   unverified route, so the live run finds a wrong model id as a provider error. The flag is changed by eng-contracts
   after the live check.
 
+## E2 update (branch `eng-e2-pipeline`): persisted calls and resume
+
+- `journal.ts` holds `RoleCall` and the `RoleCallJournal` port. `RoleDeps.journal` is optional; the SQL implementation is
+  `jobs/role-call-store.ts` on `engine_role_calls` (migration 0078).
+- The journal is written inside the paid call (`pending`, before the gateway is asked), then `answered` (with the validated
+  answer), `invalid_answer` (with its issues) or `refused` (the reservation did not cover it).
+- **The refused-retry gap is closed.** A stored invalid first answer means the resumed run sends only the retry. A stored answer
+  is reused with no call, and is checked against the role's contract again first. A stored invalid retry fails the stage
+  again with no call. `RoleOutcome.resumed` lists the stored calls a run used; `calls` lists only new calls.
+- A started call that never returns is `pending`: its key is a duplicate on the ledger, so the same attempt makes no second
+  call. A new job attempt is a new key (Bible 5.1), as before.
+- `RoleCall.costUsd` is stored at four decimals (`numeric(14,4)`), so the manifest value equals the ledger's.
+- Tests: `jobs/role-call-store.test.ts` and `jobs/role-call-resume.test.ts` (PGlite, recorded fixtures, 15 pass). The existing
+  client tests pass unchanged, since the journal is optional.
+
 ## Decisions to confirm (lead)
 
 1. **Token rates live in `claude/rates.ts`.** They are configuration (Bible 17.2 rule 3) and belong in

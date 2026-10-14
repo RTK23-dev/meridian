@@ -1,7 +1,23 @@
-# STATUS: intake and estimate_reserve stage handlers (A4)
+# STATUS: intake and estimate_reserve stage handlers (A4, updated in E2)
 
-Branch `eng-a4-budget-minimum`, cut from `code/beautiful-cori-1zfk11`. Covers `src/engine/jobs/handlers/` only: `intake.ts`,
-`estimate-reserve.ts` and their tests. Nothing else in `jobs/` changed. The format minimum is in `src/engine/plan/minimum.ts`.
+Branch `eng-a4-budget-minimum`, cut from `code/beautiful-cori-1zfk11`. E2 changes on `eng-e2-pipeline`: the estimate_reserve
+budget source and request input, and the intake comment. The format minimum is in `src/engine/plan/minimum.ts`.
+
+## E2 changes (current behaviour; the blockers below are updated where E2 answered them)
+
+- **Intake** no longer reserves, and the orchestrator no longer pauses on its null reservation. Intake returns
+  `budgetReservationId: null` on a pass. The paid stages before estimate_reserve pause the request on budget, naming the first
+  one (see `../STATUS.md`, item 1). Blocker 1 below is still open for the lead.
+- **estimate_reserve** reads the `production_request` artifact too (the registry and the orchestrator pass it). The request
+  budget is `constraints.budgetUsd`, so `EstimateReservePorts.budgets` and `BudgetPort` are gone.
+- **Monthly budget**: `WorkspaceBudgetSource.monthBudget(scope)` returns `{ status: "known", usd }` or
+  `{ status: "not_connected", reason }`. The default, `notConnectedWorkspaceBudget`, is not connected, so the stage refuses to
+  reserve with that reason and stores nothing. A NaN or negative amount is refused too. Blocker 3 is still open: the owner
+  decides where the budget is set (Bible 20.2).
+- Blocker 2 (the request budget had no input) is answered by the registry change.
+- Tests: `estimate-reserve.test.ts` 14 pass (PGlite and in-memory), including the not-connected refusal, unusable amounts, and a
+  missing `production_request` input. The "request artifact does not parse" case is not tested: `writeArtifact` refuses an
+  invalid body, so no such artifact can be stored; the handler's parse check is defensive.
 
 ## Done
 
@@ -25,7 +41,8 @@ Branch `eng-a4-budget-minimum`, cut from `code/beautiful-cori-1zfk11`. Covers `s
 - `IntakePorts.loadKits` (required): the style, persona, voice, character and product kits. No engine kit reader exists yet.
 - `IntakePorts.lookupDna` (optional): the VideoDNA lookup (6.1 step 5). Absent, the gate's `dna_lookup_resolved` fails.
 - `IntakePorts.classify` (optional): the 7.3 classifier (a Claude Haiku role, not built). Absent, every `must` fails its check.
-- `EstimateReservePorts.budgets`: the request budget and the workspace monthly budget. Absent or null, nothing is reserved.
+- `EstimateReservePorts.workspaceBudget` (E2): the workspace monthly budget. Absent means the not-connected default, so nothing
+  is reserved. The request budget comes from the production_request artifact.
 
 ## Blockers for the lead (decisions, not built here)
 
