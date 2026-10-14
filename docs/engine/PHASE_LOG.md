@@ -154,7 +154,7 @@ Extra work done in E1 beyond the checklist: W7 visual decision steps 1 to 4 and 
 - A1 (eng-pipeline, 75d3c6d): `scripts/engine/` and `npm run engine:e1`. The dry run replays recorded responses through the
   gateway and passes; live mode checks every connection first and stops with NOT_CONNECTED before any spend. Today it
   reports heygen, media_functions, the platform size limit (`thresholds.render.platformMaxBytes` is null) and the database.
-- A8 (6e773b3 merge chain, eabaeb4): "Meridian video engine" is a Factory video provider. A run that names it stops with
+- A8 (eabaeb4, merged as d4ce50b): "Meridian video engine" is a Factory video provider. A run that names it stops with
   "The video engine cannot deliver videos yet (phase E3)" before any cap check, job, reservation or cost row.
   `engine-request.ts` maps a Factory video plan to a ProductionRequest; today every plan maps to `needs_budget` or misses
   engine-only fields (format, page, language, beats), which E3 wiring supplies.
