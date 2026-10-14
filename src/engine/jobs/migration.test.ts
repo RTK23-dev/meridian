@@ -19,6 +19,12 @@ const ENGINE_TABLES = [
   "engine_cache_index",
   "engine_events",
   "engine_role_calls",
+  "engine_provider_attempts",
+  "engine_provider_breakers",
+  "engine_buckets",
+  "engine_bucket_leases",
+  "engine_asset_cache",
+  "engine_asset_cache_hits",
 ] as const;
 
 const MIGRATION = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "migrations", "0077_engine_core.sql");
@@ -33,13 +39,12 @@ after(async () => {
   await db.close();
 });
 
-test("the engine migrations are numbered after the highest existing migration, each number once", () => {
+test("the engine migrations are numbered after 0076, each number once, and in apply order", () => {
   const files = migrationFiles();
-  assert.equal(files.at(-1), "0078_engine_role_calls.sql");
-  assert.equal(files.at(-2), "0077_engine_core.sql");
-  assert.equal(files.at(-3), "0076_factory_video_carousel.sql");
-  assert.equal(files.filter((file) => file.startsWith("0077_")).length, 1);
-  assert.equal(files.filter((file) => file.startsWith("0078_")).length, 1);
+  const engine = files.filter((file) => file >= "0077_" && file < "0081_");
+  assert.deepEqual(engine, ["0077_engine_core.sql", "0078_engine_role_calls.sql", "0080_engine_asset_stores.sql"], "each engine migration is numbered once");
+  assert.ok(files.includes("0076_factory_video_carousel.sql"), "the engine migrations come after the factory migrations they depend on");
+  assert.equal(files.indexOf("0080_engine_asset_stores.sql") > files.indexOf("0078_engine_role_calls.sql"), true);
 });
 
 test("every Bible 5.4 engine table exists and carries the tenant column organization_id, not null", async () => {

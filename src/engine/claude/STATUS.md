@@ -1,5 +1,12 @@
 # Claude client and segmenter: status (W3, task A5)
 
+## E3 change: the call key names the request
+
+- `callKey` now includes the request id (`CallContext.requestId`). The key was the hash of role, prompt version, model and input, so
+  the same input in two requests was one ledger call, and the second request got `duplicate` with no answer. That escalated every
+  take whose Critic input repeated (for example a cache hit). The key still repeats for a retry within one request. Lead: this changes
+  the key of every role call. No live data exists yet. `client.test.ts` expects the request in the key.
+
 Built 2026-10-14 by eng-pipeline on branch `eng-a5-claude-client`, cut from `code/beautiful-cori-1zfk11` (gateway commit
 `a61a340`). Not pushed. The lead merges.
 

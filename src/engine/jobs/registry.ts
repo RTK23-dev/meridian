@@ -64,7 +64,7 @@ const rows: Record<EngineStage, Row> = {
   plan: { stage: "plan", group: 3, timeoutClass: "claude", paid: true, reads: ["validated_request", "video_dna", "voice_track"], writes: ["scene_plan"], gate: "plan" },
   estimate_reserve: { stage: "estimate_reserve", group: 3, timeoutClass: "claude", paid: false, reads: ["scene_plan", "production_request"], writes: ["budget_reservation"], gate: "budget" },
   produce_shot: { stage: "produce_shot", group: 4, timeoutClass: "generation", paid: true, reads: ["scene_plan"], writes: ["take"], gate: null },
-  check_take: { stage: "check_take", group: 4, timeoutClass: "claude", paid: true, reads: ["take"], writes: ["take_verdict"], gate: "take" },
+  check_take: { stage: "check_take", group: 4, timeoutClass: "claude", paid: true, reads: ["take", "scene_plan"], writes: ["take_verdict"], gate: "take" },
   edit: { stage: "edit", group: 5, timeoutClass: "claude", paid: false, reads: ["scene_plan", "take", "voice_track", "video_dna"], writes: ["edl"], gate: "edit" },
   compose: { stage: "compose", group: 6, timeoutClass: "claude", paid: false, reads: ["edl"], writes: ["composition"], gate: null },
   pre_render_gate: { stage: "pre_render_gate", group: 6, timeoutClass: "claude", paid: false, reads: ["composition", "edl"], writes: ["gate_result"], gate: "pre_render" },

@@ -26,7 +26,8 @@ export type PollPayload = z.infer<typeof pollPayloadSchema>;
 export type PollDecision =
   | { action: "wait"; runAfterMs: number; nextStep: number }
   | { action: "done" }
-  | { action: "failed"; retryable: boolean; message: string }
+  /** refusal is set for a content or input refusal: the handler turns it into a hold, it is not retried (Bible 10.4). */
+  | { action: "failed"; retryable: boolean; message: string; refusal: "content_policy" | "invalid_input" | null }
   | { action: "timed_out" };
 
 /** Backoff before poll step n (1-based): initialMs, multiplied by factor each step, capped at maxMs (Bible 15.2). */
@@ -44,10 +45,12 @@ export function pollBackoffMs(step: number, policy: typeof jobSettings.poll = jo
 export function decidePoll(input: { step: number; submittedAtMs: number; nowMs: number; timeoutMs: number; status: ProviderPoll }): PollDecision {
   if (input.status.state === "done") return { action: "done" };
   if (input.status.state === "failed") {
+    const kind = input.status.error?.kind;
     return {
       action: "failed",
       retryable: input.status.error?.retryable ?? false,
       message: input.status.error?.message ?? "the provider reported a failure without detail",
+      refusal: kind === "content_policy" || kind === "invalid_input" ? kind : null,
     };
   }
   const elapsed = input.nowMs - input.submittedAtMs;
@@ -127,7 +130,8 @@ async function queueNextPoll(sql: Sql, payload: PollPayload, nextStep: number, r
 
 /**
  * Runs one poll step. The provider is asked once. A pending answer queues the next poll and returns (the lease is released).
- * A done answer finishes the stage through the handler's finish(). A failed or timed-out call throws a provider error, and
+ * A done answer finishes the stage through the handler's finish(). A refused answer (content_policy or invalid_input) also goes
+ * to finish(), which turns it into the stage's hold (Bible 10.4). Any other failed or timed-out call throws a provider error, and
  * the job retries until it is dead, which the dispatcher records against the stage.
  */
 export async function runPollJob(
@@ -155,7 +159,10 @@ export async function runPollJob(
       await queueNextPoll(sql, payload, decision.nextStep, decision.runAfterMs, input.jobId);
       return `pending:${stage}:${payload.step}`;
     case "failed":
-      throw new EngineError("provider", `${stage}: ${decision.message}`, { retryable: decision.retryable, stage });
+      if (decision.refusal === null) {
+        throw new EngineError("provider", `${stage}: ${decision.message}`, { retryable: decision.retryable, stage });
+      }
+      return finishPoll(sql, input, status, controller);
     case "timed_out": {
       let note = "";
       if (adapter.cancel) {
@@ -167,33 +174,45 @@ export async function runPollJob(
       }
       throw new EngineError("provider", `${stage} did not finish within ${payload.timeoutMs} ms${note}`, { retryable: false, stage });
     }
-    case "done": {
-      const handler = runtime.handlers[stage];
-      if (!handler?.finish) {
-        throw new EngineError("internal", `${stage} has no finish step for an asynchronous result, so the result was not stored`, { stage });
-      }
-      const context: StageContext = {
-        sql,
-        jobId: input.jobId,
-        organizationId: payload.organizationId,
-        requestId: payload.requestId,
-        stage,
-        subjectId: payload.subjectId,
-        attempt: payload.attempt,
-        payload: stripPollFields(payload),
-        signal: controller.signal,
-      };
-      const output: StageOutput = validateStageOutput(await handler.finish(context, status), context.payload);
-      const applied = await applyEngineEvent(sql, {
-        organizationId: payload.organizationId,
-        requestId: payload.requestId,
-        event: { type: "succeeded", output },
-        triggerJobId: input.jobId,
-        dedupeKey: `poll:${input.jobId}`,
-      });
-      return applied.applied ? `completed:${stage}:${applied.queued}` : `duplicate:${stage}`;
-    }
+    case "done":
+      return finishPoll(sql, input, status, controller);
   }
+}
+
+/** Hands a settled provider answer to the stage's finish step, then applies the stage output it returns. */
+async function finishPoll(
+  sql: Sql,
+  input: { jobId: string; payload: PollPayload; runtime: EngineRuntime },
+  status: ProviderPoll,
+  controller: AbortController,
+): Promise<string> {
+  const { payload, runtime } = input;
+  const stage = payload.stage;
+  const handler = runtime.handlers[stage];
+  if (!handler?.finish) {
+    throw new EngineError("internal", `${stage} has no finish step for an asynchronous result, so the result was not stored`, { stage });
+  }
+  const context: StageContext = {
+    sql,
+    jobId: input.jobId,
+    organizationId: payload.organizationId,
+    requestId: payload.requestId,
+    stage,
+    subjectId: payload.subjectId,
+    attempt: payload.attempt,
+    payload: stripPollFields(payload),
+    signal: controller.signal,
+    poll: { provider: payload.provider, jobRef: payload.jobRef, submittedAt: payload.submittedAt },
+  };
+  const output: StageOutput = validateStageOutput(await handler.finish(context, status), context.payload);
+  const applied = await applyEngineEvent(sql, {
+    organizationId: payload.organizationId,
+    requestId: payload.requestId,
+    event: { type: "succeeded", output },
+    triggerJobId: input.jobId,
+    dedupeKey: `poll:${input.jobId}`,
+  });
+  return applied.applied ? `completed:${stage}:${applied.queued}` : `duplicate:${stage}`;
 }
 
 function stripPollFields(payload: PollPayload): EnginePayload {

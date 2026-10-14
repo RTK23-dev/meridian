@@ -16,4 +16,7 @@ export const jobSettings = {
 
   // 6.2 analyze_reference: "retries once with denser frames", then the request is escalated. Bible rule, no config key.
   analyzeRetries: 1,
+
+  // 10.4: a content_policy or invalid_input refusal gets one planner rewrite of the prompt, then the shot is downgraded.
+  promptRewrites: 1,
 } as const;

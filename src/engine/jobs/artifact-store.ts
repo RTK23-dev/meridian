@@ -99,6 +99,11 @@ export type WriteArtifactInput = {
   parentIds?: string[];
   createdAt: string;
   media?: MediaInput;
+  /**
+   * The id to store the artifact under. Absent, a new one is made. A stage that names its media in the body (a take's uri is its
+   * object key) fixes the id first, so the body and the storage key agree.
+   */
+  artifactId?: string;
 };
 
 /** A stored artifact as read back: the envelope, and where its media bytes are when it has any. */
@@ -141,7 +146,8 @@ export async function writeArtifact(sql: Sql, input: WriteArtifactInput): Promis
   `;
   if (!owner[0]) throw new EngineError("not_found", `request ${input.requestId} is not in this workspace`);
 
-  const artifactId = newId("art_");
+  const artifactId = input.artifactId ?? newId("art_");
+  if (!idSchema("art_").safeParse(artifactId).success) refuse(`${artifactId} is not an artifact id`);
   const data: unknown = parsedBody.data;
   const schema = schemaNameFor(input.type, data);
   let storageKey: string | null = null;

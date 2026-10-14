@@ -1,0 +1,8 @@
+{
+  "id": "job-abc123",
+  "generation_id": "gen-xyz789",
+  "polling_url": "/api/v1/videos/job-abc123",
+  "status": "failed",
+  "error": "Generation refused by content moderation policy",
+  "usage": { "cost": 0, "is_byok": false }
+}

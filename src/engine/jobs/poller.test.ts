@@ -58,11 +58,11 @@ test("a finished call is used even if it arrives after the deadline, and a faile
       timeoutMs: 120_000,
       status: { state: "failed", error: { kind: "rate_limit", retryable: true, message: "HTTP 429" } },
     }),
-    { action: "failed", retryable: true, message: "HTTP 429" },
+    { action: "failed", retryable: true, message: "HTTP 429", refusal: null },
   );
   assert.deepEqual(
     decidePoll({ step: 1, submittedAtMs: submitted, nowMs: 1, timeoutMs: 120_000, status: { state: "failed" } }),
-    { action: "failed", retryable: false, message: "the provider reported a failure without detail" },
+    { action: "failed", retryable: false, message: "the provider reported a failure without detail", refusal: null },
     "a failure with no detail is not retryable",
   );
 });

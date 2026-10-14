@@ -1,5 +1,16 @@
 # Gateway status
 
+## E3 (branch `eng-e3-pipeline`)
+
+- `download.ts`: `gatewayDownloader(gateway)` fetches a finished provider file (a generated take, a stock clip) through
+  `transportFor`. A URL on the provider's host is authenticated; any other URL goes out with no credential. Only https is accepted,
+  the byte limit is checked before anything is returned, an empty file and a non-2xx answer are errors (429, 408, 425 and 5xx are
+  retryable). Tests: `download.test.ts` (6).
+- `paid.ts`: `LockableLedger` (a ledger with an optional `withLock`). `paidCall` runs its authorize and reconcile steps through
+  `withLock` when the ledger has one, so a Postgres ledger serializes the budget steps of one reservation. The provider call is never
+  inside the lock. A ledger without `withLock` behaves as before.
+- The boundary tests still hold: no `fetch` outside `transport.ts`, and only `meridian.ts` reads Meridian's credentials.
+
 Built 2026-10-14 by the lead, from the owner's decision that OpenRouter is the go-to platform and that all API handling
 lives in one place.
 

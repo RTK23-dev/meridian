@@ -2,7 +2,7 @@
 // the payload a queued job carries, and the runtime a worker is given (Video Engine Bible 5.1 to 5.3, 15.2).
 
 import { z } from "zod";
-import type { ProviderAdapter, ProviderPoll, ModelClass, TakeVerdict, VisualType, GateResult } from "../contracts/index.ts";
+import type { Decision, ProviderAdapter, ProviderPoll, ModelClass, TakeVerdict, VisualType, GateResult } from "../contracts/index.ts";
 import { EngineError, idSchema } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { ENGINE_STAGES, type EngineStage } from "./registry.ts";
@@ -24,13 +24,24 @@ export type ShotSummary = {
 /** Every stage output names the subject it ran for and the artifacts it wrote, keyed by slot (for example "plan" or "take:<id>"). */
 export type StageOutputBase = { subjectId: string; artifacts: Record<string, string> };
 
+/**
+ * Why a produce job made no take. A budget hold pauses the request with the reason (Bible 14). A refusal (content_policy or
+ * invalid_input, Bible 10.4) goes back to the planner once for a rewrite; the hint is a rule-style name written by this code,
+ * never provider text.
+ */
+export type ProduceHold = { kind: "budget"; reason: string } | { kind: "refused"; errorKind: "content_policy" | "invalid_input"; hint: string };
+
 export type StageOutput =
   | (StageOutputBase & { stage: "intake"; gate: GateResult; budgetReservationId: string | null })
   | (StageOutputBase & { stage: "analyze_reference"; gate: GateResult })
   | (StageOutputBase & { stage: "voice"; gate: GateResult })
   | (StageOutputBase & { stage: "plan"; gate: GateResult; shots: ShotSummary[] })
   | (StageOutputBase & { stage: "estimate_reserve"; gate: GateResult; budgetReservationId: string | null })
-  | (StageOutputBase & { stage: "produce_shot"; shotId: string; takeId: string })
+  /**
+   * takeId is set when the take was made, and hold is set when it was not (never both). epoch is the plan epoch of the shot the job
+   * was queued for: a replan starts a new epoch, and a result from an older one is recorded but never counted (Bible 5.3).
+   */
+  | (StageOutputBase & { stage: "produce_shot"; shotId: string; takeId: string | null; epoch: number; hold?: ProduceHold; decisions?: Decision[] })
   | (StageOutputBase & { stage: "check_take"; shotId: string; takeId: string; gate: GateResult; verdict: TakeVerdict })
   | (StageOutputBase & { stage: "edit"; gate: GateResult; edlId: string })
   | (StageOutputBase & { stage: "compose"; edlId: string })
@@ -96,7 +107,8 @@ export type EngineEvent =
       requestArtifactId: string;
     }
   | { type: "succeeded"; output: StageOutput }
-  | { type: "dead"; stage: EngineStage; subjectId: string; reason: string }
+  /** epoch is the plan epoch of a produce job (from its payload), so a dead job of an older plan does not pause the request. */
+  | { type: "dead"; stage: EngineStage; subjectId: string; reason: string; epoch?: number }
   | { type: "resume" }
   | { type: "human_choice"; shotId: string; takeId: string };
 
@@ -111,7 +123,15 @@ export type StageContext = {
   payload: EnginePayload;
   /** Aborted when the stage's timeout (Bible 5.1) passes. A handler should stop its provider calls when it fires. */
   signal: AbortSignal;
+  /** Set on a finish step only: the asynchronous provider call that was submitted and is now settled (Bible 15.2). */
+  poll?: { provider: string; jobRef: string; submittedAt: string };
 };
+
+/** The plan epoch a produce or check job was queued for (Bible 5.3), when its payload names one. */
+export function epochOf(payload: EnginePayload): number | undefined {
+  const epoch = payload.details.epoch;
+  return typeof epoch === "number" && Number.isInteger(epoch) && epoch >= 0 ? epoch : undefined;
+}
 
 /** A handler either finishes (done) or hands an asynchronous provider call to the poller (submitted, Bible 15.2). */
 export type StageRunResult =
@@ -120,7 +140,12 @@ export type StageRunResult =
 
 export type StageHandler = {
   run(ctx: StageContext): Promise<StageRunResult>;
-  /** Turns a finished provider call into the stage's output (writes the Take, for example). Needed when run can submit. */
+  /**
+   * Turns a settled provider call into the stage's output (writes the Take, for example). It receives the provider's answer,
+   * which is done, failed (a refusal included) or timed out is never passed here: a failed or timed-out call throws in the poller.
+   * A refused answer (content_policy, invalid_input) is passed with state "failed" and becomes the stage's hold.
+   * Needed when run can submit.
+   */
   finish?(ctx: StageContext, polled: ProviderPoll): Promise<StageOutput>;
 };
 
