@@ -7,9 +7,10 @@
 
 import { EngineError, type Decision, type GateId, type GateResult, type ModelClass, type TakeVerdict } from "../contracts/index.ts";
 import { thresholds } from "../config/thresholds.ts";
+import { takeReviewItem } from "../review/inbox.ts";
 import { STAGE_SPECS, engineJobKey, priorityNumber, type EngineStage } from "./registry.ts";
 import { jobSettings, type RequestPriority } from "./settings.ts";
-import type { EngineEvent, EnginePayload, QueuedJob, ShotSourceKind, ShotSummary, StageOutput } from "./types.ts";
+import type { EngineEvent, EnginePayload, ProduceHold, QueuedJob, ShotSourceKind, ShotSummary, StageOutput } from "./types.ts";
 
 export const ORCHESTRATOR_STATE_SCHEMA = "engine.orchestrator_state/v1" as const;
 
@@ -34,9 +35,18 @@ export type ShotState = ShotSummary & {
   hints: string[];
   acceptedTakeId: string | null;
   downgrades: number;
+  /** The plan epoch: 0 for the first plan, one more for every replan. A result of an older epoch is recorded, never counted (5.3). */
+  epoch: number;
+  /** Prompt rewrites this shot has used (Bible 10.4). */
+  rewrites: number;
+  /** What the next plan job asks for: a downgrade (Bible 5.3) or a prompt rewrite (Bible 10.4), with its rule-name hints. */
+  replanDirective: "downgrade" | "rewrite";
+  replanHints: string[];
 };
 
 export type TakeVerdictState = {
+  /** The verdict as check_take returned it. The review item is built from it. */
+  verdict: TakeVerdict;
   pass: boolean;
   confidence: number;
   /** Rule names of the failing checks. Never free text from a model (Bible 1, trust boundaries). */
@@ -49,6 +59,10 @@ export type TakeState = {
   takeId: string;
   shotId: string;
   round: number;
+  /** The plan epoch the take was made in. */
+  epoch: number;
+  /** A take made for a plan that has since been replaced. It is kept on record and never checked or counted. */
+  stale: boolean;
   checkQueued: boolean;
   verdict: TakeVerdictState | null;
 };
@@ -111,6 +125,8 @@ export const orchestratorLimits = {
   analyzeRedos: jobSettings.analyzeRetries,
   /** Edit, compose, render and post-render redos before escalation. Shares the shot redo limit. */
   stageRedos: thresholds.jobs.qualityRedosPerShot,
+  /** Prompt rewrites a refused shot gets before it is downgraded (Bible 10.4). */
+  promptRewrites: jobSettings.promptRewrites,
 } as const;
 
 const GATE_FOR_STAGE: Partial<Record<EngineStage, GateId>> = {
@@ -259,7 +275,7 @@ function applyOutput(state: OrchestratorState, output: StageOutput, effects: Eng
       effects.push({ kind: "gate", gate: output.gate });
       return applyEstimate(state, output);
     case "produce_shot":
-      return applyProduce(state, output);
+      return applyProduce(state, output, effects);
     case "check_take":
       checkGate(output.stage, output.gate);
       effects.push({ kind: "gate", gate: output.gate });
@@ -375,7 +391,8 @@ function failNode(state: OrchestratorState, node: SingleNode, gate: GateResult, 
   );
 }
 
-function shotFromSummary(summary: ShotSummary, downgrades: number): ShotState {
+/** A shot as a plan states it. A replan (previous given) starts a new epoch and keeps the shot's own counts. */
+function shotFromSummary(summary: ShotSummary, previous: ShotState | null): ShotState {
   return {
     ...summary,
     status: needsProduce(summary.sourceKind) ? "pending" : "accepted",
@@ -385,8 +402,19 @@ function shotFromSummary(summary: ShotSummary, downgrades: number): ShotState {
     replanFailed: false,
     hints: [],
     acceptedTakeId: null,
-    downgrades,
+    downgrades: previous?.downgrades ?? 0,
+    epoch: previous === null ? 0 : previous.epoch + 1,
+    rewrites: previous?.rewrites ?? 0,
+    replanDirective: "downgrade",
+    replanHints: [],
   };
+}
+
+function startReplan(shot: ShotState, directive: "downgrade" | "rewrite", hints: string[]): void {
+  shot.status = "replanning";
+  shot.replanQueued = false;
+  shot.replanDirective = directive;
+  shot.replanHints = hints;
 }
 
 function applyPlan(state: OrchestratorState, output: Extract<StageOutput, { stage: "plan" }>, effects: EngineEffect[]): void {
@@ -403,7 +431,7 @@ function applyPlan(state: OrchestratorState, output: Extract<StageOutput, { stag
       if (seen.has(summary.shotId)) invalid(`the plan lists shot ${summary.shotId} twice`, "plan");
       seen.add(summary.shotId);
     }
-    for (const summary of output.shots) state.shots[summary.shotId] = shotFromSummary(summary, 0);
+    for (const summary of output.shots) state.shots[summary.shotId] = shotFromSummary(summary, null);
     state.nodes.plan.status = "passed";
     return;
   }
@@ -420,7 +448,7 @@ function applyPlan(state: OrchestratorState, output: Extract<StageOutput, { stag
   }
   const summary = output.shots.find((candidate) => candidate.shotId === shot.shotId);
   if (!summary) invalid(`the replanned plan has no shot ${shot.shotId}`, "plan");
-  state.shots[shot.shotId] = shotFromSummary(summary, shot.downgrades);
+  state.shots[shot.shotId] = shotFromSummary(summary, shot);
 }
 
 function applyEstimate(state: OrchestratorState, output: Extract<StageOutput, { stage: "estimate_reserve" }>): void {
@@ -436,15 +464,62 @@ function applyEstimate(state: OrchestratorState, output: Extract<StageOutput, { 
   state.nodes.estimate_reserve.status = "passed";
 }
 
-function applyProduce(state: OrchestratorState, output: Extract<StageOutput, { stage: "produce_shot" }>): void {
+function applyProduce(state: OrchestratorState, output: Extract<StageOutput, { stage: "produce_shot" }>, effects: EngineEffect[]): void {
   const shot = state.shots[output.shotId];
-  if (!shot || shot.status !== "pending") conflict(`shot ${output.shotId} is not waiting for a take`, "produce_shot");
+  if (!shot) conflict(`shot ${output.shotId} is not in the plan`, "produce_shot");
   if (output.subjectId !== output.shotId) invalid("produce_shot must report for its own shot", "produce_shot");
+  for (const decision of output.decisions ?? []) effects.push({ kind: "decision", decision });
+  const current = output.epoch === shot.epoch && shot.status === "pending";
+
+  if (output.hold !== undefined) {
+    if (output.takeId !== null) invalid("a produce result cannot hold and make a take at once", "produce_shot");
+    // A hold from an older plan is the replanned shot's past; it changes nothing.
+    if (current) applyHold(state, shot, output.hold, effects);
+    return;
+  }
+  if (output.takeId === null) invalid("a produce result with no take must say why it made none", "produce_shot");
   if (state.takes[output.takeId]) conflict(`take ${output.takeId} was already recorded`, "produce_shot");
-  state.takes[output.takeId] = { takeId: output.takeId, shotId: output.shotId, round: shot.round, checkQueued: false, verdict: null };
   mergeArtifacts(state, output.artifacts);
+  state.takes[output.takeId] = {
+    takeId: output.takeId,
+    shotId: output.shotId,
+    round: shot.round,
+    epoch: output.epoch,
+    stale: !current,
+    checkQueued: false,
+    verdict: null,
+  };
 }
 
+/**
+ * A produce job that made no take. A budget hold pauses the request, and resume queues the job again. A refusal goes back to the
+ * planner once for a prompt rewrite (Bible 10.4), and a shot refused after the rewrite is downgraded or escalated.
+ */
+function applyHold(state: OrchestratorState, shot: ShotState, hold: ProduceHold, effects: EngineEffect[]): void {
+  shot.issued = Math.max(0, shot.issued - 1);
+  if (hold.kind === "budget") {
+    pauseWith(state, { kind: "budget", stage: "produce_shot", subjectId: shot.shotId, reason: hold.reason });
+    return;
+  }
+  if (shot.rewrites < orchestratorLimits.promptRewrites) {
+    shot.rewrites += 1;
+    startReplan(shot, "rewrite", [hold.hint]);
+    effects.push({
+      kind: "decision",
+      decision: {
+        at: `shot:${shot.shotId}`,
+        chose: "prompt_rewrite",
+        alternatives: [],
+        reason: `the provider refused ${shot.shotId} (${hold.errorKind}); the planner rewrites its prompt once (Video Engine Bible 10.4)`,
+        by: "scorer",
+      },
+    });
+    return;
+  }
+  downgradeOrEscalate(state, shot, `the provider refused ${shot.shotId} (${hold.errorKind}) after its prompt rewrite`, effects);
+}
+
+/** Records a verdict. A verdict for a take of a replaced plan is kept on record and not counted (Bible 5.3). */
 function applyCheck(state: OrchestratorState, output: Extract<StageOutput, { stage: "check_take" }>, effects: EngineEffect[]): void {
   const take = state.takes[output.takeId];
   if (!take || take.verdict !== null) conflict(`take ${output.takeId} is not waiting for a verdict`, "check_take");
@@ -452,6 +527,7 @@ function applyCheck(state: OrchestratorState, output: Extract<StageOutput, { sta
   if (output.gate.pass !== output.verdict.pass) invalid("the take gate and the verdict disagree", "check_take");
   mergeArtifacts(state, output.artifacts);
   take.verdict = {
+    verdict: output.verdict,
     pass: output.verdict.pass,
     confidence: output.verdict.confidence,
     failing: verdictRules(output.verdict),
@@ -459,12 +535,18 @@ function applyCheck(state: OrchestratorState, output: Extract<StageOutput, { sta
     verdictArtifactId: output.artifacts[`verdict:${output.takeId}`] ?? null,
   };
   const shot = state.shots[take.shotId];
-  if (shot && shot.status === "pending") resolveRound(state, shot, effects);
+  if (shot && isCurrent(state, take)) resolveRound(state, shot, effects);
+}
+
+/** A take counts for its shot only while it belongs to the shot's current plan and the shot is still producing. */
+function isCurrent(state: OrchestratorState, take: TakeState): boolean {
+  const shot = state.shots[take.shotId];
+  return shot !== undefined && !take.stale && take.epoch === shot.epoch && shot.status === "pending";
 }
 
 /** Once every take of the current round has a verdict, act on the round (Bible 5.3). */
 function resolveRound(state: OrchestratorState, shot: ShotState, effects: EngineEffect[]): void {
-  const round = takesOf(state, shot.shotId, shot.round);
+  const round = takesOf(state, shot.shotId, shot.round, shot.epoch);
   if (shot.issued < shot.takesWanted || round.length < shot.takesWanted) return;
   const verdicts = round.map((take) => take.verdict);
   if (verdicts.some((verdict) => verdict === null)) return;
@@ -498,16 +580,15 @@ function resolveRound(state: OrchestratorState, shot: ShotState, effects: Engine
   downgradeOrEscalate(state, shot, `${orchestratorLimits.shotRedos} redos of ${shot.shotId} failed`, effects);
 }
 
-function takesOf(state: OrchestratorState, shotId: string, round: number): TakeState[] {
+function takesOf(state: OrchestratorState, shotId: string, round: number, epoch: number): TakeState[] {
   return Object.values(state.takes)
-    .filter((take) => take.shotId === shotId && take.round === round)
+    .filter((take) => take.shotId === shotId && take.round === round && take.epoch === epoch && !take.stale)
     .sort((a, b) => a.takeId.localeCompare(b.takeId));
 }
 
 function downgradeOrEscalate(state: OrchestratorState, shot: ShotState, why: string, effects: EngineEffect[]): void {
   if (shot.downgradeTo !== null) {
-    shot.status = "replanning";
-    shot.replanQueued = false;
+    startReplan(shot, "downgrade", []);
     shot.downgrades += 1;
     effects.push({
       kind: "decision",
@@ -531,6 +612,24 @@ function escalateShot(state: OrchestratorState, shot: ShotState, reason: string,
   const takes = Object.values(state.takes)
     .filter((take) => take.shotId === shot.shotId)
     .sort((a, b) => a.takeId.localeCompare(b.takeId));
+  // The review-inbox payload (Bible 12.5), built from the verdicts check_take returned. A shot with no verdict yet has no payload.
+  const judged = takes.flatMap((take) => (take.verdict === null ? [] : [{ take, verdict: take.verdict.verdict }]));
+  const review =
+    judged.length === 0
+      ? null
+      : takeReviewItem({
+          requestId: state.requestId,
+          shotId: shot.shotId,
+          visualType: shot.visualType,
+          reason,
+          planArtifactId: state.artifacts.plan ?? null,
+          takes: judged.map(({ take, verdict }) => ({
+            takeId: take.takeId,
+            takeArtifactId: state.artifacts[`take:${take.takeId}`] ?? null,
+            verdictArtifactId: take.verdict?.verdictArtifactId ?? null,
+            verdict,
+          })),
+        });
   effects.push({
     kind: "review_item",
     reviewKind: "escalation",
@@ -548,6 +647,7 @@ function escalateShot(state: OrchestratorState, shot: ShotState, reason: string,
         failing: take.verdict?.failing ?? [],
         verdictArtifactId: take.verdict?.verdictArtifactId ?? null,
       })),
+      ...(review === null ? {} : { review }),
     },
   });
 }
@@ -745,12 +845,16 @@ function applyDead(state: OrchestratorState, event: Extract<EngineEvent, { type:
     shot.replanQueued = false;
   } else if (stage === "produce_shot") {
     const shot = state.shots[subjectId];
-    if (!shot || shot.status !== "pending" || shot.issued === 0) conflict(`produce for ${subjectId} is not in flight`, stage);
+    if (!shot) conflict(`produce for ${subjectId} is not in flight`, stage);
+    // A job of an older plan, or of a shot that has moved on, is not in flight any more: its death changes nothing.
+    if (shot.status !== "pending" || (event.epoch !== undefined && event.epoch !== shot.epoch)) return;
+    if (shot.issued === 0) conflict(`produce for ${subjectId} is not in flight`, stage);
     shot.issued -= 1;
   } else if (stage === "check_take") {
     const take = state.takes[subjectId];
     if (!take || !take.checkQueued || take.verdict !== null) conflict(`check for ${subjectId} is not in flight`, stage);
     take.checkQueued = false;
+    if (!isCurrent(state, take)) return;
   } else if (stage === "compose" || stage === "pre_render_gate" || stage === "render" || stage === "post_render_review") {
     const branch = state.branches[subjectId];
     if (!branch || !branch.queued) conflict(`${stage} for ${subjectId} is not in flight`, stage);
@@ -946,6 +1050,7 @@ function schedule(state: OrchestratorState): QueuedJob[] {
             providerKey: providerKeyFor(shot.sourceKind, shot.modelClass),
             takesWanted: shot.takesWanted,
             round: shot.round,
+            epoch: shot.epoch,
           },
           ["plan"],
           hints,
@@ -958,15 +1063,22 @@ function schedule(state: OrchestratorState): QueuedJob[] {
   for (const shot of shots) {
     if (shot.status === "replanning" && !shot.replanQueued) {
       shot.replanQueued = true;
-      add("plan", shot.shotId, { directive: "downgrade", shotId: shot.shotId, visualType: shot.visualType, downgradeTo: shot.downgradeTo }, ["validated", "dna", "voice", "plan"], []);
+      add(
+        "plan",
+        shot.shotId,
+        { directive: shot.replanDirective, shotId: shot.shotId, visualType: shot.visualType, downgradeTo: shot.downgradeTo },
+        ["validated", "dna", "voice", "plan"],
+        shot.replanHints,
+      );
     }
   }
 
   for (const take of Object.values(state.takes).sort((a, b) => a.takeId.localeCompare(b.takeId))) {
-    if (take.verdict === null && !take.checkQueued) {
-      take.checkQueued = true;
-      add("check_take", take.takeId, { shotId: take.shotId, takeId: take.takeId }, [`take:${take.takeId}`], []);
-    }
+    if (take.verdict !== null || take.checkQueued || take.stale) continue;
+    const owner = state.shots[take.shotId];
+    if (!owner || owner.epoch !== take.epoch) continue;
+    take.checkQueued = true;
+    add("check_take", take.takeId, { shotId: take.shotId, takeId: take.takeId, epoch: take.epoch }, [`take:${take.takeId}`, "plan"], []);
   }
 
   for (const branch of Object.values(state.branches).sort((a, b) => a.edlId.localeCompare(b.edlId))) {

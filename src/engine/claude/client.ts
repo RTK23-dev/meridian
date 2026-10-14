@@ -93,6 +93,8 @@ type Settled<Answer> =
 type CallContext<Input, Answer> = {
   deps: RoleDeps;
   role: RoleDefinition<Input, Answer>;
+  /** The request the call is for. It is part of the call's idempotency key. */
+  requestId: string;
   workspaceId: string;
   reservationId: string;
   route: ResolvedRoute;
@@ -130,6 +132,8 @@ function parseInput<Input>(schema: ZodType<Input>, role: string, input: unknown,
  */
 function callKey<Input, Answer>(ctx: CallContext<Input, Answer>, retryOf: string | undefined): string {
   return contentHash({
+    // The request is part of the key: the same input in two requests is two calls, each paid and journaled for its own request.
+    requestId: ctx.requestId,
     role: ctx.role.role,
     promptVersion: ctx.promptVersion,
     model: ctx.route.model,
@@ -318,6 +322,7 @@ export async function runRole<Input, Answer>(
 
   const prompt = loadPrompt(role.prompt);
   const ctx: CallContext<Input, Answer> = {
+    requestId,
     deps,
     role,
     workspaceId: request.workspaceId,

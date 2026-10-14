@@ -12,6 +12,7 @@ import {
   json,
   ledgerWith,
   request,
+  REQUEST_ID,
   RESERVATION_ID,
   routesWithAnalysis,
   segmenterInput,
@@ -90,7 +91,8 @@ describe("runRole: the golden answer", () => {
     const { gateway } = gatewayFor([json(200, fixture("openrouter-segmenter-ok"))]);
     const input = segmenterInput();
     const outcome = await runRole(deps(gateway, ledger), segmenter, request(input));
-    const expected = contentHash({ role: "segmenter", promptVersion: "segmenter@1", model: SONNET, input });
+    // The key names the request too, so the same input in two requests is two calls (each paid and journaled).
+    const expected = contentHash({ requestId: REQUEST_ID, role: "segmenter", promptVersion: "segmenter@1", model: SONNET, input });
     assert.equal(outcome.calls[0]?.idempotencyKey, expected);
   });
 

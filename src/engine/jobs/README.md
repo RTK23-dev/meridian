@@ -20,7 +20,9 @@ redo, downgrade and escalate), **5.4** (tables, with `migrations/0077_engine_cor
 | `artifact-store.ts` | `writeArtifact` and `readArtifact` for `ArtifactEnvelope`s. JSON bodies in `engine_artifacts`; media bytes through Meridian's object-store port under the Bible 5.2 key. |
 | `sql-ledger-store.ts` | The budget's `LedgerStore` on `engine_reservations` and `engine_ledger`, with the row locks the budget README asks for. |
 | `role-call-store.ts` | The `RoleCallJournal` of one request on `engine_role_calls` (migration 0078). Lets a resumed Claude call reuse its stored answer or send only its retry. Lists the RoleCall records for the manifest. |
-| `handlers/` | The `intake` and `estimate_reserve` stage handlers (their own STATUS.md). |
+| `handlers/` | The `intake`, `estimate_reserve`, `produce_shot` and `check_take` stage handlers, and `register.ts` (their own STATUS.md). |
+| `asset-stores-sql.ts` | The asset router's Postgres stores (attempts, breaker, buckets, cache), organization-scoped, and the ledger for one reservation whose budget steps are locked. Migration 0080. |
+| `stable-id.ts` | Ids that do not change on a retry (take, spec, seed), from a sha256 of the job's labels. |
 | `test-db.ts` | Test helper only. PGlite (PostgreSQL in process) with every migration applied in order. |
 
 ## How a request moves

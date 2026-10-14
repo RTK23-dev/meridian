@@ -3,8 +3,8 @@
 // answers the job that was asked, for the subject that was asked.
 
 import { z } from "zod";
-import { EngineError, gateResultSchema, idSchema, modelClassSchema, takeVerdictSchema, visualTypeSchema } from "../contracts/index.ts";
-import type { EnginePayload, ShotSummary, StageOutput } from "./types.ts";
+import { EngineError, decisionSchema, gateResultSchema, idSchema, modelClassSchema, takeVerdictSchema, visualTypeSchema } from "../contracts/index.ts";
+import type { EnginePayload, ProduceHold, ShotSummary, StageOutput } from "./types.ts";
 
 export const shotSummarySchema = z.object({
   shotId: idSchema("shot_"),
@@ -16,6 +16,12 @@ export const shotSummarySchema = z.object({
 });
 
 const artifactsSchema = z.record(z.string().min(1), idSchema("art_"));
+
+/** Why a produce job made no take: a budget hold (paused with the reason) or a refusal (the planner's rewrite hint). */
+export const produceHoldSchema: z.ZodType<ProduceHold> = z.union([
+  z.object({ kind: z.literal("budget"), reason: z.string().min(1) }),
+  z.object({ kind: z.literal("refused"), errorKind: z.enum(["content_policy", "invalid_input"]), hint: z.string().regex(/^[a-z0-9_.:-]{1,64}$/) }),
+]);
 
 function refuse(message: string, stage: string): never {
   throw new EngineError("invalid_input", message, { stage });
@@ -46,7 +52,13 @@ export function validateStageOutput(output: StageOutput, payload: EnginePayload)
   }
   if (output.stage === "produce_shot") {
     parseOrRefuse(idSchema("shot_"), output.shotId, "the shot id", stage);
-    parseOrRefuse(idSchema("take_"), output.takeId, "the take id", stage);
+    parseOrRefuse(z.int().nonnegative(), output.epoch, "the plan epoch", stage);
+    if (output.takeId !== null) parseOrRefuse(idSchema("take_"), output.takeId, "the take id", stage);
+    if ((output.takeId === null) !== (output.hold !== undefined)) {
+      refuse("a produce result makes a take or holds, and names exactly one of them", stage);
+    }
+    if (output.hold !== undefined) parseOrRefuse(produceHoldSchema, output.hold, "the produce hold", stage);
+    if (output.decisions !== undefined) parseOrRefuse(z.array(decisionSchema), output.decisions, "the produce decisions", stage);
   }
   if (output.stage === "check_take") {
     parseOrRefuse(idSchema("take_"), output.takeId, "the take id", stage);

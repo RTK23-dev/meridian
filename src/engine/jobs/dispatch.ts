@@ -9,7 +9,7 @@ import { applyEngineEvent } from "./orchestrator-sql.ts";
 import { ENGINE_POLL_JOB_TYPE, STAGE_SPECS, stageFromJobType, type EngineStage } from "./registry.ts";
 import { pollPayloadSchema, runPollJob, scheduleProviderPoll, type PollPayload } from "./poller.ts";
 import { validateStageOutput } from "./validate.ts";
-import { enginePayloadSchema, notImplementedError, withTimeout, type EnginePayload, type EngineRuntime, type StageContext } from "./types.ts";
+import { enginePayloadSchema, epochOf, notImplementedError, withTimeout, type EnginePayload, type EngineRuntime, type StageContext } from "./types.ts";
 
 /** The runtime used by the worker. Handlers are added with registerStageHandler; until then every stage is not_implemented. */
 export const engineRuntime: EngineRuntime = {
@@ -122,11 +122,12 @@ async function run(sql: Sql, job: ExecutableJob, base: EnginePayload, poll: Poll
 }
 
 async function recordDeadLetter(sql: Sql, job: ExecutableJob, base: EnginePayload, cause: unknown): Promise<void> {
+  const epoch = epochOf(base);
   try {
     await applyEngineEvent(sql, {
       organizationId: base.organizationId,
       requestId: base.requestId,
-      event: { type: "dead", stage: base.stage, subjectId: base.subjectId, reason: messageOf(cause) },
+      event: { type: "dead", stage: base.stage, subjectId: base.subjectId, reason: messageOf(cause), ...(epoch === undefined ? {} : { epoch }) },
       dedupeKey: `dead:${job.id}`,
     });
   } catch (recordError) {

@@ -19,6 +19,12 @@ const ENGINE_TABLES = [
   "engine_cache_index",
   "engine_events",
   "engine_role_calls",
+  "engine_provider_attempts",
+  "engine_provider_breakers",
+  "engine_buckets",
+  "engine_bucket_leases",
+  "engine_asset_cache",
+  "engine_asset_cache_hits",
 ] as const;
 
 const MIGRATION = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "migrations", "0077_engine_core.sql");
@@ -39,6 +45,7 @@ test("the engine migrations follow the migrations they build on, and every migra
   assert.ok(index > 0, "0077_engine_core.sql exists");
   assert.equal(files[index - 1], "0076_factory_video_carousel.sql");
   assert.ok(files.indexOf("0078_engine_role_calls.sql") > index, "the role-call table comes after the engine core");
+  assert.ok(files.indexOf("0080_engine_asset_stores.sql") > files.indexOf("0078_engine_role_calls.sql"), "the asset stores come after the role calls");
   // From the engine migrations on (an older duplicate, 0027, predates the engine and is left as it is).
   const numbers = files.map((file) => file.slice(0, 4)).filter((prefix) => /^\d{4}$/.test(prefix) && Number(prefix) >= 77);
   assert.equal(new Set(numbers).size, numbers.length, "no migration number from 0077 on is used twice");

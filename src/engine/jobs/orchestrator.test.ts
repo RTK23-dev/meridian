@@ -286,9 +286,9 @@ test("each shot gets its own produce job; components and assets need none, and t
 test("a shot with two takes queues two produce jobs with distinct attempts, then accepts the best passing one", () => {
   const flow = flowToProduce([shot({ shotId: SHOT_A, takesWanted: 2, downgradeTo: null })]);
   assert.deepEqual(flow.jobsFor("produce_shot").map((job) => job.attempt), ["1", "2"]);
-  flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: { [`take:${TAKE_A1}`]: fixtureId("art_", 81) } });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: { [`take:${TAKE_A1}`]: fixtureId("art_", 81) } });
   assert.deepEqual(flow.jobsFor("check_take").map((job) => job.subjectId), [TAKE_A1]);
-  flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A2, artifacts: { [`take:${TAKE_A2}`]: fixtureId("art_", 82) } });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A2, artifacts: { [`take:${TAKE_A2}`]: fixtureId("art_", 82) } });
   assert.deepEqual(flow.jobsFor("check_take").map((job) => job.subjectId), [TAKE_A2]);
   flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", false), verdict: verdict(TAKE_A1, false), artifacts: {} });
   assert.equal(flow.current.shots[SHOT_A]?.status, "pending", "the round waits for the second take");
@@ -299,7 +299,7 @@ test("a shot with two takes queues two produce jobs with distinct attempts, then
 
 test("a failing take is redone with the failing rule names as hints, and the redo is a new attempt", () => {
   const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null })]);
-  flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: { [`take:${TAKE_A1}`]: fixtureId("art_", 81) } });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: { [`take:${TAKE_A1}`]: fixtureId("art_", 81) } });
   flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", false), verdict: verdict(TAKE_A1, false), artifacts: {} });
   const [redo] = flow.jobsFor("produce_shot");
   assert.equal(redo?.attempt, "2");
@@ -311,7 +311,7 @@ test("after two failed redos a shot downgrades to its downgradeTo type, logs a d
   const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: "product_hero" })]);
   for (let round = 0; round < 3; round += 1) {
     const takeId = [TAKE_A1, TAKE_A2, TAKE_A3][round] ?? TAKE_A1;
-    flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId, artifacts: { [`take:${takeId}`]: fixtureId("art_", 81 + round) } });
+    flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId, artifacts: { [`take:${takeId}`]: fixtureId("art_", 81 + round) } });
     flow.succeed({ stage: "check_take", subjectId: takeId, shotId: SHOT_A, takeId, gate: gate("take", false), verdict: verdict(takeId, false), artifacts: {} });
   }
   assert.equal(flow.current.shots[SHOT_A]?.status, "replanning");
@@ -341,7 +341,7 @@ test("a downgrade replan that fails its gate escalates, and resume runs the repl
   const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: "product_hero" })]);
   for (let round = 0; round < 3; round += 1) {
     const takeId = [TAKE_A1, TAKE_A2, TAKE_A3][round] ?? TAKE_A1;
-    flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId, artifacts: {} });
+    flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId, artifacts: {} });
     flow.succeed({ stage: "check_take", subjectId: takeId, shotId: SHOT_A, takeId, gate: gate("take", false), verdict: verdict(takeId, false), artifacts: {} });
   }
   flow.succeed({ stage: "plan", subjectId: SHOT_A, gate: gate("plan", false), shots: [], artifacts: {} });
@@ -359,7 +359,7 @@ test("a shot with no downgrade escalates after its redos, with every take in the
   const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null })]);
   for (let round = 0; round < 3; round += 1) {
     const takeId = [TAKE_A1, TAKE_A2, TAKE_A3][round] ?? TAKE_A1;
-    flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId, artifacts: { [`take:${takeId}`]: fixtureId("art_", 81 + round) } });
+    flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId, artifacts: { [`take:${takeId}`]: fixtureId("art_", 81 + round) } });
     flow.succeed({ stage: "check_take", subjectId: takeId, shotId: SHOT_A, takeId, gate: gate("take", false), verdict: verdict(takeId, false), artifacts: { [`verdict:${takeId}`]: fixtureId("art_", 101 + round) } });
   }
   assert.equal(flow.current.status, "paused");
@@ -373,7 +373,7 @@ test("a shot with no downgrade escalates after its redos, with every take in the
 
 test("a Critic confidence below 0.6 escalates even when the take passes", () => {
   const flow = flowToProduce([shot({ shotId: SHOT_A })]);
-  flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: {} });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: {} });
   flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", true), verdict: verdict(TAKE_A1, true, 0.55), artifacts: {} });
   assert.equal(flow.current.shots[SHOT_A]?.status, "escalated");
   assert.equal(flow.current.pause?.kind, "escalation");
@@ -381,7 +381,7 @@ test("a Critic confidence below 0.6 escalates even when the take passes", () => 
 
 test("a human choice accepts the picked take, stores a gold label, and resumes the request", () => {
   const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null })]);
-  flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: {} });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: {} });
   flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", true), verdict: verdict(TAKE_A1, true, 0.4), artifacts: {} });
   assert.equal(flow.current.pause?.kind, "escalation");
 
@@ -394,7 +394,7 @@ test("a human choice accepts the picked take, stores a gold label, and resumes t
 
 test("resume is refused while a shot still waits for a human choice", () => {
   const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null })]);
-  flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: {} });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: {} });
   flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", true), verdict: verdict(TAKE_A1, true, 0.4), artifacts: {} });
   assert.throws(() => advance(flow.current, { type: "resume" }), (error: unknown) => error instanceof EngineError && error.kind === "conflict");
 });
@@ -402,7 +402,7 @@ test("resume is refused while a shot still waits for a human choice", () => {
 /** Drives a one-shot request all the way through to delivery, with the given variant count. */
 function flowToDelivery(variantCount: number): Flow {
   const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null, sourceKind: "generate" })], { variantCount });
-  flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: { [`take:${TAKE_A1}`]: fixtureId("art_", 81) } });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: { [`take:${TAKE_A1}`]: fixtureId("art_", 81) } });
   flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", true), verdict: verdict(TAKE_A1, true), artifacts: {} });
   flow.succeed({ stage: "edit", subjectId: REQ, gate: gate("edit", true), edlId: EDL_1, artifacts: { [`edl:${EDL_1}`]: fixtureId("art_", 111) } });
   return flow;
@@ -467,7 +467,7 @@ test("a failing pre-render gate that names a shot sends only that shot back to p
   assert.equal(produce?.attempt, "2");
   assert.deepEqual(produce?.payload.hints, ["pre_render.broken"]);
   assert.equal(flow.current.branches[EDL_1]?.status, "superseded");
-  flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A2, artifacts: {} });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A2, artifacts: {} });
   flow.succeed({ stage: "check_take", subjectId: TAKE_A2, shotId: SHOT_A, takeId: TAKE_A2, gate: gate("take", true), verdict: verdict(TAKE_A2, true), artifacts: {} });
   assert.deepEqual(flow.jobs.map((job) => job.stage), ["edit"], "the EDL is rebuilt with the new take");
 });
@@ -477,7 +477,7 @@ test("a gate that names a component shot does not queue a produce job that could
     shot({ shotId: SHOT_A, downgradeTo: null, sourceKind: "generate" }),
     shot({ shotId: SHOT_B, sourceKind: "component", modelClass: null, visualType: "coded_graphics", downgradeTo: "product_hero" }),
   ]);
-  flow.succeed({ stage: "produce_shot", subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: {} });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: {} });
   flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", true), verdict: verdict(TAKE_A1, true), artifacts: {} });
   flow.succeed({ stage: "edit", subjectId: REQ, gate: gate("edit", true), edlId: EDL_1, artifacts: {} });
   flow.succeed({ stage: "compose", subjectId: EDL_1, edlId: EDL_1, artifacts: {} });
@@ -580,4 +580,126 @@ test("the escalation limits come from configuration", () => {
   assert.equal(orchestratorLimits.criticConfidenceMin, 0.6);
   assert.equal(orchestratorLimits.voiceRedos, 2);
   assert.equal(orchestratorLimits.planRedos, 1);
+});
+
+// --- E3: refusals, budget holds, plan epochs and the review payload (Bible 5.3, 10.4, 14) -------------------------------------
+
+function refusal(epoch: number, takeId: string | null, errorKind: "content_policy" | "invalid_input" = "content_policy"): StageOutput {
+  return {
+    stage: "produce_shot",
+    subjectId: SHOT_A,
+    shotId: SHOT_A,
+    takeId,
+    epoch,
+    hold: { kind: "refused", errorKind, hint: errorKind },
+    artifacts: {},
+  } as StageOutput;
+}
+
+test("a content_policy refusal sends the shot back to the planner once, with the rule name as the hint; a second refusal downgrades", () => {
+  const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: "product_hero" })]);
+  flow.succeed(refusal(0, null));
+  assert.equal(flow.current.shots[SHOT_A]?.status, "replanning");
+  assert.equal(flow.current.shots[SHOT_A]?.rewrites, 1);
+  const [rewrite] = flow.jobsFor("plan");
+  assert.equal(rewrite?.payload.details.directive, "rewrite", "the first refusal asks the planner for a rewrite");
+  assert.deepEqual(rewrite?.payload.hints, ["content_policy"], "the hint is the rule name, never provider text");
+  assert.ok(flow.effects.some((effect) => effect.kind === "decision" && effect.decision.chose === "prompt_rewrite"));
+
+  flow.succeed({
+    stage: "plan",
+    subjectId: SHOT_A,
+    gate: gate("plan", true),
+    shots: [shot({ shotId: SHOT_A, downgradeTo: "product_hero" })],
+    artifacts: { plan: fixtureId("art_", 92) },
+  });
+  assert.equal(flow.current.shots[SHOT_A]?.epoch, 1, "a replan starts a new plan epoch");
+  const [retry] = flow.jobsFor("produce_shot");
+  assert.equal(retry?.payload.details.epoch, 1, "the rewritten shot is produced in the new epoch");
+
+  flow.succeed(refusal(1, null, "invalid_input"));
+  assert.equal(flow.current.shots[SHOT_A]?.status, "replanning", "after the rewrite, a refusal downgrades");
+  const [downgrade] = flow.jobsFor("plan");
+  assert.equal(downgrade?.payload.details.directive, "downgrade");
+  assert.ok(flow.effects.some((effect) => effect.kind === "decision" && effect.decision.chose === "product_hero"));
+});
+
+test("a refusal after the rewrite, for a shot with no downgrade, escalates with the review item", () => {
+  const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null })]);
+  flow.succeed(refusal(0, null));
+  flow.succeed({ stage: "plan", subjectId: SHOT_A, gate: gate("plan", true), shots: [shot({ shotId: SHOT_A, downgradeTo: null })], artifacts: { plan: fixtureId("art_", 93) } });
+  flow.succeed(refusal(1, null, "invalid_input"));
+  assert.equal(flow.current.shots[SHOT_A]?.status, "escalated");
+  assert.equal(flow.current.pause?.kind, "escalation");
+});
+
+test("a budget hold pauses the request with its reason, and resume queues the produce job again", () => {
+  const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null })]);
+  flow.succeed({
+    stage: "produce_shot",
+    subjectId: SHOT_A,
+    shotId: SHOT_A,
+    takeId: null,
+    epoch: 0,
+    hold: { kind: "budget", reason: "produce_shot would take reservation res to 0.7 USD, above its 0.6 USD" },
+    artifacts: {},
+  } as StageOutput);
+  assert.equal(flow.current.status, "paused");
+  assert.equal(flow.current.pause?.kind, "budget");
+  assert.equal(flow.current.pause?.stage, "produce_shot");
+  assert.match(flow.current.pause?.reason ?? "", /above its 0.6 USD/);
+  assert.equal(flow.jobs.length, 0, "a paused request queues nothing");
+
+  flow.apply({ type: "resume" });
+  const [again] = flow.jobsFor("produce_shot");
+  assert.equal(again?.attempt, "2", "the held job is queued again as a new attempt");
+  assert.equal(flow.current.shots[SHOT_A]?.status, "pending");
+});
+
+test("a result of a replaced plan is recorded but never checked or counted, and its dead job does not pause the request", () => {
+  const flow = flowToProduce([shot({ shotId: SHOT_A, takesWanted: 2, downgradeTo: null })]);
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: { [`take:${TAKE_A1}`]: fixtureId("art_", 81) } });
+  flow.succeed(refusal(0, null));
+  assert.equal(flow.current.shots[SHOT_A]?.status, "replanning");
+  flow.succeed({
+    stage: "plan",
+    subjectId: SHOT_A,
+    gate: gate("plan", true),
+    shots: [shot({ shotId: SHOT_A, takesWanted: 2, downgradeTo: null })],
+    artifacts: { plan: fixtureId("art_", 94) },
+  });
+  assert.equal(flow.jobsFor("produce_shot").length, 2, "the new plan asks for both takes again");
+
+  // The second take of the old plan arrives now. It is kept on record, and nothing is checked for it.
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A2, artifacts: { [`take:${TAKE_A2}`]: fixtureId("art_", 82) } });
+  assert.equal(flow.current.takes[TAKE_A2]?.stale, true);
+  assert.equal(flow.jobsFor("check_take").length, 0, "a take of a replaced plan is not checked");
+
+  // Its check, queued before the replan, lands after it: the verdict is stored and the shot does not move.
+  flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", true), verdict: verdict(TAKE_A1, true, 0.9), artifacts: {} });
+  assert.equal(flow.current.shots[SHOT_A]?.status, "pending");
+  assert.equal(flow.current.shots[SHOT_A]?.acceptedTakeId, null);
+
+  // A dead job of the old plan changes nothing and pauses nothing.
+  flow.apply({ type: "dead", stage: "produce_shot", subjectId: SHOT_A, reason: "provider timed out", epoch: 0 });
+  assert.equal(flow.current.status, "running");
+  assert.equal(flow.current.pause, null);
+});
+
+test("the review item of an escalated shot carries the review-inbox payload, built from the verdicts", () => {
+  const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null })]);
+  for (let round = 0; round < 3; round += 1) {
+    const takeId = [TAKE_A1, TAKE_A2, TAKE_A3][round] ?? TAKE_A1;
+    flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId, artifacts: { [`take:${takeId}`]: fixtureId("art_", 81 + round) } });
+    flow.succeed({ stage: "check_take", subjectId: takeId, shotId: SHOT_A, takeId, gate: gate("take", false), verdict: verdict(takeId, false), artifacts: { [`verdict:${takeId}`]: fixtureId("art_", 101 + round) } });
+  }
+  const review = flow.effects.find((effect) => effect.kind === "review_item");
+  assert.ok(review && review.kind === "review_item");
+  const payload = review.detail.review as { schema: string; kind: string; actions: string[]; takes: Array<{ takeId: string; failing: string[]; checks: unknown[] }> };
+  assert.equal(payload.schema, "meridian.take_review/v1");
+  assert.equal(payload.kind, "escalation");
+  assert.equal(payload.takes.length, 3);
+  assert.deepEqual(payload.takes[0]?.failing, ["slop.hands"]);
+  assert.ok(payload.takes.every((take) => take.checks.length > 0));
+  assert.ok(payload.actions.includes("choose_take"));
 });

@@ -241,7 +241,13 @@ export async function recordDeadEngineJobs(sql: Sql, limit = 50): Promise<DeadJo
       const applied = await applyEngineEvent(sql, {
         organizationId: row.organization_id,
         requestId: payload.requestId,
-        event: { type: "dead", stage: payload.stage, subjectId: payload.subjectId, reason: row.last_error || "the job is dead" },
+        event: {
+        type: "dead",
+        stage: payload.stage,
+        subjectId: payload.subjectId,
+        reason: row.last_error || "the job is dead",
+        ...(payload.epoch === undefined ? {} : { epoch: payload.epoch }),
+      },
         dedupeKey: `dead:${row.id}`,
       });
       outcomes.push({ jobId: row.id, outcome: applied.applied ? "applied" : "duplicate", message: applied.status });
@@ -252,11 +258,18 @@ export async function recordDeadEngineJobs(sql: Sql, limit = 50): Promise<DeadJo
   return outcomes;
 }
 
-function parseDeadPayload(text: string): { requestId: string; stage: EngineStage; subjectId: string } | null {
+function parseDeadPayload(text: string): { requestId: string; stage: EngineStage; subjectId: string; epoch?: number } | null {
   try {
-    const parsed = JSON.parse(text || "{}") as { requestId?: unknown; stage?: unknown; subjectId?: unknown };
+    const parsed = JSON.parse(text || "{}") as { requestId?: unknown; stage?: unknown; subjectId?: unknown; details?: { epoch?: unknown } };
     if (typeof parsed.requestId !== "string" || typeof parsed.subjectId !== "string" || typeof parsed.stage !== "string") return null;
-    return isEngineStage(parsed.stage) ? { requestId: parsed.requestId, stage: parsed.stage, subjectId: parsed.subjectId } : null;
+    if (!isEngineStage(parsed.stage)) return null;
+    const epoch = parsed.details?.epoch;
+    return {
+      requestId: parsed.requestId,
+      stage: parsed.stage,
+      subjectId: parsed.subjectId,
+      ...(typeof epoch === "number" && Number.isInteger(epoch) && epoch >= 0 ? { epoch } : {}),
+    };
   } catch {
     return null;
   }

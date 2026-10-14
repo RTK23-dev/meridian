@@ -1,5 +1,125 @@
 # STATUS: engine jobs and orchestration (W2)
 
+Branch `eng-e3-pipeline`, from `origin/code/beautiful-cori-1zfk11` at aa3bcf8. Covers `src/engine/jobs/` (handlers, stores, poller,
+orchestrator), `migrations/0080_engine_asset_stores.sql`, one new function in `src/engine/gateway/download.ts`, the claude key
+change in `src/engine/claude/client.ts`. Nothing is pushed. The lead merges.
+
+## What is built
+
+- **`handlers/produce-shot.ts`** (Bible 6.6, 10.4, 15.2). `createProduceShotHandler({ generator, stock, downloader, media, objects })`.
+  - Generate shots go to a `ShotGenerator`. `routerGenerator(routerFor)` runs the asset router on the request's reservation
+    (`scopedLedgerStore`, so each budget step is locked per reservation). The router's report maps to a `ShotProduction` by
+    `productionFromReport`; every fact is kept, nothing is inferred.
+  - Stock shots: `stock(...)` (the W5 `searchStock` through the gateway). The clip is the first of the search's clips whose length is
+    within `thresholds.take.durationTolerance` of the shot. If none fits, the hold is `stock_duration`. The clip is free (list price 0).
+  - Every take: the file is downloaded through the gateway (`gateway/download.ts`, https only, size-limited), checked to be an mp4,
+    probed through the media functions, and kept only when it is H.264, 1080 x 1920, with a known duration. Normalisation needs a
+    media function that is not built, so any other shape is an `invalid_output` hold, not a take.
+  - The Take is written as an artifact with its media under the Bible 5.2 key (`mediaKey`). The take's `uri` is that key, and the
+    artifact row's `storage_key` is the same key. Take ids and spec ids are stable (sha256 of request, shot and attempt), so a
+    retried job names the same take. The seed depends on the attempt, so a redo never hits the first take's cache entry.
+  - Holds, not failures. A budget refusal returns a `budget` hold with the paid reason. A `content_policy` or `invalid_input` refusal
+    returns a `refused` hold whose hint is the rule-style name (`content_policy`, `invalid_input`, `invalid_output`, `stock_no_match`,
+    `stock_duration`). Other router outcomes (every candidate failed, bucket full, not connected, duplicate) are thrown, so the job
+    retries and, when dead, pauses the request.
+  - Asynchronous generators (Bible 15.2): `run` returns `submitted` when the generator submits; `finish` settles the call through
+    `generator.settle`. The router in this repository is synchronous (see blockers).
+- **`handlers/check-take.ts`** (Bible 6.7, 12.2). `createCheckTakeHandler({ gateway, media, objects, scorer?, measure?, paletteHex?,
+  metrics? })`. It reads the take and the scene plan, takes six evenly spaced frames (PNG data URLs) from the stored file, calls
+  `runTakeCheck` (code checks, similarity, the Critic through `runRole` on the request's reservation, with the request's role-call
+  journal), and writes the verdict as a `take_verdict` artifact. Defaults fail closed: the scorer is not connected, the palette,
+  product and persona lists are empty (not evaluated), the measurements beyond the probed duration are null (missing), and no gold
+  metrics are loaded (nothing can block on a learned threshold). A take whose media is missing from storage throws `not_found`.
+- **`handlers/register.ts`**: `registerEngineHandlers(runtime, { estimate_reserve, produce_shot, check_take })`. A stage not
+  registered stays `not_implemented`.
+- **`asset-stores-sql.ts`** (Postgres stores for the router, organization-scoped): `sqlProviderStats`, `sqlBreakerStore`,
+  `sqlBucketStore` (a lease row per slot, the bucket row locked, expired leases ignored), `sqlAssetCache` (first write wins, hits
+  recorded against the request), and `scopedLedgerStore(sql, org, reservationId)`.
+- **`migrations/0080_engine_asset_stores.sql`**: `engine_provider_attempts`, `engine_provider_breakers`, `engine_buckets`,
+  `engine_bucket_leases`, `engine_asset_cache`, `engine_asset_cache_hits`. Every table has `organization_id` not null and a foreign
+  key to `organizations`. The hits table also has a composite foreign key to `engine_requests`. Migration 0079 is the monthly budget
+  on the main branch, so this file is 0080 as the lead asked.
+- **Orchestrator** (`orchestrator.ts`, pure). Shots carry a plan `epoch` (0 at the first plan, +1 per replan). A produce output
+  carries its epoch; a result from an older epoch is recorded (`stale`), never checked and never counted. A refusal sends the shot
+  back to the planner once (`prompt_rewrite`, plan job with directive `rewrite` and the hint); a second refusal downgrades or
+  escalates. A budget hold pauses the request (`kind: budget`, with the reason) and resume queues the job again. A dead produce or
+  check job of an older epoch changes nothing. Produce outputs can carry the router's decisions, which become `engine_decisions`.
+  The escalation review item adds `detail.review`, the `takeReviewItem` payload (`meridian.take_review/v1`) built from the verdicts
+  check_take returned. The review payload is built where the escalation is decided, so there is one copy of it.
+- **Poller**: a refused provider answer (content_policy, invalid_input) goes to the stage's `finish` as a `failed` poll state, and
+  becomes the hold. Any other failure still throws and retries. `StageContext.poll` carries the provider reference to `finish`.
+- **Registry**: `check_take` reads `take` and `scene_plan`. The orchestrator passes the plan slot to the check job.
+- **Validation** (`validate.ts`): a produce output names exactly one of a take and a hold; a hold must match `produceHoldSchema`
+  (a budget reason, or a refusal with a rule-style hint); the epoch is a whole number from zero.
+- **Settings**: `jobSettings.promptRewrites = 1` (Bible 10.4).
+
+## Claude key change (`src/engine/claude/client.ts`)
+
+The idempotency key of a role call now includes the request id (`callKey`, `CallContext.requestId`). Before, the key was the hash of
+role, prompt version, model and input, so identical input in two requests was one ledger call. The second request then got
+`duplicate` and no answer, and every take that was a cache hit (same frames) escalated. The key still repeats for a retry within a
+request. `client.test.ts` now expects the request in the key. Lead: this changes the key of every role call; there is no live data yet.
+
+## Tests (PGlite, this worktree)
+
+- `NODE_ENV=development node --experimental-strip-types --test 'src/engine/jobs/**/*.test.ts' 'src/engine/jobs/handlers/*.test.ts' 'src/engine/gateway/**/*.test.ts' 'src/engine/claude/**/*.test.ts' 'src/engine/review/**/*.test.ts'`: **456 pass, 0 fail, 0 skipped.**
+- New files: `e3-pipeline.test.ts` (one request from plan through estimate, produce and check, a stock shot and a generated shot, both
+  accepted; the ledger, role calls, attempts, cache, decisions and downloads are all checked), `asset-stores-sql.test.ts` (tenancy,
+  breaker, buckets with leases, the cache's first write, the locked ledger), `handlers/produce-shot.test.ts` (20),
+  `handlers/check-take.test.ts`, `produce-output.test.ts`, `gateway/download.test.ts`. Extended: `orchestrator.test.ts` (five E3 tests),
+  `migration.test.ts` (0080 and the new tables; no fixed last file), `poller.test.ts`.
+- `npm run typecheck`: exit 0. `npm run lint`: 0 errors, 4 warnings, the same four in `src/components/` as the baseline.
+- Recorded responses: `jobs/test/fixtures/` holds copies of the asset and review recorded responses (OpenRouter video submit, poll and
+  policy failure, the Pexels search, the Critic's answer). The media bytes, the probe results and the frames are stand-ins with the
+  recorded shapes, labelled as such in `test/harness.ts`. No test calls a live API.
+
+## Owner must run live
+
+1. Apply `migrations/0080_engine_asset_stores.sql` on a real PostgreSQL server after 0078 and the main branch's 0079. Expected: it
+   applies cleanly and the six new `engine_*` tables exist with `organization_id` not null.
+2. Run the same suite against that server: `MERIDIAN_PG_TEST_URL=postgres://<user>@<host>:5432/postgres NODE_ENV=development node --experimental-strip-types --test 'src/engine/jobs/**/*.test.ts' 'src/engine/jobs/handlers/*.test.ts'`.
+3. Live produce and check, one stock shot and one generated shot, with a credential for OpenRouter and Pexels through the resolver and
+   a reservation of at most $1. Record: the take ids and their `uri` keys, the Take `durationMs` from the probe, the ledger actual for
+   the generated call against the activity page, the Critic's ledger rows and role-call rows, and the verdicts. Expected and honest
+   result: the take gate escalates the similarity checks (no scorer vendor, Bible 20.2) and the flicker, black-frame and motion checks
+   (no media functions yet). Record that as the result. Do not record it as a pass.
+4. `video.cinematic` (Kling) is `verified: false` in `config/routes.ts`. Run `verifyRoutes` and set it (lead, after the W5 live run).
+
+## Blockers and decisions for the lead
+
+- **The router is synchronous.** `AssetRouter.produce` submits and polls inside one paid call, so a generated take never returns
+  `submitted`. The handler's submit-and-settle path is built and tested with a fake generator. The live path needs a W5 change: a
+  submit-only result carrying the job reference, the ledger authorized at submit and reconciled at settle (`reconcileCall` is
+  exported), and `generator.settle` wired to it. Until then no worker blocks for minutes, but every generated call blocks inside
+  its job (bounded by the generation lease).
+- **The intake pre-flight hold** is yours. The e2e test gives intake a real reservation as a placeholder so voice and plan can be queued,
+  and estimate_reserve makes the plan's reservation. No intake code changed.
+- **Normalisation.** No media function normalises to 1080 x 1920 at 30 fps. A take of another shape is refused for the planner. The
+  fps is not checked. Bible 6.6 step 4 is only partly met.
+- **Similarity and measurements.** The scorer vendor (Bible 20.2) and the flicker, black-frame and optical-flow measurements are not
+  built, so the take gate escalates. Kits (style palette, product hero, persona portraits) are not loaded, so those checks are not
+  evaluated and escalate. The kit store is E3 work.
+- **Composition root.** `registerEngineHandlers` is ready, but no worker composes the ports yet: the gateway, the router factory with
+  its image and speech media store, the stock search, the downloader, the object store and the media functions. The runtime still
+  refuses every stage not registered.
+- **Asset stores are per organization** (as asked). That means provider health and the breaker are per workspace, not global as
+  Bible 10.4 describes. Lead decision.
+- **Bucket full** throws a retryable provider error, so the job retries, and when dead the request pauses. A delayed re-queue would be
+  better. Follow-up.
+- **Budget alerts** from the router are not persisted by the handler. They belong to the budget module.
+- **Rules I chose** (lead to confirm): `motionRequired` is true for generated and stock shots, since the plan has no motion flag. A
+  stock clip is taken only if its search length is within the take tolerance of the shot, because takes are not trimmed. A stock
+  licence stays `unverified` in the decision text (E2.6). A take with no connected evidence escalates.
+- **Ledger role columns.** `engine_ledger` has no `role` and `prompt_version` columns, so a Claude call's role is not stored on the
+  ledger row (the PHASE_LOG follow-up). The role call journal does keep them. Migration needed; not in this change.
+
+## Not built in this wave
+
+- The intake pre-flight hold, the planner (rewrite and downgrade plans), the edit, compose, render and post-render stages, the
+  similarity scorer, the flicker and motion measurements, and the kit store.
+
+---
+
 ## E2 pipeline fixes (branch `eng-e2-pipeline`, from `origin/code/beautiful-cori-1zfk11` at a4b04c7)
 
 Covers `src/engine/jobs/`, `migrations/0078_engine_role_calls.sql`, and the claude client's resume path in
