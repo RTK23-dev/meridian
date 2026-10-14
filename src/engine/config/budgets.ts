@@ -29,8 +29,8 @@ export const budgets = {
     media: "media",
   },
 
-  // 14.4: default request budget by format class.
-  requestDefaultUsd: { presenter: 4, cinematic: 6, coded: 2 },
+  // 14.4: there is no default request budget. The user sets the budget of every master in the request
+  // (ProductionRequest.constraints.budgetUsd); intake refuses one below the format minimum. Owner decision, 2026-10-14.
 
   // 14.4: alert when a format's average real cost exceeds its estimate by this share for a day.
   overrunAlertShare: 0.2,

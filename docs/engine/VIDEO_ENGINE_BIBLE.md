@@ -377,7 +377,7 @@ Each stage below lists what it does, step by step, how it fails, and the tests t
 - **Does:** chooses a visual type, duration, layer and source for every shot.
 - **Steps:** (1) Align our beats to the reference segments by role and relative position. (2) Split long beats into shots so shot lengths follow the grammar's curve. (3) Run the five-step visual decision engine (section 7). (4) For each shot, build its `source`: prompt for generation (Claude Opus writes prompts using the style kit and character sheets), component + props, stock query, or existing asset. (5) Set `downgradeTo` for every generated shot. (6) Opus director check of the whole plan; swaps are logged as Decisions. (7) Validate: every `must` satisfied; total estimate within budget; no product beat without real imagery; no text in generation prompts.
 - **Fails:** over budget re-runs step 3 with the remaining budget; a plan failing validation twice escalates.
-- **Tests:** a fixture request produces a plan whose shots tile the voice duration exactly; a `must` request is always honoured; a budget of $0.50 yields an all-code plan.
+- **Tests:** a fixture request produces a plan whose shots tile the voice duration exactly; a `must` request is always honoured; a budget that covers only the fixed per-master cost (section 14.2) plus nothing for generation yields an all-code plan.
 
 ### 6.5 `estimate_reserve`
 
@@ -872,7 +872,7 @@ The fixed part of every master is about $0.52: Claude roles about $0.40, Critic 
 
 ### 14.4 Budgets and alerts
 
-- Default request budget by format (initial: $4 for presenter formats, $6 for cinematic formats, $2 for coded formats).
+- **The user sets the budget of every master** (owner decision, 2026-10-14). `ProductionRequest.constraints.budgetUsd` is required and has no default by format. Intake refuses a budget below the format minimum (the fixed per-master cost plus the cheapest plan for the request's beats) and tells the user the minimum; it never raises the budget on its own.
 - Alert when a format's average real cost exceeds its estimate by over 20% for a day.
 - The ledger feeds the usage screen: cost per master, per variant, per published video and per visual type.
 
@@ -1080,7 +1080,7 @@ Six phases. A phase is complete only when every acceptance test passes in a **re
 - [ ] W8: deterministic editor with all rules in 8.3.
 - [ ] W3: `segmenter`, `genome`, `planner`, `director_check` roles with golden tests.
 
-**Acceptance:** one reference reel + one script + one page's kits become a delivered master with no human step; the edit grammar of the output is within 15% of the reference's on shot length and caption size; a $0.50 budget yields an all-code plan that still delivers.
+**Acceptance:** one reference reel + one script + one page's kits become a delivered master with no human step; the edit grammar of the output is within 15% of the reference's on shot length and caption size; a budget that covers only the fixed per-master cost yields an all-code plan that still delivers.
 
 ### E4 Gates (wave 2 integration)
 
@@ -1129,7 +1129,7 @@ Six phases. A phase is complete only when every acceptance test passes in a **re
 - [ ] Background removal, upscaling and lip-sync vendors.
 - [ ] Whether to keep Shotstack as a third renderer or drop it after E5.
 - [ ] Music source: licensed library vendor and its terms for social use.
-- [ ] Default request budgets per format after E3 measurements.
+- [x] Default request budgets per format: none. The user sets the budget of every master (decided 2026-10-14; see section 14.4).
 - [ ] Disclosure wording and placement standard for AI presenters.
 
 ### 20.3 Verify in the first two weeks

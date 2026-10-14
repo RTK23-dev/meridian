@@ -105,3 +105,10 @@ Acceptance (not met; needs the owner's keys and a recorded live run): a hand-wri
 Before that run can happen, these pieces still need wiring: a HeyGen credential category in the resolver; storage wiring for the render adapter; a deployed or local ffmpeg function endpoint for the integrity probe; the migration applied to real PostgreSQL; and a small acceptance script that builds the hand-written EDL, reserves budget, renders, probes and reconciles. That script is the first task once the owner confirms.
 
 Extra work done in E1 beyond the checklist: W7 visual decision steps 1 to 4 and W11 request, plan and budget gates with the gold-set rule (fixture-only).
+
+## 2026-10-14 Owner decision: the user sets the cost of every master
+
+- The budget of every master is set by the user in the content factory, per request (`ProductionRequest.constraints.budgetUsd`, already required by the contract). There are no default budgets by format.
+- Intake refuses a budget below the format minimum (the fixed per-master cost plus the cheapest plan for the request's beats) and tells the user the minimum. The engine never raises a budget by itself; the budget engine's cap mode keeps spend inside it.
+- Applied: Bible sections 6.4, 14.4, 19 (E3 acceptance) and 20.2 updated; `requestDefaultUsd` removed from `src/engine/config/budgets.ts`; the planner test renamed. This also settles the earlier $0.50 clash between sections 6.4 and 14.2.
+- Still to build: the "cost per master" input in the factory run screen that fills `budgetUsd` (with the minimum shown beside it) when the factory is wired to the engine.

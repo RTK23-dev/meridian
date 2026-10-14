@@ -59,7 +59,7 @@ test("the fixture request at $4 reproduces the fixture plan's shot types and bud
   assert.deepEqual(result.unsatisfiedMust, []);
 });
 
-test("section 6.4: a $0.50 budget yields a plan with no generated shot", () => {
+test("section 6.4: a budget with nothing left for generation yields a plan with no generated shot", () => {
   const result = decideVisuals(fixtureDecisionInput(0.5));
   assert.equal(result.shots.length, 5);
   for (const shot of result.shots) {
@@ -69,7 +69,8 @@ test("section 6.4: a $0.50 budget yields a plan with no generated shot", () => {
   }
   assert.equal(result.totals.generatedUsd, 0);
   assert.equal(result.totals.shotsUsd, 0);
-  // The fixed per-master lines (14.2, $0.52) already exceed $0.50, so the plan itself does not fit. See plan/STATUS.md.
+  // The user sets the budget (14.4). $0.50 is below the fixed per-master lines (14.2, $0.52), so the plan does not fit and
+  // intake refuses the request with the minimum; the planner still never reaches for a generated shot.
   assert.equal(result.totals.fixedUsd, 0.52);
   assert.equal(result.totals.fitsBudget, false);
 });
