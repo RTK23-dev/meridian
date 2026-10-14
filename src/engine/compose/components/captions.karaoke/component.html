@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"band","type":"enum","label":"Band","default":"lower","options":[{"value":"upper","label":"Upper"},{"value":"middle","label":"Middle"},{"value":"lower","label":"Lower"}]},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="captions.karaoke" data-width="1080" data-height="1920">
+  <div class="kc-band"></div>
+  <style>
+    .kc-band { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+    .kc-caption {
+      position: absolute;
+      left: 6%;
+      width: 82%;
+      text-align: center;
+      opacity: 0;
+      font-family: var(--kit-font-captions), sans-serif;
+      font-weight: var(--kit-caption-weight);
+      font-size: 104px;
+      line-height: 1.12;
+      text-transform: var(--kit-caption-case);
+      color: var(--kit-text);
+      text-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    }
+    .kc-band-upper .kc-caption { top: 16%; }
+    .kc-band-middle .kc-caption { top: 47%; }
+    .kc-band-lower .kc-caption { top: 60%; }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var highlight = kit.getPropertyValue("--kit-caption-highlight").trim();
+      var textColour = kit.getPropertyValue("--kit-text").trim();
+      var band = vars.band === "upper" || vars.band === "middle" ? vars.band : "lower";
+      var layer = document.querySelector(".kc-band");
+      layer.className = "kc-band kc-band-" + band;
+      var captions = Array.isArray(vars.captions) ? vars.captions : [];
+      var tl = gsap.timeline({ paused: true });
+      captions.forEach(function (caption) {
+        var box = document.createElement("div");
+        box.className = "kc-caption";
+        caption.words.forEach(function (word, index) {
+          var span = document.createElement("span");
+          span.textContent = word.text;
+          box.appendChild(span);
+          if (index < caption.words.length - 1) {
+            box.appendChild(document.createTextNode(" "));
+          }
+          tl.set(span, { color: highlight }, word.startMs / 1000);
+          tl.set(span, { color: textColour }, word.endMs / 1000);
+        });
+        layer.appendChild(box);
+        tl.set(box, { opacity: 1 }, caption.startMs / 1000);
+        tl.set(box, { opacity: 0 }, caption.endMs / 1000);
+      });
+      tl.set({}, {}, vars.durationMs / 1000);
+      window.__timelines["captions.karaoke"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

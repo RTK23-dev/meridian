@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"name","type":"string","label":"Product name","default":"Product"},{"id":"price","type":"string","label":"Price (drawn as text)","default":""},{"id":"heroUri","type":"string","label":"Hero image (local asset path)","default":""},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="product.card" data-width="1080" data-height="1920">
+  <div class="pc-card">
+    <div class="pc-hero"></div>
+    <div class="pc-price"></div>
+    <div class="pc-body">
+      <div class="pc-name"></div>
+      <ul class="pc-bullets"></ul>
+    </div>
+  </div>
+  <style>
+    .pc-card {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 40px;
+      background: var(--kit-secondary);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+      opacity: 0;
+    }
+    .pc-hero { position: absolute; left: 0; top: 0; width: 100%; height: 50%; display: none; }
+    .pc-hero-on { display: block; }
+    .pc-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .pc-price {
+      position: absolute;
+      right: 5%;
+      top: 5%;
+      display: none;
+      padding: 14px 32px;
+      border-radius: 999px;
+      background: var(--kit-accent);
+      color: var(--kit-background);
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 72px;
+      line-height: 1.1;
+    }
+    .pc-price-on { display: block; }
+    .pc-body { position: absolute; left: 6%; width: 88%; top: 8%; }
+    .pc-body-with-hero { top: 56%; }
+    .pc-name {
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 84px;
+      line-height: 1.05;
+      color: var(--kit-primary);
+    }
+    .pc-bullets { list-style: none; margin: 4% 0 0 0; padding: 0; }
+    .pc-bullet {
+      position: relative;
+      padding-left: 1.2em;
+      margin: 0 0 0.35em 0;
+      font-family: var(--kit-font-body), sans-serif;
+      font-size: 48px;
+      line-height: 1.3;
+      color: var(--kit-text);
+      opacity: 0;
+    }
+    .pc-bullet::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.52em;
+      width: 0.42em;
+      height: 0.42em;
+      border-radius: 50%;
+      background: var(--kit-accent);
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var card = document.querySelector(".pc-card");
+      var hero = document.querySelector(".pc-hero");
+      var body = document.querySelector(".pc-body");
+      var price = document.querySelector(".pc-price");
+      var nameEl = document.querySelector(".pc-name");
+      var list = document.querySelector(".pc-bullets");
+      var tl = gsap.timeline({ paused: true });
+
+      if (typeof vars.heroUri === "string" && vars.heroUri.length > 0) {
+        var img = document.createElement("img");
+        img.setAttribute("src", vars.heroUri);
+        img.setAttribute("alt", "");
+        hero.appendChild(img);
+        hero.className = "pc-hero pc-hero-on";
+        body.className = "pc-body pc-body-with-hero";
+      }
+      nameEl.textContent = String(vars.name || "");
+      if (typeof vars.price === "string" && vars.price.length > 0) {
+        price.textContent = vars.price;
+        price.className = "pc-price pc-price-on";
+      }
+      var bullets = Array.isArray(vars.bullets) ? vars.bullets : [];
+      bullets.forEach(function (text) {
+        var li = document.createElement("li");
+        li.className = "pc-bullet";
+        li.textContent = String(text);
+        list.appendChild(li);
+      });
+
+      tl.fromTo(card, { y: 80 * motion, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0);
+      tl.fromTo(price, { scale: 1 - 0.3 * motion }, { scale: 1, duration: 0.3, ease: "back.out(1.7)" }, 0.2);
+      var items = list.querySelectorAll(".pc-bullet");
+      for (var i = 0; i < items.length; i++) {
+        tl.fromTo(items[i], { x: 24 * motion, opacity: 0 }, { x: 0, opacity: 1, duration: 0.25, ease: "power2.out" }, 0.35 + i * 0.18);
+      }
+      tl.set({}, {}, vars.durationMs / 1000);
+      window.__timelines["product.card"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

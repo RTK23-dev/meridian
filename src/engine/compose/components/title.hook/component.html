@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"text","type":"string","label":"Hook line","default":"Stop scrolling"},{"id":"entrance","type":"enum","label":"Entrance","default":"pop","options":[{"value":"pop","label":"Pop"},{"value":"slide","label":"Slide"},{"value":"fade","label":"Fade"}]},{"id":"entranceMs","type":"number","label":"Entrance (ms)","default":250,"min":100,"max":500,"step":1,"unit":"ms"},{"id":"band","type":"enum","label":"Band","default":"middle","options":[{"value":"upper","label":"Upper"},{"value":"middle","label":"Middle"},{"value":"lower","label":"Lower"}]},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="title.hook" data-width="1080" data-height="1920">
+  <div class="th-layer">
+    <div class="th-title"></div>
+  </div>
+  <style>
+    .th-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+    .th-title {
+      position: absolute;
+      left: 6%;
+      width: 82%;
+      text-align: center;
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 150px;
+      line-height: 1.02;
+      color: var(--kit-text);
+      text-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+      transform-origin: 50% 50%;
+    }
+    .th-em { color: var(--kit-accent); }
+    .th-band-upper .th-title { top: 14%; }
+    .th-band-middle .th-title { top: 38%; }
+    .th-band-lower .th-title { top: 52%; }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var accent = kit.getPropertyValue("--kit-accent").trim();
+      var band = vars.band === "upper" || vars.band === "lower" ? vars.band : "middle";
+      var layer = document.querySelector(".th-layer");
+      layer.className = "th-layer th-band-" + band;
+      var box = document.querySelector(".th-title");
+      var words = String(vars.text || "").split(/\s+/).filter(Boolean);
+      var emphasis = Array.isArray(vars.emphasis) ? vars.emphasis.map(function (w) {
+        return String(w).toLowerCase().replace(/[^a-z0-9]/g, "");
+      }) : [];
+      words.forEach(function (word, index) {
+        var span = document.createElement("span");
+        span.textContent = word;
+        var key = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (key && emphasis.indexOf(key) !== -1) {
+          span.className = "th-em";
+          span.style.color = accent;
+        }
+        box.appendChild(span);
+        if (index < words.length - 1) {
+          box.appendChild(document.createTextNode(" "));
+        }
+      });
+      var seconds = vars.entranceMs / 1000;
+      var tl = gsap.timeline({ paused: true });
+      if (vars.entrance === "slide") {
+        tl.fromTo(box, { y: 90 * motion, opacity: 0 }, { y: 0, opacity: 1, duration: seconds, ease: "power3.out" }, 0);
+      } else if (vars.entrance === "fade") {
+        tl.fromTo(box, { opacity: 0 }, { opacity: 1, duration: seconds, ease: "power1.out" }, 0);
+      } else {
+        tl.fromTo(box, { scale: 1 - 0.4 * motion, opacity: 0 }, { scale: 1, opacity: 1, duration: seconds, ease: "back.out(1.7)" }, 0);
+      }
+      tl.set({}, {}, vars.durationMs / 1000);
+      window.__timelines["title.hook"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>
