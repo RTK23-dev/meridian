@@ -18,6 +18,7 @@ export const CAPABILITIES = [
   "stt",
   "stock",
   "render.cloud",
+  "render.fallback",
   "media.functions",
 ] as const;
 
@@ -94,6 +95,9 @@ export const routes = {
     },
     "render.cloud": {
       targets: [{ provider: "heygen", model: "hyperframes", priceKey: "render_hyperframes_cloud", verified: false }],
+    },
+    "render.fallback": {
+      targets: [{ provider: "shotstack", model: "edit-v1", priceKey: "render_shotstack", verified: false }],
     },
     "media.functions": { targets: [{ provider: "media_functions", model: "ffmpeg", priceKey: null, verified: false }] },
   } satisfies Record<Capability, Route>,
