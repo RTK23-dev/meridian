@@ -84,3 +84,24 @@ Interim handling of open conflicts (owner may overrule):
   - The render adapter needs a HeyGen credential category in `src/lib/meridian/credentials/contract.ts`, and storage wiring for `resolveAsset` and `storeVideo`.
   - Meridian's `VideoEngine` interface is shaped around Hypit, so the adapter does not implement it yet.
   - Remotion Lambda and Shotstack fallbacks are E5 work.
+
+## 2026-10-14 E1 gate: code complete on fixtures, live acceptance pending (STOP)
+
+Evidence on head 06b3288:
+- `npm test` with `MERIDIAN_REQUIRE_FFMPEG=1`: 2,943 src tests and 146 script tests pass, 0 fail, 41 skipped (PostgreSQL-gated and credential-gated tests outside the engine).
+- `npm run engine:golden`: 15 of 15 golden frames match. `npm run typecheck`: pass. `npm run lint`: 0 errors, 4 warnings in existing UI code.
+- CI green on 06b3288: six test shards with ffmpeg installed, and typecheck, lint and build.
+
+E1 checklist (Bible section 19):
+- [x] W1 every contract in section 4 as zod with fixtures; config with initial values.
+- [x] W2 engine job types, artifact table, orchestrator advancing on gate pass, poller.
+- [x] W12 estimate, reserve, reconcile, cap mode.
+- [x] W9 compiler and the five components with golden frames.
+- [x] W10 HyperFrames cloud render adapter with idempotency and integrity check (endpoints from the CLI source, not live-verified).
+- [ ] W4 speech-to-text vendor chosen and wrapped: interface and recorded adapter only; the vendor is the owner's decision. Probe, frames and loudness functions done.
+
+Acceptance (not met; needs the owner's keys and a recorded live run): a hand-written EDL with a stock clip, a TTS voice and three components rendered through HeyGen's cloud API to a valid 1080 × 1920 MP4, its ledger showing estimated and actual cost, and the real bill for ten test renders.
+
+Before that run can happen, these pieces still need wiring: a HeyGen credential category in the resolver; storage wiring for the render adapter; a deployed or local ffmpeg function endpoint for the integrity probe; the migration applied to real PostgreSQL; and a small acceptance script that builds the hand-written EDL, reserves budget, renders, probes and reconciles. That script is the first task once the owner confirms.
+
+Extra work done in E1 beyond the checklist: W7 visual decision steps 1 to 4 and W11 request, plan and budget gates with the gold-set rule (fixture-only).
