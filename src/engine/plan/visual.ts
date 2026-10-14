@@ -1,5 +1,6 @@
 // The visual decision engine (Bible section 7): steps 1 to 4 as one pure function. Step 5, the Opus director check, is a
-// Claude call and is not here (E3). Every choice returns a Decision with its alternatives, scores and reason (by: scorer).
+// Claude call and lives in director.ts (E3), which applies its answer to the choices this file returns. Every choice returns
+// a Decision with its alternatives, scores and reason (by: scorer).
 //
 //   1. filter     the six hard rules (7.2), with the `must` mapping (7.3) applied as rule 1
 //   2. propose    the candidate pool from the example's shot type, the `may` and `must` types, and downgrade chains (7.4)
@@ -29,6 +30,18 @@ export type VisualDecisionInput = {
   requestBudgetUsd: number;
 };
 
+/** A candidate that survived the filter for one shot, with what choosing it would cost and score (step 3 in the context of the choice). */
+export type ShotCandidate = {
+  visualType: VisualType;
+  generated: boolean;
+  /** The shot cost before the redo allowance (cost.ts). */
+  baseUsd: number;
+  /** baseUsd plus the redo allowance: what the candidate costs against the budget (7.2 rule 5). */
+  totalUsd: number;
+  /** U(s, t) with the choices of the other shots as the fit left them. */
+  score: number;
+};
+
 export type ShotChoice = {
   shotId: string;
   /** The chosen type, or null when no candidate survives (an unfilled shot; the plan gate refuses it). */
@@ -42,6 +55,8 @@ export type ShotChoice = {
   /** The `must` requests this shot satisfies, joined with "; ", or null when it has none. */
   mustSatisfy: string | null;
   rejected: Rejection[];
+  /** Every candidate that survived the filter, in pool order. The director's swaps must stay inside this list (7.7). */
+  candidates: ShotCandidate[];
 };
 
 export type VisualDecisionResult = {
@@ -129,6 +144,7 @@ export function decideVisuals(input: VisualDecisionInput): VisualDecisionResult 
       showsProduct: item.showsProduct,
       textInPixels: item.shot.flags.textInPixels,
       handsOnProduct: item.shot.flags.handsOnProduct,
+      refusals: item.shot.refusals,
     });
   });
 
@@ -205,6 +221,7 @@ export function decideVisuals(input: VisualDecisionInput): VisualDecisionResult 
         score: null,
         mustSatisfy: null,
         rejected,
+        candidates: [],
       });
       decisions.push({
         at: shot.shotId,
@@ -228,6 +245,13 @@ export function decideVisuals(input: VisualDecisionInput): VisualDecisionResult 
     const downgradeTo = generated ? (DOWNGRADE_TO[chosen.visualType][0] ?? null) : null;
     const mustSatisfy = item.mustWants.length > 0 ? item.mustWants.join("; ") : null;
 
+    const candidates: ShotCandidate[] = kept.map((candidate, candidateIndex) => ({
+      visualType: candidate.visualType,
+      generated: candidate.cost.generated,
+      baseUsd: candidate.cost.baseUsd,
+      totalUsd: candidate.cost.totalUsd,
+      score: round4(scoreDetail(shotIndex, candidateIndex, fit.choice).score),
+    }));
     shots.push({
       shotId: shot.shotId,
       visualType: chosen.visualType,
@@ -237,6 +261,7 @@ export function decideVisuals(input: VisualDecisionInput): VisualDecisionResult 
       score: round4(chosen.score),
       mustSatisfy,
       rejected,
+      candidates,
     });
     decisions.push({
       at: shot.shotId,

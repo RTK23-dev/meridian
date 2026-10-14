@@ -6,7 +6,7 @@
 // into src/engine/config/ (see plan/STATUS.md).
 
 import { z } from "zod";
-import type { BeatRole, ModelClass, ReferenceShotType, VisualType } from "../contracts/index.ts";
+import { VISUAL_TYPES, type BeatRole, type ModelClass, type ReferenceShotType, type VisualType } from "../contracts/index.ts";
 
 export const PLAN_TABLES_VERSION = "planTables@1";
 
@@ -191,3 +191,20 @@ export const PRODUCT_PIXEL_RISK: Partial<Record<VisualType, "always" | "unless_p
   cartoon_generated: "always",
   cinematic: "unless_pinned",
 };
+
+// --- E3 build gaps (7.1, 7.2 rule 6): types whose source cannot be built yet. A gap is a missing source, not a missing kit.
+// Rule 6 (kitRejection) removes the type from every shot and from the minimum, with the reason written into the rejection.
+// The list shrinks as E5 lands; a type is added only with a note in plan/STATUS.md.
+
+export const BUILD_GAPS: Partial<Record<VisualType, string>> = {
+  cartoon_rigged: "the rig component is not in the E3 component library (E5)",
+  react_clip: "it needs an owned or licensed clip, and no clip source exists yet",
+  screen_mock: "the chat component is not in the E3 component library (E2 and E5)",
+  cartoon_generated: "its style keyframe is a second paid call that one shot source cannot carry (plan/STATUS.md)",
+};
+
+/** The visual types the E3 planner can build a source for: every type that has no build gap. */
+export const BUILDABLE_TYPES: readonly VisualType[] = VISUAL_TYPES.filter((visualType) => BUILD_GAPS[visualType] === undefined);
+
+/** Words per line of a kinetic.punchline shot: the shot's words are grouped in order (7.1 kinetic_type). Structural. */
+export const KINETIC_WORDS_PER_LINE = 4;

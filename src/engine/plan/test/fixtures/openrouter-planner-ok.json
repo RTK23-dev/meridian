@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440210-planner0001",
+  "model": "anthropic/claude-opus-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"shots\":[{\"shotId\":\"shot_7WNRE941244J54X29NQ1PTHHW0\",\"prompt\":\"Home cook in a bright kitchen, facing the camera at mid distance, relaxed and direct, soft morning light, a slow push-in, no text in frame.\"},{\"shotId\":\"shot_4RH3FQVKBRZFMS5P5ZYN5CMADS\",\"prompt\":\"Slow pan across a tidy kitchen counter in morning light, hands out of frame, shallow depth of field, no text in frame.\",\"query\":\"morning kitchen counter cleaning\"},{\"shotId\":\"shot_5D8AEW19BNYY5H87RP6DEDM1JR\",\"prompt\":\"Wipe of a damp cloth across a clean wooden counter, soft window light, gentle handheld motion, no text in frame.\",\"query\":\"wiping kitchen counter\"},{\"shotId\":\"shot_03DRSE70TD6PZBGSFME14F8KW1\",\"prompt\":\"Overhead view of a clean kitchen counter with a few everyday objects, slow tilt, warm light, no text in frame.\",\"query\":\"clean kitchen counter overhead\"},{\"shotId\":\"shot_2PS5J74HZEQ3ZRM229HZ5CNPYK\",\"prompt\":\"Slow push-in on a clean kitchen counter, the product in the centre of the frame, soft window light, no text in frame.\"},{\"shotId\":\"shot_3EEMDWK7AQ6YWTYWG0GTWD0419\",\"prompt\":\"Gentle side pan along a clean kitchen counter, the product resting on it, shallow depth of field, no text in frame.\"},{\"shotId\":\"shot_1M6KQJPZHFKEAJE3AJCJANPYQ1\",\"prompt\":\"Static close view of a clean kitchen counter with soft reflections, the product in frame, a gentle camera drift, no text in frame.\"},{\"shotId\":\"shot_1D6HBKFDJ85842QKRYZFAAYHDA\",\"prompt\":\"Slow pull-back from a clean kitchen counter to a wider room, the product in the foreground, warm window light, no text in frame.\"}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 19412,
+    "completion_tokens": 1103,
+    "total_tokens": 20515,
+    "cost": 0.1413
+  }
+}

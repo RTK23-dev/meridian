@@ -29,6 +29,11 @@ export type ShotInput = {
   };
   /** The visual requests of this shot's beat. */
   requests: readonly ClassifiedRequest[];
+  /**
+   * Types this shot cannot be built as, with the reason (for example a component whose text limit this shot's words exceed).
+   * Rule 6 removes them (filter.ts). Set by align.ts from the shot's own words; absent means no refusal.
+   */
+  refusals?: Partial<Record<VisualType, string>>;
 };
 
 /** Which kits the request resolved (13). Missing kits make the types that need them unavailable (7.2 rule 6). */
