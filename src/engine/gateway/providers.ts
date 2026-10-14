@@ -3,7 +3,7 @@
 
 import type { ProviderSpec } from "./types.ts";
 
-export const PROVIDER_IDS = ["openrouter", "anthropic", "heygen", "media_functions"] as const;
+export const PROVIDER_IDS = ["openrouter", "anthropic", "heygen", "media_functions", "pexels", "pixabay"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export type ProviderRegistry = Record<ProviderId, ProviderSpec>;
@@ -32,6 +32,22 @@ export const DEFAULT_PROVIDERS: ProviderRegistry = {
     baseUrl: "https://api.heygen.com",
     auth: { kind: "api_key", header: "x-api-key", scheme: null },
     credentialId: "heygen",
+    defaultHeaders: {},
+  },
+  // Stock video (Bible 10.3). Free with a key; the licence check for commercial social use is an E2 owner task.
+  pexels: {
+    id: "pexels",
+    baseUrl: "https://api.pexels.com",
+    auth: { kind: "api_key", header: "Authorization", scheme: null },
+    credentialId: "pexels",
+    defaultHeaders: {},
+  },
+  // Pixabay takes its key as the `key` query parameter. The gateway adds it only to Pixabay's own URLs.
+  pixabay: {
+    id: "pixabay",
+    baseUrl: "https://pixabay.com/api",
+    auth: { kind: "api_key_query", param: "key" },
+    credentialId: "pixabay",
     defaultHeaders: {},
   },
   // The serverless ffmpeg functions. The deployment sets the base URL; until then they are not connected.

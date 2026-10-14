@@ -48,12 +48,19 @@ function withoutHeader(headers: Record<string, string>, name: string): Record<st
 }
 
 function authHeaders(spec: ProviderSpec, credential: Credential): Record<string, string> {
-  if (spec.auth.kind === "none") return {};
+  if (spec.auth.kind === "none" || spec.auth.kind === "api_key_query") return {};
   const token = credential.kind === "api_key" ? credential.secret : credential.accessToken;
   if (spec.auth.kind === "api_key") {
     return { [spec.auth.header]: spec.auth.scheme === null ? token : `${spec.auth.scheme} ${token}` };
   }
   return { [spec.auth.header]: `Bearer ${token}` };
+}
+
+/** The URL with the key as a query parameter, replacing any value the caller put there. */
+function withQueryKey(url: string, param: string, token: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set(param, token);
+  return parsed.toString();
 }
 
 function onHost(baseUrl: string, url: string): boolean {
@@ -130,16 +137,21 @@ export class Gateway {
     const authenticated = onHost(spec.baseUrl, request.url);
     const attempt = async (refresh: boolean): Promise<GatewayResult> => {
       let headers = authenticated ? { ...spec.defaultHeaders, ...request.headers } : { ...request.headers };
+      let url = request.url;
       if (authenticated) {
         const found = await this.lookup(spec, organizationId, refresh);
         if (found?.status === "not_connected") return { status: "not_connected", reason: found.reason };
         if (found?.status === "ready") {
+          if (spec.auth.kind === "api_key_query") {
+            const token = found.credential.kind === "api_key" ? found.credential.secret : found.credential.accessToken;
+            url = withQueryKey(url, spec.auth.param, token);
+          }
           for (const [name, value] of Object.entries(authHeaders(spec, found.credential))) {
             headers = { ...withoutHeader(headers, name), [name]: value };
           }
         }
       }
-      return { status: "ok", response: await this.transport({ ...request, headers }) };
+      return { status: "ok", response: await this.transport({ ...request, url, headers }) };
     };
     const first = await attempt(false);
     // An OAuth access token can expire between the lookup and the call. Refresh once, then report what the provider said.

@@ -123,8 +123,8 @@ describe("runRole: one retry on a StructuredOutputError", () => {
     assert.equal(failed.verdict, "invalid_answer");
     assert.ok(failed.issues.includes("segments.0.wordIds.1: custom"));
     assert.ok(failed.issues.includes("segments.1.startMs: custom"));
-    assert.equal(failed.costUsd, null, "the failed answer's usage is not in the error, so its cost is unknown");
-    assert.equal(failed.actualIsEstimate, true);
+    assert.equal(failed.costUsd, 0.05775, "a failed answer was still billed, and OpenRouter reported its cost");
+    assert.equal(failed.actualIsEstimate, false);
     assert.equal(answered.verdict, "answered");
     assert.notEqual(failed.idempotencyKey, answered.idempotencyKey);
 
@@ -136,8 +136,8 @@ describe("runRole: one retry on a StructuredOutputError", () => {
     assert.doesNotMatch(JSON.stringify(requests[1]?.body), /w99/, "the discarded answer's own text is not sent back");
 
     const failedEntry = await ledger.getEntryByKey(failed.idempotencyKey);
-    assert.equal(failedEntry?.actualUsd, 0.082, "the failed call is held at its estimate");
-    assert.equal(failedEntry?.actualIsEstimate, true);
+    assert.equal(failedEntry?.actualUsd, 0.0578, "the failed call is recorded at OpenRouter's reported cost");
+    assert.equal(failedEntry?.actualIsEstimate, false);
     const answeredEntry = await ledger.getEntryByKey(answered.idempotencyKey);
     assert.equal(answeredEntry?.actualUsd, 0.0579);
   });
@@ -167,7 +167,7 @@ describe("runRole: one retry on a StructuredOutputError", () => {
     assert.equal(requests.length, 2);
     const entries = await ledger.listEntries(RESERVATION_ID);
     assert.equal(entries.length, 2, "both calls are on the ledger");
-    assert.ok(entries.every((entry) => entry.actualIsEstimate === true));
+    assert.ok(entries.every((entry) => entry.actualIsEstimate === false), "both failed answers were billed at their reported cost");
   });
 });
 

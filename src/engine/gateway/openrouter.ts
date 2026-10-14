@@ -68,9 +68,12 @@ function cost(value: number | undefined): number | null {
 /** Thrown when the model's answer does not match the schema. The issues name paths only, never the model's text. */
 export class StructuredOutputError extends EngineError {
   issues: string[];
-  constructor(schemaName: string, issues: string[], stage?: string) {
+  /** What the call used and cost, when OpenRouter reported it. The call was billed even though the answer failed. */
+  usage: ChatUsage | null;
+  constructor(schemaName: string, issues: string[], stage?: string, usage: ChatUsage | null = null) {
     super("provider", `the answer did not match ${schemaName}: ${issues.join("; ")}`, { stage });
     this.issues = issues;
+    this.usage = usage;
   }
 }
 
@@ -115,18 +118,18 @@ export async function structuredChat<T>(gateway: Gateway, input: StructuredChatI
 
   const content = body.choices[0]?.message.content ?? null;
   if (content === null || content.trim() === "") {
-    throw new StructuredOutputError(input.schemaName, ["the answer was empty"], input.stage);
+    throw new StructuredOutputError(input.schemaName, ["the answer was empty"], input.stage, usage);
   }
   let json: unknown;
   try {
     json = JSON.parse(content);
   } catch {
-    throw new StructuredOutputError(input.schemaName, ["the answer was not JSON"], input.stage);
+    throw new StructuredOutputError(input.schemaName, ["the answer was not JSON"], input.stage, usage);
   }
   const answer = input.schema.safeParse(json);
   if (!answer.success) {
     const issues = answer.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.code}`);
-    throw new StructuredOutputError(input.schemaName, issues, input.stage);
+    throw new StructuredOutputError(input.schemaName, issues, input.stage, usage);
   }
   return { value: answer.data, model: body.model ?? null, generationId: body.id ?? null, usage };
 }

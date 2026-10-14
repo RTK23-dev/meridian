@@ -65,9 +65,8 @@ Built 2026-10-14 by eng-pipeline on branch `eng-a5-claude-client`, cut from `cod
   the replay decision.
 - **Concurrency.** `authorizeCall` is atomic on the key only if the Postgres store has a unique index on the key, with a
   row lock on the reservation (`budget/README.md`). Two jobs must not run the same call at once.
-- **Usage on invalid answers.** `StructuredOutputError` carries no usage, so an invalid answer's bill is unknown and held
-  at the estimate. The gateway should attach `usage` to that error. This is a gateway change (not made here: the task
-  limits this branch to `claude/` and `prompts/`).
+- **Usage on invalid answers.** Done by the lead (2026-10-14): `StructuredOutputError` now carries OpenRouter's usage, so a
+  billed answer that fails its contract is recorded at its reported cost; with no reported cost the hold stands, flagged.
 - **Prompt files load from disk** (`prompts/<role>@<n>.md`, read relative to the module). A bundled deploy must ship the
   `.md` files beside the code.
 - **Strict JSON schema.** The answer schema has optional fields and length and range keywords. OpenRouter's strict

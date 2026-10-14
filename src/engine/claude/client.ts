@@ -16,7 +16,7 @@ import { contentHash } from "../contracts/hash.ts";
 import { idSchema } from "../contracts/ids.ts";
 import type { Gateway, ResolvedRoute } from "../gateway/gateway.ts";
 import { paidCall } from "../gateway/paid.ts";
-import { StructuredOutputError, structuredChat, type ChatMessage, type StructuredChatResult } from "../gateway/openrouter.ts";
+import { StructuredOutputError, structuredChat, type ChatMessage, type ChatUsage, type StructuredChatResult } from "../gateway/openrouter.ts";
 import { loadPrompt } from "../prompts/load.ts";
 import { RoleAnswerError } from "./errors.ts";
 import { estimateClaudeUsd } from "./rates.ts";
@@ -90,7 +90,9 @@ export type RoleOutcome<Answer> = OutcomeBase &
     | { status: "duplicate"; entry: LedgerRow; samePayload: boolean }
   );
 
-type Verdict<Answer> = { verdict: "answered"; answer: StructuredChatResult<Answer> } | { verdict: "invalid"; issues: string[] };
+type Verdict<Answer> =
+  | { verdict: "answered"; answer: StructuredChatResult<Answer> }
+  | { verdict: "invalid"; issues: string[]; usage: ChatUsage | null };
 
 type Settled<Answer> =
   | { status: "settled"; verdict: Verdict<Answer>; call: RoleCall; alerts: BudgetAlert[] }
@@ -182,8 +184,9 @@ async function settle<Input, Answer>(
         return { value: { verdict: "answered", answer }, actualUsd: answer.usage.costUsd };
       } catch (error) {
         if (error instanceof StructuredOutputError) {
-          // The gateway does not attach usage to this error, so the bill is unknown and the hold stands, flagged as an estimate.
-          return { value: { verdict: "invalid", issues: [...error.issues] }, actualUsd: null };
+          // The call was billed even though the answer failed its contract. Use OpenRouter's cost when it reported one; otherwise the
+          // hold stands, flagged as an estimate.
+          return { value: { verdict: "invalid", issues: [...error.issues], usage: error.usage }, actualUsd: error.usage?.costUsd ?? null };
         }
         throw error;
       }
@@ -195,6 +198,7 @@ async function settle<Input, Answer>(
 
   const { value, entry } = outcome;
   const answered = value.verdict === "answered" ? value.answer : null;
+  const usage = value.verdict === "answered" ? value.answer.usage : value.usage;
   const call: RoleCall = {
     idempotencyKey,
     ledgerEntryId: entry.entryId,
@@ -202,9 +206,9 @@ async function settle<Input, Answer>(
     model: ctx.route.model,
     answeredBy: answered?.model ?? null,
     generationId: answered?.generationId ?? null,
-    promptTokens: answered?.usage.promptTokens ?? null,
-    completionTokens: answered?.usage.completionTokens ?? null,
-    costUsd: answered?.usage.costUsd ?? null,
+    promptTokens: usage?.promptTokens ?? null,
+    completionTokens: usage?.completionTokens ?? null,
+    costUsd: usage?.costUsd ?? null,
     actualIsEstimate: entry.actualIsEstimate === true,
     verdict: value.verdict === "answered" ? "answered" : "invalid_answer",
     issues: value.verdict === "invalid" ? [...value.issues] : [],

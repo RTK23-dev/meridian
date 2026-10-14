@@ -16,6 +16,7 @@ export const CAPABILITIES = [
   "llm.check",
   ...MODEL_CLASSES,
   "stt",
+  "stock",
   "render.cloud",
   "media.functions",
 ] as const;
@@ -70,8 +71,8 @@ export const routes = {
     },
     avatar: { targets: [openrouter(null, "heygen_avatar_iv")], note: "HeyGen Avatar IV via OpenRouter: to verify, Bible 20.3 item 3." },
     "image.keyframe": {
-      targets: [openrouter(null, "seedream_5_flash"), openrouter(null, "seedream_4_5")],
-      note: "The OpenRouter image model ids are set in E2.",
+      targets: [openrouter(null, "seedream_5_flash"), openrouter("bytedance-seed/seedream-4.5", "seedream_4_5")],
+      note: "The OpenRouter id of Seedream 5.0 Flash is not checked yet; Seedream 4.5's id is from OpenRouter's image docs.",
     },
     "image.edit": {
       targets: [openrouter(null, "nano_banana_2"), openrouter(null, "gpt_image_2")],
@@ -84,6 +85,13 @@ export const routes = {
     lipsync: { targets: [], note: "The lip-sync vendor is chosen in E2." },
 
     stt: { targets: [], note: "The speech-to-text vendor is an open owner decision (Bible 20.2)." },
+    // Stock video (Bible 10.3), in priority order. "videos" names the endpoint family, not a model.
+    stock: {
+      targets: [
+        { provider: "pexels", model: "videos", priceKey: "pexels", verified: false },
+        { provider: "pixabay", model: "videos", priceKey: "pixabay", verified: false },
+      ],
+    },
     "render.cloud": {
       targets: [{ provider: "heygen", model: "hyperframes", priceKey: "render_hyperframes_cloud", verified: false }],
     },

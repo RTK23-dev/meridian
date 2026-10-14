@@ -124,6 +124,26 @@ describe("gateway authentication", () => {
     assert.equal(await gateway.secretFor("anthropic", "org_1")(), null);
   });
 
+  it("adds a query-parameter key (Pixabay) only to the provider's own host", async () => {
+    const { transport, requests } = recorded([json(200, {}), json(200, {})]);
+    const gateway = createGateway({ transport, credentials: staticKeys({ pixabay: "px-key" }) });
+    await gateway.call({ provider: "pixabay", organizationId: "org_1", method: "GET", path: "/videos/?q=soap&key=forged" });
+    const sent = new URL(requests[0]?.url ?? "");
+    assert.equal(sent.origin + sent.pathname, "https://pixabay.com/api/videos/");
+    assert.deepEqual(sent.searchParams.getAll("key"), ["px-key"], "the caller's key value is replaced, never added beside");
+    assert.equal(sent.searchParams.get("q"), "soap");
+    await gateway.transportFor("pixabay", "org_1")({ method: "GET", url: "https://cdn.pixabay.com/video/1.mp4", headers: {} });
+    assert.equal(new URL(requests[1]?.url ?? "").searchParams.get("key"), null, "no key on the CDN");
+  });
+
+  it("sends no stock request when the stock key is not connected", async () => {
+    const { transport, requests } = recorded([]);
+    const gateway = createGateway({ transport, credentials: staticKeys({}) });
+    const result = await gateway.call({ provider: "pexels", organizationId: "org_1", method: "GET", path: "/videos/search?query=soap" });
+    assert.equal(result.status, "not_connected");
+    assert.equal(requests.length, 0);
+  });
+
   it("refuses an unknown provider", () => {
     const gateway = createGateway({ transport: recorded([]).transport, credentials: staticKeys({}) });
     assert.throws(() => gateway.provider("nope"), /unknown provider/);
