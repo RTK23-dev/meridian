@@ -69,6 +69,21 @@ budget source and request input, and the intake comment. The format minimum is i
 - When the validated request cannot be built, the gate returns its "not evaluated" checks for the rest. The handler's
   checks name the cause (a kit that did not load, or no words per minute).
 
+## E3: the edit stage (`edit.ts`, `edit.test.ts`)
+
+Branch `eng-e3-editor`. `createEditHandler({ loadStyleKit, loadMusic? })` runs the editor in `src/engine/edit/` (see its STATUS.md).
+It reads the scene plan, the video DNA, the voice track, the validated request and the accepted takes, and writes the `edl` artifact
+on a pass (parents: every input, slot `edl:<edlId>`). A fail writes nothing and returns the `edit` gate with its checks and failing
+shots. Missing or foreign inputs are `invalid_input`. A style kit that does not load, or is not the version the request names, is a
+gate fail (`style_kit_loaded`), so nothing runs on a guessed look.
+
+- `edit.test.ts`: 8 pass on PGlite. The handler builds the EDL and writes it with the inputs as parents; the same inputs give the
+  same EDL id and content hash across runs; a missing validated request and a foreign plan are refused; a missing kit and a kit of
+  another version fail the gate and store nothing; a generated shot with no take fails and names the shot; a music port places
+  the music under the speech.
+- Needs from W2 (not made here): `registry.ts` must give `edit` the read `validated_request`, and `orchestrator.ts` `nodeSlots.edit`
+  must pass it. Until then a live edit is refused with `invalid_input`. The worker must also supply `loadStyleKit`.
+
 ## Owner live run
 
 None. No provider is called, and the database is PGlite only.
