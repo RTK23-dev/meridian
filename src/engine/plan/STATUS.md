@@ -51,6 +51,37 @@ Nothing here calls a provider, so no live run is needed for steps 1 to 4. The ow
 - **Flags** (7.2 rules 2 to 4): `textInPixels`, `handsOnProduct` and `showsProduct` are inputs. Only the director or the
   classifier can set them.
 
+## A4: the format minimum (`minimum.ts`)
+
+Bible 6.1 step 6, 14.2 and 14.4. Pure code, fixture-tested (`minimum.test.ts`, 13 tests; `filter.test.ts` unchanged and passing).
+
+- **Signature for the run screen (A6):** `minimumMasterBudgetUsd(input: MinimumInput): MasterMinimum`, with
+  `MinimumInput = { beats: {beatId, text}[]; wordsPerMinute: number; visualRequests; classifications: {beatId, want,
+  properties}[]; kits: PlanKits }` and `MasterMinimum = { minimumUsd: number; lines: {label, usd, beatId?, visualType?}[] }`.
+  The lines sum to `minimumUsd` (checked in code). `planKitsOf(kits)` builds the kits from the kit bodies, and
+  `spokenBeatMs(beats, wordsPerMinute)` gives the spoken length of each beat (words divided by words per minute).
+- **What it computes:** the four fixed per-master lines from `budgets.fixedPerMasterUsd` (0.52), plus for each beat the
+  cheapest option that the planner's rules allow, plus the redo allowance on generated shots. The planner's own cost model
+  (`cost.ts`) prices every option, so the minimum and a plan with the same durations agree to the 4th decimal.
+- **Cheapest option:** known prices compare first. Ties go to code, then stock, then generation, then the type with the
+  fewest kit needs, then `VISUAL_TYPES` order. So a generic beat is labelled `coded_graphics`, not `cartoon_rigged`.
+- **Refusals (EngineError):** an unknown price is `unknown_price`, and so is an option with an unknown price that could be
+  cheaper than the cheapest known one. Never 0. A must without a classification, a must no type can deliver, a beat no type
+  can cover, a speaking rate that is not positive, a beat with no words, and a must naming a beat that is not in the script
+  are `invalid_input`. A caller that gets a throw must not treat the minimum as known.
+- **Shared rules:** rules 2 and 6 of 7.2 moved from `filterCandidates` into the exported `productPixelRejection` and
+  `kitRejection`, with the same messages. The planner and the minimum apply one copy.
+- **What the minimum does not know:** the reference shot type of each beat (intake runs before analysis, so every visual type
+  is an option for a beat with no `must`) and the flags of rules 3 and 4 (text in pixels, hands on the product). Those only
+  remove generated options, so the minimum is never higher than the planner's cheapest plan for the same durations. The beat
+  durations are estimates, so the voice's real timings can move a generated shot's cost. The plan gate then decides.
+- **Proved in tests:** the fixture request's minimum is 0.52 and its breakdown is all code; a budget at exactly 0.52 gives an
+  all-code plan that fits; a `motion_spectacle` must adds `product_hero` at 0.688 (0.1344 plus the 0.0336 allowance), the
+  planner honours it at 0.688 and cannot at 0.6879; `stop_motion_style` is refused as an unknown price; the minimum never
+  exceeds the planner's cheapest plan.
+- **Live run: none.** No provider is called. The owner's check is the speaking rate: `wordsPerMinute` is the persona's, and
+  the estimate should be compared with real voice timings once the voice track exists (6.3).
+
 ## Open points for the lead
 
 1. **Placement of the plan tables.** The brief says every number comes from `src/engine/config/`, but `config/` belongs

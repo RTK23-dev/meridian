@@ -58,6 +58,30 @@ function missingKits(needs: readonly KitNeed[], kits: PlanKits): KitNeed[] {
 }
 
 /**
+ * Rule 2 (7.2): a shot that shows the product must not generate it without a pinned hero image. Returns the reason the
+ * type is removed, or null when it stays. Shared with the minimum (minimum.ts), so the two cannot drift.
+ */
+export function productPixelRejection(visualType: VisualType, showsProduct: boolean, productKitPinned: boolean): string | null {
+  const productRisk = PRODUCT_PIXEL_RISK[visualType];
+  if (showsProduct && productRisk === "always") {
+    return "would generate the product without the hero image";
+  }
+  if (showsProduct && productRisk === "unless_pinned" && !productKitPinned) {
+    return "would generate the product without a pinned hero image";
+  }
+  return null;
+}
+
+/**
+ * Rule 6 (7.2): the persona, character or product kit the type needs must exist. Returns the reason the type is removed,
+ * or null when it stays. Shared with the minimum (minimum.ts).
+ */
+export function kitRejection(visualType: VisualType, kits: PlanKits): string | null {
+  const missing = missingKits(KIT_REQUIREMENTS[visualType], kits);
+  return missing.length > 0 ? `the kit it needs is missing: ${missing.join(", ")}` : null;
+}
+
+/**
  * Apply the six rules (7.2) to each candidate, in rule order. The first rule that removes a candidate is recorded.
  * Kept candidates keep their pool order. A candidate with an unknown price is removed by rule 5, never priced at 0.
  */
@@ -78,14 +102,9 @@ export function filterCandidates(input: FilterInput): FilterResult {
     }
 
     // Rule 2: a shot that shows the product must not generate it without a pinned hero image.
-    const productRisk = PRODUCT_PIXEL_RISK[visualType];
-    const pinned = input.kits.productKit;
-    if (input.showsProduct && productRisk === "always") {
-      reject("rule2_product_pixels", "would generate the product without the hero image");
-      continue;
-    }
-    if (input.showsProduct && productRisk === "unless_pinned" && !pinned) {
-      reject("rule2_product_pixels", "would generate the product without a pinned hero image");
+    const productReason = productPixelRejection(visualType, input.showsProduct, input.kits.productKit);
+    if (productReason !== null) {
+      reject("rule2_product_pixels", productReason);
       continue;
     }
 
@@ -113,9 +132,9 @@ export function filterCandidates(input: FilterInput): FilterResult {
     }
 
     // Rule 6: the persona, character or product kit the type needs must exist.
-    const missing = missingKits(KIT_REQUIREMENTS[visualType], input.kits);
-    if (missing.length > 0) {
-      reject("rule6_kit", `the kit it needs is missing: ${missing.join(", ")}`);
+    const kitReason = kitRejection(visualType, input.kits);
+    if (kitReason !== null) {
+      reject("rule6_kit", kitReason);
       continue;
     }
 
