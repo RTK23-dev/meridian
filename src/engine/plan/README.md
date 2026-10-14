@@ -16,6 +16,9 @@ Implements Video Engine Bible **section 7** (the five-step visual decision; step
 - `fit.ts`: step 4, the budget fit (7.6). Cheapest candidate per shot, then the best U-gain per cost-gain while it fits.
 - `cost.ts`: the shot cost model. It mirrors `engine/budget/estimate.ts`, so the planner's totals equal the budget's.
   An unknown (null) price is never 0.
+- `minimum.ts`: the format minimum (6.1 step 6, 14.2): `minimumMasterBudgetUsd(input)` returns `{ minimumUsd, lines }`. The
+  fixed per-master lines plus the cheapest shot of each beat, priced with `cost.ts` and filtered with the planner's rules.
+  An unknown price is refused, never 0. Used by intake (`jobs/handlers/intake.ts`); the run screen (A6) will import it.
 - `tables.ts`: the plan tables (7.1, 7.3, 7.4, 7.5, 13). Data, not logic. Versioned as `planTables@1`. See `STATUS.md` for
   why they are not in `config/`.
 - `types.ts`: the types the steps share. `fixtureInputs.ts`: planner inputs built from the contracts fixtures, for tests.
