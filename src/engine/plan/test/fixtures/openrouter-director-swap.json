@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440250-director0002",
+  "model": "anthropic/claude-opus-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"ok\":true,\"swaps\":[{\"shotId\":\"shot_4RH3FQVKBRZFMS5P5ZYN5CMADS\",\"toType\":\"product_hero\"},{\"shotId\":\"shot_2PS5J74HZEQ3ZRM229HZ5CNPYK\",\"toType\":\"stock_footage\"}],\"promptEdits\":[{\"shotId\":\"shot_2PS5J74HZEQ3ZRM229HZ5CNPYK\",\"prompt\":\"Push-in on the product with a sign reading BLEND, no text in frame.\"}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 7922,
+    "completion_tokens": 118,
+    "total_tokens": 8040,
+    "cost": 0.0517
+  }
+}

@@ -107,7 +107,7 @@ test("rule 4: hands on the product are never generated", () => {
   assert.ok(!kept.includes("ugc_presenter"));
   assert.ok(rejectedBy(input, "rule4_hands_on_product").includes("cinematic"));
   assert.ok(kept.includes("stock_footage"));
-  assert.ok(kept.includes("screen_mock"));
+  assert.ok(!kept.includes("screen_mock"), "screen_mock is an E3 build gap (rule 6), so it is never kept");
 });
 
 test("rule 5: a candidate costlier than the remaining budget is removed, a zero-cost one is kept at zero remaining", () => {
@@ -120,6 +120,15 @@ test("rule 5: a candidate costlier than the remaining budget is removed, a zero-
   assert.ok(kept.includes("coded_graphics"), "a zero-cost type is never removed for budget");
   assert.ok(kept.includes("stock_footage"));
   assert.ok(!kept.includes("ugc_presenter"));
+});
+
+test("rule 6 names the E3 build gaps, and a gap is not a kit", () => {
+  const details = filterCandidates(base({})).rejected.filter((item) => item.rule === "rule6_kit");
+  const gapOf = (type: VisualType) => details.find((item) => item.visualType === type)?.detail ?? "";
+  assert.match(gapOf("screen_mock"), /no source can be built for it yet/);
+  assert.match(gapOf("cartoon_rigged"), /no source can be built for it yet/);
+  assert.match(gapOf("cartoon_generated"), /no source can be built for it yet/);
+  assert.doesNotMatch(gapOf("cartoon_generated"), /kit it needs/);
 });
 
 test("rule 5: an unknown (null) price removes the candidate; it is never priced at 0", () => {
@@ -137,7 +146,9 @@ test("rule 6: a type whose kit is missing is removed", () => {
   assert.ok(rejectedBy(noPersona, "rule6_kit").includes("react_clip"));
   const noRig = base({ kits: { ...ALL_KITS, rigCharacter: false } });
   assert.ok(rejectedBy(noRig, "rule6_kit").includes("cartoon_rigged"));
-  assert.ok(!rejectedBy(noRig, "rule6_kit").includes("cartoon_generated"));
+  // cartoon_generated is an E3 build gap, so it is removed whatever the kits are; the rig kit is not its reason.
+  const generatedDetail = filterCandidates(noRig).rejected.find((item) => item.visualType === "cartoon_generated")?.detail ?? "";
+  assert.doesNotMatch(generatedDetail, /rig/);
   const noProduct = base({ kits: { ...ALL_KITS, productKit: false } });
   assert.ok(rejectedBy(noProduct, "rule6_kit").includes("product_hero"));
   // stop_motion has no known price, so rule 5 removes it before rule 6 is reached.

@@ -3,7 +3,7 @@
 
 import { VISUAL_TYPES, type VisualType } from "../contracts/index.ts";
 import { shotCost, usdAtMost, type KnownShotCost } from "./cost.ts";
-import { KIT_REQUIREMENTS, PRODUCT_PIXEL_RISK, PROPERTY_TYPES, isGeneratedType, type KitNeed } from "./tables.ts";
+import { BUILD_GAPS, KIT_REQUIREMENTS, PRODUCT_PIXEL_RISK, PROPERTY_TYPES, isGeneratedType, type KitNeed } from "./tables.ts";
 import type { Candidate, ClassifiedRequest, PlanKits, Rejection } from "./types.ts";
 
 /**
@@ -44,6 +44,11 @@ export type FilterInput = {
   showsProduct: boolean;
   textInPixels: boolean;
   handsOnProduct: boolean;
+  /**
+   * Types this shot cannot be built as, with the reason: for example a component whose text limit the shot's words exceed
+   * (align.ts). Rule 6 removes them, with the kit and build-gap reasons.
+   */
+  refusals?: Partial<Record<VisualType, string>>;
 };
 
 export type FilteredCandidate = Candidate & { cost: KnownShotCost };
@@ -62,6 +67,10 @@ function missingKits(needs: readonly KitNeed[], kits: PlanKits): KitNeed[] {
  * type is removed, or null when it stays. Shared with the minimum (minimum.ts), so the two cannot drift.
  */
 export function productPixelRejection(visualType: VisualType, showsProduct: boolean, productKitPinned: boolean): string | null {
+  // L8: a product beat shows real product imagery. Stock footage carries none, so it cannot serve a product beat.
+  if (showsProduct && visualType === "stock_footage") {
+    return "a product beat cannot use stock footage, which carries no real product imagery (L8)";
+  }
   const productRisk = PRODUCT_PIXEL_RISK[visualType];
   if (showsProduct && productRisk === "always") {
     return "would generate the product without the hero image";
@@ -73,10 +82,15 @@ export function productPixelRejection(visualType: VisualType, showsProduct: bool
 }
 
 /**
- * Rule 6 (7.2): the persona, character or product kit the type needs must exist. Returns the reason the type is removed,
- * or null when it stays. Shared with the minimum (minimum.ts).
+ * Rule 6 (7.2), as extended in E3: the persona, character or product kit the type needs must exist, and a source for the
+ * type must be buildable (BUILD_GAPS). Returns the reason the type is removed, or null when it stays. Shared with the
+ * minimum (minimum.ts), so the two cannot drift.
  */
 export function kitRejection(visualType: VisualType, kits: PlanKits): string | null {
+  const gap = BUILD_GAPS[visualType];
+  if (gap !== undefined) {
+    return `no source can be built for it yet: ${gap}`;
+  }
   const missing = missingKits(KIT_REQUIREMENTS[visualType], kits);
   return missing.length > 0 ? `the kit it needs is missing: ${missing.join(", ")}` : null;
 }
@@ -131,10 +145,15 @@ export function filterCandidates(input: FilterInput): FilterResult {
       continue;
     }
 
-    // Rule 6: the persona, character or product kit the type needs must exist.
+    // Rule 6: the persona, character or product kit the type needs must exist, and its source must be buildable.
     const kitReason = kitRejection(visualType, input.kits);
     if (kitReason !== null) {
       reject("rule6_kit", kitReason);
+      continue;
+    }
+    const refusal = input.refusals?.[visualType];
+    if (refusal !== undefined) {
+      reject("rule6_kit", `the shot cannot be built as this type: ${refusal}`);
       continue;
     }
 

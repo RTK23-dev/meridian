@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440240-director0001",
+  "model": "anthropic/claude-opus-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"ok\":true,\"swaps\":[],\"promptEdits\":[]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 7904,
+    "completion_tokens": 61,
+    "total_tokens": 7965,
+    "cost": 0.0473
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440230-planner0003",
+  "model": "anthropic/claude-opus-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"shots\":[{\"shotId\":\"shot_7WNRE941244J54X29NQ1PTHHW0\",\"prompt\":\"Home cook with a sign reading OPEN behind her, relaxed, soft morning light.\"},{\"shotId\":\"shot_4RH3FQVKBRZFMS5P5ZYN5CMADS\",\"prompt\":\"Slow pan across a tidy counter, no text in frame.\",\"query\":\"kitchen counter\"},{\"shotId\":\"shot_5D8AEW19BNYY5H87RP6DEDM1JR\",\"prompt\":\"Wipe of a counter, no text in frame.\",\"query\":\"wiping counter\"},{\"shotId\":\"shot_03DRSE70TD6PZBGSFME14F8KW1\",\"prompt\":\"Overhead counter view, no text in frame.\",\"query\":\"counter overhead\"},{\"shotId\":\"shot_2PS5J74HZEQ3ZRM229HZ5CNPYK\",\"prompt\":\"Push-in on a counter with a price tag of $19 in frame.\"},{\"shotId\":\"shot_3EEMDWK7AQ6YWTYWG0GTWD0419\",\"prompt\":\"Side pan along a counter, no text in frame.\"},{\"shotId\":\"shot_1M6KQJPZHFKEAJE3AJCJANPYQ1\",\"prompt\":\"Close view of a counter, no text in frame.\"},{\"shotId\":\"shot_1D6HBKFDJ85842QKRYZFAAYHDA\",\"prompt\":\"Pull-back from a counter, no text in frame.\"}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 19388,
+    "completion_tokens": 540,
+    "total_tokens": 19928,
+    "cost": 0.1087
+  }
+}

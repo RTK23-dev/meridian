@@ -23,6 +23,7 @@ import {
 } from "../contracts/index.ts";
 import { planTotals, shotCost, usdUnits, type KnownShotCost, type ShotCost } from "./cost.ts";
 import { kitRejection, mustAllowedTypes, mustShowsProduct, productPixelRejection } from "./filter.ts";
+import { productImageUris } from "./product.ts";
 import { RECIPES, KIT_REQUIREMENTS, visualPropertySchema, type VisualProperty } from "./tables.ts";
 import type { ClassifiedRequest, PlanKits } from "./types.ts";
 
@@ -82,14 +83,15 @@ export function spokenBeatMs(beats: readonly MinimumBeat[], wordsPerMinute: numb
 
 /**
  * The plan kits (7.2 rule 6) that a request resolved to, from the kit bodies that loaded. A kit that did not load is simply
- * absent from the input, so its flag is false.
+ * absent from the input, so its flag is false. A product kit with no image cannot pin a hero frame, so it counts as absent
+ * (product.ts).
  */
 export function planKitsOf(kits: { persona?: Persona; productKit?: ProductKit; characters: readonly CharacterSheet[] }): PlanKits {
   return {
     persona: kits.persona !== undefined,
     rigCharacter: kits.characters.some((item) => item.kind === "rigged_svg"),
     generatedCharacter: kits.characters.some((item) => item.kind === "generated"),
-    productKit: kits.productKit !== undefined,
+    productKit: kits.productKit !== undefined && productImageUris(kits.productKit).length > 0,
   };
 }
 

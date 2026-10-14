@@ -1,123 +1,130 @@
-# STATUS: visual decision engine (W7, steps 1 to 4)
+# STATUS: the plan stage (W7), E3
 
-Phase E1, wave B. Branch `engine/e1-w7-w11`, cut from `code/beautiful-cori-1zfk11` (which contains wave A). Covers
-`src/engine/plan/`. Steps 1 to 4 are pure code and fixture-tested. No Claude call was made (the client is not built).
+Branch `eng-e3-plan`, cut from `code/beautiful-cori-1zfk11` (aa3bcf8). Covers Bible 6.4 steps 1 to 7, section 7 steps 1 to 5,
+the request classifier (7.3) and the plan handler. Built on the E1 steps 1 to 4 (`visual.ts`, `filter.ts`, `score.ts`, `fit.ts`,
+`cost.ts`, `minimum.ts`), which are changed only where the list below says so.
 
-## Done
+## Built (E3)
 
-- `decideVisuals(input)` in `visual.ts`: steps 2, 1, 3 and 4 for every shot. It returns the shot choices, one scorer
-  `Decision` per shot (alternatives with scores, labelled priors, reason), the totals, and the `unfilled` and
-  `unsatisfiedMust` lists.
-- Step 1 (`filter.ts`): the six rules of 7.2, with the 7.3 `must` mapping as rule 1 (`mustAllowedTypes`).
-- Step 2 (`propose.ts`): the 7.4 table, `may` types, `must` types, and downgrade chains (7.1).
-- Step 3 (`score.ts`): U(s, t) from 7.5. Each weight, the win-rate prior and the sample minimum are read from
-  `config/weights.ts`. Missing or thin learned values use a prior, and each prior is named in the alternative's label.
-- Step 4 (`fit.ts`): the cheapest candidate per shot, then the best U-gain per cost-gain while the plan fits the request
-  budget. Unknown prices are excluded, never priced at 0.
-- `cost.ts`: the shot cost model, with the same billing rule and rounding as `engine/budget/estimate.ts`.
-- `tables.ts` (`planTables@1`): the property, proposal, recipe, downgrade, beat-fit, family, kit and risk-prior tables.
+- **Steps 1 and 2 (`align.ts`):** each beat aligned to a reference segment (role first, then nearest relative centre; a beat
+  whose role no segment has is aligned by position alone, and says so). Each beat split along the grammar's shot-length curve
+  (the curve value at the beat's centre is the target, held within `thresholds.edit.shotLengthMinMs` and `shotLengthMaxMs`, and
+  cut into the nearest count, split evenly in whole milliseconds). The pieces tile the voice exactly. Shot ids are deterministic.
+  Shot flags: showsProduct (a real_product request on the beat), textInPixels (a request asks to see words), handsOnProduct (a
+  hands request on a product beat).
+- **Step 1 (filter) extended:** rule 6 also removes the build gaps (below) and the per-shot refusals (a component whose text limit
+  the shot's own words exceed). Rule 2 refuses stock on a product beat (L8).
+- **Step 4 (`sources.ts`):** each shot's source from its final type. Component props are checked against the library's own
+  schema, with the reserved durationMs.
+- **Step 5 (`director.ts`):** `applyDirectorCheck` is pure. A swap must be one of the shot's candidates and keep the plan within
+  the request budget (checked in order, against the choices made so far). A prompt edit must be on a generated shot and ask for
+  no text. Anything else is ignored and logged as a Decision `by: "director"`. The approval is logged.
+- **Planner (`claude/roles/planner.ts`, `prompts/planner@1.md`):** one Opus call per plan, for every shot that may be generated (a
+  prompt) and every shot that may be stock (a query). A prompt that asks for text is refused by the answer contract, so the
+  retry names the path and the rule, never the model's words.
+- **Director (`claude/roles/director_check.ts`, `prompts/director_check@1.md`):** one Opus call. The answer has three keys and no
+  free text. Shot ids and type names are checked in code, not in the schema, so an out-of-bounds swap parses and is ignored.
+- **Request classifier (`claude/roles/request_classifier.ts`, `prompts/request_classifier@1.md`, `classify.ts`):** Haiku, one call
+  per request set. `classifyVisualRequests(deps, input)` is the function intake's `classify` port should call (see open point 1).
+- **Plan gate (`build.ts`):** `checkPlan` (review/gates/plan.ts, unchanged), with the handler's checks in front: the kits that
+  loaded match the validated versions, the planner and director answered, and every source was built.
+- **Handler (`jobs/handlers/plan.ts`):** reads validated_request, video_dna and voice_track; loads kits through a port; classifies;
+  plans; writes the scene_plan artifact (parents: the three inputs) whether or not the gate passes; returns the plan output with
+  its shot summaries. It refuses without a reservation, and it refuses a downgrade directive (not built, below).
+- **Downgrade:** every generated shot has `downgradeTo` (the first chain target the shot can take as it stands), or none, and the
+  gate refuses it.
 
-## Tests (run in this worktree)
+## Changed E1 code (and why)
 
-- `NODE_ENV=development node --experimental-strip-types --test 'src/engine/plan/**/*.test.ts'`: 59 pass, 0 fail.
-- The required cases are there: the 6.4 test (a $0.50 budget gives no generated shot; the fixture plan has stock and
-  coded shots only); a must is always honoured across budgets and kit sets; text-in-pixels and hands-on-product shots
-  never get a generated type; the same inputs give the same plan.
-- Two cross-checks against the contracts. At $4 the planner reproduces the fixture plan's shot types, its $0.3516 shot
-  total and its $0.9595 reservation. At budgets $4 and $1 the planner's reserved total equals `estimatePlan` of the plan it
-  chose. Other budgets are not cross-checked.
-- The cost of every priced type equals the budget module's line for the same shot.
-- `npm run typecheck`: exit 0. `npm run lint`: 0 errors (4 pre-existing warnings in `src/components/`, not touched).
+- `tables.ts`: `BUILD_GAPS`, `BUILDABLE_TYPES`, `KINETIC_WORDS_PER_LINE` added. Gaps are data.
+- `filter.ts`: `kitRejection` includes the build gaps (reason: "no source can be built for it yet"); `productPixelRejection`
+  refuses stock on a product beat; `filterCandidates` takes `refusals`.
+- `filter.test.ts`: the rule-4 assertion that screen_mock survives is now that it is removed by its gap; the rule-6 assertion that
+  cartoon_generated is not kit-rejected now checks the gap reason. Both are E3 build gaps, so the change is intended.
+- `minimum.ts`: `planKitsOf` counts a product kit with no image as absent (`product.ts`). Intake's minimum uses the same rule.
+- `visual.ts`: `ShotChoice.candidates` (each survivor with cost and score). `types.ts`: `ShotInput.refusals`.
 
-## Live run: owner (no keys held by agents)
+## Build gaps (E3 buildable set: ugc_presenter, product_hero, stock_footage, cinematic, kinetic_type, coded_graphics)
 
-Nothing here calls a provider, so no live run is needed for steps 1 to 4. The owner-only items are these:
+`cartoon_rigged` (rig component not in the E3 library), `react_clip` (no owned or licensed clip source), `screen_mock` (chat
+component not in the E3 library), `cartoon_generated` (its style keyframe is a second paid call that one shot source cannot
+carry). `stop_motion` stays out by its unknown price. The lead decides whether the gaps are right; they remove options the
+E1 pool had.
 
-1. Confirm the price of `image.edit` (`nano_banana_2` is token-priced, so `stop_motion` is never chosen). Until it is priced,
-   `stop_motion` is always excluded, and that is correct.
-2. Confirm the visual-type weights and the beat-fit table once there are real take outcomes (7.5, 16.2).
+## Tests (this worktree)
 
-## For E3 (not built here)
+Run: `NODE_ENV=development node --experimental-strip-types --test 'src/engine/plan/**/*.test.ts' 'src/engine/claude/roles/*.test.ts' src/engine/jobs/handlers/plan.test.ts`
 
-- **Step 5, the director check** (7.7): one Opus call with the plan table, the genome and the persona. Its swaps must stay
-  inside each shot's filtered candidates and the budget. Expose `decideVisuals`'s `shots` and `fitsBudget` for it.
-- **The 7.3 classifier** (Haiku, structured output): it produces `ClassifiedRequest.properties` for every visual request.
-  The planner takes the classification as input, so it cannot be built before the Claude client exists.
-- **Alignment and shot splitting** (6.4 steps 1 and 2): `align.ts` is not written. The planner takes `refShot`, the beat
-  role, the duration and the flags for each shot. E3 must produce them.
-- **Source building** (6.4 steps 4 and 5): prompts (Opus, with the style kit and character sheets), component props (with
-  a product URI for every product beat), stock queries and asset URIs. The planner returns the type and `downgradeTo`
-  only. `RECIPES` gives the model class and takes for each generated type.
-- **Flags** (7.2 rules 2 to 4): `textInPixels`, `handsOnProduct` and `showsProduct` are inputs. Only the director or the
-  classifier can set them.
+- Final run (E3, this branch): 208 tests, 208 pass, 0 fail. The run covers the plan folder, the three roles, the handler, and the
+  Claude boundary and prompt-load tests.
+- `build.test.ts` (14): the five required cases (the fixture plan tiles the voice exactly; a must is always honoured; an
+  out-of-bounds swap is ignored and logged; a budget covering only the fixed cost gives an all-code plan; no text in generation
+  prompts, with the text refused and the retry not repeating it), plus: an applied swap, the director answer refused for prose,
+  the planner and director never sent the script's words, the planner's refusal at a small budget, and a decision per alignment,
+  split and choice.
+- The role tests check each contract, its estimate at the Bible's Claude rate (Opus $4/$20, Haiku $1/$5), its four prompt sections
+  and the pinned bytes of each prompt (`load.ts` pins: a prompt edit is a new version).
+- Boundary tests still pass: `claude/boundaries.test.ts`, `review/boundaries.test.ts`, `prompts/*.test.ts`.
+- `npm run typecheck`: exit 0. `npm run lint`: 0 errors (4 warnings in `src/components/`, not touched; none in engine code).
 
-## A4: the format minimum (`minimum.ts`)
+## Deviations from the Bible (for the lead to accept or reject)
 
-Bible 6.1 step 6, 14.2 and 14.4. Pure code, fixture-tested (`minimum.test.ts`, 13 tests; `filter.test.ts` unchanged and passing).
-
-- **Signature for the run screen (A6):** `minimumMasterBudgetUsd(input: MinimumInput): MasterMinimum`, with
-  `MinimumInput = { beats: {beatId, text}[]; wordsPerMinute: number; visualRequests; classifications: {beatId, want,
-  properties}[]; kits: PlanKits }` and `MasterMinimum = { minimumUsd: number; lines: {label, usd, beatId?, visualType?}[] }`.
-  The lines sum to `minimumUsd` (checked in code). `planKitsOf(kits)` builds the kits from the kit bodies, and
-  `spokenBeatMs(beats, wordsPerMinute)` gives the spoken length of each beat (words divided by words per minute).
-- **What it computes:** the four fixed per-master lines from `budgets.fixedPerMasterUsd` (0.52), plus for each beat the
-  cheapest option that the planner's rules allow, plus the redo allowance on generated shots. The planner's own cost model
-  (`cost.ts`) prices every option, so the minimum and a plan with the same durations agree to the 4th decimal.
-- **Cheapest option:** known prices compare first. Ties go to code, then stock, then generation, then the type with the
-  fewest kit needs, then `VISUAL_TYPES` order. So a generic beat is labelled `coded_graphics`, not `cartoon_rigged`.
-- **Refusals (EngineError):** an unknown price is `unknown_price`, and so is an option with an unknown price that could be
-  cheaper than the cheapest known one. Never 0. A must without a classification, a must no type can deliver, a beat no type
-  can cover, a speaking rate that is not positive, a beat with no words, and a must naming a beat that is not in the script
-  are `invalid_input`. A caller that gets a throw must not treat the minimum as known.
-- **Shared rules:** rules 2 and 6 of 7.2 moved from `filterCandidates` into the exported `productPixelRejection` and
-  `kitRejection`, with the same messages. The planner and the minimum apply one copy.
-- **What the minimum does not know:** the reference shot type of each beat (intake runs before analysis, so every visual type
-  is an option for a beat with no `must`) and the flags of rules 3 and 4 (text in pixels, hands on the product). Those only
-  remove generated options, so the minimum is never higher than the planner's cheapest plan for the same durations. The beat
-  durations are estimates, so the voice's real timings can move a generated shot's cost. The plan gate then decides.
-- **Proved in tests:** the fixture request's minimum is 0.52 and its breakdown is all code; a budget at exactly 0.52 gives an
-  all-code plan that fits; a `motion_spectacle` must adds `product_hero` at 0.688 (0.1344 plus the 0.0336 allowance), the
-  planner honours it at 0.688 and cannot at 0.6879; `stop_motion_style` is refused as an unknown price; the minimum never
-  exceeds the planner's cheapest plan.
-- **Live run: none.** No provider is called. The owner's check is the speaking rate: `wordsPerMinute` is the persona's, and
-  the estimate should be compared with real voice timings once the voice track exists (6.3).
+1. **The director's answer has no reason, and the planner's answer has no notes (7.7, 11.2).** Bible 7.7 shows `reason` on each
+   swap. A reason is model prose that a Decision would store, so the code writes every reason from the rule that broke. This
+   matches the critic's contract (CLAUDE.md rule 8).
+2. **The director and the planner never see the script's words (7.7 lists "beat text").** A visual choice needs the beat's role
+   and the viewer's requests, and a prompt must not carry words to render (L8). The director sees beat roles, the requests and
+   the planner's prompts (as data). If you want beat text in the director's table, the answer still cannot carry it back.
+3. **The planner writes for every shot that may be generated or stock, not only the chosen type.** A director swap then stays
+   inside the shots' candidates with its source already written. The output stays within the planner's 4k-token cap for the
+   fixture (an estimate of 20k in, 4k out).
+4. **`request_classifier` output cap is 300 tokens (Bible 11.1: 0.2k initial).** A request set with many items needs more; 300
+   costs about $0.0005 more per call.
+5. **Director `ok: false` does not block.** The plan gate does not read the director's verdict (Bible 6.4 step 7 names the
+   checks it validates). The verdict is a Decision. Say if it should be a check.
+6. **Shot lengths are split per beat (curve value at the beat centre), not per shot.** Equal pieces within the beat, held to the
+   limits in config.
+7. **`planKitsOf` changed (product kit with no image counts as absent).** Intake's minimum now uses the same rule, so the minimum
+   and the planner agree.
 
 ## Open points for the lead
 
-1. **Placement of the plan tables.** The brief says every number comes from `src/engine/config/`, but `config/` belongs
-   to W1, and this worktree may not write there. The tables are in `plan/tables.ts`: the property map, the proposals, the
-   beat-fit values (7.5), the style-fit values (1, 0.5, 0), the artifact-risk priors, the kit requirements and the
-   recipes. The beat-fit values, the style-fit values and the artifact-risk priors are my judgement; the Bible gives no
-   numbers for them. The lead decides whether they move into `config/` (one file, versioned) and who confirms the values.
-2. **A $0.50 request budget cannot deliver.** 14.2 puts the fixed per-master lines at $0.52. So at $0.50 the plan's
-   reservation is $0.52, over budget. The planner gives the all-code plan the 6.4 test asks for, and `fitsBudget` is false.
-   The plan gate then refuses it. Either the minimum request budget is above $0.52, or the fixed lines are excluded from
-   the request budget. This is an owner decision.
-3. **Banned style types are a score term, not a filter.** The Bible lists banned types under styleFit (7.5), not in the
-   six rules. A banned type can still be chosen when it is the only candidate that survives. Making it a seventh filter
-   rule is the lead's call.
-4. **Downgrade chains are candidates.** 7.4 does not list downgrades as candidates. I added them, so that a zero-cost
-   route always exists for each shot (without them a $0.50 budget leaves talking-head shots with nothing). This changes
-   what the planner can choose: check that you want it.
-5. **Keyframe not priced.** `cartoon_generated` needs an `image.keyframe` plus image-to-video. The budget contract
-   (`ShotSource`) carries one `modelClass`, so the planner and `estimatePlan` both price only the video model. The
-   keyframe is under-counted. This is a contract gap for W1 or E3.
-6. **Stop-motion billing.** The planner bills 12 frames per second (7.1, top of the range). `estimatePlan` bills one call
-   per shot for `per_image`. The two would differ if `image.edit` is ever priced per image. It is excluded until then.
-7. **Real-person consent (13) cannot be checked.** `Persona` has no field for "based on a real person", and `VoiceKit` has
-   no real-person flag at all. The request gate checks the kits exist and their versions match, but not consent. A
-   contract field is needed.
-8. **Kit needs (7.2 rule 6).** The Bible says a persona or a character. I also treat the product kit as needed by
-   `product_hero` and `stop_motion`, because both pin the hero image. This is an extension of rule 6, and it is flagged.
-9. **Learned artifact risk uses the win-rate sample minimum.** 7.5 gives the sample minimum for win rate only. I use the
-   same minimum (`weights.winRateMinSamples`, 30) for take failure rates. A separate config value would be cleaner.
-10. **Interpretations to confirm.** (a) A `must` binds every shot of its beat, not just one. (b) A stock shot counts as
-    zero-cost, so the 6.4 "all-code" test allows stock as well as components. (c) A beat is a product beat if any of its
-    requests (must or may) is classified `real_product`, or the caller marks it. (d) The greedy fit scores each upgrade
-    with the choices made before that shot. An upgrade's effect on the next shot's continuity is not re-scored.
-    (e) Decisions use the shot id as `at`. The fixture's first decision uses the beat id, so `at` is not uniform there.
+1. **Intake's classifier has no reservation.** `classifyVisualRequests` makes a paid call, and a call needs a `res_` reservation
+   (Bible 14.1). Intake does not reserve (handlers/STATUS.md blocker 1). Wire intake's `classify` port to call the function with a
+   reservation. Until a reservation exists, the port returns no classifications, so every must fails its check (fail closed).
+2. **The plan job runs up to three Claude calls under one 2-minute lease (Bible 5.1).** The calls are classification, planner and
+   director, each with its own timeout (60, 110 and 90 seconds). A lease expiry retries the job, and the journal then resumes any
+   answer already stored (wire `RoleCallJournal`). The lease class for this stage is a decision.
+3. **The plan needs a reservation at plan time, and none exists yet.** `payload.budgetReservationId` is set only after
+   estimate_reserve, which runs after the plan (blocker 1 again). The handler refuses without it, so nothing is called unreserved.
+4. **Downgrade replan is not built.** `details.directive === "downgrade"` throws not_implemented. The orchestrator queues it for
+   a failed generated shot (E4 routing). The E3 code for it is `downgradeFor` plus a planner call for one shot.
+5. **Constants that are not in config.** Structural values: `KINETIC_WORDS_PER_LINE` (4, tables.ts), the product card's three
+   bullets (sources.ts), and the alignment rule (role, then nearest centre, with no weight). The role timeouts (60, 110, 90 s)
+   follow the critic's pattern in the role files. Move them into config if you want them tuned.
+6. **The E1 open points still stand:** the plan tables are in `tables.ts` (the lead decides whether they move to config); the
+   $0.50 budget cannot deliver (fixed lines are $0.52, the owner decides the minimum); banned style types are a score term, not a
+   filter; `image.edit` is unpriced so `stop_motion` is never chosen; the real-person consent check has no contract field.
 
-## Blockers
+## Files outside `plan/` (under the grant)
 
-None for the fixture work. Items 2 and 7 above need an owner or contracts decision before a live run can deliver a
-$0.50 master or a persona with a consent check.
+- `src/engine/claude/roles/request_classifier.ts`, `planner.ts`, `director_check.ts` and their tests.
+- `src/engine/prompts/request_classifier@1.md`, `planner@1.md`, `director_check@1.md`.
+- `src/engine/jobs/handlers/plan.ts` and `plan.test.ts`.
+
+Not touched, as the grant says: `jobs/handlers/STATUS.md` and `claude/STATUS.md`. The notes above are the text for them. Contracts,
+config, review gates, intake, the orchestrator and the gateway are unchanged.
+
+## Live run: owner (no keys held by agents)
+
+No agent holds a key, so nothing here has run against a provider. The owner's run, once intake's classifier and the plan
+reservation are wired (open points 1 and 3):
+
+1. Intake the fixture request ($4, `ig:reel/FIXTURE0001`) with the production kits, and classify its visual requests with the
+   request_classifier role. Record the classifier's answer, its ledger entry and its cost.
+2. Run the plan stage on the same validated request, its VideoDNA and its voice track, with the reservation. Record the planner's
+   and the director's answers, their ledger entries and costs, and the scene_plan artifact id.
+3. Check the plan gate's checks, the shot list (13 shots from 5 beats for the fixture), the director's decisions and the shot
+   lengths against the reference's curve (the E3 acceptance: edit grammar within 15 per cent of the reference, once edit exists).
+4. Run the same request at a budget of $0.52 and record the all-code plan and its gate.
+5. Replace the fixtures in `test/fixtures/` with the recorded answers, and check that the shot ids still match the plan.
