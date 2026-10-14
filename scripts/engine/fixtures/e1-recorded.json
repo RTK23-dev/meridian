@@ -1,0 +1,101 @@
+{
+  "provenance": "CONSTRUCTED, NOT CAPTURED. The request paths, bodies and envelopes follow the HyperFrames CLI 0.8.154 cloud client (the same shapes as src/engine/render/recorded.ts, see render/STATUS.md). The media function answer follows functions/ffmpeg/types.ts. No live API produced these bytes or ids. The owner's live run records real responses (scripts/engine/README.md).",
+  "mediaFunctionsBaseUrl": "https://media-functions.dry-run.example",
+  "dryRunPlatformMaxBytes": 104857600,
+  "assets": {
+    "store://assets/e1-stock-kitchen.mp4": "ZHJ5LXJ1biBzdGFuZC1pbiBmb3IgdGhlIG93bmVyIHN0b2NrIGNsaXAgKG5vdCBtZWRpYSk=",
+    "store://assets/e1-voice.wav": "ZHJ5LXJ1biBzdGFuZC1pbiBmb3IgdGhlIG93bmVyIHZvaWNlIGZpbGUgKG5vdCBhdWRpbyk="
+  },
+  "render": [
+    {
+      "label": "upload start",
+      "method": "POST",
+      "url": "https://api.heygen.com/v3/assets/direct-uploads",
+      "auth": "heygen",
+      "requireHeaders": ["Idempotency-Key", "content-type"],
+      "status": 200,
+      "json": {
+        "data": {
+          "asset_id": "asst_e1_recorded_0001",
+          "upload_url": "https://upload.storage.example/presigned/composition.zip?X-Amz-Signature=recorded",
+          "upload_headers": {}
+        }
+      }
+    },
+    {
+      "label": "presigned upload of the composition archive",
+      "method": "PUT",
+      "url": "https://upload.storage.example/presigned/composition.zip?X-Amz-Signature=recorded",
+      "auth": "none",
+      "requireHeaders": ["content-type"],
+      "status": 200
+    },
+    {
+      "label": "upload complete",
+      "method": "POST",
+      "url": "https://api.heygen.com/v3/assets/asst_e1_recorded_0001/complete",
+      "auth": "heygen",
+      "status": 200,
+      "json": { "data": { "asset_id": "asst_e1_recorded_0001" } }
+    },
+    {
+      "label": "render submit (Idempotency-Key is the composition hash)",
+      "method": "POST",
+      "url": "https://api.heygen.com/v3/hyperframes/renders",
+      "auth": "heygen",
+      "requireHeaders": ["Idempotency-Key"],
+      "status": 200,
+      "json": { "data": { "render_id": "hfr_e1_recorded_0001", "status": "queued" } }
+    },
+    {
+      "label": "render poll, still rendering",
+      "method": "GET",
+      "url": "https://api.heygen.com/v3/hyperframes/renders/hfr_e1_recorded_0001",
+      "auth": "heygen",
+      "status": 200,
+      "json": { "data": { "render_id": "hfr_e1_recorded_0001", "status": "rendering", "format": "mp4" } }
+    },
+    {
+      "label": "render poll, completed",
+      "method": "GET",
+      "url": "https://api.heygen.com/v3/hyperframes/renders/hfr_e1_recorded_0001",
+      "auth": "heygen",
+      "status": 200,
+      "json": {
+        "data": {
+          "render_id": "hfr_e1_recorded_0001",
+          "status": "completed",
+          "format": "mp4",
+          "video_url": "https://video.storage.example/hfr_e1_recorded_0001.mp4?X-Amz-Signature=recorded"
+        }
+      }
+    },
+    {
+      "label": "video download from the signed URL (no key)",
+      "method": "GET",
+      "url": "https://video.storage.example/hfr_e1_recorded_0001.mp4?X-Amz-Signature=recorded",
+      "auth": "none",
+      "status": 200,
+      "bodyBase64": "ZHJ5LXJ1biBzdGFuZC1pbiBmb3IgYSByZW5kZXJlZCBNUDQgKG5vdCBtZWRpYSk="
+    },
+    {
+      "label": "integrity probe of the downloaded bytes (media functions)",
+      "method": "POST",
+      "url": "https://media-functions.dry-run.example/probe",
+      "auth": "none",
+      "requestBodyIncludes": "ZHJ5LXJ1biBzdGFuZC1pbiBmb3IgYSByZW5kZXJlZCBNUDQgKG5vdCBtZWRpYSk=",
+      "status": 200,
+      "json": {
+        "container": "mov,mp4,m4a,3gp,3g2,mj2",
+        "videoCodec": "h264",
+        "audioCodec": "aac",
+        "width": 1080,
+        "height": 1920,
+        "fps": { "num": 30, "den": 1, "value": 30 },
+        "durationMs": 12033,
+        "audioPresent": true,
+        "bytes": 47
+      }
+    }
+  ]
+}

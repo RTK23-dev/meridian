@@ -30,7 +30,8 @@
     "ui:button-audit": "node scripts/button-audit.mjs",
     "e2e": "node scripts/product-loop.mjs",
     "engine:golden": "NODE_ENV=development node --experimental-strip-types --test src/engine/compose/test/golden/golden.run.ts",
-    "engine:golden:update": "NODE_ENV=development node --experimental-strip-types --test src/engine/compose/test/golden/golden.update.ts"
+    "engine:golden:update": "NODE_ENV=development node --experimental-strip-types --test src/engine/compose/test/golden/golden.update.ts",
+    "engine:e1": "node scripts/with-dotenv.mjs node --experimental-strip-types scripts/engine/e1-acceptance.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.13.0",
