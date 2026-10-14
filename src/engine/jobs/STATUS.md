@@ -1,5 +1,89 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## E2 pipeline fixes (branch `eng-e2-pipeline`, from `origin/code/beautiful-cori-1zfk11` at a4b04c7)
+
+Covers `src/engine/jobs/`, `migrations/0078_engine_role_calls.sql`, and the claude client's resume path in
+`src/engine/claude/client.ts` and `src/engine/claude/journal.ts` (eng-pipeline owns `claude/`; the change was needed for item 3).
+Nothing is pushed. The lead merges.
+
+### Item 1: intake advances without a reservation (done, with an open blocker)
+
+- `applyIntake`: a passing intake sets `intake` passed and no longer pauses on a null reservation. A reservation id that intake
+  does give is kept as the request's hold (the handler never gives one).
+- **Blocker, not built: the paid stages before `estimate_reserve` still need a reservation.** `analyze_reference`, `voice` and
+  `plan` are `paid: true` in `registry.ts`, and Bible 5.1 and 14 say no paid call happens without a reservation. The brief's rule
+  ("only stages after estimate_reserve require one") would let those three run unreserved, which the project rules forbid, so
+  I did not implement it. Instead `schedule()` pauses the request on budget at the first ready paid stage with no reservation,
+  and names it (`analyze_reference`, or `voice` when the DNA is cached). Nothing is queued unreserved, and nothing fails.
+- Effect in practice: a request now runs intake, then pauses at analysis with the reason "analyze_reference is a paid stage and
+  needs a budget reservation on the request". The pipeline cannot pass analysis until the lead decides one of:
+  (a) a pre-flight hold at intake (the minimum from `minimumMasterBudgetUsd`, released by estimate_reserve), which the
+  orchestrator already accepts from intake; (b) a different design. The lead must decide before any live run.
+- Tests: `orchestrator.test.ts` (intake pass without reservation advances; the first paid stage pauses and is named; voice
+  with a cached DNA; a reservation from intake queues analysis and voice; estimate_reserve is queued with the plan and the
+  request artifacts). `orchestrator-sql.test.ts` (the same through PostgreSQL, the jobs table holds only the intake job).
+
+### Item 2: estimate_reserve reads the request budget; the monthly budget has a source (done)
+
+- `registry.ts`: `estimate_reserve` reads `scene_plan` and `production_request`. `orchestrator.ts` passes the `request` slot
+  (the production_request artifact) with the plan.
+- `handlers/estimate-reserve.ts`: the request budget is `constraints.budgetUsd` from that artifact. The workspace monthly budget
+  comes from a `WorkspaceBudgetSource` (`monthBudget`), passed in `createEstimateReserveHandler({ workspaceBudget })`.
+- The default source, `notConnectedWorkspaceBudget`, returns `status: "not_connected"` with a reason. The stage then refuses
+  to reserve: the gate fails with `reservation_succeeded` and the reason, no reservation id is returned, and nothing is stored.
+  The orchestrator pauses on budget with that reason. A source that returns an unusable amount (NaN, negative) is refused too.
+- Owner question (Bible 20.2): where the workspace monthly budget is set. Until it is, every master pauses at estimate_reserve.
+- Tests: `handlers/estimate-reserve.test.ts` (14 pass), including the default source, a source's own refusal reason, unusable
+  amounts, and a missing `production_request` input.
+
+### Item 3: persisted role calls (done)
+
+- `migrations/0078_engine_role_calls.sql`: `engine_role_calls`, organization-scoped with composite foreign keys to the request
+  and the reservation, unique on `(organization_id, request_id, idempotency_key)`. Status is `pending`, `answered`,
+  `invalid_answer` or `refused`. Check constraints refuse an answered row without its answer and a settled row without its
+  ledger entry.
+- `claude/journal.ts`: the `RoleCall` type (moved from the client, re-exported by it) and the `RoleCallJournal` port.
+- `claude/client.ts`: `RoleDeps.journal` is optional. Without it nothing changes. With it: a `pending` entry is written inside
+  the paid call, before the gateway is asked; `answered` (with the validated answer) or `invalid_answer` (with its issues) once
+  it settles; `refused` when the reservation does not cover the call. Resume: a stored answer is reused with no call; a stored
+  invalid first answer means only the retry is sent; a stored invalid retry fails the stage again with no call. The outcome has
+  `resumed` (stored calls this run used) next to `calls` (new calls). `RoleAnswerError.attempts` counts both.
+- `jobs/role-call-store.ts`: `sqlRoleCallJournal(sql, { organizationId, requestId })` implements the port (scoped to the
+  request). `listRoleCalls`, `manifestRoleCalls` (the billed `RoleCall`s, in order) and `promptVersionsOf` (role to version;
+  two versions of one role in one request is refused) feed the manifest.
+- Money is stored at four decimals (`numeric(14,4)`), like the ledger. OpenRouter's `0.057866` is kept as `0.0579`.
+- **The Manifest contract has no role-call field.** The manifest writer (W13) reads `manifestRoleCalls` and `promptVersionsOf`.
+  Adding a field to `meridian.manifest/v1` is a contract change (eng-contracts, lead approval).
+- Known gap: a call that starts and never returns leaves a `pending` row and its hold. Its key is a duplicate on the ledger, so a
+  resume with the same attempt makes no second call and reports `duplicate`. A job retry with a new attempt number is a new key
+  and bills again (the existing rule, Bible 5.1). The answer of a call whose journal write fails after it was billed is lost: the
+  stage then fails closed. The journal write and the ledger write are not in one transaction (the paid-call wrapper is shared).
+- Tests: `role-call-store.test.ts` (9: the transitions, tenancy, malformed entries refused by code and by the database, order,
+  billed-only manifest list, two prompt versions refused) and `role-call-resume.test.ts` (6: a crash after the answer, the
+  retry-only resume after a refused retry, a refused first call resumed after a top-up, a started call that never came back,
+  a stored invalid retry, and a reservation that belongs to another request). Recorded fixtures only.
+
+### Migration tests
+
+- `migration.test.ts`: `0078_engine_role_calls.sql` is the newest migration; `engine_role_calls` is in the table list with
+  `organization_id not null` and a foreign key.
+
+### Checks on this branch (this worktree, PGlite)
+
+- `NODE_ENV=development node --experimental-strip-types --test 'src/engine/jobs/**/*.test.ts' 'src/engine/claude/**/*.test.ts'`:
+  177 pass, 0 fail.
+- `npm run typecheck`: exit 0.
+- `npm run lint`: 0 errors, 4 warnings, the same four in `src/components/` as the baseline.
+
+### Owner must run live (in addition to the E1 list below)
+
+1. Apply `migrations/0078_engine_role_calls.sql` on a real PostgreSQL server after 0077. Expected: it applies cleanly, and
+   `engine_role_calls` exists with `organization_id not null`.
+2. Run `src/engine/jobs/role-call-*.test.ts` against that server with `MERIDIAN_PG_TEST_URL` set (same command as below). These
+   use recorded fixtures, so no key is needed.
+
+## Done in E1
+
 Phase E1, wave B. Branch `engine/e1-w2`, cut from `code/beautiful-cori-1zfk11` at 7fd32ae (which holds the Bible, the
 contracts, config and budget). Covers `src/engine/jobs/`, `migrations/0077_engine_core.sql`, and one branch in
 `src/lib/meridian/jobs/execute.ts`. Nothing is pushed.
@@ -80,10 +164,9 @@ contracts, config and budget). Covers `src/engine/jobs/`, `migrations/0077_engin
   edit, compose, pre_render_gate, post_render_review, variants, deliver. Ten minutes (generation): voice (TTS), produce_shot.
   Five minutes (render): render. Timeouts are enforced in `dispatch.ts` and `poller.ts`, because Meridian's worker renews a
   fixed 120-second lease. The work itself cannot be forced to stop. The abort signal is passed to the handler.
-- **Intake pre-flight reservation.** Analysis and voice are paid and run before the plan is priced. The orchestrator will
-  not queue them without a `budgetReservationId` on the request, so the intake handler must create a pre-flight reservation
-  (Bible 6.1 step 6, fixed lines) and pass its id. Nothing in W2 creates it. W12 or W6 must, and must release it when the
-  full reservation replaces it.
+- **Intake pre-flight reservation (superseded in E2, see the top of this file).** Analysis and voice are paid and run before
+  the plan is priced. The orchestrator will not queue them without a `budgetReservationId` on the request. Intake does not
+  reserve; the pre-estimate paid stages now pause the request on budget until the lead decides the pre-flight hold.
 - **Downgrade does not re-reserve.** A downgraded shot is replanned, but `estimate_reserve` is not run again, so its new
   cost is not held. W7 and W12 decide whether it should be.
 - **Human choices.** `human_choice` accepts a take and stores a gold label. A shot that escalated because its downgrade

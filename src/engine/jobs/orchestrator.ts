@@ -315,6 +315,11 @@ function escalateRequest(state: OrchestratorState, pause: Pause, detail: Record<
   effects.push({ kind: "review_item", reviewKind: "escalation", reason: pause.reason, subjectId: pause.subjectId, detail });
 }
 
+/**
+ * A passing intake advances the request. Intake does not reserve (Bible 6.1: the budget is priced after the plan), so a pass
+ * with a null reservation is normal. A reservation id that intake does give is kept as the request's hold. Whether a paid stage
+ * may run before estimate_reserve is decided in schedule(): with no reservation on the request, the first such stage pauses.
+ */
 function applyIntake(state: OrchestratorState, output: Extract<StageOutput, { stage: "intake" }>, effects: EngineEffect[]): void {
   expectQueued(state, "intake", output.subjectId);
   mergeArtifacts(state, output.artifacts);
@@ -324,20 +329,17 @@ function applyIntake(state: OrchestratorState, output: Extract<StageOutput, { st
     effects.push({ kind: "rejected", reasons: reasonsOf(output.gate) });
     return;
   }
-  if (output.budgetReservationId === null) {
-    // Fail closed: the paid stages that follow cannot be queued without a reservation on the request (Bible 14).
-    state.nodes.intake.status = "idle";
-    pauseWith(state, {
-      kind: "budget",
-      stage: "intake",
-      subjectId: state.requestId,
-      reason: "intake passed without a budget reservation. No paid stage is queued without one (Bible 14).",
-    });
-    return;
-  }
-  state.budgetReservationId = output.budgetReservationId;
   state.nodes.intake.status = "passed";
+  if (output.budgetReservationId !== null) state.budgetReservationId = output.budgetReservationId;
   if (state.cachedDna) state.nodes.analyze_reference.status = "passed";
+}
+
+/** The reason a paid stage pauses the request when no reservation exists yet (Bible 5.1, 14). Names the stage. */
+function unfundedReason(stage: EngineStage): string {
+  return (
+    `${stage} is a paid stage and needs a budget reservation on the request, and none exists yet. Intake does not reserve, ` +
+    "and estimate_reserve runs after the plan (Bible 5.1, 6.1, 14). No paid call is queued."
+  );
 }
 
 function applySingleGate(
@@ -897,12 +899,23 @@ function schedule(state: OrchestratorState): QueuedJob[] {
     variants: masterPassed(state) && state.variantCount > 0,
     deliver: masterPassed(state) && (state.variantCount === 0 || (n.variants.status === "passed" && variantsSettled(state))),
   };
+  // A paid stage that is ready but has no reservation on the request is not queued. The request pauses on budget, naming it.
+  // This keeps every paid call on a reservation (Bible 5.1, 14). See unfundedReason.
+  if (state.budgetReservationId === null) {
+    const unfunded = SINGLE_NODES.find((node) => n[node].status === "idle" && ready[node] && STAGE_SPECS[node].paid);
+    if (unfunded !== undefined) {
+      pauseWith(state, { kind: "budget", stage: unfunded, subjectId: state.requestId, reason: unfundedReason(unfunded) });
+      return [];
+    }
+  }
+
   const nodeSlots: Record<SingleNode, string[]> = {
     intake: ["request"],
     analyze_reference: ["request"],
     voice: ["request"],
     plan: ["validated", "dna", "voice"],
-    estimate_reserve: ["plan"],
+    // The request artifact carries the request's budget (constraints.budgetUsd), which the reservation needs (Bible 14.1).
+    estimate_reserve: ["plan", "request"],
     edit: ["plan", "dna", "voice", ...Object.values(state.shots).flatMap((shot) => (shot.acceptedTakeId ? [`take:${shot.acceptedTakeId}`] : []))],
     variants: state.masterEdlId === null ? [] : [`edl:${state.masterEdlId}`],
     deliver: Object.keys(state.artifacts),

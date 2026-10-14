@@ -6,10 +6,10 @@
 // gate, the validated request and the minimum come out. createIntakeHandler is the stage: it reads the production_request
 // artifact (its only input, Bible 5.1), calls the ports, and writes the validated_request artifact when the gate passes.
 //
-// Not done here, on purpose: the pre-flight reservation. analyze_reference and voice are paid and run after intake, and the
-// orchestrator refuses a passing intake without a reservation id (orchestrator.ts applyIntake), so a passing intake returns
-// budgetReservationId null and the request pauses on budget. Whether intake reserves the minimum, and how that hold is
-// released at estimate_reserve, is an open decision for the lead. See handlers/STATUS.md.
+// Intake does not reserve. A passing intake returns budgetReservationId null, and the orchestrator advances on the pass
+// (applyIntake). The paid stages before estimate_reserve (analyze_reference, voice, plan) still need a reservation on the
+// request: the orchestrator pauses the request on budget at the first of them (schedule). Whether a pre-flight hold is taken
+// at intake is an open decision for the lead. See handlers/STATUS.md.
 
 import {
   EngineError,

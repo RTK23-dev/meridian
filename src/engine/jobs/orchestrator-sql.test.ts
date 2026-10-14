@@ -171,7 +171,7 @@ test("a failing intake rejects the request, persists its gate result, and queues
   assert.deepEqual(gates, [{ gate: "request", passed: false }]);
 });
 
-test("an intake without a reservation pauses the request, and no paid job reaches the jobs table", async () => {
+test("an intake without a reservation advances, then the request pauses on analysis, the first paid stage, and no paid job reaches the jobs table", async () => {
   const { organizationId, requestId } = await newRequest(7);
   const intakeJob = await jobIdOf(db.sql, organizationId, "engine.intake");
   await applyEngineEvent(db.sql, {
@@ -184,6 +184,8 @@ test("an intake without a reservation pauses the request, and no paid job reache
   const read = await readEngineRequest(db.sql, organizationId, requestId);
   assert.equal(read?.status, "paused");
   assert.equal(read?.state.pause?.kind, "budget");
+  assert.equal(read?.state.pause?.stage, "analyze_reference");
+  assert.equal(read?.state.nodes.intake.status, "passed");
   const rows = await jobsOf(db.sql, organizationId, requestId);
   assert.deepEqual(rows.map((row) => row.job_type), ["engine.intake"]);
 });

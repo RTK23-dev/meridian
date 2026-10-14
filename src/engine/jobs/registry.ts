@@ -62,7 +62,7 @@ const rows: Record<EngineStage, Row> = {
   analyze_reference: { stage: "analyze_reference", group: 2, timeoutClass: "claude", paid: true, reads: ["production_request"], writes: ["video_dna"], gate: "dna" },
   voice: { stage: "voice", group: 2, timeoutClass: "generation", paid: true, reads: ["production_request"], writes: ["voice_track"], gate: "voice" },
   plan: { stage: "plan", group: 3, timeoutClass: "claude", paid: true, reads: ["validated_request", "video_dna", "voice_track"], writes: ["scene_plan"], gate: "plan" },
-  estimate_reserve: { stage: "estimate_reserve", group: 3, timeoutClass: "claude", paid: false, reads: ["scene_plan"], writes: ["budget_reservation"], gate: "budget" },
+  estimate_reserve: { stage: "estimate_reserve", group: 3, timeoutClass: "claude", paid: false, reads: ["scene_plan", "production_request"], writes: ["budget_reservation"], gate: "budget" },
   produce_shot: { stage: "produce_shot", group: 4, timeoutClass: "generation", paid: true, reads: ["scene_plan"], writes: ["take"], gate: null },
   check_take: { stage: "check_take", group: 4, timeoutClass: "claude", paid: true, reads: ["take"], writes: ["take_verdict"], gate: "take" },
   edit: { stage: "edit", group: 5, timeoutClass: "claude", paid: false, reads: ["scene_plan", "take", "voice_track", "video_dna"], writes: ["edl"], gate: "edit" },

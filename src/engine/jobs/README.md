@@ -19,6 +19,8 @@ redo, downgrade and escalate), **5.4** (tables, with `migrations/0077_engine_cor
 | `validate.ts` | Boundary checks on a stage's output: the stage and subject match the job, ids have their prefixes, gates and verdicts parse. |
 | `artifact-store.ts` | `writeArtifact` and `readArtifact` for `ArtifactEnvelope`s. JSON bodies in `engine_artifacts`; media bytes through Meridian's object-store port under the Bible 5.2 key. |
 | `sql-ledger-store.ts` | The budget's `LedgerStore` on `engine_reservations` and `engine_ledger`, with the row locks the budget README asks for. |
+| `role-call-store.ts` | The `RoleCallJournal` of one request on `engine_role_calls` (migration 0078). Lets a resumed Claude call reuse its stored answer or send only its retry. Lists the RoleCall records for the manifest. |
+| `handlers/` | The `intake` and `estimate_reserve` stage handlers (their own STATUS.md). |
 | `test-db.ts` | Test helper only. PGlite (PostgreSQL in process) with every migration applied in order. |
 
 ## How a request moves
@@ -50,8 +52,11 @@ redo, downgrade and escalate), **5.4** (tables, with `migrations/0077_engine_cor
 
 - A paid stage (`registry.ts`, `paid: true`) is never queued without `budgetReservationId` on the request. `advance` pauses
   instead, `schedule` throws if it is ever reached, `queueJobs` refuses, and `dispatch` refuses before the handler runs.
-- An intake that passes without a reservation pauses on budget. The intake handler must create the pre-flight reservation
-  (Bible 6.1 step 6), because analysis and voice are paid and run before the plan is priced.
+- Intake does not reserve. A passing intake advances. The first paid stage with no reservation on the request (analysis, voice,
+  or the plan before estimate_reserve) pauses the request on budget and names the stage. This is open: the lead decides the
+  pre-flight hold (see STATUS.md, E2 item 1).
+- A stored Claude answer is reused only after it passes the role's contract again. A resume never sends a call that the
+  journal shows was already billed and answered.
 - A handler that is not registered throws `not_implemented` and is never recorded as done.
 - A result for another stage, another subject or another workspace is refused. Stale and duplicate results throw `conflict`.
 
