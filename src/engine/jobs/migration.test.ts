@@ -33,13 +33,15 @@ after(async () => {
   await db.close();
 });
 
-test("the engine migrations are numbered after the highest existing migration, each number once", () => {
+test("the engine migrations follow the migrations they build on, and every migration number is used once", () => {
   const files = migrationFiles();
-  assert.equal(files.at(-1), "0078_engine_role_calls.sql");
-  assert.equal(files.at(-2), "0077_engine_core.sql");
-  assert.equal(files.at(-3), "0076_factory_video_carousel.sql");
-  assert.equal(files.filter((file) => file.startsWith("0077_")).length, 1);
-  assert.equal(files.filter((file) => file.startsWith("0078_")).length, 1);
+  const index = files.indexOf("0077_engine_core.sql");
+  assert.ok(index > 0, "0077_engine_core.sql exists");
+  assert.equal(files[index - 1], "0076_factory_video_carousel.sql");
+  assert.ok(files.indexOf("0078_engine_role_calls.sql") > index, "the role-call table comes after the engine core");
+  // From the engine migrations on (an older duplicate, 0027, predates the engine and is left as it is).
+  const numbers = files.map((file) => file.slice(0, 4)).filter((prefix) => /^\d{4}$/.test(prefix) && Number(prefix) >= 77);
+  assert.equal(new Set(numbers).size, numbers.length, "no migration number from 0077 on is used twice");
 });
 
 test("every Bible 5.4 engine table exists and carries the tenant column organization_id, not null", async () => {

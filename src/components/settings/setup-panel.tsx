@@ -4,8 +4,9 @@ import { Button, ErrorState, Field, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
-import { useDecisionEnginesQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
-import { removeProviderConfig, saveProviderConfig } from "@/lib/meridian/settings/server-actions";
+import { useDecisionEnginesQuery, useProviderSettingsQuery, useScopedMutation, useVideoBudgetQuery } from "@/lib/query/hooks";
+import { removeProviderConfig, saveProviderConfig, saveVideoBudget, testProviderConnection } from "@/lib/meridian/settings/server-actions";
+import { parseMonthlyVideoBudget } from "@/lib/meridian/settings/video-budget-model";
 import type { ProviderCategory, ProviderConfigSummary } from "@/lib/meridian/settings/provider-config";
 import {
   rowsIn,
@@ -121,6 +122,123 @@ function GroupBlock({
           <SetupRowItem key={row.id} row={row} organizationId={organizationId} canAdmin={canAdmin} />
         ))}
       </ul>
+      {group === "video" ? <VideoBudgetForm organizationId={organizationId} canAdmin={canAdmin} /> : null}
+    </div>
+  );
+}
+
+/**
+ * The workspace's "Monthly video budget (USD)". Blank means no budget is set; there is no default. Only an admin can change
+ * it, and the server checks the role again.
+ */
+function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
+  const budget = useVideoBudgetQuery(organizationId);
+  const saved = budget.data?.monthlyVideoBudgetUsd ?? null;
+  const [draft, setDraft] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const save = useScopedMutation({
+    mutationKey: ["mutation", "settings.video-budget.save", organizationId],
+    mutationFn: (value: string) => saveVideoBudget({ data: { organizationId, monthlyVideoBudgetUsd: value } }),
+    invalidate: () => [qk.videoBudget(organizationId)],
+    onSuccess: (result) => {
+      setDraft(null);
+      setMessage(result.monthlyVideoBudgetUsd === null ? "Monthly video budget cleared. No budget is set." : "Monthly video budget saved.");
+    },
+  });
+
+  const shown = draft ?? (saved === null ? "" : saved.toFixed(2));
+  const parsed = parseMonthlyVideoBudget(shown);
+  const failure = save.error ? plainError(save.error) : null;
+  const current = budget.isError
+    ? "The budget could not be loaded. Nothing is assumed."
+    : budget.isPending
+      ? "Loading the budget..."
+      : saved === null
+        ? "No budget is set."
+        : `The budget is ${saved.toFixed(2)} USD a month.`;
+
+  return (
+    <div className="space-y-3 border-t border-border pt-4" data-row="monthly_video_budget">
+      <div className="space-y-1">
+        <p className="font-semibold text-fg">Monthly video budget (USD)</p>
+        <p className="text-sm text-fg-muted">
+          The most this workspace's video engine may spend in a month, in US dollars. Blank means no budget is
+          set, and there is no default. {current}
+        </p>
+      </div>
+      {!canAdmin ? (
+        <p className="text-sm text-fg-muted">Only a workspace admin can change the budget.</p>
+      ) : (
+        <>
+          {failure ? <PlainErrorMessage message={failure.message} raw={failure.raw} /> : null}
+          {message ? <p className="text-sm text-success" role="status">{message}</p> : null}
+          <form
+            className="flex flex-wrap items-end gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!parsed.ok || save.isPending || budget.isPending) return;
+              setMessage(null);
+              void save.mutateAsync(shown).catch(() => undefined);
+            }}
+          >
+            <div className="min-w-0 flex-1 basis-full sm:min-w-[16rem] sm:basis-auto">
+              <Field
+                label="Monthly video budget (USD)"
+                hint="A number of 0 or more, with at most two decimals. Leave blank for no budget."
+                error={parsed.ok ? undefined : parsed.message}
+              >
+                <Input
+                  inputMode="decimal"
+                  value={shown}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="No budget set"
+                  disabled={save.isPending || budget.isPending || budget.isError}
+                />
+              </Field>
+            </div>
+            <Button type="submit" variant="secondary" disabled={!parsed.ok || draft === null || save.isPending || budget.isPending}>
+              {save.isPending ? "Saving..." : "Save budget"}
+            </Button>
+          </form>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Test Connection for a row that offers it. The server reads the key through the resolver and calls no provider, so the
+ * answer is never shown as a pass unless the server says READY.
+ */
+function TestConnection({ row, organizationId }: { row: SetupRow; organizationId: string }) {
+  const [result, setResult] = useState<{ status: string; message: string } | null>(null);
+  const test = useScopedMutation({
+    mutationKey: ["mutation", "setup.key.test", organizationId, row.id],
+    mutationFn: () => testProviderConnection({ data: { organizationId, category: row.id as ProviderCategory } }),
+  });
+  const tone = result?.status === "READY" ? "text-success" : result?.status === "NOT_TESTABLE" ? "text-fg-muted" : "text-danger";
+  return (
+    <div className="space-y-2">
+      <Button
+        type="button"
+        variant="quiet"
+        disabled={test.isPending}
+        onClick={() => {
+          setResult(null);
+          void test.mutateAsync(undefined).then(
+            (answer) => setResult(answer),
+            (error: unknown) => setResult({ status: "ERROR", message: error instanceof Error ? error.message : "The test could not run." }),
+          );
+        }}
+      >
+        {test.isPending ? "Testing..." : "Test Connection"}
+        <span className="sr-only"> for {row.label}</span>
+      </Button>
+      {result ? (
+        <p className={`text-sm ${tone} [overflow-wrap:anywhere]`} role="status">
+          <strong>{result.status === "NOT_TESTABLE" ? "Not testable here" : result.status}</strong>: {result.message}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -143,6 +261,7 @@ function SetupRowItem({ row, organizationId, canAdmin }: { row: SetupRow; organi
         </span>
       </div>
       <RowAction row={row} organizationId={organizationId} canAdmin={canAdmin} />
+      {row.testable && canAdmin ? <TestConnection row={row} organizationId={organizationId} /> : null}
     </li>
   );
 }

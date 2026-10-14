@@ -237,8 +237,9 @@ test("every row belongs to a listed group, and the groups hold the rows the view
   for (const row of rows) assert.ok(groupIds.has(row.group), `${row.id} is in a group`);
   assert.deepEqual(rowsIn(rows, "decisions").map((row) => row.id), ["decision_engine", "jev", "openai"]);
   assert.deepEqual(rowsIn(rows, "media").map((row) => row.id), ["perception", "production", "hypit"]);
+  assert.deepEqual(rowsIn(rows, "video").map((row) => row.id), ["openrouter", "heygen", "anthropic"]);
   assert.deepEqual(rowsIn(rows, "sources").map((row) => row.id), ["meta_ad_library"]);
-  assert.equal(rowsIn(rows, "other_sources").length, KEYED.length - 6, "every other source connector is listed");
+  assert.equal(rowsIn(rows, "other_sources").length, KEYED.length - 9, "every other source connector is listed");
   assert.deepEqual(rowsIn(rows, "storage").map((row) => row.id), ["google_drive"]);
 });
 
@@ -272,4 +273,36 @@ test("the counts and the headline state counts only, and never claim a live prov
   const headline = setupHeadline(rows);
   assert.match(headline, /2 usable/);
   assert.match(headline, /Nothing is checked against a live provider here\./);
+});
+
+test("the video engine group lists OpenRouter, HeyGen and Anthropic, each with a key form and Test Connection", () => {
+  const rows = setupRows({
+    summaries: summaries({
+      openrouter: { configured: true, source: "workspace", credentialState: "usable", keyFingerprint: "...4321" },
+      heygen: { configured: true, source: "deployment", credentialState: "usable", keyFingerprint: "...8765" },
+      anthropic: { configured: false, source: "workspace", credentialState: "unusable", credentialReason: "The workspace's saved Anthropic credential has expired." },
+    }),
+    engines: READY_ENGINES,
+  });
+  const video = rowsIn(rows, "video");
+  assert.deepEqual(video.map((row) => [row.id, row.label]), [["openrouter", "OpenRouter"], ["heygen", "HeyGen"], ["anthropic", "Anthropic"]]);
+
+  const openrouter = rowOf(rows, "openrouter");
+  assert.equal(openrouter.status, "usable");
+  assert.equal(openrouter.fingerprint, "...4321");
+  assert.equal(openrouter.removable, true);
+  assert.deepEqual(openrouter.save, { kind: "form", category: "openrouter" });
+
+  const heygen = rowOf(rows, "heygen");
+  assert.equal(heygen.status, "deployment_shared_default");
+  assert.match(heygen.reason, /HEYGEN_SHARED_DEFAULT=deployment/);
+  assert.equal(heygen.removable, false, "a deployment key cannot be removed from a workspace");
+
+  const anthropic = rowOf(rows, "anthropic");
+  assert.equal(anthropic.status, "unusable");
+  assert.equal(anthropic.fingerprint, null);
+  assert.equal(anthropic.removable, true);
+
+  for (const row of video) assert.equal(row.testable, true, `${row.id} offers Test Connection`);
+  for (const row of rows.filter((item) => item.group !== "video")) assert.equal(row.testable, false, `${row.id} keeps its own controls`);
 });

@@ -36,6 +36,7 @@ export const qk = {
   alerts: (organizationId: string) => ["alerts", organizationId] as const,
   providerSettings: (organizationId: string) => ["provider-settings", organizationId] as const,
   decisionEngines: (organizationId: string) => ["decision-engines", organizationId] as const,
+  videoBudget: (organizationId: string) => ["video-budget", organizationId] as const,
 };
 
 /**

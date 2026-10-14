@@ -32,7 +32,8 @@ test("the keyed categories are exactly the resolver's categories, and only they 
   assert.deepEqual([...KEYED_PROVIDER_CATEGORIES].sort(), Object.keys(CREDENTIAL_VAULT_TYPE).sort());
   for (const category of KEYED_PROVIDER_CATEGORIES) assert.equal(isProviderCategory(category), true, category);
   for (const category of ["sources", "storage", "cyclone"]) assert.equal(isProviderCategory(category), true, category);
-  for (const value of ["", "veo", "provider_config:jev", "openrouter", 42, null]) {
+  // `openrouter` is a keyed category; the deployment-only chat key `openrouter_chat` is not a saved category.
+  for (const value of ["", "veo", "provider_config:jev", "openrouter_chat", 42, null]) {
     assert.equal(isProviderCategory(value), false, String(value));
   }
 });
