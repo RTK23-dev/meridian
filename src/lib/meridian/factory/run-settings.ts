@@ -3,6 +3,8 @@
  * older vocabularies map onto it here, so no screen keeps its own meaning for "automatic".
  */
 import { isCountryCode } from "./country-codes.ts";
+import { budgets } from "../../../engine/config/budgets.ts";
+import { sumUsd } from "../../../engine/contracts/money.ts";
 
 export const AUTOMATION_MODES = ["manual", "semi", "full"] as const;
 export type AutomationMode = (typeof AUTOMATION_MODES)[number];
@@ -48,6 +50,12 @@ export type RunSettings = {
    * paid publish needs at least one, and is refused with "no targeting country" without it.
    */
   targetingCountries: string[];
+  /**
+   * The budget the user sets for every master, in USD, or null when it is not set. A value is at most 2 decimals. A run that makes video
+   * needs one at or above MASTER_COST_FLOOR_USD (runCostProblem); a stored value below it still parses. The engine checks the exact minimum of each video at
+   * intake. Owner decision, 2026-10-14.
+   */
+  costPerMasterUsd: number | null;
 };
 
 export const DEFAULT_RUN_SETTINGS: RunSettings = {
@@ -59,7 +67,64 @@ export const DEFAULT_RUN_SETTINGS: RunSettings = {
   providers: {},
   caps: { dailyCents: 0, totalCents: 0, maxVariants: 8 },
   targetingCountries: [],
+  costPerMasterUsd: null,
 };
+
+/**
+ * The floor every master costs: the fixed Claude, critic, render and media cost (Bible 14.2). It is summed from the engine's own budget
+ * lines, not copied. The exact minimum of one video needs its script beats, which the run screen does not have, so the run screen
+ * checks this floor and the engine checks the rest at intake.
+ */
+export const MASTER_COST_FLOOR_USD: number = sumUsd(Object.values(budgets.fixedPerMasterUsd));
+
+/** A USD amount as text with at least 2 decimals, such as 0.52 or 0.525, for the words a person reads. */
+function usdText(usd: number): string {
+  const fourPlaces = usd.toFixed(4).replace(/0+$/, "");
+  const decimals = fourPlaces.split(".")[1] ?? "";
+  return decimals.length >= 2 ? fourPlaces : usd.toFixed(2);
+}
+
+/** The floor in words: the number the run screen shows, such as 0.52. */
+export const MASTER_COST_FLOOR_TEXT: string = usdText(MASTER_COST_FLOOR_USD);
+
+/** The sentence that names the floor, in the words the run screen uses. */
+export const MASTER_COST_FLOOR_SENTENCE = `Every master costs at least $${MASTER_COST_FLOOR_TEXT}: the fixed Claude, critic, render and media cost.`;
+
+/**
+ * Why a stored cost per master is not a dollar amount, or null when it is one (or unset). This is the shape check only, used when
+ * settings are parsed: a stored value is never refused for being below the floor, so raising the floor later cannot make saved
+ * settings unreadable (and lose their caps). The floor is checked where a cost is set or a run starts (costPerMasterProblem).
+ */
+export function costPerMasterShapeProblem(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "The cost per master must be a dollar amount, such as 0.75.";
+  if (Math.round(value * 100) / 100 !== value) return "The cost per master can have at most 2 decimals, such as 0.75.";
+  return null;
+}
+
+/**
+ * Why a cost per master cannot be set, in plain words. Null means it can. Unset (null) is allowed here, because a brand's defaults may
+ * leave it blank. A run that makes video is refused without one by runCostProblem. Compared in ten-thousandths of a dollar, so a
+ * typed amount and the floor compare exactly.
+ */
+export function costPerMasterProblem(value: unknown): string | null {
+  const shape = costPerMasterShapeProblem(value);
+  if (shape !== null || value === null) return shape;
+  if (Math.round((value as number) * 10000) < Math.round(MASTER_COST_FLOOR_USD * 10000)) {
+    return `The cost per master is below the floor. ${MASTER_COST_FLOOR_SENTENCE}`;
+  }
+  return null;
+}
+
+/**
+ * Why a run cannot start for its formats, in plain words, or null when it can. A run that makes video needs a cost per master at or
+ * above the floor. A run with no video (an image-only run) needs none.
+ */
+export function runCostProblem(settings: { formats: readonly Format[]; costPerMasterUsd: number | null }): string | null {
+  if (!settings.formats.includes("video")) return null;
+  if (settings.costPerMasterUsd === null) return `Type the cost per master (USD). ${MASTER_COST_FLOOR_SENTENCE}`;
+  return costPerMasterProblem(settings.costPerMasterUsd);
+}
 
 const MAX_PLATFORMS = 8;
 const MAX_CENTS = 100_000_000;
@@ -181,6 +246,13 @@ export function parseRunSettings(input: unknown, base: RunSettings = DEFAULT_RUN
     const countries = parseTargetingCountries(input.targetingCountries);
     if (!countries.ok) return countries;
     next.targetingCountries = countries.value;
+  }
+  if (input.costPerMasterUsd !== undefined) {
+    // null means the user has not set a cost. A key that is absent keeps the base value, which is null for a stored setting that predates it.
+    // Shape only: the floor is checked when a run starts (runCostProblem), so stored settings stay readable if the floor rises.
+    const problem = costPerMasterShapeProblem(input.costPerMasterUsd);
+    if (problem) return { ok: false, error: problem };
+    next.costPerMasterUsd = input.costPerMasterUsd as number | null;
   }
   return { ok: true, value: next };
 }

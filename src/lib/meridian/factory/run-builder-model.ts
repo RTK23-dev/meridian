@@ -10,8 +10,10 @@ import {
   DECISION_ENGINE_CHOICES,
   FACTORY_VIDEO_PROVIDERS,
   INTENTS,
+  costPerMasterProblem,
   parseRunSettings,
   parseTargetingCountries,
+  runCostProblem,
   type AutomationMode,
   type DecisionEngineChoice,
   type Format,
@@ -52,6 +54,8 @@ export type BuilderDraft = {
   providers: Partial<Record<Format, string>>;
   dailyDollars: string;
   totalDollars: string;
+  /** The cost per master in dollars, as typed. Blank is not set. */
+  costPerMasterDollars: string;
   maxVariants: string;
   countries: string;
 };
@@ -68,9 +72,24 @@ export function draftFromDefaults(defaults: RunSettings): BuilderDraft {
     providers: { ...defaults.providers },
     dailyDollars: defaults.caps.dailyCents ? String(defaults.caps.dailyCents / 100) : "",
     totalDollars: defaults.caps.totalCents ? String(defaults.caps.totalCents / 100) : "",
+    // A cost the brand's defaults never set is blank, so the input has no value until a person types one.
+    costPerMasterDollars: defaults.costPerMasterUsd === null ? "" : String(defaults.costPerMasterUsd),
     maxVariants: String(defaults.caps.maxVariants),
     countries: defaults.targetingCountries.join(", "),
   };
+}
+
+/**
+ * The cost per master a typed amount names, in dollars. Blank is not set (null). A typed amount is a plain decimal, such as 0.75, and
+ * is checked by the same rules the server uses. Anything else is refused with the reason.
+ */
+export function costPerMasterFromText(text: string): { ok: true; value: number | null } | { ok: false; error: string } {
+  const trimmed = text.trim();
+  if (trimmed === "") return { ok: true, value: null };
+  if (!/^(\d+\.?\d*|\.\d+)$/.test(trimmed)) return { ok: false, error: "The cost per master must be a dollar amount, such as 0.75." };
+  const value = Number(trimmed);
+  const problem = costPerMasterProblem(value);
+  return problem ? { ok: false, error: problem } : { ok: true, value };
 }
 
 /**
@@ -115,7 +134,18 @@ export function draftProblems(draft: BuilderDraft): string[] {
   const niche = draft.niche.trim();
   if (!niche) problems.push("Type a niche, such as skincare, to start a run.");
   if (niche.length > 80) problems.push("The niche is too long. Keep it to 80 characters.");
-  return [...problems, ...settingProblems(draft)];
+  return [...problems, ...settingProblems(draft), ...runCostProblems(draft)];
+}
+
+/**
+ * The run's own cost rule: a run that makes video needs a cost per master at or above the floor. It applies to starting a run only, so
+ * a brand's defaults may leave the cost blank. A cost that does not parse is already listed by settingProblems, so it is not listed twice.
+ */
+function runCostProblems(draft: BuilderDraft): string[] {
+  const cost = costPerMasterFromText(draft.costPerMasterDollars);
+  if (!cost.ok) return [];
+  const problem = runCostProblem({ formats: draft.formats, costPerMasterUsd: cost.value });
+  return problem ? [problem] : [];
 }
 
 /**
@@ -138,6 +168,8 @@ export function settingProblems(draft: BuilderDraft): string[] {
   if (!countries.ok) problems.push(countries.error);
   if (!isCapAmount(draft.dailyDollars)) problems.push("The daily cap must be a dollar amount of 0 or more.");
   if (!isCapAmount(draft.totalDollars)) problems.push("The total cap must be a dollar amount of 0 or more.");
+  const cost = costPerMasterFromText(draft.costPerMasterDollars);
+  if (!cost.ok) problems.push(cost.error);
   const variants = Number(draft.maxVariants);
   if (!Number.isInteger(variants) || variants < 1 || variants > 40) problems.push("Max variants per run is a whole number from 1 to 40.");
   const totalCents = centsOf(draft.totalDollars);
@@ -165,6 +197,8 @@ export function settingsFromDraft(draft: BuilderDraft): RunSettings {
   }
   // Only called once draftProblems is empty, so a list that does not parse is never sent. A blank list is no countries.
   const countries = countriesFromText(draft.countries);
+  // The same holds for the cost: a value that does not parse is refused before this point, and a blank one is not set.
+  const cost = costPerMasterFromText(draft.costPerMasterDollars);
   return {
     automation: draft.automation,
     decisionEngine: draft.decisionEngine,
@@ -178,6 +212,7 @@ export function settingsFromDraft(draft: BuilderDraft): RunSettings {
       maxVariants: Number(draft.maxVariants),
     },
     targetingCountries: countries.ok ? countries.value : [],
+    costPerMasterUsd: cost.ok ? cost.value : null,
   };
 }
 

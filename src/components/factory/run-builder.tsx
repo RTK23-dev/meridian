@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, Checkbox, DisabledReason, Field, Input, SelectInput } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { submitOnShortcut } from "@/components/forms/shortcut";
-import { AUTOMATION_MODES, DECISION_ENGINE_CHOICES, ENGINE_VIDEO_PROVIDER_ID, FORMATS, INTENTS, type AutomationMode, type DecisionEngineChoice, type Format, type Intent, type RunSettings } from "@/lib/meridian/factory/run-settings";
+import { AUTOMATION_MODES, DECISION_ENGINE_CHOICES, ENGINE_VIDEO_PROVIDER_ID, FORMATS, INTENTS, MASTER_COST_FLOOR_SENTENCE, MASTER_COST_FLOOR_TEXT, type AutomationMode, type DecisionEngineChoice, type Format, type Intent, type RunSettings } from "@/lib/meridian/factory/run-settings";
 import {
   AUTOMATION_DESCRIPTIONS,
   ENGINE_LABELS,
@@ -10,6 +10,7 @@ import {
   INTENT_DESCRIPTIONS,
   checkedDefaults,
   checkedSettings,
+  costPerMasterFromText,
   countriesFromText,
   draftFromDefaults,
   draftProblems,
@@ -60,6 +61,8 @@ export function RunBuilder({
   const reason = busy ? "Queueing the run." : !canEdit ? "Viewers cannot start runs. Ask a member to start one." : problems[0] ?? "";
   const countryNote = paidCountryNote(draft.intent, draft.countries);
   const countriesCheck = countriesFromText(draft.countries);
+  const costCheck = costPerMasterFromText(draft.costPerMasterDollars);
+  const needsCost = draft.formats.includes("video");
   const defaultsCheck = checkedDefaults(draft);
   const defaultsReason = savingDefaults
     ? "Saving the brand's defaults."
@@ -205,6 +208,22 @@ export function RunBuilder({
         </Field>
         {countryNote ? <p className="text-sm text-muted">{countryNote}</p> : null}
       </fieldset>
+
+      <Field
+        label="Cost per master (USD)"
+        required={needsCost}
+        hint={`${MASTER_COST_FLOOR_SENTENCE} The exact minimum for each video is checked before it is made.`}
+        error={costCheck.ok ? undefined : costCheck.error}
+      >
+        <Input
+          value={draft.costPerMasterDollars}
+          onChange={(event) => update("costPerMasterDollars", event.target.value)}
+          type="number"
+          min={MASTER_COST_FLOOR_TEXT}
+          step="0.01"
+          disabled={!canEdit}
+        />
+      </Field>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Field label="Daily spend cap (USD)">

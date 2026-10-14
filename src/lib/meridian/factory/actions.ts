@@ -12,6 +12,7 @@ import {
   mergeRunSettings,
   parseRunSettings,
   parseStoredSettings,
+  runCostProblem,
   runSettingsFromStorage,
 } from "./run-settings.ts";
 import {
@@ -382,6 +383,9 @@ export const startFactoryRun = createServerFn({ method: "POST" })
       : parseRunSettings(data.settings, mergeRunSettings(brandDefaults, null));
     if (!parsed.ok) throw new Error(parsed.error);
     const effective = parsed.value;
+    // A run that makes video needs the user's cost per master, at or above the floor. The run screen checks it too; the server does not trust that.
+    const costProblem = runCostProblem(effective);
+    if (costProblem) throw new Error(costProblem);
     // The owner ceiling and the verified round trip apply to the mode through the level it is held to.
     const level = factoryLevelOfAutomation(effective.automation);
     const ceilingRows = await sql<{ ceiling: number }>`

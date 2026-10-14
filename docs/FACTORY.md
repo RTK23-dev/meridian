@@ -18,6 +18,7 @@ A run stores the settings it started with, so a later change to the brand does n
 | `providers` | per format: `auto` or a provider id | `auto` lets the capability matrix choose. A named provider that is not ready stops the run with its reason. |
 | `caps` | `dailyCents`, `totalCents`, `maxVariants` | Spend caps and the variant limit. See the caveat on caps below. |
 | `targetingCountries` | ISO 3166-1 alpha-2 codes in capitals, such as `US` and `GB` | The countries a paid ad is targeted to. Empty means none is set. A live paid publish needs at least one. |
+| `costPerMasterUsd` | USD, at most 2 decimals, or `null` (not set) | The budget the user sets for every master. It is never below the fixed per-master cost ($0.52). A run that makes video needs one; an image-only run does not. Owner decision, 2026-10-14. The engine checks the exact minimum of each video at intake. A stored run from before this setting reads as `null`. |
 
 The server checks every value. An unknown automation, intent or format, a platform id that is not lowercase letters, a provider id
 outside the allowed pattern, a negative cap, or a country code that is not an officially assigned ISO code (or is not in capitals) is
@@ -299,8 +300,8 @@ view says so rather than guessing. The prediction an earlier pick was made under
 ## The Factory screen
 
 The Discover tab has two parts. **Start a run** is the run builder. It has the niche, automation, intent, decision engine, formats, platforms,
-a provider per format, the daily and total spend caps and the variant limit. It starts from the brand's run defaults. It says in plain words
-what must change before the run can start; for example, full automation needs a total cap above zero. Each run stores the settings it started
+a provider per format, the cost per master, the daily and total spend caps and the variant limit. It starts from the brand's run defaults. It says in plain words
+what must change before the run can start; for example, full automation needs a total cap above zero, and a run that makes video needs a cost per master at or above $0.52. Each run stores the settings it started
 with, and the server checks them again.
 
 **Runs** lists each run with its settings, its stage progress, each source's state, and the receipts and measurements of its own creatives.
