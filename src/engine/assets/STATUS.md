@@ -1,7 +1,127 @@
-# Asset router and adapters (W5), E2 status
+# Asset router and adapters (W5): E3 asynchronous submit and settle
 
-Built by eng-media-assets on branch `eng-e2-assets` (cut from `code/beautiful-cori-1zfk11` at `a4b04c7`). Fixture-tested
-only. No live call has been made: agents hold no keys (North Star decision 1). The owner's live run is listed below.
+Branch `eng-e3-router-async`, cut from `origin/code/beautiful-cori-1zfk11` at `c0767f2`. Fixture-tested only. No live call has
+been made: agents hold no keys (North Star decision 1). The owner's live run is listed at the end of this section.
+
+## What changed (E3)
+
+The router was synchronous: `produce` submitted and polled inside one paid call, so a generated take blocked a worker for the
+length of the render. It is now three entry points over one state machine (Bible 15.2):
+
+- **`submit(input)`** chooses the target (scored, cached, connected, breaker-checked), authorizes the submit on the ledger, sends
+  it, and returns `{ step: { status: "submitted", job, runAfterMs: 0 }, decisions, alerts, attempts }`. A cache hit or a refusal
+  returns the terminal `ProduceOutcome` instead. The job holds one concurrency slot on its target until it is settled.
+- **`settle(job, poll, input)`** takes the poller's finished answer (`done` or `failed`; a `pending` answer is refused). It
+  downloads and checks the take when `takes` is set, reconciles the submit's ledger entry to its bill (or its list estimate when
+  the provider reported none), records the attempt in stats and the breaker, and returns one of: `done` (the asset, cost summed
+  over the winning target's submits), `failed` (content_policy or invalid_input, to the planner), `submitted` (a retry on the same
+  target, with `runAfterMs` = the backoff, or the next target), or the terminal `unavailable`, `refused`, `queued` or `duplicate`.
+- **`produce(input)`** is `submit`, then poll each job with the backoff and the deadline, then `settle`, until the step is terminal.
+  Synchronous callers and the existing tests use it. Its behaviour is unchanged except where the ledger notes below say so.
+- **Idempotent settle (Bible 5.1).** Each settled submit is recorded under `workspaceId + idempotencyKey` in a `SettlementStore`
+  (`job.ts`). A second settle returns the first result with no provider call, no ledger write, no stats record and no cache write.
+  A settle that is running in another call is refused as retryable (`conflict`), so two polls of one job cannot both retry the
+  same submit. A claim whose lease (`thresholds.jobs.leaseMs.generation`) has expired is taken over.
+- **The job reference** (`job.ts`, `meridian.asset_job/v1`) is plain JSON, validated with zod on every parse: the provider's job
+  id, the submit's ledger key (also the idempotency key sent with it), the scored targets with their cache keys and estimates,
+  the target index, the attempt on the target, the submit number across the asset, the bills reconciled so far, and a carry of
+  the reasons the targets so far failed, were refused, or were queued. A job that names another request, workspace or reservation,
+  or a spec other than the one it was submitted with, is refused before any side effect.
+
+### Ledger (one entry per submit)
+
+Each submit is its own ledger entry (Bible 14.1). The first submit of a target is keyed by its cache key, as before. A retry on
+the same target is keyed `<cacheKey>|attempt<n>`, so it is authorized before it is sent and holds its own estimate. The asset's
+cost is the sum over the winning target's submits, as before. In `router.test.ts` the assertion for Kling changed: the three
+refused submits are three entries that sum to 1.89 (the first alone is 0.63). The total is the same; the books now show each
+submit.
+
+### Retries and the slot
+
+| Event | Next step | Slot |
+| --- | --- | --- |
+| Submit-time rate_limit or server (or retryable unknown) | Retry inside `submit`, with the backoff slept (1 s, 2 s, ... capped), up to `thresholds.jobs.maxAttempts` submits | held |
+| Settle: failed with a retryable error, attempts left | New submit on the same target, returned as `submitted` with `runAfterMs` = backoff | held, passed to the new job |
+| Settle: timeout, or non-retryable unknown, or retries used up | Next target (a `Decision` names the failed target), or `unavailable` | released before the next target |
+| Settle: content_policy or invalid_input | `failed` for the planner, no fallback | released |
+
+A poll deadline is a timeout. Cancel is best effort and is the caller's job before settle (see the open items).
+
+### Takes (opt-in)
+
+`createAssetRouter({ takes: {} })` makes settle download the finished video through the gateway (`gatewayDownloader`, 150 MiB
+limit), check it is an mp4 (`normaliseVideo`: an `ftyp` box at byte 4, between 4 KiB and the media functions' input limit), and
+store the bytes through the `MediaStore`. The asset then names the stored copy. A download that fails with a retryable error throws,
+so the poll job retries the settle with nothing recorded. A file that fails the checks is a failed take and the next target runs.
+Without `takes` (the default, and what `produce-shot` uses today) settle returns the provider's own https uri, and the take stage
+downloads it as before. Only one of the two should download: see the produce-shot change below.
+
+## Test results (real output, this branch)
+
+- `NODE_ENV=development node --experimental-strip-types --test src/engine/assets/*.test.ts src/engine/assets/providers/*.test.ts src/engine/jobs/handlers/produce-shot.test.ts src/engine/jobs/e3-pipeline.test.ts`
+  gives `# tests 163`, `# suites 45`, `# pass 163`, `# fail 0`, `# skipped 0`. The 125 before this change plus 38 new.
+- New tests: `submit-settle.test.ts` (15: submit then settle done, with the slot and the ledger; settle failed then next target;
+  rate-limited retry on the same target with the summed cost; settle twice; two settles at once; timeout moves to the next target
+  with no retry; planner refusal; pending refused; another workspace refused; another spec refused; takes stored; takes download
+  503 retried with nothing recorded; a non-mp4 take moves on; a submit answer with no job id is a failed submit and frees its slot), `job.test.ts` (schema and settlement store, 14), `ledger-steps.test.ts`
+  (lock use, 3), `normalise-take.test.ts` (video and uri checks, 6).
+- `npm run typecheck`: exit 0.
+- `npm run lint`: exit 0, 0 errors, 4 warnings, all in existing UI files under `src/components/` (none in this change). ESLint on
+  `src/engine/assets` and `src/engine/jobs` alone: exit 0, no output.
+
+## Changes needed outside this folder (reported, not made: src/engine/jobs is not this workstream)
+
+These are for the handler owner. `produce-shot.ts` currently calls `router.produce` and treats `submitted` as an error.
+
+1. **Submit.** `routerGenerator` calls `router.submit(input)` instead of `produce`, and returns `submitted` with the whole
+   `AssetJob` and `runAfterMs`. `run()` must accept `submitted` from the generator (it throws for it today, in `fromProduction`).
+   The job goes in the poll payload (a new `job` field next to `provider`, `jobRef` and `submittedAt`); `scheduleProviderPoll`
+   takes the job's first-poll delay from `runAfterMs`, not from `jobSettings.poll.initialMs`.
+2. **Settle.** `ShotGenerator.settle` takes the `AssetJob` (not `{providerId, jobRef, submittedAt}`) and calls
+   `router.settle(job, polled, input)`. Its `StepReport.step` maps like `ProduceOutcome`, except:
+   - `submitted`: `finish` must schedule the next poll for the new `job` (through `scheduleProviderPoll`) and return without
+     `applyEngineEvent(succeeded)`. Today `finishPoll` always stores the output as the stage's result.
+   - Routers are built with a durable `settlements` store (Postgres). The memory store is not shared across workers, so a
+     settle run on another worker would repeat a retry submit. This is the blocking item for production.
+3. **Timeout.** The poller's `timed_out` branch throws today. It should call `adapter.cancel` (as it does) and then settle the job
+   with `{ state: "failed", error: { kind: "timeout", retryable: true, message } }`, so the next target runs (Bible 10.4).
+4. **Download, one place.** Either `produce-shot` keeps `storeTake`'s download and the router is built without `takes` (today's
+   behaviour), or the router is built with `takes` and `storeTake` uses the stored uri and skips its own download. Doing both
+   downloads twice. The lead to choose.
+5. **Bucket leases.** A slot is held from submit until settle. A poll job that dies without settling keeps its slot. The Postgres
+   bucket store needs a lease, so a slot expires with its job's lease.
+
+## Open items and risks (owner or lead to decide)
+
+- **Image results are in process.** `openRouterImageAdapter` keeps its job's result in memory, so its poll must run in the process
+  that submitted it. `produce` does. A poller on another worker gets "no result" (a failure that is not retryable, so the next
+  target runs). Image jobs need durable results, or their submit and poll must stay in one job. Video jobs poll the provider and
+  are unaffected.
+- **Cancel.** Settle does not cancel. `awaitTerminal` cancels on its own deadline; the poller must do the same before it settles a
+  timeout (change 3).
+- **Crash between submit and record.** A worker that crashes after the provider accepts a submit and before the job is recorded
+  leaves an unknown provider job. OpenRouter documents no idempotency header, so a retry can bill twice. The ledger holds one
+  estimate per submit, so the books show the risk. This is the open risk the jobs STATUS already names. A crash between a side
+  effect and `settlements.complete` runs that settle again: the reconcile is idempotent, but a stats record can repeat.
+- **Retry of a submit that was authorized but never sent.** If a crash falls between `authorizeSubmit` and the provider call, the
+  next run finds the key authorized and returns `duplicate`. The job then fails closed (conflict) and nothing is sent twice.
+- **Memory stores.** `memorySettlementStore`, `memoryBucketStore`, `memoryProviderStats`, `memoryBreakerStore` and
+  `memoryAssetCache` are for tests and single-process use. None of them is shared across workers.
+
+## Owner's live run (E3, in addition to the E2 steps below)
+
+1. Build the router with the Postgres stores and `takes: {}` (or without `takes`, per change 4).
+2. `submit` one `video.cinematic` spec (5 s, 9:16). Record `job.providerId`, `job.jobRef`, `job.idempotencyKey`, the ledger
+   estimate, and the activity-page cost before any poll.
+3. Poll the job once with the adapter's `poll`, then `settle`. Record `asset.costUsd`, `costIsEstimate`, `ledgerEntryId`, and the
+   ledger's actual. Settle the same job a second time and confirm no request is sent (count the provider's GET and POST calls).
+4. Force a rate limit on the same spec if the provider allows it, or a timeout with a short `pollTimeoutMs`, and record that the
+   next step is the same target (rate limit) or the next target (timeout), with each submit's own ledger entry.
+
+## E2 status (retained below)
+
+The text that follows is the E2 status. It is unchanged except where the E3 section above says otherwise (notably the
+ledger count for Kling's refused submits, which is now one entry per submit).
 
 ## Done (fixture-tested)
 

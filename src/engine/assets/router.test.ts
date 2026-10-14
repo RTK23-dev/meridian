@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { assetCacheKey, type AssetSpec } from "../contracts/assets.ts";
+import { sumUsd } from "../contracts/money.ts";
 import { newId } from "../contracts/ids.ts";
 import { routes, type RouteTable } from "../config/routes.ts";
 import type { HttpResponse } from "../gateway/types.ts";
@@ -142,8 +143,16 @@ describe("routing and fallback", () => {
       ],
     );
 
+    // Each submit is its own ledger entry (Bible 14.1). The first is keyed by the cache key; the retries carry an attempt suffix.
+    const klingRows = (await h.ledger.listEntries(h.reservationId)).filter((row) => row.provider === "openrouter" && row.model === KLING);
+    assert.equal(klingRows.length, 3, "one ledger entry per submit");
+    assert.equal(
+      sumUsd(klingRows.map((row) => row.actualUsd ?? 0)),
+      1.89,
+      "each refused submit holds its list estimate (3 x 0.63), never under-counted",
+    );
     const klingEntry = await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID));
-    assert.equal(klingEntry?.actualUsd, 1.89, "each refused submit holds its list estimate (3 x 0.63), never under-counted");
+    assert.equal(klingEntry?.actualUsd, 0.63, "the first submit's entry is keyed by the cache key");
     const veoEntry = await h.ledger.getEntryByKey(assetCacheKey(spec, VEO_ID));
     assert.equal(veoEntry?.actualUsd, 0.4);
     assert.equal(veoEntry?.idempotencyKey, assetCacheKey(spec, VEO_ID), "the cache key is the idempotency key");
