@@ -20,6 +20,7 @@ export const FIXTURE_IDS = {
   ledgerRender: fixtureId("led_", 8),
   ledgerStt: fixtureId("led_", 9),
   ledgerShot3: fixtureId("led_", 10),
+  ledgerPlanner: fixtureId("led_", 34),
   shot1: fixtureId("shot_", 11),
   shot2: fixtureId("shot_", 12),
   shot3: fixtureId("shot_", 13),

@@ -764,6 +764,23 @@ export const ledgerShot3Fixture: LedgerEntry = {
   at: "2026-10-13T09:02:10.000Z",
 };
 
+// A Claude call, traced to its role and prompt version (LedgerEntry, contract v2). The estimate is the planner's
+// 20k in and 4k out at the Opus 5.5 rate (Bible 11.1): $0.16. The actual is 19k in and 3.3k out.
+export const ledgerClaudeFixture: LedgerEntry = {
+  entryId: ID.ledgerPlanner,
+  requestId: ID.request,
+  stage: "plan",
+  provider: "openrouter",
+  model: "anthropic/claude-opus-5.5",
+  estimateUsd: 0.16,
+  reservedUsd: 0.16,
+  actualUsd: 0.142,
+  idempotencyKey: contentHash({ role: "planner", promptVersion: "planner@1", model: "anthropic/claude-opus-5.5", input: ID.request }),
+  at: "2026-10-13T09:01:30.000Z",
+  role: "planner",
+  promptVersion: "planner@1",
+};
+
 const generatedUsd = takesFixture.map((take) => take.costUsd);
 
 export const manifestFixture: Manifest = {

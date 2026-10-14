@@ -230,3 +230,64 @@ test("every mode is a value the reservation accepts", async () => {
     assert.equal(result.reservation.mode, mode);
   }
 });
+
+test("a Claude call is recorded with its role and prompt version (LedgerEntry, contract v2)", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation }));
+  const result = await authorizeCall(
+    store,
+    call({ stage: "plan", provider: "openrouter", model: "anthropic/claude-opus-5.5", estimateUsd: 0.16, role: "planner", promptVersion: "planner@1", idempotencyKey: "planner:1" }),
+  );
+  assert.equal(result.status, "authorized");
+  if (result.status !== "authorized") return;
+  assert.equal(result.entry.role, "planner");
+  assert.equal(result.entry.promptVersion, "planner@1");
+  const [stored] = await store.listEntries(ID.reservation);
+  assert.equal(stored?.role, "planner");
+  assert.equal(stored?.promptVersion, "planner@1");
+});
+
+test("a call that is not a Claude call carries no role fields", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation }));
+  const result = await authorizeCall(store, call());
+  assert.equal(result.status, "authorized");
+  if (result.status !== "authorized") return;
+  assert.equal("role" in result.entry, false);
+  assert.equal("promptVersion" in result.entry, false);
+});
+
+test("a role without its prompt version, or the reverse, is refused before anything is written", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation }));
+  await assert.rejects(
+    authorizeCall(store, call({ role: "planner", idempotencyKey: "planner:x" })),
+    (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+  );
+  await assert.rejects(
+    authorizeCall(store, call({ promptVersion: "planner@1", idempotencyKey: "planner:y" })),
+    (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+  );
+  assert.equal((await store.listEntries(ID.reservation)).length, 0);
+});
+
+test("a role that is not in the Bible 11.1 list is refused by the contract before it is written", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation }));
+  await assert.rejects(
+    authorizeCall(store, call({ role: "copywriter" as never, promptVersion: "copywriter@1", idempotencyKey: "copy:1" })),
+    (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+  );
+  assert.equal((await store.listEntries(ID.reservation)).length, 0);
+});
+
+test("a duplicate key with a different role is flagged as not the same payload", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation }));
+  await authorizeCall(store, call({ role: "planner", promptVersion: "planner@1", idempotencyKey: "claude:same" }));
+  const other = await authorizeCall(store, call({ role: "critic_take", promptVersion: "critic_take@1", idempotencyKey: "claude:same" }));
+  assert.equal(other.status, "duplicate");
+  if (other.status !== "duplicate") return;
+  assert.equal(other.samePayload, false);
+  assert.equal(other.entry.role, "planner");
+});

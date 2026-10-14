@@ -18,3 +18,4 @@ export * from "./manifest.ts";
 export * from "./ledger.ts";
 export * from "./assets.ts";
 export * from "./envelope.ts";
+export * from "./version.ts";

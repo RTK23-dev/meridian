@@ -13,6 +13,7 @@ import {
   usdSchema,
   type BudgetMode,
   type BudgetReservation,
+  type ClaudeRole,
   type ScenePlan,
 } from "../contracts/index.ts";
 import { estimatePlan } from "./estimate.ts";
@@ -151,6 +152,9 @@ export type CallInput = {
   /** ISO time of the call. */
   at: string;
   entryId?: string;
+  /** A Claude call's role and prompt version (LedgerEntry, contract v2). Set both or neither. */
+  role?: ClaudeRole;
+  promptVersion?: string;
 };
 
 export type AuthorizeResult =
@@ -164,8 +168,20 @@ function samePayload(row: LedgerRow, input: CallInput): boolean {
     row.stage === input.stage &&
     row.provider === input.provider &&
     row.model === input.model &&
-    row.estimateUsd === input.estimateUsd
+    row.estimateUsd === input.estimateUsd &&
+    row.role === input.role &&
+    row.promptVersion === input.promptVersion
   );
+}
+
+/** The role fields of a call, or nothing. A role without its prompt version (or the reverse) is refused before any write. */
+function roleFieldsOf(input: CallInput): { role?: ClaudeRole; promptVersion?: string } {
+  if ((input.role === undefined) !== (input.promptVersion === undefined)) {
+    throw new EngineError("invalid_input", "a Claude call names its role and its prompt version together", {
+      stage: input.stage,
+    });
+  }
+  return input.role === undefined ? {} : { role: input.role, promptVersion: input.promptVersion };
 }
 
 /** What the reservation has committed so far: each entry's actual cost, or its hold until it is reconciled. */
@@ -187,6 +203,7 @@ export async function authorizeCall(store: LedgerStore, input: CallInput): Promi
   if (input.idempotencyKey.length === 0) {
     throw new EngineError("invalid_input", "a paid call needs an idempotency key");
   }
+  const trace = roleFieldsOf(input);
 
   const existing = await store.getEntryByKey(input.idempotencyKey);
   if (existing) {
@@ -231,11 +248,17 @@ export async function authorizeCall(store: LedgerStore, input: CallInput): Promi
     reservedUsd: estimate,
     idempotencyKey: input.idempotencyKey,
     at: input.at,
+    ...trace,
     workspaceId: reservation.workspaceId,
     reservationId: reservation.reservationId,
   };
   const { workspaceId: _workspace, reservationId: _reservation, ...contractFields } = row;
-  ledgerEntrySchema.parse(contractFields);
+  const checked = ledgerEntrySchema.safeParse(contractFields);
+  if (!checked.success) {
+    throw new EngineError("invalid_input", `ledger entry for ${input.stage} is invalid: ${checked.error.message}`, {
+      stage: input.stage,
+    });
+  }
 
   const appended = await store.appendEntry(row);
   if (!appended.created) {

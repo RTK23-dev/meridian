@@ -304,6 +304,29 @@ Invariants added in v1 (the schemas enforce them):
 - A `BudgetReservation.estimateUsd` equals the sum of its lines.
 - Money carries at most four decimals.
 
+### v2 changes and migration (E2, contract version `engine-contracts@2`)
+
+Approved by the lead, 2026-10-14. The set version is `CONTRACTS_VERSION` in `src/engine/contracts/version.ts`. Every change
+is additive, so nothing written under v1 becomes invalid. Types with a `schema` literal are unchanged, so their literals
+stay `/v1`. `LedgerEntry` and `VoiceKit` have no literal, so the set version carries their bump.
+
+- **`LedgerEntry` (4.4, `ledger.ts`):** two optional fields trace a Claude call to its role. `role` is one of the ten Claude
+  roles of 11.1 (`segmenter`, `genome`, `request_classifier`, `planner`, `director_check`, `tightener`, `critic_take`,
+  `critic_final`, `prompt_fixer`, `variant_writer`). `promptVersion` is `<role>@<n>`, the form of `Manifest.promptVersions`,
+  and must be a version of `role`. The two are set together or not at all. Entries written under v1 have neither.
+  Migration for eng-pipeline: add nullable `role` and `prompt_version` columns to `engine_ledger`, with no backfill. A null
+  means the entry is not a Claude call or was written before v2. `authorizeCall` takes both fields, and a duplicate key with
+  a different role is reported as not the same payload.
+- **`VoiceKit` (13, `kits.ts`):** optional `wordsPerMinute` (positive, finite). Intake (6.1 step 4) uses the persona's rate
+  when a persona loads, else the voice kit's. With neither, speech length is unknown and intake fails closed. Kits without
+  the field stay valid.
+- **Price table (`config/prices.ts`, `prices@2`):** `tokenRates` holds the Claude token rates of 11.1 in USD per million
+  tokens, keyed by the OpenRouter model id in `config/routes.ts`. Opus 5.5 is $4 / $20 and Sonnet 5.5 $2 / $10. Haiku is
+  costed at Haiku 4.5's $1 / $5 until Haiku 5.5's rate is confirmed (an owner check). `claude/rates.ts` still holds its own
+  copy; the switch to `prices.tokenRates` is a one-line change for the lead.
+- **Take gate (12.2, `thresholds.take`):** already held the Bible's numbers at v1, so nothing changes. The numbers are
+  checked in `config.test.ts`. `thresholds.render.platformMaxBytes` stays null: the Bible does not give a size limit.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.
