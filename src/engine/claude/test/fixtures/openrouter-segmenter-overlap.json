@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440200-segmenteroverlap",
+  "model": "anthropic/claude-sonnet-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"segments\":[{\"segId\":\"s1\",\"startMs\":0,\"endMs\":3500,\"wordIds\":[\"w1\",\"w99\"],\"shotType\":\"talking_head\",\"layers\":{}},{\"segId\":\"s2\",\"startMs\":3000,\"endMs\":13000,\"wordIds\":[],\"shotType\":\"other\",\"layers\":{}}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 25873,
+    "completion_tokens": 190,
+    "total_tokens": 26063,
+    "cost": 0.05775
+  }
+}

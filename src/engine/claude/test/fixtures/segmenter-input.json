@@ -1,0 +1,26 @@
+{
+  "durationMs": 12000,
+  "cutsMs": [3000, 7500],
+  "transcript": [
+    { "wordId": "w1", "text": "Stop", "startMs": 300, "endMs": 620, "confidence": 0.97 },
+    { "wordId": "w2", "text": "scrolling", "startMs": 640, "endMs": 1100, "confidence": 0.95 },
+    { "wordId": "w3", "text": "this", "startMs": 1150, "endMs": 1300, "confidence": 0.94 },
+    { "wordId": "w4", "text": "mug", "startMs": 3400, "endMs": 3700, "confidence": 0.93 },
+    { "wordId": "w5", "text": "keeps", "startMs": 3720, "endMs": 4100, "confidence": 0.92 },
+    { "wordId": "w6", "text": "coffee", "startMs": 4120, "endMs": 4600, "confidence": 0.91 }
+  ],
+  "frames": [
+    {
+      "atMs": 500,
+      "imageUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    },
+    {
+      "atMs": 4000,
+      "imageUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    },
+    {
+      "atMs": 8000,
+      "imageUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    }
+  ]
+}
