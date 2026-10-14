@@ -41,7 +41,7 @@ describe("component props are checked against the library's own schema", () => {
   });
 
   it("refuses a component the library does not have", () => {
-    const result = checkComponentProps("list.tierBoard", {}, 1000);
+    const result = checkComponentProps("map.route", {}, 1000);
     assert.equal(result.ok, false);
     assert.match(result.ok ? "" : result.reason, /not in the library/);
   });
