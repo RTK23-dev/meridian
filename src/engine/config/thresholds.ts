@@ -4,7 +4,7 @@
 import { tunable } from "./tunable.ts";
 
 export const thresholds = {
-  version: "thresholds@1",
+  version: "thresholds@2",
 
   // 5.1 jobs: infrastructure retries and quality redos. Constants.
   jobs: {
@@ -100,10 +100,18 @@ export const thresholds = {
     afterThresholdChangeDays: 7,
   },
 
-  // 10.4 concurrency buckets (one per provider class) and the circuit breaker.
+  // 10.4 concurrency buckets (one per provider class) and the circuit breaker. The Bible gives the 30% share, the
+  // 10-minute window and the 10-minute skip. It gives no minimum sample, so `minSample` is an initial value (thresholds@2):
+  // the breaker trips only after this many provider-side attempts in the window. Without it one failure in an empty window
+  // trips the breaker (assets/STATUS.md, decision 4). Integer. Tunable.
+  //
+  // `minAttempts` (thresholds@2) is the unknown-score policy for provider reliability and latency (10.2). The Bible gives
+  // no number. Below this many attempts in the reliability window a provider's reliability is unknown and left out of its
+  // score, not scored as 0 or 1. The assets code does not read it yet (it treats any attempt as known). Integer. Tunable.
   router: {
     concurrency: { video: 10, image: 20, tts: 30 },
-    breaker: { failureShare: 0.3, windowMs: 600_000, skipMs: 600_000 },
+    breaker: { failureShare: 0.3, windowMs: 600_000, skipMs: 600_000, minSample: tunable(5, 1, 50) },
+    minAttempts: tunable(10, 1, 100),
   },
 
   // 11.3 prompt challengers and 11.4 vision input size.

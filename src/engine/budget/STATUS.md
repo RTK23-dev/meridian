@@ -1,6 +1,57 @@
 # STATUS: engine budget and cost ledger (W12)
 
-## Phase E2: contract version `engine-contracts@2` (current)
+## Phase E3: contract version `engine-contracts@3` (current)
+
+Branch `eng-e3-contracts`, based on `origin/code/beautiful-cori-1zfk11` at aa3bcf8. Not pushed. The lead's brief for E3, item by
+item. Fixture-tested only; no live call. Covered by `budget/README.md` (the pre-flight hold section).
+
+### Done
+
+- **Pre-flight hold, `budget/preflight.ts`.** `reserveFixed(store, {requestId, workspaceId, mode, requestBudgetUsd,
+  workspaceMonthBudgetUsd, now, reservationId?})` holds the fixed per-master lines only ($0.52 from `budgets.fixedPerMasterUsd`).
+  It is idempotent on `reservationId`. Cap pauses it when the request budget or the workspace month would be exceeded.
+- **Extension, `budget/preflight.ts`.** `extendReservation(store, {reservationId, plan, requestBudgetUsd,
+  workspaceMonthBudgetUsd, now})` raises the hold to the plan's estimate plus the redo allowance, and replaces the fixed lines
+  with the plan's lines (the fixed lines stay inside). It never lowers the hold. It refuses a plan amount below the committed
+  total. It refuses a paused, released or other-month reservation. In cap it pauses (writes nothing) when a budget would be
+  exceeded. Extending again with the same plan writes nothing.
+- **Decisions I made where the brief was open (lead to confirm):**
+  1. *Extension below committed is refused,* not clamped up to the committed amount. The brief's test list says "refused".
+  2. *Cap pause on extension writes nothing.* A paused reservation holds nothing (contract), and pausing the existing hold
+     would drop its committed calls from the monthly total. So the reservation keeps its current hold and state.
+  3. *Other-month extension is refused.* Holds are counted in their `createdAt` month (`sumForMonth`). Extending in another
+     month would put the new amount in a month whose budget was never checked. `now` must be in the reservation's month.
+  4. *A paused pre-flight hold is not revived.* Its extension is refused. A new reservation is needed once the budget allows.
+- **Fixed lines are exported.** `estimate.ts` exports `fixedBudgetLines()` (was private), so the pre-flight hold and the estimate
+  share one definition.
+- **Tests, `budget/preflight.test.ts` (32).** Fits; request exceeded (cap pause, warn alert, observe silent); month exceeded
+  (cap pause, warn, observe), with the exact-budget boundary; idempotent; invalid inputs; extension fits; fixed lines inside;
+  all-code plan; request and month pause write nothing; counting the other holds of the month (boundary 1.4795 fits, 1.4794
+  pauses); warn and observe; repeated extension writes once; extension below committed refused; a plan equal to committed
+  accepted; never lowered; paused and released refused; other month refused; unknown price and invalid plan throw before any
+  write; not_found; invalid extension inputs; the whole flow (hold, analysis call, extension, shot call, reconcile, release,
+  monthly totals at the actuals).
+- **Not changed:** `reserve()`, `authorizeCall`, `reconcileCall`, `releaseReservation` and `LedgerStore`. The store interface
+  needs no new method.
+
+### Checks (this worktree)
+
+- `NODE_ENV=development node --experimental-strip-types --test 'src/engine/budget/**/*.test.ts'`: the budget files (estimate,
+  reserve, reconcile, store and preflight) pass with the rest of the E3 sets, 274 in all (see `contracts/STATUS.md`). Preflight
+  alone: `# tests 32`, `# pass 32`, `# fail 0`.
+- The estimate-reserve handler (`jobs/handlers/estimate-reserve.ts`) still calls `reserve()`, not `extendReservation`. Its
+  switch is eng-pipeline's change (see below).
+
+### For eng-pipeline and the lead (not made here)
+
+- **estimate_reserve** must call `extendReservation` with the reservation id that intake stored, not `reserve()` with a new plan
+  id. Until then a request has two reservations and the fixed hold is not raised.
+- **Intake** must call `reserveFixed` with a stable reservation id (for example from the request id). The orchestrator must then
+  take the id from intake, and no longer pause on a null reservation (Bible 6.1 step 8 wording).
+- **Postgres `LedgerStore`:** `reserveFixed` and `extendReservation` read the month totals and then write. They run in one
+  transaction with a row lock on the reservation (see `budget/README.md`).
+
+## Phase E2: contract version `engine-contracts@2`
 
 Branch `eng-e2-contracts`, based on `origin/code/beautiful-cori-1zfk11` at a4b04c7. Not pushed. Config it reads is in
 `src/engine/config/` (see `contracts/STATUS.md`).

@@ -2,4 +2,4 @@
 // LedgerEntry and VoiceKit have no literal, so a change to them bumps this set version and is recorded in the section 4
 // migration note. Bump it with every contract change, and only with the lead's approval.
 
-export const CONTRACTS_VERSION = "engine-contracts@2" as const;
+export const CONTRACTS_VERSION = "engine-contracts@3" as const;

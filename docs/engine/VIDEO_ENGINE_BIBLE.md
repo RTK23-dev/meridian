@@ -327,6 +327,30 @@ stay `/v1`. `LedgerEntry` and `VoiceKit` have no literal, so the set version car
 - **Take gate (12.2, `thresholds.take`):** already held the Bible's numbers at v1, so nothing changes. The numbers are
   checked in `config.test.ts`. `thresholds.render.platformMaxBytes` stays null: the Bible does not give a size limit.
 
+### v3 changes and migration (E3, contract version `engine-contracts@3`)
+
+Approved by the lead for E3. The set version is `CONTRACTS_VERSION` in `src/engine/contracts/version.ts`.
+
+- **`Manifest` (4.4, `manifest.ts`): `meridian.manifest/v2`.** Adds an optional `roleCalls` array of `ManifestRoleCall`:
+  `role` (one of the ten 11.1 roles), `promptVersion` (`<role>@<n>`, and the version recorded for that role in
+  `promptVersions`), `model`, `answeredBy`, `generationId`, `tokens` (`{ prompt, completion }`, each null when unknown),
+  `costUsd` (null when unknown), `actualIsEstimate` and `verdict` (`answered` or `invalid_answer`). It carries the role-call
+  journal (claude/journal.ts) to the manifest writer. Unknown values stay null. A null cost, and an invalid answer, are held
+  as the estimate, so `actualIsEstimate` is true for them. The literal moves to `/v2` because the lead asked for a version
+  bump on this type. No manifest row is stored yet (no writer exists), so no stored v1 manifest becomes invalid. Without
+  `roleCalls` a v2 manifest is valid. Migration for the manifest writer (W13): write `meridian.manifest/v2`, and read
+  `roleCalls` from the role-call store. Bible 16.3's `configVersion` is still owed, and needs its own bump.
+- **Pre-flight hold (6.1, 6.5, 14.1; `budget/preflight.ts`, not a contract change):** intake reserves the fixed per-master
+  lines only (`budgets.fixedPerMasterUsd`, 14.2). estimate_reserve raises that same reservation to the full plan estimate,
+  plus the redo allowance, and the fixed lines stay inside it. Both steps check the request budget and the workspace month,
+  and pause in cap mode when either would be exceeded. `BudgetReservation` is unchanged. The decision is recorded in
+  `budget/README.md`.
+- **Config (not a contract):** `thresholds@2` adds `router.breaker.minSample` (5, Tunable 1 to 50) and `router.minAttempts`
+  (10, Tunable 1 to 100), both initial values the Bible does not give. New `adapters@1` (`config/adapters.ts`) holds the
+  timeouts, polling and retry timing, output limits and stock page sizes that the assets code held as constants. Each value
+  the Bible does not give is an initial Tunable with bounds. The Bible gives 1080 x 1920 and the 7-day window as plain
+  constants.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.

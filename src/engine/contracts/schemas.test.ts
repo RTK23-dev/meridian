@@ -13,6 +13,7 @@ import {
   gateResultSchema,
   intakeRejectionSchema,
   ledgerEntrySchema,
+  manifestRoleCallSchema,
   manifestSchema,
   personaSchema,
   productKitSchema,
@@ -41,6 +42,8 @@ import {
   edlFixture,
   takesFixture,
   manifestFixture,
+  manifestRoleCallsFixture,
+  ledgerClaudeFixture,
   renderedVideoFixture,
   compositionFixture,
   reviewResultFixture,
@@ -240,4 +243,21 @@ test("the asset spec is the generated shot's spec, with the same prompt", () => 
 
 test("the envelope's contentHash is the hash of its body", () => {
   assert.equal(scenePlanEnvelopeFixture.contentHash, contentHash(scenePlanEnvelopeFixture.body));
+});
+
+test("every role call fixture parses with the role-call schema on its own", () => {
+  assert.equal(manifestRoleCallsFixture.length, 3);
+  for (const call of manifestRoleCallsFixture) {
+    const parsed = manifestRoleCallSchema.safeParse(call);
+    assert.ok(parsed.success, `role call ${call.role} is invalid: ${parsed.success ? "" : parsed.error.message}`);
+  }
+});
+
+test("the manifest's planner role call is the ledger's planner call: same model, prompt version and actual", () => {
+  const planner = manifestRoleCallsFixture.find((call) => call.role === "planner");
+  assert.ok(planner, "the manifest carries the planner call");
+  assert.equal(planner.model, ledgerClaudeFixture.model);
+  assert.equal(planner.promptVersion, ledgerClaudeFixture.promptVersion);
+  assert.equal(planner.costUsd, ledgerClaudeFixture.actualUsd);
+  assert.equal(manifestFixture.promptVersions.planner, ledgerClaudeFixture.promptVersion);
 });
