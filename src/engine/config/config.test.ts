@@ -3,7 +3,9 @@ import test from "node:test";
 import { MODEL_CLASSES } from "../contracts/plan.ts";
 import { EngineError, sumUsd } from "../contracts/index.ts";
 import { budgets } from "./budgets.ts";
+import { CONTRACTS_VERSION } from "../contracts/version.ts";
 import { prices, priceFor, type PriceKey } from "./prices.ts";
+import { routes, type Capability } from "./routes.ts";
 import { thresholds } from "./thresholds.ts";
 import { clampTunable, tunable, type Tunable } from "./tunable.ts";
 import { weights } from "./weights.ts";
@@ -38,8 +40,12 @@ test("every Tunable in the config has floor <= value <= ceiling", () => {
 test("each config file carries its version string", () => {
   assert.equal(thresholds.version, "thresholds@1");
   assert.equal(weights.version, "weights@1");
-  assert.equal(prices.version, "prices@1");
+  assert.equal(prices.version, "prices@2");
   assert.equal(budgets.version, "budgets@1");
+});
+
+test("the contract set is at version 2 (LedgerEntry role fields and VoiceKit wordsPerMinute, E2)", () => {
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@2");
 });
 
 test("tunable refuses an initial value outside its own bounds", () => {
@@ -132,6 +138,34 @@ test("the Bible 8.3 EDL rules and the 10.4 concurrency and breaker numbers have 
   assert.equal(thresholds.router.breaker.failureShare, 0.3);
   assert.equal(thresholds.router.breaker.windowMs, 600_000);
   assert.equal(thresholds.claude.challengerShare.value, 0.1);
+});
+
+test("the Bible 12.2 take gate numbers are in thresholds.take, and no take limit is invented", () => {
+  assert.equal(thresholds.take.durationTolerance.value, 0.1, "duration within +-10 per cent of the shot");
+  assert.equal(thresholds.take.blackOrFrozenFramesMax.value, 2, "no black or frozen run over 2 frames");
+  assert.equal(thresholds.take.flickerMax.value, 0.25, "flicker below 0.25");
+  assert.equal(thresholds.take.motionMin.value, 0.05, "motion above 0.05 for motion shots");
+  assert.equal(thresholds.take.generatedWordsMax, 0, "no generated text");
+  assert.equal(thresholds.take.rubricFrames, 6, "the Haiku rubric sees 6 frames");
+  assert.equal(thresholds.escalation.criticConfidence.value, 0.6, "escalate below 0.6 critic confidence");
+});
+
+test("the Claude token rates are in prices.tokenRates at the Bible 11.1 values, Haiku at Haiku 4.5's rate", () => {
+  assert.deepEqual(prices.tokenRates["anthropic/claude-opus-5.5"], { inputUsdPerMillion: 4, outputUsdPerMillion: 20 });
+  assert.deepEqual(prices.tokenRates["anthropic/claude-sonnet-5.5"], { inputUsdPerMillion: 2, outputUsdPerMillion: 10 });
+  assert.deepEqual(prices.tokenRates["anthropic/claude-haiku-5.5"], { inputUsdPerMillion: 1, outputUsdPerMillion: 5 });
+});
+
+test("the token rate keys are exactly the Claude models the route table names, so no route is unpriced", () => {
+  const claudeCapabilities: Capability[] = ["llm.direction", "llm.analysis", "llm.check"];
+  const routed = new Set<string>();
+  for (const capability of claudeCapabilities) {
+    for (const target of routes.table[capability].targets) {
+      assert.ok(target.model !== null, `${capability} has no model`);
+      routed.add(target.model);
+    }
+  }
+  assert.deepEqual([...routed].sort(), Object.keys(prices.tokenRates).sort());
 });
 
 test("the platform size limit is not in the Bible, so it stays null until the owner sets it", () => {

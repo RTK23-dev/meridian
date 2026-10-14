@@ -32,6 +32,13 @@ version bump, a note in Bible section 4 and the lead's approval.
 - A composition's `contentHash` is the hash of its files, and its `rootFile` is one of them.
 - A manifest's `cost.total` is the sum of its four parts.
 
+## Contract v2 (`CONTRACTS_VERSION`, see Bible section 4 "v2 changes and migration")
+
+- `LedgerEntry` takes optional `role` (one of the ten Claude roles of Bible 11.1, `CLAUDE_ROLES`) and `promptVersion`
+  (`<role>@<n>`). They are set together, and the prompt version must be a version of the role. Rows from v1 have neither.
+- `VoiceKit` takes optional `wordsPerMinute` (positive, finite), used at intake when no persona loads.
+- Both are additive. Types with a `schema` literal keep their `/v1` literals.
+
 ## Using it
 
 ```ts

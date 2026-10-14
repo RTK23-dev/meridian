@@ -37,6 +37,7 @@ import {
   edlFixture,
   gateResultFixture,
   intakeRejectionFixture,
+  ledgerClaudeFixture,
   ledgerRenderFixture,
   manifestFixture,
   personaFixture,
@@ -163,6 +164,13 @@ const cases: Case[] = [
   { name: "ledger: estimate flag without an actual", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => { delete d.actualUsd; d.actualIsEstimate = true; }) },
   { name: "ledger: negative estimate", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => (d.estimateUsd = -0.05)) },
   { name: "ledger: missing idempotency key", schema: ledgerEntrySchema, value: without(ledgerRenderFixture, "idempotencyKey") },
+  { name: "ledger: role without a prompt version", schema: ledgerEntrySchema, value: without(ledgerClaudeFixture, "promptVersion") },
+  { name: "ledger: prompt version without a role", schema: ledgerEntrySchema, value: without(ledgerClaudeFixture, "role") },
+  { name: "ledger: role outside the Bible 11.1 list", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => (d.role = "copywriter")) },
+  { name: "ledger: prompt version of another role", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => (d.promptVersion = "segmenter@1")) },
+  { name: "ledger: prompt version without a number", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => (d.promptVersion = "planner")) },
+  { name: "ledger: prompt version 0", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => (d.promptVersion = "planner@0")) },
+  { name: "ledger: prompt version with a path", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => (d.promptVersion = "planner@1/../x")) },
 
   // Provider error and kits.
   { name: "provider error: unknown kind", schema: providerErrorSchema, value: edit(providerErrorFixture, (d) => (d.kind = "boom")) },
@@ -176,6 +184,11 @@ const cases: Case[] = [
   { name: "character: unknown kind", schema: characterSheetSchema, value: edit(characterSheetFixture, (d) => (d.kind = "hand_drawn")) },
   { name: "product kit: hero angle top", schema: productKitSchema, value: edit(productKitFixture, (d) => (d.heroImages[0].angle = "top")) },
   { name: "voice kit: no direction", schema: voiceKitSchema, value: without(voiceKitFixture, "direction") },
+  { name: "voice kit: zero words per minute", schema: voiceKitSchema, value: edit(voiceKitFixture, (d) => (d.wordsPerMinute = 0)) },
+  { name: "voice kit: negative words per minute", schema: voiceKitSchema, value: edit(voiceKitFixture, (d) => (d.wordsPerMinute = -150)) },
+  { name: "voice kit: words per minute as text", schema: voiceKitSchema, value: edit(voiceKitFixture, (d) => (d.wordsPerMinute = "150")) },
+  { name: "voice kit: infinite words per minute", schema: voiceKitSchema, value: edit(voiceKitFixture, (d) => (d.wordsPerMinute = Number.POSITIVE_INFINITY)) },
+  { name: "voice kit: NaN words per minute", schema: voiceKitSchema, value: edit(voiceKitFixture, (d) => (d.wordsPerMinute = Number.NaN)) },
 
   // Artifact envelope: id prefix, body literal agreement, type, time.
   { name: "envelope: artifactId with the take prefix", schema: envelopeSchema(scenePlanSchema), value: edit(scenePlanEnvelopeFixture, (d) => (d.artifactId = ID.take1)) },
@@ -204,4 +217,16 @@ test("a gate with a failing check is valid only when it says pass false", () => 
 test("a scene plan with an extra unknown field still parses and drops it", () => {
   const parsed = scenePlanSchema.parse(edit(scenePlanFixture, (d) => (d.extra = "ignored")));
   assert.equal("extra" in parsed, false);
+});
+
+test("contract v2 is additive: a voice kit without wordsPerMinute and a ledger row without role still parse", () => {
+  assert.equal(voiceKitSchema.safeParse(without(voiceKitFixture, "wordsPerMinute")).success, true);
+  assert.equal(ledgerEntrySchema.safeParse(without(ledgerRenderFixture, "role")).success, true);
+  assert.equal(ledgerEntrySchema.safeParse(ledgerClaudeFixture).success, true);
+});
+
+test("a Claude ledger row keeps its role and prompt version through a parse", () => {
+  const parsed = ledgerEntrySchema.parse(ledgerClaudeFixture);
+  assert.equal(parsed.role, "planner");
+  assert.equal(parsed.promptVersion, "planner@1");
 });

@@ -81,4 +81,5 @@ export const voiceKitFixture: VoiceKit = {
   provider: "fixture-tts",
   providerVoiceId: "fixture-voice-01",
   direction: "Warm, direct, slightly playful",
+  wordsPerMinute: 150,
 };

@@ -97,11 +97,16 @@ export const productKitSchema = z.object({
 });
 export type ProductKit = z.infer<typeof productKitSchema>;
 
+/**
+ * A voice kit (Bible 13). `wordsPerMinute` is optional (contract v2): a page with no persona uses it to estimate beat length
+ * at intake (Bible 6.1 step 4). When a persona loads, the persona's rate is the one used. Unknown stays absent, never 0.
+ */
 export const voiceKitSchema = z.object({
   voiceId: z.string().min(1),
   provider: z.string().min(1),
   providerVoiceId: z.string().min(1),
   direction: z.string().min(1),
   consentRecord: z.string().min(1).optional(),
+  wordsPerMinute: z.number().positive().finite().optional(),
 });
 export type VoiceKit = z.infer<typeof voiceKitSchema>;

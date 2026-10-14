@@ -69,6 +69,7 @@ const schemas = {
   budgetReservation: budgetReservationSchema,
   ledgerEntry: ledgerEntrySchema,
   ledgerEntryEstimated: ledgerEntrySchema,
+  ledgerEntryClaude: ledgerEntrySchema,
   providerError: providerErrorSchema,
   styleKit: styleKitSchema,
   persona: personaSchema,

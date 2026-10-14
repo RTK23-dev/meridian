@@ -49,8 +49,35 @@ export const budgetReservationSchema = z
 export type BudgetReservation = z.infer<typeof budgetReservationSchema>;
 
 /**
+ * The Claude roles of Bible 11.1. A Claude call's ledger entry names its role, so cost is traceable per role. A new role is
+ * a contract change (a version bump and a Bible section 4 note).
+ */
+export const CLAUDE_ROLES = [
+  "segmenter",
+  "genome",
+  "request_classifier",
+  "planner",
+  "director_check",
+  "tightener",
+  "critic_take",
+  "critic_final",
+  "prompt_fixer",
+  "variant_writer",
+] as const;
+export const claudeRoleSchema = z.enum(CLAUDE_ROLES);
+export type ClaudeRole = z.infer<typeof claudeRoleSchema>;
+
+/** A prompt version in the form `<role>@<n>` (for example "planner@1"), as in Manifest.promptVersions. */
+export const promptVersionSchema = z.string().regex(/^[a-z][a-z0-9_]*@[1-9][0-9]*$/, {
+  message: "a prompt version is <role>@<n>, for example planner@1",
+});
+export type PromptVersion = z.infer<typeof promptVersionSchema>;
+
+/**
  * One paid call. Written before the call is submitted. An entry without actualUsd is still held.
  * actualIsEstimate is set when the actual is a list-price fallback, not the provider's bill (Bible 14.1 step 4).
+ * role and promptVersion (contract v2) trace a Claude call to its role and prompt version. They are set together, and the
+ * prompt version must be a version of that role. Entries written before v2 have neither and stay valid.
  */
 export const ledgerEntrySchema = z
   .object({
@@ -65,8 +92,17 @@ export const ledgerEntrySchema = z
     actualIsEstimate: z.boolean().optional(),
     idempotencyKey: z.string().min(1),
     at: z.iso.datetime(),
+    role: claudeRoleSchema.optional(),
+    promptVersion: promptVersionSchema.optional(),
   })
   .refine((entry) => entry.actualIsEstimate === undefined || entry.actualUsd !== undefined, {
     message: "actualIsEstimate needs actualUsd",
-  });
+  })
+  .refine((entry) => (entry.role === undefined) === (entry.promptVersion === undefined), {
+    message: "role and promptVersion are set together",
+  })
+  .refine(
+    (entry) => entry.role === undefined || entry.promptVersion === undefined || entry.promptVersion.startsWith(`${entry.role}@`),
+    { message: "promptVersion must be a version of role" },
+  );
 export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;

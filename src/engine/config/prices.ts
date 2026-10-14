@@ -75,10 +75,31 @@ const priceEntries = {
 
 export type PriceKey = keyof typeof priceEntries;
 
+/** A Claude token rate in USD per million tokens (Bible 11.1), for the estimate and the list-price fallback. */
+export type TokenRate = { readonly inputUsdPerMillion: number; readonly outputUsdPerMillion: number };
+
+/**
+ * Claude token rates (Bible 11.1), keyed by the OpenRouter model id in config/routes.ts. Opus 5.5 ($4 / $20) and Sonnet 5.5
+ * ($2 / $10) are the rates Bible 11.1 uses. Haiku is costed at Haiku 4.5's $1 / $5 until Haiku 5.5's rate is confirmed (owner
+ * check, Bible 11.1), so the Haiku entry is not yet a confirmed price. Cached-input reads ($0.20 per million) and Batch pricing
+ * (half price) are not modelled: the route cannot use them yet. A model with no entry has no estimate, and its call refuses.
+ * Config tests check that these keys are exactly the Claude models the route table names.
+ */
+const tokenRateEntries = {
+  "anthropic/claude-opus-5.5": { inputUsdPerMillion: 4, outputUsdPerMillion: 20 },
+  "anthropic/claude-sonnet-5.5": { inputUsdPerMillion: 2, outputUsdPerMillion: 10 },
+  "anthropic/claude-haiku-5.5": { inputUsdPerMillion: 1, outputUsdPerMillion: 5 },
+} as const satisfies Record<string, TokenRate>;
+
+export type ClaudeModelId = keyof typeof tokenRateEntries;
+
 export const prices = {
-  version: "prices@1",
+  version: "prices@2",
 
   entries: priceEntries,
+
+  /** Claude token rates (Bible 11.1). claude/rates.ts keeps its own copy until the lead points it at this table. */
+  tokenRates: tokenRateEntries,
 
   /** The default priced route for each model class: the first provider in 10.3 priority order. */
   routeFor: {

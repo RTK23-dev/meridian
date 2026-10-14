@@ -53,6 +53,7 @@ export const fixtures = {
   budgetReservation: chain.budgetReservationFixture,
   ledgerEntry: chain.ledgerRenderFixture,
   ledgerEntryEstimated: chain.ledgerSttFixture,
+  ledgerEntryClaude: chain.ledgerClaudeFixture,
   providerError: providerErrorFixture,
   styleKit: styleKitFixture,
   persona: personaFixture,

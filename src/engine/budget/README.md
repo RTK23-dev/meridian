@@ -35,6 +35,10 @@ Production runs in `cap`.
   payload is returned with `samePayload: false`.
 - Reconciling a call twice keeps the first actual.
 - `LedgerRow` adds the workspace and the reservation to the contract's `LedgerEntry`. The contract type stays exact.
+- A Claude call passes its `role` and `promptVersion` to `authorizeCall` (contract v2, Bible section 4 v2 note). They are
+  set together: one without the other is refused as `invalid_input` before anything is written. A call that is not a
+  Claude call carries neither field.
+- A ledger row that fails the `LedgerEntry` contract is refused as `invalid_input` (an `EngineError`), before it is stored.
 
 ## For the Postgres implementation (eng-pipeline)
 
