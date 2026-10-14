@@ -146,3 +146,16 @@ below in the PR: ids, costs, and the activity-page figure beside each.
 Bible section 19 E2 is not met by this work alone. The acceptance is one shot each for `ugc_presenter`, `product_hero`,
 `stock_footage` and `coded_graphics` that passes the take gate, and a deliberately bad take that fails it. That needs the
 planner, the take gate (W11) and the live run above.
+
+## E3 additions (speech speed for the voice stage)
+
+- `ProduceInput.speechSpeed` (default 1) reaches the adapter context (`providers/index.ts`) and the speech adapter
+  (`providers/openrouterSpeech.ts`). A speed other than 1 is sent as `speed` in the request, and the adapter's id becomes
+  `openrouter:<model>@speed=<n>`. That id is the cache identity and the breaker bucket, so a take at another pace is another
+  call and never a cache hit for the default pace. The range is 0.5 to 2 (`SPEECH_SPEED_RANGE`, initial); anything else is
+  refused before a request.
+- The router and the adapters are otherwise unchanged. Tests: `providers/openrouterSpeech.test.ts` (the speed is sent, the
+  identity carries it, the default sends nothing, out-of-range speeds are refused). The voice pipeline is tested in
+  `src/engine/voice/voice.test.ts` against the real router.
+- Live (owner): record one take at 1.0, 1.1 and 1.2 for the same text, and confirm that the speech route accepts `speed`
+  (PROVIDER_APIS.md lists it; no live call has checked it).

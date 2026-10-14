@@ -21,6 +21,8 @@ export type AdapterContext = {
   videoProfiles: ReadonlyMap<string, VideoProfile>;
   /** The page's voice id for speech routes. Null means speech is not connected. */
   voice: string | null;
+  /** The speaking rate for speech routes. */
+  speechSpeed: number;
 };
 
 /** The adapter for one routed target of a generation capability, or null when no adapter speaks that route. */
@@ -48,6 +50,7 @@ export function adapterFor(route: ResolvedRoute, context: AdapterContext): Route
         route,
         media: context.media,
         voice: context.voice,
+        speed: context.speechSpeed,
       });
     }
     if (route.capability === "avatar") return avatarIvAdapter(route);

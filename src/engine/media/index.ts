@@ -13,7 +13,12 @@ export type {
   MediaSource,
   ProbeRequest,
   ProbeResult,
+  TimelineRequest,
+  TimelineResult,
+  TimelineSample,
+  LoudnessSample,
 } from "./interface.ts";
+export { timelineInProcess, timelineOverWire, type TimelineClient } from "./timeline.ts";
 export { httpMediaFunctions, type HttpMediaFunctions } from "./http.ts";
 export {
   type MediaTransport,
@@ -41,3 +46,9 @@ export {
   type SttResult,
 } from "./stt.ts";
 export { mediaConfig } from "./config.ts";
+export {
+  NOT_CONNECTED,
+  notConnectedReason,
+  speechToTextConnection,
+  type SpeechToTextConnection,
+} from "./stt-connection.ts";

@@ -73,3 +73,15 @@ by a module under `src/engine/media/`, so `tsc --noEmit` type-checks all of it. 
   policy never saw.
 - Tool errors are classified from stderr: "Invalid data found", "matches no streams" and similar are invalid_input.
   Other failures are a non-retryable provider error with the stderr tail, with temporary paths redacted.
+
+## E3: the timeline (`timeline.ts`, route `POST /timeline`)
+
+- One call, four ffmpeg passes after a probe: brightness and motion every 500 ms (signalstats on a 160 px copy; motion is the
+  mean luma change to the sample 500 ms earlier), momentary loudness every 100 ms (ebur128 metadata; silence and values at or
+  below -70 LUFS are null), and a mono RMS envelope every 10 ms from 8 kHz PCM. Constants are in `types.ts` (`TIMELINE_STEPS`).
+- Limits: media up to 240 s (`FFMPEG_LIMITS.maxTimelineMs`), 90 s per pass (`toolTimeoutMs.timeline`), and PCM within the 4 MB
+  stdout limit (about 16 kB per second).
+- Parsers are pure and tested against the lines this ffmpeg build prints (6.1.1). A value with no time, or a time with no value,
+  is a provider error.
+- Captured: the timeline, cuts and probe of a generated 6 s reel (`src/engine/analyze/test/fixtures/reference-measurements.json`).
+- Not deployed. The owner deploys this handler with the other routes and records one `/timeline` answer as `captured`.

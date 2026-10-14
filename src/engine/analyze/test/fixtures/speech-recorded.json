@@ -1,0 +1,23 @@
+{
+  "provider": "test-stt",
+  "model": "test-stt-model",
+  "source": "synthetic",
+  "recordedAt": "2026-10-14T10:00:00.000Z",
+  "responses": [
+    {
+      "outcome": "ok",
+      "language": "en",
+      "billedUsd": null,
+      "words": [
+        { "text": "watch", "start": 0.1, "end": 0.4, "confidence": 0.97 },
+        { "text": "this", "start": 0.45, "end": 0.7, "confidence": 0.98 },
+        { "text": "blender", "start": 0.72, "end": 1.2, "confidence": 0.96 },
+        { "text": "crush", "start": 3.2, "end": 3.5, "confidence": 0.95 },
+        { "text": "ice", "start": 3.55, "end": 3.8, "confidence": 0.97 },
+        { "text": "fast", "start": 3.85, "end": 4.2, "confidence": 0.96 },
+        { "text": "tap", "start": 4.7, "end": 4.9, "confidence": 0.94 },
+        { "text": "link", "start": 5.0, "end": 5.3, "confidence": 0.96 }
+      ]
+    }
+  ]
+}

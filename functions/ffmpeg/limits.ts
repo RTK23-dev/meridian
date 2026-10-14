@@ -12,8 +12,10 @@ export const FFMPEG_LIMITS = {
   maxFramesOutputBytes: 32 * 1024 * 1024,
   /** Largest single PNG the tool may write. */
   maxFramePngBytes: 8 * 1024 * 1024,
-  /** Largest stdout captured from one tool run. */
+  /** Largest stdout captured from one tool run. The timeline's PCM at 8 kHz mono is about 16 kB per second. */
   maxToolStdoutBytes: 4 * 1024 * 1024,
+  /** Longest media the timeline measures (Bible 6.2: references run to 90 s; the cap leaves room). */
+  maxTimelineMs: 240_000,
   /** Time allowed to fetch the input from a URL. */
   urlFetchTimeoutMs: 60_000,
   /** Time allowed for one tool run. The caller's transport timeout must be longer (see src/engine/media/config.ts). */
@@ -22,6 +24,7 @@ export const FFMPEG_LIMITS = {
     frames: 60_000,
     loudness: 120_000,
     cuts: 120_000,
+    timeline: 90_000,
     version: 10_000,
   },
   /** Characters of tool stderr kept in an error message. */
