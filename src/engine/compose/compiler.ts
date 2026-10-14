@@ -196,7 +196,32 @@ function boxStyle(clip: EdlClip): string {
   return `left:${num(x)}px;top:${num(y)}px;width:${num(w)}px;height:${num(h)}px;`;
 }
 
-/** Validates a component clip's props, then maps every *Uri prop to a local asset. */
+/** A prop named *Uri holds one media URI, and a prop named *Uris holds a list of them. */
+const MEDIA_KEY = /Uris?$/;
+
+/**
+ * Maps every media URI in a props tree to a local asset path. The walk goes into objects and arrays, so a URI inside a
+ * list item (for example a tier board's item image) is mapped too, and no EDL URI reaches the HTML. Every mapped
+ * value must be an image or a video, which the registry checks.
+ */
+function mapMediaUris(value: unknown, assets: AssetRegistry, key = ""): unknown {
+  if (typeof value === "string" && MEDIA_KEY.test(key)) {
+    return assets.register(value, ["image", "video"]);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => mapMediaUris(item, assets, key));
+  }
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [childKey, child] of Object.entries(value)) {
+      out[childKey] = mapMediaUris(child, assets, childKey);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Validates a component clip's props, then maps every media URI in them to a local asset. */
 function componentValues(
   clip: EdlClip,
   definition: ComponentDefinition,
@@ -209,14 +234,7 @@ function componentValues(
     const issues = parsed.error.issues.map((issue) => `${issue.path.join(".") || "props"}: ${issue.message}`);
     throw invalid(`clip ${clip.clipId} props for ${definition.name} are invalid: ${issues.join("; ")}`);
   }
-  const values: Record<string, unknown> = { ...(parsed.data as Record<string, unknown>) };
-  for (const key of Object.keys(values)) {
-    const value = values[key];
-    if (key.endsWith("Uri") && typeof value === "string") {
-      values[key] = assets.register(value, ["image", "video"]);
-    }
-  }
-  return values;
+  return mapMediaUris(parsed.data, assets) as Record<string, unknown>;
 }
 
 function mediaElement(clip: EdlClip, layer: EdlLayer, src: string, kind: AssetKind): string {

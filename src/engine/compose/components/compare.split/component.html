@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"leftLabel","type":"string","label":"Left label","default":"Before"},{"id":"rightLabel","type":"string","label":"Right label","default":"After"},{"id":"leftUri","type":"string","label":"Left media (local asset path)","default":""},{"id":"rightUri","type":"string","label":"Right media (local asset path)","default":""},{"id":"revealMs","type":"number","label":"Right panel wipes in (ms)","default":0,"min":0,"max":3600000,"step":1,"unit":"ms"},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="compare.split" data-width="1080" data-height="1920">
+  <div class="cs-root">
+    <div class="cs-panel cs-left"></div>
+    <div class="cs-panel cs-right"></div>
+    <div class="cs-divider"></div>
+  </div>
+  <style>
+    .cs-root {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--kit-background);
+    }
+    .cs-panel {
+      position: absolute;
+      top: 0;
+      width: 50%;
+      height: 100%;
+      overflow: hidden;
+    }
+    .cs-left { left: 0; background: var(--kit-secondary); }
+    .cs-right { left: 50%; background: var(--kit-primary); }
+    .cs-panel > img,
+    .cs-panel > video {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    /* Labels sit 6% in from the panel edge and never wider than 70% of the panel: the right label ends before 88%. */
+    .cs-label {
+      position: absolute;
+      left: 6%;
+      bottom: 22%;
+      max-width: 70%;
+      box-sizing: border-box;
+      padding: 14px 24px;
+      border-radius: 999px;
+      background: var(--kit-accent);
+      color: var(--kit-background);
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 44px;
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cs-divider {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 8px;
+      height: 100%;
+      margin-left: -4px;
+      background: var(--kit-background);
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var seconds = vars.durationMs / 1000;
+
+      function mediaFor(path) {
+        if (/\.(mp4|webm|mov)$/i.test(path)) {
+          var video = document.createElement("video");
+          video.className = "clip";
+          video.setAttribute("src", path);
+          video.setAttribute("muted", "");
+          video.setAttribute("playsinline", "");
+          video.setAttribute("preload", "auto");
+          video.setAttribute("data-start", "0");
+          video.setAttribute("data-duration", String(seconds));
+          video.setAttribute("data-track-index", "0");
+          video.setAttribute("data-media-start", "0");
+          return video;
+        }
+        var img = document.createElement("img");
+        img.setAttribute("src", path);
+        img.setAttribute("alt", "");
+        return img;
+      }
+
+      function labelFor(text) {
+        var label = document.createElement("div");
+        label.className = "cs-label";
+        label.textContent = String(text);
+        return label;
+      }
+
+      var left = document.querySelector(".cs-left");
+      var right = document.querySelector(".cs-right");
+      if (typeof vars.leftUri === "string" && vars.leftUri.length > 0) {
+        left.appendChild(mediaFor(vars.leftUri));
+      }
+      if (typeof vars.rightUri === "string" && vars.rightUri.length > 0) {
+        right.appendChild(mediaFor(vars.rightUri));
+      }
+      left.appendChild(labelFor(vars.leftLabel));
+      right.appendChild(labelFor(vars.rightLabel));
+
+      // The right panel wipes in from the divider at its time, and slides a little with the kit's motion intensity.
+      // Before that it is clipped away entirely.
+      var tl = gsap.timeline({ paused: true });
+      tl.fromTo(
+        right,
+        { clipPath: "inset(0% 0% 0% 100%)", x: 60 * motion },
+        { clipPath: "inset(0% 0% 0% 0%)", x: 0, duration: 0.4, ease: "power3.out" },
+        vars.revealMs / 1000,
+      );
+      tl.set({}, {}, seconds);
+      window.__timelines["compare.split"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

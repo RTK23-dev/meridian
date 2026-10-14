@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"oldText","type":"string","label":"Old price (drawn as text)","default":""},{"id":"newText","type":"string","label":"New price (drawn as text)","default":"$0"},{"id":"revealMs","type":"number","label":"New price appears (ms)","default":600,"min":0,"max":3600000,"step":1,"unit":"ms"},{"id":"caption","type":"string","label":"Caption under the price","default":""},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="price.reveal" data-width="1080" data-height="1920">
+  <div class="pr-stack">
+    <div class="pr-old"></div>
+    <div class="pr-new"></div>
+    <div class="pr-caption"></div>
+  </div>
+  <style>
+    /* The stack is centred and spans 6% to 88% of the width (Bible 8.3). */
+    .pr-stack {
+      position: absolute;
+      left: 6%;
+      width: 82%;
+      top: 50%;
+      transform: translateY(-50%);
+      text-align: center;
+    }
+    .pr-old {
+      display: none;
+      font-family: var(--kit-font-body), sans-serif;
+      font-weight: 500;
+      font-size: 104px;
+      line-height: 1.1;
+      color: var(--kit-text);
+      opacity: 0.75;
+      text-decoration: line-through;
+      text-decoration-thickness: 10px;
+      text-decoration-color: var(--kit-accent);
+      white-space: nowrap;
+    }
+    .pr-new {
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 200px;
+      line-height: 1.05;
+      color: var(--kit-accent);
+      white-space: nowrap;
+      opacity: 0;
+    }
+    .pr-caption {
+      display: none;
+      margin-top: 4%;
+      font-family: var(--kit-font-body), sans-serif;
+      font-weight: 700;
+      font-size: 56px;
+      line-height: 1.2;
+      color: var(--kit-text);
+      opacity: 0;
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var seconds = vars.durationMs / 1000;
+      var oldEl = document.querySelector(".pr-old");
+      var newEl = document.querySelector(".pr-new");
+      var captionEl = document.querySelector(".pr-caption");
+
+      if (typeof vars.oldText === "string" && vars.oldText.length > 0) {
+        oldEl.textContent = vars.oldText;
+        oldEl.style.display = "block";
+      }
+
+      // The new price is sized to fit the 82% column by its character count (Inter is bundled, so the count is exact
+      // enough): at most 260 px, and smaller for longer amounts.
+      var newText = String(vars.newText);
+      newEl.textContent = newText;
+      newEl.style.fontSize = Math.min(260, Math.floor(860 / (newText.length * 0.62))) + "px";
+
+      if (typeof vars.caption === "string" && vars.caption.length > 0) {
+        captionEl.textContent = vars.caption;
+        captionEl.style.display = "block";
+      }
+
+      var at = vars.revealMs / 1000;
+      var tl = gsap.timeline({ paused: true });
+      tl.fromTo(newEl, { opacity: 0, scale: 1 + 0.25 * motion }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.7)" }, at);
+      if (captionEl.style.display === "block") {
+        tl.fromTo(captionEl, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power1.out" }, at + 0.2);
+      }
+      tl.set({}, {}, seconds);
+      window.__timelines["price.reveal"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"baseUri","type":"string","label":"Base clip (local asset path)","default":""},{"id":"presenterUri","type":"string","label":"Presenter clip (local asset path)","default":""},{"id":"baseInMs","type":"number","label":"Base in-point (ms)","default":0,"min":0,"max":3600000,"step":1,"unit":"ms"},{"id":"presenterInMs","type":"number","label":"Presenter in-point (ms)","default":0,"min":0,"max":3600000,"step":1,"unit":"ms"},{"id":"pip","type":"enum","label":"Picture-in-picture position","default":"bottom-right","options":[{"value":"top-left","label":"Top left"},{"value":"top-right","label":"Top right"},{"value":"bottom-left","label":"Bottom left"},{"value":"bottom-right","label":"Bottom right"}]},{"id":"pipInMs","type":"number","label":"Presenter enters (ms)","default":0,"min":0,"max":60000,"step":1,"unit":"ms"},{"id":"pipWidthPct","type":"number","label":"Presenter width (% of frame)","default":34,"min":24,"max":40,"step":1},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="react.layout" data-width="1080" data-height="1920">
+  <div class="rl-base"></div>
+  <div class="rl-pip"></div>
+  <style>
+    .rl-base {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--kit-primary);
+    }
+    .rl-base > * {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    /* The picture-in-picture box is a plain wrapper: GSAP animates the wrapper, and the media fills it. */
+    .rl-pip {
+      position: absolute;
+      overflow: hidden;
+      aspect-ratio: 3 / 4;
+      border-radius: 40px;
+      border: 8px solid var(--kit-background);
+      background: var(--kit-secondary);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      box-sizing: border-box;
+    }
+    .rl-pip > * {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .rl-pip-top-left { left: 6%; top: 10%; }
+    .rl-pip-top-right { right: 12%; top: 10%; }
+    .rl-pip-bottom-left { left: 6%; bottom: 20%; }
+    .rl-pip-bottom-right { right: 12%; bottom: 20%; }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var seconds = vars.durationMs / 1000;
+      var positions = ["top-left", "top-right", "bottom-left", "bottom-right"];
+      var position = positions.indexOf(vars.pip) === -1 ? "bottom-right" : vars.pip;
+
+      // A video is a timed, muted element on the sub-composition clock. An image is a plain img.
+      function mediaFor(path, inMs) {
+        if (/\.(mp4|webm|mov)$/i.test(path)) {
+          var video = document.createElement("video");
+          video.className = "clip";
+          video.setAttribute("src", path);
+          video.setAttribute("muted", "");
+          video.setAttribute("playsinline", "");
+          video.setAttribute("preload", "auto");
+          video.setAttribute("data-start", "0");
+          video.setAttribute("data-duration", String(seconds));
+          video.setAttribute("data-track-index", "0");
+          video.setAttribute("data-media-start", String(inMs / 1000));
+          return video;
+        }
+        var img = document.createElement("img");
+        img.setAttribute("src", path);
+        img.setAttribute("alt", "");
+        return img;
+      }
+
+      var pip = document.querySelector(".rl-pip");
+      document.querySelector(".rl-base").appendChild(mediaFor(String(vars.baseUri), vars.baseInMs));
+      pip.appendChild(mediaFor(String(vars.presenterUri), vars.presenterInMs));
+      pip.className = "rl-pip rl-pip-" + position;
+      pip.style.width = vars.pipWidthPct + "%";
+
+      var tl = gsap.timeline({ paused: true });
+      tl.fromTo(pip, { opacity: 0, scale: 1 - 0.15 * motion }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.5)" }, vars.pipInMs / 1000);
+      tl.set({}, {}, seconds);
+      window.__timelines["react.layout"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

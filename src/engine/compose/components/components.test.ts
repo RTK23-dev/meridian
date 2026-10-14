@@ -111,12 +111,17 @@ describe("safe zones (Bible 8.3)", () => {
 });
 
 describe("component library", () => {
-  it("holds the five E1 components, each keyed by its name", () => {
+  it("holds the ten E1 and E2 components, each keyed by its name", () => {
     assert.deepEqual(Object.keys(COMPONENT_LIBRARY).sort(), [
       "captions.karaoke",
+      "chat.thread",
+      "compare.split",
       "cta.card",
       "kinetic.punchline",
+      "list.tierBoard",
+      "price.reveal",
       "product.card",
+      "react.layout",
       "title.hook",
     ]);
     for (const [key, definition] of Object.entries(COMPONENT_LIBRARY)) {

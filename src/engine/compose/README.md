@@ -17,8 +17,9 @@ Implements Bible section **9** (compiler and component library), **13** (style k
 | `golden/` | 17.3 | Local render harness and the golden-frame runner (`npm run engine:golden`). Not in `npm test`. |
 | `snapshots/edl-fixture/` | 17.3 | Snapshot of the compiled contracts EDL fixture (`UPDATE_SNAPSHOTS=1` rewrites it). |
 
-Components shipped in E1: `captions.karaoke`, `title.hook`, `kinetic.punchline`, `product.card`, `cta.card`.
-The rest of the 9.2 list arrives in E2 and E5.
+Components shipped: E1 `captions.karaoke`, `title.hook`, `kinetic.punchline`, `product.card`, `cta.card`; E2 `react.layout`,
+`list.tierBoard`, `compare.split`, `price.reveal`, `chat.thread`. The rest of the 9.2 list arrives in E5 (and later
+phases).
 
 ## Output shape
 
@@ -40,7 +41,9 @@ The rest of the 9.2 list arrives in E2 and E5.
   yet drawn), so nothing is dropped silently.
 - Audio gain must stay within HyperFrames' +12 dB (`data-volume` ≤ 3.98).
 - Music ducking is pre-rendered upstream (9.1 rule 5). The compiler uses the stem as given and ignores `duckDb`.
-- Each `*Uri` prop is a media URI. The compiler checks its kind and maps it to a local asset path.
+- Each `*Uri` prop (and each string in a `*Uris` list) is a media URI, at any depth: a list item's image is mapped too.
+  The compiler checks its kind and maps it to a local asset path, so no EDL URI reaches the HTML (tested).
+  A component's own schema can narrow the kind (for example `imageUriSchema` in `components/shared.ts` refuses video).
 - Component props are validated by the component's zod schema. The error names the clip.
 - Every text value reaches the HTML as escaped text or escaped JSON. The HTML never receives raw ad or script text.
 
@@ -93,6 +96,17 @@ The rest of the 9.2 list arrives in E2 and E5.
 `HYPERFRAMES_BROWSER_PATH`, ffmpeg for frame extraction) and compares each frame with its PNG. Pass means under 1% of
 pixels differ by more than 16 in any channel. `npm run engine:golden:update` writes the PNGs again; review them by eye.
 Golden renders use the bundled Inter font only (no font fetch at render time).
+
+Golden media is placeholder media, never product or person photography. `test/golden/harness.ts` draws each image as a
+gradient with a disc in a colour chosen by the file's base name (`hero`, `before`, `after`, `base`, `presenter`), and
+writes each video as a short solid-colour VP8 clip made with ffmpeg (`FFMPEG_PATH`, or `ffmpeg` on the PATH). That
+exercises a component's own `<video>` path (picture-in-picture, wipes). The lint tests (`mode "lint"`) write empty
+files for video, so `npm test` needs no ffmpeg.
+
+Timing in a component: a `<video>` inside a sub-composition has `data-start` 0, its duration, `data-media-start` for
+the in-point, and `muted`. A picture-in-picture box is a plain wrapper that GSAP animates; the media fills it (the
+HyperFrames common-mistakes guide). Text is set with `textContent`, so markup in an ad or script reaches the frame as
+text.
 
 ## Not in this round
 
