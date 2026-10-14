@@ -125,3 +125,26 @@ Extra work done in E1 beyond the checklist: W7 visual decision steps 1 to 4 and 
 - Applied: Bible L2, L3, section 2 table, 10, 11 and 17; `CLAUDE.md` rule 3; the five agent files; the engine-bible skill.
 - Waiting on the owner: credential categories for a per-workspace OpenRouter key, HeyGen and Anthropic; the live run in
   `src/engine/gateway/STATUS.md` (verifies the model ids and the cost reporting).
+
+## 2026-10-14 Merged A5 (Claude client) and A4 (budget minimum, intake and estimate_reserve)
+
+- A5 (eng-pipeline, a2fe891): `src/engine/claude/` and `src/engine/prompts/`. `runRole` sends every role through the
+  gateway's `structuredChat` inside `paidCall`, keyed by the hash of (role, prompt version, model, input). One retry on a
+  `StructuredOutputError` shows the failed checks by path and code only; a second failure throws `RoleAnswerError`. The
+  segmenter role and `prompts/segmenter@1.md` with untrusted-data blocks. Fixtures are in OpenRouter's documented shape,
+  not live captures.
+- A4 (eng-plan-review, 44e86c8): `minimumMasterBudgetUsd` in `src/engine/plan/minimum.ts` (fixed per-master cost plus the
+  cheapest plan for the beats, with a breakdown); the intake and estimate_reserve handlers in `src/engine/jobs/handlers/`.
+  The filter refactor keeps the same behaviour (lead check of the diff).
+- Lead review: no network or environment reads outside the gateway; unknown prices and model rates refuse. 824 of 824
+  engine tests pass; typecheck clean.
+- Follow-ups recorded (not owner decisions unless marked):
+  - Claude token rates sit in `claude/rates.ts`; they move to `config/prices.ts` (eng-contracts).
+  - `LedgerEntry` has no role or prompt-version field, and `StructuredOutputError` carries no usage, so an invalid answer
+    reconciles to the held estimate. Gateway and contract changes, to schedule with E3.
+  - The orchestrator pauses when intake returns no reservation id; intake should not reserve. Fix in `applyIntake` (eng-pipeline).
+  - estimate_reserve receives only the scene plan. The registry must also pass the request (for its budget), and the
+    workspace monthly budget has no source yet. **Owner:** where the workspace monthly budget is set.
+  - `VoiceKit` has no words-per-minute, so intake cannot estimate beat length for a page without a persona (contract change,
+    eng-contracts).
+  - The request classifier and kit store are not built yet (E3), so intake refuses any `must` visual request for now.
