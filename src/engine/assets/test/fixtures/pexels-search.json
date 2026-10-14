@@ -1,0 +1,46 @@
+{
+  "page": 1,
+  "per_page": 15,
+  "total_results": 3,
+  "next_page": null,
+  "videos": [
+    {
+      "id": 4433001,
+      "width": 1080,
+      "height": 1920,
+      "duration": 8,
+      "url": "https://www.pexels.com/video/coffee-pour-4433001/",
+      "image": "https://images.pexels.com/videos/4433001/preview.jpg",
+      "user": { "id": 555, "name": "Ana Lima", "url": "https://www.pexels.com/@ana-lima" },
+      "video_files": [
+        { "id": 1, "quality": "hls", "file_type": "application/x-mpegURL", "width": 1080, "height": 1920, "fps": 30, "link": "https://player.pexels.com/hls/4433001.m3u8" },
+        { "id": 2, "quality": "hd", "file_type": "video/mp4", "width": 1080, "height": 1920, "fps": 30, "link": "https://videos.pexels.com/video-files/4433001/4433001-hd_1080_1920_30fps.mp4" },
+        { "id": 3, "quality": "sd", "file_type": "video/mp4", "width": 540, "height": 960, "fps": 30, "link": "https://videos.pexels.com/video-files/4433001/4433001-sd_540_960_30fps.mp4" }
+      ]
+    },
+    {
+      "id": 4433002,
+      "width": 1920,
+      "height": 1080,
+      "duration": 12,
+      "url": "https://www.pexels.com/video/landscape-4433002/",
+      "image": "https://images.pexels.com/videos/4433002/preview.jpg",
+      "user": { "id": 556, "name": "Ben Ortiz", "url": "https://www.pexels.com/@ben-ortiz" },
+      "video_files": [
+        { "id": 4, "quality": "hd", "file_type": "video/mp4", "width": 1920, "height": 1080, "fps": 25, "link": "https://videos.pexels.com/video-files/4433002/4433002-hd_1920_1080_25fps.mp4" }
+      ]
+    },
+    {
+      "id": 4433003,
+      "width": 1080,
+      "height": 1920,
+      "duration": 2,
+      "url": "https://www.pexels.com/video/short-4433003/",
+      "image": "https://images.pexels.com/videos/4433003/preview.jpg",
+      "user": { "id": 557, "name": "Chen Wei", "url": "https://www.pexels.com/@chen-wei" },
+      "video_files": [
+        { "id": 5, "quality": "hd", "file_type": "video/mp4", "width": 1080, "height": 1920, "fps": 30, "link": "https://videos.pexels.com/video-files/4433003/4433003-hd_1080_1920_30fps.mp4" }
+      ]
+    }
+  ]
+}
