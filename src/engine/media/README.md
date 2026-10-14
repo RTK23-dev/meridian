@@ -65,8 +65,10 @@ The tests that need ffmpeg are skipped with a visible reason when ffmpeg is not 
 
 ## Not in E1
 
-OCR, motion and flicker metrics, the embedding wrapper, audio extraction for speech-to-text, and the lip-sync,
-background-removal and upscaling wrappers. Each belongs to a later phase (E2 to E4) and to an owner decision in Bible
-20.2.
+OCR, flicker metrics, the embedding wrapper, audio extraction for speech-to-text, and the lip-sync, background-removal
+and upscaling wrappers. Each belongs to a later phase (E2 to E4) and to an owner decision in Bible 20.2.
+
+Added in E3: the timeline (`timeline.ts`: brightness, motion, momentary loudness and the envelope in one call) and the
+speech-to-text connection check (`stt-connection.ts`). Zoom detection and the loop frame comparison are still not built.
 
 See `STATUS.md` for the owner's live steps and the blockers.

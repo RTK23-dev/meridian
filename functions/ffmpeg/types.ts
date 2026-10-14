@@ -127,3 +127,43 @@ export function assertInputSize(bytes: number, stage: string): void {
     );
   }
 }
+
+/**
+ * The timeline (Bible 6.2 step 2): per-sample measures of one video, from one call. Each series keeps its own step, and
+ * every sample time is an integer millisecond from the start. Unknown stays null: a silent measure is a null loudness.
+ */
+export const TIMELINE_STEPS = {
+  /** Brightness and motion: two samples per second (the frame rate of the reference sample, Bible 6.2). */
+  videoSampleMs: 500,
+  /** Momentary loudness (EBU R128, 400 ms window) every 100 ms. */
+  loudnessStepMs: 100,
+  /** The audio envelope: mono RMS over each 10 ms window. */
+  envelopeStepMs: 10,
+  /** The PCM rate the envelope is taken from. */
+  envelopeSampleRateHz: 8000,
+} as const;
+
+/** Momentary loudness at or below the BS.1770 absolute gate is reported as null (silence, Bible 8.1). */
+export const LOUDNESS_GATE_LUFS = -70;
+
+export const timelineRequestSchema = z.strictObject({ source: mediaSourceSchema });
+export type TimelineRequest = z.infer<typeof timelineRequestSchema>;
+
+const timelineSampleSchema = z.strictObject({ atMs: z.int().nonnegative(), value: z.number().min(0).max(1).finite() });
+const loudnessSampleSchema = z.strictObject({ atMs: z.int().nonnegative(), lufs: z.number().finite().nullable() });
+
+/** One call's measures. Series are empty when the stream is absent (videoPresent or audioPresent false). */
+export const timelineResultSchema = z.strictObject({
+  videoPresent: z.boolean(),
+  audioPresent: z.boolean(),
+  brightness: z.array(timelineSampleSchema).max(600),
+  motion: z.array(timelineSampleSchema).max(600),
+  loudness: z.array(loudnessSampleSchema).max(3000),
+  envelope: z.strictObject({
+    stepMs: z.literal(TIMELINE_STEPS.envelopeStepMs),
+    rms: z.array(z.number().min(0).max(1).finite()).max(30000),
+  }),
+});
+export type TimelineResult = z.infer<typeof timelineResultSchema>;
+export type TimelineSample = z.infer<typeof timelineSampleSchema>;
+export type LoudnessSample = z.infer<typeof loudnessSampleSchema>;

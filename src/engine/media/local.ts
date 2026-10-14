@@ -7,6 +7,7 @@ import { framesInProcess } from "./frames.ts";
 import { loudnessInProcess } from "./loudness.ts";
 import type { MediaFunctions } from "./interface.ts";
 import { probeInProcess } from "./probe.ts";
+import { timelineInProcess } from "./timeline.ts";
 
 export const localMediaFunctions: MediaFunctions = {
   id: "local:in-process (tests and CI only)",
@@ -14,4 +15,5 @@ export const localMediaFunctions: MediaFunctions = {
   frames: framesInProcess(),
   loudness: loudnessInProcess(),
   cuts: cutsInProcess(),
+  timeline: timelineInProcess(),
 };

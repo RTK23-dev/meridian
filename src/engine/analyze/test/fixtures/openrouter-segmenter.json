@@ -1,0 +1,21 @@
+{
+  "id": "gen-e3-segmenter-ok-0001",
+  "model": "anthropic/claude-sonnet-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"segments\":[{\"segId\":\"s1\",\"startMs\":0,\"endMs\":1533,\"wordIds\":[\"w0001\",\"w0002\",\"w0003\"],\"shotType\":\"talking_head\",\"layers\":{\"base\":\"a presenter facing the camera\",\"captions\":\"word captions, lower band\"},\"onScreenText\":\"Watch this\",\"beatRole\":\"hook\"},{\"segId\":\"s2\",\"startMs\":1533,\"endMs\":3033,\"wordIds\":[],\"shotType\":\"product_closeup\",\"layers\":{\"base\":\"a blender on a kitchen counter\",\"graphics\":\"price card\"},\"beatRole\":\"item\"},{\"segId\":\"s3\",\"startMs\":3033,\"endMs\":4567,\"wordIds\":[\"w0004\",\"w0005\",\"w0006\"],\"shotType\":\"talking_head\",\"layers\":{\"base\":\"a presenter holding a glass\",\"captions\":\"word captions, middle band\"},\"beatRole\":\"payoff\"},{\"segId\":\"s4\",\"startMs\":4567,\"endMs\":6000,\"wordIds\":[\"w0007\",\"w0008\"],\"shotType\":\"text_only\",\"layers\":{\"base\":\"a plain background\",\"graphics\":\"a link sticker\"},\"beatRole\":\"cta\"}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 25873,
+    "completion_tokens": 612,
+    "total_tokens": 26485,
+    "cost": 0.057866
+  }
+}

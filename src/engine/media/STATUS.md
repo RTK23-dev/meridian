@@ -123,3 +123,25 @@ Final run, on the committed tree (ffmpeg 6.1.1 and ffprobe 6.1.1 on PATH, Node 2
 - Prettier `--check` on `src/engine/media`, `src/engine/test` and `functions/ffmpeg`: clean.
 
 Not run: a live anything. No vendor is chosen, and the functions are not deployed.
+
+## E3 additions
+
+- `timeline.ts` (client, in-process and over HTTP) and `MediaFunctions.timeline()`: brightness, motion, momentary loudness and
+  the envelope in one call. The implementation is `functions/ffmpeg/timeline.ts`. `http.ts` and `local.ts` implement it; no
+  other file implements `MediaFunctions`. Tests: `timeline.test.ts` (recorded lines, the client's order checks, and a real
+  timeline on a generated reel when ffmpeg is present) and `http-handler.test.ts` (the route, and an end-to-end round trip).
+- `stt-connection.ts`: `speechToTextConnection(gateway, options)`. It reads the `stt` route through the gateway and sends
+  nothing. With no model, or with no wired adapter, it returns `not_connected` with a reason that starts `NOT_CONNECTED:`. The
+  analyze and voice stages call it before any paid step. Tests: `stt-connection.test.ts`.
+- The beat grid (`analyze/beats.ts`) is computed in the analyze folder from the envelope. It is not part of this folder, so the
+  media index does not export it.
+
+## Still not in this folder
+
+OCR, zoom detection, the frame comparison for endsOnLoop, flicker metrics, the embedding wrapper, and the lip-sync,
+background-removal and upscaling wrappers. Each needs an owner decision or a later phase (see `analyze/STATUS.md`).
+
+## Owner live steps added in E3
+
+Deploy the functions with `/timeline`, and record one timeline answer as `captured`. The speech-to-text steps of E1 still
+apply (choose the vendor, record one transcription, price it). Nothing here chooses a vendor.

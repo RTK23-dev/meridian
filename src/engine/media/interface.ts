@@ -10,6 +10,8 @@ import type {
   MediaSource,
   ProbeRequest,
   ProbeResult,
+  TimelineRequest,
+  TimelineResult,
 } from "../../../functions/ffmpeg/types.ts";
 
 export type {
@@ -22,6 +24,10 @@ export type {
   MediaSource,
   ProbeRequest,
   ProbeResult,
+  TimelineRequest,
+  TimelineResult,
+  TimelineSample,
+  LoudnessSample,
 } from "../../../functions/ffmpeg/types.ts";
 
 /** What a caller passes to cuts. sceneScore defaults to mediaConfig.sceneCutScore. */
@@ -39,4 +45,6 @@ export interface MediaFunctions {
   frames(request: FramesRequest): Promise<FramesResult>;
   loudness(request: LoudnessRequest): Promise<LoudnessResult>;
   cuts(request: CutsCallRequest): Promise<CutsResult>;
+  /** Per-sample brightness, motion, momentary loudness and the audio envelope of one video (Bible 6.2 step 2). */
+  timeline(request: TimelineRequest): Promise<TimelineResult>;
 }

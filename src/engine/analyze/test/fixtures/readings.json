@@ -1,0 +1,19 @@
+{
+  "source": "synthetic",
+  "note": "Hand-written readings in the shape the caption (OCR), zoom and loop readers will return. No such reader is built yet (analyze/STATUS.md).",
+  "captions": {
+    "wordsPerCaption": [2, 3],
+    "position": "lower",
+    "style": "bold sans word captions",
+    "highlightCurrentWord": true
+  },
+  "zoom": {
+    "jumps": [
+      { "atMs": 1533, "scale": 1.18 },
+      { "atMs": 4567, "scale": 1.1 }
+    ],
+    "shake": false,
+    "speedRamps": false
+  },
+  "loop": false
+}

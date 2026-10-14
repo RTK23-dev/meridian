@@ -26,11 +26,20 @@ export type OpenRouterSpeechOptions = {
   media: MediaStore;
   /** The provider-specific voice id from the page's voice kit. Null means the adapter is not connected. */
   voice: string | null;
+  /** The speaking rate (PROVIDER_APIS "speed"). 1 is the default and is not sent. The voice stage paces a take with it (Bible 6.3). */
+  speed?: number;
 };
+
+/** The speaking rates the adapter accepts. Anything else is refused before a request is made. */
+export const SPEECH_SPEED_RANGE = { min: 0.5, max: 2 } as const;
 
 /** One OpenRouter speech model as a RoutedAdapter. Priced per million characters of the script text. */
 export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): RoutedAdapter {
   const { gateway, organizationId, workspaceId, route, media, voice } = options;
+  const speed = options.speed ?? 1;
+  if (!Number.isFinite(speed) || speed < SPEECH_SPEED_RANGE.min || speed > SPEECH_SPEED_RANGE.max) {
+    throw new EngineError("invalid_input", `the speech speed must be from ${SPEECH_SPEED_RANGE.min} to ${SPEECH_SPEED_RANGE.max}`);
+  }
   const model = route.model;
   if (route.capability !== "tts") throw new EngineError("config", `openRouterSpeechAdapter cannot serve ${route.capability}`);
   const modelClass: ModelClass = "tts";
@@ -38,7 +47,8 @@ export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): Route
   const details = new Map<string, { generationId?: string; mediaType: string }>();
 
   return {
-    id: `${PROVIDER}:${model}`,
+    // The speed is part of the identity: a take at another rate is another call, with its own cache key and breaker bucket.
+    id: speed === 1 ? `${PROVIDER}:${model}` : `${PROVIDER}:${model}@speed=${speed}`,
     providerId: PROVIDER,
     modelClass,
     capabilities: UNVERIFIED_CAPABILITIES,
@@ -64,7 +74,7 @@ export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): Route
         method: "POST",
         path: "/audio/speech",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model, input: spec.prompt, voice, response_format: "mp3" }),
+        body: JSON.stringify({ model, input: spec.prompt, voice, response_format: "mp3", ...(speed === 1 ? {} : { speed }) }),
         timeoutMs: SPEECH_TIMEOUT_MS,
       });
       ensureOk(response);

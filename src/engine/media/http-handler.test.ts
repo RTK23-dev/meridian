@@ -44,6 +44,13 @@ describe("handleMediaRequest: typed errors (no ffmpeg needed)", () => {
     assert.deepEqual(await send(post("/probe", "{not json")), CAPTURED_BAD_JSON_400);
   });
 
+  it("routes POST /timeline and refuses a plain-http URL with the same 400 as the probe, with no ffmpeg", async () => {
+    const timeline = await send(post("/timeline", { source: { kind: "url", url: "http://127.0.0.1/reel.mp4" } }));
+    const probe = await send(post("/probe", { source: { kind: "url", url: "http://127.0.0.1/reel.mp4" } }));
+    assert.equal(timeline.status, 400);
+    assert.equal(timeline.body, probe.body);
+  });
+
   it("answers an unknown path with 404, exactly as captured", async () => {
     assert.deepEqual(await send(post("/nope", {})), CAPTURED_UNKNOWN_ROUTE_404);
   });
@@ -148,6 +155,11 @@ describe("handleMediaRequest on the generated reel", { skip: SKIP }, () => {
 
     const loudness = await functions.loudness({ source });
     assert.ok(loudness.integratedLufs !== null);
+
+    const timeline = await functions.timeline({ source });
+    assert.equal(timeline.audioPresent, true);
+    assert.ok(timeline.brightness.length > 0, "the timeline measures brightness on the video");
+    assert.ok(timeline.envelope.rms.length > 0, "the timeline measures the audio envelope");
 
     const frames = await functions.frames({ source, atMs: [500, 1500], longSidePx: 768 });
     assert.deepEqual(

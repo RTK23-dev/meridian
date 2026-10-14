@@ -129,6 +129,8 @@ export type ProduceInput = {
   continuityProvider?: string | null;
   /** The page's voice id, for speech routes. */
   voiceId?: string | null;
+  /** The speaking rate for speech routes (1 is the vendor's default). Part of the adapter's identity, so it is part of the cache key. */
+  speechSpeed?: number;
 };
 
 export type ProducedAsset = {
@@ -346,6 +348,7 @@ export function createAssetRouter(deps: RouterDeps): AssetRouter {
       media: deps.media,
       videoProfiles,
       voice: input.voiceId ?? null,
+      speechSpeed: input.speechSpeed ?? 1,
     };
 
     // 1. The routed targets of this model class, in priority order.
