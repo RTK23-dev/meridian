@@ -148,3 +148,22 @@ Extra work done in E1 beyond the checklist: W7 visual decision steps 1 to 4 and 
   - `VoiceKit` has no words-per-minute, so intake cannot estimate beat length for a page without a persona (contract change,
     eng-contracts).
   - The request classifier and kit store are not built yet (E3), so intake refuses any `must` visual request for now.
+
+## 2026-10-14 Merged A1 (E1 acceptance script), A8 (engine as a Factory provider) and A6 (cost per master)
+
+- A1 (eng-pipeline, 75d3c6d): `scripts/engine/` and `npm run engine:e1`. The dry run replays recorded responses through the
+  gateway and passes; live mode checks every connection first and stops with NOT_CONNECTED before any spend. Today it
+  reports heygen, media_functions, the platform size limit (`thresholds.render.platformMaxBytes` is null) and the database.
+- A8 (6e773b3 merge chain, eabaeb4): "Meridian video engine" is a Factory video provider. A run that names it stops with
+  "The video engine cannot deliver videos yet (phase E3)" before any cap check, job, reservation or cost row.
+  `engine-request.ts` maps a Factory video plan to a ProductionRequest; today every plan maps to `needs_budget` or misses
+  engine-only fields (format, page, language, beats), which E3 wiring supplies.
+- A6 (fd42544): "Cost per master (USD)" in the run builder; a video run cannot start without one at or above the floor
+  ($0.52, summed from `budgets.fixedPerMasterUsd`). `startFactoryRun` refuses it on the server too.
+  - Lead fix at merge: stored settings are parsed for the amount's shape only, so a stored cost below a later, higher floor
+    no longer makes the settings unreadable (which would have dropped their spend caps). The floor is enforced where the
+    cost is typed and where a run starts.
+- Screenshots before and after: `docs/factory-run-screens/`.
+- Checks on 6e773b3: `npm test` 3,092 src and 153 script tests pass, 0 fail, 41 skipped; typecheck clean; lint 0 errors;
+  CI green.
+- Noted, not changed: the produce stage defaults a video to 8 seconds when the plan has none (`produce.ts`).
