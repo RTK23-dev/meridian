@@ -1,7 +1,44 @@
-# STATUS: engine compose (W9): compiler, style kit, five components, golden frames
+# STATUS: engine compose (W9): compiler, style kit, ten components, golden frames
 
-Phase E1, wave B. Branch `engine/e1-w9-w10`, cut from `code/beautiful-cori-1zfk11` (7fd32ae). Covers `src/engine/compose/`
-(and the `components/`, `golden/` and `snapshots/` folders inside it). Details: `README.md` in this folder.
+Phase E2 (W9, the second component set) on branch `eng-e2-components`, cut from `code/beautiful-cori-1zfk11` (a4b04c7).
+Phase E1 history below. Covers `src/engine/compose/` (and the `components/`, `golden/` and `snapshots/` folders inside
+it). Details: `README.md` in this folder.
+
+## E2: five more components (`react.layout`, `list.tierBoard`, `compare.split`, `price.reveal`, `chat.thread`)
+
+- Each follows the E1 pattern: `component.html`, `props.ts` (zod), `fixtures/` (3 prop sets), `index.ts`, golden PNGs.
+  The library now holds ten components (`components/index.ts`). Per-component decisions are in `components/STATUS.md`.
+- Compiler change (`compiler.ts`): every `*Uri` and `*Uris` prop is mapped to a local asset at any depth, so a list
+  item's image cannot leak its EDL URI into the HTML. Compositions with no nested URIs compile to the same bytes as E1
+  (the EDL snapshot test is unchanged and passes).
+- Price text is formatted by code from integer minor units (`price.reveal/props.ts`, `formatPrice`, tested). Chat text
+  and every other value reaches the HTML escaped (tested with markup in a message, an item name and a label).
+- Golden harness (`test/golden/harness.ts`): placeholder images are coloured gradients chosen by name; video slots get a
+  generated VP8 placeholder (ffmpeg), so the components' own `<video>` path is rendered. `mode "lint"` writes empty
+  files for video, so `npm test` needs no ffmpeg. The product hero frame is unchanged.
+- Tests run here (`NODE_ENV=development node --experimental-strip-types --test 'src/engine/compose/**/*.test.ts'`):
+  **163 pass, 0 fail, 0 skipped.** That includes `components/e2.test.ts` (new), `components/components.test.ts`,
+  `compiler.test.ts`, `styleKit.test.ts`, and `lint.test.ts` (`hyperframes lint` on the EDL fixture and all 30 component
+  fixtures: 31 of 31 with zero errors and zero warnings; the CLI runs here, so nothing was skipped).
+- `npm run typecheck`: exit 0. `npm run lint`: exit 0, 0 errors, 4 warnings, all in existing `src/components/` files
+  (the same four as before this change). `npx eslint src/engine/compose`: exit 0.
+- Golden frames: `npm run engine:golden:update` wrote 35 PNGs (15 from E1, unchanged byte for byte, and 20 new), then
+  `npm run engine:golden` (with `HYPERFRAMES_BROWSER_PATH` set to the local headless shell): **30 pass, 0 fail** across
+  the ten components. The `list.tierBoard` frames were regenerated once after a fix to the text-only card names (a
+  scratch run for that one component; its three fixtures were rerun and checked by eye).
+- Full `npm test` is the lead's to run after merging (not run in this worktree, per the brief).
+
+### Owner's live run for E2
+
+Agents hold no keys. The owner renders one composition with a clip of each new component through the HeyGen cloud, and
+checks: the `react.layout` video plays in sync inside the sub-composition; `compare.split` wipes in with its video; the
+`list.tierBoard` item images are real product imagery (L8); and the cloud frames match the local golden frames for the
+same composition (Bible 6.9). Record the render id, the video id, the ledger entries and the artifact ids. The list is in
+`components/STATUS.md`.
+
+## E1 (history)
+
+Phase E1, wave B. Branch `engine/e1-w9-w10`, cut from `code/beautiful-cori-1zfk11` (7fd32ae).
 
 ## Done
 

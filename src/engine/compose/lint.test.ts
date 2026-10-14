@@ -69,7 +69,7 @@ describe("hyperframes lint on compiled compositions", { skip: skip ?? false }, (
   for (const component of Object.values(COMPONENT_LIBRARY)) {
     for (const fixture of component.fixtures) {
       it(`passes ${component.name} / ${fixture.name} with zero errors and zero warnings`, () => {
-        const built = buildHarness(component, fixture);
+        const built = buildHarness(component, fixture, "lint");
         try {
           const report = lint(built.dir);
           assert.equal(report.errorCount, 0, JSON.stringify(report.findings, null, 2));

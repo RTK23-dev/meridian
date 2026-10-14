@@ -10,6 +10,8 @@ import { edlFixture, styleKitFixture } from "../contracts/fixtures/index.ts";
 import { compile, COMPOSITION_FPS, GSAP_SCRIPT_URL, SUPPORTED_TRANSITIONS } from "./compiler.ts";
 import { COMPONENT_LIBRARY } from "./components/index.ts";
 import { escapeHtml } from "./html.ts";
+import { z } from "zod";
+import type { ComponentDefinition } from "./library.ts";
 
 const SNAPSHOT_DIR = fileURLToPath(new URL("./snapshots/edl-fixture/", import.meta.url));
 const UPDATE = process.env.UPDATE_SNAPSHOTS === "1";
@@ -413,6 +415,38 @@ describe("compile: the EDL rules HyperFrames needs", () => {
           }),
           styleKitFixture,
         ),
+      /is audio, but this slot takes image or video/,
+    );
+  });
+
+  it("maps a *Uri or *Uris value at any depth (inside list items too), and refuses audio for it", () => {
+    const probe: ComponentDefinition = {
+      name: "test.mediaProbe",
+      template:
+        '<!DOCTYPE html>\n<html data-composition-variables=\'[]\'>\n<head></head>\n<body>\n<div data-composition-id="test.mediaProbe" data-width="1080" data-height="1920"></div>\n</body>\n</html>\n',
+      propsSchema: z.object({
+        shots: z.array(z.object({ imageUri: z.string() })),
+        frameUris: z.array(z.string()),
+        durationMs: z.int().positive(),
+      }),
+      declaredVariables: [],
+      fixtures: [],
+    };
+    const edl = (frameUris: string[]) =>
+      edlClone((draft) => {
+        draft.tracks[2].clips[0].component = "test.mediaProbe";
+        draft.tracks[2].clips[0].props = { shots: [{ imageUri: "store://a/one.png" }], frameUris };
+      });
+    const library = { ...COMPONENT_LIBRARY, "test.mediaProbe": probe };
+    const result = compile(edl(["store://b/two.webm"]), styleKitFixture, library);
+    const html = textOf(result, "index.html");
+    const values = hostValues(html, "c_gfx_4");
+    const shots = values.shots as Array<{ imageUri: string }>;
+    assert.match(shots[0].imageUri, /^assets\/[0-9a-f]{16}\.png$/);
+    assert.match((values.frameUris as string[])[0], /^assets\/[0-9a-f]{16}\.webm$/);
+    assert.equal(html.includes("store://"), false, "no EDL URI reaches the composition");
+    assertInvalid(
+      () => compile(edl(["store://b/voice.wav"]), styleKitFixture, library),
       /is audio, but this slot takes image or video/,
     );
   });
