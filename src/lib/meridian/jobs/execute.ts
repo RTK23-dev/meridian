@@ -37,6 +37,10 @@ function readPayload(job: ExecutableJob): Record<string, unknown> {
 /** Runs one claimed job. A string result means the work finished. It does not invent provider data. */
 export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> {
   const payload = readPayload(job);
+  if (job.job_type.startsWith("engine.")) {
+    const { executeEngineJob } = await import("../../../engine/jobs/dispatch.ts");
+    return executeEngineJob(sql, job);
+  }
   if (job.job_type === "research.collect") {
     const { executeResearchCollection } = await import("../research/worker.ts");
     return executeResearchCollection(sql, job, payload);
