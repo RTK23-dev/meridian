@@ -32,7 +32,9 @@ import type { CreativeSpec, ProductionJob } from "../production/types.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
+import { engineRequestIdFor, mapVideoToEngineRequest } from "./engine-request.ts";
 import { meteredSpendOf } from "./spend.ts";
+import { ENGINE_VIDEO_PROVIDER_ID } from "./run-settings.ts";
 import {
   IN_FLIGHT_STATUSES,
   NOT_A_SLIDE,
@@ -69,6 +71,9 @@ export type VideoRequest = {
   durationSeconds: number;
   sequenceIndex: number;
 };
+
+/** The reason a run that names the Meridian video engine stops. The engine is not connected; phase E3 connects it. */
+export const ENGINE_NOT_READY_REASON = "The video engine cannot deliver videos yet (phase E3)";
 
 /** The reason the run waits for a video that is still at the provider. It names the provider and the job's status. */
 export function waitingReasonOf(label: string, providerId: string, status: string): string {
@@ -134,13 +139,31 @@ async function resumeVideo(
   return { kind: "skipped" };
 }
 
+/**
+ * The Meridian video engine is named, and it is not connected. The plan is mapped to the engine's request, so a plan the engine could not
+ * take is found here as well. Nothing is sent: no job, reservation, provider call, creative, media id, receipt or cost row is written, and
+ * the run stops with the reason. The mapping's result is not shown on the run; the reason is the one phase E3 is named by.
+ */
+function engineNotConnected(scope: Scope, req: VideoRequest): Step {
+  mapVideoToEngineRequest({
+    organizationId: scope.organizationId,
+    requestId: engineRequestIdFor(req.jobId, req.plan.createdAt),
+    plan: req.plan,
+    deliverableId: req.planDeliverableId,
+  });
+  return { kind: "stop", reason: ENGINE_NOT_READY_REASON };
+}
+
 async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: VideoRequest): Promise<Step> {
+  // The provider is the run's choice for video. The engine stops here, before the cap check, a job or a reservation exists.
+  const requested = input.providers.video ?? "auto";
+  if (requested === ENGINE_VIDEO_PROVIDER_ID) return engineNotConnected(scope, req);
+
   // The metered spend is checked before any provider call, as it is for an image.
   const reached = await capStopOf(sql, input, scope);
   if (reached) return { kind: "stop", reason: reached };
 
-  // The provider is the run's choice for video. A named provider that is not ready is refused here, before a job or a reservation exists.
-  const requested = input.providers.video ?? "auto";
+  // A named provider that is not ready is refused here, before a job or a reservation exists.
   const spec: CreativeSpec = {
     id: req.jobId,
     organizationId: scope.organizationId,
