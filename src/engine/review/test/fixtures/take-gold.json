@@ -1,0 +1,107 @@
+[
+  {
+    "schema": "meridian.gold_label/v1",
+    "labelId": "tg_flicker_01",
+    "check": "take:flicker_below_max",
+    "subjectId": "take_01JABCDEFGHJKMNPQRSTVWXYZ0",
+    "shouldFail": false,
+    "source": "owner_seed",
+    "reason": "Authored sample for the loader test, not an owner label: a steady take.",
+    "input": {
+      "shot": { "plannedDurationMs": 4000, "motionRequired": true },
+      "measurements": { "durationMs": 4050, "blackOrFrozenRunFrames": 0, "flickerScore": 0.12, "meanMotion": 0.31 }
+    }
+  },
+  {
+    "schema": "meridian.gold_label/v1",
+    "labelId": "tg_flicker_02",
+    "check": "take:flicker_below_max",
+    "subjectId": "take_01JABCDEFGHJKMNPQRSTVWXYZ1",
+    "shouldFail": true,
+    "source": "owner_seed",
+    "reason": "Authored sample for the loader test, not an owner label: visible brightness pumping.",
+    "input": {
+      "shot": { "plannedDurationMs": 4000, "motionRequired": true },
+      "measurements": { "durationMs": 4000, "blackOrFrozenRunFrames": 0, "flickerScore": 0.41, "meanMotion": 0.27 }
+    }
+  },
+  {
+    "schema": "meridian.gold_label/v1",
+    "labelId": "tg_duration_01",
+    "check": "take:duration_within_tolerance",
+    "subjectId": "take_01JABCDEFGHJKMNPQRSTVWXYZ2",
+    "shouldFail": true,
+    "source": "owner_seed",
+    "reason": "Authored sample for the loader test, not an owner label: 17 per cent longer than the shot.",
+    "input": {
+      "shot": { "plannedDurationMs": 4000, "motionRequired": false },
+      "measurements": { "durationMs": 4700, "blackOrFrozenRunFrames": 0, "flickerScore": 0.1, "meanMotion": 0.02 }
+    }
+  },
+  {
+    "schema": "meridian.gold_label/v1",
+    "labelId": "tg_black_01",
+    "check": "take:no_black_or_frozen_frames",
+    "subjectId": "take_01JABCDEFGHJKMNPQRSTVWXYZ3",
+    "shouldFail": true,
+    "source": "owner_seed",
+    "reason": "Authored sample for the loader test, not an owner label: a five-frame black run.",
+    "input": {
+      "shot": { "plannedDurationMs": 4000, "motionRequired": false },
+      "measurements": { "durationMs": 4000, "blackOrFrozenRunFrames": 5, "flickerScore": 0.1, "meanMotion": 0.02 }
+    }
+  },
+  {
+    "schema": "meridian.gold_label/v1",
+    "labelId": "tg_motion_01",
+    "check": "take:motion_present",
+    "subjectId": "take_01JABCDEFGHJKMNPQRSTVWXYZ4",
+    "shouldFail": true,
+    "source": "owner_seed",
+    "reason": "Authored sample for the loader test, not an owner label: a motion shot that does not move.",
+    "input": {
+      "shot": { "plannedDurationMs": 4000, "motionRequired": true },
+      "measurements": { "durationMs": 4000, "blackOrFrozenRunFrames": 0, "flickerScore": 0.1, "meanMotion": 0.01 }
+    }
+  },
+  {
+    "schema": "meridian.gold_label/v1",
+    "labelId": "tg_product_01",
+    "check": "take:product_match",
+    "subjectId": "take_01JABCDEFGHJKMNPQRSTVWXYZ5",
+    "shouldFail": false,
+    "source": "owner_seed",
+    "reason": "Authored sample for the loader test, not an owner label: the product matches its hero image.",
+    "input": { "score": 0.93 }
+  },
+  {
+    "schema": "meridian.gold_label/v1",
+    "labelId": "tg_product_02",
+    "check": "take:product_match",
+    "subjectId": "take_01JABCDEFGHJKMNPQRSTVWXYZ6",
+    "shouldFail": true,
+    "source": "owner_seed",
+    "reason": "Authored sample for the loader test, not an owner label: a warped product.",
+    "input": { "score": 0.41 }
+  },
+  {
+    "schema": "meridian.gold_label/v1",
+    "labelId": "tg_rubric_01",
+    "check": "take:slop_rubric",
+    "subjectId": "take_01JABCDEFGHJKMNPQRSTVWXYZ7",
+    "shouldFail": true,
+    "source": "owner_seed",
+    "reason": "Authored sample for the loader test, not an owner label: hands scored as a clear flaw.",
+    "input": {
+      "rubric": {
+        "hands": 0.35,
+        "faces": 0.95,
+        "anatomy": 0.9,
+        "physics": 0.88,
+        "plastic_skin": 0.8,
+        "morphing_objects": 0.93,
+        "background_warping": 0.9
+      }
+    }
+  }
+]

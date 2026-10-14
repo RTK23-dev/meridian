@@ -1,0 +1,38 @@
+{
+  "clean": {
+    "durationMs": 4100,
+    "blackOrFrozenRunFrames": 0,
+    "flickerScore": 0.1,
+    "meanMotion": 0.22
+  },
+  "black_frames": {
+    "durationMs": 4100,
+    "blackOrFrozenRunFrames": 5,
+    "flickerScore": 0.1,
+    "meanMotion": 0.22
+  },
+  "flicker": {
+    "durationMs": 4100,
+    "blackOrFrozenRunFrames": 0,
+    "flickerScore": 0.41,
+    "meanMotion": 0.22
+  },
+  "static_motion_shot": {
+    "durationMs": 4100,
+    "blackOrFrozenRunFrames": 0,
+    "flickerScore": 0.1,
+    "meanMotion": 0.01
+  },
+  "too_long": {
+    "durationMs": 4700,
+    "blackOrFrozenRunFrames": 0,
+    "flickerScore": 0.1,
+    "meanMotion": 0.22
+  },
+  "probe_missing": {
+    "durationMs": null,
+    "blackOrFrozenRunFrames": 0,
+    "flickerScore": 0.1,
+    "meanMotion": 0.22
+  }
+}
