@@ -67,7 +67,7 @@ Oct 12, 2026 · @Victor
 | L1 | Orchestration is Meridian's Postgres job queue in TypeScript, not a coding-agent session per video |
 | L2 | Claude via OpenRouter by default, through the engine's one API gateway (owner decision 2026-10-14, replacing "via the Anthropic API"): Opus for direction, Sonnet for analysis and structured writing, Haiku for checks and volume. The route table can move any role to the Anthropic API directly or to another provider |
 | L3 | Pixels via OpenRouter (video, avatar, image, voice), through the same gateway; stock via Pexels and Pixabay APIs |
-| L4 | Render with HyperFrames on HeyGen's cloud render API; Remotion Lambda and Shotstack as fallbacks behind the same compiler |
+| L4 | Render with HyperFrames on HeyGen's cloud render API; Shotstack as the only fallback behind the same compiler (owner decision 2026-10-14: Remotion Lambda dropped, because it needs an S3 bucket and S3 is retired) |
 | L5 | Our own clean-room contracts and code. Ideas from Hypit, OpenMontage and master-skills are reused; their code is not (Hypit's licence restricts multi-tenant use; OpenMontage is AGPL-3.0) |
 | L6 | Claude never writes render code per video; it selects components and fills props |
 | L7 | Every video carries a manifest; every decision is logged with its reason |
@@ -416,7 +416,7 @@ Each stage below lists what it does, step by step, how it fails, and the tests t
 
 ### 6.11 `render`
 
-- **Does:** renders the composition on HeyGen's HyperFrames cloud with an idempotency key = hash of the composition. On two failures, falls back to Remotion Lambda (compiled from the same EDL), then Shotstack for component-free timelines.
+- **Does:** renders the composition on HeyGen's HyperFrames cloud with an idempotency key = hash of the composition. On two failures, falls back to Shotstack for component-free timelines; an EDL that uses custom components goes to review (owner decision 2026-10-14: no Remotion Lambda).
 - **Render integrity:** ffprobe confirms 1080 × 1920, 30 fps, duration ±100 ms, audio present.
 
 ### 6.12 `post_render_review`
@@ -616,7 +616,7 @@ Every component lives in `engine/compose/components/<name>/` with `component.htm
 
 ### 9.3 Fallback renderers
 
-- **Remotion Lambda:** a second compiler targets a Remotion project that mirrors the component library's props. Parity is required only for the eight most-used components at first; others downgrade to `kinetic.punchline` or `product.card` when falling back.
+- **Remotion Lambda:** dropped (owner decision 2026-10-14). It needs an S3 render bucket, and North Star decision 2 retires S3.
 - **Shotstack:** only for EDLs that use media, captions and simple text (no custom components).
 - The render adapter records which renderer produced each video in the manifest.
 
@@ -671,7 +671,7 @@ The highest score wins unless its concurrency bucket is full, in which case the 
 | Speech-to-text | Hosted model with word timestamps (vendor chosen in E1) | per minute |
 | Stock | Pexels; Pixabay | free with key (licence check in E2) |
 | Background removal, upscaling, lip-sync | API vendors chosen in E2 | per call |
-| Render | HeyGen HyperFrames cloud; Remotion Lambda; Shotstack | \~$0.10 per min at 1080p (verify); compute; $0.20 per min |
+| Render | HeyGen HyperFrames cloud; Shotstack (Remotion Lambda dropped 2026-10-14) | \~$0.10 per min at 1080p (verify); $0.20 per min |
 
 Prices live in `engine/config/prices.ts` and are overwritten by reconciled actuals: the ledger's rolling average replaces the list price after 50 calls.
 
@@ -1096,9 +1096,9 @@ Six phases. A phase is complete only when every acceptance test passes in a **re
 
 - [ ] W5, W9: `cinematic`, `cartoon_rigged` (one character rig), `cartoon_generated`, `kinetic_type`, `stop_motion`, `screen_mock` complete.
 - [ ] W13: variants for caption, music, hook, product, persona, language; manifest writer; events.
-- [ ] W9: Remotion Lambda fallback compiler for the eight most-used components.
+- [ ] W9/W10: Shotstack fallback render adapter for component-free EDLs (Remotion Lambda dropped by the owner, 2026-10-14).
 
-**Acceptance:** 20 variants from one master in under 15 minutes; a caption-only variant triggers no generation; a forced HyperFrames failure falls back to Remotion and still delivers.
+**Acceptance:** 20 variants from one master in under 15 minutes; a caption-only variant triggers no generation; a forced HyperFrames failure on a component-free EDL falls back to Shotstack and still delivers, and one on a component EDL goes to review.
 
 ### E6 Batch scale (all)
 
@@ -1129,7 +1129,9 @@ Six phases. A phase is complete only when every acceptance test passes in a **re
 
 - [ ] Speech-to-text vendor (word timestamps, music robustness, price).
 - [ ] Background removal, upscaling and lip-sync vendors.
-- [ ] Whether to keep Shotstack as a third renderer or drop it after E5.
+- [x] Renderer fallback: Shotstack only; Remotion Lambda dropped because it needs S3 (decided 2026-10-14).
+- [x] Workspace monthly budget: a "Monthly video budget (USD)" field per workspace in Settings, with no default; the engine refuses to reserve until it is set (decided 2026-10-14).
+- [x] Credentials: per-workspace OpenRouter, HeyGen and Anthropic credential categories in Meridian's resolver (approved 2026-10-14).
 - [ ] Music source: licensed library vendor and its terms for social use.
 - [x] Default request budgets per format: none. The user sets the budget of every master (decided 2026-10-14; see section 14.4).
 - [ ] Disclosure wording and placement standard for AI presenters.

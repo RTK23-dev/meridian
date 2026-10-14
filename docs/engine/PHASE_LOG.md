@@ -167,3 +167,16 @@ Extra work done in E1 beyond the checklist: W7 visual decision steps 1 to 4 and 
 - Checks on 6e773b3: `npm test` 3,092 src and 153 script tests pass, 0 fail, 41 skipped; typecheck clean; lint 0 errors;
   CI green.
 - Noted, not changed: the produce stage defaults a video to 8 seconds when the plan has none (`produce.ts`).
+
+## 2026-10-14 Owner decisions: credentials, monthly budget, render fallback, discovery provider
+
+- **Credentials (approved):** per-workspace credential categories for OpenRouter, HeyGen and Anthropic in
+  `src/lib/meridian/credentials/`. The deployment-wide OpenRouter key stays as an opt-in fallback. Task A2.
+- **Workspace monthly budget:** a "Monthly video budget (USD)" field per workspace in Settings, with no default. Until it
+  is set, estimate_reserve refuses with that reason.
+- **Render fallback:** Shotstack only. Remotion Lambda is dropped because it needs an S3 render bucket and S3 is retired.
+  Component-free EDLs fall back to Shotstack; EDLs with custom components go to review after two HeyGen failures.
+  Applied to Bible L4, 6.11, 9, 10.3, 19 (E5) and 20.2.
+- **Discovery provider (delegated to the lead):** Apify, for pay-per-use pricing with no contract at the planned volume
+  (about 1,000 candidates per niche per week). It is added as a gateway provider like any other, so moving to Bright Data
+  later is a provider entry and a route change.

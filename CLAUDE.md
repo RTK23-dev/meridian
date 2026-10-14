@@ -39,7 +39,7 @@ The video engine is specified in `docs/engine/VIDEO_ENGINE_BIBLE.md`. Codebase s
 
 ## Known conflicts (owner to decide; do not resolve in code)
 
-- **Artifact storage.** The Bible stores artifacts in S3. North Star decision 2 retires S3 in favour of Postgres and Drive.
+- **Artifact storage.** The Bible stores artifacts in S3. North Star decision 2 retires S3 in favour of Postgres and Drive. For rendering, the owner dropped Remotion Lambda (S3-backed) on 2026-10-14; Shotstack is the only fallback.
 - **Live runs.** The Bible's done-definition needs live runs; North Star decision 1 says agents never hold keys.
 - **Before E1.** The Bible requires handoff phase 0 (Veo move, PR #39). PR #39 closed unmerged and no Veo provider exists in this repo.
 - **Hypit.** The Bible reuses Hypit's ideas only; the North Star keeps Hypit as a selectable provider.
