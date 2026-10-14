@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1080, height=1920">
+<title>edl_01M4T7V0HR000000000002VHP9</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div id="root" data-composition-id="root" data-start="0" data-duration="24.000" data-width="1080" data-height="1920">
+<div id="stage">
+<video class="clip" id="clip-c_base_2" src="assets/87768e11a288e3b8.mp4" data-start="3.000" data-duration="6.000" data-track-index="0" data-media-start="0.000" muted playsinline preload="auto" style="z-index:1;"></video>
+<video class="clip" id="clip-c_base_3" src="assets/3d157b7d0d32c316.mp4" data-start="9.000" data-duration="6.000" data-track-index="0" data-media-start="0.000" muted playsinline preload="auto" style="z-index:1;"></video>
+<video class="clip" id="clip-c_presenter_1" src="assets/2c497b325b4ad31d.mp4" data-start="0.000" data-duration="3.000" data-track-index="2" data-media-start="0.000" muted playsinline preload="auto" style="z-index:3;"></video>
+<div class="clip" id="clip-c_gfx_4" data-composition-id="c_gfx_4" data-composition-src="components/product.card.html" data-start="15.000" data-duration="6.000" data-track-index="3" data-variable-values='{&quot;name&quot;:&quot;Fixture Blender&quot;,&quot;bullets&quot;:[],&quot;durationMs&quot;:6000}' style="z-index:4;left:60px;top:900px;width:960px;height:700px;"></div>
+<div class="clip" id="clip-c_gfx_5" data-composition-id="c_gfx_5" data-composition-src="components/cta.card.html" data-start="21.000" data-duration="3.000" data-track-index="3" data-variable-values='{&quot;text&quot;:&quot;Send BLEND to get the link&quot;,&quot;arrow&quot;:&quot;down&quot;,&quot;durationMs&quot;:3000}' style="z-index:4;left:60px;top:900px;width:960px;height:500px;"></div>
+<div class="clip" id="clip-c_cap_1" data-composition-id="c_cap_1" data-composition-src="components/captions.karaoke.html" data-start="0.000" data-duration="24.000" data-track-index="4" data-variable-values='{&quot;captions&quot;:[],&quot;band&quot;:&quot;lower&quot;,&quot;durationMs&quot;:24000}' style="z-index:5;"></div>
+<div id="fx-flash"></div>
+</div>
+<audio class="clip" id="audio-voice" src="assets/c11b992997d25bc2.wav" data-start="0.000" data-duration="24.000" data-track-index="10" data-volume="1"></audio>
+<audio class="clip" id="audio-music" src="assets/9b9d71af48212968.wav" data-start="0.000" data-duration="24.000" data-track-index="11" data-volume="0.2512"></audio>
+<audio class="clip" id="audio-sfx-0" src="assets/6b4f1b42561d263f.wav" data-start="8.950" data-duration="0.650" data-track-index="12" data-volume="0.5012"></audio>
+<script>
+window.__timelines = window.__timelines || {};
+var tl = gsap.timeline({ paused: true });
+tl.to(document.getElementById("stage"), { scale: 1.1, duration: 0.1, ease: "power2.out" }, 1.2);
+tl.to(document.getElementById("stage"), { scale: 1, duration: 0.2, ease: "power2.in" }, 1.3);
+tl.set({}, {}, 24.000);
+window.__timelines["root"] = tl;
+</script>
+</div>
+</body>
+</html>

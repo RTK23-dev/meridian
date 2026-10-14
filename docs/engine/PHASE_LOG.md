@@ -69,3 +69,18 @@ Interim handling of open conflicts (owner may overrule):
   - Priority and poll-backoff values sit in `jobs/settings.ts`; they move into `src/engine/config/` with the other stray settings.
   - The intake handler must create the pre-flight reservation.
   - No stage handlers are registered yet, so every `engine.*` job is refused as not implemented until E2 and E3 add them.
+
+## 2026-10-14 Wave B: W9 and W10 merged; wave B complete
+
+- eng-edit-compose delivered `src/engine/compose/` (a deterministic compiler from EDL to a HyperFrames composition, the style kit as CSS custom properties, and the five E1 components `captions.karaoke`, `title.hook`, `kinetic.punchline`, `product.card` and `cta.card` with golden frames) and `src/engine/render/` (the HeyGen HyperFrames cloud adapter: budget hold before submit, `Idempotency-Key` = `Composition.contentHash`, an injected integrity check, and a deterministic zip of the composition). Commit ce23f58. The agent hit the account's usage limit mid-task and was resumed with its context; no work was lost.
+- New dev dependencies: `hyperframes` and `@hyperframes/core`, pinned at 0.8.154, for `hyperframes lint` and local golden-frame renders.
+  - Lead check: rebuilt `package-lock.json` from this branch's lockfile with only these two packages added, and npm produced the same diff. No existing package version changed and none was removed; 170 packages were added. The only new install scripts are esbuild's (already used in the repo).
+  - New scripts: `npm run engine:golden` and `npm run engine:golden:update`.
+- Lead review: escaping covers every untrusted value written into HTML, and clip ids are restricted to `[A-Za-z0-9_-]` before output. The 15 golden PNGs total 1.4 MB.
+- Lead fix after merge: moved the golden-frame harness from `compose/golden/` to `compose/test/golden/`. W4's boundary test had flagged it for reading `FFMPEG_PATH`, which is correct for a test tool but not allowed in production engine code.
+- Result: 706 engine and job tests pass, none skipped; `npm run engine:golden` 15 of 15; typecheck clean, lint 0 errors.
+- Follow-ups recorded:
+  - The HeyGen endpoints come from the `hyperframes` CLI 0.8.154 source and are not live-verified. Still unknown: whether `Idempotency-Key` deduplicates, the real price per minute, and output resolution (Bible 20.3 item 1).
+  - The render adapter needs a HeyGen credential category in `src/lib/meridian/credentials/contract.ts`, and storage wiring for `resolveAsset` and `storeVideo`.
+  - Meridian's `VideoEngine` interface is shaped around Hypit, so the adapter does not implement it yet.
+  - Remotion Lambda and Shotstack fallbacks are E5 work.

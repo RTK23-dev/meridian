@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"rhythmMs","type":"number","label":"Rhythm (ms)","default":700,"min":200,"max":2000,"step":1,"unit":"ms"},{"id":"scale","type":"number","label":"Scale","default":1,"min":0.8,"max":1.4,"step":0.01},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="kinetic.punchline" data-width="1080" data-height="1920">
+  <div class="kp-layer"></div>
+  <style>
+    .kp-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+    .kp-line {
+      position: absolute;
+      left: 6%;
+      width: 82%;
+      top: 40%;
+      text-align: center;
+      opacity: 0;
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 170px;
+      line-height: 1;
+      color: var(--kit-primary);
+      text-shadow: 0 10px 36px rgba(0, 0, 0, 0.25);
+      transform-origin: 50% 50%;
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var accent = kit.getPropertyValue("--kit-accent").trim();
+      var layer = document.querySelector(".kp-layer");
+      var lines = Array.isArray(vars.lines) ? vars.lines : [];
+      var rhythm = vars.rhythmMs / 1000;
+      var scale = vars.scale;
+      var punch = scale * (1 + 0.25 * motion);
+      var tl = gsap.timeline({ paused: true });
+      lines.forEach(function (text, index) {
+        var el = document.createElement("div");
+        el.className = "kp-line";
+        el.textContent = String(text);
+        var isLast = index === lines.length - 1;
+        if (isLast) {
+          el.style.color = accent;
+        }
+        layer.appendChild(el);
+        var start = index * rhythm;
+        tl.set(el, { opacity: 1 }, start);
+        tl.fromTo(el, { scale: punch }, { scale: scale, duration: 0.12, ease: "power3.out" }, start);
+        if (!isLast) {
+          tl.set(el, { opacity: 0 }, (index + 1) * rhythm);
+        }
+      });
+      tl.set({}, {}, vars.durationMs / 1000);
+      window.__timelines["kinetic.punchline"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>
