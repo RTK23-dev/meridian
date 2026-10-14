@@ -81,6 +81,8 @@ describe("runRole: the golden answer", () => {
     assert.equal(entry?.estimateUsd, 0.082);
     assert.equal(entry?.actualUsd, 0.0579);
     assert.equal(entry?.actualIsEstimate, false);
+    assert.equal(entry?.role, "segmenter", "the ledger entry names the role");
+    assert.equal(entry?.promptVersion, "segmenter@1");
   });
 
   it("uses as its idempotency key the hash of role, prompt version, model and input", async () => {

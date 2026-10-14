@@ -2,7 +2,7 @@
 // cost. A refused call is never made. A duplicate idempotency key is never billed or made twice. A call that throws keeps
 // its held amount on the ledger, so a provider that billed for a failure is never under-counted.
 
-import { authorizeCall, type BudgetAlert } from "../budget/reserve.ts";
+import { authorizeCall, type BudgetAlert, type CallInput } from "../budget/reserve.ts";
 import { reconcileCall } from "../budget/reconcile.ts";
 import type { LedgerRow, LedgerStore } from "../budget/store.ts";
 import type { ResolvedRoute } from "./gateway.ts";
@@ -17,6 +17,9 @@ export type PaidCallInput = {
   idempotencyKey: string;
   /** ISO time of the call. */
   at: string;
+  /** A Claude call's role and prompt version, recorded on the ledger entry (contract v2). Set both or neither. */
+  role?: CallInput["role"];
+  promptVersion?: string;
 };
 
 export type PaidRun<T> = { value: T; /** The provider's own bill, when it reports one (OpenRouter usage.cost). */ actualUsd: number | null };
@@ -35,6 +38,7 @@ export async function paidCall<T>(input: PaidCallInput, run: () => Promise<PaidR
     estimateUsd: input.estimateUsd,
     idempotencyKey: input.idempotencyKey,
     at: input.at,
+    ...(input.role === undefined ? {} : { role: input.role, promptVersion: input.promptVersion }),
   });
   if (authorized.status === "refused") return { status: "refused", reason: authorized.reason, alerts: authorized.alerts };
   if (authorized.status === "duplicate") return { status: "duplicate", entry: authorized.entry, samePayload: authorized.samePayload };

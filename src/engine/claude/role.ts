@@ -1,6 +1,7 @@
 // What a Claude role is: its capability, its prompt, its input and answer contracts, and the token estimate of one call
 // (Bible 11.1). A role is data plus pure functions; the client (client.ts) does every call, budget step and retry.
 
+import type { ClaudeRole } from "../contracts/index.ts";
 import type { ZodType } from "zod";
 import type { Capability } from "../config/routes.ts";
 import type { ContentPart } from "../gateway/openrouter.ts";
@@ -11,7 +12,7 @@ export type ClaudeCapability = Extract<Capability, "llm.direction" | "llm.analys
 
 export type RoleDefinition<Input, Answer> = {
   /** The role's name, for example "segmenter". Also the prompt's name. */
-  role: string;
+  role: ClaudeRole;
   capability: ClaudeCapability;
   /** The pipeline stage the role serves (Bible 6.x), used in error messages. */
   stage: string;

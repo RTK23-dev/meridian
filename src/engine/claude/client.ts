@@ -167,6 +167,8 @@ async function settle<Input, Answer>(
       estimateUsd: ctx.estimateUsd,
       idempotencyKey,
       at: ctx.deps.now(),
+      role: ctx.role.role,
+      promptVersion: ctx.promptVersion,
     },
     async () => {
       try {

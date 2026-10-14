@@ -2,11 +2,11 @@
 // tokens in / out; Haiku costed at Haiku 4.5's $1 / $5 until Haiku 5.5's rate is confirmed). Keyed by the OpenRouter id in
 // config/routes.ts. A model with no rate here has no estimate, and the call refuses rather than guessing (fail closed).
 //
-// These rates sit in this folder only because config/ is outside the W3 write scope. They belong in config/prices.ts; see
-// STATUS.md. Cached-input reads ($0.20 per million) and Batch pricing (half price) are not used: the route does not support
+// The rates live in config/prices.ts (prices@2, tokenRates); this file reads them. Cached-input reads ($0.20 per million) and Batch pricing (half price) are not used: the route does not support
 // them yet (Bible 20.3 item 6).
 
 import { budgets } from "../config/budgets.ts";
+import { prices } from "../config/prices.ts";
 import { EngineError } from "../contracts/errors.ts";
 import { roundUsd } from "../contracts/money.ts";
 
@@ -16,11 +16,7 @@ const TOKENS_PER_MILLION = 1_000_000;
 
 export type TokenRate = { inputUsdPerMillion: number; outputUsdPerMillion: number };
 
-export const claudeRates: Readonly<Record<string, TokenRate>> = {
-  "anthropic/claude-opus-5.5": { inputUsdPerMillion: 4, outputUsdPerMillion: 20 },
-  "anthropic/claude-sonnet-5.5": { inputUsdPerMillion: 2, outputUsdPerMillion: 10 },
-  "anthropic/claude-haiku-5.5": { inputUsdPerMillion: 1, outputUsdPerMillion: 5 },
-};
+export const claudeRates: Readonly<Record<string, TokenRate>> = prices.tokenRates;
 
 export type TokenCount = { input: number; output: number };
 
