@@ -22,6 +22,11 @@ export type ProduceInput = {
   providers: Partial<Record<string, string>>;
   /** The caps the run is held to, in cents, after the run and the brand are combined. Null for a cap that is not set. */
   caps: { totalCents: number | null; dailyCents: number | null };
+  /**
+   * The budget the user set for every master, in USD (RunSettings.costPerMasterUsd). Null when it is not set. A video request takes it
+   * as its budget (ProductionRequest.constraints.budgetUsd); the engine refuses one below the video's own minimum at intake.
+   */
+  costPerMasterUsd: number | null;
   /** Decision engines the judgments may call. Absent means the engines the deployment selects. */
   engines?: DecisionEngineRegistry;
   driveClient?: ArtifactDrive;

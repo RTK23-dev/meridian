@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_RUN_SETTINGS, parseRunSettings } from "./run-settings.ts";
-import { checkedSettings, draftFromDefaults, draftProblems, settingsFromDraft, type BuilderDraft } from "./run-builder-model.ts";
+import { budgets } from "../../../engine/config/budgets.ts";
+import { DEFAULT_RUN_SETTINGS, MASTER_COST_FLOOR_TEXT, MASTER_COST_FLOOR_USD, parseRunSettings } from "./run-settings.ts";
+import {
+  checkedDefaults,
+  checkedSettings,
+  costPerMasterFromText,
+  draftFromDefaults,
+  draftProblems,
+  settingsFromDraft,
+  type BuilderDraft,
+} from "./run-builder-model.ts";
 
 const READY: BuilderDraft = {
   ...draftFromDefaults(DEFAULT_RUN_SETTINGS),
@@ -69,4 +78,75 @@ test("the draft starts from the brand's defaults, so a run inherits what the bra
   assert.equal(draft.dailyDollars, "5");
   assert.equal(draft.totalDollars, "");
   assert.equal(draft.maxVariants, "12");
+});
+
+const FLOOR_BLOCK = "Every master costs at least $0.52: the fixed Claude, critic, render and media cost.";
+const VIDEO: BuilderDraft = { ...READY, formats: ["video"], costPerMasterDollars: "0.75" };
+
+test("the floor is the sum of the engine's four fixed per-master lines, not a copied number", () => {
+  const cents = Object.values(budgets.fixedPerMasterUsd).reduce((sum, usd) => sum + Math.round(usd * 100), 0);
+  assert.equal(Math.round(MASTER_COST_FLOOR_USD * 100), cents);
+  assert.equal(MASTER_COST_FLOOR_TEXT, "0.52");
+});
+
+test("a cost per master is validated for null, below the floor, at the floor, too many decimals and non-numbers", () => {
+  assert.deepEqual(costPerMasterFromText(""), { ok: true, value: null }, "blank is not set");
+  assert.deepEqual(costPerMasterFromText("   "), { ok: true, value: null }, "spaces are blank");
+  assert.deepEqual(costPerMasterFromText("0.52"), { ok: true, value: 0.52 }, "at the floor is allowed");
+  assert.deepEqual(costPerMasterFromText("0.75"), { ok: true, value: 0.75 });
+  assert.deepEqual(costPerMasterFromText("12"), { ok: true, value: 12 });
+  assert.deepEqual(costPerMasterFromText(".8"), { ok: true, value: 0.8 });
+
+  const below = costPerMasterFromText("0.51");
+  assert.equal(below.ok, false);
+  if (!below.ok) assert.equal(below.error, `The cost per master is below the floor. ${FLOOR_BLOCK}`);
+  assert.equal(costPerMasterFromText("0").ok, false, "zero is below the floor");
+  assert.equal(costPerMasterFromText("0.5").ok, false, "0.50 is below the floor");
+
+  const decimals = costPerMasterFromText("0.755");
+  assert.equal(decimals.ok, false);
+  if (!decimals.ok) assert.match(decimals.error, /at most 2 decimals/);
+
+  for (const text of ["abc", "-1", "1e3", "1,50", "$0.75"]) {
+    const refused = costPerMasterFromText(text);
+    assert.equal(refused.ok, false, `refused: ${text}`);
+    if (!refused.ok) assert.match(refused.error, /must be a dollar amount, such as 0\.75/);
+  }
+});
+
+test("a run that makes video cannot start without a cost per master, and the reason names the floor", () => {
+  const blank = { ...VIDEO, costPerMasterDollars: "" };
+  assert.deepEqual(draftProblems(blank), [`Type the cost per master (USD). ${FLOOR_BLOCK}`]);
+  assert.equal(checkedSettings(blank).ok, false);
+});
+
+test("a run that makes video cannot start below the floor, and at the floor it can", () => {
+  assert.deepEqual(draftProblems({ ...VIDEO, costPerMasterDollars: "0.51" }), [`The cost per master is below the floor. ${FLOOR_BLOCK}`]);
+  assert.deepEqual(draftProblems({ ...VIDEO, costPerMasterDollars: "0.52" }), []);
+  const checked = checkedSettings({ ...VIDEO, costPerMasterDollars: "0.52" });
+  assert.equal(checked.ok, true);
+  if (checked.ok) assert.equal(checked.settings.costPerMasterUsd, 0.52);
+});
+
+test("a mixed run that makes video needs the cost too, and an image-only run does not", () => {
+  assert.deepEqual(draftProblems({ ...VIDEO, formats: ["image", "video"], costPerMasterDollars: "" }), [`Type the cost per master (USD). ${FLOOR_BLOCK}`]);
+  assert.deepEqual(draftProblems({ ...READY, formats: ["image"], costPerMasterDollars: "" }), [], "an image-only run starts with no cost");
+  assert.deepEqual(draftProblems({ ...READY, formats: ["carousel"], costPerMasterDollars: "" }), []);
+  const settings = settingsFromDraft({ ...READY, formats: ["image"], costPerMasterDollars: "" });
+  assert.equal(settings.costPerMasterUsd, null, "a run with no cost stores null, never a number");
+});
+
+test("the cost per master is saved from the draft, and a blank one is null", () => {
+  assert.equal(settingsFromDraft({ ...VIDEO, costPerMasterDollars: "0.75" }).costPerMasterUsd, 0.75);
+  assert.equal(settingsFromDraft({ ...VIDEO, costPerMasterDollars: "" }).costPerMasterUsd, null);
+});
+
+test("the brand's defaults may leave the cost blank, so saving them does not need one, but a bad cost still blocks saving", () => {
+  assert.equal(checkedDefaults({ ...VIDEO, costPerMasterDollars: "" }).ok, true, "defaults are saved without a run's cost");
+  assert.equal(checkedDefaults({ ...VIDEO, costPerMasterDollars: "0.1" }).ok, false, "a cost below the floor is refused in defaults too");
+});
+
+test("the draft starts from the brand's saved cost, and is blank when none is saved", () => {
+  assert.equal(draftFromDefaults({ ...DEFAULT_RUN_SETTINGS, costPerMasterUsd: 0.9 }).costPerMasterDollars, "0.9");
+  assert.equal(draftFromDefaults(DEFAULT_RUN_SETTINGS).costPerMasterDollars, "", "no default value is typed into the input");
 });

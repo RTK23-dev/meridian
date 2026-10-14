@@ -217,6 +217,7 @@ export async function executeFactoryJob(
         totalCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
         dailyCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
       },
+      costPerMasterUsd: settings.costPerMasterUsd,
       engines: seams.decisionEngines,
     });
     if (produced.stop) {
