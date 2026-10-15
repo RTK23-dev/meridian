@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { EngineError, type EditDecisionList, type ProductionRequest, type VariantMatrix } from "../contracts/index.ts";
 import { edlFixture, FIXTURE_IDS, productionRequestFixture, scenePlanFixture } from "../contracts/fixtures/index.ts";
-import { EDIT_TUNING } from "../edit/tuning.ts";
+import { thresholds } from "../config/thresholds.ts";
 import { variantMusicMix } from "./config.ts";
 import { expandVariants, masterBand, workFor, type ExpansionInput, type VariantMusicTrack } from "./expand.ts";
 
@@ -207,8 +207,8 @@ describe("variant control values and the music mix", () => {
     assert.equal(masterBand(edlFixture), null, "the fixture's captions clip names no band, so the master's band is unknown");
   });
 
-  it("uses the editor's music mix, so a variant's music sits at the level the editor sets (edit/tuning.ts)", () => {
-    assert.equal(variantMusicMix.gainDb, EDIT_TUNING.music.baseGainDb);
-    assert.equal(variantMusicMix.duckDb, EDIT_TUNING.music.duckDb);
+  it("uses the editor's music mix, so a variant's music sits at the level the editor sets (thresholds.editor.music)", () => {
+    assert.equal(variantMusicMix.gainDb, thresholds.editor.music.baseGainDb.value);
+    assert.equal(variantMusicMix.duckDb, thresholds.editor.music.duckDb);
   });
 });

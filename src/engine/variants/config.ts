@@ -1,8 +1,10 @@
 // Variant settings (Video Engine Bible 6.13 and 14.3). The per-change cost estimates are not here: they are read from
 // config/budgets.ts (budgets.variantCostUsd). What lives here is what the variants code needs and no config file holds yet:
 // the attribute names, the caption positions the compositor draws, and the music mix a variant uses when the master has no
-// music to copy. The mix mirrors edit/tuning.ts (EDIT_TUNING.music); variants/expand.test.ts checks the two agree, so a change
-// to the editor's mix is seen here before it ships. Nothing else is a number in this folder.
+// music to copy. The mix is the editor's own (config/thresholds.ts, thresholds.editor.music), so the two cannot drift.
+// Nothing else is a number in this folder.
+
+import { thresholds } from "../config/thresholds.ts";
 
 /** The six attributes a variant can change (Bible 6.13). Each variant changes exactly one of them against the master. */
 export const VARIANT_ATTRIBUTES = ["caption", "music", "hook", "product", "persona", "language"] as const;
@@ -28,10 +30,10 @@ export type CaptionBand = (typeof CAPTION_BANDS)[number];
 /** The caption component the compositor draws (compose/library). A caption style naming another component is not drawable. */
 export const DRAWABLE_CAPTION_COMPONENT = "captions.karaoke" as const;
 
-/** The music mix a variant uses when the master has no music to copy (mirrors edit/tuning.ts EDIT_TUNING.music, in dB). */
+/** The music mix a variant uses when the master has no music to copy: the editor's mix (thresholds.editor.music, in dB). */
 export const variantMusicMix = {
-  gainDb: -12,
-  duckDb: -18,
+  gainDb: thresholds.editor.music.baseGainDb.value,
+  duckDb: thresholds.editor.music.duckDb,
 } as const;
 
 /** The stable prefix of a variant EDL id. The rest is a hash of the master EDL and the variant key (Bible 5.1: a retry names the same EDL). */
