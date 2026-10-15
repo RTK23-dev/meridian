@@ -317,6 +317,7 @@ export async function chainWorld(sql: Sql, organizationId: string): Promise<Chai
     },
     variants: {
       loadMusicTrack: async ({ trackId }) => (trackId === MUSIC.trackId ? MUSIC : undefined),
+      loadStyleKit: async () => fx.styleKitFixture,
       withLedger: (scope, fn) => withReservationLedger(sql, scope.organizationId, scope.reservationId, fn),
       events: sqlEventStore(sql),
       now,

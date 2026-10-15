@@ -106,7 +106,8 @@ const rows: Record<EngineStage, Row> = {
     group: 8,
     timeoutClass: "generation",
     paid: true,
-    reads: ["production_request", "scene_plan", "edl"],
+    // The assembly (phase assemble) reads the variant's plan, the DNA, its voice, the validated request and the takes its EDL plays.
+    reads: ["production_request", "scene_plan", "edl", "video_dna", "voice_track", "validated_request", "take"],
     writes: ["edl", "scene_plan", "voice_track"],
     gate: null,
   },

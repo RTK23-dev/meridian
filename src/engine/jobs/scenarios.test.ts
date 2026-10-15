@@ -287,6 +287,7 @@ async function world(options: { variantCount?: number; request?: ProductionReque
     render: renderPortsFor(state),
     variants: {
       loadMusicTrack: async ({ trackId }) => (trackId === MUSIC.trackId ? MUSIC : undefined),
+      loadStyleKit: async () => fx.styleKitFixture,
       withLedger: (scope, fn) => withReservationLedger(db.sql, scope.organizationId, scope.reservationId, fn),
       events: sqlEventStore(db.sql),
       now: () => CREATED,

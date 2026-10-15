@@ -5,16 +5,12 @@
 // Deliberate deviation (variants/STATUS.md): Bible 6.13 asks for the changed lines only. An EDL holds one voice clip and there is no
 // audio splice yet, so the variant's track is re-spoken whole. The cost is the speech of the unchanged beats, and it is on the ledger.
 //
-// The call is scoped to its variant. The asset router keys its cache and its ledger on the spec (prompt, seed, duration), not on the
-// voice, so the same text in another voice would return or charge the master's narration. The speech spec's seed therefore carries the
-// variant's scope (callScopeOf), and the speech of one variant never shares a cache entry or a ledger key with the master or another variant.
+// The speech is cached and ledgered under its voice: the asset router's cache key names the voice for a speech spec (assets/cache.ts,
+// routeCacheKey). The same text in another voice is a new call, and the same voice again is a hit. Nothing here scopes the call further.
 
 import { EngineError, type ProductionRequest, type VoiceKit } from "../contracts/index.ts";
 import { runVoice, type VoiceOutcome, type VoicePorts, type VoiceRun } from "../voice/voice.ts";
-import { callScopeOf, variantRequestFor } from "./work.ts";
-
-/** The seed range of the speech specs (a 31-bit signed integer, as the asset spec's seed is). */
-const SEED_MODULUS = 2_147_483_647;
+import { variantRequestFor } from "./work.ts";
 
 /** One variant's voice call: the master request, the lines the writer changed, and the voice that speaks. */
 export type VariantSpeech = {
@@ -23,7 +19,7 @@ export type VariantSpeech = {
   reservationId: string;
   /** The job's infrastructure attempt, from 1 (Bible 5.1). */
   attempt: number;
-  /** The variant's job subject (variants/work.ts). It names the gate and scopes the provider calls. */
+  /** The variant's job subject (variants/work.ts). It names the gate of the call. */
   subject: string;
   /** The master request: its beats give the order, and its maxMs bounds the narration. */
   request: ProductionRequest;
@@ -53,24 +49,6 @@ export const runVoiceOverPorts: VoiceRunner = async (run, ports) => {
   return runVoice(run, ports);
 };
 
-/** The ports with the router's speech spec scoped to one variant (see the header). Only `produce` is changed. Absent stays absent. */
-export function scopedVoicePorts(ports: VoicePorts | undefined, subject: string): VoicePorts | undefined {
-  if (ports === undefined) return undefined;
-  const scope = callScopeOf(subject);
-  const router = ports.router;
-  return {
-    ...ports,
-    router: {
-      ...router,
-      produce: (input) =>
-        router.produce({
-          ...input,
-          spec: { ...input.spec, seed: (input.spec.seed + scope) % SEED_MODULUS },
-        }),
-    },
-  };
-}
-
 /**
  * Speaks one variant's full script (Bible 6.13, the deviation above). The outcome is the voice stage's: not_connected, or done with a
  * gate and, when it passes, the track. A line that names no beat of the request is refused by variantRequestFor, before any call.
@@ -92,6 +70,6 @@ export async function speakVariantScript(
       voice: run.voice,
       claims: run.claims,
     },
-    scopedVoicePorts(ports, run.subject),
+    ports,
   );
 }

@@ -306,3 +306,19 @@ planner, the take gate (W11) and the live run above.
   `src/engine/voice/voice.test.ts` against the real router.
 - Live (owner): record one take at 1.0, 1.1 and 1.2 for the same text, and confirm that the speech route accepts `speed`
   (PROVIDER_APIS.md lists it; no live call has checked it).
+
+## Speech cache key names the voice (variant work, this worktree)
+
+- The router's cache and ledger key was `assetCacheKey(spec, providerId)`, which holds no voice. Two voices speaking the same text shared one
+  cached take and one ledger key, so the second voice was served the first voice's audio (a hit at $0), or a duplicate. Fixed at the router:
+  a speech spec (modelClass `tts`) is keyed by `routeCacheKey(spec, providerId, { voiceId })` (`cache.ts`), which adds the voice to the asset
+  key. Every other spec keeps `assetCacheKey`, so no other key moves.
+- Both router sites use it: the candidate's `cacheKey`, and the check a resumed job makes against its stored key (`checkJobFor`). The ledger
+  key is that cache key, so two voices are two ledger rows.
+- The adapter id is not changed. The circuit breaker and the provider statistics are per provider, and a per-voice adapter id would split
+  them. The speed stays in the adapter id, as above.
+- Tests: `router.test.ts`, "speech voices (Bible 10.4): the voice is part of the cache key" (2 tests). Two voices on the same text: each is a
+  call, the first voice again is a hit at $0, and the ledger holds two rows with two keys. The key test checks that a non-speech spec's key is
+  unchanged.
+- The variant path no longer shifts the speech seed to keep variants apart: that was a workaround for this bug (variants/speak.ts).
+- No speech data is live yet, so no key is migrated. Changing a speech key only moves speech calls.

@@ -93,7 +93,7 @@ function parseBody<S extends z.ZodType>(schema: S, value: unknown, what: string,
 }
 
 /** One gate of the edit stage, with its checks in the order the rules ran them. */
-function editGate(subjectId: string, checks: readonly RuleResult[], failingShotIds: readonly string[]): GateResult {
+export function editGate(subjectId: string, checks: readonly RuleResult[], failingShotIds: readonly string[]): GateResult {
   const parsed = gateResultSchema.safeParse({
     gate: "edit",
     subjectId,
@@ -114,7 +114,7 @@ function editGate(subjectId: string, checks: readonly RuleResult[], failingShotI
 }
 
 /** The emphasis marks the script carries, one per term and beat (Bible 8.2 step 10). */
-function emphasisOf(validated: ValidatedRequest): { beatId: string; term: string }[] {
+export function emphasisOf(validated: ValidatedRequest): { beatId: string; term: string }[] {
   return validated.request.script.beats.flatMap((beat) => (beat.emphasis ?? []).map((term) => ({ beatId: beat.beatId, term })));
 }
 

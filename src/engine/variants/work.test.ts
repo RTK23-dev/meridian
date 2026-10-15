@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { EngineError, type EditDecisionList, type ProductionRequest, type VariantMatrix } from "../contracts/index.ts";
 import { edlFixture, FIXTURE_IDS, productionRequestFixture, scenePlanFixture } from "../contracts/fixtures/index.ts";
 import { expandVariants, type ExpansionInput, type PlannedVariant } from "./expand.ts";
-import { callScopeOf, generationWorkOf, nextPhaseOf, variantRequestFor, variantSubjectOf, variantWorkItemSchema, type VariantWorkItem } from "./work.ts";
+import { generationWorkOf, nextPhaseOf, variantRequestFor, variantSubjectOf, variantWorkItemSchema, type VariantWorkItem } from "./work.ts";
 
 const REQUEST = productionRequestFixture as ProductionRequest;
 const ALL_BEATS = REQUEST.script.beats.map((beat) => beat.beatId);
@@ -124,12 +124,5 @@ describe("a variant's own script, and its job subject (variants/work.ts)", () =>
     assert.notEqual(variantSubjectOf("product:a-b"), variantSubjectOf("product:a.b"));
     assert.equal(variantSubjectOf("hook:2"), variantSubjectOf("hook:2"));
     assert.match(variantSubjectOf("hook:2"), /^[A-Za-z0-9-]+$/);
-  });
-
-  it("scopes the provider calls of two variants to two different numbers, inside the seed range", () => {
-    const hook = callScopeOf(variantSubjectOf("hook:1"));
-    const persona = callScopeOf(variantSubjectOf("persona:x"));
-    assert.notEqual(hook, persona);
-    assert.ok(Number.isInteger(hook) && hook >= 0 && hook < 2 ** 24);
   });
 });

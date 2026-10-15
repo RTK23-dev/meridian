@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 import { EngineError, type ProductionRequest, type VoiceKit } from "../contracts/index.ts";
 import { productionRequestFixture, voiceKitFixture } from "../contracts/fixtures/index.ts";
 import type { VoiceOutcome, VoicePorts, VoiceRun } from "../voice/voice.ts";
-import { callScopeOf, variantRequestFor, variantSubjectOf } from "./work.ts";
-import { runVoiceOverPorts, scopedVoicePorts, speakVariantScript, type VariantSpeech, type VoiceRunner } from "./speak.ts";
+import { variantRequestFor, variantSubjectOf } from "./work.ts";
+import { runVoiceOverPorts, speakVariantScript, type VariantSpeech, type VoiceRunner } from "./speak.ts";
 
 const REQUEST = productionRequestFixture as ProductionRequest;
 const VOICE = voiceKitFixture as VoiceKit;
@@ -13,25 +13,15 @@ const SUBJECT_HOOK = variantSubjectOf("hook:2");
 const SUBJECT_PERSONA = variantSubjectOf("persona:persona_variant");
 
 /** A runner that records each run. It never reaches a provider: it answers not connected. */
-function recordingRunner(): { runner: VoiceRunner; runs: VoiceRun[] } {
+function recordingRunner(): { runner: VoiceRunner; runs: VoiceRun[]; portsSeen: (VoicePorts | undefined)[] } {
   const runs: VoiceRun[] = [];
-  const runner: VoiceRunner = async (run): Promise<VoiceOutcome> => {
+  const portsSeen: (VoicePorts | undefined)[] = [];
+  const runner: VoiceRunner = async (run, ports): Promise<VoiceOutcome> => {
     runs.push(run);
+    portsSeen.push(ports);
     return { status: "not_connected", reason: "NOT_CONNECTED: recorded runner" };
   };
-  return { runner, runs };
-}
-
-/** A router stub whose produce records the spec's seed. */
-function routerStub(seeds: number[]): VoicePorts {
-  return {
-    router: {
-      produce: async (input: { spec: { seed: number } }) => {
-        seeds.push(input.spec.seed);
-        return { outcome: { status: "not_connected", reason: "stub" } };
-      },
-    },
-  } as unknown as VoicePorts;
+  return { runner, runs, portsSeen };
 }
 
 function speech(overrides: Partial<VariantSpeech> = {}): VariantSpeech {
@@ -97,38 +87,19 @@ describe("a variant speaks its full script (Bible 6.13, the deviation in variant
     assert.equal(runs.length, 0);
   });
 
-  it("hands the kit and the claims to the voice stage unchanged", async () => {
-    const { runner, runs } = recordingRunner();
-    await speakVariantScript(undefined, speech(), runner);
+  it("hands the kit, the claims and the variant's gate subject to the voice stage unchanged, and the ports as they are", async () => {
+    const { runner, runs, portsSeen } = recordingRunner();
+    const ports = { router: {} } as unknown as VoicePorts;
+    await speakVariantScript(ports, speech(), runner);
     assert.equal(runs[0]?.voice, VOICE);
     assert.deepEqual(runs[0]?.claims, CLAIMS);
     assert.equal(runs[0]?.subjectId, SUBJECT_HOOK, "the gate of the call names the variant");
+    assert.equal(portsSeen[0], ports, "the voice stage gets the ports it was given");
   });
 });
 
-describe("a variant's provider calls are scoped to the variant (variants/speak.ts)", () => {
-  it("shifts the spec's seed by the variant's scope, so the same text in another voice is another cache entry", async () => {
-    const seedsHook: number[] = [];
-    const seedsPersona: number[] = [];
-    const hook = scopedVoicePorts(routerStub(seedsHook), SUBJECT_HOOK);
-    const persona = scopedVoicePorts(routerStub(seedsPersona), SUBJECT_PERSONA);
-    await hook?.router.produce({ spec: { seed: 0 } } as Parameters<VoicePorts["router"]["produce"]>[0]);
-    await persona?.router.produce({ spec: { seed: 0 } } as Parameters<VoicePorts["router"]["produce"]>[0]);
-    assert.equal(seedsHook[0], callScopeOf(SUBJECT_HOOK));
-    assert.equal(seedsPersona[0], callScopeOf(SUBJECT_PERSONA));
-    assert.notEqual(seedsHook[0], seedsPersona[0]);
-  });
-
-  it("keeps a retake one seed step from the take before it, inside the variant's scope", async () => {
-    const seeds: number[] = [];
-    const scoped = scopedVoicePorts(routerStub(seeds), SUBJECT_HOOK);
-    await scoped?.router.produce({ spec: { seed: 0 } } as Parameters<VoicePorts["router"]["produce"]>[0]);
-    await scoped?.router.produce({ spec: { seed: 1 } } as Parameters<VoicePorts["router"]["produce"]>[0]);
-    assert.equal((seeds[1] ?? 0) - (seeds[0] ?? 0), 1);
-  });
-
-  it("passes no ports when none are wired, so the voice runner refuses before any call", async () => {
-    assert.equal(scopedVoicePorts(undefined, SUBJECT_HOOK), undefined);
+describe("a variant's speech without ports (variants/speak.ts)", () => {
+  it("the default voice runner refuses before any call when no speech route is wired", async () => {
     await assert.rejects(runVoiceOverPorts({} as VoiceRun, undefined), (error: unknown) => {
       return error instanceof EngineError && error.kind === "config" && error.message.startsWith("NOT_CONNECTED:");
     });

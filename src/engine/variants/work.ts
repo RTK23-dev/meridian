@@ -11,8 +11,11 @@ import { z } from "zod";
 import { EngineError, type ProductionRequest } from "../contracts/index.ts";
 import type { PlannedVariant } from "./expand.ts";
 
-/** The phases of a generation variant, in order: its writer call, its voice, and its plan (with the references and prompts it changes). */
-export const VARIANT_PHASES = ["writer", "voice", "plan"] as const;
+/**
+ * The phases of a generation variant. Its writer call, its voice and its plan run first, in that order (nextPhaseOf). Its assembly (the EDL
+ * over its own takes and voice) runs after its produce and check jobs, once every shot it changes has a take that passed.
+ */
+export const VARIANT_PHASES = ["writer", "voice", "plan", "assemble"] as const;
 export type VariantPhase = (typeof VARIANT_PHASES)[number];
 
 const beatIdsSchema = z.array(z.string().min(1).max(64));
@@ -146,13 +149,4 @@ export function variantRequestFor(input: {
     return { ...beat, text, emphasis: (beat.emphasis ?? []).filter((word) => text.includes(word)) };
   });
   return { ...input.request, script: { language: input.language, beats } };
-}
-
-/**
- * A number that scopes a variant's provider calls. The asset router keys its cache and its ledger on the spec's content and seed, not on
- * the voice, so a variant that speaks the master's text in another voice would hit the master's entry. The seed of the variant's calls
- * carries this scope (variants/speak.ts). Pure.
- */
-export function callScopeOf(subject: string): number {
-  return parseInt(createHash("sha256").update(subject).digest("hex").slice(0, 6), 16);
 }

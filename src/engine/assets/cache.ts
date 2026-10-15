@@ -1,6 +1,22 @@
-// The asset cache (Bible 10.4). The key is assetCacheKey(spec, providerId), a sha256 over the model class, the normalised
-// prompt, references, frames, duration, seed and provider. The cache is per workspace (Bible 5.2): a key from one tenant is
-// never a hit for another. A hit returns the stored asset at $0 and is recorded as a hit (no ledger row: nothing was paid).
+// The asset cache (Bible 10.4). The key is routeCacheKey(spec, providerId, speech): assetCacheKey(spec, providerId), a sha256 over the model
+// class, the normalised prompt, references, frames, duration, seed and provider, and for a speech spec (modelClass tts) the voice it is spoken
+// in. The voice is part of the key, so the same text in two voices is two takes, never one cached take. The cache is per workspace (Bible
+// 5.2): a key from one tenant is never a hit for another. A hit returns the stored asset at $0 and is recorded as a hit (no ledger row:
+// nothing was paid).
+
+import type { AssetSpec } from "../contracts/assets.ts";
+import { assetCacheKey } from "../contracts/assets.ts";
+import { contentHash } from "../contracts/hash.ts";
+
+/**
+ * The key one router candidate is cached under and ledgered under. For every spec but speech it is assetCacheKey. For a speech spec it
+ * also names the voice (null when the call names none), so two voices never share an entry or a ledger key (Bible 10.4). Pure.
+ */
+export function routeCacheKey(spec: AssetSpec, providerId: string, speech: { voiceId?: string | null }): string {
+  const key = assetCacheKey(spec, providerId);
+  if (spec.modelClass !== "tts") return key;
+  return contentHash({ asset: key, voiceId: speech.voiceId ?? null });
+}
 
 export type CachedAsset = {
   workspaceId: string;

@@ -69,12 +69,19 @@ export type StageOutput =
   | (StageOutputBase & { stage: "variants"; phase: "writer"; key: string; outcome: VariantWriterOutcome })
   | (StageOutputBase & { stage: "variants"; phase: "voice"; key: string; outcome: VariantVoiceOutcome })
   | (StageOutputBase & { stage: "variants"; phase: "plan"; key: string; outcome: VariantPlanOutcome })
+  /**
+   * The variant's assembly: its EDL, built over its own inputs (variants/assemble.ts). gate is the edit gate of that build, with the checks
+   * that ran. edlId is set whether or not the build passed (the gate names it). A passing build writes the edl artifact (edl:<edlId>).
+   */
+  | (StageOutputBase & { stage: "variants"; phase: "assemble"; key: string; edlId: string; gate: GateResult; outcome: VariantAssemblyOutcome })
   | (StageOutputBase & { stage: "deliver"; manifestId: string });
 
 /** A variant's writer call, done (with the text it wrote) or not built (with the reason). */
 export type VariantWriterOutcome = { status: "done"; text: WriterText } | { status: "not_built"; reason: string };
 /** A variant's voice, done (with its track's id and artifact) or not built. */
 export type VariantVoiceOutcome = { status: "done"; voiceTrackId: string; artifacts: Record<string, string> } | { status: "not_built"; reason: string };
+/** A variant's assembly: built (its EDL is stored) or not built (the edit gate failed, or an input was not usable). */
+export type VariantAssemblyOutcome = { status: "done" } | { status: "not_built"; reason: string };
 /** A variant's plan, done (with its artifact and the shots to produce, in the plan's own terms) or not built. */
 export type VariantPlanOutcome = { status: "done"; artifacts: Record<string, string>; produce: ShotSummary[] } | { status: "not_built"; reason: string };
 

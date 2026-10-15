@@ -13,7 +13,8 @@ import { defaultRouterSettings } from "./router.ts";
 import { memoryBucketStore } from "./buckets.ts";
 import { memoryMediaStore } from "./adapter.ts";
 import { videoProfilesFromListing } from "./providers/openrouterVideo.ts";
-import { assetSpec, fakeClock, fixture, gatewayFor, json, ledgerWithReservation, pngBytes, base64, routesWith, scripted, WORKSPACE, type Reply } from "./test/recorded.ts";
+import { assetSpec, base64, fakeClock, fixture, gatewayFor, json, ledgerWithReservation, mp3Bytes, pngBytes, raw, routesWith, scripted, WORKSPACE, type Reply } from "./test/recorded.ts";
+import { routeCacheKey } from "./cache.ts";
 
 const KLING = "kwaivgi/kling-v3.0-std";
 const VEO = "google/veo-3.1";
@@ -443,5 +444,45 @@ describe("image routes", () => {
     assert.equal(report.outcome.asset.costUsd, 0.04);
     assert.match(report.outcome.asset.uri, /^memory:\/\/org_1\//);
     assert.equal(h.media.objects.size, 1);
+  });
+});
+
+describe("speech voices (Bible 10.4): the voice is part of the cache key", () => {
+  const SPEECH_PATH = "POST /api/v1/audio/speech";
+  const SPEECH_MODEL = "test/eleven-v4";
+  const speechTable = () => routesWith("tts", [{ provider: "openrouter", model: SPEECH_MODEL, priceKey: "eleven_v4", verified: false }], routes.table);
+  const answer = () => raw(200, mp3Bytes(), { "content-type": "audio/mpeg" });
+
+  it("two voices speaking the same text do not share a cached take: each voice is a call, and the same voice again is a hit", async () => {
+    const h = await harness({ table: speechTable(), script: { [SPEECH_PATH]: [answer(), answer(), answer()] } });
+    const spec = assetSpec({ modelClass: "tts", prompt: "Two scoops, one sentence.", durationMs: 1000 });
+    const speak = (voiceId: string) => ({ ...h.input(spec), stage: "voice", voiceId });
+    const calls = () => h.requests.filter((request) => request.url.endsWith("/audio/speech")).length;
+
+    const first = await h.router.produce(speak("voice_a"));
+    assert.equal(first.outcome.status, "done");
+    assert.equal(calls(), 1, "the first voice is called");
+
+    const second = await h.router.produce(speak("voice_b"));
+    assert.equal(second.outcome.status, "done");
+    assert.equal(calls(), 2, "the second voice is called: the same text in another voice is not a cache hit");
+    assert.equal((await h.cache.hits(WORKSPACE)).length, 0, "no hit was recorded for the other voice");
+
+    const third = await h.router.produce(speak("voice_a"));
+    assert.equal(third.outcome.status, "done");
+    assert.equal(calls(), 2, "the first voice again is a cache hit at $0");
+    assert.equal((await h.cache.hits(WORKSPACE)).length, 1);
+
+    const rows = await h.ledger.listEntries(h.reservationId);
+    assert.equal(rows.length, 2, "one ledger row for each voice's call, and none for the hit");
+    assert.notEqual(rows[0]?.idempotencyKey, rows[1]?.idempotencyKey, "the two calls have two ledger keys");
+  });
+
+  it("the key names the voice for a speech spec only, and is unchanged for every other spec", () => {
+    const speech = assetSpec({ modelClass: "tts", prompt: "Hello there." });
+    const video = assetSpec({ modelClass: "video.cinematic", prompt: "A slow push-in." });
+    assert.notEqual(routeCacheKey(speech, "openrouter:test", { voiceId: "a" }), routeCacheKey(speech, "openrouter:test", { voiceId: "b" }));
+    assert.equal(routeCacheKey(speech, "openrouter:test", { voiceId: null }) === routeCacheKey(speech, "openrouter:test", { voiceId: "a" }), false);
+    assert.equal(routeCacheKey(video, "openrouter:test", { voiceId: "a" }), assetCacheKey(video, "openrouter:test"));
   });
 });

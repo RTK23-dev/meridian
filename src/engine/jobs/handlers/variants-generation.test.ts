@@ -13,9 +13,16 @@ import { after, before, test } from "node:test";
 import { deps, gatewayFor, json } from "../../claude/test/helpers.ts";
 import { releaseReservation } from "../../budget/reconcile.ts";
 import { memoryLedgerStore, type LedgerStore } from "../../budget/store.ts";
-import { EngineError, type EditDecisionList, type Persona, type ProductKit, type ProductionRequest, type ScenePlan, type VariantMatrix, type VoiceKit, type VoiceTrack } from "../../contracts/index.ts";
+import { EngineError, type EditDecisionList, type Persona, type ProductKit, type ProductionRequest, type ScenePlan, type StyleKit, type Take, type VariantMatrix, type VoiceKit, type VoiceTrack } from "../../contracts/index.ts";
 import {
   budgetReservationFixture,
+  styleKitFixture,
+  fixtureId,
+  take1Fixture,
+  take2Fixture,
+  take3bFixture,
+  validatedRequestFixture,
+  videoDnaFixture,
   FIXTURE_IDS,
   personaFixture,
   productKitFixture,
@@ -34,7 +41,9 @@ import { expandVariants } from "../../variants/expand.ts";
 import type { EnginePayload, StageContext, StageOutput, VariantPlanOutcome, VariantVoiceOutcome, VariantWriterOutcome } from "../types.ts";
 import { captionVariantMaster } from "../test/caption-variant.ts";
 import { assetSpecFor, takeIdFor } from "./produce-shot.ts";
+import { variantScenePlan } from "../../variants/plan.ts";
 import { createVariantsHandler, type VariantConnection, type VariantPorts } from "./variants.ts";
+import { validateStageOutput } from "../validate.ts";
 import { budgets } from "../../config/budgets.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -158,6 +167,7 @@ async function harness(options: {
         };
   const ports: VariantPorts = {
     loadMusicTrack: async () => undefined,
+    loadStyleKit: async () => styleKitFixture as StyleKit,
     withLedger: (_scope, fn) => fn(ledger),
     events,
     now: () => AT,
@@ -502,4 +512,73 @@ test("the work item's subject is the one the orchestrator queues, and the genera
   const item = variants[0] ? generationWorkOf(variants[0], requestWith({ hooks: 1, maxVariants: 4, budgetUsd: 1 })) : null;
   assert.equal(item?.subject, variantSubjectOf("hook:1"));
   assert.equal(item?.voiceBeatIds.length, 5);
+});
+
+// --- The assembly phase (variants/assemble.ts): the variant's EDL is written when the edit gate passes, over the variant's own inputs.
+
+const ASSEMBLY_TAKE = fixtureId("take_", 91);
+const ASSEMBLY_VOICE_ID = "vtk_variant_hook";
+
+/** Stores the variant's own inputs (its plan, DNA, narration, validated request and takes) and returns their artifact ids. */
+async function storeAssemblyInputs(takes: Take[]): Promise<string[]> {
+  const ids: string[] = [];
+  const variantPlan = variantScenePlan(scenePlanFixture, { key: "hook:1", attribute: "hook", reference: null, shotIds: [FIXTURE_IDS.shot1], voiceTrackId: ASSEMBLY_VOICE_ID, chose: "hook:1" }).plan;
+  const variantVoice: VoiceTrack = { ...(voiceTrackFixture as VoiceTrack), voiceTrackId: ASSEMBLY_VOICE_ID, audioUri: "store://voice/variant-hook.mp3" };
+  const put = async (stage: string, type: "scene_plan" | "video_dna" | "voice_track" | "validated_request" | "take", body: unknown) => {
+    const stored = await writeArtifact(db.sql, { organizationId: WS, requestId: REQ, stage, type, body, createdAt: CREATED });
+    ids.push(stored.artifactId);
+  };
+  await put("plan", "scene_plan", variantPlan);
+  await put("analyze_reference", "video_dna", videoDnaFixture);
+  await put("voice", "voice_track", variantVoice);
+  await put("intake", "validated_request", validatedRequestFixture);
+  for (const take of takes) await put("produce_shot", "take", take);
+  return ids;
+}
+
+test("an assembly writes the variant's EDL when its edit gate passes: a variant of the master, over its own narration and take", async () => {
+  const h = await harness({});
+  const inputIds = await storeAssemblyInputs([{ ...take1Fixture, takeId: ASSEMBLY_TAKE, uri: "store://takes/variant-hook.mp4" }, take2Fixture, take3bFixture]);
+  const item = workOf((await runRequestPhase(h, requestWith({ hooks: 1, maxVariants: 4, budgetUsd: 1 }))).output, "hook:1");
+  const result = await createVariantsHandler(h.ports).run(phaseContext(inputIds, item, "assemble"));
+  assert.equal(result.kind, "done");
+  if (result.kind !== "done" || result.output.stage !== "variants" || result.output.phase !== "assemble") throw new Error("the assembly did not finish");
+  assert.deepEqual(result.output.outcome, { status: "done" });
+  validateStageOutput(result.output, phaseContext(inputIds, item, "assemble").payload);
+  assert.equal(result.output.gate.pass, true, "the edit gate passes");
+  const edlArtifact = result.output.artifacts[`edl:${result.output.edlId}`];
+  assert.ok(edlArtifact, "the variant's EDL is stored under its id");
+  const stored = await readArtifact(db.sql, { organizationId: WS, artifactId: edlArtifact ?? "" });
+  const edl = stored.envelope.body as EditDecisionList;
+  assert.equal(edl.edlId, result.output.edlId);
+  assert.equal(edl.variantOf, FIXTURE_IDS.edl, "it names the master it varies");
+  assert.equal(edl.audio.voice.uri, "store://voice/variant-hook.mp3", "it speaks the variant's narration");
+  assert.ok(JSON.stringify(edl.tracks).includes("store://takes/variant-hook.mp4"), "it plays the variant's take");
+  const rows = await h.events.list({ organizationId: WS, requestId: REQ });
+  assert.equal(rows.filter((row) => row.kind === "variant.planned" && (row.body as { status: string }).status === "built").length, 1);
+});
+
+test("an assembly whose EDL fails the edit gate writes no EDL and says why: the variant is not built", async () => {
+  const h = await harness({});
+  // The hook shot has no take: the EDL cannot play it, so the edit gate fails and nothing is stored.
+  const inputIds = await storeAssemblyInputs([take2Fixture, take3bFixture]);
+  const item = workOf((await runRequestPhase(h, requestWith({ hooks: 1, maxVariants: 4, budgetUsd: 1 }))).output, "hook:1");
+  const result = await createVariantsHandler(h.ports).run(phaseContext(inputIds, item, "assemble"));
+  if (result.kind !== "done" || result.output.stage !== "variants" || result.output.phase !== "assemble") throw new Error("the assembly did not finish");
+  assert.equal(result.output.outcome.status, "not_built");
+  assert.equal(result.output.gate.pass, false);
+  assert.deepEqual(result.output.artifacts, {}, "nothing is stored");
+  assert.equal(result.output.gate.checks.some((check) => !check.pass), true);
+});
+
+test("an assembly whose style kit is not the one the request names is not built, and the gate says so", async () => {
+  const h = await harness({});
+  h.ports.loadStyleKit = async () => undefined;
+  const inputIds = await storeAssemblyInputs([{ ...take1Fixture, takeId: ASSEMBLY_TAKE, uri: "store://takes/variant-hook.mp4" }, take2Fixture, take3bFixture]);
+  const item = workOf((await runRequestPhase(h, requestWith({ hooks: 1, maxVariants: 4, budgetUsd: 1 }))).output, "hook:1");
+  const result = await createVariantsHandler(h.ports).run(phaseContext(inputIds, item, "assemble"));
+  if (result.kind !== "done" || result.output.stage !== "variants" || result.output.phase !== "assemble") throw new Error("the assembly did not finish");
+  assert.equal(result.output.outcome.status, "not_built");
+  if (result.output.outcome.status === "not_built") assert.match(result.output.outcome.reason, /did not load/);
+  assert.deepEqual(result.output.artifacts, {});
 });

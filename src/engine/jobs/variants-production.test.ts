@@ -36,6 +36,7 @@ function portsWith(keys: Record<string, string>) {
       throw new Error("no role call is expected in this test");
     },
     workspaceBudget: notConnectedWorkspaceBudget,
+    loadStyleKit: async () => undefined,
     now: () => "2026-10-13T09:30:00.000Z",
   });
   return { ports, requests };

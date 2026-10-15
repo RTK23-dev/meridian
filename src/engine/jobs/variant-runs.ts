@@ -1,13 +1,14 @@
-// The variant runs of the orchestrator (Video Engine Bible 6.13, 5.3). One run per generation variant: its phases (writer, voice, plan), then
-// one produce job for each shot the change makes again, then one check job for each take. The run is pure state: the orchestrator
-// (orchestrator.ts) reads it to queue jobs and applies each result to it.
+// The variant runs of the orchestrator (Video Engine Bible 6.13, 5.3). One run per generation variant. Its phases (writer, voice, plan) come
+// first; then one produce job for each shot the change makes again, and one check for each take; then the assembly (the variant's EDL, built
+// by the editor over the variant's own plan, voice and takes: variants/assemble.ts); then the variant's chain (compose, pre-render, render and
+// review, as the master's). The run is pure state: the orchestrator (orchestrator.ts) reads it to queue jobs and applies each result to it.
 //
-// A variant fails alone (Bible 6.13, variants/STATUS.md). A phase that cannot finish, a produce job that makes no take, a take that fails
-// its checks after the shot's redos, or an escalated take ends that variant with its reason. It never pauses the request and never
-// re-plans the master. Redos are the shot's redos (orchestratorLimits.shotRedos, Bible 5.3); there is no human choice for a variant.
+// A variant fails alone (Bible 6.13). A phase that cannot finish, a produce job that makes no take, a take that fails its checks after the
+// shot's redos, an assembly that does not pass the edit gate, or a chain that does not pass review each end that variant with its reason.
+// It never pauses the request and never re-plans or re-edits the master. Redos are the shot's redos (orchestratorLimits.shotRedos, Bible 5.3)
+// and the chain's stage redos. A variant does not wait for a human choice.
 //
-// The produced takes are kept and are not assembled into an EDL yet: the assembly of a generation variant is not built (variants/STATUS.md).
-// A produced run therefore reports "produced: takes made, not assembled", and deliver does not wait on it for anything it can deliver.
+// A produced run is one whose EDL passed review. Deliver chooses it with the master, as it chooses the master's own video (deliver/videos.ts).
 
 import type { Decision, TakeVerdict } from "../contracts/index.ts";
 import type { VariantWorkItem, VariantPhase } from "../variants/work.ts";
@@ -15,7 +16,11 @@ import { variantShotSubjectOf } from "../variants/work.ts";
 import type { WriterText } from "../variants/writer.ts";
 import type { VariantPlanOutcome, VariantVoiceOutcome, VariantWriterOutcome, ShotSummary } from "./types.ts";
 
-export type VariantRunStatus = "preparing" | "producing" | "produced" | "failed";
+/**
+ * The lifecycle of a run: preparing (its phases), producing (its shots), assembling (the EDL is queued or being built), rendering (its
+ * chain: compose, pre-render, render and review), then produced (the chain passed) or failed (with a reason).
+ */
+export type VariantRunStatus = "preparing" | "producing" | "assembling" | "rendering" | "produced" | "failed";
 
 export type VariantShotRun = {
   shotId: string;
@@ -32,6 +37,8 @@ export type VariantShotRun = {
   /** Takes of this round that have a verdict. */
   checked: number;
   accepted: boolean;
+  /** The take that was accepted for this shot, once it passed its check. The EDL plays it. */
+  takeId: string | null;
   /** Rule names of the failed checks, for the next round's produce jobs. Never free text (Bible 1). */
   hints: string[];
 };
@@ -58,10 +65,17 @@ export type VariantRun = {
   /** What the writer wrote, for the voice and the plan. Null until the writer's phase is done (or when no words change). */
   text: WriterText | null;
   voiceTrackId: string | null;
-  /** The variant's own artifacts: plan:<key> and voice:<key>. They are not request artifacts (deliver reads the request's only). */
+  /** The variant's own artifacts: plan:<key>, voice:<key>, take:<id> and verdict:<id>. They are not request artifacts (deliver reads the request's). */
   artifacts: Record<string, string>;
   shots: Record<string, VariantShotRun>;
   takes: Record<string, VariantTakeRun>;
+  /** The EDL the assembly built, once it passed. Its chain runs under this id. */
+  edlId: string | null;
+  /**
+   * The take of every generated shot the EDL plays (the master's accepted take, or the variant's own), with its artifact id. Null until the
+   * run is assembling and every shot has a take to play.
+   */
+  picked: Record<string, string> | null;
   /** Why the run failed, or what it is waiting for. Null while it runs well. */
   reason: string | null;
 };
@@ -80,15 +94,18 @@ export function newVariantRun(work: VariantWorkItem): VariantRun {
     artifacts: {},
     shots: {},
     takes: {},
+    edlId: null,
+    picked: null,
     reason: null,
   };
 }
 
+/** A run has ended: its variant is produced (its chain passed review) or failed. */
 export function isTerminal(run: VariantRun): boolean {
   return run.status === "produced" || run.status === "failed";
 }
 
-/** The run's end when a phase or a produce job cannot finish it. The reason names the cause, and the run never pauses the request. */
+/** The run's end when a phase or a job cannot finish it. The reason names the cause, and the run never pauses the request. */
 export function failVariantRun(run: VariantRun, reason: string): void {
   if (isTerminal(run)) return;
   run.status = "failed";
@@ -103,9 +120,7 @@ export function variantDecision(run: VariantRun): Decision {
     at: `variant:${run.key}`,
     chose: produced ? "produced" : "failed",
     alternatives: [],
-    reason: produced
-      ? `its takes passed their checks; it is not assembled into an EDL yet (variants/STATUS.md)`
-      : `not built: ${run.reason ?? "no reason recorded"}`,
+    reason: produced ? "its EDL passed the edit gate and its chain passed review" : `not built: ${run.reason ?? "no reason recorded"}`,
     by: "scorer",
   };
 }
@@ -129,7 +144,7 @@ export function applyVoiceOutcome(run: VariantRun, outcome: VariantVoiceOutcome)
 
 /**
  * The plan phase's outcome. A done plan opens the produce stage: one shot per generated shot the change touches, each with its own
- * subject. A plan whose shots are not the work list's shots fails the run. With no shot to make again, the run is produced at once.
+ * subject. A plan whose shots are not the work list's shots fails the run. With no shot to make again, the run is assembling at once.
  */
 export function applyPlanOutcome(run: VariantRun, outcome: VariantPlanOutcome): void {
   run.phase = null;
@@ -153,10 +168,11 @@ export function applyPlanOutcome(run: VariantRun, outcome: VariantPlanOutcome): 
       issued: 0,
       checked: 0,
       accepted: false,
+      takeId: null,
       hints: [],
     };
   }
-  run.status = wanted.length === 0 ? "produced" : "producing";
+  run.status = wanted.length === 0 ? "assembling" : "producing";
 }
 
 /** The shots of a producing run that need a produce job now: not accepted, and fewer takes issued this round than wanted. */
@@ -211,9 +227,9 @@ export function takesToCheck(run: VariantRun): VariantTakeRun[] {
 }
 
 /**
- * A check's verdict for one take. A pass accepts its shot, and the run is produced when every shot is accepted. A fail is a redo of the
- * shot while it has redos left (its round starts again with the failed rules as hints), and a fail with none left fails the run. An
- * escalation fails the run: a variant does not wait for a human choice.
+ * A check's verdict for one take. A pass accepts its shot; when every shot is accepted the run is assembling. A fail is a redo of the shot
+ * while it has redos left (its round starts again with the failed rules as hints), and a fail with none left fails the run. An escalation
+ * fails the run: a variant does not wait for a human choice.
  */
 export function applyVerdict(run: VariantRun, input: { takeId: string; verdict: TakeVerdict; redosPerShot: number }): void {
   const take = run.takes[input.takeId];
@@ -226,7 +242,8 @@ export function applyVerdict(run: VariantRun, input: { takeId: string; verdict: 
   if (shot.accepted) return;
   if (input.verdict.pass) {
     shot.accepted = true;
-    if (Object.values(run.shots).every((candidate) => candidate.accepted)) run.status = "produced";
+    shot.takeId = take.takeId;
+    if (Object.values(run.shots).every((candidate) => candidate.accepted)) run.status = "assembling";
     return;
   }
   if (input.verdict.action === "escalate") {
@@ -243,4 +260,19 @@ export function applyVerdict(run: VariantRun, input: { takeId: string; verdict: 
     return;
   }
   return failVariantRun(run, `shot ${shot.shotId} did not pass its checks after ${input.redosPerShot} redos (${shot.hints.join(", ") || "no rule named"})`);
+}
+
+/** The assembly's outcome. A built EDL starts the variant's chain; an EDL that does not pass the edit gate fails the variant. */
+export function applyAssemblyOutcome(run: VariantRun, outcome: { status: "done"; edlId: string } | { status: "not_built"; reason: string }): void {
+  if (run.status !== "assembling" || run.phase !== "assemble") return;
+  run.phase = null;
+  if (outcome.status === "not_built") return failVariantRun(run, outcome.reason);
+  run.edlId = outcome.edlId;
+  run.status = "rendering";
+}
+
+/** The chain of the variant passed review (its post-render review passed): the variant is produced. */
+export function passVariantRun(run: VariantRun): void {
+  if (run.status !== "rendering") return;
+  run.status = "produced";
 }

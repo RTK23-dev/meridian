@@ -194,6 +194,8 @@ export type ProductionVariantInput = {
   roles: VariantGenerationPorts["roles"];
   /** Meridian's Settings, through workspace-budget.ts: the workspace's monthly budget. */
   workspaceBudget: WorkspaceBudgetSource;
+  /** The style kit the validated request names: the same kit store the edit stage reads (kit-store.ts). */
+  loadStyleKit: VariantPorts["loadStyleKit"];
   now: () => string;
 };
 
@@ -209,6 +211,7 @@ export function productionVariantPorts(input: ProductionVariantInput): VariantPo
     withLedger: (scope, fn) => withReservationLedger(input.sql, scope.organizationId, scope.reservationId, fn),
     events: sqlEventStore(input.sql),
     now: input.now,
+    loadStyleKit: input.loadStyleKit,
     workspaceMonthBudget: async (scope) => {
       const month = await input.workspaceBudget.monthBudget({ organizationId: scope.organizationId, requestId: scope.requestId, now: scope.now });
       return month.status === "known" ? month.usd : null;

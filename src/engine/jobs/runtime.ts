@@ -230,6 +230,7 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
       withLedger: (scope, fn) => withReservationLedger(composition.sql, scope.organizationId, scope.reservationId, fn),
       events: sqlEventStore(composition.sql),
       now,
+      loadStyleKit: styleKitOf,
     },
   );
   handlers.deliver = createDeliverHandler(
@@ -304,7 +305,7 @@ export function productionEngineRuntime(sql: Sql): EngineRuntime {
   // so a variant that needs one is NOT_CONNECTED with its reason and no call is made (variants/STATUS.md).
   const runtime = createEngineRuntime({
     ...composition,
-    variants: productionVariantPorts({ sql, gateway, roles: rolesFor(composition), workspaceBudget, now: isoNow }),
+    variants: productionVariantPorts({ sql, gateway, roles: rolesFor(composition), workspaceBudget, loadStyleKit: kitPorts(sql).loadStyleKit, now: isoNow }),
   });
   productionRuntimes.set(sql, runtime);
   return runtime;

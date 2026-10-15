@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { memoryLedgerStore, type LedgerStore } from "../../budget/store.ts";
-import { EngineError, edlSchema, type EditDecisionList, type ProductionRequest, type VariantMatrix } from "../../contracts/index.ts";
+import { EngineError, edlSchema, type EditDecisionList, type ProductionRequest, type StyleKit, type VariantMatrix } from "../../contracts/index.ts";
 import {
   budgetReservationFixture,
   FIXTURE_IDS,
   productionRequestFixture,
   scenePlanFixture,
+  styleKitFixture,
   fixtureId,
 } from "../../contracts/fixtures/index.ts";
 import { memoryEventStore, type EventStore } from "../../events/store.ts";
@@ -73,6 +74,7 @@ async function harness(options: { reservedUsd?: number; paused?: boolean; tracks
   const tracks = options.tracks ?? new Map<string, VariantMusicTrack>();
   const ports: VariantPorts = {
     loadMusicTrack: async ({ trackId }) => tracks.get(trackId),
+    loadStyleKit: async () => styleKitFixture as StyleKit,
     withLedger: (_scope, fn) => fn(ledger),
     events,
     now: () => AT,
