@@ -160,7 +160,7 @@ test("a brand with no product URL gets a keyword and no link, with the reason st
   assert.ok(record);
   assert.equal(record.linkUrl, null);
   assert.equal(record.destinationUrl, null);
-  assert.match(record.reason ?? "", /no product URL/);
+  assert.match(record.reason ?? "", /No product URL/);
 });
 
 test("a keyword already held by another reel is skipped, and the next candidate is used", async () => {

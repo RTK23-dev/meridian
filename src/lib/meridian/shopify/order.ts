@@ -19,20 +19,21 @@ const MONEY = /^\d{1,12}(\.\d{1,4})?$/;
 
 const OrderId = z.union([z.number().int().positive(), z.string().regex(/^\d{1,20}$/)]);
 
+// Only the order id is required. Every other field is optional: an order without a field has that field unknown, which stays null.
 export const ShopifyOrderPayload = z.object({
   id: OrderId,
-  name: z.unknown(),
-  currency: z.unknown(),
-  total_price: z.unknown(),
-  subtotal_price: z.unknown(),
-  total_tax: z.unknown(),
-  total_discounts: z.unknown(),
-  created_at: z.unknown(),
-  landing_site: z.unknown(),
-  referring_site: z.unknown(),
-  source_name: z.unknown(),
-  note_attributes: z.unknown(),
-  discount_codes: z.unknown(),
+  name: z.unknown().optional(),
+  currency: z.unknown().optional(),
+  total_price: z.unknown().optional(),
+  subtotal_price: z.unknown().optional(),
+  total_tax: z.unknown().optional(),
+  total_discounts: z.unknown().optional(),
+  created_at: z.unknown().optional(),
+  landing_site: z.unknown().optional(),
+  referring_site: z.unknown().optional(),
+  source_name: z.unknown().optional(),
+  note_attributes: z.unknown().optional(),
+  discount_codes: z.unknown().optional(),
 });
 
 export type ShopifyOrderPayload = z.infer<typeof ShopifyOrderPayload>;
