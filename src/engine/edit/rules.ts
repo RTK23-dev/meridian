@@ -297,10 +297,10 @@ export function voiceReachesMasterLoudness(edl: EditDecisionList, ctx: RuleConte
   const target = thresholds.postRender.loudnessTargetLufs;
   const measured = ctx.voice.lufs + edl.audio.voice.gainDb;
   const off = Math.abs(measured - target);
-  return result(rule, off <= EDIT_TUNING.loudnessRoundingLufs, {
+  return result(rule, off <= thresholds.editor.loudnessRoundingLufs.value, {
     value: measured,
     limit: target,
-    detail: off <= EDIT_TUNING.loudnessRoundingLufs ? undefined : `voice lands at ${measured.toFixed(2)} LUFS, target ${target}`,
+    detail: off <= thresholds.editor.loudnessRoundingLufs.value ? undefined : `voice lands at ${measured.toFixed(2)} LUFS, target ${target}`,
   });
 }
 
@@ -308,7 +308,7 @@ export function voiceReachesMasterLoudness(edl: EditDecisionList, ctx: RuleConte
 export function voiceGainDrawable(edl: EditDecisionList): RuleResult {
   const rule = "voice_gain_drawable";
   const gain = edl.audio.voice.gainDb;
-  const limit = EDIT_TUNING.maxDrawableGainDb;
+  const limit = thresholds.editor.maxDrawableGainDb.value;
   return result(rule, gain <= limit, { value: gain, limit, detail: gain <= limit ? undefined : `voice needs ${gain} dB, above the ${limit} dB the compiler plays` });
 }
 
@@ -316,7 +316,7 @@ export function voiceGainDrawable(edl: EditDecisionList): RuleResult {
 export function musicDuckedUnderSpeech(edl: EditDecisionList): RuleResult {
   const rule = "music_ducked_under_speech";
   if (edl.audio.music === undefined) return result(rule, true, { detail: "no music track in this EDL" });
-  const duck = EDIT_TUNING.music.duckDb;
+  const duck = thresholds.editor.music.duckDb;
   return result(rule, edl.audio.music.duckDb === duck, {
     value: edl.audio.music.duckDb,
     limit: duck,
@@ -413,14 +413,14 @@ export function hookCaptionByMs(edl: EditDecisionList): RuleResult {
   if (captions === null) return result(rule, false, { detail: "a caption clip has no readable props" });
   const first = captions[0];
   if (first === undefined) return result(rule, false, { detail: "the EDL has no captions" });
-  const limit = EDIT_TUNING.hook.captionByMs;
+  const limit = thresholds.editor.hook.captionByMs;
   return result(rule, first.startMs <= limit, { value: first.startMs, limit });
 }
 
 /** Bible 8.2 step 5: motion starts within 300 ms, shown as a motion effect or a cut that early. */
 export function hookMotionWithinMs(edl: EditDecisionList, ctx: RuleContext): RuleResult {
   const rule = "hook_motion_within_300ms";
-  const limit = EDIT_TUNING.hook.motionWithinMs;
+  const limit = thresholds.editor.hook.motionWithinMs;
   const effect = edl.effects.find((item) => item.atMs <= limit && (MOTION_EFFECTS as readonly string[]).includes(item.kind));
   const cut = visualClips(edl, ctx).find((visual) => visual.clip.startMs > 0 && visual.clip.startMs <= limit);
   const at = effect !== undefined ? effect.atMs : cut?.clip.startMs;

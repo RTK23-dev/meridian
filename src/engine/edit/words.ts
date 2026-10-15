@@ -2,8 +2,11 @@
 // voice words group into captions. Pure. Word times are integer milliseconds from the voice track (contracts/analysis.ts).
 
 import type { BeatSpan, Word } from "../contracts/index.ts";
-import { EDIT_TUNING } from "./tuning.ts";
+import { thresholds } from "../config/thresholds.ts";
 import { roundToFrame } from "./time.ts";
+
+/** The caption break pattern (Bible 8.2 step 9), built once from its configured source. */
+const BREAK_PATTERN = new RegExp(thresholds.editor.captions.breakPattern);
 
 /** A window a cut may move inside: lo and hi are both allowed. */
 export type Range = { lo: number; hi: number };
@@ -23,7 +26,7 @@ export function gapMidpoints(words: readonly Word[]): number[] {
     const current = words[i];
     const next = words[i + 1];
     if (current === undefined || next === undefined) continue;
-    if (next.startMs - current.endMs >= EDIT_TUNING.cutSnap.gapMinMs) {
+    if (next.startMs - current.endMs >= thresholds.editor.cutSnap.gapMinMs) {
       mids.push(Math.round((current.endMs + next.startMs) / 2));
     }
   }
@@ -53,7 +56,7 @@ function nearest(points: readonly number[], target: number): number | null {
 export function snapCut(target: number, range: Range, context: SnapContext): number {
   const clamped = Math.min(Math.max(target, range.lo), range.hi);
   const { words, beatPeriodMs } = context;
-  const { windowMs } = EDIT_TUNING.cutSnap;
+  const { windowMs } = thresholds.editor.cutSnap;
   let base = clamped;
 
   const gaps = gapMidpoints(words).filter((mid) => Math.abs(mid - clamped) <= windowMs && mid >= range.lo && mid <= range.hi);
@@ -69,7 +72,7 @@ export function snapCut(target: number, range: Range, context: SnapContext): num
 
   if (beatPeriodMs !== undefined && beatPeriodMs > 0) {
     const grid = Math.round(base / beatPeriodMs) * beatPeriodMs;
-    const onBeat = Math.abs(grid - base) <= EDIT_TUNING.cutSnap.beatWindowMs && grid >= range.lo && grid <= range.hi;
+    const onBeat = Math.abs(grid - base) <= thresholds.editor.cutSnap.beatWindowMs && grid >= range.lo && grid <= range.hi;
     if (onBeat && !insideWord(words, grid)) base = grid;
   } else {
     const framed = roundToFrame(base);
@@ -95,7 +98,7 @@ export function normalizeTerm(text: string): string {
 export function captionBreaks(words: readonly Word[], beats: readonly BeatSpan[]): boolean[] {
   return words.map((word, index) => {
     if (index === words.length - 1) return true;
-    if (EDIT_TUNING.captions.breakPattern.test(word.text)) return true;
+    if (BREAK_PATTERN.test(word.text)) return true;
     const next = words[index + 1];
     return next !== undefined && beatIndexOf(beats, word.startMs) !== beatIndexOf(beats, next.startMs);
   });

@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { thresholds } from "../config/thresholds.ts";
 import { assumedFaceRect, captionBandRect, pixelBoxToRect, rectsOverlap, touchesUnsafeZone } from "./geometry.ts";
-import { EDIT_TUNING } from "./tuning.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE = join(HERE, "..", "compose", "components", "captions.karaoke", "component.html");
@@ -35,16 +35,16 @@ test("a pixel box becomes fractions of the 1080 x 1920 frame", () => {
 
 test("the caption layout numbers match the captions.karaoke template (a drift fails this test)", () => {
   const template = readFileSync(TEMPLATE, "utf8");
-  const geometry = EDIT_TUNING.geometry;
+  const geometry = thresholds.editor.geometry;
   const percent = (share: number): string => `${Math.round(share * 1000) / 10}%`;
-  assert.ok(template.includes(`left: ${percent(geometry.captionLeftShare)};`), "left");
-  assert.ok(template.includes(`width: ${percent(geometry.captionWidthShare)};`), "width");
-  assert.ok(template.includes(`.kc-band-upper .kc-caption { top: ${percent(geometry.captionTopShare.upper)}; }`), "upper band top");
-  assert.ok(template.includes(`.kc-band-middle .kc-caption { top: ${percent(geometry.captionTopShare.middle)}; }`), "middle band top");
-  assert.ok(template.includes(`.kc-band-lower .kc-caption { top: ${percent(geometry.captionTopShare.lower)}; }`), "lower band top");
+  assert.ok(template.includes(`left: ${percent(geometry.captionLeftShare.value)};`), "left");
+  assert.ok(template.includes(`width: ${percent(geometry.captionWidthShare.value)};`), "width");
+  assert.ok(template.includes(`.kc-band-upper .kc-caption { top: ${percent(geometry.captionTopShare.upper.value)}; }`), "upper band top");
+  assert.ok(template.includes(`.kc-band-middle .kc-caption { top: ${percent(geometry.captionTopShare.middle.value)}; }`), "middle band top");
+  assert.ok(template.includes(`.kc-band-lower .kc-caption { top: ${percent(geometry.captionTopShare.lower.value)}; }`), "lower band top");
   const fontSize = /font-size: (\d+)px;/.exec(template)?.[1];
   const lineHeight = /line-height: ([\d.]+);/.exec(template)?.[1];
   assert.ok(fontSize !== undefined && lineHeight !== undefined, "the template states the font size and line height");
   const oneLine = (Number(fontSize) * Number(lineHeight)) / 1920;
-  assert.ok(geometry.captionHeightShare >= oneLine, `the box height ${geometry.captionHeightShare} holds one line of ${oneLine.toFixed(4)}`);
+  assert.ok(geometry.captionHeightShare.value >= oneLine, `the box height ${geometry.captionHeightShare.value} holds one line of ${oneLine.toFixed(4)}`);
 });

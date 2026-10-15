@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { thresholds } from "../config/thresholds.ts";
-import { REVIEW_TUNING } from "./tuning.ts";
 import type { ScriptBeat, ShotSpec, VisualType } from "../contracts/index.ts";
 import { fixtureId } from "../contracts/fixtures/index.ts";
 import { slideshowDimensions, slideshowRisk, weightedMean, type SlideshowInput } from "./slideshowRisk.ts";
@@ -51,7 +50,7 @@ describe("slideshow risk: the coded run (Bible 12.3 acceptance: five coded shots
     const check = result.checks.find((item) => item.rule === "slideshow_coded_run");
     assert.equal(check?.pass, false);
     assert.equal(check?.value, 5);
-    assert.equal(check?.limit, REVIEW_TUNING.codedRunMax);
+    assert.equal(check?.limit, thresholds.slideshow.codedRunMax);
     assert.deepEqual([...result.failingShotIds].sort(), shots.map((item) => item.shotId).sort());
   });
 
@@ -59,7 +58,7 @@ describe("slideshow risk: the coded run (Bible 12.3 acceptance: five coded shots
     const result = slideshowRisk(input([1, 2, 3, 4].map((n) => coded(n, "b1"))));
     assert.equal(result.checks.find((item) => item.rule === "slideshow_coded_run")?.pass, true);
     assert.equal(result.codedRun.longest, 4);
-    assert.equal(REVIEW_TUNING.codedRunMax, 4);
+    assert.equal(thresholds.slideshow.codedRunMax, 4);
   });
 
   it("a moving shot between coded shots breaks the run, so five coded shots split 2 and 3 pass", () => {

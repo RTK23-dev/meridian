@@ -8,7 +8,7 @@ returns. Status and what E4 still needs: `STATUS.md`.
 E4 (Bible 6.10, 6.12, 12.3): `gates/preRender.ts` (`checkPreRender`) runs `checkEdl` and the render-side checks; `slideshowRisk.ts`
 holds the six dimensions and the coded-run check; `gates/postRender.ts` (`checkPostRender`) judges the MP4 and returns the review
 failures; `criticFinal.ts` runs the final Critic (Haiku, then Sonnet when unsure); `labels.ts` turns review decisions into gold labels;
-`inbox.ts` builds the gate escalation payload; `tuning.ts` holds the review values config does not hold yet (see STATUS.md).
+`inbox.ts` builds the gate escalation payload. The slideshow values (weights, lists, the coded-run limit) are in `config/thresholds.ts` (`thresholds.slideshow`, thresholds@3).
 
 ## Files
 

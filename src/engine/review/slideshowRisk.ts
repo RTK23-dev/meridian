@@ -4,13 +4,13 @@
 //     acceptance test, "five coded shots in a row is blocked", is this check, and the same limit the edit rules give a shot type.
 //   - slideshow_risk_below_max: the weighted mean of the six dimensions is below the limit.
 // The dimensions are measured from the plan, the EDL and the script, so they are evidence the gate can read. Their definitions and
-// the weights are initial (review/tuning.ts), and no check built on them blocks until its gold set meets the target (Bible 12.4).
+// the weights are initial (thresholds.slideshow, config/thresholds.ts, thresholds@3), and no check built on them blocks until its
+// gold set meets the target (Bible 12.4).
 
 import type { EditDecisionList, ScriptBeat, ShotSpec } from "../contracts/index.ts";
 import { thresholds } from "../config/thresholds.ts";
 import type { GateCheck } from "../contracts/gate.ts";
 import { check, notEvaluated, stringsIn } from "./gates/common.ts";
-import { REVIEW_TUNING } from "./tuning.ts";
 
 export const SLIDESHOW_DIMENSIONS = [
   "repetition",
@@ -50,11 +50,11 @@ export type SlideshowResult = {
   failingShotIds: string[];
 };
 
-const MOTION_KINDS = new Set<string>(REVIEW_TUNING.motionEffectKinds);
-const STILL_CLASSES = new Set<string>(REVIEW_TUNING.stillModelClasses);
-const TEXT_LED = new Set<string>(REVIEW_TUNING.textLedComponents);
-const CLAIM_TYPES = new Set<string>(REVIEW_TUNING.cinematicClaimTypes);
-const STOP_WORDS = new Set<string>(REVIEW_TUNING.stopWords);
+const MOTION_KINDS = new Set<string>(thresholds.slideshow.motionEffectKinds);
+const STILL_CLASSES = new Set<string>(thresholds.slideshow.stillModelClasses);
+const TEXT_LED = new Set<string>(thresholds.slideshow.textLedComponents);
+const CLAIM_TYPES = new Set<string>(thresholds.slideshow.cinematicClaimTypes);
+const STOP_WORDS = new Set<string>(thresholds.slideshow.stopWords);
 
 function sortedByTime(shots: readonly ShotSpec[]): ShotSpec[] {
   return [...shots].sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs || (a.shotId < b.shotId ? -1 : a.shotId > b.shotId ? 1 : 0));
@@ -107,7 +107,7 @@ function shotText(shot: ShotSpec): string {
 
 function contentWords(text: string): Set<string> {
   const words = text.toLowerCase().match(/[a-z]+/g) ?? [];
-  return new Set(words.filter((word) => word.length >= REVIEW_TUNING.contentWordMinLength && !STOP_WORDS.has(word)));
+  return new Set(words.filter((word) => word.length >= thresholds.slideshow.contentWordMinLength.value && !STOP_WORDS.has(word)));
 }
 
 function isMotionEffectIn(shot: ShotSpec, effects: EditDecisionList["effects"]): boolean {
@@ -121,7 +121,7 @@ function isStill(shot: ShotSpec): boolean {
 
 function isMovingFootage(shot: ShotSpec): boolean {
   if (shot.source.kind === "stock") return true;
-  return shot.source.kind === "generate" && shot.source.modelClass.startsWith(REVIEW_TUNING.motionModelClassPrefix);
+  return shot.source.kind === "generate" && shot.source.modelClass.startsWith(thresholds.slideshow.motionModelClassPrefix);
 }
 
 function share(part: number, whole: number): number {
@@ -138,7 +138,7 @@ export function slideshowDimensions(input: SlideshowInput): DimensionScore[] {
   const total = shots.length;
   const totalMs = shots.reduce((sum, shot) => sum + durationOf(shot), 0);
   const typeLimit = thresholds.edit.sameShotTypeMaxRun;
-  const codedLimit = REVIEW_TUNING.codedRunMax;
+  const codedLimit = thresholds.slideshow.codedRunMax;
   const beatById = new Map<string, string>();
   for (const beat of input.beats) beatById.set(beat.beatId, `${beatById.get(beat.beatId) ?? ""} ${beat.text}`);
   const beatIds = new Set(input.beats.map((beat) => beat.beatId));
@@ -229,17 +229,17 @@ export function slideshowDimensions(input: SlideshowInput): DimensionScore[] {
 
 /** The weighted mean of the dimensions, or null when there is nothing to judge. */
 export function weightedMean(dimensions: readonly DimensionScore[]): number | null {
-  const weights = REVIEW_TUNING.slideshowWeights;
-  const weightSum = dimensions.reduce((sum, item) => sum + weights[item.dimension], 0);
+  const weights = thresholds.slideshow.weights;
+  const weightSum = dimensions.reduce((sum, item) => sum + weights[item.dimension].value, 0);
   if (dimensions.length === 0 || weightSum <= 0) return null;
-  const weighted = dimensions.reduce((sum, item) => sum + item.value * weights[item.dimension], 0);
+  const weighted = dimensions.reduce((sum, item) => sum + item.value * weights[item.dimension].value, 0);
   return round(weighted / weightSum);
 }
 
 /** Runs the slideshow risk checks on a plan. Pure. */
 export function slideshowRisk(input: SlideshowInput): SlideshowResult {
   const shots = sortedByTime(input.shots);
-  const limit = REVIEW_TUNING.codedRunMax;
+  const limit = thresholds.slideshow.codedRunMax;
   const runs = runsOf(shots, codedJoins).filter((run) => run[0] !== undefined && isCoded(run[0]));
   const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
   const overRun = runs.filter((run) => run.length > limit).flat().map((shot) => shot.shotId);

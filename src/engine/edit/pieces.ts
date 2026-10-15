@@ -5,7 +5,6 @@
 import { EngineError, type BeatSpan, type ScenePlan, type ShotSpec, type Take, type VisualType } from "../contracts/index.ts";
 import { thresholds } from "../config/thresholds.ts";
 import { snapCut, type Range, type SnapContext } from "./words.ts";
-import { EDIT_TUNING } from "./tuning.ts";
 
 export type MediaSource = { uri: string; srcInMs: number; takeDurationMs: number };
 export type ComponentSource = { name: string; props: Record<string, unknown> };
@@ -120,7 +119,7 @@ export function mergeShortPieces(pieces: readonly Piece[], targetAt: (midMs: num
     if (piece === undefined) break;
     const length = piece.endMs - piece.startMs;
     const target = targetAt((piece.startMs + piece.endMs) / 2);
-    const floor = Math.max(MIN_SHOT_MS, EDIT_TUNING.fit.shortShare * target);
+    const floor = Math.max(MIN_SHOT_MS, thresholds.editor.fit.shortShare * target);
     if (length >= floor) {
       index += 1;
       continue;
@@ -196,7 +195,7 @@ function splitPiece(piece: Piece, cuts: readonly number[]): Piece[] {
 function partCount(piece: Piece, targetMs: number): number {
   const length = piece.endMs - piece.startMs;
   let count = 1;
-  if (length > EDIT_TUNING.fit.longShare * targetMs) count = Math.max(2, Math.round(length / targetMs));
+  if (length > thresholds.editor.fit.longShare * targetMs) count = Math.max(2, Math.round(length / targetMs));
   if (!piece.presenter && length > MAX_SHOT_MS) count = Math.max(count, Math.ceil(length / MAX_SHOT_MS));
   return Math.min(count, Math.floor(length / MIN_SHOT_MS));
 }
@@ -217,7 +216,7 @@ export function splitLongPieces(
   for (const piece of pieces) {
     const length = piece.endMs - piece.startMs;
     const target = targetAt((piece.startMs + piece.endMs) / 2);
-    const needs = length > EDIT_TUNING.fit.longShare * target || (!piece.presenter && length > MAX_SHOT_MS);
+    const needs = length > thresholds.editor.fit.longShare * target || (!piece.presenter && length > MAX_SHOT_MS);
     if (!needs) {
       out.push(piece);
       continue;

@@ -3,6 +3,46 @@
 Branch `eng-e3-editor`, cut from `origin/code/beautiful-cori-1zfk11` (aa3bcf8). Covers `src/engine/edit/` (except `grammar.ts`,
 which is W6's and is not on this branch) and `src/engine/jobs/handlers/edit.ts` with its test. Details: `README.md` here.
 
+## Config adoption: thresholds@3 (branch `eng-config-adoption`)
+
+Cut from `origin/code/beautiful-cori-1zfk11` at d5a62c1. Not pushed. The lead's replacement table (contracts/STATUS.md, "Replacements
+for the lead") applied as written, for `edit/` except `grammar.ts`, and for `review/slideshowRisk.ts` with its test.
+
+- `edit/tuning.ts` keeps only `EDIT_TUNING.drawableTransitions`, `EDIT_TUNING.drawableEffects` and the `CaptionBand` type.
+- Every 8.2 value is read from `thresholds.editor` (`words.ts`, `editor.ts`, `time.ts`, `pieces.ts`, `geometry.ts`, `rules.ts`,
+  `geometry.test.ts`). A Tunable is read with `.value`. `words.ts` builds the break pattern once at module level:
+  `new RegExp(thresholds.editor.captions.breakPattern)`.
+- The EDL identity hashes `thresholds.version` (lead decision, Bible 16.3). The EDL id changes once for every run: the old tuning
+  version was `edit-tuning@1`. The EDL body, its checks, its notes and its seed are unchanged. Nothing is stored in production yet,
+  so no stored EDL is affected. A re-run after this change names a new id, as Bible 16.3 says it should.
+- `geometry.ts` keeps its outputs: `captionBandRect` and `assumedFaceRect` return the same rectangles as before.
+- New test (`editor.test.ts`): the EDL id and input hash are `editIdentity({ tuning: thresholds.version, input })`, computed, not
+  pinned. No test pins a literal EDL id, and none needed changing.
+
+### Verification (this branch)
+
+- Edit, review and compose tests, `NODE_ENV=development node --experimental-strip-types --test` on `src/engine/edit/**`,
+  `src/engine/review/**`, `src/engine/compose/**`: **512 pass, 0 fail, 0 skipped** (511 before, plus the new id test).
+- A/B against the HEAD code (a copy of `src/engine` at d5a62c1, run from scratchpad, not committed): 400 generated editor inputs
+  (193 pass and 207 fail, so the failure paths are covered: missing takes, component kinds, music with and without bpm, all three
+  caption bands, motion intensities 0 to 3, a kit that is not karaoke), plus 300 random slideshow plans and the caption geometry.
+  Every output was deeply equal except the EDL id, the EDL's own id field and the input hash, which all changed (400 of 400).
+- `npm run typecheck`: **exit 2**, with two errors outside this grant. See the blocker below.
+- `npx eslint src/engine/edit src/engine/review src/engine/compose`: exit 0, no output.
+
+### Blocker for the lead: `variants/expand.test.ts` (not in this grant)
+
+`variants/expand.test.ts` line 5 imports `EDIT_TUNING` and lines 210 to 212 read `EDIT_TUNING.music.baseGainDb` and
+`EDIT_TUNING.music.duckDb`. The table removes `music` from `tuning.ts`, so:
+
+- `npm run typecheck` fails: `expand.test.ts(211,54)` and `(212,54)`, TS2339, property `music` does not exist.
+- At runtime, `expand.test.ts` runs 16 tests: 15 pass, and "uses the editor's music mix" fails with a TypeError.
+
+The fix is three lines in `variants/expand.test.ts`, for the variants owner or the lead: import `thresholds` from
+`../config/thresholds.ts` and compare `gainDb` with `thresholds.editor.music.baseGainDb.value` and `duckDb` with
+`thresholds.editor.music.duckDb`. `variants/config.ts` (lines 4 and 31) also names `edit/tuning.ts` in comments, now stale.
+Nothing was changed in `variants/`. The alternative, keeping `music` in `tuning.ts`, departs from the table.
+
 ## Done
 
 - `buildEdl(input)` (editor.ts): the Bible 8.2 steps. Clock and outro hold; shots placed in their beats (several shots in a beat
@@ -17,7 +57,8 @@ which is W6's and is not on this branch) and `src/engine/jobs/handlers/edit.ts` 
   `hookMotionWithinMs`, `sourcesCoverClips`, `layoutWithinTimeline`, `drawableByCompiler`, `truePeakWithinLimit`), plus
   `edlMatchesContract`. `checkEdl(edl, ctx)` runs them all, stops at the contract, and names each failing shot once. A rule that is
   missing an input it needs fails and says which input (unknown means fail).
-- Thresholds from `config/thresholds.ts` (`thresholds.edit`, `thresholds.postRender`); the 8.2 constants are in `tuning.ts`.
+- Thresholds from `config/thresholds.ts` (`thresholds.edit`, `thresholds.postRender`, and from thresholds@3 the 8.2 constants in
+  `thresholds.editor`); `tuning.ts` keeps only the drawable lists and the caption band type.
 - The handler (`jobs/handlers/edit.ts`): `createEditHandler({ loadStyleKit, loadMusic? })`. Pass: writes the `edl` artifact with every
   input as its parent, and names it `edl:<edlId>`. Fail: writes nothing, and the gate names the checks and shots. Missing or
   foreign inputs are refused as `invalid_input`, not as a gate result.
@@ -43,9 +84,8 @@ which is W6's and is not on this branch) and `src/engine/jobs/handlers/edit.ts` 
    `invalid_input`. This is a W2 change, which this workstream may not make.
 2. **Style kit and music ports are not wired.** `loadStyleKit` is required. No kit reader exists yet, so the worker must supply it.
    `loadMusic` is optional, and no music source exists in the inputs, so the EDL has no music until one is wired.
-3. **Tuning constants belong in `config/`.** `edit/tuning.ts` holds the 8.2 numbers (snap windows, fit shares, hook times,
-   punch-in amplitudes, music gain, caption maximums, drawable transitions and effects, the caption geometry). The lead should move
-   them into `config/thresholds.ts` (W1), with `edit/geometry.test.ts` kept as the drift check against the template.
+3. **Tuning constants belong in `config/`.** Done at thresholds@3 (see "Config adoption" above). The 8.2 numbers are in
+   `thresholds.editor`. `edit/geometry.test.ts` stays as the drift check against the caption template.
 4. **Take length versus the take gate.** The take gate allows a take to be 10% shorter than its shot. The edit gate requires its
    source to cover its clip, so a take 10% short passes the take gate and fails the edit gate, and goes back to produce_shot. The
    gates disagree by design; the lead should decide whether the take gate's tolerance should be zero on the short side.
