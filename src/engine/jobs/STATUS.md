@@ -1,5 +1,100 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## E3 integration pass (branch `eng-e3-wiring`)
+
+Built on `origin/code/beautiful-cori-1zfk11` (the E3 branches and the router's submit and settle, merged in commit d5b78f7). Nothing is
+pushed. The lead merges. The lead's eight items, and the later note on the async router, are below in order.
+
+### What is wired
+
+1. **Pre-flight hold (lead decision 1).** Intake reserves `budgets.fixedPerMasterUsd` with `reserveFixed` after its own checks pass. The
+   hold's id is `preflightReservationId(requestId, attempt)`: a retry of the same job gets the same hold, and a resume after a budget
+   pause gets a new one (a paused hold is never revived). `estimate_reserve` raises that same reservation with `extendForPlan`
+   (`extendReservation`); it never makes a second one. A paused or refused hold, or a workspace month that is not connected, pauses the
+   request with the reason (`budgetPause`, a new intake output field). A rejected intake releases its hold.
+2. **Classifier (lead decision 2).** Intake classifies the `must` requests only, with `classifyVisualRequests`, on the hold. The plan
+   classifies all requests. When every request is a `must` the two inputs are identical, so the plan resumes intake's stored answer
+   through the role-call journal and pays nothing twice.
+3. **Workspace monthly budget (lead decision 3).** `productionEngineRuntime(sql)` reads it with
+   `workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql))`. Unset, intake pauses and estimate refuses, each with the reason.
+4. **Edit inputs (lead decision 4).** `registry.ts` gives `edit` the read `validated_request`; `nodeSlots.edit` passes `validated`. The
+   style kit comes from the kit store at the exact version the validated request names (`loadStyleKit`). Music is not connected, so
+   `loadMusic` is absent and the editor's no-music path runs.
+5. **Plan lease (lead decision 5).** `plan` has `timeoutFactor: 3`, so its lease is three Claude leases (360 s). **Config request for
+   the lead:** add `thresholds.jobs.leaseMs.plan` (360 000 ms) and drop the factor.
+6. **Director beat text (lead decision 6).** `DirectorChoice.beatText` carries the beat's script text from `plan/build.ts` to
+   `director_check`, which accepts it as untrusted data. The director prompt is now `director_check@2.md` (the table description
+   names `beatText`); `director_check@1.md` is kept as shipped and pinned. The planner never receives script text. The director's prompt
+   edits are still refused when they ask for text.
+7. **Composition root (lead decision 7).** `runtime.ts`: `createEngineRuntime(composition)` and `productionEngineRuntime(sql)`.
+   Registered always: `intake`, `plan`, `estimate_reserve`, `edit`. Registered with their ports: `produce_shot` and `check_take`
+   (`shotPorts`: media functions, object store, asset-media store, optional similarity scorer), `analyze_reference` (`analysis`
+   ports) and `voice` (`voice` ports). Not registered anywhere: `compose`, `pre_render_gate`, `post_render_review`, `variants`,
+   `deliver` (not built) and `render` (no stage handler exists; the W10 adapter is not wired to a stage). Production passes no
+   `shotPorts`, `analysis` or `voice`, so those stages stay `not_implemented`, which fails closed. Production passes no
+   `lookupDna`, so intake fails its `dna_lookup_resolved` check until a lookup exists.
+   `lib/meridian/jobs/execute.ts` calls `executeEngineJob(sql, job, productionEngineRuntime(sql))`. Nothing reads `process.env`.
+8. **End to end (lead item 8), `e2e.test.ts`.** Two cases on PGlite, each in its own database, each using the fixture request id (the
+   recorded planner answers name shot ids derived from it).
+   - Case 1 (budget $0.52, the fixed cost): intake (classifier on the hold), analyze and voice (stand-ins), plan (recorded planner and
+     director), estimate (the same hold, extended to 0.52), three stock produce jobs, three check jobs. The take gate escalates each take
+     (no black-frame, flicker, motion or similarity measurement), so the request pauses for review with an escalation item. The test
+     asserts one hold for the request, one ledger row per answered Claude call on that hold, and no ledger row on any other reservation.
+   - Case 2 (budget $4): the same flow to estimate. The fixture plan's first shot is Avatar IV (`ugc_presenter`), which is not connected,
+     so its produce job dies on its last attempt, the request pauses on that shot (`dead_letter`), and no avatar call is charged.
+   - **Not reached: the EDL.** See Blockers.
+9. **Async produce (the lead's later note).** `routerGenerator` calls the router's `submit`. A submitted call returns `submitted` with
+   its `AssetJob` as the poll's carry, together with the router's decisions so far. The poll's `finish` calls `settle(job, polled)`. If
+   settle moves the call to its next target, `finish` returns `submitted` again and the poller queues the next poll. A provider failure
+   (any kind, including a refusal) and a poll timeout both reach `finish` as a failed poll state. A timeout is cancelled first if the
+   adapter can cancel it. The poller no longer throws for a provider failure: the router decides between a fallback and a failure.
+   **One downloader:** the handler's `gatewayDownloader` takes every take. The router's `takes` downloader is not set, so no take is
+   downloaded twice. `ProviderResolver.resolve(providerId, organizationId)` returns the poll adapter the router would build for that
+   route and workspace (`pollAdapterFor`, from the gateway's route table). The router's `waitMs` (`runAfterMs`) is not used: the poll
+   keeps its own backoff.
+
+### Decisions and deviations (for the lead to accept or reject)
+
+- **Kits are not artifacts.** The artifact types have no kit type, and an artifact belongs to one request while a kit belongs to a
+  workspace. Kits are rows in `engine_kits` (Bible 5.4) and are read by `kit-store.ts`, with the same tenancy. Making kits artifacts is a
+  contract change (`ARTIFACT_TYPES`), which needs approval.
+- **A budget below the fixed lines is refused before any hold** (`budget_covers_fixed_lines`). A budget between the fixed lines and the
+  minimum is refused after the classifier, with the hold released. That costs one classifier call (a fraction of a cent) before the
+  refusal; the minimum needs the classification.
+- **Intake's classifier and the plan's classifier are separate calls** unless the inputs match (see item 2).
+- **`ProviderResolver.resolve` takes the workspace.** Adapters carry the workspace's credentials.
+- **Poller:** a non-refusal provider failure is settled, not thrown (the existing tests assert the new behaviour).
+- **`StageHandler.finish` returns a `StageRunResult`** (done or submitted again), not a `StageOutput`.
+- **Stand-ins in `e2e.test.ts`.** `analyze_reference` and `voice` write their contract fixtures, and their gates say so
+  (`recorded_stand_in`). The real handlers exist on this branch now, but their ports need full media functions, a speech-to-text
+  connection, a TTS route and the role deps. Those are not wired in production or in the test, so the test does not exercise them.
+
+### Blockers (on recorded fixtures)
+
+- **No EDL is reachable from honest inputs on this branch.** Two reasons. (a) The take gate needs black-frame, flicker, motion and
+  similarity measurements, which have no media function or vendor, so every take escalates (Bible 12, 12.4). (b) The fixture plan's
+  generated shot is Avatar IV, which is not connected. Its only cheaper alternative is the all-code plan at the fixed cost, and that plan
+  still checks stock takes, so (a) applies. The E3 acceptance cannot pass until the measurements exist.
+- **The planner's answer is tied to the request's shot ids,** so a plan variant (for example a page with no presenter) needs a new
+  recorded answer. Changing the page without one would be a fabricated answer.
+- **`render` has no stage handler**, and `compose` is not built, so nothing reaches a render.
+- **Production wiring not done:** the media functions' base URL and the object store (both needed for `produce_shot` and `check_take`),
+  the VideoDNA lookup, and the speech-to-text and TTS connections for analyze and voice. Each of these fails closed until it is wired.
+
+### Owner must run live
+
+Nothing here calls a provider. For the live run, after the lead merges: set the workspace's monthly video budget in Settings; seed the
+kits in `engine_kits` (or through the kit store); wire the media functions, the object store, the VideoDNA lookup and the STT and TTS
+connections; then run a request at $0.52 and record each stage, the hold's id, its ledger rows and the take verdicts. The live run is
+the E3 acceptance and needs the take measurements first.
+
+### Checks on this branch
+
+- `NODE_ENV=development node --experimental-strip-types --test 'src/engine/jobs/*.test.ts' 'src/engine/jobs/handlers/*.test.ts' 'src/engine/plan/*.test.ts' 'src/engine/claude/**/*.test.ts' 'src/engine/prompts/*.test.ts'`: 466 pass, 0 fail (PGlite).
+- Boundary and config tests (gateway, review, media, config, assets, claude): 103 pass, 0 fail.
+- `npm run typecheck`: exit 0. `npm run lint`: 0 errors, 4 warnings (the existing UI files).
+- The full `npm test` was not run here, as the lead asked.
+
 Branch `eng-e3-pipeline`, from `origin/code/beautiful-cori-1zfk11` at aa3bcf8. Covers `src/engine/jobs/` (handlers, stores, poller,
 orchestrator), `migrations/0080_engine_asset_stores.sql`, one new function in `src/engine/gateway/download.ts`, the claude key
 change in `src/engine/claude/client.ts`. Nothing is pushed. The lead merges.

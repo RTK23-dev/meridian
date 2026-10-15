@@ -92,16 +92,18 @@ describe("director_check role", () => {
     assert.equal(estimateClaudeUsd("anthropic/claude-opus-5.5", directorCheck.estimateTokens), 0.052);
   });
 
-  it("loads prompt director_check@1 with the four parts of Bible 11.2", () => {
+  it("loads prompt director_check@2 with the four parts of Bible 11.2, and the table it reads names beatText", () => {
     const prompt = loadPrompt(DIRECTOR_CHECK_PROMPT);
-    assert.equal(prompt.id, "director_check@1");
+    assert.equal(prompt.id, "director_check@2");
     for (const heading of ["## Role and rules", "## Reference material", "## Task input", "## Output contract"]) {
       assert.match(prompt.text, new RegExp(`^${heading}$`, "m"), `missing ${heading}`);
     }
+    assert.match(prompt.text, /`beatText`/);
   });
 
-  it("pins the bytes of director_check@1: an edit is a new version (Bible 11.3)", () => {
-    assert.equal(loadPrompt(DIRECTOR_CHECK_PROMPT).fileHash, "sha256:60e86b7829527b43bceb0d74adce5f0511c81251caa410e7d1c09f6e6cde4a79");
+  it("pins the bytes of each shipped version: an edit is a new version (Bible 11.3)", () => {
+    assert.equal(loadPrompt(DIRECTOR_CHECK_PROMPT).fileHash, "sha256:63e6a1c9406ba7aa47d3e6174538bffbcf2b3127c7603594852615c6144de7db");
+    assert.equal(loadPrompt({ role: "director_check", version: 1 }).fileHash, "sha256:60e86b7829527b43bceb0d74adce5f0511c81251caa410e7d1c09f6e6cde4a79");
   });
 
   it("sends the plan table as one untrusted data block", () => {

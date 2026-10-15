@@ -106,6 +106,7 @@ async function run(sql: Sql, job: ExecutableJob, base: EnginePayload, poll: Poll
       jobRef: result.jobRef,
       submittedAt: result.submittedAt,
       parentJobId: job.id,
+      ...(result.carry === undefined ? {} : { carry: result.carry }),
     });
     return `submitted:${stage}:${key}`;
   }

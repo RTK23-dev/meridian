@@ -1,5 +1,21 @@
 # STATUS: intake and estimate_reserve stage handlers (A4, updated in E2)
 
+## E3 integration pass (branch `eng-e3-wiring`; the full account is `../STATUS.md`)
+
+- **`intake.ts`:** reserves the pre-flight hold (`reserveFixed`, id from `preflightReservationId`) after the request's own checks pass,
+  classifies the `must` requests on that hold (`classifyVisualRequests`, through `roleDeps` with the request's journal), and runs the
+  final gate. A pass keeps the hold; a rejection releases it. A paused hold or an unconnected month returns `budgetPause`, which the
+  orchestrator turns into a budget pause. New checks: `budget_covers_fixed_lines` (before any hold), `requests_classified`.
+  Ports: `loadKits`, `lookupDna?`, `workspaceBudget?`, `roleDeps?` (scope now includes `reservationId`).
+- **`estimate-reserve.ts`:** extends the intake hold (`extendForPlan`, which is `extendReservation`). It makes no second reservation.
+  No hold on the payload, or an unconnected month, refuses with the reason. `WorkspaceBudgetSource` and `WorkspaceMonthBudget` live here.
+- **`plan.ts`:** `roleDeps` takes `{ organizationId, requestId, reservationId }`, so the request's journal and the hold's ledger are used.
+- **`produce-shot.ts`:** the router's `submit` and `settle` (see `../STATUS.md`, item 9). One downloader, this handler's.
+- **`register.ts`:** unchanged. `runtime.ts` (in `../`) builds the set.
+- **Tests:** `intake.test.ts` (21, PGlite: a classifier call on the hold, the fixed-lines refusal, a paused month, no monthly source,
+  no classifier, a released hold, and the same hold on a retry), `estimate-reserve.test.ts` (extension, cap pause, unknown price,
+  not-found, and the PGlite handler cases), `produce-shot.test.ts` (submit carries the job; settle may submit again).
+
 Branch `eng-a4-budget-minimum`, cut from `code/beautiful-cori-1zfk11`. E2 changes on `eng-e2-pipeline`: the estimate_reserve
 budget source and request input, and the intake comment. The format minimum is in `src/engine/plan/minimum.ts`.
 

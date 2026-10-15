@@ -117,7 +117,7 @@ describe("the fixture request at $4", () => {
     assert.equal(approval?.chose, "not approved", "the director's approval is recorded even when it is no");
   });
 
-  it("writes every generation prompt without text to render, and never sends the script's words to a model", async () => {
+  it("writes every generation prompt without text to render; the planner is never sent the script's words", async () => {
     const { input, requests } = await planInputWith([recordedAnswer(PLANNER), recordedAnswer(DIRECTOR)]);
     const outcome = await planScene(input);
     assert.ok(outcome.plan);
@@ -126,11 +126,19 @@ describe("the fixture request at $4", () => {
       assert.equal(promptAsksForText(shot.source.prompt).asksForText, false, `${shot.shotId} prompt asks for text`);
     }
     const planner = sentText(requests[0]?.body);
-    const director = sentText(requests[1]?.body);
     for (const words of SCRIPT_WORDS) {
       assert.equal(planner.includes(words), false, `the planner was sent script words: ${words}`);
-      assert.equal(director.includes(words), false, `the director was sent script words: ${words}`);
     }
+  });
+
+  it("the director is sent each shot's beat text as untrusted data (Bible 7.7), and only there", async () => {
+    const { input, requests } = await planInputWith([recordedAnswer(PLANNER), recordedAnswer(DIRECTOR)]);
+    await planScene(input);
+    const director = sentText(requests[1]?.body);
+    const beat = input.request.script.beats.find((item) => item.beatId === "b3");
+    assert.ok(beat);
+    assert.ok(director.includes(beat.text), "the director's table carries the beat text of the blender beat");
+    assert.match(director, /<untrusted-data/);
   });
 
   it("refuses to send a prompt that asks for text: the retry names the rule and never repeats the model's words", async () => {

@@ -13,12 +13,16 @@
 // 1080 x 1920 with a known duration. Normalisation (6.6 step 4) needs a media function that is not built, so a file of another shape
 // is a refusal (invalid_output), not a take that would fail later.
 //
-// Asynchronous providers (Bible 15.2). When the generator returns "submitted", run() returns submitted and the poller settles the
-// call through finish(). The router in this repository is synchronous; its submit-only path is a W5 change (see STATUS.md).
+// Asynchronous providers (Bible 15.2). A generated take is submitted through the router's submit: run() returns submitted with the
+// asset job as its carry, and the poller polls the provider. When the call is finished, finish() settles it through the router's
+// settle, which reconciles the bill and may move the call to the next target (submitted again). One downloader takes every take:
+// this handler's (gateway/download.ts). The router's own downloader is not set, so no take is downloaded twice.
 
-import { EngineError, assetSpecSchema, contentHash, newId, scenePlanSchema, takeSchema, type AssetSpec, type Decision, type ProviderError, type ShotSpec, type Take } from "../../contracts/index.ts";
+import { z } from "zod";
+import { EngineError, assetSpecSchema, contentHash, decisionSchema, newId, scenePlanSchema, takeSchema, type AssetSpec, type Decision, type ProviderError, type ShotSpec, type Take } from "../../contracts/index.ts";
 import type { ProviderPoll } from "../../contracts/assets.ts";
-import type { AssetRouter, ProduceReport } from "../../assets/router.ts";
+import type { AsyncAssetRouter, ProduceInput, ProduceReport, StepReport } from "../../assets/router.ts";
+import { parseAssetJob, type AssetJob } from "../../assets/job.ts";
 import type { StockOutcome } from "../../assets/stock.ts";
 import type { MediaDownloader } from "../../gateway/download.ts";
 import type { MediaFunctions, ProbeResult } from "../../media/interface.ts";
@@ -58,7 +62,8 @@ export type ShotProduction =
       ledgerEntryId: string | null;
       decisions: Decision[];
     }
-  | { status: "submitted"; providerId: string; jobRef: string; submittedAt: string; decisions: Decision[] }
+  /** The router submitted the call. job is the router's asset job: the poller carries it, and settle receives it back. */
+  | { status: "submitted"; providerId: string; jobRef: string; submittedAt: string; job: AssetJob; runAfterMs: number; decisions: Decision[] }
   | { status: "failed"; providerId: string; error: ProviderError; decisions: Decision[] }
   | { status: "refused"; reasons: string[]; decisions: Decision[] }
   | { status: "queued"; reasons: string[] }
@@ -75,10 +80,10 @@ export type GenerateInput = {
   visualType: string;
 };
 
-/** Makes the generated take. A generator that submits asynchronously implements settle as well (the poller calls it). */
+/** Makes the generated take. generate submits; settle finishes a submit once the poller has its answer (Bible 15.2). */
 export interface ShotGenerator {
   generate(input: GenerateInput): Promise<ShotProduction>;
-  settle?(input: GenerateInput, polled: ProviderPoll, submission: { providerId: string; jobRef: string; submittedAt: string }): Promise<ShotProduction>;
+  settle(input: GenerateInput, job: AssetJob, polled: ProviderPoll): Promise<ShotProduction>;
 }
 
 export type StockSearch = (input: { organizationId: string; query: string; minDurationMs: number }) => Promise<StockOutcome>;
@@ -126,24 +131,70 @@ export function productionFromReport(report: ProduceReport): ShotProduction {
   }
 }
 
-/** The generator that runs the asset router. Synchronous: a call finishes inside the router, so it never returns submitted. */
-export function routerGenerator(routerFor: (input: { sql: Sql; organizationId: string; requestId: string; reservationId: string }) => AssetRouter): ShotGenerator {
+/** The router's input for one generated take (the stage is the budget stage name). */
+function routerInputOf(input: GenerateInput): ProduceInput {
+  return {
+    spec: input.spec,
+    workspaceId: input.organizationId,
+    requestId: input.requestId,
+    reservationId: input.reservationId,
+    stage: "produce_shot",
+    visualType: input.visualType,
+    continuityProvider: null,
+    voiceId: null,
+  };
+}
+
+/** A router step as the generator reports it: a submitted call carries its job, anything else is terminal. */
+function productionFromStep(report: StepReport): ShotProduction {
+  const step = report.step;
+  if (step.status === "submitted") {
+    return {
+      status: "submitted",
+      providerId: step.job.providerId,
+      jobRef: step.job.jobRef,
+      submittedAt: step.job.submittedAt,
+      job: step.job,
+      runAfterMs: step.runAfterMs,
+      decisions: report.decisions,
+    };
+  }
+  return productionFromReport({ outcome: step, decisions: report.decisions, alerts: report.alerts, attempts: report.attempts });
+}
+
+/**
+ * The generator that runs the asset router (E3): generate submits, and settle finishes a submit the poller has answered. Both use the
+ * router of the request's reservation, so the ledger steps are the same as the synchronous path's.
+ */
+export function routerGenerator(routerFor: (input: { sql: Sql; organizationId: string; requestId: string; reservationId: string }) => AsyncAssetRouter): ShotGenerator {
+  const scopeOf = (input: GenerateInput) => ({ sql: input.sql, organizationId: input.organizationId, requestId: input.requestId, reservationId: input.reservationId });
   return {
     async generate(input) {
-      const router = routerFor({ sql: input.sql, organizationId: input.organizationId, requestId: input.requestId, reservationId: input.reservationId });
-      const report = await router.produce({
-        spec: input.spec,
-        workspaceId: input.organizationId,
-        requestId: input.requestId,
-        reservationId: input.reservationId,
-        stage: "produce_shot",
-        visualType: input.visualType,
-        continuityProvider: null,
-        voiceId: null,
-      });
-      return productionFromReport(report);
+      const router = routerFor(scopeOf(input));
+      return productionFromStep(await router.submit(routerInputOf(input)));
+    },
+    async settle(input, job, polled) {
+      const router = routerFor(scopeOf(input));
+      return productionFromStep(await router.settle(job, polled, routerInputOf(input)));
     },
   };
+}
+
+/** The asset job a poll carries (carry = { job, decisions }). It is parsed again here: the poll payload is stored JSON (Bible 1). */
+function carriedJob(carry: unknown): AssetJob {
+  const value = typeof carry === "object" && carry !== null ? (carry as { job?: unknown }).job : undefined;
+  return parseAssetJob(value);
+}
+
+/** The router's decisions from the submits so far, carried with the job, so the settled take keeps every decision (Bible L7). */
+function carriedDecisionsOf(carry: unknown): Decision[] {
+  const value = typeof carry === "object" && carry !== null ? (carry as { decisions?: unknown }).decisions : undefined;
+  if (value === undefined) return [];
+  const parsed = z.array(decisionSchema).safeParse(value);
+  if (!parsed.success) {
+    throw new EngineError("internal", "the decisions carried by a poll do not parse", { stage: "produce_shot" });
+  }
+  return parsed.data;
 }
 
 /** The prompt with the failed checks' rule names appended as things to avoid. Hints are rule names, never model prose (Bible 1). */
@@ -418,7 +469,14 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
           visualType: shot.visualType,
         });
         if (production.status === "submitted") {
-          return { kind: "submitted", provider: production.providerId, jobRef: production.jobRef, submittedAt: production.submittedAt };
+          // The router's job is the poll's carry. The poller settles the call through finish, with this job.
+          return {
+            kind: "submitted",
+            provider: production.providerId,
+            jobRef: production.jobRef,
+            submittedAt: production.submittedAt,
+            carry: { job: production.job, decisions: production.decisions },
+          };
         }
         const { made, decisions } = await fromProduction(ctx, ports, shot, planArtifactId, attempt, production, spec, started);
         return { kind: "done", output: outputFor(shot.shotId, epoch, made, decisions) };
@@ -471,22 +529,33 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
       throw new EngineError("invalid_input", `${shot.shotId} is a ${source.kind} shot and needs no produce job`, { stage: "produce_shot" });
     },
 
-    async finish(ctx: StageContext, polled: ProviderPoll): Promise<StageOutput> {
+    async finish(ctx: StageContext, polled: ProviderPoll): Promise<StageRunResult> {
       const submission = ctx.poll;
-      if (!submission || !ports.generator.settle) {
-        throw new EngineError("internal", "produce_shot has no asynchronous generator to settle a call with", { stage: "produce_shot" });
+      if (!submission) {
+        throw new EngineError("internal", "produce_shot was asked to finish a call it did not submit", { stage: "produce_shot" });
       }
+      const job = carriedJob(submission.carry);
+      const carried = carriedDecisionsOf(submission.carry);
       const { shot, planArtifactId } = await planShotOf(ctx);
       const attempt = attemptFor(ctx);
       const spec = assetSpecFor({ requestId: ctx.requestId, shot, attempt, hints: ctx.payload.hints });
       const production = await ports.generator.settle(
         { sql: ctx.sql, organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId: requireReservation(ctx), spec, visualType: shot.visualType },
+        job,
         polled,
-        { providerId: submission.provider, jobRef: submission.jobRef, submittedAt: submission.submittedAt },
       );
-      const startedMs = Number.isNaN(Date.parse(submission.submittedAt)) ? (ports.now ?? Date.now)() : Date.parse(submission.submittedAt);
-      const { made, decisions } = await fromProduction(ctx, ports, shot, planArtifactId, attempt, production, spec, startedMs);
-      return outputFor(shot.shotId, epochFor(ctx), made, decisions);
+      if (production.status === "submitted") {
+        // Settling moved the call to its next target: the poller schedules that poll, and nothing is written yet.
+        return {
+          kind: "submitted",
+          provider: production.providerId,
+          jobRef: production.jobRef,
+          submittedAt: production.submittedAt,
+          carry: { job: production.job, decisions: [...carried, ...production.decisions] },
+        };
+      }
+      const { made, decisions } = await fromProduction(ctx, ports, shot, planArtifactId, attempt, production, spec, Date.parse(job.submittedAt));
+      return { kind: "done", output: outputFor(shot.shotId, epochFor(ctx), made, [...carried, ...decisions]) };
     },
   };
 }

@@ -190,9 +190,10 @@ test("a finished provider call finishes the stage through its finish step and ad
         subjectId: ctx.subjectId,
         gate: passGate("request", requestId),
         budgetReservationId: reservation,
+        budgetPause: null,
         artifacts: { validated: fixtureId("art_", 631) },
       };
-      return output;
+      return { kind: "done", output };
     },
   };
   const result = await executeEngineJob(db.sql, row, runtimeWith({ adapter, now: Date.parse(submittedAt) + 10_000, handlers: { intake: handler } }));
@@ -224,32 +225,60 @@ test("a finished provider call with no finish step is refused, not stored as a s
   assert.equal(read?.state.nodes.intake.status, "queued");
 });
 
-test("a provider that reports a failure fails the poll with the provider's retry flag", async () => {
+test("a provider failure is settled through the stage's finish, not thrown: the stage moves the call on (the router settles it)", async () => {
   const submittedAt = new Date(Date.UTC(2026, 9, 13, 9, 0, 0)).toISOString();
   const { organizationId, requestId } = await submittedIntake(5, submittedAt);
   const row = await pollRow(organizationId, requestId);
   const { adapter } = fakeProvider(() => ({ state: "failed", error: { kind: "server", retryable: true, message: "HTTP 503" } }));
-  await assert.rejects(
-    executeEngineJob(db.sql, row, runtimeWith({ adapter, now: Date.parse(submittedAt) + 1_000 })),
-    (error: unknown) => error instanceof EngineError && error.kind === "provider" && error.retryable === true && /HTTP 503/.test(error.message),
-  );
+  const seen: ProviderPoll[] = [];
+  const handler: StageHandler = {
+    run: async () => {
+      throw new Error("run is not used for a poll");
+    },
+    finish: async (_ctx, polled) => {
+      seen.push(polled);
+      // The router's settle moved the call to another target: the poll for that target is queued, and the stage waits for it.
+      return { kind: "submitted", provider: "openrouter:other-model", jobRef: "job-next", submittedAt };
+    },
+  };
+  const result = await executeEngineJob(db.sql, row, runtimeWith({ adapter, now: Date.parse(submittedAt) + 1_000, handlers: { intake: handler } }));
+  assert.match(result, /^submitted:intake:/, "the next target's poll is queued");
+  assert.equal(seen[0]?.state, "failed");
+  assert.equal(seen[0]?.error?.retryable, true, "the provider's retry flag reaches the stage");
+  assert.match(seen[0]?.error?.message ?? "", /HTTP 503/);
 });
 
-test("a provider call that runs past its deadline is cancelled and fails the stage, and a failed cancel is reported", async () => {
+test("a provider call that runs past its deadline is cancelled, then settled as a timeout through finish; a failed cancel is said in the failure", async () => {
   const submittedAt = new Date(Date.UTC(2026, 9, 13, 9, 0, 0)).toISOString();
   const { organizationId, requestId } = await submittedIntake(6, submittedAt);
   const row = await pollRow(organizationId, requestId);
   const { adapter, cancelled } = fakeProvider(() => ({ state: "pending" }), { cancelFails: true });
-  await assert.rejects(
-    executeEngineJob(db.sql, row, runtimeWith({ adapter, now: Date.parse(submittedAt) + 130_000 })),
-    (error: unknown) =>
-      error instanceof EngineError &&
-      error.kind === "provider" &&
-      error.retryable === false &&
-      /did not finish within 120000 ms/.test(error.message) &&
-      /cancelling the provider job also failed/.test(error.message),
-  );
+  const seen: ProviderPoll[] = [];
+  const handler: StageHandler = {
+    run: async () => {
+      throw new Error("run is not used for a poll");
+    },
+    finish: async (ctx, polled) => {
+      seen.push(polled);
+      return {
+        kind: "done",
+        output: {
+          stage: "intake",
+          subjectId: ctx.subjectId,
+          gate: passGate("request", requestId),
+          budgetReservationId: null,
+          budgetPause: null,
+          artifacts: {},
+        },
+      };
+    },
+  };
+  await executeEngineJob(db.sql, row, runtimeWith({ adapter, now: Date.parse(submittedAt) + 130_000, handlers: { intake: handler } }));
   assert.deepEqual(cancelled, ["remote-6"]);
+  assert.equal(seen[0]?.state, "failed");
+  assert.equal(seen[0]?.error?.kind, "timeout");
+  assert.match(seen[0]?.error?.message ?? "", /did not finish within 120000 ms/);
+  assert.match(seen[0]?.error?.message ?? "", /cancelling the provider job also failed/);
 });
 
 test("a provider that is not resolvable in this runtime is a configuration error, never a silent success", async () => {

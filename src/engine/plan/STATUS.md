@@ -1,5 +1,18 @@
 # STATUS: the plan stage (W7), E3
 
+## E3 integration pass (branch `eng-e3-wiring`)
+
+- **Director beat text (lead decision 6, Bible 7.7).** `DirectorChoice.beatText` (optional) is set in `build.ts` from the beat's script
+  text, and `runDirector` sends it in the director's table. The director call is the only one that sees script text, as untrusted data.
+  The planner still never sees it. The director's prompt edits are still refused when they ask for text (`applyDirectorCheck`).
+- **Prompt:** the director reads `director_check@2.md` (see `../claude/STATUS.md`).
+- **Test change:** `build.test.ts` no longer asserts that the director sees no script words. It asserts that the planner sees none, and
+  that the director's table carries the beat text inside an untrusted block.
+- **Intake and the plan classify the same must requests** (see `../jobs/STATUS.md`, item 2): when the inputs match, the plan resumes
+  intake's answer through the journal.
+- **Lease:** the plan stage's lease is three Claude leases (`registry.ts`, `timeoutFactor: 3`). The config owner should add
+  `thresholds.jobs.leaseMs.plan`.
+
 Branch `eng-e3-plan`, cut from `code/beautiful-cori-1zfk11` (aa3bcf8). Covers Bible 6.4 steps 1 to 7, section 7 steps 1 to 5,
 the request classifier (7.3) and the plan handler. Built on the E1 steps 1 to 4 (`visual.ts`, `filter.ts`, `score.ts`, `fit.ts`,
 `cost.ts`, `minimum.ts`), which are changed only where the list below says so.

@@ -14,8 +14,11 @@ import type { RoleDefinition } from "../role.ts";
 
 export const DIRECTOR_CHECK_ROLE = "director_check";
 
-/** The prompt version this code is written against. The file is prompts/director_check@1.md. */
-export const DIRECTOR_CHECK_PROMPT = { role: DIRECTOR_CHECK_ROLE, version: 1 } as const;
+/**
+ * The prompt version this code is written against. The file is prompts/director_check@2.md. Version 2 adds beatText to each shot
+ * (Bible 7.7 shows the beat text in the plan table); version 1 is kept as shipped.
+ */
+export const DIRECTOR_CHECK_PROMPT = { role: DIRECTOR_CHECK_ROLE, version: 2 } as const;
 
 /** The output cap is priced: the estimate and max_tokens both use 1000 output tokens (Bible 11.1). */
 export const DIRECTOR_CHECK_MAX_OUTPUT_TOKENS = 1000;
@@ -36,6 +39,11 @@ export const directorShotSchema = z.object({
   prompt: z.string().min(1).optional(),
   mustSatisfy: z.string().min(1).optional(),
   showsProduct: z.boolean(),
+  /**
+   * The script's text of the shot's beat (Bible 7.7). It is the request's own words, untrusted, shown as data. The director
+   * judges the picture from it and never copies it into a prompt edit (prompt edits are checked for text in plan/director.ts).
+   */
+  beatText: z.string().min(1).optional(),
 });
 export type DirectorShot = z.infer<typeof directorShotSchema>;
 

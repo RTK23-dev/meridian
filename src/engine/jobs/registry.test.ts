@@ -39,7 +39,8 @@ test("every stage has the Bible's timeout class: 2 minutes for Claude stages, 10
   assert.equal(STAGE_SPECS.voice.timeoutMs, 600_000);
   assert.equal(STAGE_SPECS.render.timeoutMs, 300_000);
   assert.equal(STAGE_SPECS.intake.timeoutMs, 120_000);
-  assert.equal(STAGE_SPECS.plan.timeoutMs, 120_000);
+  // The plan makes three Claude calls under one lease: three Claude leases (E3 lead decision 5).
+  assert.equal(STAGE_SPECS.plan.timeoutMs, 3 * 120_000);
   assert.equal(STAGE_SPECS.check_take.timeoutMs, 120_000);
   for (const stage of ENGINE_STAGES) {
     assert.equal(STAGE_SPECS[stage].maxAttempts, 3, `${stage} gets 3 infrastructure attempts`);

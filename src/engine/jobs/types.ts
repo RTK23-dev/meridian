@@ -32,7 +32,11 @@ export type StageOutputBase = { subjectId: string; artifacts: Record<string, str
 export type ProduceHold = { kind: "budget"; reason: string } | { kind: "refused"; errorKind: "content_policy" | "invalid_input"; hint: string };
 
 export type StageOutput =
-  | (StageOutputBase & { stage: "intake"; gate: GateResult; budgetReservationId: string | null })
+  /**
+   * budgetReservationId is the pre-flight hold, set on a pass. budgetPause is set when the hold was paused or refused (or the
+   * workspace month is not connected): the request pauses on budget with that reason, and a resume runs intake again (Bible 14).
+   */
+  | (StageOutputBase & { stage: "intake"; gate: GateResult; budgetReservationId: string | null; budgetPause: string | null })
   | (StageOutputBase & { stage: "analyze_reference"; gate: GateResult })
   | (StageOutputBase & { stage: "voice"; gate: GateResult })
   | (StageOutputBase & { stage: "plan"; gate: GateResult; shots: ShotSummary[] })
@@ -124,7 +128,7 @@ export type StageContext = {
   /** Aborted when the stage's timeout (Bible 5.1) passes. A handler should stop its provider calls when it fires. */
   signal: AbortSignal;
   /** Set on a finish step only: the asynchronous provider call that was submitted and is now settled (Bible 15.2). */
-  poll?: { provider: string; jobRef: string; submittedAt: string };
+  poll?: { provider: string; jobRef: string; submittedAt: string; carry?: unknown };
 };
 
 /** The plan epoch a produce or check job was queued for (Bible 5.3), when its payload names one. */
@@ -136,7 +140,8 @@ export function epochOf(payload: EnginePayload): number | undefined {
 /** A handler either finishes (done) or hands an asynchronous provider call to the poller (submitted, Bible 15.2). */
 export type StageRunResult =
   | { kind: "done"; output: StageOutput }
-  | { kind: "submitted"; provider: string; jobRef: string; submittedAt: string };
+  /** carry is the handler's own state for the poll (the asset job, for a generated take). It is stored as JSON and parsed again. */
+  | { kind: "submitted"; provider: string; jobRef: string; submittedAt: string; carry?: unknown };
 
 export type StageHandler = {
   run(ctx: StageContext): Promise<StageRunResult>;
@@ -146,11 +151,16 @@ export type StageHandler = {
    * A refused answer (content_policy, invalid_input) is passed with state "failed" and becomes the stage's hold.
    * Needed when run can submit.
    */
-  finish?(ctx: StageContext, polled: ProviderPoll): Promise<StageOutput>;
+  /**
+   * Settles the provider call once it is finished. It returns the stage's result, or submitted again when the call moved on to
+   * another target: the poller then schedules the next poll with the new carry, and nothing is written yet.
+   */
+  finish?(ctx: StageContext, polled: ProviderPoll): Promise<StageRunResult>;
 };
 
 export interface ProviderResolver {
-  resolve(providerId: string): ProviderAdapter | null;
+  /** The adapter that polls a submitted call of this provider, for one workspace (its credentials are the workspace's). */
+  resolve(providerId: string, organizationId: string): ProviderAdapter | null;
 }
 
 export type EngineRuntime = {

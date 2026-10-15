@@ -25,12 +25,40 @@ import {
 } from "./produce-shot.ts";
 import type { StockOutcome } from "../../assets/stock.ts";
 import type { ProduceReport } from "../../assets/router.ts";
+import { parseAssetJob, type AssetJob } from "../../assets/job.ts";
 
 const ORG = "org_produce_test";
 const BRAND = "brand_produce_test";
 const KLING = "openrouter:kwaivgi/kling-v3.0-std";
 const RESERVATION = fixtureId("res_", 900);
 const NOW = Date.parse("2026-10-14T10:00:00.000Z");
+
+/** One submit to the Kling route, in the router's own job shape (the shape parseAssetJob checks). */
+function assetJobOf(jobRef: string, submittedAt: string): AssetJob {
+  return parseAssetJob({
+    schema: "meridian.asset_job/v1",
+    jobRef,
+    workspaceId: ORG,
+    requestId: FIXTURE_IDS.request,
+    reservationId: RESERVATION,
+    stage: "produce_shot",
+    modelClass: "video.budget",
+    providerId: KLING,
+    provider: "openrouter",
+    model: "kwaivgi/kling-v3.0-std",
+    idempotencyKey: `key-${jobRef}`,
+    attemptOnTarget: 1,
+    submitNumber: 1,
+    submittedAt,
+    targets: [{ adapterId: KLING, provider: "openrouter", model: "kwaivgi/kling-v3.0-std", cacheKey: `cache-${jobRef}`, estimateUsd: 0.63 }],
+    targetIndex: 0,
+    targetBilledUsd: 0,
+    targetAllBilled: true,
+    targetSubmits: 1,
+    targetFirstEntryId: null,
+    carry: { excluded: [], exhausted: [], refused: [], queued: [], duplicate: null },
+  });
+}
 
 const GENERATE_PROMPT = "Slow push-in on a clean kitchen counter, soft window light, no text in frame.";
 
@@ -147,6 +175,9 @@ function generatorAnswering(production: ShotProduction): ShotGenerator & { asked
     asked: 0,
     async generate() {
       generator.asked += 1;
+      return production;
+    },
+    async settle() {
       return production;
     },
   };
@@ -268,9 +299,15 @@ describe("prompt, spec and identity helpers", () => {
   test("the router generator asks the router for one shot, on the request's reservation, and returns its report", async () => {
     const seen: string[] = [];
     const generator = routerGenerator(() => ({
-      async produce(input) {
+      async submit(input) {
         seen.push(`${input.stage}:${input.reservationId}:${input.spec.shotId}`);
-        return { outcome: { status: "not_connected", reasons: ["fixture"] }, decisions: [], alerts: [], attempts: [] };
+        return { step: { status: "not_connected", reasons: ["fixture"] }, decisions: [], alerts: [], attempts: [] };
+      },
+      async settle() {
+        throw new Error("settle is not reached when nothing was submitted");
+      },
+      async produce() {
+        throw new Error("the generator submits and settles; it never runs the synchronous loop");
       },
     }));
     const production = await generator.generate({
@@ -451,17 +488,19 @@ describe("the produce_shot stage on PostgreSQL", () => {
     assert.equal((await takeRowsFor(requestId)).length, 0);
   });
 
-  test("a submitted call returns submitted to the poller, and finish settles it into the take", async () => {
+  test("a submitted call carries the router's job to the poller, and finish settles that job into the take", async () => {
     const shot = generateShot(fixtureId("shot_", 51));
     const { requestId, planArtifactId } = await requestWith([shot]);
     const submittedAt = new Date(NOW).toISOString();
+    const job = assetJobOf("job-abc123", submittedAt);
+    const settled: AssetJob[] = [];
     const generator: ShotGenerator = {
       async generate() {
-        return { status: "submitted", providerId: KLING, jobRef: "job-abc123", submittedAt, decisions: [] };
+        return { status: "submitted", providerId: KLING, jobRef: "job-abc123", submittedAt, job, runAfterMs: 0, decisions: [] };
       },
-      async settle(_input, polled: ProviderPoll, submission) {
+      async settle(_input, settledJob, polled: ProviderPoll) {
+        settled.push(settledJob);
         assert.equal(polled.state, "done");
-        assert.equal(submission.jobRef, "job-abc123");
         return doneProduction({ costUsd: polled.actualUsd ?? 0 });
       },
     };
@@ -469,28 +508,55 @@ describe("the produce_shot stage on PostgreSQL", () => {
     const handler = createProduceShotHandler(ports);
 
     const started = await handler.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
-    assert.deepEqual(started, { kind: "submitted", provider: KLING, jobRef: "job-abc123", submittedAt });
+    assert.deepEqual(started, { kind: "submitted", provider: KLING, jobRef: "job-abc123", submittedAt, carry: { job, decisions: [] } });
 
     assert.ok(handler.finish, "an asynchronous handler finishes its calls");
-    const output = await handler.finish(
-      contextFor({ requestId, planArtifactId, shotId: shot.shotId, poll: { provider: KLING, jobRef: "job-abc123", submittedAt } }),
+    const result = await handler.finish(
+      contextFor({ requestId, planArtifactId, shotId: shot.shotId, poll: { provider: KLING, jobRef: "job-abc123", submittedAt, carry: { job } } }),
       { state: "done", uri: "https://openrouter.ai/api/v1/videos/job-abc123/content?index=0", actualUsd: 0.6125 },
     );
-    assert.equal(output.stage, "produce_shot");
-    if (output.stage !== "produce_shot") throw new Error("expected a produce output");
-    assert.ok(output.takeId, "the settled call is a take");
+    assert.equal(result.kind, "done", "the settled call is the stage's result, not another submit");
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.ok(result.output.takeId, "the settled call is a take");
+    assert.deepEqual(settled.map((item) => item.jobRef), ["job-abc123"], "settle received the carried job");
     assert.equal((await takeRowsFor(requestId)).length, 1);
+  });
+
+  test("a settle that moves the call to its next target returns submitted again, and writes no take yet", async () => {
+    const shot = generateShot(fixtureId("shot_", 54));
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const submittedAt = new Date(NOW).toISOString();
+    const first = assetJobOf("job-first", submittedAt);
+    const next = assetJobOf("job-next", submittedAt);
+    const generator: ShotGenerator = {
+      async generate() {
+        return { status: "submitted", providerId: KLING, jobRef: "job-first", submittedAt, job: first, runAfterMs: 0, decisions: [] };
+      },
+      async settle() {
+        return { status: "submitted", providerId: KLING, jobRef: "job-next", submittedAt, job: next, runAfterMs: 0, decisions: [] };
+      },
+    };
+    const { ports } = portsFor({ generator });
+    const handler = createProduceShotHandler(ports);
+    assert.ok(handler.finish);
+    const result = await handler.finish(
+      contextFor({ requestId, planArtifactId, shotId: shot.shotId, poll: { provider: KLING, jobRef: "job-first", submittedAt, carry: { job: first } } }),
+      { state: "failed", error: { kind: "server", retryable: true, message: "upstream" } },
+    );
+    assert.deepEqual(result, { kind: "submitted", provider: KLING, jobRef: "job-next", submittedAt, carry: { job: next, decisions: [] } });
+    assert.equal((await takeRowsFor(requestId)).length, 0);
   });
 
   test("a refusal that arrives through the poller becomes the hold, with no retry", async () => {
     const shot = generateShot(fixtureId("shot_", 52));
     const { requestId, planArtifactId } = await requestWith([shot]);
     const submittedAt = new Date(NOW).toISOString();
+    const job = assetJobOf("job-policy", submittedAt);
     const generator: ShotGenerator = {
       async generate() {
-        return { status: "submitted", providerId: KLING, jobRef: "job-policy", submittedAt, decisions: [] };
+        return { status: "submitted", providerId: KLING, jobRef: "job-policy", submittedAt, job, runAfterMs: 0, decisions: [] };
       },
-      async settle(_input, polled) {
+      async settle(_input, _job, polled) {
         assert.equal(polled.state, "failed");
         return { status: "failed", providerId: KLING, error: polled.error ?? { kind: "unknown", retryable: false, message: "" }, decisions: [] };
       },
@@ -498,12 +564,12 @@ describe("the produce_shot stage on PostgreSQL", () => {
     const { ports } = portsFor({ generator });
     const finish = createProduceShotHandler(ports).finish;
     assert.ok(finish);
-    const output = await finish(
-      contextFor({ requestId, planArtifactId, shotId: shot.shotId, poll: { provider: KLING, jobRef: "job-policy", submittedAt } }),
+    const result = await finish(
+      contextFor({ requestId, planArtifactId, shotId: shot.shotId, poll: { provider: KLING, jobRef: "job-policy", submittedAt, carry: { job } } }),
       { state: "failed", error: { kind: "content_policy", retryable: false, message: "refused" } },
     );
-    if (output.stage !== "produce_shot") throw new Error("expected a produce output");
-    assert.deepEqual(output.hold, { kind: "refused", errorKind: "content_policy", hint: "content_policy" });
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.deepEqual(result.output.hold, { kind: "refused", errorKind: "content_policy", hint: "content_policy" });
   });
 
   test("a component shot needs no produce job, and a job with no epoch is refused before anything is called", async () => {

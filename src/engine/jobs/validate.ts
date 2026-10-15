@@ -50,6 +50,10 @@ export function validateStageOutput(output: StageOutput, payload: EnginePayload)
   if (output.stage === "intake" || output.stage === "estimate_reserve") {
     if (output.budgetReservationId !== null) parseOrRefuse(idSchema("res_"), output.budgetReservationId, "the budget reservation id", stage);
   }
+  if (output.stage === "intake" && output.budgetPause !== null) {
+    parseOrRefuse(z.string().min(1), output.budgetPause, "the budget pause reason", stage);
+    if (output.budgetReservationId !== null) refuse("an intake that pauses on budget names no reservation", stage);
+  }
   if (output.stage === "produce_shot") {
     parseOrRefuse(idSchema("shot_"), output.shotId, "the shot id", stage);
     parseOrRefuse(z.int().nonnegative(), output.epoch, "the plan epoch", stage);

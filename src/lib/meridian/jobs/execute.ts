@@ -39,7 +39,8 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
   const payload = readPayload(job);
   if (job.job_type.startsWith("engine.")) {
     const { executeEngineJob } = await import("../../../engine/jobs/dispatch.ts");
-    return executeEngineJob(sql, job);
+    const { productionEngineRuntime } = await import("../../../engine/jobs/runtime.ts");
+    return executeEngineJob(sql, job, productionEngineRuntime(sql));
   }
   if (job.job_type === "research.collect") {
     const { executeResearchCollection } = await import("../research/worker.ts");
