@@ -484,6 +484,20 @@ test("variants fan out to their own compose stage after the master passes, and d
   assert.deepEqual(flow.jobs.map((job) => job.stage), ["deliver"]);
 });
 
+test("a caption variant (a re-render only, no generation) runs its own chain and never queues a produce or voice job", () => {
+  const flow = flowToDelivery(1);
+  passBranch(flow, EDL_1);
+  const before = flow.history.length;
+  flow.succeed({ stage: "variants", subjectId: REQ, variants: [{ edlId: EDL_2 }], artifacts: { [`edl:${EDL_2}`]: fixtureId("art_", 131) } });
+  passBranch(flow, EDL_2);
+  const afterMaster = flow.history.slice(before).map((job) => job.stage);
+  assert.ok(afterMaster.includes("compose"), "the caption variant is composed");
+  assert.ok(afterMaster.includes("render"), "and rendered");
+  assert.ok(afterMaster.includes("deliver"), "and delivered with the master");
+  assert.equal(afterMaster.filter((stage) => stage === "produce_shot" || stage === "voice" || stage === "plan").length, 0, "no generation job");
+  assert.equal(flow.history.filter((job) => job.stage === "produce_shot").length, 1, "the only produce job is the master's own, from the plan");
+});
+
 test("a failing pre-render gate that names a shot sends only that shot back to produce, then rebuilds the edit", () => {
   // The failing check is proven (its gold set meets the target), so it may block (Bible 12.4, 5.3).
   const flow = flowToDelivery(0, provenFor([BROKEN("pre_render")]));

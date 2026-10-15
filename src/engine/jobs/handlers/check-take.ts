@@ -9,7 +9,8 @@
 //   - similarity scorer: notConnectedScorer (no embedding vendor is chosen, Bible 20.2)
 //   - palette: no style kit is loaded here, so the palette list is empty
 //   - product and persona: the shot's kit is not loaded, so the hero and portrait lists are empty (not evaluated)
-//   - measurements beyond the take's probed duration: frame differences, flicker and optical flow are not media functions yet
+//   - measurements: black or frozen frames, flicker and motion come from the media detectors when they are wired (`detectors`);
+//     a detector that refuses the take's file leaves its measure missing
 //   - gold metrics: none, so no check can block on a learned threshold (Bible 12.4)
 // A stored take that is missing from storage is an internal error, never a verdict on nothing.
 //
@@ -24,6 +25,7 @@ import { notConnectedScorer, type SimilarityScorer } from "../../review/take/sim
 import type { TakeMeasurements } from "../../review/take/code.ts";
 import type { TakeGoldMetrics, TakeShot } from "../../review/take/types.ts";
 import type { MediaFunctions } from "../../media/interface.ts";
+import { takeMeasurementsFromDetectors, type TakeDetectors } from "../gate-measures.ts";
 import type { Sql } from "../../../lib/meridian/learning/store.ts";
 import { readJobInputs, writeArtifact, type MediaStorePort, type StoredArtifact } from "../artifact-store.ts";
 import { scopedLedgerStore } from "../asset-stores-sql.ts";
@@ -72,7 +74,11 @@ export type CheckTakePorts = {
   /** The object store the take's media is read from. */
   objects: MediaStorePort;
   scorer?: SimilarityScorer;
-  /** Measurements beyond the probed duration. Absent, those checks are missing evidence. */
+  /**
+   * The media detectors (Bible 6.7 step 1): black or frozen frames, flicker and motion, measured on the take's bytes. Absent, those
+   * checks are missing evidence. `measure`, when given, takes precedence (a test or a deployment with its own measurement).
+   */
+  detectors?: TakeDetectors;
   measure?: TakeMeasurer;
   /** The style kit's palette, as hex colours. Absent, the palette check is missing evidence. */
   paletteHex?: (input: { organizationId: string; requestId: string }) => Promise<string[]>;
@@ -151,7 +157,11 @@ export async function checkOneTake(ctx: StageContext, ports: CheckTakePorts): Pr
   const { takeArtifact, take, shot } = await takeInputsOf(ctx);
   const bytes = await bytesOf(ctx, ports, take);
   const frames = await framesOf(ctx, ports, take, bytes);
-  const measurements = ports.measure ? await ports.measure({ take, bytes }) : probedMeasurements(take);
+  const measurements = ports.measure
+    ? await ports.measure({ take, bytes })
+    : ports.detectors
+      ? await takeMeasurementsFromDetectors(ports.detectors, { take, bytes })
+      : probedMeasurements(take);
   const palette = ports.paletteHex ? await ports.paletteHex({ organizationId: ctx.organizationId, requestId: ctx.requestId }) : [];
   const metrics = ports.metrics ? await ports.metrics() : {};
   const role: RoleDeps = {

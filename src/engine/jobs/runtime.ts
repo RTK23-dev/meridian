@@ -12,7 +12,11 @@
 //   - E4 and E5 (this file, later pass): compose, pre_render_gate, variants and deliver are always registered. They need no provider:
 //     the kit store, the engine tables and the reservation's ledger. render (the HyperFrames and Shotstack deps) and
 //     post_render_review (the media, the object store and the Critic) are registered only when composition.render and
-//     composition.postRender are given. Production gives neither yet, so the pipeline stops at render with not_implemented.
+//     composition.postRender are given. Production gives both (production-ports.ts): HyperFrames and Shotstack through the gateway,
+//     the engine's objects in Meridian's store, 15-minute source links from Meridian's signer, and the media functions over the
+//     gateway. Each one fails closed on its own: no media functions URL, no signer secret, or no HyperFrames price stops the stage.
+//   - the media detectors (check_take, post_render_review) and the frame_reader readings (analyze_reference, post_render_review) are
+//     wired through gate-measures.ts and analyze/frameReader.ts. They are optional ports; without them their checks are not evaluated.
 //
 // No key is read here: the gateway takes its credentials from Meridian's resolver, and the transport is the gateway's own.
 
@@ -24,6 +28,11 @@ import type { ModelClass, ProviderAdapter } from "../contracts/index.ts";
 import { createAnalyzeReferenceHandler } from "./handlers/analyze-reference.ts";
 import { createVoiceHandler, type VoiceStagePorts } from "./handlers/voice.ts";
 import type { ReferencePorts } from "../analyze/reference.ts";
+import { analysisReadings } from "../analyze/frameReader.ts";
+import type { PictureClient } from "../media/index.ts";
+import type { TakeDetectors } from "./gate-measures.ts";
+import { gatewayMediaFunctions, productionPostRenderPorts, productionRenderPorts } from "./production-ports.ts";
+import { engineMediaLinkSigner, engineObjectStore } from "../../lib/meridian/storage/engine-media-link.ts";
 import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
@@ -74,6 +83,8 @@ export type ShotPorts = {
   sleep?: (ms: number) => Promise<void>;
   /** The similarity scorer (Bible 20.2). Absent, the similarity checks are missing evidence and escalate. */
   similarity?: SimilarityScorer;
+  /** The media detectors of check_take (Bible 6.7 step 1): black or frozen frames, flicker and motion. Absent, those checks are missing evidence. */
+  detectors?: TakeDetectors;
 };
 
 export type EngineComposition = {
@@ -87,6 +98,11 @@ export type EngineComposition = {
   lookupDna?: IntakePorts["lookupDna"];
   /** analyze_reference (W6). Its ports are the media functions, the speech connection and the role deps. Absent: not_implemented. */
   analysis?: ReferencePorts;
+  /**
+   * The picture client (zoom and loop) of the reference readings. With it and without readings in `analysis`, analyze_reference reads
+   * captions, shake, speed ramps, zoom and loop through analysisReadings (analyze/frameReader.ts). Absent, the readings stay unknown.
+   */
+  picture?: PictureClient;
   /** voice (W6). Its ports are the asset router's speech route, the speech connection and the media functions. Absent: not_implemented. */
   voice?: VoiceStagePorts;
   shotPorts?: ShotPorts;
@@ -165,6 +181,15 @@ function routerFor(composition: EngineComposition, ports: ShotPorts) {
     });
 }
 
+/**
+ * The analyze_reference ports with the frame readings wired (Bible 6.2 step 6, 8.1). When the composition gives a picture client and
+ * no readings of its own, the readings are analysisReadings: the picture measures and the frame_reader role on the same roles deps.
+ */
+export function analysisPortsOf(analysis: ReferencePorts, picture: PictureClient | undefined): ReferencePorts {
+  if (analysis.readings !== undefined || picture === undefined) return analysis;
+  return { ...analysis, readings: analysisReadings({ picture, roles: analysis.roles }) };
+}
+
 /** The runtime for a composition. Each handler is built from the ports it is given, and nothing else is read. */
 export function createEngineRuntime(composition: EngineComposition): EngineRuntime {
   const now = composition.now ?? isoNow;
@@ -189,7 +214,9 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
     edit: createEditHandler({ loadStyleKit: kits.loadStyleKit }),
   };
 
-  if (composition.analysis !== undefined) handlers.analyze_reference = createAnalyzeReferenceHandler(composition.analysis);
+  if (composition.analysis !== undefined) {
+    handlers.analyze_reference = createAnalyzeReferenceHandler(analysisPortsOf(composition.analysis, composition.picture));
+  }
   if (composition.voice !== undefined) handlers.voice = createVoiceHandler(composition.voice);
 
   // Stages 9 to 14 that need no model call or provider are registered on the kits and the engine tables (E4, E5).
@@ -226,6 +253,7 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
       objects: shot.objects,
       now,
       ...(shot.similarity === undefined ? {} : { scorer: shot.similarity }),
+      ...(shot.detectors === undefined ? {} : { detectors: shot.detectors }),
     };
     handlers.produce_shot = createProduceShotHandler({
       generator: routerGenerator(routerFor(composition, shot)),
@@ -259,10 +287,17 @@ const productionRuntimes = new WeakMap<Sql, EngineRuntime>();
 export function productionEngineRuntime(sql: Sql): EngineRuntime {
   const existing = productionRuntimes.get(sql);
   if (existing) return existing;
+  const gateway = createGateway({ transport: fetchHttpTransport, credentials: meridianCredentialSource() });
+  // The render and post-render deps (owner decision 2026-10-14): HyperFrames and Shotstack through the gateway, the engine's objects in
+  // Meridian's store, and the 15-minute source links signed by Meridian. Each is fail closed on its own (NOT_CONNECTED, price unknown).
+  const objects = engineObjectStore(sql);
+  const media = gatewayMediaFunctions(gateway);
   const runtime = createEngineRuntime({
     sql,
-    gateway: createGateway({ transport: fetchHttpTransport, credentials: meridianCredentialSource() }),
+    gateway,
     workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
+    render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks: engineMediaLinkSigner(), now: isoNow }),
+    postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
   });
   productionRuntimes.set(sql, runtime);
   return runtime;

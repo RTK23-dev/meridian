@@ -1,5 +1,18 @@
 # STATUS: review gates, pre-production (W11)
 
+## W2 wiring pass (branch `eng-e45-leftovers-2`): decision 8 partly answered
+
+Not run in this pass. The measurements the review gates read are now wired in `jobs/`, with no change to `takeCheck.ts` (it already takes
+`measurements` as input) and no change to the gates:
+- **Take gate:** `takeCodeMeasures`-equal values come from the media detectors (`jobs/gate-measures.ts`, `codeMeasuresOf`), into
+  `check_take`. A refused detector is a null measure, which is missing evidence.
+- **Post-render, black frames and silence:** from the detectors (`renderMeasuresFromDetectors`).
+- **Post-render, overlays:** from the frame_reader role on the graphics clips' midpoints (`post_render_review`, `frameReader: true`, off by
+  default), through `analyze/renderReadings.ts`.
+- **Still undefined:** OCR (`measureOcr`, decision 5). `forbidden_terms_absent` stays not evaluated.
+Until OCR is wired, no video passes post-render (`captions_ocr_match_script` is not evaluated, so it fails closed). The checks are
+wired, not calibrated (Bible 12.4).
+
 Phase E1, wave B. Branch `engine/e1-w7-w11`, cut from `code/beautiful-cori-1zfk11` (which contains wave A). Covers
 `src/engine/review/`: the three pre-production gates (`request`, `plan`, `budget`), the gold-set loader and routing.
 Pure code, fixture-tested. No Claude call and no store access.
