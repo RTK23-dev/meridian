@@ -1,5 +1,27 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## Cartoon chain end to end (contract v5): the orchestrator's non-variant branch and the chain stores
+
+Branch `worktree-agent-adcc78d81ea833bab`, on top of `244e3e8`. The variant branch of the orchestrator and `jobs/types.ts` beyond the
+source kind are not touched.
+
+- `types.ts`: `ShotSourceKind` gains `chain` (one line). Generation, stock and a chain need a produce job.
+- `orchestrator.ts`: `needsProduce` is true for `chain`. `providerKeyFor` for a chain is the first call's class (the image bucket for a
+  keyframe). A chain is one produce job per take (`takesWanted` 1), and its take is checked and accepted like any media take, so edit waits
+  for it. `applyProduce` still refuses a takeless output with no hold (a stop-motion chain); stop_motion never reaches it (refused at the
+  plan).
+- `chain-store.ts` (new) and `migrations/0094_engine_chain_calls.sql` (new): the chain call records, organization-scoped. See
+  `handlers/STATUS.md` for the records, and its open items 1 and 3 for why this is a table and not an `engine_artifacts` row.
+- `migration.test.ts`: `engine_chain_calls` is in the tenancy list (the test requires every engine table to be listed).
+- `orchestrator.test.ts` (50 pass): a chain shot is one produce job on the image bucket, its take is checked, edit runs once the take
+  passes; `providerKeyFor` and `needsProduce` read a chain.
+- `cartoon-chain.test.ts` (new, 3 pass): the end-to-end cartoon run on recorded fixtures (plan summary, the orchestrator, the produce stage
+  with the real router and the real image and video adapters over a recorded transport, the poller's settle, the take check, the edit).
+  The stand-ins are listed in `handlers/STATUS.md`.
+- Test run, this branch: `src/engine/jobs/*.test.ts`, `handlers/*.test.ts` and `test/*.test.ts` run 362 tests, 362 pass, 0 fail. Before the
+  migration list had `engine_chain_calls`, two migration tests failed.
+- Not touched, and needed by the owner or lead: the runtime wiring (`runtime.ts`, `providerUrl`, see `handlers/STATUS.md`, item 1).
+
 ## E5 item 3 (generation variants, this branch): PARTIAL, see `../variants/STATUS.md`
 
 - `orchestrator.ts` `applyVariants` merges only the `edl:` slots of a variants output into the request's artifacts. A prepared generation

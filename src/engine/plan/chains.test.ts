@@ -249,7 +249,7 @@ test("the closing component is named for stop_motion, and checked against the li
   );
 });
 
-test("both sides at the filter: without a price stop_motion is removed by rule 5 (unknown_price); with one, rule 5 passes and the missing player is rule 6", async () => {
+test("both sides at the filter: without a price stop_motion is removed by rule 5 (unknown_price); with one it is kept, because stopmotion.player is in the library", async () => {
   const kits = { persona: true, rigCharacter: true, generatedCharacter: true, productKit: true };
   const candidate: Candidate = { visualType: "stop_motion", origin: "proposal", proposalIndex: 0 };
   const input = {
@@ -267,11 +267,14 @@ test("both sides at the filter: without a price stop_motion is removed by rule 5
   assert.equal(unpriced.rejected[0]?.rule, "rule5_budget");
   assert.match(unpriced.rejected[0]?.detail ?? "", new RegExp(`^unknown_price: ${EDIT_KEY}`));
   await withPriceOverlay({ [EDIT_KEY]: OWNER_IMAGE_EDIT }, () => {
+    // The player is drawn (merged from d1f532e), so rule 6 has nothing to remove: the price is the only gate left.
+    assert.equal(closingComponentProblem("stop_motion"), null, "stopmotion.player is in the component library");
     const priced = filterCandidates(input);
-    assert.equal(priced.rejected[0]?.rule, "rule6_kit", "rule 5 now passes");
-    assert.match(
-      priced.rejected[0]?.detail ?? "",
-      /closing component stopmotion\.player is not in the component library yet/,
+    assert.equal(priced.rejected.length, 0, "rule 5 passes and no rule removes stop_motion");
+    assert.deepEqual(
+      priced.kept.map((kept) => kept.visualType),
+      ["stop_motion"],
+      "stop_motion is kept once image.edit has a price",
     );
   });
 });

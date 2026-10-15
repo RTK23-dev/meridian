@@ -9,8 +9,11 @@ import { ENGINE_STAGES, type EngineStage } from "./registry.ts";
 import type { RequestPriority } from "./settings.ts";
 import type { GoldMetrics } from "../review/gold.ts";
 
-/** Where a shot's source comes from (ShotSpec.source.kind). Generation and stock need a produce job; the others do not. */
-export type ShotSourceKind = "generate" | "stock" | "component" | "asset";
+/**
+ * Where a shot's source comes from (ShotSpec.source.kind). Generation, stock and a chain of calls (contract v5) need a produce job;
+ * the others do not.
+ */
+export type ShotSourceKind = "generate" | "stock" | "component" | "asset" | "chain";
 
 /** What the plan stage reports about one shot. The orchestrator plans work from this, not from the plan body. */
 export type ShotSummary = {

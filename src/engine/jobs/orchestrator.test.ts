@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EngineError, type GateId, type GateResult, type TakeVerdict } from "../contracts/index.ts";
 import { FIXTURE_IDS, fixtureId } from "../contracts/fixtures/index.ts";
-import { advance, orchestratorLimits, type OrchestratorState } from "./orchestrator.ts";
+import { advance, needsProduce, orchestratorLimits, providerKeyFor, type OrchestratorState } from "./orchestrator.ts";
 import type { EngineEvent, QueuedJob, ShotSummary, StageOutput } from "./types.ts";
 import type { GoldMetrics } from "../review/gold.ts";
 
@@ -307,6 +307,35 @@ test("each shot gets its own produce job; components and assets need none, and t
   assert.equal(flow.jobsFor("edit").length, 0, "edit waits for the generated shots");
   const providerKeys = produce.map((job) => job.payload.details.providerKey).sort();
   assert.deepEqual(providerKeys, ["stock", "video"]);
+});
+
+test("a chain shot (contract v5) is one produce job on the image bucket, its take is checked, and edit waits for it like any media take", () => {
+  const flow = flowToProduce([
+    shot({ shotId: SHOT_A, visualType: "cartoon_generated", sourceKind: "chain", modelClass: "image.keyframe", downgradeTo: "cartoon_rigged", takesWanted: 1 }),
+    shot({ shotId: SHOT_B, sourceKind: "component", modelClass: null, visualType: "coded_graphics", downgradeTo: null }),
+  ]);
+  const produce = flow.jobsFor("produce_shot");
+  assert.deepEqual(produce.map((job) => job.subjectId), [SHOT_A], "the chain needs one produce job; the component needs none");
+  assert.equal(produce[0]?.payload.details.sourceKind, "chain");
+  assert.equal(produce[0]?.payload.details.providerKey, "image", "a chain's bucket is its first call's");
+  assert.equal(produce[0]?.paid, true);
+  assert.equal(flow.current.shots[SHOT_A]?.status, "pending");
+
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: { [`take:${TAKE_A1}`]: fixtureId("art_", 91) } });
+  assert.deepEqual(flow.jobsFor("check_take").map((job) => job.subjectId), [TAKE_A1]);
+  assert.equal(flow.jobsFor("edit").length, 0, "edit waits for the chain's take to pass");
+  flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", true), verdict: verdict(TAKE_A1, true, 0.9), artifacts: {} });
+  assert.equal(flow.current.shots[SHOT_A]?.acceptedTakeId, TAKE_A1);
+  const edit = flow.jobsFor("edit");
+  assert.equal(edit.length, 1, "the accepted take lets edit run");
+  assert.ok(edit[0]?.payload.inputArtifactIds.includes(fixtureId("art_", 91)), "edit reads the chain's take artifact");
+});
+
+test("providerKeyFor and needsProduce read a chain as a produce job on its first call's bucket", () => {
+  assert.equal(providerKeyFor("chain", "image.keyframe"), "image");
+  assert.equal(providerKeyFor("chain", "video.budget"), "video");
+  assert.equal(needsProduce("chain"), true);
+  assert.equal(needsProduce("component"), false);
 });
 
 test("a shot with two takes queues two produce jobs with distinct attempts, then accepts the best passing one", () => {

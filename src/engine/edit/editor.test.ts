@@ -392,6 +392,30 @@ test("a media shot with no chosen take fails the edit and names the shot", () =>
   assert.deepEqual(build.failingShotIds, [shotId(1)]);
 });
 
+test("a chain shot takes its last call's video as its media: its take is accepted and the EDL places it (contract v5)", () => {
+  const input = synthInput({
+    beats: [{ beatId: "b1", durationMs: 3000 }],
+    shots: [{ n: 1, beatId: "b1", visualType: "cartoon_generated", layer: "base", kind: "chain" }],
+  });
+  const build = buildEdl(input);
+  assert.equal(build.pass, true, `the chain build passes; failing: ${failingChecks(build).join(" | ")}`);
+  const edl = passing(build);
+  const placed = clipsOfShot(edl, shotId(1));
+  assert.equal(placed.length > 0, true, "the chain's take is on the base track");
+  assert.ok(placed.every((clip) => clip.srcUri === `store://takes/shot-1.mp4`), "the clip plays the chain's take, not a component");
+});
+
+test("a chain shot with no chosen take fails the edit and names the shot: a chain is media, so a missing take is never silent", () => {
+  const build = synthFailure({
+    beats: [{ beatId: "b1", durationMs: 3000 }],
+    shots: [{ n: 1, beatId: "b1", visualType: "cartoon_generated", layer: "base", kind: "chain" }],
+    takes: [],
+  });
+  assert.equal(build.pass, false);
+  assert.deepEqual(build.failingShotIds, [shotId(1)]);
+  assert.ok(failingChecks(build).some((line) => line.startsWith("shot_sources_available") && line.includes(shotId(1))));
+});
+
 test("a take given to a component shot is refused, because a component draws itself", () => {
   const build = synthFailure({
     beats: [{ beatId: "b1", durationMs: 1000 }],

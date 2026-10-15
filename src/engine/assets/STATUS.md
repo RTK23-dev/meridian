@@ -1,5 +1,32 @@
 # Asset router and adapters (W5): E3 asynchronous submit and settle
 
+## Cartoon chain: image references, first frame, and a stateless image result (branch `worktree-agent-adcc78d81ea833bab`)
+
+`providers/openrouterImage.ts` (the image adapter, for image.keyframe and image.edit):
+
+- **References and first frame.** A spec's first frame (when it has one) and its references are sent as `input_references`, in that order,
+  each as `{ type: "image_url", image_url: { url } }`. The element shape is the documented shape of a `frame_images` element; PROVIDER_APIS.md
+  names `input_references` and does not describe an element. Unverified until the live run.
+- **Limits.** Every reference must be an https URL the provider can fetch (`normaliseHttpsUrl`). A store uri is refused before any call
+  (`invalid_input`, no call made). A last frame is refused the same way. More than `IMAGE_REFERENCES_MAX` (4, an initial bound; the
+  provider documents none) is refused before any call. The router sees `firstFrame: true` and `refsMax: 4` on the image capabilities.
+- **Stateless results.** The answer of an image call (the uri, the media type, the bill, or the failure message) travels in the job
+  reference (`encodeImageResult` / `decodeImageResult`, base64url, under the `image:` prefix). Before, it was kept in process memory, so a poll
+  by another worker's adapter instance found "no result" for a paid image. Now any instance reads it. A reference this adapter did not write
+  is a failed poll with no details.
+- Tests (`openrouterImage.test.ts`, 13 pass): references sent in order from a recorded answer (`test/fixtures/openrouter-image-references.json`;
+  its image is a valid PNG padded above the adapter's 1 KiB floor); no `input_references` when there are none; a store uri refused with no
+  call; a last frame and too many references refused with no call; the capabilities; a second instance reads the same result; a foreign
+  reference fails closed. The whole folder (`src/engine/assets/**`) runs 151 tests, 0 fail, before the plan and edit changes.
+
+Not changed: the video adapter. Its frames still need https (`normaliseHttpsUrl`), and its profile has no reference support (`refsMax` 0).
+The cartoon clip therefore carries no references (plan/STATUS.md).
+
+**Open for the owner's live run**
+
+1. The `input_references` element shape and the reference limit (see above). The live answer is recorded in `test/fixtures/` when run.
+2. Whether the provider fetches a link produced by Meridian's signed engine-media route (the first frame and the references need it).
+
 Branch `eng-e3-router-async`, cut from `origin/code/beautiful-cori-1zfk11` at `c0767f2`. Fixture-tested only. No live call has
 been made: agents hold no keys (North Star decision 1). The owner's live run is listed at the end of this section.
 

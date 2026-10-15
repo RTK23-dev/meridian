@@ -1,5 +1,78 @@
 # STATUS: intake and estimate_reserve stage handlers (A4, updated in E2)
 
+## Cartoon chain end to end: cartoon_generated built and tested; stop_motion refused until image.edit is priced
+
+Branch `worktree-agent-adcc78d81ea833bab`, on top of `244e3e8`. This supersedes the chain items of the sections below
+(`produce_shot` "Chains on produce_shot", the blockers 1 to 3 and 5 and 6 there).
+
+**plan (`plan.ts`)**: `shotSummaryOf` summarises a chain: `sourceKind` `chain`, `modelClass` is the first call's, `takesWanted` 1. A chain
+is refused (`not_implemented`, nothing stored) when a call takes two takes, or when its last call is an image (a stop-motion chain: its
+closing component is not placed by the orchestrator yet).
+
+**produce_shot (`produce-shot.ts`, `chain-store.ts`)**
+
+- Records (Bible 5.1): each call of a chain is recorded before it is made (its spec, in `engine_chain_calls`), and its output is recorded
+  when the provider makes it (uri, provider, bill, ledger entry). A retried job reads a made call back and makes no call for it; a call
+  that was recorded but not made is made with the spec it was recorded with, so the same input hash and idempotency key are used. A
+  second write of a different output is refused (`conflict`).
+- A recorded spec carries its links. A link from the signer is a bearer link to one engine object for 15 minutes: it is stored in
+  `engine_chain_calls` so a retry sends the same link, and it is never logged. A retry after the 15 minutes sends the stored link, which the
+  provider may then refuse; the refusal is a hold, not a second paid call.
+- Cost: the take's cost is the sum of the call outputs, read from the records, so a retry keeps the cost of the calls made earlier.
+- Links: `ProduceShotPorts.providerUrl` (optional) turns a chain input the provider reads (a reference or a frame) into an https link,
+  once per input per call, and the link is part of the recorded spec. Absent, the stored uri is sent and the adapter refuses it (fail
+  closed). An input that cannot be linked (`invalid_input`) stops the chain before the call, as a refusal hold with hint
+  `unlinked_input` (the planner may rewrite once). A link service that is not connected is thrown (`config`).
+- Stop: a refused or failed call still stops the chain at that call, and the decision names it (unchanged).
+- The output schema (`chainOutputSchema`) moved to `chain-store.ts` and is re-exported from `produce-shot.ts`.
+
+**check_take**: unchanged. A chain's take is a generated take, so the motion check applies.
+
+**Tests (this section)**
+
+- `produce-shot.test.ts` (33 pass): four new cases: a retry reads the keyframe back and makes the clip alone on the recorded spec; a run
+  after every call was made calls no provider; a link port's link is recorded and a retry reuses it (no second signing); an unlinkable
+  input stops the chain before the first call with its hold.
+- `chain-store.test.ts` (new, 5 pass): the first spec stands; one output per call; a different output is refused; the records are read
+  only in their own workspace; a row that no longer matches its contract is an internal error.
+- `plan.test.ts` (7 pass): the cartoon chain is summarised; a stop-motion chain is refused with no summary.
+- `migration.test.ts` (11 pass): `engine_chain_calls` is in the tenancy list.
+- `cartoon-chain.test.ts` (new, 3 pass, PGlite, recorded transport): (1) the cartoon shot goes plan (summary), queues one produce job on
+  the image bucket, makes the keyframe (the sheet sent as a link), then the clip from the keyframe (first frame as a link), one ledger row
+  and one idempotency key per call; the take costs both calls (0.19 with the recorded prices); the check runs with the motion check and
+  passes; edit passes and the EDL plays the chain's take. (2) A refused clip (content policy through the poller) stops the chain at the
+  clip with the hold, the clip is submitted once, is never downloaded, and no third ledger row exists. (3) A stop-motion chain whose frame
+  model is not routed makes no call and throws `config`.
+- Stand-ins in (1), named in the test: the plan is the contract fixture's plan with the cartoon shot in the builder's form; the other shots'
+  takes are contract fixtures; the link port is a fake signer; the detectors are clean recorded answers; the palette similarity is a
+  recorded score; the video listing (one model, durations 3, 5, 8 s) is written in the test, not recorded.
+
+**Needed before production (the lead, or the owner)**
+
+1. `runtime.ts`: pass `providerUrl` to `createProduceShotHandler` from the composition root, using Meridian's engine media link signer
+   (`lib/meridian/storage/engine-media-link.ts`) through `sourceUrlResolver`. Not done here: runtime.ts is outside this grant. Without it a
+   chain's references and frames reach the adapters as store uris, the adapters refuse them, and every cartoon shot is held.
+2. Kit images are `store://` uris, which the engine media signer does not sign (it signs `engine/` keys only). The owner decides how a
+   kit image becomes a fetchable link (or a signed kit route) before a keyframe can use a character sheet live.
+3. A chain output has no artifact type (`engine_artifacts.type` is checked against the contract's list), so the chain records are in
+   `engine_chain_calls` (migrations/0094). The lead decides whether a `chain_output` artifact type is added (a contract change: version,
+   Bible section 4 note, lead approval). The table can move into `engine_artifacts` then.
+4. The clip's references: see plan/STATUS.md. The contract fixture lists them; the builder no longer sends them.
+5. Not done here, outside this grant: `variants/expand.ts` (line 134) and `deliver/manifest.ts` (line 110) test `source.kind === "generate"`
+   for paid generation and need `chain` before a chain shot reaches variants or the manifest.
+6. A retried produce job whose take was written before the job ended writes a second take artifact with the same take id (the take id is
+   deterministic; the artifact id is not). This is the existing behaviour of `storeTake`, unchanged here.
+7. Pricing: the plan prices a video.budget call from the route's price key, while the router estimates a submit from the routed target's own
+   price key. The two can differ for the live model. Check the estimate's line against the router's estimate in the live run.
+
+**The owner's live run (agents hold no keys)**
+
+1. With items 1 and 2 above wired: one cartoon_generated beat on a page with a generated character sheet. Record the keyframe's call (its
+   input references, as links), its ledger row and idempotency key; the clip's call (its first frame, as a link), its ledger row and key;
+   the take artifact id, its cost (the sum of the two), and the check_take verdict.
+2. The same beat with a refused keyframe (content policy) to see the stop, the planner's one rewrite and the hold reason.
+3. Record the real `input_references` element shape and the image reference limit (both unverified, see `assets/STATUS.md`).
+
 ## Chains on produce_shot and check_take (contract v5; branch `worktree-agent-a2631ad1048c21356`, from `cef526c`)
 
 There is no `produce/` folder: the produce_shot handler is `produce-shot.ts`, so its status is here. The plan side is in `../../plan/STATUS.md`.
