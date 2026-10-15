@@ -4,6 +4,11 @@ Phase E3, branch `eng-e3-analyze-voice`, cut from `code/beautiful-cori-1zfk11` (
 (the edit grammar), 11.1 (the genome and tightener roles) and 4.1 (Video DNA). The stage handler is
 `src/engine/jobs/handlers/analyze-reference.ts`. See `README.md` for the file list.
 
+**Follow-up, branch `eng-e3-vision-measure` (from `origin/code/beautiful-cori-1zfk11`, 79f7a92).** Zoom jumps and the loop are
+now measured (see "Zoom and loop" below). Captions are NOT measured: the `frame_reader` role needs a `ClaudeRole` value that
+`contracts/ledger.ts` does not have. Per the lead's instruction, no contract was edited and no role or prompt was written. The
+captions reading stays null, so the grammar's `captions` field stays unknown and the DNA gate fails on purpose.
+
 ## Done (fixture-tested)
 
 - **Timeline (new media function, W4).** `functions/ffmpeg/timeline.ts`, route `POST /timeline`, and the client
@@ -41,6 +46,17 @@ Phase E3, branch `eng-e3-analyze-voice`, cut from `code/beautiful-cori-1zfk11` (
 - **NOT_CONNECTED.** The stage stops before any spend when speech-to-text is not connected (`media/stt-connection.ts`), when the
   reference source is not connected, and when a port is missing. The handler throws a config error whose message starts with
   `NOT_CONNECTED:`.
+- **Zoom and loop (follow-up).** A new media function, `POST /picture` (`functions/ffmpeg/picture.ts`), with the client
+  `src/engine/media/picture.ts`. It decodes a 64 px grayscale thumbnail every 100 ms, and the true last frame from the end of the
+  stream. Per pair of neighbours it fits a scale and a shift (the later thumbnail is the earlier one magnified about the centre
+  and moved), and reports the scale and a fit ratio. A pair that straddles a scene cut is not measured. It also reports the luma
+  distance of the first frame and the last. `analyze/zoom.ts` (pure) turns the pairs into zoom jumps (|scale - 1| above 8%, fit at
+  most 0.6, consecutive same-direction pairs joined) and the loop (distance at most 0.04). `analyze/readings.ts` is the stage's
+  `readings` port built from that client. `MediaFunctions` is unchanged: the picture client is on `HttpMediaFunctions` only, so the
+  three fixtures that implement `MediaFunctions` need no change.
+- **Grammar motion (follow-up).** `MeasuredZoom.shake` and `speedRamps` are `boolean | null`. The motion fields stay unknown while
+  either is null. rehookIntervalMs and the transitions need only the jumps, so they are computed from the zoom reading. Punch-ins
+  are the zoom-ins only (scale above 1); a zoom-out counts as a jump, not as a punch-in.
 
 ## Tests
 
@@ -59,6 +75,11 @@ Run from the repo root:
   NOT_CONNECTED writes nothing and spends nothing, and a missing reservation is refused.
 - `media/timeline.test.ts`, `media/stt-connection.test.ts`, `media/http-handler.test.ts`: the parsers, the client's order checks,
   the real timeline on a generated reel (ffmpeg present here), the route, and the connection check.
+- Follow-up: `analyze/zoom.test.ts` (pure: jumps, joins, cuts, the 8% line, the loop threshold), `analyze/readings.test.ts`
+  (the readings port on the recorded answers in `test/fixtures/picture-captured.json`), `media/picture.test.ts` (the scale
+  model on exact synthetic pictures, the contract, the client, the route, and the generated clips when ffmpeg is present),
+  `edit/grammar.test.ts` (zoom-ins only, and shake or speed ramps null keeps the motion unknown), and `reference.test.ts` (the
+  stage with the picture readings: the gate fails naming only captions and motion).
 
 Results on this branch are in the report to the lead.
 
@@ -69,8 +90,9 @@ Results on this branch are in the report to the lead.
    with music under the speech: word timings, the bill, and a repeat with the same key that is not billed.
 2. **Deploy and record the functions.** Deploy `functions/ffmpeg` (see `functions/ffmpeg/STATUS.md`) with `/timeline`. Run the
    timeline, cuts, probe and frames on the reference through `httpMediaFunctions` and record the answers as `captured`.
-3. **Captions, zoom and loop readers.** The grammar needs them (see blockers 2 to 4). Until they exist the stage fails its gate
-   on purpose.
+3. **Captions reader and motion readers.** The grammar needs captions (blocker 2), and shake and speed ramps (blocker 3). The
+   zoom and loop readings are measured by `POST /picture`, so the owner's live step is to deploy it with `/picture` and record one
+   reference's answer as `captured`. Until captions and motion exist the stage fails its gate on purpose.
 4. **Reference source.** Wire the `ReferenceSource` port (resolve and release) once the owner decides where reference media is
    held (S3 is retired; Drive or Postgres, NORTH_STAR decision 2).
 5. **Live analyze run (Bible 19 E3).** One reference reel, with the real segmenter and genome calls (Sonnet). Attach the
@@ -80,14 +102,21 @@ Results on this branch are in the report to the lead.
 ## Blockers and decisions for the lead
 
 1. **Speech-to-text vendor (Bible 20.2): owner decision.** Blocks analyze and voice. Both stop with NOT_CONNECTED before any spend.
-2. **Captions (OCR) are not measured.** Bible 6.2 step 6 and 8.1 name OCR of the frames. OCR is not in the Bible's media list,
-   `MediaFunctions` has no OCR, and no vendor is chosen. The contract's `captions` block has no null, so the DNA cannot be
-   stored without it. Decision needed: an API for OCR through the gateway (an owner vendor choice, Bible 20.2), or a vision read
-   by a role. Local OCR would break principle 8.
-3. **Zoom jumps and shake are not measured.** `motion.punchIn*`, `rehookIntervalMs` and the zoom class of `transitions` need zoom
-   detection. No function exists. Method to decide (ffmpeg feature tracking, or a vision read).
-4. **endsOnLoop is not measured.** It needs the first and last frame compared (Bible 8.1). The frame plan does not request
-   those two frames yet. It is a small addition in W4 once the lead agrees the extra two frames are allowed past the cap of 60.
+2. **Captions are not measured (lead decision needed: add `frame_reader` to `CLAUDE_ROLES`).** Bible 6.2 step 6 and 8.1 name
+   OCR of the frames. The lead's follow-up decided captions are read by a vision role on the sampled frames, not by local OCR
+   (principle 8). That role is `frame_reader`, and it is not in `CLAUDE_ROLES` (`contracts/ledger.ts`). Per the lead's
+   instruction, this branch stops there: no contract edit, no `claude/roles/frame_reader.ts`, no `prompts/frame_reader@1.md`.
+   The role also needs its Bible 11.1 row, a prompt, and an answer contract. Once the value is added (eng-contracts, version
+   bump, lead approval), the role follows the `tightener` pattern: `captionReadingSchema` per frame (words per caption, band,
+   size, style, highlight), aggregated by code into `EditGrammar.captions`. Visible text is used as measurements only (size,
+   position, count), never copied, as the `onScreenText` decision above.
+3. **Shake and speed ramps are not measured.** Bible 8.1 defines `motion.shakeOnImpact` (high-frequency global motion) and
+   `speedRamps` (motion-speed discontinuities inside a shot). The picture function measures scale and fit per pair but not
+   global translation over time, so both readings are null and the motion fields stay unknown. Decision needed: a method (a
+   10 fps translation series, or a vision read), or drop the two fields from the contract (eng-contracts).
+4. **endsOnLoop: measured, one open point.** The loop reading is the first frame against the true last frame of the picture
+   (`/picture`), not two extra frames in the Bible 6.2 frame plan, so the cap of 60 is unchanged. Open: the threshold 0.04 is
+   initial, measured on generated clips only (a still with its brightness returning gives 0.022, a zoom drift gives 0.24).
 5. **Reference source store.** `ReferenceSource` is a port with no production implementation. `ig:reel/<id>` needs a source
    URL, and `s3://` is retired. Until the store is decided, the stage refuses with NOT_CONNECTED.
 6. **Angle Bible slugs.** The Bible and the contracts name the Angle Bible but do not list its values. The only list is
@@ -141,6 +170,10 @@ readings are synthetic and labelled so in their fixtures.
 - `src/engine/prompts/genome@1.md` and `tightener@1.md` (granted). `prompts/STATUS.md` is not edited.
 - `src/engine/jobs/handlers/analyze-reference.ts` and `voice.ts` with their tests (granted). `jobs/handlers/STATUS.md` is not
   edited. The ports the worker must wire are listed in `voice/STATUS.md` and below.
+- Follow-up (granted by the lead): `functions/ffmpeg/picture.ts` and its wire, type, http and limit entries; `src/engine/media/`
+  (`picture.ts`, its test, `test/picture-clips.ts`, `http.ts`, `index.ts`, `config.ts`, and the handler list in
+  `boundaries.test.ts`). `edit/grammar.ts` and its test. `analyze/test/harness.ts` and `reference.test.ts`. No contract, no
+  `claude/` file and no prompt is changed. `media/STATUS.md` and `functions/ffmpeg/STATUS.md` describe the picture route.
 
 Ports the worker must wire for these two handlers (none is wired in this branch): `ReferenceSource` (resolve and release),
 `speech` (from `speechToTextConnection`), `sttPricePerMinuteUsd`, `roles` (the Claude client's dependencies), the media functions,

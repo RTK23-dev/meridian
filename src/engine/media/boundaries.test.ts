@@ -43,7 +43,7 @@ function importSpecifiers(source: string): Array<{ specifier: string; typeOnly: 
   return found;
 }
 
-const HANDLER_MODULES = /functions\/ffmpeg\/(probe|frames|loudness|cuts|http|exec|source)\.ts$/;
+const HANDLER_MODULES = /functions\/ffmpeg\/(probe|frames|loudness|cuts|timeline|picture|http|exec|source)\.ts$/;
 const LOCAL_ONLY = /(\/|^)local\.ts$/;
 
 describe("media boundaries", () => {

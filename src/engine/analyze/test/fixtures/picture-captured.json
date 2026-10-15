@@ -1,0 +1,510 @@
+{
+ "source": "captured",
+ "note": "The output of the real picture function (functions/ffmpeg/picture.ts, ffmpeg 6.1.1, this machine) on the generated clips of media/test/picture-clips.ts. No cuts were passed.",
+ "recipe": {
+  "clip": {
+   "width": 360,
+   "height": 640,
+   "fps": 30,
+   "durationMs": 2000,
+   "jumpMs": 1000,
+   "jumpScale": 1.2
+  },
+  "kinds": [
+   "punch",
+   "punch-offcentre",
+   "loop",
+   "drift"
+  ]
+ },
+ "results": {
+  "punch": {
+   "sampleMs": 100,
+   "width": 64,
+   "height": 114,
+   "pairs": [
+    {
+     "atMs": 100,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 200,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 300,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 400,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 500,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 600,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 700,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 800,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 900,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1000,
+     "usable": true,
+     "scale": 1.205,
+     "fit": 0.26230922423207875
+    },
+    {
+     "atMs": 1100,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1200,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1300,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1400,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1500,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1600,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1700,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1800,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1900,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    }
+   ],
+   "loopDistance": 0.24322271671826626
+  },
+  "punch-offcentre": {
+   "sampleMs": 100,
+   "width": 64,
+   "height": 114,
+   "pairs": [
+    {
+     "atMs": 100,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 200,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 300,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 400,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 500,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 600,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 700,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 800,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 900,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1000,
+     "usable": true,
+     "scale": 1.21,
+     "fit": 0.2100625447911916
+    },
+    {
+     "atMs": 1100,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1200,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1300,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1400,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1500,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1600,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1700,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1800,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1900,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    }
+   ],
+   "loopDistance": 0.24623806759545924
+  },
+  "loop": {
+   "sampleMs": 100,
+   "width": 64,
+   "height": 114,
+   "pairs": [
+    {
+     "atMs": 100,
+     "usable": true,
+     "scale": 0.845,
+     "fit": 0.9909420289855072
+    },
+    {
+     "atMs": 200,
+     "usable": true,
+     "scale": 0.82,
+     "fit": 0.9950617283950617
+    },
+    {
+     "atMs": 300,
+     "usable": true,
+     "scale": 0.84,
+     "fit": 0.993920972644377
+    },
+    {
+     "atMs": 400,
+     "usable": true,
+     "scale": 0.82,
+     "fit": 0.9696969696969697
+    },
+    {
+     "atMs": 500,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 600,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 700,
+     "usable": true,
+     "scale": 1.13,
+     "fit": 0.9895470383275261
+    },
+    {
+     "atMs": 800,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 900,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1000,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1100,
+     "usable": true,
+     "scale": 0.805,
+     "fit": 0.9911190053285968
+    },
+    {
+     "atMs": 1200,
+     "usable": true,
+     "scale": 0.92,
+     "fit": 0.995049504950495
+    },
+    {
+     "atMs": 1300,
+     "usable": true,
+     "scale": 0.88,
+     "fit": 0.993993993993994
+    },
+    {
+     "atMs": 1400,
+     "usable": true,
+     "scale": 1.06,
+     "fit": 0.98
+    },
+    {
+     "atMs": 1500,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1600,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1700,
+     "usable": true,
+     "scale": 0.83,
+     "fit": 0.977859778597786
+    },
+    {
+     "atMs": 1800,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1900,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    }
+   ],
+   "loopDistance": 0.0217406260749914
+  },
+  "drift": {
+   "sampleMs": 100,
+   "width": 64,
+   "height": 114,
+   "pairs": [
+    {
+     "atMs": 100,
+     "usable": true,
+     "scale": 1.02,
+     "fit": 0.9880286212274102
+    },
+    {
+     "atMs": 200,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 300,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 400,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 500,
+     "usable": true,
+     "scale": 1.02,
+     "fit": 0.9842675557407794
+    },
+    {
+     "atMs": 600,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 700,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 800,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 900,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1000,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1100,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1200,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1300,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1400,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1500,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1600,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1700,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1800,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    },
+    {
+     "atMs": 1900,
+     "usable": true,
+     "scale": 1,
+     "fit": 1
+    }
+   ],
+   "loopDistance": 0.24383814929480563
+  }
+ }
+}

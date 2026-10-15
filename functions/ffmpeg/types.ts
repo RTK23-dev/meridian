@@ -167,3 +167,69 @@ export const timelineResultSchema = z.strictObject({
 export type TimelineResult = z.infer<typeof timelineResultSchema>;
 export type TimelineSample = z.infer<typeof timelineSampleSchema>;
 export type LoudnessSample = z.infer<typeof loudnessSampleSchema>;
+
+/**
+ * The picture measures (Bible 6.2 step 6, 8.1 motion and endsOnLoop): a grayscale thumbnail every sampleMs, the scale that
+ * maps each thumbnail onto the next, and the difference between the first and the true last frame. Initial values.
+ */
+export const PICTURE_STEPS = {
+  /** The spacing of the thumbnails, and so of the scale pairs. A zoom jump is caught by the pair that holds it. */
+  sampleMs: 100,
+  /** Width of each thumbnail in pixels. The height follows the picture's aspect ratio. */
+  thumbWidthPx: 64,
+  /** The window at the end of the picture from which the last frame is read. */
+  tailWindowMs: 500,
+} as const;
+
+/** At most this many scene cuts per call (a reference of 90 s has far fewer). */
+export const MAX_PICTURE_CUTS = 600;
+/** At most this many pairs per call: the longest picture (240 s) at one pair per sampleMs. */
+export const MAX_PICTURE_PAIRS = 2400;
+
+const pictureScaleSchema = z.number().finite().min(0.5).max(2);
+
+/**
+ * One pair of neighbouring thumbnails: atMs is the time of the later one. A pair that straddles a scene cut is not measured
+ * (usable false). A measured pair has the scale that maps the earlier thumbnail onto the later one (new over old, so a
+ * zoom-in is above 1), and fit: the share of the frame difference that this scale leaves (0 is a perfect fit, 1 is no gain).
+ */
+export const picturePairSchema = z
+  .strictObject({
+    atMs: z.int().nonnegative(),
+    usable: z.boolean(),
+    scale: pictureScaleSchema.nullable(),
+    fit: z.number().finite().min(0).max(1).nullable(),
+  })
+  .refine(
+    (pair) =>
+      pair.usable
+        ? pair.scale !== null && pair.fit !== null
+        : pair.scale === null && pair.fit === null,
+    { message: "a pair is usable with a scale and a fit, or unusable with neither" },
+  );
+export type PicturePair = z.infer<typeof picturePairSchema>;
+
+export const pictureRequestSchema = z.strictObject({
+  source: mediaSourceSchema,
+  /** Scene-cut times in milliseconds (from the cuts function). A pair that straddles one is not measured. */
+  cutsMs: z.array(z.int().nonnegative()).max(MAX_PICTURE_CUTS),
+});
+export type PictureRequest = z.infer<typeof pictureRequestSchema>;
+
+/**
+ * One call's measures. loopDistance is the mean luma difference between the first frame and the last frame (0 to 1), or null
+ * when the picture is too short to hold two thumbnails.
+ */
+export const pictureResultSchema = z.strictObject({
+  sampleMs: z.literal(PICTURE_STEPS.sampleMs),
+  width: z.int().positive(),
+  height: z.int().positive(),
+  pairs: z
+    .array(picturePairSchema)
+    .max(MAX_PICTURE_PAIRS)
+    .refine((pairs) => pairs.every((pair, index) => index === 0 || pair.atMs > pairs[index - 1]!.atMs), {
+      message: "pairs must run forward in time",
+    }),
+  loopDistance: z.number().finite().min(0).max(1).nullable(),
+});
+export type PictureResult = z.infer<typeof pictureResultSchema>;

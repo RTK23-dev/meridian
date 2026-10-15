@@ -11,6 +11,7 @@ import {
   copiesGenomeBody,
   genomeBody,
   recordedMedia,
+  recordedPictureReadings,
   referencePorts as portsFor,
   referenceRun as run,
   request,
@@ -138,6 +139,24 @@ describe("analyze_reference on recorded measurements and role answers", () => {
     assert.match(text, /zoom/);
     assert.match(text, /loop/);
     assert.equal(released.length, 1, "the source is released on the failure path too");
+  });
+
+  it("reads zoom and loop from the picture measures; the gate still fails, naming only the captions and the motion it cannot read", async () => {
+    const { ports, released } = await portsFor({
+      responses: [segmenterBody, genomeBody],
+      readingsPort: recordedPictureReadings("punch"),
+    });
+    const outcome = await analyzeReference(run(), ports);
+    assert.equal(outcome.status, "done");
+    if (outcome.status !== "done") return;
+    assert.equal(outcome.gate.pass, false);
+    assert.equal(outcome.dna, null, "no DNA is stored with an unknown field");
+    const text = outcome.unknown.join("\n");
+    assert.match(text, /captions/);
+    assert.match(text, /^motion \(shakeOnImpact/m);
+    assert.doesNotMatch(text, /zoom \(/, "the zoom reading is measured");
+    assert.doesNotMatch(text, /loop \(/, "the loop reading is measured");
+    assert.equal(released.length, 1);
   });
 
   it("refuses a segment layer that repeats the transcript, so no source words enter the DNA through a layer", async () => {

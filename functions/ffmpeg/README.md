@@ -18,6 +18,7 @@ inside a temporary directory, then always removes that directory).
 | `frames.ts`   | ffmpeg, one PNG output per time        | PNG bytes at the asked times (first decoded frame at or after each time), optional `longSidePx` (no upscaling). A time at or past the last frame is `invalid_input`. |
 | `cuts.ts`     | ffmpeg `select='gt(scene,T)',showinfo` | scene-change times in ms, ascending. `T` is an input (the client supplies the configured default).                                                                   |
 | `loudness.ts` | ffmpeg `ebur128=peak=true`             | integrated LUFS, true peak dBTP, loudness range LU. Silence or a value at the absolute gate (-70 LUFS) is `null`.                                                    |
+| `picture.ts`  | ffmpeg, raw grayscale thumbnails to files | per 100 ms pair: scale and shift fit (scale, fit ratio), a cut-straddling pair unmeasured; loop distance of the first and last frame (Bible 8.1, zoom and loop). Route `POST /picture`. |
 
 The frame plan of section 6.2 (a frame at every cut, then 2 per second, capped at 60, cuts first) is applied by the
 client, `src/engine/media/frames.ts`, so the handler receives explicit times.

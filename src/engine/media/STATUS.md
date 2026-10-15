@@ -145,3 +145,13 @@ background-removal and upscaling wrappers. Each needs an owner decision or a lat
 
 Deploy the functions with `/timeline`, and record one timeline answer as `captured`. The speech-to-text steps of E1 still
 apply (choose the vendor, record one transcription, price it). Nothing here chooses a vendor.
+
+## Follow-up: the picture client (`picture.ts`, route `POST /picture`)
+
+- `pictureInProcess()` and `pictureOverWire(post)` (path `PICTURE_PATH`, timeout `callTimeoutMs.picture`). The answer is checked
+  against `pictureResultSchema` (out-of-time pairs, a usable pair without a scale, a loop distance above 1 are provider errors).
+- `PictureClient` is on `HttpMediaFunctions` as `picture`, not on `MediaFunctions`. Adding it to the interface would have broken
+  three fixtures outside this folder (voice and jobs), so the analyze readings take it directly.
+- `test/picture-clips.ts` generates the clips the picture tests use (a centred and an off-centre 1.2x zoom-in at 1000 ms, a
+  looping still, a drifting zoom), with ffmpeg in the fixture directory. `picture.test.ts` skips them without ffmpeg.
+- `boundaries.test.ts`: the handler list now names `timeline` and `picture`, so no production file outside this folder runs them.

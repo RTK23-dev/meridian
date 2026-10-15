@@ -85,3 +85,23 @@ by a module under `src/engine/media/`, so `tsc --noEmit` type-checks all of it. 
   is a provider error.
 - Captured: the timeline, cuts and probe of a generated 6 s reel (`src/engine/analyze/test/fixtures/reference-measurements.json`).
 - Not deployed. The owner deploys this handler with the other routes and records one `/timeline` answer as `captured`.
+
+## Follow-up: the picture measures (`picture.ts`, route `POST /picture`)
+
+- Input: the source and the scene-cut times (`cutsMs`, at most 600). Output: a 64 px grayscale thumbnail every 100 ms
+  (`PICTURE_STEPS`), one pair per neighbouring thumbnails (atMs is the later one, usable, scale, fit), and `loopDistance`, the
+  mean luma difference of the first frame and the true last frame (read from the last 500 ms of the stream).
+- The scale model: the later thumbnail is the earlier one magnified about the centre and moved by a shift. The search is a
+  joint coarse grid (scale 0.80 to 1.30 in 0.02 steps, shift -0.08, 0, +0.08 in x and y), then a fine shift and a fine scale.
+  Fit is the residual after the model over the identity residual (0 is a perfect fit). Pairs whose frames are within the noise
+  floor (mean difference 0.01) are scale 1, fit 1.
+- A pair that straddles a cut is `usable: false`. The response schema refuses a usable pair without a scale and an unusable one
+  with one, and refuses pairs out of time order.
+- Measured on this machine (ffmpeg 6.1.1, Node 22): the punch-in clip gives its jump at 1000 ms with scale 1.205 (true 1.2);
+  an off-centre punch-in gives 1.21; a zoom that comes back gives a loop distance of 0.022, and a drifting zoom 0.24.
+- Worst-case compute, measured in isolation on random pictures (every pair runs the full search): 600 pairs, about 2.1 s. This
+  is compute only, not the function's cold start, which is not measured. Record both on the deployed function.
+- Limits: media up to 240 s (`maxPictureMs`), 90 s per pass (`toolTimeoutMs.picture`), and the thumbnails go to a file in the
+  temporary directory, not to stdout, so the 4 MB stdout limit does not apply. Three ffmpeg passes: the probe, the thumbnail
+  grid and the tail.
+- Not deployed. The owner deploys this route with the others and records one `/picture` answer as `captured`.

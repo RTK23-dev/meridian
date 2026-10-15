@@ -6,6 +6,7 @@ import { cutsOverWire, type CutsClient } from "./cuts.ts";
 import { framesOverWire, type FramesClient } from "./frames.ts";
 import type { MediaFunctions } from "./interface.ts";
 import { loudnessOverWire, type LoudnessClient } from "./loudness.ts";
+import { pictureOverWire, type PictureClient } from "./picture.ts";
 import { probeOverWire, type ProbeClient } from "./probe.ts";
 import { timelineOverWire, type TimelineClient } from "./timeline.ts";
 import { wirePost, type MediaTransport } from "./wire-client.ts";
@@ -16,6 +17,8 @@ export type HttpMediaFunctions = MediaFunctions & {
   loudness: LoudnessClient;
   cuts: CutsClient;
   timeline: TimelineClient;
+  /** The picture measures (zoom and loop). Not part of MediaFunctions: only the analyze readings take it. */
+  picture: PictureClient;
 };
 
 /**
@@ -45,5 +48,6 @@ export function httpMediaFunctions(baseUrl: string, transport: MediaTransport): 
     loudness: loudnessOverWire(post),
     cuts: cutsOverWire(post),
     timeline: timelineOverWire(post),
+    picture: pictureOverWire(post),
   };
 }
