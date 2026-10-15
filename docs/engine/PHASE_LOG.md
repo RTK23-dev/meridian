@@ -273,3 +273,52 @@ key and plan price (the cost per 1,000 results stays unknown until confirmed); t
 NOT_CONNECTED until one is set); the HyperFrames price (render stays fail-closed until it is known); the speech-to-text
 vendor; the monthly video budget per workspace; the Instagram trial graduation path (the Graph API documents no graduation
 field, so the feed step stays a person's action until one is observed).
+
+## 2026-10-15 Completion pass: remaining phase work, provider facts, fixes and documentation
+
+Merged into code/beautiful-cori-1zfk11 (PR #71), in this order:
+- **Provider facts** (Apify, Instagram trial reels, Shopify, OpenRouter model ids): `docs/PROVIDERS.md` and `docs/engine/PROVIDER_APIS.md`
+  record each fact with its source URL and the date 2026-10-15. Partly verified. The `verified` flags in `routes.ts` stay false until the
+  owner's live run. Sample-only fields are kept: nulling them would stop ratings and the UTM join.
+- **Shopify webhook** answers 200 for a stored order, because Shopify confirms receipt only on 200. The trial help text and the publish
+  dialog now say what each strategy does: MANUAL is graduated by hand in the app; SS_PERFORMANCE graduates when Instagram decides.
+- **E6 server functions** (`src/lib/meridian/engine-ops`): stage metrics and the dead-letter list for any member of the workspace, and
+  replay for an admin only. The workspace comes from the request row, and the role comes from the database.
+- **Chain contract, engine-contracts@5**: a shot's source may be a chain of calls, each with its own output that a later call can use.
+  Bible section 4 has the v5 note. Existing single-call shots parse unchanged.
+- **stopmotion.player**: a sourceBound component that plays 2 to 36 ordered frames from the shot's own takes, with golden frames. The
+  floor is 2 frames, not the Bible's 24; undershoot is refused, overshoot clamped. Its owner-facing confirmation is still open.
+- **Chain execution**: cartoon_generated runs plan, keyframe call, video call, check and edit on recorded fixtures. Each call has its own
+  ledger entry and idempotency key, and a refused call stops the shot with its reason. Chain call records live in `engine_chain_calls`
+  (migration 0094), not `engine_artifacts`. stop_motion is refused as unknown_price until the owner prices `image.edit`.
+- **Generation variants** (Bible 6.13): a variant work list drives its writer call, its voice, its produce and check jobs, and its EDL.
+  Each variant is rebuilt by the editor from its own inputs and runs compose, pre-render, render and review as its own branch. Funding
+  is under the request reservation. The writer is `variant_writer@2`, and product copy names the variant's product.
+- **Sleep and grade caps**: nightly tuning is clamped to MAX_NIGHTLY_CHANGE_SHARE (refusals are recorded in the morning summary). The grade
+  stage checks the kill switch and the daily and total caps before each engine call, and a capped ad makes no call.
+- **Chain providers and kit images**: `providerUrl` comes from the gateway. Kit images are linkable under the engine signer's rules,
+  for the same organization only, with 15-minute links.
+- **Screenshots**: `docs/feature-screens/` has 40 PNGs and a README. Before is from d0e8f63 and after is from 91df2bf. Not captured: the
+  studio publish dialog (no stored variant on the fixture), the B2 tier counts (they need an Apify key), and B5 in a connected state (no
+  Shopify shop).
+
+Checks: the full local `src` run at 0f5a584 gave 5,051 tests, 5,010 pass, 0 fail, 41 skipped (PostgreSQL and credential gated). The
+targeted tests at 5d2fd8b pass (124), and typecheck is clean. CI on 0f5a584 is green.
+
+Deferred, and why:
+- **Production shot ports.** `produce_shot` and `check_take` stay NOT_CONNECTED in production until a deployment supplies the MediaStore
+  and the video profiles. Cartoon shots therefore do not run in production yet.
+- **Changed-lines-only voice.** The variant's voice is a full re-speak, a recorded deviation. Changed lines only needs
+  `audio.voice` as an ordered list in the EDL and a `spliceAudio` media function, which needs the owner's approval.
+- **Kit image key convention** `kits/{org}/{brand}/{kind}/{kitId}/{name}.png`: needs lead confirmation, and no kit writer exists yet.
+- **Image adapter references and frames**: the `input_references` shape and its limit are unverified until a live run.
+- **Product variant copy** names the product. The planner's "No names" rule points the other way: owner decision.
+- **Hook variants** re-produce the hook shot's presenter take, because the lips must follow the new audio. This is the design.
+- **E2E chain test** uses stand-ins, listed in `src/engine/jobs/handlers/STATUS.md`.
+- **Live runs**: none. Agents hold no keys.
+- **Checklist artifact**: not ticked in this pass (session limit).
+
+Owner items: the keys for OpenRouter, HeyGen, Anthropic, Apify and Shopify; the Apify plan price; the HyperFrames price; the media functions
+URL; `DATABASE_URL` and `MERIDIAN_PG_TEST_URL`; the speech-to-text vendor; the platform file-size limit; the Shotstack credential slot;
+the two critic_final items; the `paidPartnership` default; music, disclosure wording and the stock licence; the `image.edit` price; the
+deployment's shot ports; the EDL audio contract step; the kit key convention; the product naming question; and merging PR #71.
