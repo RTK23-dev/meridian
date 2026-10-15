@@ -1,15 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { tunable } from "../../../engine/config/tunable.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import type { Sql } from "../learning/store.ts";
 import { runSleepNight } from "./sleep.ts";
+import type { TunedProposal } from "./sleep-tuning.ts";
 
 const ORG = "org_fixture";
 const BRAND = "brand_fixture";
 const NOW = new Date("2026-10-15T12:00:00Z");
 
 type Settings = { enabled: boolean; brand_id: string | null; night_time: string; time_zone: string; niche: string; updated_by: string };
-type Night = { id: string; organization_id: string; night_key: string; status: string; reason: string; summary: string; counts: string; failures: string };
+type Night = {
+  id: string;
+  organization_id: string;
+  night_key: string;
+  status: string;
+  reason: string;
+  summary: string;
+  counts: string;
+  failures: string;
+  change_budget: string;
+};
 
 /**
  * An in-memory stand-in for the statements a sleep night runs before any factory stage. It answers by statement text. The night
@@ -33,7 +45,17 @@ function fakeSleepDb(options: {
     if (text.includes("insert into sleep_mode_nights")) {
       const [id, organizationId, , nightKey] = values as string[];
       if (nights.some((night) => night.organization_id === organizationId && night.night_key === nightKey)) return [];
-      nights.push({ id, organization_id: organizationId, night_key: nightKey, status: "running", reason: "", summary: "", counts: "", failures: "" });
+      nights.push({
+        id,
+        organization_id: organizationId,
+        night_key: nightKey,
+        status: "running",
+        reason: "",
+        summary: "",
+        counts: "",
+        failures: "",
+        change_budget: "",
+      });
       return [{ id }];
     }
     if (text.includes("set status = 'failed'")) {
@@ -45,10 +67,10 @@ function fakeSleepDb(options: {
       return [];
     }
     if (text.includes("update sleep_mode_nights set status")) {
-      // The night's final record. Values follow the statement: 0 status, 2 reason, 3 summary, 6 counts, 8 failures, 11 night id.
-      const [status, , reason, summary, , , counts, , failures, , , nightId] = values as string[];
+      // The night's final record. Values follow the statement: 0 status, 2 reason, 3 summary, 6 counts, 8 failures, 10 change budget, 11 night id.
+      const [status, , reason, summary, , , counts, , failures, , changeBudget, nightId] = values as string[];
       const night = nights.find((item) => item.id === nightId);
-      if (night) Object.assign(night, { status, reason, summary, counts, failures });
+      if (night) Object.assign(night, { status, reason, summary, counts, failures, change_budget: changeBudget });
       return [];
     }
     if (text.includes("from factory_kill_switches")) return options.killSwitch ?? [];
@@ -112,4 +134,59 @@ test("a night that has already run for the same local date is not run again", as
   assert.equal(await runSleepNight(db.sql, jobFor(), NOW), "sleep:already-ran:2026-10-15");
   assert.equal(db.nights.length, 1);
   assert.equal(db.nights[0]?.status, "stopped", "a finished night keeps its status");
+});
+
+type ChangeBudget = {
+  maxNightlyChangeShare: number;
+  tunedValuesAccepted: number;
+  tunedValuesRefused: number;
+  accepted: Array<{ key: string; from: number; to: number }>;
+  refused: Array<{ key: string; proposed: number | null; kept: number; reason: string }>;
+  note: string;
+};
+
+const CRITIC: TunedProposal = { key: "thresholds.criticConfidence", current: tunable(0.6, 0.3, 0.9), proposed: 0.9 };
+
+test("a night that proposes a tuned change past the nightly cap refuses the excess, and the morning summary says what and why", async () => {
+  // No spend cap is set, so the night stops early. Its morning summary still records every tuning decision the night was given.
+  const db = fakeSleepDb({ settings: ON });
+  assert.equal(await runSleepNight(db.sql, jobFor(), NOW, { tuning: [CRITIC] }), "sleep:stopped");
+  const night = db.nights[0];
+  assert.match(night?.summary ?? "", /^Stopped: no spend cap is set\. Tuning: /, "the night's own outcome comes first, then the tuning line");
+  assert.match(
+    night?.summary ?? "",
+    /Refused thresholds\.criticConfidence: proposed 0\.9, kept 0\.69, because it moves more than 15% from the current value\./,
+    "the refused change, its kept value and the reason are in the morning summary",
+  );
+  const budget = JSON.parse(night?.change_budget ?? "{}") as ChangeBudget;
+  assert.equal(budget.maxNightlyChangeShare, 0.15);
+  assert.equal(budget.tunedValuesRefused, 1);
+  assert.equal(budget.tunedValuesAccepted, 0);
+  assert.equal(budget.refused[0]?.key, "thresholds.criticConfidence");
+  assert.equal(budget.refused[0]?.proposed, 0.9);
+  assert.equal(budget.refused[0]?.kept, 0.69);
+});
+
+test("a tuned change inside the nightly cap is accepted, and nothing is refused", async () => {
+  const db = fakeSleepDb({ settings: ON });
+  const inside: TunedProposal = { ...CRITIC, proposed: 0.65 };
+  await runSleepNight(db.sql, jobFor(), NOW, { tuning: [inside] });
+  const night = db.nights[0];
+  assert.match(night?.summary ?? "", /Tuning: 1 proposed change inside the 15% nightly cap, 0 refused\./);
+  assert.doesNotMatch(night?.summary ?? "", /Refused /);
+  const budget = JSON.parse(night?.change_budget ?? "{}") as ChangeBudget;
+  assert.deepEqual(budget.accepted, [{ key: "thresholds.criticConfidence", from: 0.6, to: 0.65 }]);
+  assert.equal(budget.tunedValuesRefused, 0);
+  assert.match(budget.note, /recorded here only/, "an accepted change is recorded, and sleep mode writes no engine config");
+});
+
+test("a night with no tuned proposal says the cap was not used, and its summary says nothing about tuning", async () => {
+  const db = fakeSleepDb({ settings: ON });
+  await runSleepNight(db.sql, jobFor(), NOW);
+  const night = db.nights[0];
+  assert.doesNotMatch(night?.summary ?? "", /Tuning:/);
+  const budget = JSON.parse(night?.change_budget ?? "{}") as ChangeBudget;
+  assert.equal(budget.tunedValuesAccepted, 0);
+  assert.equal(budget.tunedValuesRefused, 0);
+  assert.equal(budget.note, "No tuned value was proposed tonight, so the nightly change cap was not used.");
 });

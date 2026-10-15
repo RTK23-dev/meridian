@@ -4,6 +4,9 @@ import type { AutomationMode } from "./run-settings.ts";
 /** Stages that spend money or publish. Manual and semi stop before each one until a person approves it. */
 const SPEND_OR_PUBLISH: ReadonlySet<FactoryStage> = new Set(["factory.produce", "factory.launch", "factory.test"]);
 
+/** The reason the kill switch stops a stage. The grade stage gives the same reason when it stops inside a stage. */
+export const KILL_SWITCH_STOP_REASON = "The kill switch is engaged. Nothing runs until it is released.";
+
 export type StageDecision =
   | { action: "run" }
   | { action: "await_approval"; reason: string }
@@ -57,7 +60,7 @@ export function capStopReason(input: {
  */
 export function stageDecision(input: StageDecisionInput): StageDecision {
   if (input.killSwitchEngaged) {
-    return { action: "stop", reason: "The kill switch is engaged. Nothing runs until it is released." };
+    return { action: "stop", reason: KILL_SWITCH_STOP_REASON };
   }
   const spends = SPEND_OR_PUBLISH.has(input.stage);
   const review = input.stage === "factory.review";
