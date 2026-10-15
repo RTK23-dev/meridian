@@ -7,9 +7,10 @@ of **6.1** and the ledger's storage interface for **5.4**. Pure logic over `Ledg
 
 - `store.ts`: the `LedgerStore` interface (create, get and update a reservation; append an entry; set an actual; sum
   reserved and actual for a workspace month) and `memoryLedgerStore()` for tests.
-- `estimate.ts`: `estimatePlan(plan)`. Prices each shot from `config/prices.ts`, adds the fixed per-master lines
-  (`fixedBudgetLines()`, from `config/budgets.ts`), and adds the redo allowance on generated shots only. Throws
-  `UnknownPriceError`, naming the shot, when a price is unknown.
+- `estimate.ts`: `estimatePlan(plan)`. Prices each paid call from `config/prices.ts`: one line for a generate, component,
+  stock or asset shot, and one line per call for a chain (contract v5), so every link is reserved. Adds the fixed per-master
+  lines (`fixedBudgetLines()`, from `config/budgets.ts`), and adds the redo allowance on generated lines (a chain's calls
+  are generated). Throws `UnknownPriceError`, naming the shot, when a price is unknown.
 - `reserve.ts`: `reserve(store, input)` reserves a plan's estimate against the request budget and the workspace month.
   `authorizeCall` authorizes one paid call against its reservation before it is submitted.
 - `preflight.ts`: `reserveFixed(store, input)` is the pre-flight hold at intake. `extendReservation(store, input)` raises it

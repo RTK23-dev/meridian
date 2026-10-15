@@ -102,6 +102,8 @@ function shotText(shot: ShotSpec): string {
       return shot.source.query;
     case "asset":
       return "";
+    case "chain":
+      return shot.source.calls.map((call) => call.prompt).join(" ");
   }
 }
 

@@ -1,6 +1,99 @@
 # STATUS: engine contracts (W1, with config)
 
-## E3 follow-up: contract version `engine-contracts@4` (current)
+## Chains: contract version `engine-contracts@5` (current)
+
+Branch `worktree-agent-a347022c3cbcf198e`, fast-forwarded to `code/beautiful-cori-1zfk11` (b4ee734) before the change, which is
+where the engine's latest work sits (eng-plan-gaps-2 is an ancestor). Not pushed; the lead merges. Bible section 4 has the
+"v5 changes and migration" note. Commit: see `git log` on the branch. The task is plan/STATUS.md item 5.
+
+### The schema (`plan.ts`)
+
+`ShotSpec.source` is a discriminated union on `kind`, now with a fifth member:
+
+    { kind: 'chain', calls: ChainCall[] }     // at least two calls (CHAIN_MIN_CALLS)
+    ChainCall  = { output, modelClass, prompt, refs: ChainInput[], firstFrame?, lastFrame?, takes: 1 | 2 }
+    ChainInput = { kind: 'asset', uri } | { kind: 'output', output }
+    output     = /^[a-z][a-z0-9_]{0,39}$/
+
+Refused at parse time: a repeated output name, and an output input that no earlier call of the same chain makes (unknown,
+a later call's, or the call's own). `chainProblem(calls)` returns the first problem with its call index. `chainInputsOf(call)`
+lists a call's inputs. Exported from `index.ts` through `plan.ts`.
+
+### Changes (the lead's list)
+
+1. **Schema.** As above. The literal stays `meridian.scene_plan/v1` (additive). Every single-call shot is unchanged: a test parses
+   each shot of `scenePlanFixture` and checks the parse is equal to its input.
+2. **Version.** `CONTRACTS_VERSION = "engine-contracts@5"`. `config.test.ts` pins it.
+3. **Fixtures.** `fixtures/ids.ts`: `shotCartoonChain` (shot_ 16) and `shotStopChain` (shot_ 17). `fixtures/chain.ts`:
+   `cartoonChainShotFixture` (keyframe, then a clip that starts from it; 0 to 3 s), `stopMotionChainShotFixture` (30 image-edit
+   frames, each reading the hero and the frame before; 9 to 11.5 s), and `scenePlanChainFixture` (the fixture plan with its shot 1
+   drawn by the cartoon chain; `estimatedUsd` 0.3204 = 0.1188 + 0.2016). `scenePlanChain` is in the `fixtures` map, so the round
+   trip and the top-level parse tests cover it.
+4. **Estimate (`budget/estimate.ts`).** One budget line per call. A chain's calls are generated (redo allowance). A single-call
+   shot keeps one line at its old price.
+5. **Tests.** `schemas.test.ts`: additive parse, chain round trip, unknown output refused with the name in the message.
+   `invalid.test.ts`: 17 chain rows (one call, no calls, unknown/own/later output, repeated name, bad names, takes 3, empty
+   prompt, unknown model class, bare string input, unknown input kind, empty asset uri, a plan with a bad chain).
+   `budget/estimate.test.ts`: each link priced, takes priced per link, 24 per-image links priced 24 times, a stop-motion
+   chain refused and named (token-priced frames), an unknown output refused before pricing, the single-call shot unchanged.
+
+### Consumers changed outside the contracts folder (minimal: typecheck, and fail closed)
+
+- `review/gates/plan.ts`: `shotUsesProductImagery` (chain case); the text rule checks every call's prompt
+  (`generationPromptsOf`); the downgrade rule counts a chain as generated (`isGeneratedShot`). Tests in `gates/plan.test.ts`.
+- `review/slideshowRisk.ts`: `shotText` (chain case: the calls' prompts).
+- `jobs/handlers/plan.ts`: `shotSummaryOf` refuses a chain with `not_implemented`, and the summaries are built before the
+  scene plan artifact is written, so a refused plan is not stored. Test in `plan.test.ts`.
+- `jobs/e3-pipeline.test.ts`: the test's summary helper refuses a chain (this fixture has none).
+- `config/config.test.ts`: the version pin.
+
+### Still to change before the planner may write a chain (not done here; the plan refuses a chain until then)
+
+- `edit/editor.ts` lines 136 and 162: media shots are generate or stock, so a chain is not media and has no take.
+- `deliver/manifest.ts` line 110: a generate shot's manifest row.
+- `variants/expand.ts` line 134: which shots a hook or product variant regenerates.
+- `jobs/handlers/check-take.ts` line 41: which shots get a take check (generate or stock).
+- `jobs/orchestrator.ts` `needsProduce` and `providerKeyFor`, and `jobs/validate.ts` (the summary enum): a chain needs a produce job.
+- `jobs/handlers/produce-shot.ts`: makes one take per shot today. It must make the calls in order and resolve each output input.
+  A chain falls through to its final refusal (line ~529).
+- `review/slideshowRisk.ts` `isStill` and `isMovingFootage`: a chain is not classified as still or moving footage.
+- `plan/cost.ts` `RECIPES`: `cartoon_generated` is priced as one video call, without the keyframe. `estimatedUsd` must match the
+  estimate once the plan builds the chain.
+- `plan/sources.ts` `buildSource` still refuses both chain types and names the chain builders (`cartoonGeneratedChain`,
+  `stopMotionChain`). Their calls are not yet in the `chain` shape; the builder that makes the shape is a later change.
+
+### Decisions for the lead
+
+1. **The literal.** Kept at `/v1` because the change is additive (v2 and v4 did the same). Say if you want `meridian.scene_plan/v2`.
+2. **Chain inputs are typed.** A chain's `refs` are `ChainInput[]`, not `string[]` as a generate source's are, so an output name
+   cannot be mistaken for an asset uri and an unknown name is refused. Say if you want the strings form with a prefix instead.
+3. **The closing `stopmotion.player` is not in the contract.** A chain carries calls only. Where the component sits (a `then`
+   field on the chain, or a second shot) is a decision for the lead and the component owner.
+4. **One budget line per call.** `BudgetLine` has no call id, so the lines of one shot differ only by provider and amount. The
+   ledger's per-call entries (eng-pipeline) need a call id when the produce stage writes them.
+5. **Minimum two calls.** A one-call chain is a generate source. No maximum is set; the stop-motion range (24 to 36) is in
+   `plan/tables.ts` (`STOP_MOTION_FRAMES`), and the budget bounds the cost.
+
+### Owner items
+
+- **Price for the image-edit class.** It is token-priced (`prices.ts`, price null), so a stop-motion chain's estimate refuses until
+  the owner sets a price. The contract accepts the chain; the estimate does not guess.
+
+### Tests (this worktree)
+
+- Final run: `NODE_ENV=development node --experimental-strip-types --test` over `contracts/*.test.ts`, `budget/*.test.ts`,
+  `config/*.test.ts`, `review/gates/*.test.ts`, `review/slideshowRisk.test.ts`, `jobs/handlers/plan.test.ts`,
+  `jobs/handlers/estimate-reserve.test.ts`, `jobs/e3-pipeline.test.ts` and `jobs/scenarios.test.ts`: 502 tests, 502 pass, 0 fail.
+- `npx tsc --noEmit`: exit 0. `npx eslint` on the 16 changed TypeScript files: exit 0.
+- The full `npm test` was not run here; the lead runs it after merging.
+
+### Live run: owner (no keys held by agents)
+
+Nothing here calls a provider. The first live check for a chain is one cartoon_generated shot: the keyframe call, then the clip
+from that keyframe (the first frame is the keyframe's take). Record each call's ledger entry, its estimate and its actual cost,
+and check the two calls against the estimate's two lines. The stop-motion chain waits for the image-edit price.
+
+## E3 follow-up: contract version `engine-contracts@4`
 
 Branch `eng-e3-contracts-2`, from `origin/code/beautiful-cori-1zfk11` (1a13ebb), then merged with that branch at f6b70d5 (E4).
 Not pushed; the lead merges. Bible section 4 has the "v4 changes and migration" note. Commit: see `git log` on the branch.

@@ -41,6 +41,7 @@ export const fixtures = {
   videoDna: chain.videoDnaFixture,
   voiceTrack: chain.voiceTrackFixture,
   scenePlan: chain.scenePlanFixture,
+  scenePlanChain: chain.scenePlanChainFixture,
   assetSpec: chain.assetSpecFixture,
   take: chain.take1Fixture,
   takeVerdict: chain.takeVerdictFixture,

@@ -94,6 +94,7 @@ function plan(): ScenePlan {
 }
 
 function summaryOf(shot: ShotSpec): ShotSummary {
+  if (shot.source.kind === "chain") throw new Error(`${shot.shotId}: this pipeline fixture has no chain shot (contract v5)`);
   return {
     shotId: shot.shotId,
     visualType: shot.visualType,

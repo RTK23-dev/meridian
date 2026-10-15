@@ -4,6 +4,7 @@
 
 import { thresholds } from "../../config/thresholds.ts";
 import {
+  chainInputsOf,
   EngineError,
   productionRequestSchema,
   scenePlanSchema,
@@ -49,6 +50,19 @@ const RULES = [
   "estimated_usd_matches_shots",
 ] as const;
 
+/** The prompts a shot sends to a generation model: its own prompt, or one per call of a chain (contract v5). */
+export function generationPromptsOf(shot: ShotSpec): string[] {
+  const source = shot.source;
+  if (source.kind === "generate") return [source.prompt];
+  if (source.kind === "chain") return source.calls.map((call) => call.prompt);
+  return [];
+}
+
+/** Does a shot make its pixels with a paid model call: a generate shot, or a chain of them (contract v5)? */
+export function isGeneratedShot(shot: ShotSpec): boolean {
+  return shot.source.kind === "generate" || shot.source.kind === "chain";
+}
+
 /** Does this shot put real product imagery on screen? A generated shot pins or refers to a product URI; a component names one in its props. */
 export function shotUsesProductImagery(shot: ShotSpec, uris: readonly string[]): boolean {
   const source = shot.source;
@@ -63,6 +77,10 @@ export function shotUsesProductImagery(shot: ShotSpec, uris: readonly string[]):
       return stringsIn(source.props).some((text) => uris.includes(text));
     case "asset":
       return uris.includes(source.assetUri);
+    case "chain":
+      return source.calls.some((call) =>
+        chainInputsOf(call).some((input) => input.kind === "asset" && uris.includes(input.uri)),
+      );
     case "stock":
       return false;
   }
@@ -214,16 +232,16 @@ export function checkPlan(input: PlanGateInput): GateResult {
     }),
   );
 
-  // No text to render in a generation prompt (12.1, 7.2 rule 3).
+  // No text to render in a generation prompt (12.1, 7.2 rule 3). Every call of a chain (contract v5) is a generation prompt.
   const textProblems: string[] = [];
   for (const shot of shots) {
-    if (shot.source.kind !== "generate") {
-      continue;
-    }
-    const finding = promptAsksForText(shot.source.prompt);
-    if (finding.asksForText) {
-      failing.add(shot.shotId);
-      textProblems.push(`${shot.shotId} asks for text (${finding.cues.join(", ")})`);
+    for (const prompt of generationPromptsOf(shot)) {
+      const finding = promptAsksForText(prompt);
+      if (finding.asksForText) {
+        failing.add(shot.shotId);
+        textProblems.push(`${shot.shotId} asks for text (${finding.cues.join(", ")})`);
+        break;
+      }
     }
   }
   checks.push(
@@ -258,8 +276,8 @@ export function checkPlan(input: PlanGateInput): GateResult {
     }),
   );
 
-  // Every generated shot names its fallback (6.4 step 5).
-  const withoutDowngrade = shots.filter((shot) => shot.source.kind === "generate" && shot.downgradeTo === undefined);
+  // Every generated shot names its fallback (6.4 step 5). A chain (contract v5) is generated.
+  const withoutDowngrade = shots.filter((shot) => isGeneratedShot(shot) && shot.downgradeTo === undefined);
   withoutDowngrade.forEach((shot) => failing.add(shot.shotId));
   checks.push(
     check("generated_shots_have_downgrade", withoutDowngrade.length === 0, {

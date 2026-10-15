@@ -383,6 +383,49 @@ an accepted value set, so no document written under v1 to v3 becomes invalid.
 - **Bible 11.1:** the `frame_reader` row is added. Its tokens (12k in, 1k out) and its cost (about $0.02) are proposals at
   Haiku's $1 / $5 rate, to confirm with the analyze stage's batch size.
 
+### v5 changes and migration (chains, contract version `engine-contracts@5`)
+
+Requested by the lead on 2026-10-15 (plan/STATUS.md, item 5); the lead's merge records the approval. The set version is
+`CONTRACTS_VERSION` in `src/engine/contracts/version.ts`. The change is additive: every single-call shot parses unchanged, so
+no document written under v1 to v4 becomes invalid.
+
+**Why.** Bible 7.1 makes two generated types a chain of calls. `cartoon_generated` is a style keyframe (`image.keyframe`), then
+a video (`video.budget`) that starts from it. `stop_motion` is 24 to 36 `image.edit` frames from the hero image, then the
+`stopmotion.player` component. A `ShotSpec.source` carried one call, so the estimate could not price the keyframe or the frames,
+and a plan would under-reserve.
+
+**What changed.**
+
+- `ShotSpec.source` (`plan.ts`, `shotSourceSchema`) takes a fifth kind, `chain`: `{ kind: 'chain', calls }`, with at least two calls.
+- Each call (`ChainCall`) has an `output` (a lower-case name, unique in the chain, that a later call of the same chain reads),
+  a `modelClass`, a `prompt`, `refs`, an optional `firstFrame` and `lastFrame`, and `takes` (1 or 2), as a generate source has.
+- A call's inputs are typed (`ChainInput`): `{ kind: 'asset', uri }` or `{ kind: 'output', output }`. An output name is never read
+  as an asset uri. An output input that no earlier call of the same chain makes is refused at parse time, so an unknown name, a
+  name a later call makes and a call's own name are all refused.
+- `estimatePlan` (`budget/estimate.ts`) prices every call: one budget line per call (stage `produce_shot`, the shot's id, the route
+  key of the call's model class), priced over the call's takes. Every call counts as generated for the redo allowance. A
+  generate, component, stock or asset shot still has one line at its old price.
+- The schema literal stays `meridian.scene_plan/v1`. A plan with a chain is readable only by a v5 reader.
+
+**Not in this version.** A chain carries calls only. The closing `stopmotion.player` is a component, not a call, and the contract
+does not yet place it in the chain; a later version adds it when the component exists. The stop-motion frames have no known
+price (`image.edit` is token-priced), so the estimate refuses a stop-motion chain, naming the shot, until the owner sets a price.
+No take record is per call yet.
+
+**Migration for each consumer.** None ships with v5. Until each one handles `chain`, the plan stage refuses a chain shot before
+anything is stored (`jobs/handlers/plan.ts`, `shotSummaryOf`), and the plan gate treats a chain as generated (its prompts are
+checked for text, and it needs a downgrade).
+
+- Plan builder (eng-plan-review): may emit `chain`. `plan/cost.ts` prices `cartoon_generated` as one video call, so it must price
+  the keyframe too before it sets `estimatedUsd`.
+- Stage job types (eng-pipeline): the orchestrator's `ShotSourceKind` and the stage output validator enumerate four kinds, and
+  reject `chain` today. `produce_shot` must make the calls in order, resolve each output input to the take of the call that made
+  it, and write one take per call.
+- Every other rule that tests `kind === 'generate'` for paid generation must treat `chain` as generated before a plan carries
+  one: the take check, variants, the manifest's shot rows, the editor's media shots and the slideshow risk. The file list is in
+  `src/engine/contracts/STATUS.md`.
+- Readers at v4 reject a chain shot. Deploy the readers before the planner writes one.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.
