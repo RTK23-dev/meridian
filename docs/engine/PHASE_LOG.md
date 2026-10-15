@@ -349,3 +349,23 @@ deployment configuration; the keys and database URLs; the speech-to-text vendor;
 
 Checks on the final head (c9b5d8d, with the phase-log commit after it): the full local `src` run gave 5,101 tests, 5,060 pass, 0 fail, 41
 skipped (PostgreSQL and credential gated). CI on 8ae9552 is green.
+
+## Docs checkpoint (d364d84, 2026-10-15)
+
+The README, CHANGELOG, the Factory, operations, testing, setup, roadmap and handoff docs, and `scripts/engine/README.md` were brought up to
+the checkpoint. NORTH_STAR section 8 has status notes for each item; the notes change no criterion. No code changed.
+
+Checks on `d364d84`: `npm test` gave 153 of 153 script tests, and 5,101 `src` tests with 5,060 passing, 0 failing and 41 skipped (PostgreSQL
+and credential gated), exit 0. `npm run typecheck` is clean. `npm run lint` has 0 errors and 4 warnings, all in files this checkpoint does
+not touch. No test reads the documents.
+
+Contradictions left for the owner or lead. None is resolved in code:
+- **PR number.** CLAUDE.md says PR #39 (the Veo move) closed unmerged. Git history holds a merged PR #39 (merge `0fa9235`, decision engines).
+  The Veo removal is `4639ebd`.
+- **E1 render cost.** The $0.05 render line is the fixed per-master figure in `src/engine/config/budgets.ts` (Bible 14.2), not a provider
+  price. The E1 replay records it as `actualUsd`. HyperFrames has no price in `prices.ts` (null). Rule 2 says no invented costs, so the
+  owner or lead must decide whether a fixed estimate may be recorded as an actual.
+- **S3 text.** S3 is still named in `src/engine` and `src/lib/meridian/storage`, and `src/engine/render/hyperframesCloud.ts` line 42 describes
+  presigned S3 uploads. This is the known storage conflict.
+- **NORTH_STAR section 8.** The no-receipt rule (item 1) was not re-checked in the status notes. No button-audit run is recorded for the
+  item 11 screens.

@@ -29,16 +29,16 @@ The golden command needs ffmpeg and a Chrome headless shell (`HYPERFRAMES_BROWSE
 
 ## Counts at this checkpoint
 
-Measured on 2026-10-15 at `3ba590f` (the head of the checkpoint branch), with `MERIDIAN_REQUIRE_FFMPEG=1 npm test`:
+Measured on 2026-10-15 at `d364d84` (the checkpoint head), with `npm test` as the script runs it, no extra variable:
 
 | Run | Tests | Passing | Failing | Skipped |
 | --- | --- | --- | --- | --- |
 | `scripts/**/*.test.mjs` | 153 | 153 | 0 | 0 |
-| `src/**/*.test.ts` | 5,102 | 5,061 | 0 | 41 |
+| `src/**/*.test.ts` | 5,101 | 5,060 | 0 | 41 |
 
-The 41 skipped tests are the PostgreSQL-gated and credential-gated ones; they run when `MERIDIAN_PG_TEST_URL` or a key is set. The
-PHASE_LOG records 5,101 tests, 5,060 passing, 0 failing and 41 skipped for the `src` run at `c9b5d8d` (2026-10-15). No test file changed
-between `c9b5d8d` and `3ba590f`, so the one-test difference is not explained in this document.
+These match the PHASE_LOG totals. The 41 skipped tests are the PostgreSQL-gated and credential-gated ones; they run when
+`MERIDIAN_PG_TEST_URL` or a key is set. A later run with `MERIDIAN_REQUIRE_FFMPEG=1` reported one more passing test (5,102 and 5,061);
+that run is not reproduced here, and the extra test is not identified.
 
 ## The PostgreSQL test database
 
