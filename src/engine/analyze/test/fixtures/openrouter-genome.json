@@ -1,0 +1,21 @@
+{
+  "id": "gen-e3-genome-ok-0001",
+  "model": "anthropic/claude-sonnet-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"genome\":{\"hook_mechanism\":\"result-first\",\"pacing\":\"continuous-open-loop\",\"caption_style\":\"organic-handheld-macro\"},\"transferable\":[\"hook_mechanism\",\"pacing\",\"caption_style\"],\"notTransferable\":[\"footage\",\"voice\",\"music\"]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 14212,
+    "completion_tokens": 186,
+    "total_tokens": 14398,
+    "cost": 0.031124
+  }
+}

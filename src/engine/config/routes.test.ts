@@ -26,7 +26,7 @@ describe("route table", () => {
 
   it("uses OpenRouter for every model API", () => {
     for (const capability of CAPABILITIES) {
-      if (capability === "render.cloud" || capability === "media.functions" || capability === "stock") continue;
+      if (capability === "render.cloud" || capability === "render.fallback" || capability === "media.functions" || capability === "stock") continue;
       for (const target of routes.table[capability].targets) assert.equal(target.provider, "openrouter", capability);
     }
   });

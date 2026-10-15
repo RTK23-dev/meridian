@@ -3,7 +3,7 @@
 
 import type { ProviderSpec } from "./types.ts";
 
-export const PROVIDER_IDS = ["openrouter", "anthropic", "heygen", "media_functions", "pexels", "pixabay"] as const;
+export const PROVIDER_IDS = ["openrouter", "anthropic", "heygen", "media_functions", "pexels", "pixabay", "shotstack"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export type ProviderRegistry = Record<ProviderId, ProviderSpec>;
@@ -49,6 +49,14 @@ export const DEFAULT_PROVIDERS: ProviderRegistry = {
     auth: { kind: "api_key_query", param: "key" },
     credentialId: "pixabay",
     defaultHeaders: {},
+  },
+  // Shotstack: the only fallback renderer, for component-free EDLs (owner decision 2026-10-14).
+  shotstack: {
+    id: "shotstack",
+    baseUrl: "https://api.shotstack.io/edit/v1",
+    auth: { kind: "api_key", header: "x-api-key", scheme: null },
+    credentialId: "shotstack",
+    defaultHeaders: { Accept: "application/json" },
   },
   // The serverless ffmpeg functions. The deployment sets the base URL; until then they are not connected.
   media_functions: {

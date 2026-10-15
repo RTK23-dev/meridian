@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# onnxruntime-node downloads its CUDA (GPU) binaries from nuget.org during install. The runners have no GPU, and the
+# download times out often enough to fail npm ci before any test runs. "skip" leaves out only those non-bundled GPU files;
+# the CPU runtime ships inside the npm package (node_modules/onnxruntime-node/script/install.js).
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   ui-smoke:
     runs-on: ubuntu-latest

@@ -23,6 +23,8 @@ export type WireSource = z.infer<typeof wireSourceSchema>;
 
 export const wireProbeRequestSchema = z.strictObject({ source: wireSourceSchema });
 export const wireLoudnessRequestSchema = wireProbeRequestSchema;
+/** The timeline takes the same body as the probe: one source. */
+export const wireTimelineRequestSchema = wireProbeRequestSchema;
 export const wireCutsRequestSchema = z.strictObject({
   source: wireSourceSchema,
   sceneScore: sceneScoreSchema,

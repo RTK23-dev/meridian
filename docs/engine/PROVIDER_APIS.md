@@ -55,3 +55,22 @@ terms for commercial social use are an owner check (E2.6); record `url` and `use
 `GET /videos/?q=…&video_type=film&min_width=…&min_height=…&safesearch=true&per_page=3..200&page=…`. Response:
 `{ total, totalHits, hits: [{ id, pageURL, type, tags, duration, user_id, user, videos: { large|medium|small|tiny:
 { url, width, height, size, thumbnail } } }] }`. Record `pageURL` and `user` with every clip.
+
+## Shotstack (base `https://api.shotstack.io/edit/v1`, header `x-api-key: <key>`)
+Fallback renderer for component-free EDLs (owner decision 2026-10-14). The docs use `{version}` in the path; `v1` is the
+production environment (the sandbox is `stage`).
+
+`POST /render` with JSON `{ timeline, output, callback? }`:
+- `timeline`: `{ soundtrack?: { src, effect?, volume? }, background?: "#000000", fonts?: [{ src }], tracks: [{ clips: [clip] }] }`.
+  Earlier tracks are drawn on top of later ones.
+- `clip`: `{ asset, start (s), length (s), fit? ("cover", "contain", …), scale?, position? ("top", "center", "bottom", …),
+  offset?: { x, y }, transition?: { in, out }, effect?, filter?, opacity?, alias? }`.
+- `asset` types seen in the docs: `video` `{ type, src, trim?, volume?, speed?, crop? }`, `image` `{ type, src }`,
+  `title` `{ type, text, style }`, `audio` (soundtrack-like). Anything else: verify before use.
+- `output`: `{ format: "mp4", size: { width: 1080, height: 1920 }, fps, quality?, mute?, poster?, thumbnail? }`
+  (`resolution`/`aspectRatio` are the alternative to `size`).
+Response 200/201: `{ success, message, response: { id, message } }` (the docs also show `{ id, status }`; parse both).
+
+`GET /render/{id}`: `{ success, message, response: { id, status, error, duration, renderTime, url, poster, thumbnail,
+created, updated } }`. Status values seen: `queued`, `fetching`, `rendering`, `saving`, `done`, `failed`. `url` is a
+temporary asset URL (download it to our storage).

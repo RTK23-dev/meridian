@@ -1,4 +1,4 @@
-// The serverless entry point: a Web-standard Request in, a Response out. Routes: POST /probe, /frames, /loudness, /cuts
+// The serverless entry point: a Web-standard Request in, a Response out. Routes: POST /probe, /frames, /loudness, /cuts, /timeline
 // and GET /health (tool versions). Errors are typed: the body carries kind, retryable and message, and the status
 // follows from the kind. Unexpected errors return a generic message, never a stack trace.
 
@@ -9,16 +9,18 @@ import { FFMPEG_LIMITS } from "./limits.ts";
 import * as frames from "./frames.ts";
 import * as loudness from "./loudness.ts";
 import * as probe from "./probe.ts";
+import * as timeline from "./timeline.ts";
 import type { UrlPolicy } from "./source.ts";
 import {
   sourceFromWire,
   wireCutsRequestSchema,
+  wireTimelineRequestSchema,
   wireFramesRequestSchema,
   wireProbeRequestSchema,
   framesToWire,
   type WireFramesResult,
 } from "./wire.ts";
-import { parseInput, type CutsResult, type LoudnessResult, type ProbeResult } from "./types.ts";
+import { parseInput, type CutsResult, type LoudnessResult, type ProbeResult, type TimelineResult } from "./types.ts";
 
 export type HandlerOptions = {
   urlPolicy?: UrlPolicy;
@@ -121,6 +123,11 @@ const ROUTES: Record<string, Route> = {
       { source: sourceFromWire(input.source) },
       options,
     );
+    return result;
+  },
+  "/timeline": async (body, options) => {
+    const input = parseInput(wireTimelineRequestSchema, body, "media.http");
+    const result: TimelineResult = await timeline.run({ source: sourceFromWire(input.source) }, options);
     return result;
   },
   "/cuts": async (body, options) => {

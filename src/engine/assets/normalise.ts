@@ -8,6 +8,9 @@ export const OUTPUT_LIMITS = {
   imageMaxBytes: 32 * 1024 * 1024,
   speechMinBytes: 1024,
   speechMaxBytes: 64 * 1024 * 1024,
+  /** A take is an mp4. Its ceiling is the media functions' input limit (functions/ffmpeg FFMPEG_LIMITS.maxInputBytes). */
+  videoMinBytes: 4096,
+  videoMaxBytes: 150 * 1024 * 1024,
   urlMaxLength: 2048,
 } as const;
 
@@ -15,6 +18,7 @@ export const IMAGE_MEDIA_TYPES = ["image/png", "image/jpeg", "image/webp"] as co
 export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
 
 export const SPEECH_MEDIA_TYPE = "audio/mpeg" as const;
+export const VIDEO_MEDIA_TYPE = "video/mp4" as const;
 
 export type Normalised<T> = { ok: true; value: T } | { ok: false; reason: string };
 
@@ -102,4 +106,29 @@ export function decodeBase64Strict(text: string): Normalised<Uint8Array> {
   const bytes = new Uint8Array(Buffer.from(text, "base64"));
   if (bytes.length === 0) return fail("base64 payload decoded to no bytes");
   return { ok: true, value: bytes };
+}
+
+/**
+ * A finished take downloaded from a provider. It must be an mp4 (an "ftyp" box at byte 4, ISO base media format) between the size
+ * limits. Codec, resolution and duration are measured by the media functions after storage (Bible 6.6 step 4), not here.
+ */
+export function normaliseVideo(bytes: Uint8Array): Normalised<{ bytes: Uint8Array; mediaType: typeof VIDEO_MEDIA_TYPE }> {
+  if (bytes.length < OUTPUT_LIMITS.videoMinBytes || bytes.length > OUTPUT_LIMITS.videoMaxBytes) {
+    return fail(`video size ${bytes.length} bytes is outside ${OUTPUT_LIMITS.videoMinBytes} to ${OUTPUT_LIMITS.videoMaxBytes}`);
+  }
+  if (!startsWith(bytes, [0x66, 0x74, 0x79, 0x70], 4)) return fail("video bytes are not an mp4 (no ftyp box)");
+  return { ok: true, value: { bytes, mediaType: VIDEO_MEDIA_TYPE } };
+}
+
+/**
+ * A uri a provider adapter returned for a finished job: a provider URL or a stored media uri. It is a sanity check only (non-empty,
+ * within the length limit, no whitespace or control characters). The adapter has already checked its own URLs, and nothing here
+ * sends a request to it.
+ */
+export function normaliseUri(text: string): Normalised<string> {
+  if (text.length === 0 || text.length > OUTPUT_LIMITS.urlMaxLength) return fail("uri is empty or too long");
+  if (/\s/.test(text) || text.split("").some((character) => character.charCodeAt(0) < 0x20)) {
+    return fail("uri contains whitespace or control characters");
+  }
+  return { ok: true, value: text };
 }

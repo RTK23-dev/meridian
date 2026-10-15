@@ -7,6 +7,7 @@ import { framesOverWire, type FramesClient } from "./frames.ts";
 import type { MediaFunctions } from "./interface.ts";
 import { loudnessOverWire, type LoudnessClient } from "./loudness.ts";
 import { probeOverWire, type ProbeClient } from "./probe.ts";
+import { timelineOverWire, type TimelineClient } from "./timeline.ts";
 import { wirePost, type MediaTransport } from "./wire-client.ts";
 
 export type HttpMediaFunctions = MediaFunctions & {
@@ -14,6 +15,7 @@ export type HttpMediaFunctions = MediaFunctions & {
   frames: FramesClient;
   loudness: LoudnessClient;
   cuts: CutsClient;
+  timeline: TimelineClient;
 };
 
 /**
@@ -42,5 +44,6 @@ export function httpMediaFunctions(baseUrl: string, transport: MediaTransport): 
     frames: framesOverWire(post),
     loudness: loudnessOverWire(post),
     cuts: cutsOverWire(post),
+    timeline: timelineOverWire(post),
   };
 }

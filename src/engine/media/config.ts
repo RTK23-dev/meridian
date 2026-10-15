@@ -17,7 +17,7 @@ export const mediaConfig = {
    * Transport timeouts for one call to a deployed function, in milliseconds. Each is longer than the function's own
    * tool timeout (functions/ffmpeg/limits.ts) so that a cold start (about 3 s, Bible 15.2) does not cut the call short.
    */
-  callTimeoutMs: { probe: 40_000, frames: 80_000, loudness: 140_000, cuts: 140_000 },
+  callTimeoutMs: { probe: 40_000, frames: 80_000, loudness: 140_000, cuts: 140_000, timeline: 300_000 },
 
   /** Validation limits for speech-to-text output (untrusted, Bible 2 and 6.3). */
   transcript: {
