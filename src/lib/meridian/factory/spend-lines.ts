@@ -11,6 +11,10 @@ export type SpendFigures = {
   tokenOnlyDecisions: number;
   tokens: number;
   providerCents: number;
+  /** The actual cost on the video engine's ledger, in micro-dollars. Absent when the run started no engine request. */
+  engineMicros?: number;
+  /** Engine calls with no actual recorded yet. Their cost is unknown, not zero. */
+  enginePendingCalls?: number;
 };
 
 /** A micro-dollar amount as dollars, with enough places to show a fraction of a cent. */
@@ -27,7 +31,9 @@ export function usdOfCents(cents: number): string {
 export function spendLinesOf(spend: SpendFigures): string[] {
   const lines: string[] = [];
   const anyMetered = spend.pricedDecisions > 0 || spend.tokenOnlyDecisions > 0;
-  if (!anyMetered && spend.providerCents === 0) {
+  const engineMicros = spend.engineMicros ?? 0;
+  const enginePending = spend.enginePendingCalls ?? 0;
+  if (!anyMetered && spend.providerCents === 0 && engineMicros === 0 && enginePending === 0) {
     lines.push("No metered spend yet. A decision that reports its tokens is recorded here.");
   }
   if (spend.pricedDecisions > 0) {
@@ -43,6 +49,14 @@ export function spendLinesOf(spend: SpendFigures): string[] {
   }
   if (spend.providerCents > 0) {
     lines.push(`Provider calls reported ${usdOfCents(spend.providerCents)}.`);
+  }
+  if (engineMicros > 0) {
+    lines.push(`The video engine's ledger records ${usdOfMicros(engineMicros)} in actual cost. Caps count it with the rest.`);
+  }
+  if (enginePending > 0) {
+    lines.push(
+      `${enginePending} video engine call${enginePending === 1 ? " has" : "s have"} no actual cost recorded yet. The unspent part of the master's budget is held against the cap until it is.`,
+    );
   }
   lines.push("Unpriced spend is not counted by caps. A cap counts only priced cost.");
   return lines;

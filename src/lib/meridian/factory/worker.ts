@@ -12,9 +12,10 @@ import { learnForRun } from "./learn.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
-import { stageDecision } from "./stage-decision.ts";
-import { effectiveCap, meteredSpendOf, spendCapsOf } from "./spend.ts";
+import { capStopReason, stageDecision } from "./stage-decision.ts";
+import { effectiveCap, meteredSpendOf, pauseRunEngineSpend, spendCapsOf } from "./spend.ts";
 import { produceFactoryCreatives, scheduleProduceRecheck } from "./produce.ts";
+import type { FactoryEngineSeams } from "./produce-shared.ts";
 import { launchFactoryRun, recordTestPlan, scheduleRunMeasurement } from "./publish.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { recordedClaimsOf, templateFromDna } from "./template.ts";
@@ -64,9 +65,9 @@ function parseList(value: string): string[] {
 
 /**
  * The decision engines a stage may call. Production passes nothing and the stage builds the live engines; a test passes fixture
- * engines, so no engine is reached over the network.
+ * engines, so no engine is reached over the network. The video engine's seams (readiness and the fields a request needs) are passed the same way.
  */
-export type FactorySeams = { decisionEngines?: DecisionEngineRegistry };
+export type FactorySeams = { decisionEngines?: DecisionEngineRegistry; engine?: FactoryEngineSeams };
 
 /**
  * Runs one Factory stage. `deps` are the sourcing seams the discover stage uses; production passes nothing and gets the live
@@ -121,6 +122,8 @@ export async function executeFactoryJob(
     // A stage that waits or is stopped is recorded on the run with its reason. It is not a failure. The stages after it hold until
     // a person approves the stage it waits at, or the stop is cleared and that stage runs again.
     const status = decision.action === "stop" ? "paused" : "awaiting_approval";
+    // A stopped run stops its video engine requests too: the engine's jobs run in the queue whether or not the run does (spend.ts).
+    if (decision.action === "stop") await pauseRunEngineSpend(sql, job.organization_id, job.brand_id, runId, decision.reason);
     await sql`
       update factory_runs set status = ${status}, current_stage = ${job.job_type}, error = ${decision.reason}, updated_at = now()
       where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
@@ -219,8 +222,18 @@ export async function executeFactoryJob(
       },
       costPerMasterUsd: settings.costPerMasterUsd,
       engines: seams.decisionEngines,
+      engine: seams.engine,
     });
     if (produced.stop) {
+      // A run that stops at a cap also stops its engine requests. A stop for any other reason leaves each request inside its own budget.
+      const spentNow = await meteredSpendOf(sql, job.organization_id, job.brand_id, runId);
+      const capReached = capStopReason({
+        capCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
+        spentCents: spentNow.totalCents,
+        dailyCapCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
+        dailySpentCents: spentNow.dailyCents,
+      });
+      if (capReached) await pauseRunEngineSpend(sql, job.organization_id, job.brand_id, runId, capReached);
       await sql`
         update factory_runs set status = 'paused', current_stage = ${job.job_type}, waiting_on = '', error = ${produced.stop}, updated_at = now()
         where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}

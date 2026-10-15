@@ -4,6 +4,7 @@ import { Group, Panel as ResizablePanel, Separator } from "react-resizable-panel
 import { Inbox } from "lucide-react";
 import { Button, EmptyState, ScreenSkeleton } from "@/components/ui";
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
+import { EngineReviewItems } from "@/components/reviews/engine-review-items";
 import { ReviewDetail } from "@/components/reviews/review-detail";
 import { ReviewInbox } from "@/components/reviews/review-inbox";
 import {
@@ -124,6 +125,7 @@ function Reviews({ brandId }: { brandId: string }) {
         <h1 className="page-title">Holds a person has to clear</h1>
         <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject. A reject needs a reason.</p>
       </div>
+      <EngineReviewItems items={data.engineItems} />
       {resolve.error ? <PlainErrorNotice error={resolve.error} /> : null}
       {data.openTotal === 0 ? (
         <EmptyState

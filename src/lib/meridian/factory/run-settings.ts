@@ -18,12 +18,15 @@ export type Format = (typeof FORMATS)[number];
 export const DECISION_ENGINE_CHOICES = ["workspace_default", "jev", "openai-decisions"] as const;
 export type DecisionEngineChoice = (typeof DECISION_ENGINE_CHOICES)[number];
 
-/** The id of the Meridian video engine. It is not connected yet (phase E3), so a run that names it stops with the reason. */
+/**
+ * The id of the Meridian video engine. A run that names it makes its videos through the engine's API (produce-engine.ts). A run whose engine
+ * cannot run stops with the engine's own reason, and nothing is sent.
+ */
 export const ENGINE_VIDEO_PROVIDER_ID = "engine";
 
 /**
  * The video providers a Factory run can name, in the order the run builder lists them. "auto" lets the capability matrix choose. The
- * produce stage routes each of the other ids, except the engine, which stops the run until it is connected.
+ * produce stage routes each of the other ids through a provider call, and the engine id through the video engine (produce-engine.ts).
  */
 export const FACTORY_VIDEO_PROVIDERS: ReadonlyArray<{ id: string; label: string }> = [
   { id: "auto", label: "Auto (the capability matrix chooses)" },

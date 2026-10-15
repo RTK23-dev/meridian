@@ -148,3 +148,19 @@ test("the request id is a req_ ULID, the same for the same job and plan, and non
   assert.notEqual(engineRequestIdFor("factory-another-video", PLAN_CREATED), id, "another job gives another id");
   assert.equal(engineRequestIdFor(JOB, "not a date"), null);
 });
+
+test("the run's cost per master is the request's budget, over the plan's own estimate, and a run with none sets no budget", () => {
+  const plan = pricedPlan(1.25);
+  const id = videoIdOf(plan);
+
+  const runBudget = mapVideoToEngineRequest({ organizationId: ORGANIZATION, requestId: requestIdFixture(), plan, deliverableId: id, engine: ENGINE_FIELDS, budgetUsd: 0.75 });
+  assert.equal(runBudget.status, "mapped");
+  if (runBudget.status === "mapped") assert.equal(runBudget.request.constraints.budgetUsd, 0.75, "the run's budget is the one the request carries");
+
+  const noRunBudget = mapVideoToEngineRequest({ organizationId: ORGANIZATION, requestId: requestIdFixture(), plan, deliverableId: id, engine: ENGINE_FIELDS, budgetUsd: null });
+  assert.equal(noRunBudget.status, "needs_budget", "a run with no cost per master does not fall back to the plan's estimate");
+  assert.ok(noRunBudget.status === "needs_budget" && noRunBudget.missing.includes("constraints.budgetUsd"));
+
+  const invalid = mapVideoToEngineRequest({ organizationId: ORGANIZATION, requestId: requestIdFixture(), plan, deliverableId: id, engine: ENGINE_FIELDS, budgetUsd: Number.NaN });
+  assert.equal(invalid.status, "needs_budget", "a budget that is not a number is no budget");
+});

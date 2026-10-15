@@ -5,6 +5,7 @@ import { mayAutoPublish, publishCreative } from "@/lib/meridian/providers/contra
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { isReviewReasonCode, reviewReasonOptions } from "../reviews/reasons.ts";
 import { loadReviewPage, reviewPage } from "../reviews/listing.ts";
+import { engineInboxItems } from "../reviews/engine-items.ts";
 import {
   id,
   asText,
@@ -47,6 +48,8 @@ export const listReviews = createServerFn({ method: "POST" })
         policyVersion: asText(row.policy_version),
         createdAt: asText(row.created_at),
       })),
+      // The video engine's open items for this brand. Read only: their decisions are the engine's, and Meridian does not change them here.
+      engineItems: await engineInboxItems(sql, access.organizationId, data.brandId),
       // The window the list holds, and the totals over every review. hasMore says a further window has rows.
       offset: data.offset,
       limit: data.limit,
