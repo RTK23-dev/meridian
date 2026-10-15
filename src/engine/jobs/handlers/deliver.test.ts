@@ -1,3 +1,5 @@
+import { CONTRACTS_VERSION } from "../../contracts/version.ts";
+import { thresholds } from "../../config/thresholds.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { memoryLedgerStore, type LedgerStore } from "../../budget/store.ts";
@@ -374,8 +376,8 @@ test("delivers the master and the variant: writes both manifests, settles and re
     assert.equal(variantEvent.attribute, "caption");
     assert.equal(variantEvent.value, "lower", "the band the variant set, not the master's");
     const videoEvent = rows.find((row) => row.kind === "video.delivered")?.body as { configVersions: Record<string, string> };
-    assert.equal(videoEvent.configVersions.thresholds, "thresholds@2");
-    assert.equal(videoEvent.configVersions.contracts, "engine-contracts@3");
+    assert.equal(videoEvent.configVersions.thresholds, thresholds.version, "the event records the config version in use");
+    assert.equal(videoEvent.configVersions.contracts, CONTRACTS_VERSION);
   } finally {
     await database.close();
   }
