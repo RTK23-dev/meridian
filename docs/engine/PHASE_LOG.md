@@ -208,3 +208,34 @@ Follow-ups:
 - Router stores are in-memory; Postgres stores are in the E3 pipeline task.
 - Lead decision for paid pre-plan stages: intake holds the fixed per-master cost (pre-flight) and estimate_reserve
   raises the same reservation to the plan estimate (E3 contracts and pipeline tasks).
+
+## 2026-10-15 E3 code complete on fixtures; E4 and E5 in progress
+
+Merged since the E2 entry (all reviewed by the lead):
+- E3 contracts (c38d9c6, ccaa152): pre-flight hold (`reserveFixed`, `extendReservation`), Manifest v2 `roleCalls`,
+  adapter and breaker config, `frame_reader` role, editor decisions, thresholds@3 (plan lease, editor and slideshow values).
+- E3 W2 (d8e0950): produce_shot and check_take, Postgres router stores, reservation-locked ledger (migration 0080).
+- E3 W8 (49ecaec): deterministic editor with every Bible 8.3 rule as a named function.
+- E3 W7 (6ed94fb): plan stage, director step 5, planner, director_check and request_classifier roles.
+- E3 W6 (580119f): analyze_reference and voice, genome and tightener roles, timeline media function.
+- Router async split (fc5b339), zoom and loop measurements (ec8cc49), E3 wiring (e023fc2): pre-flight hold at intake,
+  estimate extension, kit store, engine runtime composition root used by `src/lib/meridian/jobs/execute.ts`,
+  async produce, end-to-end test from intake to the take check on recorded responses.
+- A2 credentials and monthly video budget (c45ba09; migration renumbered 0079), budget source wired to estimate_reserve.
+- E4 gates (7a05431): pre-render gate, post-render review, critic_final with a Sonnet re-check, decision-to-label writer.
+- E5: Shotstack fallback (3dadac0) and variants, manifest writer, deliver, learning events (54956a8).
+- CI: `ONNXRUNTIME_NODE_INSTALL=skip` stops the onnxruntime-node CUDA download that failed npm ci four times.
+
+Checks on d5a62c1: engine and functions tests 1,978 pass, 0 fail; typecheck clean; lint 0 errors; CI green on the
+previous heads.
+
+Lead decisions recorded: intake holds the fixed per-master cost and estimate_reserve extends the same reservation;
+captions, zoom, loop, shake and speed ramps are measured by API (a vision role and the ffmpeg functions), never local
+OCR; the Angle Bible list comes from `src/lib/meridian/study/bible.ts`; on-screen text is measured, never copied;
+kits are stored in engine_kits; EDL ids include the thresholds version.
+
+Owner items raised in this wave: the Shotstack credential slot; confirmation of two proposed critic_final craft items;
+`paidPartnership` disclosure defaults to on until the disclosure standard is decided (Bible 20.2).
+
+In progress: config adoption in edit and review, E4/E5 orchestration consolidation with scenario tests, frame_reader and
+media detectors, and the remaining visual types (kinetic.type, screen.mock, character.rig, generated-type recipes).
