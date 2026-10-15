@@ -20,6 +20,8 @@ export const pollPayloadSchema = enginePayloadSchema.extend({
   timeoutMs: z.int().positive(),
   step: z.int().positive(),
   parentJobId: z.string().min(1).optional(),
+  /** The handler's state for the call (the asset job of a generated take). Untrusted: the handler parses it again. */
+  carry: z.unknown().optional(),
 });
 export type PollPayload = z.infer<typeof pollPayloadSchema>;
 
@@ -80,6 +82,8 @@ export async function scheduleProviderPoll(
     jobRef: string;
     submittedAt: string;
     parentJobId: string;
+    /** The handler's state for the call, stored with the poll (JSON). */
+    carry?: unknown;
   },
 ): Promise<string> {
   // The timeout of an asynchronous call is its stage's job timeout (Bible 5.1).
@@ -95,6 +99,7 @@ export async function scheduleProviderPoll(
       timeoutMs,
       step: 1,
       parentJobId: input.parentJobId,
+      ...(input.carry === undefined ? {} : { carry: input.carry }),
     };
     const key = pollKey(payload, 1);
     const id = globalThis.crypto.randomUUID();
@@ -140,7 +145,7 @@ export async function runPollJob(
 ): Promise<string> {
   const { payload, runtime } = input;
   const stage = payload.stage;
-  const adapter = runtime.providers.resolve(payload.provider);
+  const adapter = runtime.providers.resolve(payload.provider, payload.organizationId);
   if (!adapter) {
     throw new EngineError("config", `provider ${payload.provider} is not resolvable in this runtime`, { stage, retryable: false });
   }
@@ -158,12 +163,12 @@ export async function runPollJob(
     case "wait":
       await queueNextPoll(sql, payload, decision.nextStep, decision.runAfterMs, input.jobId);
       return `pending:${stage}:${payload.step}`;
+    // A failed call is settled, not retried here: the router reconciles its bill and moves to the next target if it has one
+    // (assets/router.ts settle). The handler's finish turns the outcome into the stage's result or hold.
     case "failed":
-      if (decision.refusal === null) {
-        throw new EngineError("provider", `${stage}: ${decision.message}`, { retryable: decision.retryable, stage });
-      }
       return finishPoll(sql, input, status, controller);
     case "timed_out": {
+      // The deadline passed: cancel the provider job if the adapter can, then settle the call as a timeout failure (Bible 15.5).
       let note = "";
       if (adapter.cancel) {
         try {
@@ -172,7 +177,11 @@ export async function runPollJob(
           note = `; cancelling the provider job also failed: ${error instanceof Error ? error.message : "unknown error"}`;
         }
       }
-      throw new EngineError("provider", `${stage} did not finish within ${payload.timeoutMs} ms${note}`, { retryable: false, stage });
+      const timedOut: ProviderPoll = {
+        state: "failed",
+        error: { kind: "timeout", retryable: true, message: `${stage} did not finish within ${payload.timeoutMs} ms${note}` },
+      };
+      return finishPoll(sql, input, timedOut, controller);
     }
     case "done":
       return finishPoll(sql, input, status, controller);
@@ -202,9 +211,22 @@ async function finishPoll(
     attempt: payload.attempt,
     payload: stripPollFields(payload),
     signal: controller.signal,
-    poll: { provider: payload.provider, jobRef: payload.jobRef, submittedAt: payload.submittedAt },
+    poll: { provider: payload.provider, jobRef: payload.jobRef, submittedAt: payload.submittedAt, carry: payload.carry },
   };
-  const output: StageOutput = validateStageOutput(await handler.finish(context, status), context.payload);
+  const result = await handler.finish(context, status);
+  if (result.kind === "submitted") {
+    // The call moved on to another target: its own poll is queued, and this stage's output waits for that poll.
+    const key = await scheduleProviderPoll(sql, {
+      payload: context.payload,
+      provider: result.provider,
+      jobRef: result.jobRef,
+      submittedAt: result.submittedAt,
+      parentJobId: input.jobId,
+      ...(result.carry === undefined ? {} : { carry: result.carry }),
+    });
+    return `submitted:${stage}:${key}`;
+  }
+  const output: StageOutput = validateStageOutput(result.output, context.payload);
   const applied = await applyEngineEvent(sql, {
     organizationId: payload.organizationId,
     requestId: payload.requestId,

@@ -1,5 +1,15 @@
 # Claude client and segmenter: status (W3, task A5)
 
+## E3 integration pass (branch `eng-e3-wiring`)
+
+- **`roles/director_check.ts` is version 2.** `DIRECTOR_CHECK_PROMPT` is `director_check@2`, and the shot input takes an optional
+  `beatText` (the beat's script text, untrusted). Version 1 is kept as shipped and its bytes are pinned. The director's answer is
+  unchanged (`ok`, `swaps`, `promptEdits`).
+- **Callers:** `plan/build.ts` sends the beat text, and intake and the plan both build their role deps through the runtime's
+  `rolesFor`, which scopes the ledger to the request's reservation and adds the request's journal.
+- **Not changed:** the call key, the retry rule and the estimates. Prompt caching and the Batch API are still not used (`llm.*` routes do not
+  declare them).
+
 ## E3 change: the call key names the request
 
 - `callKey` now includes the request id (`CallContext.requestId`). The key was the hash of role, prompt version, model and input, so

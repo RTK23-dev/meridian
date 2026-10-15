@@ -1,5 +1,11 @@
 # Role prompts: status (W3, task A5)
 
+## E3 integration pass (branch `eng-e3-wiring`)
+
+- **`director_check@2.md`** is new: a copy of `@1` with the shot table's `beatText` described as untrusted script text, which the
+  director judges the picture from and never copies into a prompt edit. `@1` is unchanged and pinned in `claude/roles/director_check.test.ts`.
+- The loader's pin test (`load.test.ts`) still pins `segmenter@1` only; the director pins are in its role test.
+
 Built 2026-10-14 by eng-pipeline on branch `eng-a5-claude-client`. Not pushed.
 
 ## Done (fixture-tested)

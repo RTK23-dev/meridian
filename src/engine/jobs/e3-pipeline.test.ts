@@ -6,10 +6,10 @@
 
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { budgetReservationSchema, type GateResult, type ScenePlan, type ShotSpec } from "../contracts/index.ts";
+import { budgetReservationSchema, type GateResult, type ProviderAdapter, type ScenePlan, type ShotSpec } from "../contracts/index.ts";
 import type { ShotSummary } from "./types.ts";
 import { FIXTURE_IDS, fixtureId, productionRequestFixture } from "../contracts/fixtures/index.ts";
-import { createAssetRouter, type AssetRouter } from "../assets/router.ts";
+import { createAssetRouter, type AsyncAssetRouter } from "../assets/router.ts";
 import { memoryMediaStore } from "../assets/adapter.ts";
 import { searchStock } from "../assets/stock.ts";
 import { stockProviderFor } from "../assets/providers/index.ts";
@@ -120,8 +120,17 @@ function providers() {
 
 function runtimeFor(options: { gateway: ReturnType<typeof gatewayWith>; profiles: ReadonlyMap<string, VideoProfile>; objects: ReturnType<typeof fakeObjects>; media: ReturnType<typeof fakeMedia> }): EngineRuntime {
   const { gateway, profiles, objects, media } = options;
-  const runtime: EngineRuntime = { handlers: {}, providers: { resolve: () => null }, now: () => Date.parse(NOW) };
-  const routerFor = (scope: { sql: Sql; organizationId: string; requestId: string; reservationId: string }): AssetRouter =>
+  // The poll's adapter: the recorded Kling job, finished, with the content URL the recorded transport answers and the bill it reported.
+  const kling = {
+    id: KLING,
+    poll: async () => ({ state: "done" as const, uri: "https://openrouter.ai/api/v1/videos/job-abc123/content?index=0", actualUsd: 0.6125 }),
+  } as unknown as ProviderAdapter;
+  const runtime: EngineRuntime = {
+    handlers: {},
+    providers: { resolve: (providerId) => (providerId === `openrouter:${KLING}` ? kling : null) },
+    now: () => Date.parse(NOW),
+  };
+  const routerFor = (scope: { sql: Sql; organizationId: string; requestId: string; reservationId: string }): AsyncAssetRouter =>
     createAssetRouter({
       gateway,
       ledger: scopedLedgerStore(scope.sql, scope.organizationId, scope.reservationId),
@@ -231,8 +240,10 @@ test("one request from plan through estimate, produce and check: a stock shot an
 
   // estimate_reserve prices the plan and makes the request's reservation.
   assert.equal(await runQueued(db.sql, runtime, "engine.estimate_reserve"), 1);
-  // produce_shot: one job per generated or stock shot, each on the reservation.
+  // produce_shot: one job per generated or stock shot, each on the reservation. The generated call is submitted, not finished.
   assert.equal(await runQueued(db.sql, runtime, "engine.produce_shot"), 2);
+  // The poll of the generated call settles it through the router, and the take is written by finish (Bible 15.2).
+  assert.equal(await runQueued(db.sql, runtime, "engine.poll"), 1);
   // check_take: one job per take, reading the take and the plan.
   assert.equal(await runQueued(db.sql, runtime, "engine.check_take"), 2);
 

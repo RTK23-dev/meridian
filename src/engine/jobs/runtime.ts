@@ -7,16 +7,20 @@
 //     workspace's monthly budget (Meridian's Settings, through workspaceBudgetFromSettings).
 //   - with shotPorts: produce_shot and check_take. Their media functions, object store and asset-media store are deployment
 //     wiring that does not exist yet, so production does not register them. They stay not_implemented, which fails closed.
-//   - with handlers: analyze_reference, voice (W6) and render (W10). Those stages are built in other workstreams; they are
-//     registered when the composition is given them, and not otherwise.
+//   - with their ports: analyze_reference (the `analysis` ports) and voice (the `voice` ports), both W6. Without ports they stay
+//     not_implemented. A composition may also pass a handler for render (W10) through `handlers`.
 //   - never here: compose, pre_render_gate, post_render_review, variants, deliver. They are not built.
 //
 // No key is read here: the gateway takes its credentials from Meridian's resolver, and the transport is the gateway's own.
 
-import { createAssetRouter, type AssetRouter, type RouterSettings } from "../assets/router.ts";
+import { createAssetRouter, type AsyncAssetRouter, type RouterSettings } from "../assets/router.ts";
 import type { MediaStore } from "../assets/adapter.ts";
 import type { VideoProfile } from "../assets/providers/openrouterVideo.ts";
-import { stockProviderFor } from "../assets/providers/index.ts";
+import { adapterFor, stockProviderFor } from "../assets/providers/index.ts";
+import type { ModelClass, ProviderAdapter } from "../contracts/index.ts";
+import { createAnalyzeReferenceHandler } from "./handlers/analyze-reference.ts";
+import { createVoiceHandler, type VoiceStagePorts } from "./handlers/voice.ts";
+import type { ReferencePorts } from "../analyze/reference.ts";
 import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
@@ -67,9 +71,41 @@ export type EngineComposition = {
   now?: () => string;
   /** The VideoDNA lookup (Bible 6.1 step 5). Absent, intake fails its dna_lookup check: no lookup is made and nothing is assumed. */
   lookupDna?: IntakePorts["lookupDna"];
+  /** analyze_reference (W6). Its ports are the media functions, the speech connection and the role deps. Absent: not_implemented. */
+  analysis?: ReferencePorts;
+  /** voice (W6). Its ports are the asset router's speech route, the speech connection and the media functions. Absent: not_implemented. */
+  voice?: VoiceStagePorts;
   shotPorts?: ShotPorts;
   handlers?: ExternalStageHandlers;
 };
+
+/** The model classes whose adapters can be polled (the router's submit targets). A poll resolves the adapter by its id. */
+const POLLABLE_CLASSES: readonly ModelClass[] = ["video.cinematic", "video.budget", "video.i2v_pinned", "avatar", "image.keyframe", "tts", "lipsync"];
+
+/**
+ * The adapter that polls a submitted call (Bible 15.2). It is the adapter the router would build for the same route, for the
+ * workspace the call belongs to (its credentials are the workspace's). Null when the route is not in the table or the composition
+ * has no shot ports (the adapters need the media store and the video profiles).
+ */
+export function pollAdapterFor(composition: EngineComposition, providerId: string, organizationId: string): ProviderAdapter | null {
+  const ports = composition.shotPorts;
+  if (ports === undefined) return null;
+  for (const modelClass of POLLABLE_CLASSES) {
+    for (const route of composition.gateway.routes(modelClass)) {
+      if (`${route.provider.id}:${route.model}` !== providerId) continue;
+      return adapterFor(route, {
+        gateway: composition.gateway,
+        organizationId,
+        workspaceId: organizationId,
+        media: ports.assetMedia,
+        videoProfiles: ports.videoProfiles ?? new Map<string, VideoProfile>(),
+        voice: null,
+        speechSpeed: 1,
+      });
+    }
+  }
+  return null;
+}
 
 const isoNow = (): string => new Date().toISOString();
 
@@ -87,7 +123,7 @@ function rolesFor(composition: EngineComposition): (scope: { organizationId: str
 /** The asset router of one generation job, on the request's reservation (Bible 10). */
 function routerFor(composition: EngineComposition, ports: ShotPorts) {
   const now = composition.now ?? isoNow;
-  return (scope: { sql: Sql; organizationId: string; requestId: string; reservationId: string }): AssetRouter =>
+  return (scope: { sql: Sql; organizationId: string; requestId: string; reservationId: string }): AsyncAssetRouter =>
     createAssetRouter({
       gateway: composition.gateway,
       ledger: scopedLedgerStore(scope.sql, scope.organizationId, scope.reservationId),
@@ -108,7 +144,7 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
   const now = composition.now ?? isoNow;
   const runtime: EngineRuntime = {
     handlers: {},
-    providers: { resolve: () => null },
+    providers: { resolve: (providerId, organizationId) => pollAdapterFor(composition, providerId, organizationId) },
     now: () => Date.parse(now()),
   };
   const kits = kitPorts(composition.sql);
@@ -126,6 +162,9 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
     estimate_reserve: createEstimateReserveHandler({ workspaceBudget: composition.workspaceBudget }),
     edit: createEditHandler({ loadStyleKit: kits.loadStyleKit }),
   };
+
+  if (composition.analysis !== undefined) handlers.analyze_reference = createAnalyzeReferenceHandler(composition.analysis);
+  if (composition.voice !== undefined) handlers.voice = createVoiceHandler(composition.voice);
 
   const shot = composition.shotPorts;
   if (shot !== undefined) {
