@@ -68,6 +68,9 @@ export function validateStageOutput(output: StageOutput, payload: EnginePayload)
     parseOrRefuse(idSchema("take_"), output.takeId, "the take id", stage);
     parseOrRefuse(idSchema("shot_"), output.shotId, "the shot id", stage);
   }
+  if (output.stage === "render" && output.decisions !== undefined) {
+    parseOrRefuse(z.array(decisionSchema), output.decisions, "the render decisions", stage);
+  }
   if (output.stage === "variants") {
     for (const variant of output.variants) parseOrRefuse(idSchema("edl_"), variant.edlId, "a variant EDL id", stage);
   }

@@ -1,5 +1,30 @@
 # STATUS: intake and estimate_reserve stage handlers (A4, updated in E2)
 
+## E4 and E5 (branch `eng-e45-orchestration`; the full account is `../STATUS.md`)
+
+- **`compose.ts`** (new, Bible 6.9). `createComposeHandler({ loadStyleKit, now })`. Reads the `edl` and the `validated_request`, compiles
+  the EDL with the style kit (`compose/compiler.ts`), and writes the `composition` artifact (slot `composition:<edl>`). Pure. A kit that did
+  not load, an EDL the compiler refuses, or a missing input is `invalid_input`. Covered by `compose.test.ts` (3).
+- **`render.ts`** (new, Bible 6.11, owner decision 2026-10-14). `createRenderHandler(ports)`. Reads the `composition`, the `edl` and the
+  `validated_request`; recompiles and checks the contentHash; runs `renderWithFallback` (`render/fallback.ts`) with the HyperFrames deps
+  (`renderComposition`) and, when the composition root gives it, the Shotstack deps (`renderEdlWithShotstack`). Every run stores the
+  integrity gate (slot `integrity:<edl>`); a pass also stores the `rendered_video` (slot `render:<edl>`). The integrity gate is recorded
+  as the renderer's own check returned it (a wrapper keeps it). A Shotstack route is a `decisions` entry (`chose` shotstack, `by` scorer).
+  Review is a failing gate with rule `render_completed`. A render price of `undefined` fails `render_price_known`. Shotstack without deps
+  is a non-retryable provider error, which counts as a failed attempt. Tested in `scenarios.test.ts` (fallback and review) with a
+  scripted HyperFrames adapter that fails on submit and the shotstack harness.
+- **`pre-render-gate.ts`** (registered, E4). Unchanged. Its `loadStyleKit` is the composition's `styleKit` (or the kit store); the optional
+  ports come from `composition.preRender`. Absent, their checks are not evaluated and the gate reviews.
+- **`post-render-review.ts`** (registered when `composition.postRender` is given, E4). Unchanged.
+- **`variants.ts`** (registered, E5). The orchestrator now passes the request and the plan with the master (`request`, `plan`,
+  `edl:<master>`). Production has no music track connected, so `loadMusicTrack` returns undefined and no music variant is built. The
+  generation variants are still `deferred` (see `../STATUS.md`, the sub-graph).
+- **`deliver.ts`** (registered, E5). Writes the `engine_manifests` row for each manifest (`../manifest-store.ts`) after the artifact write,
+  under the same id, so a retry writes nothing twice. The stage reads the gate results and decisions from `engine_gate_results` and
+  `engine_decisions` (`../engine-reads-sql.ts`).
+- **Tests added:** `compose.test.ts` (3), and the orchestrator's gate-routing tests in `../orchestrator.test.ts`. The end-to-end
+  scenarios (`../scenarios.test.ts`, 9) and the runtime registration test (`../runtime.test.ts`, 4) cover the rest.
+
 ## E3 integration pass (branch `eng-e3-wiring`; the full account is `../STATUS.md`)
 
 - **`intake.ts`:** reserves the pre-flight hold (`reserveFixed`, id from `preflightReservationId`) after the request's own checks pass,

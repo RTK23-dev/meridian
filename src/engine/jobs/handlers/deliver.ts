@@ -60,6 +60,7 @@ import { selectVideos, type Stored, type VideoPick } from "../../deliver/videos.
 import { writeArtifactOnce } from "../../deliver/write-once.ts";
 import { diffEdl } from "../../variants/diff.ts";
 import { readJobInputs, type StoredArtifact } from "../artifact-store.ts";
+import { writeManifestRow } from "../manifest-store.ts";
 import { stableId } from "../stable-id.ts";
 import type { StageContext, StageHandler, StageRunResult } from "../types.ts";
 
@@ -251,6 +252,15 @@ export function createDeliverHandler(ports: DeliverPorts): StageHandler {
           parentIds: ctx.payload.inputArtifactIds,
           createdAt: at,
           artifactId: stableId("art_", `manifest|${ctx.requestId}|${video.videoId}`),
+        });
+        // The same manifest as a row of engine_manifests (Bible 5.4), under the artifact's id, so a retry writes it once.
+        await writeManifestRow(ctx.sql, {
+          organizationId: ctx.organizationId,
+          requestId: ctx.requestId,
+          artifactId: written.artifactId,
+          variantOf: manifest.variantOf ?? null,
+          body: manifest,
+          createdAt: at,
         });
         artifacts[`manifest:${video.videoId}`] = written.artifactId;
       }

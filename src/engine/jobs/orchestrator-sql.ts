@@ -9,6 +9,7 @@ import { advance, ORCHESTRATOR_STATE_SCHEMA, type EngineEffect, type Orchestrato
 import { isEngineStage, type EngineStage } from "./registry.ts";
 import type { RequestPriority } from "./settings.ts";
 import type { EngineEvent, QueuedJob } from "./types.ts";
+import type { GoldMetrics } from "../review/gold.ts";
 
 /** Runs fn in one transaction, or refuses. A connection without transactions never runs a half-applied event. */
 export async function transaction<T>(sql: Sql, fn: (tx: Sql) => Promise<T>): Promise<T> {
@@ -30,6 +31,7 @@ export type StartRequestInput = {
   cachedDnaArtifactId?: string;
   variantCount: number;
   requestArtifactId: string;
+  gateMetrics?: Record<string, GoldMetrics>;
 };
 
 /** Creates the request row and queues intake. Refused if the request id already exists. */
@@ -48,6 +50,7 @@ export async function startEngineRequest(sql: Sql, input: StartRequestInput): Pr
       ...(input.cachedDnaArtifactId ? { cachedDnaArtifactId: input.cachedDnaArtifactId } : {}),
       variantCount: input.variantCount,
       requestArtifactId: input.requestArtifactId,
+      ...(input.gateMetrics ? { gateMetrics: input.gateMetrics } : {}),
     });
     await tx`
       insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, current_stage, state)

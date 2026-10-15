@@ -9,7 +9,10 @@
 //     wiring that does not exist yet, so production does not register them. They stay not_implemented, which fails closed.
 //   - with their ports: analyze_reference (the `analysis` ports) and voice (the `voice` ports), both W6. Without ports they stay
 //     not_implemented. A composition may also pass a handler for render (W10) through `handlers`.
-//   - never here: compose, pre_render_gate, post_render_review, variants, deliver. They are not built.
+//   - E4 and E5 (this file, later pass): compose, pre_render_gate, variants and deliver are always registered. They need no provider:
+//     the kit store, the engine tables and the reservation's ledger. render (the HyperFrames and Shotstack deps) and
+//     post_render_review (the media, the object store and the Critic) are registered only when composition.render and
+//     composition.postRender are given. Production gives neither yet, so the pipeline stops at render with not_implemented.
 //
 // No key is read here: the gateway takes its credentials from Meridian's resolver, and the transport is the gateway's own.
 
@@ -43,6 +46,17 @@ import { registerEngineHandlers } from "./handlers/register.ts";
 import { kitPorts } from "./kit-store.ts";
 import type { MediaStorePort } from "./artifact-store.ts";
 import type { EngineRuntime, StageHandler } from "./types.ts";
+import { createPreRenderGateHandler, type PreRenderPorts } from "./handlers/pre-render-gate.ts";
+import type { StyleKit, ValidatedRequest } from "../contracts/index.ts";
+import { createPostRenderReviewHandler, type PostRenderPorts } from "./handlers/post-render-review.ts";
+import { createComposeHandler } from "./handlers/compose.ts";
+import { createRenderHandler, type RenderPorts } from "./handlers/render.ts";
+import { createVariantsHandler, type VariantPorts } from "./handlers/variants.ts";
+import { createDeliverHandler, type DeliverPorts } from "./handlers/deliver.ts";
+import { sqlEventStore } from "./event-store-sql.ts";
+import { decisionsOf, gateResultsOf } from "./engine-reads-sql.ts";
+import { withReservationLedger } from "./sql-ledger-store.ts";
+import { listRoleCalls } from "./role-call-store.ts";
 
 /** The stages built in other workstreams (W6: analyze_reference and voice; W10: render). Registered only when given. */
 export type ExternalStageHandlers = Partial<Record<"analyze_reference" | "voice" | "render", StageHandler>>;
@@ -77,6 +91,18 @@ export type EngineComposition = {
   voice?: VoiceStagePorts;
   shotPorts?: ShotPorts;
   handlers?: ExternalStageHandlers;
+  /** The style kit a validated request names (Bible 13). Absent, the kit store of this database is read. */
+  styleKit?: (scope: { organizationId: string; validated: ValidatedRequest }) => Promise<StyleKit | undefined>;
+  /** The optional ports of pre_render_gate (budget, licences, product imagery, disclosure). Absent, their checks are not evaluated (fail closed). */
+  preRender?: Omit<PreRenderPorts, "loadStyleKit">;
+  /** render (Bible 6.11): the HyperFrames and Shotstack deps. Absent, render stays not_implemented and nothing is rendered. */
+  render?: RenderPorts;
+  /** post_render_review (Bible 6.12): the media, object store and Critic. Absent, it stays not_implemented. */
+  postRender?: PostRenderPorts;
+  /** variants (Bible 6.13). Absent, the stage runs with no music track connected (none is loaded, so no music variant is built). */
+  variants?: VariantPorts;
+  /** deliver (Bible 6.14). Absent, the stage reads and writes the engine tables of this database. */
+  deliver?: DeliverPorts;
 };
 
 /** The model classes whose adapters can be polled (the router's submit targets). A poll resolves the adapter by its id. */
@@ -165,6 +191,32 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
 
   if (composition.analysis !== undefined) handlers.analyze_reference = createAnalyzeReferenceHandler(composition.analysis);
   if (composition.voice !== undefined) handlers.voice = createVoiceHandler(composition.voice);
+
+  // Stages 9 to 14 that need no model call or provider are registered on the kits and the engine tables (E4, E5).
+  const styleKitOf = composition.styleKit ?? kits.loadStyleKit;
+  handlers.pre_render_gate = createPreRenderGateHandler({ ...(composition.preRender ?? {}), loadStyleKit: styleKitOf });
+  handlers.compose = createComposeHandler({ loadStyleKit: styleKitOf, now: () => now() });
+  handlers.variants = createVariantsHandler(
+    composition.variants ?? {
+      // No music track is connected, so the matrix's music ids name no track and no music variant is built (fail closed).
+      loadMusicTrack: async () => undefined,
+      withLedger: (scope, fn) => withReservationLedger(composition.sql, scope.organizationId, scope.reservationId, fn),
+      events: sqlEventStore(composition.sql),
+      now,
+    },
+  );
+  handlers.deliver = createDeliverHandler(
+    composition.deliver ?? {
+      withLedger: (scope, fn) => withReservationLedger(composition.sql, scope.organizationId, scope.reservationId, fn),
+      roleCalls: (scope) => listRoleCalls(composition.sql, scope),
+      gates: (scope) => gateResultsOf(composition.sql, scope),
+      decisions: (scope) => decisionsOf(composition.sql, scope),
+      events: sqlEventStore(composition.sql),
+      now,
+    },
+  );
+  if (composition.render !== undefined) handlers.render = createRenderHandler(composition.render);
+  if (composition.postRender !== undefined) handlers.post_render_review = createPostRenderReviewHandler(composition.postRender);
 
   const shot = composition.shotPorts;
   if (shot !== undefined) {

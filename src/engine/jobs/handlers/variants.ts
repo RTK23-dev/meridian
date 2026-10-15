@@ -11,7 +11,8 @@
 // plan is on record whether or not a variant was built. A variant that cannot be built fails alone; the stage does not fail for it.
 //
 // Inputs (the job reads only these, Bible 5.1): the production_request, the scene_plan, and the master edl (payload.details.masterEdlId).
-// The orchestrator does not pass the request and the plan to this stage yet (see STATUS.md, E5): the stage refuses without them.
+// The orchestrator passes the request and the plan with the master (slots "request", "plan" and "edl:<master>", E4 pass): the stage
+// refuses without them.
 // The reservation (payload.budgetReservationId) is read for its headroom only. No ledger entry is written here.
 
 import {
