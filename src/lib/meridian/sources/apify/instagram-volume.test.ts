@@ -126,16 +126,21 @@ test("handles compare without case or @, and one reel has one key however its ad
   assert.match(reelKey("https://www.instagram.com/someone/"), /^address:/);
 });
 
+/** The reason of a failed answer; an ok answer has none. */
+function reasonOf(result: { status: string; reason?: string }): string {
+  return result.reason ?? "";
+}
+
 test("an Apify answer is items only for a 200 or 201 with a JSON list; every other answer is failed with a short reason", () => {
   assert.deepEqual(settleApifyResponse(201, encode([{ a: 1 }])), { status: "ok", items: [{ a: 1 }] });
   assert.deepEqual(settleApifyResponse(200, encode([])), { status: "ok", items: [] });
   assert.equal(settleApifyResponse(408, encode({})).status, "failed");
-  assert.match(settleApifyResponse(408, encode({})).reason, /time limit/);
+  assert.match(reasonOf(settleApifyResponse(408, encode({}))), /time limit/);
   const refused = settleApifyResponse(401, encode({ error: { type: "auth", message: "Token is not valid." } }));
   assert.equal(refused.status, "failed");
-  assert.match(refused.reason, /answered 401\. Token is not valid\./);
-  assert.equal(settleApifyResponse(402, encode({ error: { message: "x".repeat(400) } })).reason.length < 260, true, "a provider message is cut short");
-  assert.match(settleApifyResponse(500, new TextEncoder().encode("<html>")).reason, /answered 500\.$/);
+  assert.match(reasonOf(refused), /answered 401\. Token is not valid\./);
+  assert.equal(reasonOf(settleApifyResponse(402, encode({ error: { message: "x".repeat(400) } }))).length < 260, true, "a provider message is cut short");
+  assert.match(reasonOf(settleApifyResponse(500, new TextEncoder().encode("<html>"))), /answered 500\.$/);
   assert.equal(settleApifyResponse(200, encode({ not: "a list" })).status, "failed");
   assert.equal(settleApifyResponse(200, new TextEncoder().encode("not json")).status, "failed");
 });

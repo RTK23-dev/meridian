@@ -35,6 +35,7 @@ import { Route as ApiDriveConnectRouteImport } from './routes/api/drive/connect'
 import { Route as ApiMediaLinksCreativeIdRouteImport } from './routes/api/media-links/$creativeId'
 import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
 import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
+import { Route as ApiWebhooksShopifyRouteImport } from './routes/api/webhooks/shopify'
 import { Route as AppBrandsBrandIdIndexRouteImport } from './routes/_app/brands/$brandId/index'
 import { Route as AppBrandsBrandIdAccountsRouteImport } from './routes/_app/brands/$brandId/accounts'
 import { Route as AppBrandsBrandIdBrainRouteImport } from './routes/_app/brands/$brandId/brain'
@@ -179,6 +180,11 @@ const ApiWebhooksReceiveRoute = ApiWebhooksReceiveRouteImport.update({
   path: '/api/webhooks/receive',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiWebhooksShopifyRoute = ApiWebhooksShopifyRouteImport.update({
+  id: '/api/webhooks/shopify',
+  path: '/api/webhooks/shopify',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppBrandsBrandIdIndexRoute = AppBrandsBrandIdIndexRouteImport.update({
   id: '/brands/$brandId/',
   path: '/brands/$brandId/',
@@ -282,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
+  '/api/webhooks/shopify': typeof ApiWebhooksShopifyRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
@@ -323,6 +330,7 @@ export interface FileRoutesByTo {
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
+  '/api/webhooks/shopify': typeof ApiWebhooksShopifyRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
@@ -366,6 +374,7 @@ export interface FileRoutesById {
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
+  '/api/webhooks/shopify': typeof ApiWebhooksShopifyRoute
   '/_app/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/_app/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/_app/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
@@ -409,6 +418,7 @@ export interface FileRouteTypes {
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
+    | '/api/webhooks/shopify'
     | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
@@ -450,6 +460,7 @@ export interface FileRouteTypes {
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
+    | '/api/webhooks/shopify'
     | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
@@ -492,6 +503,7 @@ export interface FileRouteTypes {
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
+    | '/api/webhooks/shopify'
     | '/_app/brands/$brandId/accounts'
     | '/_app/brands/$brandId/brain'
     | '/_app/brands/$brandId/calibration'
@@ -521,6 +533,7 @@ export interface RootRouteChildren {
   ApiMediaLinksCreativeIdRoute: typeof ApiMediaLinksCreativeIdRoute
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
+  ApiWebhooksShopifyRoute: typeof ApiWebhooksShopifyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -707,6 +720,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWebhooksReceiveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/webhooks/shopify': {
+      id: '/api/webhooks/shopify'
+      path: '/api/webhooks/shopify'
+      fullPath: '/api/webhooks/shopify'
+      preLoaderRoute: typeof ApiWebhooksShopifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/brands/$brandId/': {
       id: '/_app/brands/$brandId/'
       path: '/brands/$brandId'
@@ -885,6 +905,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMediaLinksCreativeIdRoute: ApiMediaLinksCreativeIdRoute,
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,
+  ApiWebhooksShopifyRoute: ApiWebhooksShopifyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

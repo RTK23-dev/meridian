@@ -18,7 +18,7 @@ const prior: PriorTrialState = {
   checks: 0,
 };
 
-const readOk = (isSharedToFeed: boolean | null): TrialReading => ({
+const readOk = (isSharedToFeed: boolean | null): Extract<TrialReading, { ok: true }> => ({
   ok: true,
   mediaId: "17900000000000001",
   mediaProductType: "REELS",

@@ -360,7 +360,7 @@ function BrandPages({ brandId }: { brandId: string }) {
               </Field>
             ) : null}
 
-            {!canEdit ? <DisabledReason>Your role can view pages but not change them.</DisabledReason> : null}
+            {!canEdit ? <DisabledReason id="pages-role-note">Your role can view pages but not change them.</DisabledReason> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="quiet" onClick={() => setDialogTarget(null)} disabled={saving}>
                 Cancel

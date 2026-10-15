@@ -75,7 +75,7 @@ test("a trial Reel sends the documented JSON container body with trial_params, t
   assert.equal(container.method, "POST");
   assert.equal(container.url, "https://graph.facebook.com/v25.0/17841400000000001/media");
   assert.equal(container.headers["Content-Type"], "application/json");
-  assert.deepEqual(JSON.parse(container.body ?? "{}"), {
+  assert.deepEqual(JSON.parse(String(container.body ?? "{}")), {
     media_type: "REELS",
     video_url: "https://media.example.com/signed/creative-1?expires=1&sig=abc",
     caption: "Caption",
@@ -91,7 +91,7 @@ test("a trial Reel sends the documented JSON container body with trial_params, t
 test("the SS_PERFORMANCE strategy is sent as the documented value", async () => {
   const { transport, requests } = scripted([reply(200, { id: "c1" }), reply(200, { status_code: "FINISHED" }), reply(200, { id: "m1" })]);
   await channel(transport).publish(request({ trial: { graduationStrategy: "SS_PERFORMANCE" } }));
-  assert.deepEqual(JSON.parse(requests[0].body ?? "{}").trial_params, { graduation_strategy: "SS_PERFORMANCE" });
+  assert.deepEqual(JSON.parse(String(requests[0].body ?? "{}")).trial_params, { graduation_strategy: "SS_PERFORMANCE" });
 });
 
 test("an ordinary Reel is unchanged: a form-encoded container on v21.0, no trial_params, and no trial on the receipt", async () => {
@@ -102,8 +102,8 @@ test("an ordinary Reel is unchanged: a form-encoded container on v21.0, no trial
   assert.equal(receipt.trial, undefined);
   assert.equal(requests[0].url, "https://graph.facebook.com/v21.0/17841400000000001/media");
   assert.equal(requests[0].headers["Content-Type"], "application/x-www-form-urlencoded");
-  assert.equal(requests[0].body?.includes("trial_params"), false);
-  assert.equal(requests[0].body?.includes("media_type=REELS"), true);
+  assert.equal(String(requests[0].body ?? "").includes("trial_params"), false);
+  assert.equal(String(requests[0].body ?? "").includes("media_type=REELS"), true);
 });
 
 test("a trial the container refuses is a failed receipt with no id, and nothing is published", async () => {

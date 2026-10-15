@@ -382,7 +382,7 @@ export async function engineReadiness(organizationId: string, ports: EngineReadi
   const heygen = await lookup("heygen");
   const shotstack = await lookup("shotstack");
   if (heygen.status !== "ready" && shotstack.status !== "ready") {
-    reasons.push(`Render: neither HyperFrames (HeyGen) nor Shotstack is connected. ${heygen.status === "ready" ? "" : heygen.reason}`.trim());
+    reasons.push(`Render: neither HyperFrames (HeyGen) nor Shotstack is connected. ${heygen.reason}`);
   }
 
   const missing = stagesNeeded(options.variantCount ?? 0).filter((stage) => ports.runtime.handlers[stage] === undefined);
