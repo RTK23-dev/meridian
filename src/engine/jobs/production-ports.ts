@@ -19,6 +19,7 @@ import { mediaKey, type MediaStorePort } from "./artifact-store.ts";
 import { scopedLedgerStore } from "./asset-stores-sql.ts";
 import { kitPorts, productKitBySku, readKit } from "./kit-store.ts";
 import { ENGINE_MEDIA_LINK_TTL_SECONDS, sourceUrlResolver, type MediaLinkSigner } from "./media-link.ts";
+import { readDriveConnectionMeta } from "../../lib/meridian/storage/drive-connection-store.ts";
 import { sqlEventStore } from "./event-store-sql.ts";
 import { withReservationLedger } from "./sql-ledger-store.ts";
 import type { ProduceShotPorts } from "./handlers/produce-shot.ts";
@@ -31,20 +32,24 @@ import type { RenderDetectors } from "./gate-measures.ts";
 const MINUTE_MS = 60_000;
 
 /**
- * The media functions over the gateway. The base URL is the gateway's media_functions provider (set by the deployment); with none,
- * every call fails with a NOT_CONNECTED config error before anything is sent. The connection is checked on each call, so a
- * deployment that sets the URL later needs no restart.
+ * The reason the media functions cannot be called on this deployment, or null when they are connected. The gateway says why (the base
+ * URL is not set). Sends nothing.
+ */
+export async function mediaFunctionsProblem(gateway: Gateway): Promise<string | null> {
+  const status = await gateway.connection("media_functions", null);
+  if (status.connected) return null;
+  return notConnectedReason(`the media functions are not connected: ${status.reason ?? "no base URL is set on this deployment"}`);
+}
+
+/**
+ * The media functions over the gateway. The base URL is the gateway's media_functions provider (set by the deployment, from
+ * MEDIA_FUNCTIONS_BASE_URL in production); with none, every call fails with a NOT_CONNECTED config error before anything is sent.
+ * The connection is checked on each call, so a deployment that sets the URL later needs no restart.
  */
 export function gatewayMediaFunctions(gateway: Gateway): HttpMediaFunctions {
   const connected = async (): Promise<HttpMediaFunctions> => {
-    const status = await gateway.connection("media_functions", null);
-    if (!status.connected) {
-      throw new EngineError(
-        "config",
-        notConnectedReason(`the media functions are not connected: ${status.reason ?? "no base URL is set on this deployment"}`),
-        { stage: "media.client" },
-      );
-    }
+    const problem = await mediaFunctionsProblem(gateway);
+    if (problem !== null) throw new EngineError("config", problem, { stage: "media.client" });
     return httpMediaFunctions(gateway.baseUrlFor("media_functions"), textTransport(gateway.transportFor("media_functions", null)));
   };
   return {
@@ -63,7 +68,7 @@ export function gatewayMediaFunctions(gateway: Gateway): HttpMediaFunctions {
 }
 
 /** The brand a request's media is stored under (Bible 5.2). A request with no brand has nowhere to store media, so it is refused. */
-async function brandOfRequest(sql: Sql, organizationId: string, requestId: string): Promise<string> {
+export async function brandOfRequest(sql: Sql, organizationId: string, requestId: string): Promise<string> {
   const rows = await sql<{ brand_id: string | null }>`
     select brand_id from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1
   `;
@@ -308,5 +313,25 @@ export function productionProviderUrl(input: ProductionProviderUrlInput): Provid
       throw new EngineError("config", "the signed link for a chain input is not https, so the provider cannot fetch it", { stage: "produce_shot" });
     }
     return result.url;
+  };
+}
+
+export type ShotConnection = (organizationId: string) => Promise<string | null>;
+
+/**
+ * The reason a shot's ports cannot make or store a take for this workspace, or null when they can. It is checked before any paid call
+ * (produce_shot, check_take): the media functions must be connected, and the workspace's Google Drive must be connected, because a
+ * finished image or take is stored there after it is paid for. Sends nothing and makes no paid call (Bible 10.4, 14, fail closed).
+ * The Drive check reads whether the workspace has a connection, not whether its token opens: an unreadable token still fails the store.
+ */
+export function productionShotConnection(input: { sql: Sql; gateway: Gateway }): ShotConnection {
+  return async (organizationId) => {
+    const media = await mediaFunctionsProblem(input.gateway);
+    if (media !== null) return media;
+    const drive = await readDriveConnectionMeta(input.sql, organizationId);
+    if (!drive.connected) {
+      return notConnectedReason("Google Drive is not connected for this workspace, so a take's media cannot be stored (Bible 5.2)");
+    }
+    return null;
   };
 }

@@ -1,5 +1,22 @@
 # Asset router and adapters (W5): E3 asynchronous submit and settle
 
+## Video profiles for production (this pass): `video-profiles.ts`
+
+- `videoProfileLoader({ gateway })` is the production loader the shot ports use (`jobs/runtime.ts`, `ShotPorts.videoProfiles`). It reads
+  GET /videos/models through the gateway (`listVideoModels`), for one workspace's credential, and maps each routed OpenRouter model of
+  `video.cinematic`, `video.budget` and `video.i2v_pinned` to its `VideoProfile` (`videoProfilesFromListing`). The models come from the route
+  table: the `video.cinematic` and `video.budget` models today; `video.i2v_pinned` has none.
+- A successful read is kept per workspace for the loader's life (one loader per runtime). A failed read is not kept, so the next call reads
+  again. Concurrent calls for one workspace share one read.
+- Every routed model the loader leaves out has a reason, from `gapsFor(organizationId)`: a listing that could not be read (HTTP status or error
+  class; a missing key is `NOT_CONNECTED:`), a listing with no data array, a model the listing does not name, or an entry that does not parse.
+  The reasons are the engine's own text; the provider's words appear only as the classified excerpt.
+- `noEligibleVideoModel` is the eligibility rule for a video class: at least one routed OpenRouter model with a profile is eligible. Otherwise
+  it returns each model's reason, and the shot is refused with them before any paid call. A non-video class is never refused here.
+- Interface change, for the lead: `ShotPorts.videoProfiles` is a loader object, not a Map, and `loadVideoProfiles` takes the workspace id (the
+  key is the workspace's). Callers in `jobs/runtime.ts` updated; no other caller passed a profile map to ShotPorts.
+- Tests: `video-profiles.test.ts` (recorded listing, failed listing, missing key, no data array, a rejected entry, the eligibility rule).
+
 ## Cartoon chain: image references, first frame, and a stateless image result (branch `worktree-agent-adcc78d81ea833bab`)
 
 `providers/openrouterImage.ts` (the image adapter, for image.keyframe and image.edit):
