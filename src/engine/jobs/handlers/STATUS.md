@@ -84,6 +84,23 @@ gate fail (`style_kit_loaded`), so nothing runs on a guessed look.
 - Needs from W2 (not made here): `registry.ts` must give `edit` the read `validated_request`, and `orchestrator.ts` `nodeSlots.edit`
   must pass it. Until then a live edit is refused with `invalid_input`. The worker must also supply `loadStyleKit`.
 
+## E4: pre_render_gate and post_render_review (branch `eng-e4-gates`)
+
+- `pre-render-gate.ts` (`createPreRenderGateHandler`, Bible 6.10, 12.3): reads the composition, the EDL, the plan, the validated
+  request, the voice track, the video DNA and the takes; refuses a missing or foreign input; runs `checkPreRender` (review/gates/preRender.ts)
+  and writes the `gate_result` artifact on every run. Ports: `loadStyleKit` (required), and optional `renderBudget`, `licensedUris`,
+  `productImageUris` and `disclosures`. Absent ports fail their checks (review). Unpaid.
+- `post-render-review.ts` (`createPostRenderReviewHandler`, Bible 6.12, 12.3): reads the rendered video, the EDL and the render stage's
+  `render_integrity` gate result when one is an input. Measures the file (loudness, timeline, frames) through `MediaFunctions`, takes the
+  optional measurement ports (black frames, overlays, OCR), runs the final Critic through `runCriticFinal` on the request's reservation (paid),
+  runs `checkPostRender`, and writes the `review_result` artifact on every run. A frame set the media functions refuse leaves the Critic
+  unanswered, and nothing is sent.
+- Registry and orchestrator changes these handlers need (eng-pipeline, see review/STATUS.md decisions 5 to 7): `registry.ts` reads for
+  `pre_render_gate` (scene_plan, validated_request, voice_track, video_dna, take), the render stage's integrity `gate_result` as a
+  `post_render_review` input, and `orchestrator.ts` routing through `decideGate`.
+- Tests: `pre-render-gate.test.ts` (7) and `post-render-review.test.ts` (13), on PGlite, with the recorded critic answers and fake media
+  functions. Run with the review tests (see review/STATUS.md).
+
 ## Owner live run
 
 None. No provider is called, and the database is PGlite only.

@@ -1,7 +1,7 @@
 // Shared helpers for the pure gates (Bible 12 and 5.3). A gate returns a GateResult; the orchestrator routes it.
 // Unknown means fail: a check that cannot be evaluated is a failing check with a detail, never a pass.
 
-import { EngineError, gateResultSchema, type GateCheck, type GateId, type GateResult } from "../../contracts/index.ts";
+import { EngineError, gateResultSchema, idSchema, type GateCheck, type GateId, type GateResult } from "../../contracts/index.ts";
 
 /** The EDL frame rate (contracts/edl.ts fps is the literal 30). A test in gates.test.ts keeps the two equal. */
 export const EDL_FPS = 30;
@@ -46,6 +46,14 @@ export function gateResult(gate: GateId, subjectId: string, checks: GateCheck[],
     throw new EngineError("internal", `gate ${gate} built an invalid result: ${parsed.error.message}`);
   }
   return parsed.data;
+}
+
+/**
+ * The ids that are plan shots (shot_), in the order given and without repeats. A rule can name a clip that is not a shot (the
+ * loop clip, a sticker); such a clip is not a shot to send back to the plan, so it is left out rather than failing the result.
+ */
+export function asShotIds(ids: readonly string[]): string[] {
+  return [...new Set(ids)].filter((id) => idSchema("shot_").safeParse(id).success);
 }
 
 /** Every string inside a JSON-like value, to a fixed depth. Used to find URIs inside component props. */

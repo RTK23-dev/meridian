@@ -179,7 +179,127 @@ Nothing here calls a provider. The owner-only items are these:
 6. **The prompt-text check is a heuristic.** Its gold set is the only protection against false fails. Its cue list is in
    `gates/promptText.ts` and is not in config (it has no numbers).
 
+## E4: pre-render gate, post-render review, critic_final (branch `eng-e4-gates`, from `code/beautiful-cori-1zfk11` at 79f7a92)
+
+Built on fixtures. Nothing calls a provider or renders. Nothing is pushed; the lead merges. Granted files: `claude/roles/critic_final.ts`
+and its test, `prompts/critic_final@1.md`, `jobs/handlers/pre-render-gate.ts` and `post-render-review.ts` with their tests.
+
+### Done
+
+- `gates/preRender.ts`: `checkPreRender(input)`, pure. Runs `checkEdl` (edit/rules.ts, every 8.3 rule), then the composition built from
+  this EDL (same id, every media URI in its asset list), slideshow risk, the delivery promise (every script beat covered, every planned
+  shot in the EDL, each product_hero shot uses real imagery), caption legibility (words per caption within `thresholds.edit`
+  captionWordsMin..captionWordsMax, which is config; the grammar's range is checked by `checkEdl`), the AI-presenter disclosure flag
+  (required when a `ugc_presenter` shot is planned), rights (every media URI has a licence record), and the render budget (an unknown
+  render price fails). Safe zones are the `checkEdl` rules `captions_in_safe_zone` and `captions_off_presenter_face`.
+- `slideshowRisk.ts`: the six dimensions of 12.3 (repetition, decorative visuals, weak motion, shot intent, typography over-reliance,
+  unsupported cinematic claims), each 0 to 1, and the weighted mean, which must be below `thresholds.postRender.slideshowRiskMax`.
+  Checks: `slideshow_coded_run` (no run of coded shots, source kind `component`, longer than `REVIEW_TUNING.codedRunMax`) and
+  `slideshow_risk_below_max`. The Bible's acceptance "five coded shots in a row is blocked" is the first check.
+- `gates/postRender.ts`: `checkPostRender(input)`, pure, returns the GateResult and the review failures (rule, shot, layer). Checks:
+  `render_integrity_passed` (the render stage's integrity result for this video), `loudness_within_tolerance` (-14 LUFS plus or minus
+  `loudnessToleranceLufs`), `true_peak_within_limit` (the edit rule), `silence_within_limit` (`silenceMaxMs`), `overlays_present` (every
+  graphics clip drawn in its frame), `black_frames_absent` (at every cut plus or minus `cutFrameWindow` frames and at
+  `samplePositions`), `captions_ocr_match_script`, `forbidden_terms_absent` (EDL text and text read from the frames),
+  `rubric_<item>` for the nine rubric items, and `critic_confidence`. `requiredFrameTimes`, `criticFrameTimes` and `shotAt` are exported.
+  `criticGoldMetricsByCheck` maps the one critic gold set to every rubric rule.
+- `criticFinal.ts`: `runCriticFinal(deps, request)`. Haiku (`criticFinal`, `llm.check`) first. Haiku's confidence below
+  `thresholds.postRender.sonnetRecheckBelow` runs `criticFinalRecheck` (the same role and input on `llm.analysis`, Sonnet) through
+  `runRole`, and Sonnet's answer is the outcome. A refused call, a duplicate, a re-check with no answer, or frames that do not match the
+  contract are `not_answered` (missing evidence). A broken answer twice throws `RoleAnswerError`.
+- `claude/roles/critic_final.ts` and `prompts/critic_final@1.md`: the role (12 frames, an EDL summary, nine rubric scores and a
+  confidence, strict). Estimate 15k in / 1k out, output cap 1k. The Critic's answer has no free text.
+- `labels.ts`: decisions on review items become gold labels in the `meridian.gold_label/v1` format. `labelsFromTakeDecision` (take
+  items) and `labelsFromGateDecision` (pre_render and post_render items). `loadCriticFinalGold` loads the critic's set and computes its
+  metrics with the gate's rule. Rule for each label (labels.ts header): an accept labels every checkable check as passing; a reject labels
+  only the failing checks as failing; a choose_take labels the chosen take; the plan decisions label nothing; checks with no input in the
+  item are listed as `skipped` with a reason.
+- `inbox.ts`: `gateReviewItem(input)` builds the payload for a pre_render or post_render escalation (`meridian.gate_review/v1`). Its
+  reason is built from rule names. Writing it into `engine_review_items` is the lead's wiring.
+- `jobs/handlers/pre-render-gate.ts`: `createPreRenderGateHandler(ports)`. Reads composition, EDL, plan, validated request, voice, DNA and
+  takes, refuses a missing or foreign input, runs `checkPreRender`, and writes the `gate_result` artifact on every run (pass or fail).
+  Unpaid: no reservation.
+- `jobs/handlers/post-render-review.ts`: `createPostRenderReviewHandler(ports)`. Reads the rendered video, the EDL and the render's
+  integrity `gate_result` (optional: absent is missing evidence). It reads the file through `media.loudness`, `media.timeline` and
+  `media.frames` (the frames in chunks of `thresholds.reference.maxFrames`), takes the optional measurement ports, runs `runCriticFinal` on
+  the request's reservation (paid), runs `checkPostRender`, and writes the `review_result` artifact on every run. `longestSilenceMs` and
+  `criticSummaryOf` are exported.
+- Shared test helpers: `review/test/render.ts` (a clean EDL built by the editor from the E1 chain fixtures, its composition, the
+  rendered video and the clean inputs; `provenMetrics` and `unprovenMetrics`). Recorded critic answers, authored in the OpenRouter shape
+  and not from a live call: `review/test/fixtures/openrouter-critic-final-{ok,unsure,sonnet-ok,sonnet-unsure}.json`.
+
+### Tests (run in this worktree)
+
+- `NODE_ENV=development node --experimental-strip-types --test src/engine/review/*.test.ts src/engine/review/gates/*.test.ts
+  src/engine/review/take/*.test.ts src/engine/claude/roles/critic_final.test.ts src/engine/claude/roles/critic_take.test.ts
+  src/engine/jobs/handlers/pre-render-gate.test.ts src/engine/jobs/handlers/post-render-review.test.ts`: 314 pass, 0 fail.
+  This includes the E1 and E2 gates and `boundaries.test.ts` (no fetch, no environment read, no logging, no forbidden import in review/).
+- New tests: `slideshowRisk.test.ts` (15), `gates/preRender.test.ts` (21), `gates/postRender.test.ts` (29), `criticFinal.test.ts` (8),
+  `labels.test.ts` (19), `claude/roles/critic_final.test.ts` (13), `jobs/handlers/pre-render-gate.test.ts` (7),
+  `jobs/handlers/post-render-review.test.ts` (13).
+- Required acceptance cases, each in a test: five coded shots in a row are blocked and named (`slideshowRisk`, `preRender`); a broken
+  overlay never passes and goes to review with no gold set (`postRender`, and the handler); a clean pass (`preRender`, `postRender`);
+  Haiku unsure triggers Sonnet, and Sonnet decides (`criticFinal`, the handler); missing integrity evidence is review (`postRender`,
+  the handler).
+- `npm run typecheck`: exit 0. `npm run lint`: 0 errors, 4 warnings, all pre-existing in `src/components/`.
+- Not run: the full `npm test` (the lead runs it after merging).
+
+### Decisions for the lead
+
+1. **Config values not in `config/`.** `review/tuning.ts` holds initial values that the lead should move into `config/thresholds.ts`:
+   `codedRunMax` (4: five in a row is blocked), the six `slideshowWeights` (equal, 1 each), `contentWordMinLength`, `stopWords`,
+   `textLedComponents`, `motionEffectKinds`, `stillModelClasses`, `cinematicClaimTypes` and `motionModelClassPrefix`. The final rubric uses
+   `thresholds.take.slopRubricItemMin` and the critic floor uses `thresholds.escalation.criticConfidence`; no new number was needed for them.
+2. **Slideshow dimensions are my definitions.** The Bible names the six dimensions, not their formulas. Mine are in `slideshowRisk.ts`
+   (for example, decorative means no content word shared with the beat and no must request; weak motion means still assets or still
+   generations with no motion effect in the shot). Each feeds a check that cannot block until its gold set meets the target.
+3. **Craft rubric items are my proposal.** Bible 12.3 says "craft and slop rubric" and names no craft items. I added
+   `captions_legible` and `framing_in_safe_area`, defined in `critic_final@1.md`. The owner confirms them before labels are written.
+4. **Frame counts.** "Cut ± 2 frames" is five frames per cut. `critic_final` sees twelve frames spread evenly over the video.
+5. **Orchestrator routing (eng-pipeline).** `applyPreRender` and `applyPostRender` redo on any failure today, which is the rule the gold
+   set exists to prevent. They must call `decideGate(gate, metricsByCheck)` and act on the verdict: `pass` proceeds, `block` redoes the
+   named shots (only proven checks block), and `review` creates an escalation item (`gateReviewItem`). Without this, an unproven pre-render
+   or post-render failure is redone, not reviewed. For the critic rows, metrics come from `criticGoldMetricsByCheck`.
+6. **Pre-render inputs (registry, eng-pipeline).** `registry.ts` gives `pre_render_gate` only `composition` and `edl`. The handler reads
+   `scene_plan`, `validated_request`, `voice_track`, `video_dna` and the `take` artifacts too, and refuses without them. The registry's reads
+   and `nodeSlots` for this stage must include them.
+7. **Post-render inputs (render and orchestrator, eng-pipeline / W10).** The render stage must store its `render_integrity` GateResult as a
+   `gate_result` artifact and return its slot. The orchestrator's `branchSlots` for `post_render_review` must pass it. Without it, every
+   video routes to review at the integrity check (fail closed).
+8. **Missing measurements (W4).** Black-frame detection, overlay detection and OCR of the captions and claims are not media functions yet.
+   Their ports (`measureBlackFrames`, `measureOverlays`, `measureOcr`) are optional. Absent, their checks are not evaluated, so no video
+   passes post-render until W4 supplies them. The loudness, true peak, timeline and frame functions exist and are used.
+9. **Render price.** `config/prices.ts` has `render_hyperframes_cloud` with `usd: null`. Until the owner sets it, the render budget check
+   fails with "the render price is not in the table".
+10. **Licences and disclosure (no source yet).** `licensedUris` and `disclosures` are ports with no source. Until they are connected, the
+    rights and disclosure checks are not evaluated and route to review. The disclosure wording is open (Bible 20.2): the flag is carried, no
+    wording is written. `paidPartnership` is not checked: no contract field carries it.
+11. **The review decision labels only what the item carries.** Overlays, black frames and OCR have no gold inputs in the item, so they are not
+    labelled. Only the take checks and the critic rubric are.
+12. **Not built.** `review/sampling.ts` (Bible 6.14, 12.5), the inbox UI and the `engine_review_items` write (the lead's), and the events
+    (`gate.result`, `review.decided`: W13). `claude/STATUS.md` and `prompts/STATUS.md` are eng-pipeline's and were not edited; the role and
+    prompt are described here.
+
+### Live run: owner (no keys held by agents)
+
+1. Route and verify the final Critic. `llm.check` is Haiku and `llm.analysis` is Sonnet, both `verified: false` in `config/routes.ts`. Run
+   one `critic_final` on a real rendered MP4 through `runCriticFinal`, with twelve frames from the frames function at 768 px on the long side.
+   Record the model that answered, the generation id, the usage cost and the ledger row (estimate against actual). Then force a Haiku-unsure
+   case (or a clip with visible hand defects) and record that Sonnet was called and which answer was used.
+2. Measure a real render: integrated loudness, true peak, silence and the frame times from `requiredFrameTimes`. Record the numbers the gate
+   reads, against `thresholds.postRender`.
+3. Set the HyperFrames render price (`config/prices.ts`) and connect the licence record source and the disclosure flag. Until then, the
+   pre-render gate routes to review (by design).
+4. Acceptance (Bible 19, E4). (a) A plan with five coded shots in a row is blocked by slideshow risk: with the gold set for
+   `pre_render:slideshow_coded_run` proven, `decideGate` returns `block`; without it, `review`. (b) A render with a deliberately broken
+   overlay never reaches delivery: the overlay detector (W4) must exist first, then the record shows `pass` false. (c) Clean pass, one redo,
+   downgrade and human escalation run end to end with correct manifests (the orchestrator's routing, decision 5).
+5. Gold sets. Label 100 failing and 100 passing examples of `post_render:critic_final` from owner or review decisions, export them as the
+   gold-set JSON, and load them with `loadCriticFinalGold`. Check `metrics.meetsTarget` before any rubric check may block (12.4).
+
 ## Blockers
 
-None for the fixture work. Items 1 and 3 above need the owner's labels or a contract field before any check can block in
-a live run.
+- Decisions 5 to 7 are the lead's and eng-pipeline's: the orchestrator's use of `decideGate`, and the registry slots for the pre-render and
+  post-render stages. Until they land, the stages run but their results route the wrong way (redo instead of review on unproven failures).
+- Decision 8: no video passes post-render until the overlay, black-frame and OCR measurements exist (W4).
+- Decision 9 and 10: the render price and the licence and disclosure sources.
