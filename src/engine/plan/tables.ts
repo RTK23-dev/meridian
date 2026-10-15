@@ -90,11 +90,14 @@ export function isGeneratedType(visualType: VisualType): boolean {
 }
 
 // --- 7.1 "Downgrade to": the fallback chain (an empty list means none is needed) ------------------------------------
+// stock_footage falls back to product_hero. 7.1 says "cinematic budget model"; the lead decided that this means the video.budget
+// model class. product_hero is the only buildable type on that class (cartoon_generated is a gap), so it is the target. The
+// downgrade is set only when product_hero's own kit and rules allow it (build.ts downgradeFor).
 
 export const DOWNGRADE_TO: Record<VisualType, readonly VisualType[]> = {
   ugc_presenter: ["kinetic_type"],
   product_hero: ["coded_graphics"],
-  stock_footage: [],
+  stock_footage: ["product_hero"],
   cinematic: ["product_hero", "stock_footage"],
   cartoon_rigged: ["kinetic_type"],
   cartoon_generated: ["cartoon_rigged"],
@@ -198,22 +201,10 @@ export const PRODUCT_PIXEL_RISK: Partial<Record<VisualType, "always" | "unless_p
 // The list shrinks as E5 lands; a type is added only with a note in plan/STATUS.md.
 
 export const BUILD_GAPS: Partial<Record<VisualType, string>> = {
-  cartoon_rigged:
-    "the character.rig component and its source are built (E5, sources.ts), and the gap stays until the lead opens it (plan/STATUS.md)",
   react_clip: "it needs an owned or licensed clip, and no clip source exists yet",
-  screen_mock:
-    "the screen.mock component and its source are built (E5, sources.ts), and the gap stays until the lead opens it (plan/STATUS.md)",
   cartoon_generated:
     "its style keyframe is a second paid call, and its video is priced without that call; one shot source cannot carry the chain (GENERATION_CHAINS, plan/STATUS.md)",
 };
-
-/**
- * stop_motion has no gap entry on purpose: its image.edit price is unknown, so rule 5 removes it first, and minimum.test.ts
- * pins that reason (`unknown_price`). Its chain (GENERATION_CHAINS) is refused by sources.ts buildSource.
- */
-
-/** The visual types the E3 planner can build a source for: every type that has no build gap. */
-export const BUILDABLE_TYPES: readonly VisualType[] = VISUAL_TYPES.filter((visualType) => BUILD_GAPS[visualType] === undefined);
 
 /** Words per line of a kinetic.punchline shot: the shot's words are grouped in order (7.1 kinetic_type). Structural. */
 export const KINETIC_WORDS_PER_LINE = 4;
@@ -256,6 +247,18 @@ export const GENERATION_CHAINS = {
     { step: "player", component: "stopmotion.player" },
   ],
 } as const;
+
+/**
+ * The visual types whose source is a chain of calls. sources.ts refuses them (a ShotSource carries one call), so they are not
+ * buildable in E5 whatever their gaps say. stop_motion has no gap entry on purpose: its image.edit price is unknown, so rule 5
+ * removes it first, and minimum.test.ts pins that reason (`unknown_price`).
+ */
+export const CHAIN_TYPES = Object.keys(GENERATION_CHAINS) as VisualType[];
+
+/** The visual types the plan can build a source for: no build gap and no chain (sources.ts buildSource builds each of these). */
+export const BUILDABLE_TYPES: readonly VisualType[] = VISUAL_TYPES.filter(
+  (visualType) => BUILD_GAPS[visualType] === undefined && !CHAIN_TYPES.includes(visualType),
+);
 
 /**
  * The pose and expression a beat role plays in a character.rig shot (9.2 asks the planner for a pose timeline per beat; E5 code

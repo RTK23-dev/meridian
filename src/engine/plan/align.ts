@@ -180,18 +180,47 @@ export function splitBeat(
   return { beatId: span.beatId, shotCount: count, targetMs, curveTenth, durationsMs };
 }
 
+/** A word of the script as the voice times it (absolute ms on the voice clock). */
+export type VoiceWord = { text: string; startMs: number; endMs: number };
+
+/** A word a shot speaks, timed from the shot's start (ms, clamped to 0 to the shot's last millisecond). See SourceShot.spans. */
+export type ShotWord = { text: string; startMs: number; endMs: number };
+
+/** Fraction of an even slot a fallback word is held for (the same hold as sources.ts wordSpanOf). */
+const FALLBACK_HOLD = 0.7;
+
 /**
- * The script's words that a shot speaks: the words whose start falls inside the shot. A shot that speaks none falls back to its
- * beat's words, so a component always has text to show. Pure. Used by align (the refusals) and by the source builder.
+ * The words a shot speaks, each with its time from the shot's start. Pure. The words are the ones whose start falls inside the
+ * shot. A shot that speaks none falls back to its beat's words, so a component always has text to show; those beat words lie
+ * outside the shot, so their voice times cannot be used. They are spread evenly across the shot instead, in script order, so no
+ * time falls outside it and no two lines of a kinetic component start together. Every time is clamped to the shot.
  */
-export function wordsOfShot(
-  words: readonly { text: string; startMs: number }[],
-  shot: { startMs: number; endMs: number },
-  beatSpan: { startMs: number; endMs: number },
-): string[] {
-  const inside = words.filter((word) => word.startMs >= shot.startMs && word.startMs < shot.endMs).map((word) => word.text);
-  if (inside.length > 0) return inside;
-  return words.filter((word) => word.startMs >= beatSpan.startMs && word.startMs < beatSpan.endMs).map((word) => word.text);
+export function timedWordsOfShot(words: readonly VoiceWord[], shot: { startMs: number; endMs: number }, beatSpan: { startMs: number; endMs: number }): ShotWord[] {
+  const durationMs = shot.endMs - shot.startMs;
+  const last = durationMs - 1;
+  const inside = words.filter((word) => word.startMs >= shot.startMs && word.startMs < shot.endMs);
+  if (inside.length > 0) {
+    return inside.map((word) => {
+      const startMs = Math.min(Math.max(0, word.startMs - shot.startMs), last);
+      const endMs = Math.min(Math.max(startMs, word.endMs - shot.startMs), last);
+      return { text: word.text, startMs, endMs };
+    });
+  }
+  const beatWords = words.filter((word) => word.startMs >= beatSpan.startMs && word.startMs < beatSpan.endMs);
+  const step = durationMs / Math.max(1, beatWords.length);
+  return beatWords.map((word, index) => {
+    const startMs = Math.min(Math.round(index * step), last);
+    const endMs = Math.min(Math.round(startMs + step * FALLBACK_HOLD), last);
+    return { text: word.text, startMs, endMs };
+  });
+}
+
+/**
+ * The script's words that a shot speaks: the words whose start falls inside the shot, or the beat's words when it speaks none
+ * (timedWordsOfShot). Pure. Used by align (the refusals) and by the source builder.
+ */
+export function wordsOfShot(words: readonly VoiceWord[], shot: { startMs: number; endMs: number }, beatSpan: { startMs: number; endMs: number }): string[] {
+  return timedWordsOfShot(words, shot, beatSpan).map((word) => word.text);
 }
 
 /** The classified requests of one beat, and their texts, in request order. A request with no classification is refused. */

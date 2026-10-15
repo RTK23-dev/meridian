@@ -10,6 +10,7 @@ import { promptAsksForText } from "../review/gates/promptText.ts";
 import {
   BUILD_GAPS,
   BUILDABLE_TYPES,
+  CHAIN_TYPES,
   DOWNGRADE_TO,
   GENERATION_CHAINS,
   PROMPT_STYLE,
@@ -90,18 +91,22 @@ describe("build gaps: the E5 types that are built, and the ones that stay gaps",
     assert.equal(RECIPES.stop_motion.kind, "generate");
   });
 
-  it("cartoon_rigged and screen_mock stay gaps until the lead opens them, and their gap text says the source is built", () => {
-    assert.match(BUILD_GAPS.cartoon_rigged ?? "", /built \(E5/);
-    assert.match(BUILD_GAPS.screen_mock ?? "", /built \(E5/);
+  it("cartoon_rigged and screen_mock are built, so they are not gaps; their sources are checked per shot (sources.ts)", () => {
+    assert.equal(BUILD_GAPS.cartoon_rigged, undefined);
+    assert.equal(BUILD_GAPS.screen_mock, undefined);
+    assert.ok(BUILDABLE_TYPES.includes("cartoon_rigged"));
+    assert.ok(BUILDABLE_TYPES.includes("screen_mock"));
   });
 
-  it("every type with no gap is buildable, and kinetic_type, cinematic and coded_graphics are among them", () => {
+  it("buildable means no gap and no chain: every other type is buildable, and the two chains are not", () => {
     for (const type of VISUAL_TYPES) {
-      assert.equal(BUILDABLE_TYPES.includes(type), BUILD_GAPS[type] === undefined, type);
+      const expected = BUILD_GAPS[type] === undefined && type !== "cartoon_generated" && type !== "stop_motion";
+      assert.equal(BUILDABLE_TYPES.includes(type), expected, type);
     }
-    for (const type of ["kinetic_type", "cinematic", "coded_graphics", "stock_footage", "ugc_presenter", "product_hero"] as VisualType[]) {
+    for (const type of ["kinetic_type", "cinematic", "coded_graphics", "stock_footage", "ugc_presenter", "product_hero", "cartoon_rigged", "screen_mock"] as VisualType[]) {
       assert.ok(BUILDABLE_TYPES.includes(type), type);
     }
+    assert.deepEqual([...CHAIN_TYPES].sort(), ["cartoon_generated", "stop_motion"]);
   });
 });
 
@@ -110,6 +115,13 @@ describe("downgrade paths (Bible 7.1) for the E5 types", () => {
     assert.deepEqual([...DOWNGRADE_TO.cinematic], ["product_hero", "stock_footage"]);
     assert.deepEqual([...DOWNGRADE_TO.stop_motion], ["product_hero"]);
     assert.deepEqual([...DOWNGRADE_TO.cartoon_generated], ["cartoon_rigged"]);
+  });
+
+  it("stock falls back to product_hero: the one buildable type on the video.budget class (lead decision, 2026-10-15)", () => {
+    assert.deepEqual([...DOWNGRADE_TO.stock_footage], ["product_hero"]);
+    const productHero = RECIPES.product_hero;
+    assert.ok(productHero.kind === "generate" && productHero.modelClass === "video.budget");
+    assert.ok(BUILDABLE_TYPES.includes("product_hero"));
   });
 
   it("cartoon_rigged falls back to kinetic type; the code-drawn types need none", () => {

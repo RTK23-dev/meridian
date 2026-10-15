@@ -276,13 +276,22 @@ test("planKitsOf reads the kit bodies that loaded", () => {
     productKit: false,
   });
   const generated = { characterId: "char_gen", version: 1, kind: "generated" as const };
-  const rigged = { characterId: "char_rig", version: 1, kind: "rigged_svg" as const };
+  const rigged = {
+    characterId: "char_rig",
+    version: 1,
+    kind: "rigged_svg" as const,
+    poses: ["idle", "point"],
+    visemes: ["closed", "open", "wide", "round"],
+  };
   assert.deepEqual(planKitsOf({ persona: personaFixture, characters: [generated, rigged] }), {
     persona: true,
     rigCharacter: true,
     generatedCharacter: true,
     productKit: false,
   });
+  // A rigged sheet that lists other mouth names (the contract fixture's phonemes) cannot drive the rig, so the kit is absent.
+  const phonemes = { ...rigged, visemes: ["A", "E", "O", "M", "rest"] };
+  assert.equal(planKitsOf({ characters: [phonemes] }).rigCharacter, false, "phoneme names are not the rig's mouth shapes");
 });
 
 test("the minimum is deterministic: the same input gives the same breakdown", () => {

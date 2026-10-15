@@ -1,5 +1,96 @@
 # STATUS: the plan stage (W7), E3 and E5 (W9 plan-side support)
 
+## E5 follow-up: the plan gaps closed (branch `eng-plan-gaps-2`, from `code/beautiful-cori-1zfk11`)
+
+This section supersedes the E5 items it names: decisions 1, 2 and 5 of the E5 section below, and the build-gap list of E3.
+
+**What changed**
+
+- **Word spans (`align.ts` `timedWordsOfShot`).** A shot's words carry their times from the shot's start, clamped to the shot's
+  last millisecond. `build.ts` passes them as `SourceShot.spans` to every source (kinetic.type, character.rig, screen.mock).
+  Words that start inside the shot use their voice times. A shot that speaks none (the beat's words all lie outside it) gets
+  those words spread evenly across the shot in script order. Clamping them to zero would give every line the same start, and
+  kinetic.type refuses equal starts. `wordsOfShot` returns the same words as before.
+- **The rig sheet (`character.ts`, new).** `rigSheetProblem` and `rigSheetOf`. A rigged sheet drives character.rig only when it
+  lists the rig's own names: the `idle` pose, and the `closed` and `open` mouth shapes. `build.ts` passes the first such sheet
+  (in the order `kits.characters` gives) to every source. `planKitsOf` counts the rig only when such a sheet exists.
+- **Build-time refusals (`sources.ts` `componentBuildRefusals`).** Before the planner writes anything, each component type
+  (kinetic_type, coded_graphics, cartoon_rigged, screen_mock) is built from the shot's own words, timings, kits and sheet. A
+  refusal is a rule-6 removal for that shot (`refusals`, filter.ts). So the planner never chooses a type the plan cannot draw,
+  and the plan does not fail later at `sources_built`. Before this, a one-line screen with no product kit, or a sheet without
+  the rig's names, failed the whole plan.
+- **Mouth timing (`sources.ts` `mouthTimelineOf`).** A mouth closes no later than the next word opens, so the events stay in
+  order when two word spans touch or overlap.
+- **Gaps removed.** `cartoon_rigged` and `screen_mock` are no longer in `BUILD_GAPS`. `BUILD_GAPS` now holds react_clip and
+  cartoon_generated. `BUILDABLE_TYPES` excludes the chain types (`CHAIN_TYPES`: cartoon_generated, stop_motion), so it matches
+  what buildSource can build.
+- **Downgrades.** `DOWNGRADE_TO.stock_footage` is `["product_hero"]`. The lead decided (2026-10-15) that 7.1's "cinematic budget
+  model" means the video.budget class. product_hero is the only buildable type on that class (cartoon_generated is a gap).
+  `build.ts` now sets `downgradeTo` on every shot whose type has a 7.1 fallback (`downgradeFor`), not only on generated shots.
+  So a stock shot names product_hero, and a cartoon_rigged shot names kinetic_type.
+- **Stop-motion and cartoon chains.** Still refused by `buildSource` with the chain's reason. Not built (see the contract note).
+
+**Decisions for the lead (not made in code)**
+
+1. **Generalised downgrade.** Every type with a 7.1 fallback now gets `downgradeTo`, so cartoon_rigged gets kinetic_type as well
+   as stock getting product_hero. The orchestrator already downgrades a failing component that has a target, so this matches
+   its design. Narrow it to generated and stock if you want only those.
+2. **Sketch beats on a page with no usable rig have no candidate.** When a reference segment is `sketch_joke`, its only
+   candidates are cartoon_rigged and the gapped cartoon_generated. With no rig that can draw, the plan is refused at
+   `every_shot_has_a_candidate` (no model call is made). This is fail-closed, and it is better than before (the sketch always
+   failed). Whether a sketch beat should fall back to kinetic_type is a proposal change (7.4), so it is your decision.
+3. **The rig's mouth names.** character.rig draws `closed, open, wide, round, teeth` (`RIG_VISEMES`). The contract fixture's
+   sheet uses phoneme names (`A, E, O, M, rest`), so it cannot drive the rig and is refused for it, as the test shows. The page's
+   character sheet must list the rig's names, or a mapping from phonemes to the rig's shapes must be agreed. The kit UI and the
+   contract owner decide that.
+4. **Which rig.** `kits.characters` is loaded by the handler. Its order is not tied to `page.characterIds`, so the first usable
+   rig is a guess. Please confirm the order (or pass the page's rig explicitly).
+5. **Contract change for the chains (cartoon_generated and stop_motion).** This is not made in code; the lead writes it.
+   - `ShotSource` (contracts/plan.ts) is one call: a union with one `kind`. A cartoon shot is two calls (image.keyframe, then
+     video.budget from the keyframe, Bible 7.1). A stop-motion shot is 24 to 36 image.edit calls from the hero image, then
+     `stopmotion.player`. The estimate reads `ShotSpec`, so it cannot price the keyframe or the frames, and the plan would
+     under-reserve. The proposed contract: `ShotSpec.source` may be a `chain` of calls, each with its modelClass, its refs and its
+     take count, and `estimatePlan` prices every call. A version bump is needed (Bible section 4).
+   - Until then both stay refused (`buildSource`), and both name their chain builder (`cartoonGeneratedChain`, `stopMotionChain`).
+   - stop_motion also needs `stopmotion.player`, which is not built, and image.edit is unpriced (rule 5 removes it first).
+6. **The downgrade replan is still not built** (E3 open point 4). A downgrade on a stock or rigged shot is recorded as a
+   target, but the plan does not re-run for it yet.
+
+**Tests (this follow-up)**
+
+- `align.test.ts`: `timedWordsOfShot` (relative and clamped; the fallback is spread in order and stays inside the shot; the same
+  words as `wordsOfShot`). The existing `wordsOfShot` test now carries the end times the type needs.
+- `sources.test.ts`: the rig's mouth from the spans; chat messages at their spans; mouth events closing at the next open;
+  `componentBuildRefusals` (no refusal for a fully-kitted shot; cartoon_rigged without a sheet or with phonemes; a one-line screen
+  with no product; a long chat sentence; kinetic over its limit; a product card with no kit).
+- `filter.test.ts`: the pins are updated. screen_mock and cartoon_rigged are kept with their kits (the rule-4 and rule-6 lines
+  were the build-gap pins). A build-time refusal removes a type with its reason. The rig kit reason is asserted.
+- `tables.test.ts`: the gap pins are replaced with the opened types. BUILDABLE_TYPES excludes the chains. Stock falls back to
+  product_hero, which is on video.budget.
+- `minimum.test.ts`: `planKitsOf` counts a usable rig, and not the phoneme sheet.
+- `character.test.ts` (new): `rigSheetProblem` and `rigSheetOf`.
+- `build.followup.test.ts` (new): a sketch beat drawn as character.rig, with the mouth timed from the voice's words (exact values
+  from the fixture's words); every mouth in its shot and in order; cartoon_rigged naming kinetic_type; a sketch reference with no
+  usable rig refused at the filter with no model call; stock naming product_hero; the kinetic line of b1 starting at the voice time
+  of "lying" (1714 ms).
+
+**Test status (honest account)**
+
+- Before the owner's instruction to stop test runs, `NODE_ENV=development node --experimental-strip-types --test
+  'src/engine/plan/**/*.test.ts'` ran 203 tests, 203 pass, 0 fail.
+- `npm run typecheck` finished once, after that run. It printed no errors (its exit code was not captured).
+- `npm run lint` was not run. No test, typecheck or lint run was started after the owner's instruction.
+- The lead runs every check after the phases are done. Please run `npm test`, `npm run typecheck` and `npm run lint`, and
+  check the plan folder first, since build.ts, sources.ts, tables.ts, align.ts and minimum.ts changed.
+
+**The owner's live run (agents hold no keys)**
+
+1. A page with a rig sheet that lists the rig's names, and a reference with a sketch segment. Plan it, and record the rig
+   source props, the plan gate's checks, and the cloud render (components cost $0; the ledger records the render only).
+2. Check a rigged shot's mouth events against the voice's word spans in the shot (they open at each word's voice time).
+3. Check the kinetic.type line times against the voice (the emphasis line starts at its word's voice time).
+4. Check a stock shot's downgradeTo (product_hero) against the kit, and the rig's kinetic_type fallback.
+
 ## E5: visual-type recipes and component sources (branch `eng-e5-visual-types`)
 
 Granted files: `tables.ts`, `sources.ts` and their tests (`sources.test.ts`, the new `tables.test.ts`). Nothing else in `plan/`

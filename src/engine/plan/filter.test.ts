@@ -107,7 +107,8 @@ test("rule 4: hands on the product are never generated", () => {
   assert.ok(!kept.includes("ugc_presenter"));
   assert.ok(rejectedBy(input, "rule4_hands_on_product").includes("cinematic"));
   assert.ok(kept.includes("stock_footage"));
-  assert.ok(!kept.includes("screen_mock"), "screen_mock is an E3 build gap (rule 6), so it is never kept");
+  assert.ok(kept.includes("screen_mock"), "screen_mock is a component (no generated pixels), so rule 4 does not touch it");
+  assert.ok(kept.includes("cartoon_rigged"), "cartoon_rigged is a component too, and the page has its rig");
 });
 
 test("rule 5: a candidate costlier than the remaining budget is removed, a zero-cost one is kept at zero remaining", () => {
@@ -122,13 +123,22 @@ test("rule 5: a candidate costlier than the remaining budget is removed, a zero-
   assert.ok(!kept.includes("ugc_presenter"));
 });
 
-test("rule 6 names the E3 build gaps, and a gap is not a kit", () => {
+test("rule 6 names the build gaps that remain, and a gap is not a kit", () => {
   const details = filterCandidates(base({})).rejected.filter((item) => item.rule === "rule6_kit");
   const gapOf = (type: VisualType) => details.find((item) => item.visualType === type)?.detail ?? "";
-  assert.match(gapOf("screen_mock"), /no source can be built for it yet/);
-  assert.match(gapOf("cartoon_rigged"), /no source can be built for it yet/);
+  assert.match(gapOf("react_clip"), /no source can be built for it yet/);
   assert.match(gapOf("cartoon_generated"), /no source can be built for it yet/);
   assert.doesNotMatch(gapOf("cartoon_generated"), /kit it needs/);
+  // screen_mock and cartoon_rigged are built (E5 sources, opened in E5 follow-up): they have no gap, so rule 6 keeps them.
+  assert.equal(gapOf("screen_mock"), "", "screen_mock is not rejected by rule 6 when its kits are present");
+  assert.equal(gapOf("cartoon_rigged"), "", "cartoon_rigged is not rejected by rule 6 when its rig is present");
+});
+
+test("rule 6 refuses a component the shot's own words cannot be drawn as, with the reason from its source", () => {
+  const refusals = { screen_mock: "a one-line screen needs the product's name for its app" };
+  const refused = filterCandidates(base({ refusals })).rejected.find((item) => item.visualType === "screen_mock");
+  assert.equal(refused?.rule, "rule6_kit");
+  assert.match(refused?.detail ?? "", /cannot be built as this type: a one-line screen needs the product's name/);
 });
 
 test("rule 5: an unknown (null) price removes the candidate; it is never priced at 0", () => {
@@ -145,8 +155,10 @@ test("rule 6: a type whose kit is missing is removed", () => {
   assert.ok(rejectedBy(noPersona, "rule6_kit").includes("ugc_presenter"));
   assert.ok(rejectedBy(noPersona, "rule6_kit").includes("react_clip"));
   const noRig = base({ kits: { ...ALL_KITS, rigCharacter: false } });
-  assert.ok(rejectedBy(noRig, "rule6_kit").includes("cartoon_rigged"));
-  // cartoon_generated is an E3 build gap, so it is removed whatever the kits are; the rig kit is not its reason.
+  const riggedDetail = filterCandidates(noRig).rejected.find((item) => item.visualType === "cartoon_rigged")?.detail ?? "";
+  assert.match(riggedDetail, /the kit it needs is missing: rigCharacter/, "without a usable rig, cartoon_rigged is removed for its kit");
+  assert.ok(keptTypes(base({})).includes("cartoon_rigged"), "with the rig, cartoon_rigged is kept");
+  // cartoon_generated is a build gap, so it is removed whatever the kits are; the rig kit is not its reason.
   const generatedDetail = filterCandidates(noRig).rejected.find((item) => item.visualType === "cartoon_generated")?.detail ?? "";
   assert.doesNotMatch(generatedDetail, /rig/);
   const noProduct = base({ kits: { ...ALL_KITS, productKit: false } });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { EngineError, idSchema } from "../contracts/index.ts";
 import { videoDnaFixture, voiceTrackFixture, productionRequestFixture, FIXTURE_IDS } from "../contracts/fixtures/index.ts";
-import { alignBeat, alignmentDecisions, alignShots, DEFAULT_SHOT_LENGTH, shotIdFor, splitBeat, wordsOfShot, type AlignInput } from "./align.ts";
+import { alignBeat, alignmentDecisions, alignShots, DEFAULT_SHOT_LENGTH, shotIdFor, splitBeat, timedWordsOfShot, wordsOfShot, type AlignInput } from "./align.ts";
 import { BLENDER } from "./test/helpers.ts";
 
 const LIMITS = { minMs: 400, maxMs: 6000 };
@@ -182,13 +182,53 @@ describe("the whole alignment", () => {
 });
 
 describe("the words a shot speaks", () => {
+  const words = [
+    { text: "one", startMs: 0, endMs: 400 },
+    { text: "two", startMs: 1000, endMs: 1300 },
+    { text: "three", startMs: 4000, endMs: 4500 },
+  ];
+
   it("takes the words that start inside the shot, and falls back to the beat's words for a shot that speaks none", () => {
-    const words = [
-      { text: "one", startMs: 0 },
-      { text: "two", startMs: 1000 },
-      { text: "three", startMs: 4000 },
-    ];
     assert.deepEqual(wordsOfShot(words, { startMs: 0, endMs: 2000 }, { startMs: 0, endMs: 5000 }), ["one", "two"]);
     assert.deepEqual(wordsOfShot(words, { startMs: 2000, endMs: 3000 }, { startMs: 0, endMs: 5000 }), ["one", "two", "three"]);
+  });
+
+  it("times the words a shot speaks from the shot's start, clamped to the shot", () => {
+    const timed = timedWordsOfShot(words, { startMs: 500, endMs: 2000 }, { startMs: 0, endMs: 5000 });
+    assert.deepEqual(timed, [{ text: "two", startMs: 500, endMs: 800 }], "one starts before the shot, so it is not spoken in it");
+    const straddling = timedWordsOfShot([{ text: "long", startMs: 1200, endMs: 2600 }], { startMs: 1000, endMs: 2000 }, { startMs: 0, endMs: 3000 });
+    assert.deepEqual(straddling, [{ text: "long", startMs: 200, endMs: 999 }], "the end is clamped to the shot's last millisecond");
+  });
+
+  it("spreads a fallback's beat words across the shot in order, so no time falls outside it", () => {
+    // A shot of 2000 ms that speaks none of the beat's words (they all start before it): the beat's three words are spread.
+    const beatWords = [
+      { text: "alpha", startMs: 0, endMs: 300 },
+      { text: "beta", startMs: 300, endMs: 600 },
+      { text: "gamma", startMs: 600, endMs: 900 },
+    ];
+    const fallback = timedWordsOfShot(beatWords, { startMs: 2000, endMs: 4000 }, { startMs: 0, endMs: 1000 });
+    assert.deepEqual(
+      fallback.map((word) => word.text),
+      ["alpha", "beta", "gamma"],
+    );
+    for (const word of fallback) {
+      assert.ok(word.startMs >= 0 && word.endMs <= 1999 && word.startMs <= word.endMs, `${word.text} stays inside the shot`);
+    }
+    assert.deepEqual(
+      fallback.map((word) => word.startMs),
+      [0, 667, 1333],
+      "even slots of a third of the shot, in script order",
+    );
+  });
+
+  it("keeps wordsOfShot and timedWordsOfShot on the same words", () => {
+    for (const shot of [{ startMs: 0, endMs: 2000 }, { startMs: 2000, endMs: 3000 }, { startMs: 3000, endMs: 5000 }]) {
+      const beat = { startMs: 0, endMs: 5000 };
+      assert.deepEqual(
+        timedWordsOfShot(words, shot, beat).map((word) => word.text),
+        wordsOfShot(words, shot, beat),
+      );
+    }
   });
 });
