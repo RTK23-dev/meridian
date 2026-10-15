@@ -8,6 +8,8 @@ import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { ENGINE_STAGES, type EngineStage } from "./registry.ts";
 import type { RequestPriority } from "./settings.ts";
 import type { GoldMetrics } from "../review/gold.ts";
+import type { VariantWorkItem } from "../variants/work.ts";
+import type { WriterText } from "../variants/writer.ts";
 
 /** Where a shot's source comes from (ShotSpec.source.kind). Generation and stock need a produce job; the others do not. */
 export type ShotSourceKind = "generate" | "stock" | "component" | "asset";
@@ -54,8 +56,24 @@ export type StageOutput =
   /** decisions is set when the renderer was a fallback (Bible 6.11, L7): the manifest records why the video was rendered that way. */
   | (StageOutputBase & { stage: "render"; edlId: string; gate: GateResult; decisions?: Decision[] })
   | (StageOutputBase & { stage: "post_render_review"; edlId: string; gate: GateResult })
-  | (StageOutputBase & { stage: "variants"; variants: { edlId: string }[] })
+  /**
+   * The variants stage in phases (Bible 6.13). The request phase funds the generation variants, writes the caption and music EDLs and
+   * hands over the work list of each generation variant (`work`). Each later phase is one job of one variant, whose subject is the
+   * variant's subject (VariantWorkItem.subject): its writer call, its voice, then its plan. A phase that cannot finish is not_built with
+   * the reason, and that variant alone fails.
+   */
+  | (StageOutputBase & { stage: "variants"; phase: "request"; variants: { edlId: string }[]; work: VariantWorkItem[] })
+  | (StageOutputBase & { stage: "variants"; phase: "writer"; key: string; outcome: VariantWriterOutcome })
+  | (StageOutputBase & { stage: "variants"; phase: "voice"; key: string; outcome: VariantVoiceOutcome })
+  | (StageOutputBase & { stage: "variants"; phase: "plan"; key: string; outcome: VariantPlanOutcome })
   | (StageOutputBase & { stage: "deliver"; manifestId: string });
+
+/** A variant's writer call, done (with the text it wrote) or not built (with the reason). */
+export type VariantWriterOutcome = { status: "done"; text: WriterText } | { status: "not_built"; reason: string };
+/** A variant's voice, done (with its track's id and artifact) or not built. */
+export type VariantVoiceOutcome = { status: "done"; voiceTrackId: string; artifacts: Record<string, string> } | { status: "not_built"; reason: string };
+/** A variant's plan, done (with its artifact and the shots to produce, in the plan's own terms) or not built. */
+export type VariantPlanOutcome = { status: "done"; artifacts: Record<string, string>; produce: ShotSummary[] } | { status: "not_built"; reason: string };
 
 /**
  * The payload every engine job carries. inputArtifactIds are the only artifacts the job may read. hints are rule names from

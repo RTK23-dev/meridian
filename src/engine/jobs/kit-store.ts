@@ -145,3 +145,35 @@ export function kitPorts(sql: Sql): {
     },
   };
 }
+
+/**
+ * The product kit of a SKU in this workspace: the highest version of the kit whose sku is the SKU, or undefined when the workspace has no
+ * such kit. A variant names a SKU, not a kit id, so this reads the workspace's product kits and matches the body. Each stored body is
+ * validated on the way out, as readKit does; a body that no longer matches its contract is an internal error.
+ */
+export async function productKitBySku(sql: Sql, input: { organizationId: string; sku: string }): Promise<ProductKit | undefined> {
+  const rows = await sql<{ body: string }>`
+    select body from engine_kits
+    where organization_id = ${input.organizationId} and kind = 'product'
+    order by created_at desc, id asc
+  `;
+  let best: ProductKit | undefined;
+  let bestVersion = 0;
+  for (const row of rows) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(row.body);
+    } catch (error) {
+      throw new EngineError("internal", "a stored product kit is not JSON", { cause: error });
+    }
+    const parsed = productKitSchema.safeParse(raw);
+    if (!parsed.success) throw new EngineError("internal", "a stored product kit no longer matches its contract");
+    if (parsed.data.sku !== input.sku) continue;
+    const version = versionOf(parsed.data as unknown as Record<string, unknown>);
+    if (best === undefined || version > bestVersion) {
+      best = parsed.data;
+      bestVersion = version;
+    }
+  }
+  return best;
+}

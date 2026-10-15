@@ -1,16 +1,36 @@
 # STATUS: engine jobs and orchestration (W2)
 
-## E5 item 3 (generation variants, this branch): PARTIAL, see `../variants/STATUS.md`
+## E5 item 3 (generation variants, this branch): the work list, the phases and the variant runs are built; assembly is not
 
-- `orchestrator.ts` `applyVariants` merges only the `edl:` slots of a variants output into the request's artifacts. A prepared generation
-  variant's `plan:` and `voice:` slots stay with the stage: `deliver` reads every request artifact and needs exactly one `scene_plan`
-  (`handlers/deliver.ts`), so merging them would refuse the request. Test: `orchestrator.test.ts`, "a prepared generation variant's plan
-  and voice are not request artifacts".
-- The orchestrator's variant sub-graph is NOT built: `StageOutput`'s `variants` member has no key, work or shot list (`types.ts`), and the
-  shots, takes and edit are request-scoped. The proposal and the blockers (voice splice, prompts, wiring) are in `../variants/STATUS.md`.
-- The "Not built" sections below describe the state before this item. The handler work answers part of them (the writer call, the
-  beat-scoped voice, the variant plan and funding). The request-scoped shots, takes and edit, and the output that carries a variant's work,
-  remain open.
+Status: lead items 1 to 6 are built and their six tests pass (the work list, production wiring, the full voice re-speak as a recorded
+deviation, the product prompt as `variant_writer@2`, the hook design, and the tests). E5 item 3 is not closed: a generation variant does not
+yet reach an assembled video (see the last bullet).
+
+Full account in `../variants/STATUS.md`. What is in this folder:
+
+- **Work list (`types.ts`, `orchestrator.ts`).** `StageOutput`'s `variants` member is now phased. The request phase carries `work`, one item
+  per funded generation variant (`variants/work.ts`, `VariantWorkItem`). The writer, voice and plan phases each report one variant's outcome.
+  The orchestrator's variant branch applies each outcome to that variant's run.
+- **Variant runs (`variant-runs.ts`, pure).** A run is `preparing` (its phases), then `producing` (one produce job per shot the change makes
+  again, then one check per take, with the shot's redos), then `produced` or `failed`. A failure ends that variant alone: it never pauses the
+  request. Its decision is recorded (`variantDecision`). State is `OrchestratorState.variantRuns`, absent in older states (read as none).
+- **Scheduling.** Phase jobs are `engine.variants` jobs with subject `variantSubjectOf(key)` and `details.phase`. Produce jobs for a variant
+  shot have subject `<variant subject>.<shotId>`, and their inputs are the variant's plan artifact, not the master's. Their takes are named by
+  that subject (`handlers/produce-shot.ts`: `takeIdFor`, `assetSpecFor` take the subject; a master job's subject is its shot id, so master ids
+  are unchanged). Check jobs read the take and the variant's plan.
+- **Deliver.** Delivery waits for every variant run to end (`variantsSettled`). The variant's plan and voice stay with its run, not the
+  request's artifacts (deliver reads one scene plan). A dead variant job or a refused produce ends its run as `failed`.
+- **Validation (`validate.ts`).** The request phase's work items are validated against `variantWorkItemSchema`. A phase outcome names its
+  key and, when not built, its reason. A plan's produce list is validated as shot summaries.
+- **Registry (`registry.ts`).** `variants` is a generation-class stage (its voice phase is a generation call). Its writes are EDLs, scene
+  plans and voice tracks.
+- **Production (`production-ports.ts`, `runtime.ts`, `kit-store.ts`).** `productionVariantPorts` is passed by `productionEngineRuntime`. The
+  writer's route is read through the gateway; a route with no key is NOT_CONNECTED with no call. The voice is not connected (no voice port in
+  production), so a variant that needs one is NOT_CONNECTED with its reason. `productKitBySku` reads a product kit by its SKU.
+- **Not built.** The assembly of a generation variant (EDL with its new takes and voice; compose, pre-render, render, review). The audio
+  splice contract. A produced variant's takes are kept and not used. Owner or lead decides whether produce waits for the assembly.
+- The "Not built" sections below describe the state before this item. The variant sub-graph they name is now built as described here, up to
+  `produced`.
 
 ## W2 leftovers: wiring pass (branch `eng-e45-leftovers-2`, base 5d5925b)
 

@@ -231,12 +231,14 @@ export function promptWithHints(prompt: string, hints: readonly string[]): strin
  * The asset spec of one generate call (Bible 10.1). It is built from the plan's shot, the attempt and the hints, so a replay
  * builds the same spec with the same cache key, and a redo (a new attempt, with hints) builds a new one.
  */
-export function assetSpecFor(input: { requestId: string; shot: ShotSpec; attempt: number; hints: readonly string[] }): AssetSpec {
+export function assetSpecFor(input: { requestId: string; shot: ShotSpec; attempt: number; hints: readonly string[]; subject?: string }): AssetSpec {
   const source = input.shot.source;
   if (source.kind !== "generate") {
     throw new EngineError("invalid_input", `${input.shot.shotId} is a ${source.kind} shot and has no asset spec`, { stage: "produce_shot" });
   }
-  const label = `${input.requestId}|${input.shot.shotId}|${input.attempt}`;
+  // The label names the job's subject: a master shot's subject is its id, and a variant's shot has its own (variants/work.ts), so the
+  // variant's take is never the master's take, nor the cached answer of the master's call.
+  const label = `${input.requestId}|${input.subject ?? input.shot.shotId}|${input.attempt}`;
   const spec = {
     schema: "meridian.asset_spec/v1" as const,
     specId: stableId("asp_", `asset|${label}`),
@@ -332,7 +334,8 @@ async function storeTake(
 
   const brandId = await brandOf(ctx.sql, ctx.organizationId, ctx.requestId);
   const artifactId = newId("art_");
-  const takeId = takeIdFor(ctx.requestId, input.shotId, input.attempt);
+  // The take is named by the job's subject (a master shot's subject is its id), so a variant's take has its own id.
+  const takeId = takeIdFor(ctx.requestId, ctx.subjectId, input.attempt);
   const uri = mediaKey({ workspaceId: ctx.organizationId, requestId: ctx.requestId, stage: ctx.stage, artifactId, extension: "mp4" });
   const take: Take = takeSchema.parse({
     schema: "meridian.take/v1",
@@ -364,11 +367,11 @@ async function storeTake(
 }
 
 /** The StageOutput of a produce job. Exactly one of a take and a hold is set. */
-function outputFor(shotId: string, epoch: number, made: Stored | Refused, decisions: Decision[]): StageOutput {
+function outputFor(subjectId: string, shotId: string, epoch: number, made: Stored | Refused, decisions: Decision[]): StageOutput {
   if (made.kind === "take") {
-    return { stage: "produce_shot", subjectId: shotId, shotId, takeId: made.takeId, epoch, artifacts: made.artifacts, decisions };
+    return { stage: "produce_shot", subjectId, shotId, takeId: made.takeId, epoch, artifacts: made.artifacts, decisions };
   }
-  return { stage: "produce_shot", subjectId: shotId, shotId, takeId: null, epoch, artifacts: {}, hold: made.hold, decisions };
+  return { stage: "produce_shot", subjectId, shotId, takeId: null, epoch, artifacts: {}, hold: made.hold, decisions };
 }
 
 /** Refusals the planner rewrites once (Bible 10.4). Anything else from the router is not a refusal and is thrown. */
@@ -449,9 +452,19 @@ async function planShotOf(ctx: StageContext): Promise<{ shot: ShotSpec; planArti
   if (!planned) throw new EngineError("invalid_input", `${ctx.stage} needs its scene_plan input artifact`, { stage: ctx.stage });
   const plan = scenePlanSchema.safeParse(planned.envelope.body);
   if (!plan.success) throw new EngineError("invalid_input", "the scene plan does not parse", { stage: ctx.stage });
-  const shot = plan.data.shots.find((candidate) => candidate.shotId === ctx.subjectId);
-  if (!shot) throw new EngineError("invalid_input", `the scene plan has no shot ${ctx.subjectId}`, { stage: ctx.stage });
+  const shotId = shotIdOf(ctx);
+  const shot = plan.data.shots.find((candidate) => candidate.shotId === shotId);
+  if (!shot) throw new EngineError("invalid_input", `the scene plan has no shot ${shotId}`, { stage: ctx.stage });
   return { shot, planArtifactId: planned.envelope.artifactId };
+}
+
+/**
+ * The plan shot a produce job makes. A master job's subject is its shot id. A variant's job has its own subject, and names its shot in its
+ * details (variants/work.ts), so the shot is found in the variant's plan under its plan id.
+ */
+function shotIdOf(ctx: StageContext): string {
+  const named = ctx.payload.details.shotId;
+  return typeof named === "string" && named.length > 0 ? named : ctx.subjectId;
 }
 
 function epochFor(ctx: StageContext): number {
@@ -619,7 +632,7 @@ async function driveChain(run: ChainRun, settled: ShotProduction | null): Promis
         reason: `call ${progress.index + 1} of ${run.calls.length} (${call.modelClass}) did not make an output, so no later call is made`,
         by: "scorer",
       };
-      return { kind: "done", output: outputFor(shot.shotId, run.epoch, named, [...decisions, ...callDecisions, stop]) };
+      return { kind: "done", output: outputFor(ctx.subjectId, shot.shotId, run.epoch, named, [...decisions, ...callDecisions, stop]) };
     }
 
     if (!production.cacheHit && production.ledgerEntryId === null) {
@@ -670,7 +683,7 @@ async function finishChain(run: ChainRun): Promise<StageRunResult> {
     };
     return {
       kind: "done",
-      output: { stage: "produce_shot", subjectId: shot.shotId, shotId: shot.shotId, takeId: null, epoch: run.epoch, artifacts: {}, decisions: [...run.decisions, closing] },
+      output: { stage: "produce_shot", subjectId: ctx.subjectId, shotId: shot.shotId, takeId: null, epoch: run.epoch, artifacts: {}, decisions: [...run.decisions, closing] },
     };
   }
   const { provider, model } = splitAdapterId(last.providerId);
@@ -687,7 +700,7 @@ async function finishChain(run: ChainRun): Promise<StageRunResult> {
     latencyMs: clock() - Date.parse(run.progress.startedAt),
     createdAt: new Date(clock()).toISOString(),
   });
-  return { kind: "done", output: outputFor(shot.shotId, run.epoch, made, run.decisions) };
+  return { kind: "done", output: outputFor(ctx.subjectId, shot.shotId, run.epoch, made, run.decisions) };
 }
 
 /**
@@ -705,7 +718,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
 
       if (source.kind === "generate") {
         const started = now();
-        const spec = assetSpecFor({ requestId: ctx.requestId, shot, attempt, hints: ctx.payload.hints });
+        const spec = assetSpecFor({ requestId: ctx.requestId, shot, attempt, hints: ctx.payload.hints, subject: ctx.subjectId });
         const reservationId = requireReservation(ctx);
         const production = await ports.generator.generate({
           sql: ctx.sql,
@@ -726,7 +739,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
           };
         }
         const { made, decisions } = await fromProduction(ctx, ports, shot, planArtifactId, attempt, production, spec, started);
-        return { kind: "done", output: outputFor(shot.shotId, epoch, made, decisions) };
+        return { kind: "done", output: outputFor(ctx.subjectId, shot.shotId,epoch, made, decisions) };
       }
 
       if (source.kind === "stock") {
@@ -734,7 +747,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
         const outcome = await ports.stock({ organizationId: ctx.organizationId, query: source.query, minDurationMs: source.minMs });
         if (outcome.status === "no_results") {
           const hold: ProduceHold = { kind: "refused", errorKind: "invalid_input", hint: "stock_no_match" };
-          return { kind: "done", output: outputFor(shot.shotId, epoch, { kind: "hold", hold }, []) };
+          return { kind: "done", output: outputFor(ctx.subjectId, shot.shotId,epoch, { kind: "hold", hold }, []) };
         }
         if (outcome.status === "not_connected") {
           throw new EngineError("config", `no stock source is connected: ${joined(outcome.reasons)}`, { retryable: false, stage: "produce_shot" });
@@ -748,7 +761,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
         const clip = outcome.clips.find((candidate) => Math.abs(candidate.durationMs - planned) / planned <= thresholds.take.durationTolerance.value);
         if (clip === undefined) {
           const hold: ProduceHold = { kind: "refused", errorKind: "invalid_input", hint: "stock_duration" };
-          return { kind: "done", output: outputFor(shot.shotId, epoch, { kind: "hold", hold }, []) };
+          return { kind: "done", output: outputFor(ctx.subjectId, shot.shotId,epoch, { kind: "hold", hold }, []) };
         }
         const made = await storeTake(ctx, ports, {
           shotId: shot.shotId,
@@ -770,7 +783,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
           reason: `the first stock clip for the query, in route order; licence ${clip.licence.status} (Bible 10.3, E2.6)`,
           by: "scorer",
         };
-        return { kind: "done", output: outputFor(shot.shotId, epoch, made, [decision]) };
+        return { kind: "done", output: outputFor(ctx.subjectId, shot.shotId,epoch, made, [decision]) };
       }
 
       if (source.kind === "chain") {
@@ -827,7 +840,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
         }
         return driveChain({ ctx, ports, shot, calls, planArtifactId, epoch: epochFor(ctx), attempt, progress: chain, decisions: carried }, settled);
       }
-      const spec = assetSpecFor({ requestId: ctx.requestId, shot, attempt, hints: ctx.payload.hints });
+      const spec = assetSpecFor({ requestId: ctx.requestId, shot, attempt, hints: ctx.payload.hints, subject: ctx.subjectId });
       const production = await ports.generator.settle(
         { sql: ctx.sql, organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId: requireReservation(ctx), spec, visualType: shot.visualType },
         job,
@@ -844,7 +857,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
         };
       }
       const { made, decisions } = await fromProduction(ctx, ports, shot, planArtifactId, attempt, production, spec, Date.parse(job.submittedAt));
-      return { kind: "done", output: outputFor(shot.shotId, epochFor(ctx), made, [...carried, ...decisions]) };
+      return { kind: "done", output: outputFor(ctx.subjectId, shot.shotId,epochFor(ctx), made, [...carried, ...decisions]) };
     },
   };
 }

@@ -3,96 +3,134 @@ import { describe, it } from "node:test";
 import { EngineError, type ProductionRequest, type VoiceKit } from "../contracts/index.ts";
 import { productionRequestFixture, voiceKitFixture } from "../contracts/fixtures/index.ts";
 import type { VoiceOutcome, VoicePorts, VoiceRun } from "../voice/voice.ts";
-import { changedRequestFor, speakChangedLines, type SpeakChangedRun } from "./speak.ts";
+import { callScopeOf, variantRequestFor, variantSubjectOf } from "./work.ts";
+import { runVoiceOverPorts, scopedVoicePorts, speakVariantScript, type VariantSpeech, type VoiceRunner } from "./speak.ts";
 
-const request = productionRequestFixture as ProductionRequest;
-const voice = voiceKitFixture as VoiceKit;
+const REQUEST = productionRequestFixture as ProductionRequest;
+const VOICE = voiceKitFixture as VoiceKit;
+const CLAIMS = ["Makes four smoothies in under two minutes"];
+const SUBJECT_HOOK = variantSubjectOf("hook:2");
+const SUBJECT_PERSONA = variantSubjectOf("persona:persona_variant");
 
-function run(overrides: Partial<SpeakChangedRun> = {}): SpeakChangedRun {
+/** A runner that records each run. It never reaches a provider: it answers not connected. */
+function recordingRunner(): { runner: VoiceRunner; runs: VoiceRun[] } {
+  const runs: VoiceRun[] = [];
+  const runner: VoiceRunner = async (run): Promise<VoiceOutcome> => {
+    runs.push(run);
+    return { status: "not_connected", reason: "NOT_CONNECTED: recorded runner" };
+  };
+  return { runner, runs };
+}
+
+/** A router stub whose produce records the spec's seed. */
+function routerStub(seeds: number[]): VoicePorts {
   return {
-    organizationId: "ws_test",
-    requestId: request.requestId,
-    reservationId: "res_01JABCDEFGHJKMNPQRSTVWXYZ0",
+    router: {
+      produce: async (input: { spec: { seed: number } }) => {
+        seeds.push(input.spec.seed);
+        return { outcome: { status: "not_connected", reason: "stub" } };
+      },
+    },
+  } as unknown as VoicePorts;
+}
+
+function speech(overrides: Partial<VariantSpeech> = {}): VariantSpeech {
+  return {
+    organizationId: "ws_speak",
+    requestId: REQUEST.requestId,
+    reservationId: "res_speak",
     attempt: 1,
-    subjectId: request.requestId,
-    request,
-    language: request.script.language,
-    voice,
-    claims: [],
+    subject: SUBJECT_HOOK,
+    request: REQUEST,
+    language: REQUEST.script.language,
+    voice: VOICE,
+    claims: CLAIMS,
     lines: [{ beatId: "b1", text: "Your counter has been lying to you all along." }],
     ...overrides,
   };
 }
 
-const NOT_RUN: VoiceOutcome = { status: "not_connected", reason: "NOT_CONNECTED: the runner was not expected to run" };
+describe("a variant speaks its full script (Bible 6.13, the deviation in variants/STATUS.md)", () => {
+  it("speaks every beat of the master's script, with the new line in place of the beat it changed", async () => {
+    const { runner, runs } = recordingRunner();
+    await speakVariantScript(undefined, speech(), runner);
+    assert.equal(runs.length, 1);
+    const beats = runs[0]?.request.script.beats ?? [];
+    assert.deepEqual(beats.map((beat) => beat.beatId), REQUEST.script.beats.map((beat) => beat.beatId), "every beat is spoken");
+    assert.equal(beats[0]?.text, "Your counter has been lying to you all along.", "the hook beat is the writer's line");
+    assert.equal(beats[1]?.text, REQUEST.script.beats[1]?.text, "the other beats are the master's own text");
+  });
 
-describe("the beat-scoped voice call of a variant (Bible 6.3, 6.13)", () => {
-  it("speaks only the changed beat, in script order, with its new text", () => {
-    const changed = changedRequestFor(run());
-    assert.deepEqual(
-      changed.script.beats.map((beat) => [beat.beatId, beat.text]),
-      [["b1", "Your counter has been lying to you all along."]],
-    );
-    assert.equal(changed.constraints.maxMs, request.constraints.maxMs);
+  it("speaks a language variant's lines in the variant's language", async () => {
+    const { runner, runs } = recordingRunner();
+    const lines = REQUEST.script.beats.map((beat) => ({ beatId: beat.beatId, text: `DE ${beat.text}` }));
+    await speakVariantScript(undefined, speech({ language: "de", lines, subject: variantSubjectOf("language:de") }), runner);
+    assert.equal(runs[0]?.request.script.language, "de");
+    assert.ok(runs[0]?.request.script.beats.every((beat) => beat.text.startsWith("DE ")));
+  });
+
+  it("speaks a persona's voice over the master's own text, with the persona's voice kit", async () => {
+    const { runner, runs } = recordingRunner();
+    const persona: VoiceKit = { ...VOICE, voiceId: "voice_variant", providerVoiceId: "variant-voice-id" };
+    await speakVariantScript(undefined, speech({ voice: persona, lines: [], subject: SUBJECT_PERSONA }), runner);
+    assert.equal(runs[0]?.voice.voiceId, "voice_variant");
+    assert.deepEqual(runs[0]?.request.script.beats.map((beat) => beat.text), REQUEST.script.beats.map((beat) => beat.text));
   });
 
   it("keeps an emphasis word only while the new text still contains it", () => {
-    const changed = changedRequestFor(run({ lines: [{ beatId: "b1", text: "Your counter is lying again." }] }));
-    assert.deepEqual(changed.script.beats[0]?.emphasis, ["lying"]);
-    const dropped = changedRequestFor(run({ lines: [{ beatId: "b1", text: "Your counter misleads you." }] }));
-    assert.deepEqual(dropped.script.beats[0]?.emphasis, []);
+    const beats = REQUEST.script.beats.map((beat, index) => ({ ...beat, emphasis: ["lying"], text: index === 1 ? "The lying counter is full." : beat.text }));
+    const request = { ...REQUEST, script: { ...REQUEST.script, beats } };
+    const built = variantRequestFor({ request, language: "en", lines: [{ beatId: "b1", text: "Your counter fooled you." }] });
+    assert.deepEqual(built.script.beats[0]?.emphasis, []);
+    assert.deepEqual(built.script.beats[1]?.emphasis, ["lying"]);
   });
 
-  it("speaks in the language of the variant, which is what the voice stage transcribes against", () => {
-    const changed = changedRequestFor(run({ language: "de", lines: [{ beatId: "b1", text: "Deine Arbeitsplatte lügt dich an." }] }));
-    assert.equal(changed.script.language, "de");
-  });
-
-  it("refuses a line for a beat the request does not have, a beat with two lines, and an empty set, before anything is called", async () => {
-    let called = false;
-    const runner = async (): Promise<VoiceOutcome> => {
-      called = true;
-      return NOT_RUN;
-    };
-    const ports = {} as VoicePorts;
+  it("refuses a line for a beat the request does not have, and two lines for one beat, before any call", async () => {
+    const { runner, runs } = recordingRunner();
+    await assert.rejects(speakVariantScript(undefined, speech({ lines: [{ beatId: "b9", text: "x" }] }), runner), (error: unknown) => {
+      return error instanceof EngineError && error.kind === "invalid_input";
+    });
     await assert.rejects(
-      speakChangedLines(ports, run({ lines: [{ beatId: "b9", text: "Not a beat." }] }), runner),
+      speakVariantScript(undefined, speech({ lines: [{ beatId: "b1", text: "a" }, { beatId: "b1", text: "b" }] }), runner),
       (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
     );
-    await assert.rejects(
-      speakChangedLines(ports, run({ lines: [{ beatId: "b1", text: "One." }, { beatId: "b1", text: "Two." }] }), runner),
-      (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
-    );
-    await assert.rejects(
-      speakChangedLines(ports, run({ lines: [] }), runner),
-      (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
-    );
-    assert.equal(called, false);
+    assert.equal(runs.length, 0);
   });
 
-  it("hands the voice stage the changed request, the kit and the claims, and returns its outcome", async () => {
-    const seen: VoiceRun[] = [];
-    const ports = { marker: "ports" } as unknown as VoicePorts;
-    const outcome: VoiceOutcome = { status: "done", gate: { gate: "voice", subjectId: request.requestId, pass: false, checks: [] }, track: null };
-    const result = await speakChangedLines(
-      ports,
-      run({ claims: ["Makes four smoothies in under two minutes"] }),
-      async (voiceRun, received) => {
-        seen.push(voiceRun);
-        assert.equal((received as unknown as { marker: string }).marker, "ports");
-        return outcome;
-      },
-    );
-    assert.equal(result, outcome);
-    assert.equal(seen.length, 1);
-    assert.deepEqual(seen[0]?.request.script.beats.map((beat) => beat.beatId), ["b1"]);
-    assert.deepEqual(seen[0]?.claims, ["Makes four smoothies in under two minutes"]);
-    assert.equal(seen[0]?.voice.providerVoiceId, voice.providerVoiceId);
+  it("hands the kit and the claims to the voice stage unchanged", async () => {
+    const { runner, runs } = recordingRunner();
+    await speakVariantScript(undefined, speech(), runner);
+    assert.equal(runs[0]?.voice, VOICE);
+    assert.deepEqual(runs[0]?.claims, CLAIMS);
+    assert.equal(runs[0]?.subjectId, SUBJECT_HOOK, "the gate of the call names the variant");
+  });
+});
+
+describe("a variant's provider calls are scoped to the variant (variants/speak.ts)", () => {
+  it("shifts the spec's seed by the variant's scope, so the same text in another voice is another cache entry", async () => {
+    const seedsHook: number[] = [];
+    const seedsPersona: number[] = [];
+    const hook = scopedVoicePorts(routerStub(seedsHook), SUBJECT_HOOK);
+    const persona = scopedVoicePorts(routerStub(seedsPersona), SUBJECT_PERSONA);
+    await hook?.router.produce({ spec: { seed: 0 } } as Parameters<VoicePorts["router"]["produce"]>[0]);
+    await persona?.router.produce({ spec: { seed: 0 } } as Parameters<VoicePorts["router"]["produce"]>[0]);
+    assert.equal(seedsHook[0], callScopeOf(SUBJECT_HOOK));
+    assert.equal(seedsPersona[0], callScopeOf(SUBJECT_PERSONA));
+    assert.notEqual(seedsHook[0], seedsPersona[0]);
   });
 
-  it("with no speech connection the real voice stage makes no call and reports NOT_CONNECTED", async () => {
-    const ports = { speech: { status: "not_connected", reason: "no speech-to-text key" } } as unknown as VoicePorts;
-    const outcome = await speakChangedLines(ports, run());
-    assert.deepEqual(outcome, { status: "not_connected", reason: "no speech-to-text key" });
+  it("keeps a retake one seed step from the take before it, inside the variant's scope", async () => {
+    const seeds: number[] = [];
+    const scoped = scopedVoicePorts(routerStub(seeds), SUBJECT_HOOK);
+    await scoped?.router.produce({ spec: { seed: 0 } } as Parameters<VoicePorts["router"]["produce"]>[0]);
+    await scoped?.router.produce({ spec: { seed: 1 } } as Parameters<VoicePorts["router"]["produce"]>[0]);
+    assert.equal((seeds[1] ?? 0) - (seeds[0] ?? 0), 1);
+  });
+
+  it("passes no ports when none are wired, so the voice runner refuses before any call", async () => {
+    assert.equal(scopedVoicePorts(undefined, SUBJECT_HOOK), undefined);
+    await assert.rejects(runVoiceOverPorts({} as VoiceRun, undefined), (error: unknown) => {
+      return error instanceof EngineError && error.kind === "config" && error.message.startsWith("NOT_CONNECTED:");
+    });
   });
 });

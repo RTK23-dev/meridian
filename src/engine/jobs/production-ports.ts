@@ -5,7 +5,7 @@
 // table. A dependency that is not connected fails with a NOT_CONNECTED reason, so nothing is sent and nothing is priced on a guess.
 
 import { priceFor } from "../config/prices.ts";
-import { EngineError, roundUsd, type GateResult } from "../contracts/index.ts";
+import { EngineError, roundUsd, type GateResult, type Persona, type VoiceKit } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { Gateway } from "../gateway/gateway.ts";
 import { textTransport } from "../gateway/text.ts";
@@ -17,10 +17,14 @@ import { createHyperframesCloudAdapter, RENDER_EXPECTATION, type IntegrityInput,
 import { createShotstackAdapter, type ShotstackDeps } from "../render/shotstack.ts";
 import { mediaKey, type MediaStorePort } from "./artifact-store.ts";
 import { scopedLedgerStore } from "./asset-stores-sql.ts";
-import { kitPorts } from "./kit-store.ts";
+import { kitPorts, productKitBySku, readKit } from "./kit-store.ts";
 import { sourceUrlResolver, type MediaLinkSigner } from "./media-link.ts";
+import { sqlEventStore } from "./event-store-sql.ts";
+import { withReservationLedger } from "./sql-ledger-store.ts";
 import type { PostRenderPorts } from "./handlers/post-render-review.ts";
 import type { RenderPorts, RenderScope } from "./handlers/render.ts";
+import type { VariantGenerationPorts, VariantPorts } from "./handlers/variants.ts";
+import type { WorkspaceBudgetSource } from "./handlers/estimate-reserve.ts";
 import type { RenderDetectors } from "./gate-measures.ts";
 
 const MINUTE_MS = 60_000;
@@ -176,4 +180,57 @@ export function productionPostRenderPorts(input: ProductionPostRenderInput): Pos
     frameReader: true,
     now: input.now,
   };
+}
+
+/** The reason a variant's voice cannot be spoken in production: no voice port is built, so no voice call is made (variants/STATUS.md). */
+const VOICE_NOT_WIRED = notConnectedReason(
+  "the voice of a variant is not wired in production: the speech route, speech-to-text, the media functions and the audio loader have no deployment wiring yet",
+);
+
+export type ProductionVariantInput = {
+  sql: Sql;
+  gateway: Gateway;
+  /** The Claude client's deps for one request on its reservation (the composition's roles). */
+  roles: VariantGenerationPorts["roles"];
+  /** Meridian's Settings, through workspace-budget.ts: the workspace's monthly budget. */
+  workspaceBudget: WorkspaceBudgetSource;
+  now: () => string;
+};
+
+/**
+ * The variants stage's ports in production (Bible 6.13). The writer's route is read from the gateway, and its key comes from Meridian's
+ * credential resolver: a route with no key is NOT_CONNECTED before any call. The kits are the workspace's engine_kits rows, the monthly budget
+ * is Meridian's Settings, and the events are the engine's table. The voice is not connected (VOICE_NOT_WIRED), and music is not either, so a
+ * variant that needs a voice is reported NOT_CONNECTED with its reason, and no music variant is built.
+ */
+export function productionVariantPorts(input: ProductionVariantInput): VariantPorts {
+  return {
+    loadMusicTrack: async () => undefined,
+    withLedger: (scope, fn) => withReservationLedger(input.sql, scope.organizationId, scope.reservationId, fn),
+    events: sqlEventStore(input.sql),
+    now: input.now,
+    workspaceMonthBudget: async (scope) => {
+      const month = await input.workspaceBudget.monthBudget({ organizationId: scope.organizationId, requestId: scope.requestId, now: scope.now });
+      return month.status === "known" ? month.usd : null;
+    },
+    generation: {
+      roles: input.roles,
+      connection: async (scope) => ({ writer: await writerReasonOf(input.gateway, scope.organizationId), voice: VOICE_NOT_WIRED }),
+      loadProductKit: (scope) => productKitBySku(input.sql, scope),
+      loadPersona: async (scope) => (await readKit<Persona>(input.sql, { organizationId: scope.organizationId, kind: "persona", kitId: scope.personaId }))?.body,
+      loadVoiceKit: async (scope) => (await readKit<VoiceKit>(input.sql, { organizationId: scope.organizationId, kind: "voice", kitId: scope.voiceId }))?.body,
+    },
+  };
+}
+
+/** Whether the writer's route can be called for a workspace: its provider is connected. The NOT_CONNECTED reason when it is not. No call is made. */
+async function writerReasonOf(gateway: Gateway, organizationId: string): Promise<string | null> {
+  let providerId: string;
+  try {
+    providerId = gateway.route("llm.check").provider.id;
+  } catch (error) {
+    return notConnectedReason(error instanceof Error ? error.message : "the writer's route has no model");
+  }
+  const status = await gateway.connection(providerId, organizationId);
+  return status.connected ? null : notConnectedReason(status.reason ?? `the ${providerId} key is not connected for this workspace`);
 }

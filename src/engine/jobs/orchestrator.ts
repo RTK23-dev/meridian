@@ -12,6 +12,22 @@ import { gateReviewItem, takeReviewItem } from "../review/inbox.ts";
 import { STAGE_SPECS, engineJobKey, priorityNumber, type EngineStage } from "./registry.ts";
 import { jobSettings, type RequestPriority } from "./settings.ts";
 import type { EngineEvent, EnginePayload, ProduceHold, QueuedJob, ShotSourceKind, ShotSummary, StageOutput } from "./types.ts";
+import { nextPhaseOf } from "../variants/work.ts";
+import {
+  applyPlanOutcome,
+  applyProduceResult,
+  applyVerdict,
+  applyVoiceOutcome,
+  applyWriterOutcome,
+  failVariantRun,
+  isTerminal,
+  markIssued,
+  newVariantRun,
+  shotsToIssue,
+  takesToCheck,
+  variantDecision,
+  type VariantRun,
+} from "./variant-runs.ts";
 
 export const ORCHESTRATOR_STATE_SCHEMA = "engine.orchestrator_state/v1" as const;
 
@@ -106,6 +122,11 @@ export type OrchestratorState = {
    * E4, which reads as no proven check.
    */
   gateMetrics?: Record<string, GoldMetrics>;
+  /**
+   * The generation variants, by key (Bible 6.13). Each run has its own phases, shots and takes, and fails alone. Absent in states written
+   * before the variant work list, which reads as no run.
+   */
+  variantRuns?: Record<string, VariantRun>;
 };
 
 export type EngineEffect =
@@ -222,6 +243,7 @@ function initialState(event: Extract<EngineEvent, { type: "start" }>): Orchestra
     },
     manifestId: null,
     gateMetrics: { ...(event.gateMetrics ?? {}) },
+    variantRuns: {},
   };
 }
 
@@ -282,12 +304,18 @@ function applyOutput(state: OrchestratorState, output: StageOutput, effects: Eng
       checkGate(output.stage, output.gate);
       effects.push({ kind: "gate", gate: output.gate });
       return applyEstimate(state, output);
-    case "produce_shot":
+    case "produce_shot": {
+      const run = runOfProduce(state, output.subjectId);
+      if (run !== null) return applyVariantProduce(run, output, effects);
       return applyProduce(state, output, effects);
-    case "check_take":
+    }
+    case "check_take": {
+      const run = runOfTake(state, output.takeId);
+      if (run !== null) return applyVariantCheck(run, output, effects);
       checkGate(output.stage, output.gate);
       effects.push({ kind: "gate", gate: output.gate });
       return applyCheck(state, output, effects);
+    }
     case "edit":
       checkGate(output.stage, output.gate);
       effects.push({ kind: "gate", gate: output.gate });
@@ -308,7 +336,8 @@ function applyOutput(state: OrchestratorState, output: StageOutput, effects: Eng
       effects.push({ kind: "gate", gate: output.gate });
       return applyPostRender(state, output, effects);
     case "variants":
-      return applyVariants(state, output);
+      if (output.phase === "request") return applyVariants(state, output);
+      return applyVariantPhase(state, output, effects);
     case "deliver":
       return applyDeliver(state, output, effects);
   }
@@ -875,12 +904,14 @@ function branchStageName(stage: BranchStage): EngineStage {
   return stage === "done" ? "post_render_review" : stage;
 }
 
-function applyVariants(state: OrchestratorState, output: Extract<StageOutput, { stage: "variants" }>): void {
+/**
+ * The request phase of the variants stage (Bible 6.13). Its EDLs (caption and music) become branches. Its work list starts one run for
+ * each generation variant, and the runs are queued by schedule(). A variant's plan and voice are its own: they stay in its run, not in
+ * the request's artifacts, since deliver reads every request artifact and needs exactly one scene plan (handlers/deliver.ts).
+ */
+function applyVariants(state: OrchestratorState, output: Extract<StageOutput, { stage: "variants"; phase: "request" }>): void {
   expectQueued(state, "variants", output.subjectId);
   if (state.masterEdlId === null) conflict("variants ran without a master EDL", "variants");
-  // Only the variant EDLs become request artifacts. A prepared generation variant's plan and voice (the "plan:" and "voice:" slots) are
-  // stored by the stage and stay with it until its assembly is wired: deliver reads every request artifact and needs exactly one
-  // scene plan (handlers/deliver.ts), so merging them here would refuse the request.
   mergeArtifacts(
     state,
     Object.fromEntries(Object.entries(output.artifacts).filter(([slot]) => slot.startsWith("edl:"))),
@@ -889,7 +920,89 @@ function applyVariants(state: OrchestratorState, output: Extract<StageOutput, { 
     if (state.branches[variant.edlId]) invalid(`variant ${variant.edlId} already has a branch`, "variants");
     state.branches[variant.edlId] = newBranch(variant.edlId, state.masterEdlId);
   }
+  const runs = variantRunsOf(state);
+  for (const item of output.work) {
+    if (runs[item.key] || Object.values(runs).some((run) => run.subject === item.subject)) {
+      invalid(`variant ${item.key} is already in the variant work list`, "variants");
+    }
+    runs[item.key] = newVariantRun(item);
+  }
+  state.variantRuns = runs;
   state.nodes.variants.status = "passed";
+}
+
+// --- Variant runs (Bible 6.13) -------------------------------------------------------------------------------------------------------
+// A run's phases, produce jobs and checks are queued by schedule() and applied here. A run never pauses the request. Its end is a
+// decision in the manifest (variantDecision), so a produced or failed variant is on record with its reason.
+
+function variantRunsOf(state: OrchestratorState): Record<string, VariantRun> {
+  return state.variantRuns ?? {};
+}
+
+/** The run that owns a produce job's subject: one of its shots' subjects. Null for a master produce job. */
+function runOfProduce(state: OrchestratorState, subjectId: string): VariantRun | null {
+  return Object.values(variantRunsOf(state)).find((run) => Object.values(run.shots).some((shot) => shot.subject === subjectId)) ?? null;
+}
+
+/** The run that owns a take: the run that made it. Null for a master take. */
+function runOfTake(state: OrchestratorState, takeId: string): VariantRun | null {
+  return Object.values(variantRunsOf(state)).find((run) => run.takes[takeId] !== undefined) ?? null;
+}
+
+/** Records a decision once, when a run ends (produced or failed). */
+function endedRun(before: boolean, run: VariantRun, effects: EngineEffect[]): void {
+  if (!before && isTerminal(run)) effects.push({ kind: "decision", decision: variantDecision(run) });
+}
+
+function applyVariantPhase(state: OrchestratorState, output: Extract<StageOutput, { stage: "variants"; phase: "writer" | "voice" | "plan" }>, effects: EngineEffect[]): void {
+  const run = variantRunsOf(state)[output.key];
+  if (!run || run.subject !== output.subjectId) invalid(`variant ${output.key} is not in the variant work list`, "variants");
+  if (run.phase !== output.phase) conflict(`variant ${output.key} is not waiting for its ${output.phase} phase`, "variants");
+  const before = isTerminal(run);
+  if (output.phase === "writer") applyWriterOutcome(run, output.outcome);
+  else if (output.phase === "voice") applyVoiceOutcome(run, output.outcome);
+  else applyPlanOutcome(run, output.outcome);
+  endedRun(before, run, effects);
+}
+
+function holdTextOf(output: Extract<StageOutput, { stage: "produce_shot" }>): string | null {
+  if (output.hold === undefined) return null;
+  if (output.hold.kind === "budget") return `the budget held shot ${output.shotId}: ${output.hold.reason}`;
+  return `the provider refused shot ${output.shotId} (${output.hold.errorKind})`;
+}
+
+function applyVariantProduce(run: VariantRun, output: Extract<StageOutput, { stage: "produce_shot" }>, effects: EngineEffect[]): void {
+  const before = isTerminal(run);
+  for (const decision of output.decisions ?? []) effects.push({ kind: "decision", decision });
+  const takeSlot = output.takeId === null ? null : `take:${output.takeId}`;
+  const takeArtifactId = takeSlot === null ? null : (output.artifacts[takeSlot] ?? null);
+  applyProduceResult(run, { shotId: output.shotId, takeId: output.takeId, takeArtifactId, held: holdTextOf(output) });
+  if (takeSlot !== null && takeArtifactId !== null) run.artifacts[takeSlot] = takeArtifactId;
+  endedRun(before, run, effects);
+}
+
+function applyVariantCheck(run: VariantRun, output: Extract<StageOutput, { stage: "check_take" }>, effects: EngineEffect[]): void {
+  const before = isTerminal(run);
+  if (output.gate.pass !== output.verdict.pass) invalid("the take gate and the verdict disagree", "check_take");
+  applyVerdict(run, { takeId: output.takeId, verdict: output.verdict, redosPerShot: orchestratorLimits.shotRedos });
+  const verdictArtifact = output.artifacts[`verdict:${output.takeId}`];
+  if (verdictArtifact) run.artifacts[`verdict:${output.takeId}`] = verdictArtifact;
+  endedRun(before, run, effects);
+}
+
+/** A dead job of a variant ends that variant alone. A job of a run that has ended changes nothing. */
+function applyVariantDead(run: VariantRun, event: Extract<EngineEvent, { type: "dead" }>, effects: EngineEffect[]): void {
+  const before = isTerminal(run);
+  failVariantRun(run, `${event.stage} for ${event.subjectId} died: ${event.reason}`);
+  endedRun(before, run, effects);
+}
+
+/** The run a dead job belongs to, or null for a master job. A variant's phase, produce and check jobs are its own. */
+function variantRunOfDead(state: OrchestratorState, stage: EngineStage, subjectId: string): VariantRun | null {
+  if (stage === "variants") return Object.values(variantRunsOf(state)).find((run) => run.subject === subjectId) ?? null;
+  if (stage === "produce_shot") return runOfProduce(state, subjectId);
+  if (stage === "check_take") return runOfTake(state, subjectId);
+  return null;
 }
 
 function applyDeliver(state: OrchestratorState, output: Extract<StageOutput, { stage: "deliver" }>, effects: EngineEffect[]): void {
@@ -907,6 +1020,8 @@ function applyDeliver(state: OrchestratorState, output: Extract<StageOutput, { s
  */
 function applyDead(state: OrchestratorState, event: Extract<EngineEvent, { type: "dead" }>, effects: EngineEffect[]): void {
   const { stage, subjectId, reason } = event;
+  const variant = variantRunOfDead(state, stage, subjectId);
+  if (variant !== null) return applyVariantDead(variant, event, effects);
   if (isSingleNode(stage) && subjectId === state.requestId) {
     const node = state.nodes[stage];
     if (node.status !== "queued") conflict(`${stage} is not queued, so its dead job cannot apply`, stage);
@@ -1008,8 +1123,10 @@ function masterPassed(state: OrchestratorState): boolean {
   return state.masterEdlId !== null && state.branches[state.masterEdlId]?.status === "passed";
 }
 
+/** Delivery waits for every variant EDL's chain and every generation variant's run to end (a produced or a failed run). */
 function variantsSettled(state: OrchestratorState): boolean {
-  return Object.values(state.branches).every((branch) => branch.variantOf === null || branch.status !== "running");
+  const branchesDone = Object.values(state.branches).every((branch) => branch.variantOf === null || branch.status !== "running");
+  return branchesDone && Object.values(variantRunsOf(state)).every(isTerminal);
 }
 
 /** The accepted take of every shot, as slots. Pre-render and the edit read them (Bible 6.10). */
@@ -1042,13 +1159,22 @@ function schedule(state: OrchestratorState): QueuedJob[] {
   if (state.status !== "running") return [];
   const jobs: QueuedJob[] = [];
 
-  const add = (stage: EngineStage, subjectId: string, details: Record<string, unknown>, slots: string[], hints: string[]): void => {
+  /** Queues one job. Its inputs are the request's slots, or the artifact ids a variant run names (explicitIds), never both. */
+  const add = (
+    stage: EngineStage,
+    subjectId: string,
+    details: Record<string, unknown>,
+    slots: string[],
+    hints: string[],
+    explicitIds?: (string | undefined)[],
+  ): void => {
     const spec = STAGE_SPECS[stage];
     if (spec.paid && state.budgetReservationId === null) {
       throw new EngineError("invalid_input", `${stage} is a paid stage and needs a budget reservation on the request (Bible 14)`, { stage });
     }
     const attempt = nextAttempt(state, stage, subjectId);
-    const inputArtifactIds = [...new Set(slots.map((slot) => state.artifacts[slot]).filter((id): id is string => id !== undefined))];
+    const resolved = explicitIds ?? slots.map((slot) => state.artifacts[slot]);
+    const inputArtifactIds = [...new Set(resolved.filter((id): id is string => id !== undefined))];
     const payload: EnginePayload = {
       organizationId: state.organizationId,
       requestId: state.requestId,
@@ -1162,6 +1288,50 @@ function schedule(state: OrchestratorState): QueuedJob[] {
     if (!owner || owner.epoch !== take.epoch) continue;
     take.checkQueued = true;
     add("check_take", take.takeId, { shotId: take.shotId, takeId: take.takeId, epoch: take.epoch }, [`take:${take.takeId}`, "plan"], []);
+  }
+
+  // Generation variants (Bible 6.13). A run queues its next phase (writer, voice, plan), then the produce job of each shot it changes, then
+  // the check of each take. Its subjects and attempts are its own, so no job key is shared with the master or with another variant.
+  for (const run of Object.values(variantRunsOf(state)).sort((a, b) => a.key.localeCompare(b.key))) {
+    if (run.status === "preparing" && run.phase === null) {
+      const phase = nextPhaseOf(run.work, run.done);
+      if (phase !== null) {
+        run.phase = phase;
+        add(
+          "variants",
+          run.subject,
+          { phase, variantKey: run.key, masterEdlId: state.masterEdlId, work: run.work, text: run.text, voiceTrackId: run.voiceTrackId },
+          ["request", "plan"],
+          [],
+        );
+      }
+    }
+    for (const shot of shotsToIssue(run)) {
+      while (shot.issued < shot.takesWanted) {
+        const hints = markIssued(run, shot.shotId);
+        add(
+          "produce_shot",
+          shot.subject,
+          {
+            shotId: shot.shotId,
+            variantKey: run.key,
+            visualType: shot.visualType,
+            sourceKind: "generate",
+            modelClass: shot.modelClass,
+            providerKey: providerKeyFor("generate", shot.modelClass),
+            takesWanted: shot.takesWanted,
+            round: shot.round,
+          },
+          [],
+          hints,
+          [run.artifacts[`plan:${run.key}`]],
+        );
+      }
+    }
+    for (const take of takesToCheck(run)) {
+      take.checkQueued = true;
+      add("check_take", take.takeId, { shotId: take.shotId, takeId: take.takeId, variantKey: run.key }, [], [], [take.artifactId ?? undefined, run.artifacts[`plan:${run.key}`]]);
+    }
   }
 
   for (const branch of Object.values(state.branches).sort((a, b) => a.edlId.localeCompare(b.edlId))) {

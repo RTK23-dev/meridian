@@ -84,6 +84,29 @@ describe("the variant scene plan: one change against the master (Bible 6.13)", (
   });
 });
 
+describe("a product variant's prompts (Bible 6.13, variant_writer@2)", () => {
+  it("replaces the prompt of each touched shot with the writer's, and keeps the master's prompt on every other shot", () => {
+    const prompt = "Slow push-in on a clean kitchen counter, the Corner Toaster in the centre, no text in frame.";
+    const { plan } = variantScenePlan(master, input({ prompts: { [PRODUCT_SHOT]: prompt } }));
+    for (const [index, shot] of master.shots.entries()) {
+      const changed = plan.shots[index];
+      if (shot.shotId === PRODUCT_SHOT) {
+        assert.equal(changed?.source.kind === "generate" ? changed.source.prompt : null, prompt);
+      } else {
+        assert.deepEqual(changed, shot, `shot ${shot.shotId} keeps its prompt`);
+      }
+    }
+    assert.match(plan.decisions.at(-1)?.reason ?? "", /changes 1 generated shot/);
+  });
+
+  it("refuses the variant when a touched shot has no new prompt, before any plan is made", () => {
+    assert.throws(
+      () => variantScenePlan(master, input({ shotIds: [PRODUCT_SHOT], prompts: { [HOOK_SHOT]: "A new prompt." } })),
+      (error: unknown) => error instanceof EngineError && error.kind === "invalid_input" && /has no new prompt/.test(error.message),
+    );
+  });
+});
+
 describe("the references a variant takes from its kits (Bible 13)", () => {
   it("a product swap uses the kit's front hero image, else its first one, and no reference when the kit has none", () => {
     assert.equal(productReferenceOf(productKitFixture as ProductKit), "store://products/fixture-blender-front.png");

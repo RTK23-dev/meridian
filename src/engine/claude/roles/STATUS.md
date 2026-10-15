@@ -1,27 +1,33 @@
 # STATUS: Claude roles added in E5 (W13)
 
-Branch `eng-e5-variants`. Covers `variant_writer.ts` and its test in this folder, and `src/engine/prompts/variant_writer@1.md`. The
-other roles of this folder are eng-pipeline's and are not changed here. Nothing is pushed.
+Branch `eng-e5-variants`, then this worktree (`agent-a88fc87eb7108bf53`). Covers `variant_writer.ts` and its test in this folder, and the
+prompts `variant_writer@1.md` (kept as shipped) and `variant_writer@2.md`. The other roles of this folder are not changed here.
 
 ## variant_writer (Bible 6.13, 11.1)
 
-- Stage `variants`. Capability `llm.check` (Haiku). Prompt `variant_writer@1` (pinned by hash in the test). Output cap 600 tokens.
-  Estimate 2k in and 0.5k out at Haiku's rate: $0.0045 a call (under the Bible's $0.01).
-- Input: the beats to write (a hook beat, or every beat for a language), the variant's attribute and label, the target language and
-  the approved claims. The beats are inside an untrusted-data block.
-- Answer: one `lines` entry for each beat it was given, with no extra or repeated beat. Every number of a beat is kept in its line.
-  A line is non-empty and at most 300 characters. A failed answer gets one retry under its own key.
-- Nothing calls it yet. It is for the variant sub-graph (`variants/STATUS.md`, blocker 3).
+- Stage `variants`. Capability `llm.check` (the check route). Prompt `variant_writer@2` (the role's version; `@1` is kept and pinned).
+  Output cap 600 tokens. The estimate is 2k in and 0.5k out, $0.0045 a call at the check route's rate (under the Bible's $0.01).
+- Two tasks, one role, one input union (`task`):
+  - `lines`: the beats to write (a hook beat, or every beat for a language), the variant's attribute and label, the target language and the
+    approved claims. The answer has one `lines` entry for each beat, no extra or repeated beat, every number of a beat kept, and each line
+    non-empty and at most 300 characters.
+  - `product_prompts` (new in @2): the generated product shots to rewrite, each with the master's prompt, and the variant's product name (its
+    kit's name) and the master's. The answer has one `prompts` entry for each shot. Each prompt names the variant's product, not the master's,
+    has no quotation marks, and is at most 300 characters.
+- Both tasks are inside an untrusted-data block. A failed answer gets one retry under its own key.
+- Called by `variants/writer.ts` (`writeVariantText`) from the variants stage's writer phase (`jobs/handlers/variants.ts`).
 
 ## Tests
 
-`variant_writer.test.ts` (17): the input and answer contracts, the Haiku route and the estimate, the pinned prompt hash, a call through
-`runRole` on a reservation (the ledger row carries `role` and `promptVersion`), a retry that answers, and a failed retry that fails.
+`variant_writer.test.ts` (23): the input contracts of both tasks, the answer contracts (the lines checks, the product checks), the JSON
+schema, the estimate, the user content, the pinned bytes of @1 and @2, and a call through `runRole` on a reservation (the ledger row carries
+`role` and `promptVersion` @2), a retry that answers, and a failed retry that fails. `prompts/load.test.ts` pins both versions.
 
 ## Live (owner)
 
-Run `runRole` with `variant_writer` on the hook beat of one recorded request, through the Haiku route. Record the answer, the ledger
-row and the role-call row. Haiku's rate is still $1 / $5 (prices@2, an owner check).
+Run `runRole` with `variant_writer` on the product prompts of one recorded request, through the check route. Record the answer, the ledger
+row (its `promptVersion` must read `variant_writer@2`) and the role-call row. The check route's rate is still $1 / $5 (prices@2, an
+owner check).
 
 ## frame_reader (eng-detectors)
 
