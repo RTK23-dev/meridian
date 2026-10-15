@@ -35,6 +35,8 @@ function summaries(overrides: Record<string, unknown> = {}) {
     pinterest: summary("not_configured"),
     tiktok: summary("not_configured"),
     licensed: summary("not_configured"),
+    shopify: summary("not_configured"),
+    apify: summary("not_configured"),
     storage: { configured: false, settings: {} },
     ...overrides,
   };
