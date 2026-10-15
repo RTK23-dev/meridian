@@ -1,5 +1,99 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## Production shot ports: produce_shot and check_take in production (this pass)
+
+Scope: `runtime.ts`, `production-ports.ts` and their tests. New modules outside this folder, all in granted places:
+`src/engine/assets/video-profiles.ts` (the loader and the eligibility rule), `src/lib/meridian/storage/engine-asset-media.ts` (the asset
+store) and `src/lib/meridian/storage/engine-media-functions.ts` (the media functions' deployment setting). Nothing in `contracts/`,
+`config/routes.ts` or the job queue changed. `src/engine/jobs/handlers/` is unchanged.
+
+**Wired (fixture-tested; nothing called live)**
+
+1. **objects.** `productionComposition` passes `engineObjectStore(sql)` (Meridian's Drive-backed store, the `mediaPortMatchesDriveStore`
+   check holds) as `shotPorts.objects`, so every take is written there under the request's brand.
+2. **assetMedia.** `engineAssetMediaFor` writes image bytes to `engine/{org}/{requestId}/assets/{sha256}.png` under the request's brand. The
+   router writes through the store of its own request: `ShotPorts.assetMediaFor(scope)`. `ShotPorts.assetMedia` stays a `MediaStore` for
+   tests and is `UNBOUND_ASSET_MEDIA` in production (it refuses every write, so an unbound write fails closed). The organization is the
+   router's `workspaceId`. A write for another workspace, a content hash that does not match the bytes, an empty file, a media type other
+   than png, mp4 or wav (so speech's mp3 is refused), and a request with no brand are each refused before the object store is touched. A
+   `read` refuses a key outside the workspace before the store is read.
+3. **media.** `gatewayMediaFunctions(gateway)`, unchanged. Its base URL is the gateway's `media_functions` provider, set from
+   `MEDIA_FUNCTIONS_BASE_URL` (an https origin, path allowed, no query, fragment or credentials) by `engineMediaFunctionsBaseUrl`, which
+   reads the environment outside `src/engine`. Unset: NOT_CONNECTED, with the gateway's reason ("media_functions has no base URL set on this
+   deployment").
+4. **videoProfiles.** `ShotPorts.videoProfiles` is a `VideoProfileLoader` (`assets/video-profiles.ts`). `loadVideoProfiles(organizationId)`
+   reads GET /videos/models through the gateway (`listVideoModels`, no fetch here) and maps the routed OpenRouter models, read from
+   `config/routes.ts`: the model of `video.cinematic` and the model of `video.budget`; `video.i2v_pinned` has no model. A successful read is kept per workspace for the
+   runtime's life. A failed read is not kept, so the next call reads again (the listing is free), and concurrent calls share one read.
+   `gapsFor(organizationId)` records why each model is missing: the listing failed (with the HTTP status or the error class), a config error
+   (NOT_CONNECTED, with the key's reason), no data array, a model the listing does not name, or an entry that does not parse.
+   - **Deviation from the brief:** the loader takes the workspace id. The OpenRouter key is the workspace's (credential resolver), so a read
+     with no workspace would use the deployment key only and fail for every workspace that has its own. The brief gave no argument; the lead
+     decides whether this is acceptable.
+5. **Refusal before any paid call (`shotGeneratorOf`).** `generate` checks, in order: (a) `shotConnection` (production: the media functions
+   and the workspace's Drive connection, `productionShotConnection`); (b) for a video class, a routed OpenRouter model with a profile
+   (`noEligibleVideoModel`), else the refusal carries each model's reason from the listing; (c) the request's brand (`brandOfRequest`), which
+   is read before the paid call, not after the image is stored. Any refusal returns `not_connected` with its reasons, and produce_shot throws
+   it as a NOT_CONNECTED config error. Image and speech classes never read the video listing. `settle` reads profiles only, in case the router
+   moves the call to another target of the same class.
+6. **check_take.** Wrapped so the same connection check runs before the handler reads the take (`connectedFirst`).
+7. **productionEngineRuntime** always gives the shot ports, so `produce_shot` and `check_take` are registered in production. Their
+   NOT_CONNECTED reasons are the answer when a dependency is missing.
+
+**Still NOT_CONNECTED in production, and why**
+
+- **Every shot, with no `MEDIA_FUNCTIONS_BASE_URL` on the deployment.** The media functions are the probe, the frames and the detectors of
+  produce_shot and check_take, and the render and post-render stages. The deployment setting is the owner's to set (the host must also be
+  restricted: the functions have no credential, scripts/engine/STATUS.md finding 3).
+- **Every shot, when the workspace has no Google Drive connection.** A take and an image are stored in Drive; nothing is paid for a shot that
+  cannot be stored. The check reads that a connection exists, not that its token opens; an unreadable token still fails the store after a
+  paid call, which is a residual risk for the live run.
+- **Video shots, when the workspace's OpenRouter key is missing or the listing fails.** The reason is the listing's (NOT_CONNECTED for a
+  missing key; "could not be read" for a failed listing).
+- **Video models the listing does not name.** The `video.budget` model is absent from the recorded listing, so its shots are
+  refused with "does not name" until the live listing names it. `video.i2v_pinned` has no model in `routes.ts` (the first-and-last-frame
+  test chooses one), so its shots are refused with "no OpenRouter model routed".
+- **Speech.** The asset store refuses audio/mpeg (the speech adapter's mp3), because the engine's object keys carry only png, mp4 and wav.
+  No production path requests speech through the shot ports (the voice stage is not registered in production). A jpeg or webp image is
+  refused the same way; the image adapter asks for png.
+- **check_take's measurements.** The similarity scorer and the detectors are not wired in production, so their checks are missing evidence
+  and the take escalates (Bible 12). They are not NOT_CONNECTED errors.
+- **Not in this pass:** avatar, lip-sync, image.edit (model null in `routes.ts`), stock (the Pexels and Pixabay keys) and the rest of the
+  routes keep their own NOT_CONNECTED reasons, as before.
+
+**Tests (this worktree; `NODE_ENV=development node --experimental-strip-types --test`)**
+
+- `src/engine/jobs/runtime.test.ts`: production registers produce_shot and check_take once per handle; with no media functions URL a shot is
+  refused with its reason and nothing is sent; the production shot ports carry the injected object store and a store bound to each request
+  (the image lands under the request's brand, the unbound store refuses); a video shot is refused with the listing's reason before any call
+  (a 500 listing, one GET only); an image shot reads no listing and a request with no brand is refused before its call; check_take is refused
+  before it reads a take when the connection is missing.
+- `src/engine/jobs/production-ports.test.ts`: the media functions problem; the shot connection (media first, then Drive; nothing read when the
+  media functions are missing).
+- `src/engine/assets/video-profiles.test.ts`: the routed models; a listing that names the route's model yields its profile; the model it
+  does not name is left out with its reason; a failed listing yields no profile, with its reason, and is read again; a read is kept per
+  workspace; no key is NOT_CONNECTED with no request; a listing with no data array is a failed read; an entry with no durations is left
+  out with its reason; the eligibility rule.
+- `src/lib/meridian/storage/engine-asset-media.test.ts` and `engine-media-functions.test.ts`: the asset store's keys, its refusals (another
+  organization, hash mismatch, empty, media type, no brand), its reads; the setting's rules.
+- Result: the five changed test files run 54 pass, 0 fail. The wider engine jobs, handlers and assets suites were run once before the test
+  edits: 559 of 560 passed, the one failure being the old assertion that production registers no produce_shot, which this pass replaces.
+- `npx tsc --noEmit`: exit 0. `npx eslint` on every changed file: exit 0.
+
+**The owner's live run (agents hold no keys; nothing here calls a provider)**
+
+1. Restrict the media functions' host to Meridian, then set `MEDIA_FUNCTIONS_BASE_URL` (https) on the deployment. Record one `probe` through
+   `gatewayMediaFunctions` and its result.
+2. Connect Google Drive for the test workspace (readDriveConnectionMeta must show it), and set a workspace OpenRouter key.
+3. Read GET /videos/models live. Record the listing's answer for the `video.cinematic` and `video.budget` models, and `gapsFor` for the
+   workspace. Record the loader's gaps (any "does not name" or "could not be read" reason).
+4. One `video.cinematic` shot through produce_shot on a request with a brand: record the generation id, the ledger row (estimate and
+   actual), the take's `engine/...mp4` key in Drive, the probe, and the check_take verdict.
+5. One `image.keyframe` call through the request's asset store: record the `engine/{org}/{request}/assets/{sha256}.png` key, its Drive
+   object, and the signed link the chain's providerUrl returns for it (MEDIA_LINK_SECRET and APP_URL must be set), and that the route serves
+   it (200, image/png).
+6. A refusal check: with the workspace's key removed, a video shot must return the NOT_CONNECTED reason with no paid call (ledger unchanged).
+
 ## E5 item 3 (generation variants, this branch): built through assembly and the variant's own chain
 
 ## providerUrl and kit images (branch `worktree-agent-afd76db5012a9b7ba`, from `329b60a`)
@@ -35,7 +129,8 @@ handler, the orchestrator's variant branch and `src/engine/contracts/` are not t
 
 **Still NOT_CONNECTED in production, and why**
 
-- **`produce_shot` and `check_take` are not registered in production.** `productionComposition` passes no `shotPorts`, so the dispatcher
+- **(Superseded by "Production shot ports" at the top of this file: production now registers both stages.)** `produce_shot` and
+  `check_take` were not registered in production. `productionComposition` passed no `shotPorts`, so the dispatcher
   refuses a chain stage with `not_implemented` (never a success). Shot ports need three things that do not exist: `assetMedia`, a `MediaStore`
   for keyframe and speech bytes (no production implementation; a keyframe's uri must be an engine object key for the clip's first frame to
   link), `videoProfiles` (the video models' listing: none), and the media functions (`gatewayMediaFunctions` is NOT_CONNECTED until the

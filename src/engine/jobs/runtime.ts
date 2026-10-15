@@ -5,11 +5,13 @@
 // What is registered, and what is not (E3 status, see STATUS.md):
 //   - always: intake, plan, estimate_reserve, edit. They need the database, the gateway (for the Claude roles), the kits and the
 //     workspace's monthly budget (Meridian's Settings, through workspaceBudgetFromSettings).
-//   - with shotPorts: produce_shot and check_take. Their media functions, object store and asset-media store are deployment
-//     wiring that does not exist yet, so production does not register them. They stay not_implemented, which fails closed.
-//     The chain's providerUrl (Bible 10.1) is built by productionComposition from the gateway's base URLs and Meridian's
-//     signer, and passed to produce_shot with the shot ports, so it is ready when the shot ports are. A chain provider with no
-//     base URL makes that link NOT_CONNECTED with its reason (jobs/STATUS.md).
+//   - with shotPorts: produce_shot and check_take. Production always gives them (productionComposition): the media functions
+//     (MEDIA_FUNCTIONS_BASE_URL, read outside src/engine), the engine's object store (Drive), the request-bound asset store and the
+//     video profiles from GET /videos/models (assets/video-profiles.ts). Before any paid call, shotConnection names what is not
+//     connected (the media functions, Drive), and a video class with no eligible model is refused with the listing's reasons. A
+//     composition with no shotPorts keeps both stages not_implemented, which fails closed. The chain's providerUrl (Bible 10.1) is
+//     built by productionComposition from the gateway's base URLs and Meridian's signer. A chain provider with no base URL makes
+//     that link NOT_CONNECTED with its reason (jobs/STATUS.md).
 //   - with their ports: analyze_reference (the `analysis` ports) and voice (the `voice` ports), both W6. Without ports they stay
 //     not_implemented. A composition may also pass a handler for render (W10) through `handlers`.
 //   - E4 and E5 (this file, later pass): compose, pre_render_gate, variants and deliver are always registered. They need no provider:
@@ -25,9 +27,10 @@
 
 import { createAssetRouter, type AsyncAssetRouter, type RouterSettings } from "../assets/router.ts";
 import type { MediaStore } from "../assets/adapter.ts";
-import type { VideoProfile } from "../assets/providers/openrouterVideo.ts";
+import { isVideoClass, type VideoProfile } from "../assets/providers/openrouterVideo.ts";
 import { adapterFor, stockProviderFor } from "../assets/providers/index.ts";
-import type { ModelClass, ProviderAdapter } from "../contracts/index.ts";
+import { EngineError, type ModelClass, type ProviderAdapter } from "../contracts/index.ts";
+import { noEligibleVideoModel, videoProfileLoader, type VideoProfileLoader } from "../assets/video-profiles.ts";
 import { createAnalyzeReferenceHandler } from "./handlers/analyze-reference.ts";
 import { createVoiceHandler, type VoiceStagePorts } from "./handlers/voice.ts";
 import type { ReferencePorts } from "../analyze/reference.ts";
@@ -35,14 +38,19 @@ import { analysisReadings } from "../analyze/frameReader.ts";
 import type { PictureClient } from "../media/index.ts";
 import type { TakeDetectors } from "./gate-measures.ts";
 import {
+  brandOfRequest,
   gatewayMediaFunctions,
   productionPostRenderPorts,
   productionProviderUrl,
   productionRenderPorts,
+  productionShotConnection,
   productionVariantPorts,
   type ProviderUrl,
+  type ShotConnection,
 } from "./production-ports.ts";
 import { engineMediaLinkSigner, engineObjectStore } from "../../lib/meridian/storage/engine-media-link.ts";
+import { engineAssetMediaFor } from "../../lib/meridian/storage/engine-asset-media.ts";
+import { engineMediaFunctionsBaseUrl } from "../../lib/meridian/storage/engine-media-functions.ts";
 import type { MediaLinkSigner } from "./media-link.ts";
 import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
@@ -61,7 +69,7 @@ import { createEstimateReserveHandler, type WorkspaceBudgetSource } from "./hand
 import { createCheckTakeHandler, type CheckTakePorts } from "./handlers/check-take.ts";
 import { createIntakeHandler, type IntakePorts } from "./handlers/intake.ts";
 import { createPlanHandler } from "./handlers/plan.ts";
-import { createProduceShotHandler, routerGenerator, type ProduceShotPorts } from "./handlers/produce-shot.ts";
+import { createProduceShotHandler, routerGenerator, type ProduceShotPorts, type ShotGenerator } from "./handlers/produce-shot.ts";
 import { registerEngineHandlers } from "./handlers/register.ts";
 import { kitPorts } from "./kit-store.ts";
 import type { MediaStorePort } from "./artifact-store.ts";
@@ -86,10 +94,29 @@ export type ShotPorts = {
   media: Pick<MediaFunctions, "probe" | "frames">;
   /** The object store the takes' media is written to (Bible 5.2). */
   objects: MediaStorePort;
-  /** The asset router's store for image and speech bytes. Video and stock results are URLs and need none. */
+  /**
+   * The asset router's store for image and speech bytes, for a shot with no request scope (tests). Polls take it too: a poll writes no
+   * bytes. Production gives assetMediaFor instead, and this store refuses every write.
+   */
   assetMedia: MediaStore;
-  /** The video models' profiles from the provider's listing (E2 harness). Empty means no video model is eligible. */
-  videoProfiles?: ReadonlyMap<string, VideoProfile>;
+  /**
+   * The asset store of one request (Bible 5.2). Its keys name the request and the bytes go under its brand, so the router writes through
+   * the store of the call's own request. Production: engineAssetMediaFor over the engine's object store. When given, it is used instead
+   * of assetMedia.
+   */
+  assetMediaFor?: (scope: { organizationId: string; requestId: string }) => MediaStore;
+  /**
+   * The video models' profiles, loaded from GET /videos/models for one workspace and cached per runtime (assets/video-profiles.ts). A
+   * model the listing does not name, or a listing that failed, leaves it out with its reason, and produce_shot refuses a video shot with
+   * those reasons. Absent: no video model is eligible, and produce_shot says so.
+   */
+  videoProfiles?: VideoProfileLoader;
+  /**
+   * The reason the shot ports cannot make or store a take for this workspace, or null when they can. It is checked before any paid call
+   * (produce_shot's generate, check_take's read). Production: productionShotConnection (media functions and Drive connected). Absent,
+   * nothing is checked, which is for tests with fake ports only.
+   */
+  shotConnection?: ShotConnection;
   routerSettings?: Partial<RouterSettings>;
   sleep?: (ms: number) => Promise<void>;
   /** The similarity scorer (Bible 20.2). Absent, the similarity checks are missing evidence and escalate. */
@@ -152,12 +179,13 @@ export function pollAdapterFor(composition: EngineComposition, providerId: strin
   for (const modelClass of POLLABLE_CLASSES) {
     for (const route of composition.gateway.routes(modelClass)) {
       if (`${route.provider.id}:${route.model}` !== providerId) continue;
+      // A poll reads no profile (the video poll is by job id) and writes no bytes, so the profiles are empty and the store is unbound.
       return adapterFor(route, {
         gateway: composition.gateway,
         organizationId,
         workspaceId: organizationId,
         media: ports.assetMedia,
-        videoProfiles: ports.videoProfiles ?? new Map<string, VideoProfile>(),
+        videoProfiles: new Map<string, VideoProfile>(),
         voice: null,
         speechSpeed: 1,
       });
@@ -179,8 +207,11 @@ function rolesFor(composition: EngineComposition): (scope: { organizationId: str
   });
 }
 
-/** The asset router of one generation job, on the request's reservation (Bible 10). */
-function routerFor(composition: EngineComposition, ports: ShotPorts) {
+/**
+ * The asset router of one generation job, on the request's reservation (Bible 10). The profiles are the ones the caller loaded for the
+ * job's workspace. The store is the request's own when the shot ports give one (assetMediaFor), so a keyframe's key names the request.
+ */
+function routerFor(composition: EngineComposition, ports: ShotPorts, profiles: ReadonlyMap<string, VideoProfile>) {
   const now = composition.now ?? isoNow;
   return (scope: { sql: Sql; organizationId: string; requestId: string; reservationId: string }): AsyncAssetRouter =>
     createAssetRouter({
@@ -190,8 +221,8 @@ function routerFor(composition: EngineComposition, ports: ShotPorts) {
       stats: sqlProviderStats(scope.sql, scope.organizationId),
       breakers: sqlBreakerStore(scope.sql, scope.organizationId),
       buckets: sqlBucketStore(scope.sql, scope.organizationId),
-      media: ports.assetMedia,
-      videoProfiles: ports.videoProfiles ?? new Map<string, VideoProfile>(),
+      media: ports.assetMediaFor?.({ organizationId: scope.organizationId, requestId: scope.requestId }) ?? ports.assetMedia,
+      videoProfiles: profiles,
       ...(ports.routerSettings === undefined ? {} : { settings: ports.routerSettings }),
       ...(ports.sleep === undefined ? {} : { sleep: ports.sleep }),
       now: () => Date.parse(now()),
@@ -208,13 +239,59 @@ export function analysisPortsOf(analysis: ReferencePorts, picture: PictureClient
 }
 
 /**
+ * The asset store of a shot with no request scope. Production binds one per request (assetMediaFor), so this store refuses every write:
+ * a shot that reaches it is refused with its reason, and nothing is stored.
+ */
+export const UNBOUND_ASSET_MEDIA: MediaStore = {
+  async put() {
+    throw new EngineError("config", "the asset store is not bound to a request, so no bytes are stored");
+  },
+};
+
+/**
+ * The generator of produce_shot (Bible 10.1, 10.4, 14). A generate call is made only when its take can be stored and priced:
+ *   1. the shot ports are connected for the workspace (shotConnection: the media functions and the workspace's Drive, production);
+ *   2. a video class has a routed OpenRouter model with a verified profile (videoProfiles); otherwise the refusal names each model's
+ *      reason, from the listing, and no call is made;
+ *   3. the request has a brand, so its media has a place to be stored (checked before the paid call, not after it).
+ * A refusal at 1 or 2 returns not_connected with its reasons, which produce_shot turns into a NOT_CONNECTED failure of the shot. A settle
+ * makes no new paid call; it reads the profiles only, in case the router moves the call to another target of the same class.
+ * Image and speech classes never read the video listing, so an image shot does not depend on it.
+ */
+export function shotGeneratorOf(composition: EngineComposition, shot: ShotPorts): ShotGenerator {
+  const loader = shot.videoProfiles;
+  const profilesFor = async (organizationId: string, modelClass: string): Promise<ReadonlyMap<string, VideoProfile>> =>
+    loader === undefined || !isVideoClass(modelClass) ? new Map<string, VideoProfile>() : loader.loadVideoProfiles(organizationId);
+  return {
+    async generate(input) {
+      const blocked = shot.shotConnection === undefined ? null : await shot.shotConnection(input.organizationId);
+      if (blocked !== null) return { status: "not_connected", reasons: [blocked] };
+      const profiles = await profilesFor(input.organizationId, input.spec.modelClass);
+      const refusal = noEligibleVideoModel({
+        gateway: composition.gateway,
+        modelClass: input.spec.modelClass,
+        profiles,
+        gaps: loader?.gapsFor(input.organizationId) ?? [],
+      });
+      if (refusal !== null) return { status: "not_connected", reasons: refusal };
+      await brandOfRequest(input.sql, input.organizationId, input.requestId);
+      return routerGenerator(routerFor(composition, shot, profiles)).generate(input);
+    },
+    async settle(input, job, polled) {
+      const profiles = await profilesFor(input.organizationId, job.modelClass);
+      return routerGenerator(routerFor(composition, shot, profiles)).settle(input, job, polled);
+    },
+  };
+}
+
+/**
  * The ports of produce_shot for a composition with shot ports. The composition's providerUrl (Bible 10.1) is passed on here, so a chain's
  * inputs are linked for the provider that reads them. Absent the providerUrl, the field is absent too (the adapters refuse the stored uris).
  */
 export function produceShotPortsOf(composition: EngineComposition, shot: ShotPorts): ProduceShotPorts {
   const now = composition.now ?? isoNow;
   return {
-    generator: routerGenerator(routerFor(composition, shot)),
+    generator: shotGeneratorOf(composition, shot),
     stock: (input) =>
       searchStock({
         gateway: composition.gateway,
@@ -228,6 +305,18 @@ export function produceShotPortsOf(composition: EngineComposition, shot: ShotPor
     objects: shot.objects,
     now: () => Date.parse(now()),
     ...(composition.providerUrl === undefined ? {} : { providerUrl: composition.providerUrl }),
+  };
+}
+
+/** A stage handler that checks its shot ports are connected before it runs. A missing connection is a config error with its reason. */
+function connectedFirst(handler: StageHandler, stage: string, connection: ShotConnection): StageHandler {
+  return {
+    ...handler,
+    async run(ctx) {
+      const reason = await connection(ctx.organizationId);
+      if (reason !== null) throw new EngineError("config", reason, { stage, retryable: false });
+      return handler.run(ctx);
+    },
   };
 }
 
@@ -298,7 +387,8 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
       ...(shot.detectors === undefined ? {} : { detectors: shot.detectors }),
     };
     handlers.produce_shot = createProduceShotHandler(produceShotPortsOf(composition, shot));
-    handlers.check_take = createCheckTakeHandler(checkPorts);
+    const checkTake = createCheckTakeHandler(checkPorts);
+    handlers.check_take = shot.shotConnection === undefined ? checkTake : connectedFirst(checkTake, "check_take", shot.shotConnection);
   }
 
   registerEngineHandlers(runtime, { ...handlers, ...(composition.handlers ?? {}) });
@@ -312,8 +402,16 @@ const productionRuntimes = new WeakMap<Sql, EngineRuntime>();
  * gateway's own fetch, and the signer reads the server's secret and origin. A test passes its own gateway or signer, nothing else.
  */
 export type ProductionDeps = {
+  /** A gateway a test builds. Given, the media functions' URL is the gateway's own; production builds the gateway (below). */
   gateway?: Gateway;
   mediaLinks?: MediaLinkSigner;
+  /** The engine's object store. Production: engineObjectStore(sql), Meridian's Drive-backed store. */
+  objects?: MediaStorePort;
+  /**
+   * The media functions' base URL for a gateway built here. Production reads MEDIA_FUNCTIONS_BASE_URL (engine-media-functions.ts); null
+   * leaves the media functions NOT_CONNECTED. Ignored when a gateway is given.
+   */
+  mediaFunctionsBaseUrl?: string | null;
 };
 
 /**
@@ -322,13 +420,36 @@ export type ProductionDeps = {
  * linked through the signer, and a chain provider with no base URL on this deployment is NOT_CONNECTED with its reason.
  */
 export function productionComposition(sql: Sql, deps: ProductionDeps = {}): EngineComposition {
-  const gateway = deps.gateway ?? createGateway({ transport: fetchHttpTransport, credentials: meridianCredentialSource() });
+  // The media functions' base URL is a deployment setting (MEDIA_FUNCTIONS_BASE_URL), read here, outside src/engine. Unset, the media
+  // functions are NOT_CONNECTED with the gateway's reason, and so is every stage that needs them.
+  const mediaFunctionsBaseUrl = deps.mediaFunctionsBaseUrl === undefined ? engineMediaFunctionsBaseUrl() : deps.mediaFunctionsBaseUrl;
+  const gateway =
+    deps.gateway ??
+    createGateway({
+      transport: fetchHttpTransport,
+      credentials: meridianCredentialSource(),
+      providers: mediaFunctionsBaseUrl === null ? {} : { media_functions: { baseUrl: mediaFunctionsBaseUrl } },
+    });
   const mediaLinks = deps.mediaLinks ?? engineMediaLinkSigner();
   // The render and post-render deps (owner decision 2026-10-14): HyperFrames and Shotstack through the gateway, the engine's objects in
   // Meridian's store, and the 15-minute source links signed by Meridian. Each is fail closed on its own (NOT_CONNECTED, price unknown).
-  const objects = engineObjectStore(sql);
+  const objects = deps.objects ?? engineObjectStore(sql);
   const media = gatewayMediaFunctions(gateway);
   const workspaceBudget = workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql));
+  // The shot ports (Bible 6.6, 6.7): the take and image stores under each request's brand, the video profiles of the listing, and the
+  // connection check that refuses a shot before any paid call when the media functions or the workspace's Drive are not connected.
+  const shotPorts: ShotPorts = {
+    media,
+    objects,
+    assetMedia: UNBOUND_ASSET_MEDIA,
+    assetMediaFor: (scope) =>
+      engineAssetMediaFor(
+        { objects, brandOf: ({ organizationId, requestId }) => brandOfRequest(sql, organizationId, requestId) },
+        { organizationId: scope.organizationId, requestId: scope.requestId },
+      ),
+    videoProfiles: videoProfileLoader({ gateway }),
+    shotConnection: productionShotConnection({ sql, gateway }),
+  };
   return {
     sql,
     gateway,
@@ -336,6 +457,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
     render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks, now: isoNow }),
     postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
     providerUrl: productionProviderUrl({ gateway, mediaLinks }),
+    shotPorts,
   };
 }
 

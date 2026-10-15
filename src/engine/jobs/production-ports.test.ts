@@ -9,10 +9,12 @@ import { engineMediaLinkSigner } from "../../lib/meridian/storage/engine-media-l
 import {
   chainProvidersOf,
   gatewayMediaFunctions,
+  mediaFunctionsProblem,
   objectKeyOfUri,
   productionPostRenderPorts,
   productionProviderUrl,
   productionRenderPorts,
+  productionShotConnection,
   renderLineUsd,
 } from "./production-ports.ts";
 import type { RenderScope } from "./handlers/render.ts";
@@ -55,6 +57,46 @@ test("the media functions are not connected without a base URL, and no request i
     (error: unknown) => error instanceof EngineError && error.kind === "config" && error.message.startsWith("NOT_CONNECTED"),
   );
   assert.equal(requests.length, 0);
+});
+
+/** A gateway whose media functions have a base URL (the deployment's setting), and no key: the media functions carry none. */
+function mediaGateway() {
+  return createGateway({
+    transport: recordedTransport({}).transport,
+    credentials: keySource({}),
+    providers: { media_functions: { baseUrl: "https://fn.example.com" } },
+  });
+}
+
+/** A SQL handle that answers every statement with the given rows. Only the Drive connection read runs through it here. */
+function sqlAnswering(rows: unknown[]): Sql {
+  return (async () => rows) as unknown as Sql;
+}
+
+/** A SQL handle that fails when it is read: a check that returns before the database must never touch it. */
+const SQL_MUST_NOT_RUN = (() => {
+  throw new Error("the database was read");
+}) as unknown as Sql;
+
+test("the media functions are a problem with their NOT_CONNECTED reason until the deployment sets a base URL", async () => {
+  const unset = gatewayWith(recordedTransport({}).transport);
+  assert.ok((await mediaFunctionsProblem(unset))?.startsWith("NOT_CONNECTED: the media functions are not connected: media_functions has no base URL"));
+  assert.equal(await mediaFunctionsProblem(mediaGateway()), null);
+});
+
+test("the shot connection names the media functions when they are not connected, and reads nothing else", async () => {
+  const reason = await productionShotConnection({ sql: SQL_MUST_NOT_RUN, gateway: gatewayWith(recordedTransport({}).transport) })("org_prod");
+  assert.ok(reason?.startsWith("NOT_CONNECTED: the media functions are not connected"));
+});
+
+test("with the media functions connected, a workspace with no Drive connection is NOT_CONNECTED: a take has nowhere to be stored", async () => {
+  const reason = await productionShotConnection({ sql: sqlAnswering([]), gateway: mediaGateway() })("org_prod");
+  assert.ok(reason?.startsWith("NOT_CONNECTED: Google Drive is not connected for this workspace"), reason ?? "no reason");
+});
+
+test("with the media functions and the workspace's Drive connected, the shot connection is ready (null)", async () => {
+  const connected = sqlAnswering([{ created_at: new Date("2026-10-01T00:00:00.000Z") }]);
+  assert.equal(await productionShotConnection({ sql: connected, gateway: mediaGateway() })("org_prod"), null);
 });
 
 test("the HyperFrames adapter sends nothing without a HeyGen key, and says so", async () => {
