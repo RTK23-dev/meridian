@@ -120,3 +120,21 @@ gate fail (`style_kit_loaded`), so nothing runs on a guessed look.
 ## Owner live run
 
 None. No provider is called, and the database is PGlite only.
+
+## E5: the variants and deliver handlers (`variants.ts`, `variants.test.ts`, `deliver.ts`, `deliver.test.ts`)
+
+Branch `eng-e5-variants`. The logic is in `src/engine/variants/`, `src/engine/deliver/` and `src/engine/events/` (see their STATUS.md).
+
+- `createVariantsHandler(ports)`: reads the request, the plan and the master EDL, and the reservation's headroom. Builds the caption and
+  music variants as EDLs (checked against their control) and writes them as `edl` artifacts with `variantOf` set. Reports hook,
+  product, persona and language variants as deferred, with their work. Emits `variant.planned` for each variant.
+- `createDeliverHandler(ports)`: picks the delivered videos, settles the ledger (reconcile, then release under the reservation's lock),
+  writes one manifest per delivered video under a stable id, and emits the learning events. A retry writes and emits nothing new.
+- Tests on PGlite: `variants.test.ts` (8), `deliver.test.ts` (7). Both use the artifact store and check the output with
+  `validateStageOutput`.
+- Needs from the orchestrator (not made here, eng-pipeline's files): `nodeSlots.variants` must pass the `production_request` and
+  `scene_plan` slots, and `registry.ts` must widen `reads` for `variants` (the stage refuses without them). `deliver` reads every
+  slot the orchestrator passes; its registry `reads` is empty.
+- Needs from the worker (not wired here): the ports. `loadMusicTrack`, `withLedger` (production: `withReservationLedger`), the event
+  store (a Postgres store on `engine_events`), `roleCalls` (`listRoleCalls`), `gates` and `decisions` (the engine tables), and the clock.
+- The variants stage makes no generation call and no paid call. The deliver stage pays for nothing; it reconciles and releases.
