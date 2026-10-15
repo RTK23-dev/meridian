@@ -251,8 +251,9 @@ Factory discovery at volume through Apify with the outlier rater wired (B1, B2, 
 Shopify orders and sleep mode with its holdout (B5, B6, migration 0092). Migration 0093 makes a creator's niche nullable.
 
 Checks on b6b51c6: CI green (typecheck, lint and build; all six test shards; e2e; sidecar; ui-smoke). Locally, the `src` tests
-run in six parallel groups; the counts are recorded below once every group has finished. Typecheck was clean and lint had 0
-errors and 5 warnings on the merged branch before the last test-only fixes; CI typecheck and lint pass on b6b51c6.
+in six parallel groups: 4,792 tests, 4,751 pass, 0 fail, 41 skipped (the PostgreSQL and credential-gated tests, as before).
+Typecheck was clean and lint had 0 errors and 5 warnings on the merged branch before the last test-only fixes; CI typecheck and
+lint pass on b6b51c6. The `scripts/` tests (153) passed in the full run.
 
 Not done, and why:
 - Generation variant sub-graph (E4/E5 item 3). Shots are request-scoped and cannot be edited per variant; voice has no
