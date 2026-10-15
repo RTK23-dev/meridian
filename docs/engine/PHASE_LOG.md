@@ -322,3 +322,27 @@ Owner items: the keys for OpenRouter, HeyGen, Anthropic, Apify and Shopify; the 
 URL; `DATABASE_URL` and `MERIDIAN_PG_TEST_URL`; the speech-to-text vendor; the platform file-size limit; the Shotstack credential slot;
 the two critic_final items; the `paidPartnership` default; music, disclosure wording and the stock licence; the `image.edit` price; the
 deployment's shot ports; the EDL audio contract step; the kit key convention; the product naming question; and merging PR #71.
+
+## 2026-10-15 Final pass: production shot ports, stop motion floor, image input and the lead's decisions
+
+Merged after the completion pass (commits 3c6c92e and c9b5d8d):
+- **Production shot ports** (`src/engine/jobs/runtime.ts`, `production-ports.ts`): the takes' object store is the engine media store on
+  Drive; the asset store is an adapter over the same store, PNG, MP4 and WAV keys only; the media functions take their base URL from
+  `MEDIA_FUNCTIONS_BASE_URL`; the video profiles come from the gateway's listing, loaded per workspace and cached per runtime. Each
+  missing piece is a NOT_CONNECTED with its reason. Still NOT_CONNECTED in production: every shot stage until the media functions URL is
+  set; shots without a Drive connection or an OpenRouter key; `video.budget` shots, because the recorded listing does not name that
+  model; `video.i2v_pinned`, which has no model; speech and non-PNG images. Similarity and detector checks are missing evidence.
+- **Media functions host**: the functions carry no credential, so the host must be restricted before the URL is set.
+- **stopmotion.player floor is 24 frames** (the Bible's number). Overshoot above 36 is refused, not clamped. The golden frames were
+  rechecked by centre colour (9 of 9). Planned stop-motion shots are now about 1.9 to 3.0 seconds. Longer shots need a lower frame rate
+  per shot; that is the next decision for the owner. stop_motion stays refused until `image.edit` has a price.
+- **Image input**: OpenRouter's image generation guide (2026-10-15) documents `input_references` as
+  `{type: "image_url", image_url: {url}}`, which matches the code. No code change was needed. The reference limit is unverified
+  (`IMAGE_REFERENCES_MAX`), and no live call has been made.
+- **Lead decisions recorded here**: kit images use the key `kits/{org}/{brand}/{kind}/{kitId}/{name}.png`, the convention the chain
+  work used, and it is confirmed. The chain call records stay in `engine_chain_calls` (migration 0094), not in `engine_artifacts`,
+  because a chain output is an intermediate, not a delivered artifact. The stop-motion floor is 24 frames, as above.
+
+Still open, and needing the owner: the EDL audio contract step (changed-lines-only voice); the product naming question in variant copy;
+the Apify plan price, the HyperFrames price and the `image.edit` price; the media functions URL and host; the production shot ports'
+deployment configuration; the keys and database URLs; the speech-to-text vendor; the live runs; and merging PR #71.
