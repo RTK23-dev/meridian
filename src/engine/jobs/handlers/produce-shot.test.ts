@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { assetCacheKey, EngineError, scenePlanSchema, type AssetSpec, type ScenePlan, type ShotSpec } from "../../contracts/index.ts";
-import { FIXTURE_IDS, cartoonChainShotFixture, fixtureId, scenePlanFixture, stopMotionChainShotFixture } from "../../contracts/fixtures/index.ts";
+import { CHARACTER_SHEET_URI, FIXTURE_IDS, cartoonChainShotFixture, fixtureId, scenePlanFixture, stopMotionChainShotFixture } from "../../contracts/fixtures/index.ts";
 import type { ProviderPoll } from "../../contracts/assets.ts";
 import { estimatePlan } from "../../budget/estimate.ts";
 import { prices } from "../../config/prices.ts";
@@ -846,6 +846,102 @@ describe("a chain of calls on the produce_shot stage (contract v5)", () => {
 });
 
 /** A stock clip with the search's own fields. Only the length and the id matter to these tests. */
+/** A generator that makes the keyframe, then fails the clip with a retryable error, as a timed-out call does. It keeps every spec. */
+function keyframeThenTimeout(): ShotGenerator & { specs: AssetSpec[] } {
+  const generator = {
+    specs: [] as AssetSpec[],
+    async generate(input: { spec: AssetSpec }) {
+      generator.specs.push(input.spec);
+      if (input.spec.modelClass === "image.keyframe") return keyframeDone();
+      throw new EngineError("provider", "the clip call timed out", { retryable: true, stage: "produce_shot" });
+    },
+    async settle(): Promise<ShotProduction> {
+      throw new Error("settle is not scripted for this generator");
+    },
+  };
+  return generator;
+}
+
+describe("chain records on the produce_shot stage (Bible 5.1): a retry reads what was made and makes no second call", () => {
+  test("a retried job reads the keyframe back and makes only the clip, on the spec the clip was first recorded with", async () => {
+    const shot = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 71) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const first = keyframeThenTimeout();
+    const handler = createProduceShotHandler(portsFor({ generator: first }).ports);
+    await assert.rejects(handler.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId })), (error: unknown) => error instanceof EngineError && error.retryable);
+    assert.deepEqual(first.specs.map((spec) => spec.modelClass), ["image.keyframe", "video.budget"], "the first run made both calls, then the clip timed out");
+
+    const retry = scriptedGenerator([clipDone()]);
+    const { ports } = portsFor({ generator: retry });
+    const result = await createProduceShotHandler(ports).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(result.kind, "done");
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.equal(result.output.takeId, takeIdFor(requestId, shot.shotId, 1));
+    assert.deepEqual(retry.specs.map((spec) => spec.modelClass), ["video.budget"], "the retry made the clip alone; the keyframe was read back");
+    assert.equal(assetCacheKey(retry.specs[0] as AssetSpec, CLIP_PROVIDER), assetCacheKey(first.specs[1] as AssetSpec, CLIP_PROVIDER), "the clip's input hash is the same as the first run's");
+    assert.equal(retry.specs[0]?.firstFrame, "store://keyframes/kf-1.png", "the clip starts from the keyframe the first run made");
+
+    const stored = await readArtifact(db.sql, { organizationId: ORG, artifactId: result.output.artifacts[`take:${result.output.takeId}`] ?? "" });
+    assert.equal((stored.envelope.body as { costUsd: number }).costUsd, 0.1188, "the take still costs both calls, read from the records");
+  });
+
+  test("a run after every call was made calls no provider at all, and the take names the same take id", async () => {
+    const shot = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 72) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const made = scriptedGenerator([keyframeDone(), clipDone()]);
+    const { ports } = portsFor({ generator: made });
+    const first = await createProduceShotHandler(ports).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(made.specs.length, 2);
+
+    const nothing = scriptedGenerator([]);
+    const again = await createProduceShotHandler(portsFor({ generator: nothing }).ports).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(nothing.specs.length, 0, "no call is made: every call has its output recorded");
+    assert.equal(again.kind, "done");
+    if (first.kind !== "done" || again.kind !== "done" || first.output.stage !== "produce_shot" || again.output.stage !== "produce_shot") throw new Error("expected produce outputs");
+    assert.equal(again.output.takeId, first.output.takeId);
+  });
+
+  test("a link port makes the clip's first frame an https link, records it, and a retry reuses that link without signing again", async () => {
+    const shot = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 73) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const linked: string[] = [];
+    const providerUrl = async (input: { uri: string }) => {
+      linked.push(input.uri);
+      return `https://media.example.test/engine/link/${linked.length}.png?sig=fixture`;
+    };
+    const first = keyframeThenTimeout();
+    const withLinks = { ...portsFor({ generator: first }).ports, providerUrl };
+    await assert.rejects(createProduceShotHandler(withLinks).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId })));
+    const firstClip = first.specs[1];
+    assert.equal(firstClip?.firstFrame?.startsWith("https://media.example.test/"), true, "the clip reads the keyframe as a link");
+    // Each call links its own inputs once: the keyframe reads the sheet, and the clip reads the sheet and the keyframe it starts from.
+    assert.deepEqual(linked, [CHARACTER_SHEET_URI, CHARACTER_SHEET_URI, "store://keyframes/kf-1.png"], "the keyframe's sheet, then the clip's sheet and keyframe");
+    const linksBefore = linked.length;
+
+    const retry = scriptedGenerator([clipDone()]);
+    const retryPorts = { ...portsFor({ generator: retry }).ports, providerUrl };
+    await createProduceShotHandler(retryPorts).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(linked.length, linksBefore, "the retry signs no new link: the record holds the one the first run made");
+    assert.equal(retry.specs[0]?.firstFrame, firstClip?.firstFrame, "the retry's clip reads the same link");
+  });
+
+  test("an input the provider cannot read stops the chain before the first call, as a hold, and no call is made", async () => {
+    const shot = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 74) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const generator = scriptedGenerator([keyframeDone(), clipDone()]);
+    const refusing = async () => {
+      throw new EngineError("invalid_input", "the source media cannot be linked: not an engine object");
+    };
+    const ports = { ...portsFor({ generator }).ports, providerUrl: refusing };
+    const result = await createProduceShotHandler(ports).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(generator.specs.length, 0, "no call is made for an input the provider cannot read");
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.equal(result.output.takeId, null);
+    assert.deepEqual(result.output.hold, { kind: "refused", errorKind: "invalid_input", hint: "unlinked_input" });
+    assert.ok(result.output.decisions?.some((decision) => decision.chose === "stopped at keyframe"), "the stop is recorded as a decision");
+  });
+});
+
 function clipOf(durationMs: number, clipId: string) {
   return {
     vendor: "pexels",

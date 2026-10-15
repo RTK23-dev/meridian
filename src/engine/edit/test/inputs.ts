@@ -5,6 +5,7 @@ import {
   contentHash,
   type BeatRole,
   type BeatSpan,
+  type ChainCall,
   type EditGrammar,
   type ScenePlan,
   type ShotLayer,
@@ -25,7 +26,7 @@ export type SynthShot = {
   beatId: string;
   visualType: VisualType;
   layer: ShotLayer;
-  kind: "generate" | "stock" | "component";
+  kind: "generate" | "stock" | "component" | "chain";
   /** The take's length. Defaults to the shot's span. Only media shots have takes. */
   takeMs?: number;
   component?: string;
@@ -110,6 +111,14 @@ export function synthInput(options: SynthOptions): EditInput {
     }
     if (shot.kind === "stock") {
       return { ...base, source: { kind: "stock", query: "kitchen", minMs: 400 } };
+    }
+    if (shot.kind === "chain") {
+      // A chain of two calls (contract v5): a keyframe, then the clip from it. The clip is the shot's take.
+      const calls: ChainCall[] = [
+        { output: "keyframe", modelClass: "image.keyframe", prompt: `shot ${shot.n} keyframe`, refs: [], takes: 1 },
+        { output: "clip", modelClass: "video.budget", prompt: `shot ${shot.n} clip`, refs: [], firstFrame: { kind: "output", output: "keyframe" }, takes: 1 },
+      ];
+      return { ...base, source: { kind: "chain", calls } };
     }
     return { ...base, source: { kind: "generate", modelClass: "video.budget", prompt: `shot ${shot.n}`, refs: [], takes: 1 } };
   });

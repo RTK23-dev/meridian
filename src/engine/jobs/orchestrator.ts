@@ -180,7 +180,10 @@ function conflict(message: string, stage?: string): never {
   throw new EngineError("conflict", message, { stage });
 }
 
-/** The provider concurrency bucket of a produce job (Bible 10.4). Stock has its own bucket. */
+/**
+ * The provider concurrency bucket of a produce job (Bible 10.4). Stock has its own bucket. A chain's bucket is its first call's
+ * (the plan summary gives that class); each of its calls is still limited by its own adapter's bucket in the router.
+ */
 export function providerKeyFor(sourceKind: ShotSourceKind, modelClass: ModelClass | null): string {
   if (sourceKind === "stock") return "stock";
   if (modelClass === "tts") return "tts";
@@ -188,9 +191,12 @@ export function providerKeyFor(sourceKind: ShotSourceKind, modelClass: ModelClas
   return "video";
 }
 
-/** Only generation and stock need a produce job. Components are rendered in the composition; assets already exist. */
+/**
+ * Generation, stock and a chain of calls (contract v5) need a produce job. Components are rendered in the composition; assets already
+ * exist.
+ */
 export function needsProduce(sourceKind: ShotSourceKind): boolean {
-  return sourceKind === "generate" || sourceKind === "stock";
+  return sourceKind === "generate" || sourceKind === "stock" || sourceKind === "chain";
 }
 
 function failingRules(gate: GateResult): string[] {

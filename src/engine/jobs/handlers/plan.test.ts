@@ -153,10 +153,33 @@ test("the summary of a generated shot names its model class and its takes, and a
   });
 });
 
-test("a chain shot has no summary: the plan stage refuses it, because no stage produces a chain yet (contract v5)", () => {
+test("a cartoon chain is summarised as a chain: its first call's model class, and one take (contract v5)", () => {
+  assert.deepEqual(shotSummaryOf(cartoonChainShotFixture), {
+    shotId: cartoonChainShotFixture.shotId,
+    visualType: "cartoon_generated",
+    downgradeTo: "cartoon_rigged",
+    sourceKind: "chain",
+    modelClass: "image.keyframe",
+    takesWanted: 1,
+  });
+});
+
+test("a stop-motion chain (it ends in an image) is refused with no summary, so no plan the orchestrator cannot run is stored", () => {
+  const stopMotion = {
+    ...cartoonChainShotFixture,
+    shotId: "shot_stop_motion_fixture",
+    visualType: "stop_motion" as const,
+    source: {
+      kind: "chain" as const,
+      calls: [
+        { output: "frame_01", modelClass: "image.edit" as const, prompt: "frame one", refs: [{ kind: "asset" as const, uri: "store://products/hero.png" }], takes: 1 as const },
+        { output: "frame_02", modelClass: "image.edit" as const, prompt: "frame two", refs: [{ kind: "output" as const, output: "frame_01" }], takes: 1 as const },
+      ],
+    },
+  };
   assert.throws(
-    () => shotSummaryOf(cartoonChainShotFixture),
-    (error: unknown) => error instanceof EngineError && error.kind === "not_implemented" && error.message.includes(cartoonChainShotFixture.shotId),
+    () => shotSummaryOf(stopMotion),
+    (error: unknown) => error instanceof EngineError && error.kind === "not_implemented" && error.message.includes("ends in an image"),
   );
 });
 

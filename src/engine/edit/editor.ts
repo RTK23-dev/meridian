@@ -17,6 +17,7 @@ import {
   type EditGrammar,
   type EdlClip,
   type ScenePlan,
+  type ShotSpec,
   type StyleKit,
   type Take,
   type Word,
@@ -42,7 +43,7 @@ export type EditInput = {
   grammar: EditGrammar;
   /** The reference video's duration. The hook cut is scaled by our timeline over this. */
   referenceDurationMs: number;
-  /** The chosen take of each generated or stock shot. A shot with no take must be a component. */
+  /** The chosen take of each shot that takes media (generated, stock or a chain). A shot with no take must be a component. */
   takes: Take[];
   kit: StyleKit;
   emphasis: EmphasisMark[];
@@ -98,6 +99,14 @@ type Preconditions = {
   captionRanges: Array<[number, number]>;
 };
 
+/**
+ * A shot whose pixels are a take (Bible 6.6): a generated shot, a stock clip, or a chain of calls (contract v5), whose take is its
+ * last call's video. Each such shot has exactly one chosen take, and a missing one fails the edit with the shot's id (fail closed).
+ */
+export function takesMedia(shot: ShotSpec): boolean {
+  return shot.source.kind === "generate" || shot.source.kind === "stock" || shot.source.kind === "chain";
+}
+
 /** Inputs that must hold before anything is placed. A failing one is a check with a detail, and no EDL is built. */
 function preconditions(input: EditInput): Preconditions {
   const checks: RuleResult[] = [];
@@ -133,7 +142,7 @@ function preconditions(input: EditInput): Preconditions {
   // Each take belongs to a shot that takes media, and each such shot has exactly one take.
   const takes = new Map<string, Take>();
   const takeProblems: string[] = [];
-  const mediaShots = new Set(plan.shots.filter((shot) => shot.source.kind === "generate" || shot.source.kind === "stock").map((shot) => shot.shotId));
+  const mediaShots = new Set(plan.shots.filter(takesMedia).map((shot) => shot.shotId));
   for (const take of input.takes) {
     if (!mediaShots.has(take.shotId)) {
       takeProblems.push(take.shotId);
@@ -159,7 +168,7 @@ function preconditions(input: EditInput): Preconditions {
   for (const shot of plan.shots) {
     if (shot.source.kind === "asset") {
       sourceProblems.push(shot.shotId);
-    } else if ((shot.source.kind === "generate" || shot.source.kind === "stock") && !takes.has(shot.shotId)) {
+    } else if (takesMedia(shot) && !takes.has(shot.shotId)) {
       sourceless.push(shot.shotId);
     }
   }

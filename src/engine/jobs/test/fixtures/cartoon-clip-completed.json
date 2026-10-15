@@ -1,0 +1,9 @@
+{
+  "_provenance": "Recorded shape of GET /videos/{id} when the job completes (PROVIDER_APIS.md: completed carries unsigned_urls and usage.cost). The cost is the list price of 3 seconds of the routed model, not a billed figure; the live run records the billed one.",
+  "id": "job-cartoon-clip-1",
+  "generation_id": "gen-cartoon-clip-1",
+  "polling_url": "/api/v1/videos/job-cartoon-clip-1",
+  "status": "completed",
+  "unsigned_urls": ["https://openrouter.ai/api/v1/videos/job-cartoon-clip-1/content?index=0"],
+  "usage": { "cost": 0.15, "is_byok": false }
+}

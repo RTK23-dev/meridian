@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 import { EngineError } from "../../contracts/errors.ts";
 import { classifyError, ProviderCallError } from "../classify.ts";
 import { memoryMediaStore, type MediaStore } from "../adapter.ts";
-import { assetSpec, base64, gatewayFor, json, pngBytes, scripted } from "../test/recorded.ts";
-import { openRouterImageAdapter } from "./openrouterImage.ts";
+import { assetSpec, base64, fixture, gatewayFor, json, pngBytes, scripted } from "../test/recorded.ts";
+import { IMAGE_REFERENCES_MAX, openRouterImageAdapter } from "./openrouterImage.ts";
 
 const PATH = "POST /api/v1/images";
 
@@ -54,10 +54,86 @@ describe("OpenRouter image", () => {
     assert.equal(adapter.price(assetSpec({ modelClass: "image.keyframe" })).estimateUsd, 0.04);
   });
 
-  it("refuses references and frames before any call", async () => {
+  it("sends the first frame and then the references as input references, in order, from the recorded answer", async () => {
+    const recorded = fixture<{ answer: unknown }>("openrouter-image-references.json");
+    const { adapter, script } = setup({ [PATH]: json(200, recorded.answer) });
+    const spec = assetSpec({
+      modelClass: "image.edit",
+      firstFrame: "https://media.example.test/engine/org_1/req_1/chain/frame-1.png",
+      refs: ["https://media.example.test/engine/org_1/req_1/chain/hero.png", "https://media.example.test/engine/org_1/req_1/chain/sheet.png"],
+    });
+    const { jobRef } = await adapter.submit(spec, "sha256:refs");
+    const poll = await adapter.poll(jobRef);
+
+    assert.equal(poll.state, "done");
+    assert.equal(poll.actualUsd, 0.04);
+    assert.equal(script.requests.length, 1, "one call, with the references in it");
+    const sent = JSON.parse(String(script.requests[0]?.body));
+    assert.deepEqual(
+      sent.input_references,
+      [spec.firstFrame, ...spec.refs].map((url) => ({ type: "image_url", image_url: { url } })),
+      "the first frame comes first, then the references, each as an image_url",
+    );
+    assert.equal(sent.seed, spec.seed);
+  });
+
+  it("sends no input_references when the spec has none, so a plain call is the same as before", async () => {
+    const { adapter, script } = setup({ [PATH]: json(200, imageAnswer(pngBytes(), "image/png", 0.04)) });
+    await adapter.submit(assetSpec({ modelClass: "image.keyframe" }), "k");
+    const sent = JSON.parse(String(script.requests[0]?.body));
+    assert.equal("input_references" in sent, false);
+  });
+
+  it("refuses a reference that is not an https URL before any call, because the provider cannot read a store uri", async () => {
     const { adapter, script } = setup({});
-    await assert.rejects(adapter.submit(assetSpec({ modelClass: "image.keyframe", refs: ["https://a.example.com/x.png"] }), "k"), EngineError);
+    await assert.rejects(
+      adapter.submit(assetSpec({ modelClass: "image.keyframe", refs: ["store://characters/fixture/sheet-1.png"] }), "k"),
+      (error: unknown) => error instanceof EngineError && error.kind === "invalid_input" && /https/.test(error.message),
+    );
     assert.equal(script.requests.length, 0);
+  });
+
+  it("refuses a last frame, and more references than the adapter takes, before any call", async () => {
+    const { adapter, script } = setup({});
+    const url = (name: string) => `https://media.example.test/${name}.png`;
+    await assert.rejects(
+      adapter.submit(assetSpec({ modelClass: "image.edit", lastFrame: url("last") }), "k"),
+      (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+    );
+    const tooMany = [1, 2, 3, 4, 5].map((n) => url(`ref-${n}`));
+    await assert.rejects(
+      adapter.submit(assetSpec({ modelClass: "image.edit", refs: tooMany }), "k"),
+      (error: unknown) => error instanceof EngineError && error.kind === "invalid_input" && /references/.test(error.message),
+    );
+    assert.equal(script.requests.length, 0);
+  });
+
+  it("carries the answer in the job reference, so a poll by another adapter instance (another worker) reads the same result", async () => {
+    const media = memoryMediaStore();
+    const first = setup({ [PATH]: json(200, imageAnswer(pngBytes(), "image/png", 0.04)) }, media).adapter;
+    const { jobRef } = await first.submit(assetSpec({ modelClass: "image.keyframe" }), "sha256:worker");
+    assert.ok(jobRef.length <= 512, "the reference fits the router's job reference limit");
+    const second = setup({}, media).adapter;
+    const poll = await second.poll(jobRef);
+    assert.equal(poll.state, "done");
+    assert.match(poll.uri ?? "", /^memory:\/\/org_1\//);
+    assert.equal(poll.actualUsd, 0.04);
+    assert.deepEqual(second.detailsFor(jobRef), { mediaType: "image/png" });
+  });
+
+  it("a reference this adapter did not write is a failed poll with no result, never a guess", async () => {
+    const { adapter } = setup({});
+    const poll = await adapter.poll("image:sha256:not-ours");
+    assert.equal(poll.state, "failed");
+    assert.equal(adapter.detailsFor("image:sha256:not-ours"), undefined);
+  });
+
+  it("declares first-frame and reference support, so the router sends a reference spec to the image route", () => {
+    const { adapter } = setup({});
+    assert.equal(adapter.capabilities.firstFrame, true);
+    assert.equal(adapter.capabilities.lastFrame, false);
+    assert.equal(adapter.capabilities.refsMax, IMAGE_REFERENCES_MAX);
+    assert.deepEqual(adapter.capabilities.aspect, ["9:16"]);
   });
 
   it("keeps the bill when the image is refused for its type, so the ledger is not under-counted", async () => {

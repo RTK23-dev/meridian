@@ -350,7 +350,10 @@ export function chainKitRefusal(visualType: ChainType, input: Pick<BuildSourceIn
 
 /**
  * The calls of a cartoon_generated shot (contract v5 chain): the keyframe, then the video that starts from it (7.1). Every character
- * reference is sent with every call (Bible 13). Both calls carry the code's look for the type in front of the planner's prompt.
+ * reference goes to the keyframe (Bible 13), which is the image that carries the character. The clip sends no references: the video
+ * adapter has no reference field, and its routed model takes none (its profile's refsMax is 0), so a reference on the clip would be
+ * refused before any call. The clip's first frame is the keyframe, so the character reaches it through the keyframe. Both calls carry
+ * the code's look for the type in front of the planner's prompt.
  */
 export function cartoonGeneratedChain(input: BuildSourceInput): Checked<ChainCall[]> {
   if (input.prompt === undefined) return { ok: false, reason: "no prompt was written for this cartoon shot" };
@@ -367,7 +370,7 @@ export function cartoonGeneratedChain(input: BuildSourceInput): Checked<ChainCal
         output: "clip",
         modelClass: "video.budget",
         prompt,
-        refs,
+        refs: [],
         firstFrame: { kind: "output", output: "keyframe" },
         takes: 1,
       },

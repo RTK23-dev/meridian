@@ -1,5 +1,16 @@
 # STATUS: edit (W8), Phase E3
 
+## Chain takes are media (contract v5; branch `worktree-agent-adcc78d81ea833bab`)
+
+- `editor.ts` `takesMedia(shot)`: a generated, stock or chain shot takes media. One predicate now drives both the `takes_match_plan` rule
+  (a take names a media shot) and `shot_sources_available` (a media shot has its take). Before, a chain take was refused as a stray take,
+  and a chain shot with no take passed silently.
+- A missing take fails closed with its reason (`shot_sources_available`: "no chosen take for <shot>") and names the shot in
+  `failingShotIds`. The preconditions return before any shot is placed, so no EDL is built on a missing take.
+- `editor.test.ts` (33 pass): a chain shot's take is accepted and the EDL plays it; a chain shot with no take fails and names it.
+- `test/inputs.ts`: `kind: "chain"` builds a two-call chain (keyframe, then the clip from it), so synthetic inputs can carry chains.
+- The end-to-end cartoon run (`jobs/cartoon-chain.test.ts`) passes the chain's take through this editor on recorded fixtures.
+
 Branch `eng-e3-editor`, cut from `origin/code/beautiful-cori-1zfk11` (aa3bcf8). Covers `src/engine/edit/` (except `grammar.ts`,
 which is W6's and is not on this branch) and `src/engine/jobs/handlers/edit.ts` with its test. Details: `README.md` here.
 

@@ -35,13 +35,38 @@ export type PlanPorts = {
   roleDeps: (scope: { organizationId: string; requestId: string; reservationId: string }) => RoleDeps;
 };
 
-/** The summary the orchestrator plans work from (ShotSummary). The plan body itself is not passed on. */
+/**
+ * The summary the orchestrator plans work from (ShotSummary). The plan body itself is not passed on.
+ *
+ * A chain (contract v5, Bible 7.1) is summarised by its first call's model class, and it makes one take: its last call's video. A
+ * chain that makes its take from several takes, or that ends in an image (stop-motion frames, whose closing component the
+ * orchestrator does not place yet), is refused here, before anything is stored, so no plan the pipeline cannot run is kept.
+ */
 export function shotSummaryOf(shot: ShotSpec): ShotSummary {
   const source = shot.source;
   if (source.kind === "chain") {
-    // No stage produces a chain yet (contract v5). The orchestrator would treat a chain as needing no produce job and skip its
-    // calls, so the plan stage refuses the shot here, before anything is reserved or made.
-    throw notImplementedError(`${shot.shotId} is a chain of ${source.calls.length} calls, and no stage produces a chain yet`, "plan");
+    const first = source.calls[0];
+    const last = source.calls[source.calls.length - 1];
+    if (first === undefined || last === undefined) {
+      throw notImplementedError(`${shot.shotId} is a chain with no calls`, "plan");
+    }
+    if (source.calls.some((call) => call.takes !== 1)) {
+      throw notImplementedError(`${shot.shotId} is a chain whose calls take two takes; a chain makes one take`, "plan");
+    }
+    if (!last.modelClass.startsWith("video.")) {
+      throw notImplementedError(
+        `${shot.shotId} is a chain that ends in an image; its closing component is not placed by the orchestrator yet, so the shot is refused`,
+        "plan",
+      );
+    }
+    return {
+      shotId: shot.shotId,
+      visualType: shot.visualType,
+      downgradeTo: shot.downgradeTo ?? null,
+      sourceKind: "chain",
+      modelClass: first.modelClass,
+      takesWanted: 1,
+    };
   }
   return {
     shotId: shot.shotId,
@@ -139,7 +164,7 @@ export function createPlanHandler(ports: PlanPorts): StageHandler {
       const artifacts: Record<string, string> = {};
       let shots: ShotSummary[] = [];
       if (planned.plan !== null) {
-        // The summaries refuse a chain (contract v5) before anything is written, so no plan the pipeline cannot run is stored.
+        // The summaries refuse a chain the pipeline cannot run (contract v5) before anything is written, so no such plan is stored.
         const summaries = planned.plan.shots.map(shotSummaryOf);
         const written = await writeArtifact(ctx.sql, {
           organizationId: ctx.organizationId,

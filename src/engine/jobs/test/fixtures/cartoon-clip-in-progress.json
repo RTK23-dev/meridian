@@ -1,0 +1,7 @@
+{
+  "_provenance": "Recorded shape of GET /videos/{id} while the job runs (PROVIDER_APIS.md, Video). Hand-written for the chain test.",
+  "id": "job-cartoon-clip-1",
+  "generation_id": "gen-cartoon-clip-1",
+  "polling_url": "/api/v1/videos/job-cartoon-clip-1",
+  "status": "in_progress"
+}

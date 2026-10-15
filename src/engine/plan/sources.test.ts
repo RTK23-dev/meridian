@@ -402,7 +402,7 @@ describe("cartoon_generated and stop_motion: chains of calls (contract v5)", () 
     assert.equal(stop.built.source.kind === "chain" ? stop.built.source.calls.length : 0, 30);
   });
 
-  it("builds the cartoon chain: a keyframe with every reference, then a video that takes the keyframe, both in the code's look", () => {
+  it("builds the cartoon chain: a keyframe with every reference, then a video that takes the keyframe and no references, both in the code's look", () => {
     const chain = cartoonGeneratedChain(input({ visualType: "cartoon_generated", prompt: "The bean jumps.", character: GENERATED_SHEET }));
     assert.ok(chain.ok);
     if (!chain.ok) return;
@@ -410,7 +410,7 @@ describe("cartoon_generated and stop_motion: chains of calls (contract v5)", () 
     const refs = (GENERATED_SHEET.references ?? []).map((uri) => ({ kind: "asset", uri }));
     assert.deepEqual(chain.value, [
       { output: "keyframe", modelClass: "image.keyframe", prompt: style, refs, takes: 1 },
-      { output: "clip", modelClass: "video.budget", prompt: style, refs, firstFrame: { kind: "output", output: "keyframe" }, takes: 1 },
+      { output: "clip", modelClass: "video.budget", prompt: style, refs: [], firstFrame: { kind: "output", output: "keyframe" }, takes: 1 },
     ]);
   });
 

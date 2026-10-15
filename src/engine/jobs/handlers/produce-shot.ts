@@ -23,8 +23,8 @@ import {
   EngineError,
   assetSpecSchema,
   contentHash,
+  chainInputsOf,
   decisionSchema,
-  modelClassSchema,
   newId,
   scenePlanSchema,
   sumUsd,
@@ -40,6 +40,8 @@ import {
 import type { ProviderPoll } from "../../contracts/assets.ts";
 import { closingComponentOf, closingComponentProblem, libraryHas } from "../../plan/chains.ts";
 import type { AsyncAssetRouter, ProduceInput, ProduceReport, StepReport } from "../../assets/router.ts";
+import { normaliseHttpsUrl } from "../../assets/normalise.ts";
+import { chainOutputSchema, readChainCall, recordChainOutput, recordChainSpec, type ChainCallKey, type ChainOutput } from "../chain-store.ts";
 import { parseAssetJob, type AssetJob } from "../../assets/job.ts";
 import type { StockOutcome } from "../../assets/stock.ts";
 import type { MediaDownloader } from "../../gateway/download.ts";
@@ -50,6 +52,9 @@ import { thresholds } from "../../config/thresholds.ts";
 import { mediaKey, readJobInputs, writeArtifact, type MediaStorePort } from "../artifact-store.ts";
 import { stableId, seedFor } from "../stable-id.ts";
 import { epochOf, type ProduceHold, type StageContext, type StageHandler, type StageOutput, type StageRunResult } from "../types.ts";
+
+export { chainOutputSchema };
+export type { ChainOutput };
 
 /** The stock route's endpoint family (config/routes.ts, "stock"). It names the call, not a model. */
 export const STOCK_MODEL = "videos";
@@ -120,6 +125,13 @@ export type ProduceShotPorts = {
    * closing component is not drawn is refused before its first call, so no frame is paid for a shot that cannot be drawn.
    */
   componentHas?: (component: string) => boolean;
+  /**
+   * Makes a chain's input (a reference or a frame the provider reads) into a link the provider can fetch: an https URL (Bible 10.1).
+   * The stored uri of a call's output or of a kit image is not one. Absent, the stored uri is sent as it is, and an adapter that needs
+   * https refuses it before any call. A link that cannot be made for an input stops the chain as a hold (the call is not made). A link
+   * service that is not connected is thrown, as a config error, so nothing is sent.
+   */
+  providerUrl?: (input: { organizationId: string; uri: string }) => Promise<string>;
 };
 
 /** Turns a router report into a ShotProduction. The router's facts are kept; nothing is inferred. */
@@ -484,21 +496,10 @@ function attemptFor(ctx: StageContext): number {
 // and its own output, which a later call of the same chain reads by name. The last call's video is the shot's take. A chain that ends
 // in an image (stop-motion frames) has no take: its closing component draws the frames (Bible 6.6), so the output names the component
 // and holds no take. A refused or failed call stops the chain: no later call is made, and the hold names the call.
-
-/** One finished call of a chain: what a later call may read (its uri), and what the call cost. */
-export const chainOutputSchema = z.object({
-  output: z.string().min(1),
-  modelClass: modelClassSchema,
-  uri: z.string().min(1),
-  mediaType: z.string().min(1).nullable(),
-  providerId: z.string().min(1),
-  promptHash: z.string().min(1),
-  costUsd: z.number().nonnegative(),
-  costIsEstimate: z.boolean(),
-  cacheHit: z.boolean(),
-  ledgerEntryId: z.string().min(1).nullable(),
-});
-export type ChainOutput = z.infer<typeof chainOutputSchema>;
+//
+// Records (chain-store.ts, Bible 5.1). Each call is recorded before it is made, with its spec, and its output is recorded when it is
+// made. A retry of the produce job reads those records: a made call is read back, and the call that follows is made with the spec it
+// was recorded with. So a retry never makes a call twice for one key and never builds a second link for one input.
 
 /** How far a chain has got: the index of its next call, when it started, and the outputs of the calls made. Carried on the poll. */
 export const chainProgressSchema = z.object({
@@ -508,7 +509,10 @@ export const chainProgressSchema = z.object({
 });
 export type ChainProgress = z.infer<typeof chainProgressSchema>;
 
-/** The asset spec of one call of a chain. Its inputs are the assets it names and the outputs of the earlier calls, as their uris. */
+/**
+ * The asset spec of one call of a chain. Its inputs are the assets it names and the outputs of the earlier calls, as their uris. `linkOf`
+ * maps each such uri to the link the spec carries (the provider's fetchable URL); absent, the uri is the link.
+ */
 export function chainCallSpecFor(input: {
   requestId: string;
   shot: ShotSpec;
@@ -517,21 +521,14 @@ export function chainCallSpecFor(input: {
   attempt: number;
   hints: readonly string[];
   outputs: readonly ChainOutput[];
+  linkOf?: (uri: string) => string;
 }): AssetSpec {
   const call = input.calls[input.index];
   if (call === undefined) {
     throw new EngineError("internal", `${input.shot.shotId} has no call ${input.index} in its chain`, { stage: "produce_shot" });
   }
-  const resolve = (ref: ChainInput): string => {
-    if (ref.kind === "asset") return ref.uri;
-    const made = input.outputs.find((output) => output.output === ref.output);
-    if (made === undefined) {
-      throw new EngineError("internal", `call ${call.output} of ${input.shot.shotId} reads ${ref.output}, which no earlier call made`, {
-        stage: "produce_shot",
-      });
-    }
-    return made.uri;
-  };
+  const linkOf = input.linkOf ?? ((uri: string) => uri);
+  const resolve = (ref: ChainInput): string => linkOf(uriOfInput(ref, input.outputs, input.shot.shotId, call.output));
   // The label names the call, so each call of a chain has its own seed, spec id and cache key (the input hash, Bible 10.4).
   const label = `${input.requestId}|${input.shot.shotId}|${input.attempt}|${call.output}`;
   const firstFrame = call.firstFrame === undefined ? undefined : resolve(call.firstFrame);
@@ -552,6 +549,90 @@ export function chainCallSpecFor(input: {
     seed: seedFor(label),
     takes: call.takes,
   });
+}
+
+/** The uri a chain input stands for: an asset's own uri, or the uri of the earlier call of that name. An unknown name is an internal error. */
+function uriOfInput(ref: ChainInput, outputs: readonly ChainOutput[], shotId: string, callName: string): string {
+  if (ref.kind === "asset") return ref.uri;
+  const made = outputs.find((output) => output.output === ref.output);
+  if (made === undefined) {
+    throw new EngineError("internal", `call ${callName} of ${shotId} reads ${ref.output}, which no earlier call made`, { stage: "produce_shot" });
+  }
+  return made.uri;
+}
+
+/** The record key of one call of a chain run (the request, the shot, the job's attempt and the call's output name). */
+function keyOf(run: ChainRun, output: string): ChainCallKey {
+  return { organizationId: run.ctx.organizationId, requestId: run.ctx.requestId, shotId: run.shot.shotId, attempt: run.attempt, output };
+}
+
+/**
+ * The links for the inputs of a call that the provider reads and that are not https yet: each uri is linked once, through the ports.
+ * Absent the port, there are no links and the stored uris are sent as they are (the adapter refuses what it cannot read).
+ */
+async function linksFor(run: ChainRun, call: ChainCall, outputs: readonly ChainOutput[]): Promise<Map<string, string>> {
+  const links = new Map<string, string>();
+  const providerUrl = run.ports.providerUrl;
+  if (providerUrl === undefined) return links;
+  for (const input of chainInputsOf(call)) {
+    const uri = uriOfInput(input, outputs, run.shot.shotId, call.output);
+    if (links.has(uri) || normaliseHttpsUrl(uri).ok) continue;
+    const link = await providerUrl({ organizationId: run.ctx.organizationId, uri });
+    if (!normaliseHttpsUrl(link).ok) {
+      throw new EngineError("invalid_input", `the link made for an input of ${call.output} is not an https URL the provider can fetch`, {
+        stage: "produce_shot",
+      });
+    }
+    links.set(uri, link);
+  }
+  return links;
+}
+
+/** The spec of one call, pinned by its record (Bible 5.1). See specOfCall. */
+type CallSpec = { kind: "spec"; spec: AssetSpec } | { kind: "unlinked"; reason: string };
+
+/**
+ * The spec of the call at `index`. A recorded call returns the spec it was recorded with, so a retry makes the same call. A call with no
+ * record is built from the outputs before it, its inputs as links, and recorded before it is made. An input that cannot be linked is
+ * returned as unlinked, so the chain stops before the call with a hold; a link service that is not connected is thrown.
+ */
+async function specOfCall(run: ChainRun, index: number, outputs: readonly ChainOutput[]): Promise<CallSpec> {
+  const call = run.calls[index];
+  if (call === undefined) throw new EngineError("internal", `${run.shot.shotId} has no call ${index} in its chain`, { stage: "produce_shot" });
+  const key = keyOf(run, call.output);
+  const recorded = await readChainCall(run.ctx.sql, key);
+  if (recorded !== null) return { kind: "spec", spec: recorded.spec };
+  let links: Map<string, string>;
+  try {
+    links = await linksFor(run, call, outputs);
+  } catch (error) {
+    if (error instanceof EngineError && error.kind === "invalid_input") return { kind: "unlinked", reason: error.message };
+    throw error;
+  }
+  const spec = chainCallSpecFor({
+    requestId: run.ctx.requestId,
+    shot: run.shot,
+    calls: run.calls,
+    index,
+    attempt: run.attempt,
+    hints: run.ctx.payload.hints,
+    outputs,
+    linkOf: (uri) => links.get(uri) ?? uri,
+  });
+  const stored = await recordChainSpec(run.ctx.sql, { ...key, callIndex: index, spec, at: new Date((run.ports.now ?? Date.now)()).toISOString() });
+  return { kind: "spec", spec: stored };
+}
+
+/** The decision that records a chain's stop at one call (Bible L7): the call, and why no later call is made. */
+function stopDecisionOf(run: ChainRun, index: number, reason: string, clock: () => number): Decision {
+  const call = run.calls[index];
+  return {
+    at: new Date(clock()).toISOString(),
+    chose: `stopped at ${call?.output ?? "chain"}`,
+    alternatives: [],
+    reason,
+    by: "scorer",
+  };
 }
 
 /** What a chain run carries from one call to the next. */
@@ -589,15 +670,26 @@ async function driveChain(run: ChainRun, settled: ShotProduction | null): Promis
   for (;;) {
     const call = run.calls[progress.index];
     if (call === undefined) return finishChain({ ...run, progress, decisions });
-    const spec = chainCallSpecFor({
-      requestId: ctx.requestId,
-      shot,
-      calls: run.calls,
-      index: progress.index,
-      attempt: run.attempt,
-      hints: ctx.payload.hints,
-      outputs: progress.outputs,
-    });
+    const recorded = await readChainCall(ctx.sql, keyOf(run, call.output));
+    if (recorded?.output) {
+      // Made by an earlier run of this job: its output is read back, and no call is made for it (Bible 5.1).
+      if (answer !== null) {
+        throw new EngineError("conflict", `call ${call.output} of ${shot.shotId} was made by an earlier run; its settled answer is not used`, {
+          stage: "produce_shot",
+          retryable: false,
+        });
+      }
+      progress = { index: progress.index + 1, startedAt: progress.startedAt, outputs: [...progress.outputs, recorded.output] };
+      continue;
+    }
+    const built = await specOfCall(run, progress.index, progress.outputs);
+    if (built.kind === "unlinked") {
+      // An input the provider cannot read is a refusal before the call: nothing is spent, and the planner may rewrite the call once.
+      const stop = stopDecisionOf(run, progress.index, `call ${progress.index + 1} of ${run.calls.length} (${call.modelClass}) has an input the provider cannot read: ${built.reason}; no call is made`, ports.now ?? Date.now);
+      const hold: ProduceHold = { kind: "refused", errorKind: "invalid_input", hint: "unlinked_input" };
+      return { kind: "done", output: outputFor(ctx.subjectId, shot.shotId, run.epoch, { kind: "hold", hold }, [...decisions, stop]) };
+    }
+    const spec = built.spec;
     const production =
       answer ??
       (await ports.generator.generate({
@@ -625,13 +717,12 @@ async function driveChain(run: ChainRun, settled: ShotProduction | null): Promis
       const { made, decisions: callDecisions } = await fromProduction(ctx, ports, shot, run.planArtifactId, run.attempt, production, spec, Date.parse(progress.startedAt));
       const named: Stored | Refused =
         made.kind === "hold" && made.hold.kind === "budget" ? { kind: "hold", hold: { kind: "budget", reason: `${call.output}: ${made.hold.reason}` } } : made;
-      const stop: Decision = {
-        at: new Date((ports.now ?? Date.now)()).toISOString(),
-        chose: `stopped at ${call.output}`,
-        alternatives: [],
-        reason: `call ${progress.index + 1} of ${run.calls.length} (${call.modelClass}) did not make an output, so no later call is made`,
-        by: "scorer",
-      };
+      const stop = stopDecisionOf(
+        run,
+        progress.index,
+        `call ${progress.index + 1} of ${run.calls.length} (${call.modelClass}) did not make an output, so no later call is made`,
+        ports.now ?? Date.now,
+      );
       return { kind: "done", output: outputFor(ctx.subjectId, shot.shotId, run.epoch, named, [...decisions, ...callDecisions, stop]) };
     }
 
@@ -650,6 +741,8 @@ async function driveChain(run: ChainRun, settled: ShotProduction | null): Promis
       cacheHit: production.cacheHit,
       ledgerEntryId: production.ledgerEntryId,
     };
+    // The output is recorded before the next call reads it, so a retry reads it back and makes no second call (Bible 5.1).
+    await recordChainOutput(ctx.sql, { ...keyOf(run, call.output), made, at: new Date((ports.now ?? Date.now)()).toISOString() });
     progress = { index: progress.index + 1, startedAt: progress.startedAt, outputs: [...progress.outputs, made] };
     decisions = [...decisions, ...production.decisions];
     if (progress.index >= run.calls.length) return finishChain({ ...run, progress, decisions });
@@ -820,10 +913,14 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
       const attempt = attemptFor(ctx);
       const chain = chainCarryOf(submission.carry);
       if (chain !== null) {
-        // A call of a chain: settle it, then carry on with the calls that follow (Bible 7.1). The spec is rebuilt from the same outputs.
+        // A call of a chain: settle it, then carry on with the calls that follow (Bible 7.1). The spec is the one the call was recorded
+        // with before it was submitted, so the settle checks the same spec (Bible 5.1).
         if (shot.source.kind !== "chain") throw new EngineError("internal", `${shot.shotId} carries chain progress but its source is ${shot.source.kind}`, { stage: "produce_shot" });
         const calls = shot.source.calls;
-        const spec = chainCallSpecFor({ requestId: ctx.requestId, shot, calls, index: chain.index, attempt, hints: ctx.payload.hints, outputs: chain.outputs });
+        const run: ChainRun = { ctx, ports, shot, calls, planArtifactId, epoch: epochFor(ctx), attempt, progress: chain, decisions: carried };
+        const built = await specOfCall(run, chain.index, chain.outputs);
+        if (built.kind !== "spec") throw new EngineError("internal", `${shot.shotId} has a settled call with no recorded spec`, { stage: "produce_shot" });
+        const spec = built.spec;
         const settled = await ports.generator.settle(
           { sql: ctx.sql, organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId: requireReservation(ctx), spec, visualType: shot.visualType },
           job,
@@ -838,7 +935,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
             carry: { job: settled.job, decisions: [...carried, ...settled.decisions], chain },
           };
         }
-        return driveChain({ ctx, ports, shot, calls, planArtifactId, epoch: epochFor(ctx), attempt, progress: chain, decisions: carried }, settled);
+        return driveChain(run, settled);
       }
       const spec = assetSpecFor({ requestId: ctx.requestId, shot, attempt, hints: ctx.payload.hints, subject: ctx.subjectId });
       const production = await ports.generator.settle(

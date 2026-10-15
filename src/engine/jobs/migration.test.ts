@@ -25,6 +25,8 @@ const ENGINE_TABLES = [
   "engine_bucket_leases",
   "engine_asset_cache",
   "engine_asset_cache_hits",
+  // Chain call records (migrations/0094): the spec and the output of each call of a chain (contract v5, Bible 7.1).
+  "engine_chain_calls",
 ] as const;
 
 const MIGRATION = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "migrations", "0077_engine_core.sql");

@@ -1,5 +1,39 @@
 # STATUS: the plan stage (W7), E3 and E5 (W9 plan-side support)
 
+## Cartoon chain end to end (contract v5): cartoon_generated built and tested; stop_motion refused until image.edit is priced
+
+Branch `worktree-agent-adcc78d81ea833bab`, on top of `244e3e8`. The plan side hands the chain to the stages (`jobs/handlers/plan.ts`,
+`jobs/orchestrator.ts`, `jobs/handlers/produce-shot.ts`, `edit/editor.ts`; see their STATUS files).
+
+**What changed in plan/**
+
+- `sources.ts` `cartoonGeneratedChain`: the keyframe carries every character reference. The clip sends NO references (`refs: []`) and
+  starts from the keyframe. Reason: the video adapter has no reference field and its profile's `refsMax` is 0, so a reference on the clip
+  is refused before any call. The contract fixture (`contracts/fixtures/chain.ts`) still lists the sheet on the clip. The contract owner
+  decides whether to align it; it is not changed here.
+- `sources.test.ts`: the cartoon chain pin is the new form.
+- `chains.test.ts`: "both sides at the filter" asserts the current rule. Without a price, rule 5 removes stop_motion (`unknown_price`).
+  With a price, the filter keeps it, because `stopmotion.player` is in the component library (merged from d1f532e), so no rule removes it.
+  stop_motion stays refused while image.edit has no price.
+
+**Still refused, and why**
+
+- stop_motion, while image.edit has no price (rule 5, `unknown_price`). It is also refused by the plan stage's summary (`shotSummaryOf`)
+  while its last call is an image: the orchestrator does not place its closing component yet.
+
+**Tests (this section)**
+
+- `chains.test.ts` 13 pass. `sources.test.ts` passes. The plan, edit and assets test folders run 453 tests, 0 fail.
+- The cartoon chain end to end is `jobs/cartoon-chain.test.ts` (3 tests, recorded transport, PGlite).
+
+**Owner's live run (agents hold no keys)**
+
+1. Price image.edit (per image, per call) in `config/prices.ts` and set its OpenRouter model id in `config/routes.ts`. Plan a stop-motion
+   beat: rule 5 passes, and the plan still refuses the shot until the closing component is placed.
+2. Plan a cartoon beat on a page with a generated character sheet whose references are fetchable https links (see
+   `jobs/handlers/STATUS.md`). Record the cartoon shot (the keyframe with its references, then the clip with none), the plan gate's checks,
+   and the estimate's two lines.
+
 ## Chains (contract v5): cartoon_generated and stop_motion are planned as chains (branch `worktree-agent-a2631ad1048c21356`, from `cef526c`)
 
 This section supersedes the chain items of the E5 and E3 sections below: the build gaps for cartoon_generated, the single-call
