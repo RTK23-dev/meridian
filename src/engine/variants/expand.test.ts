@@ -201,6 +201,31 @@ describe("variant expansion: the matrix into planned variants (Bible 6.13, 14.3)
   });
 });
 
+describe("variant expansion: the request budget's room for the reservation (Bible 14.1, 14.4)", () => {
+  it("a variant the headroom does not cover fits the room the request budget leaves for the reservation", () => {
+    const expansion = expandVariants(input({ captionStyles: ["upper", "middle"], maxVariants: 4, budgetUsd: 5 }, { headroomUsd: 0, extendableUsd: 0.1 }));
+    assert.deepEqual(expansion.planned.map((variant) => variant.key), ["caption:upper"]);
+    assert.deepEqual(expansion.skipped.map((skip) => [skip.key, skip.reason]), [["caption:middle", "over_request_budget"]]);
+    assert.equal(expansion.budgetUsd, 0.1);
+  });
+
+  it("with no room under the request budget, the same variant is refused as over the reservation", () => {
+    const expansion = expandVariants(input({ captionStyles: ["upper", "middle"], maxVariants: 4, budgetUsd: 5 }, { headroomUsd: 0.1, extendableUsd: 0 }));
+    assert.deepEqual(expansion.planned.map((variant) => variant.key), ["caption:upper"]);
+    assert.deepEqual(expansion.skipped.map((skip) => [skip.key, skip.reason]), [["caption:middle", "over_reservation"]]);
+  });
+
+  it("the matrix's own budget binds before the reservation, and says so", () => {
+    const expansion = expandVariants(input({ captionStyles: ["upper", "middle"], maxVariants: 4, budgetUsd: 0.1 }, { headroomUsd: 5, extendableUsd: 5 }));
+    assert.deepEqual(expansion.planned.map((variant) => variant.key), ["caption:upper"]);
+    assert.deepEqual(expansion.skipped.map((skip) => [skip.key, skip.reason]), [["caption:middle", "over_budget"]]);
+  });
+
+  it("refuses a room under the request budget that is not an amount", () => {
+    assert.throws(() => expandVariants(input({ captionStyles: ["upper"] }, { extendableUsd: -1 })), (error: unknown) => error instanceof EngineError && error.kind === "invalid_input");
+  });
+});
+
 describe("variant control values and the music mix", () => {
   it("reads the master's caption band from its first captions clip that names one, and null when none does", () => {
     assert.equal(masterBand(masterWithCaptions()), "lower");

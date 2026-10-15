@@ -168,6 +168,11 @@ Branch `eng-e5-variants`. The logic is in `src/engine/variants/`, `src/engine/de
 - `createVariantsHandler(ports)`: reads the request, the plan and the master EDL, and the reservation's headroom. Builds the caption and
   music variants as EDLs (checked against their control) and writes them as `edl` artifacts with `variantOf` set. Reports hook,
   product, persona and language variants as deferred, with their work. Emits `variant.planned` for each variant.
+- E5 item 3 (this branch, partial; see `../../variants/STATUS.md`): the stage funds the variants it runs under the reservation
+  (`extendForVariants`, refused with the reason above a budget). With `VariantPorts.generation` wired it prepares each generation variant:
+  the writer (once for a hook or a language), the beat-scoped voice, and the variant plan (kit references). Production does not wire
+  `generation`, so generation variants stay deferred with `NOT_CONNECTED`. A new port, `workspaceMonthBudgetUsd` (optional), is read for
+  the raise. Tests: `variants-generation.test.ts` (11 on PGlite, recorded answers).
 - `createDeliverHandler(ports)`: picks the delivered videos, settles the ledger (reconcile, then release under the reservation's lock),
   writes one manifest per delivered video under a stable id, and emits the learning events. A retry writes and emits nothing new.
 - Tests on PGlite: `variants.test.ts` (8), `deliver.test.ts` (7). Both use the artifact store and check the output with

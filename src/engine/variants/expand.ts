@@ -5,13 +5,14 @@
 //
 // Work by attribute (Bible 6.13):
 // - caption and music: an EDL diff and a re-render. No generation.
-// - hook: a new hook line (variant_writer, Haiku), the voice stage for that beat, and the generated shots in the hook beat.
+// - hook: a new hook line (variant_writer, the check route), the voice stage for that beat, and the generated shots in the hook beat.
 // - product: produce_shot again for the product shots only (shots of visual type product_hero).
 // - persona: the voice stage for the whole script and the presenter shots (ugc_presenter) produced again.
 // - language: the writer for every beat, the voice stage for the whole script, and the presenter shots produced again.
 //
 // Fit (Bible 14.3): the cheapest variants go first, so the most variants fit the budget. Limits: the matrix's maxVariants, its
-// budgetUsd, and the request reservation's headroom (what the reservation can still hold). Each limit that binds is named.
+// budgetUsd, and what the variants may spend: the reservation's headroom (what it already holds beyond what is committed) plus what
+// the request budget lets the reservation grow by (extendableUsd, variants/reserve.ts). Each limit that binds is named.
 
 import { budgets } from "../config/budgets.ts";
 import { EngineError, roundUsd, sumUsd, type EditDecisionList, type ProductionRequest, type ScenePlan, type VariantMatrix } from "../contracts/index.ts";
@@ -62,7 +63,8 @@ export type SkipReason =
   | "duplicate_value"
   | "over_max_variants"
   | "over_budget"
-  | "over_reservation";
+  | "over_reservation"
+  | "over_request_budget";
 
 export type SkippedVariant = {
   key: string;
@@ -91,6 +93,11 @@ export type ExpansionInput = {
   tracks: ReadonlyMap<string, VariantMusicTrack>;
   /** What the request's reservation can still hold: its reservedUsd less what is committed. Never negative. */
   headroomUsd: number;
+  /**
+   * How much the reservation may be raised under the request budget: constraints.budgetUsd less its reservedUsd. Never negative. Absent
+   * means zero, so the variants fit the headroom alone.
+   */
+  extendableUsd?: number;
 };
 
 const COST = budgets.variantCostUsd;
@@ -324,8 +331,14 @@ export function expandVariants(input: ExpansionInput): VariantExpansion {
       ATTRIBUTE_ORDER[a.variant.attribute] - ATTRIBUTE_ORDER[b.variant.attribute] ||
       a.order - b.order,
   );
-  const reservationBinds = input.headroomUsd < matrix.budgetUsd;
-  const budgetUsd = roundUsd(Math.min(matrix.budgetUsd, input.headroomUsd));
+  const extendableUsd = input.extendableUsd ?? 0;
+  if (!Number.isFinite(extendableUsd) || extendableUsd < 0) {
+    throw new EngineError("invalid_input", "the room the request budget leaves the reservation must be a finite amount, zero or more", { stage: "variants" });
+  }
+  // What the variants may spend: the headroom the reservation holds, and what the request budget lets it grow by.
+  const spendableUsd = roundUsd(input.headroomUsd + extendableUsd);
+  const reservationBinds = spendableUsd < matrix.budgetUsd;
+  const budgetUsd = roundUsd(Math.min(matrix.budgetUsd, spendableUsd));
   const planned: PlannedVariant[] = [];
   for (const { variant } of ranked) {
     const skip = (reason: SkipReason): void => {
@@ -337,7 +350,10 @@ export function expandVariants(input: ExpansionInput): VariantExpansion {
     }
     const spent = sumUsd([...planned.map((item) => item.estimateUsd), variant.estimateUsd]);
     if (spent > budgetUsd) {
-      skip(reservationBinds ? "over_reservation" : "over_budget");
+      // The reservation binds: the headroom alone, or the headroom plus a request budget that still leaves room (then the request
+      // budget is what refuses the variant).
+      if (!reservationBinds) skip("over_budget");
+      else skip(extendableUsd > 0 ? "over_request_budget" : "over_reservation");
       continue;
     }
     planned.push(variant);

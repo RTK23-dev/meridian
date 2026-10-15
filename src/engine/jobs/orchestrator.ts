@@ -878,7 +878,13 @@ function branchStageName(stage: BranchStage): EngineStage {
 function applyVariants(state: OrchestratorState, output: Extract<StageOutput, { stage: "variants" }>): void {
   expectQueued(state, "variants", output.subjectId);
   if (state.masterEdlId === null) conflict("variants ran without a master EDL", "variants");
-  mergeArtifacts(state, output.artifacts);
+  // Only the variant EDLs become request artifacts. A prepared generation variant's plan and voice (the "plan:" and "voice:" slots) are
+  // stored by the stage and stay with it until its assembly is wired: deliver reads every request artifact and needs exactly one
+  // scene plan (handlers/deliver.ts), so merging them here would refuse the request.
+  mergeArtifacts(
+    state,
+    Object.fromEntries(Object.entries(output.artifacts).filter(([slot]) => slot.startsWith("edl:"))),
+  );
   for (const variant of output.variants) {
     if (state.branches[variant.edlId]) invalid(`variant ${variant.edlId} already has a branch`, "variants");
     state.branches[variant.edlId] = newBranch(variant.edlId, state.masterEdlId);
