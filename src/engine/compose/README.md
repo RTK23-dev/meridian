@@ -7,7 +7,7 @@ Implements Bible section **9** (compiler and component library), **13** (style k
 
 | Path | Bible | What it does |
 | --- | --- | --- |
-| `compiler.ts` | 9.1, 6.9 | `compile(edl, styleKit, components)` → `{ files, composition, assets }`. Pure and deterministic. |
+| `compiler.ts` | 9.1, 6.9 | `compile(edl, styleKit, components, options)` → `{ files, composition, assets }`. Pure and deterministic. `options.clipSourceUris` is needed by a sourceBound clip. |
 | `styleKit.ts` | 9.1 rule 4, 13 | Style kit → `:root` custom properties (`--kit-*`). Refuses font names that could break CSS. |
 | `library.ts` | 9.2 | `ComponentDefinition` and `ComponentFixture` types, the reserved `durationMs` prop. |
 | `html.ts` | 9.1, L8 | Escaping for every string that reaches HTML (text nodes and JSON in attributes). |
@@ -19,7 +19,8 @@ Implements Bible section **9** (compiler and component library), **13** (style k
 
 Components shipped: E1 `captions.karaoke`, `title.hook`, `kinetic.punchline`, `product.card`, `cta.card`; E2 `react.layout`,
 `list.tierBoard`, `compare.split`, `price.reveal`, `chat.thread`; E5 `kinetic.type`, `screen.mock`, `character.rig` (the
-rig Bible 9.2 calls `cartoon.rig`). The rest of the 9.2 list arrives in later phases.
+rig Bible 9.2 calls `cartoon.rig`); the chain work adds `stopmotion.player` (Bible 7.1, sourceBound: see `STATUS.md`). The
+rest of the 9.2 list arrives in later phases.
 
 ## Output shape
 
@@ -45,6 +46,9 @@ rig Bible 9.2 calls `cartoon.rig`). The rest of the 9.2 list arrives in later ph
   The compiler checks its kind and maps it to a local asset path, so no EDL URI reaches the HTML (tested).
   A component's own schema can narrow the kind (for example `imageUriSchema` in `components/shared.ts` refuses video).
 - Component props are validated by the component's zod schema. The error names the clip.
+- A `sourceBound` component (`stopmotion.player`) draws only the media its own shot produced. `compile(edl, kit, library,
+  { clipSourceUris })` takes the list per clip id. A clip with no list, or with a media URI outside it, is refused and the
+  reason names the URI (tested). Other components ignore the option, so existing callers compile as before.
 - Every text value reaches the HTML as escaped text or escaped JSON. The HTML never receives raw ad or script text.
 
 ## HyperFrames version and the docs used

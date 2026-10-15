@@ -261,16 +261,22 @@ describe("nested media: a list item's image is mapped to a local asset (L8)", ()
   });
 });
 
-describe("a composition with all ten components is deterministic and self-contained", () => {
+describe("a composition with every component in the library is deterministic and self-contained", () => {
   const names = Object.keys(COMPONENT_LIBRARY).sort();
   const clips = names.map((name) => {
     const fixture = COMPONENT_LIBRARY[name].fixtures[0];
     return { component: name, props: fixture.props, durationMs: fixture.durationMs };
   });
+  // A sourceBound component (stopmotion.player) draws only its own shot's media, so its clip gets that shot's list.
+  const sources = new Map(
+    names.flatMap((name, index) =>
+      COMPONENT_LIBRARY[name].sourceBound === true ? [[`c_e2_${index}`, COMPONENT_LIBRARY[name].fixtures[0].sourceUris ?? []] as const] : [],
+    ),
+  );
 
   it("compiles to the same bytes and hash twice, with one host and one template per component", () => {
-    const first = compile(clipEdl(clips), styleKitFixture);
-    const second = compile(clipEdl(clips), styleKitFixture);
+    const first = compile(clipEdl(clips), styleKitFixture, COMPONENT_LIBRARY, { clipSourceUris: sources });
+    const second = compile(clipEdl(clips), styleKitFixture, COMPONENT_LIBRARY, { clipSourceUris: sources });
     assert.equal(first.composition.contentHash, second.composition.contentHash);
     for (const name of names) {
       assert.ok(textOf(first.files, "index.html").includes(`data-composition-src="components/${name}.html"`), name);

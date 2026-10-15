@@ -3,12 +3,17 @@
 
 import type { z } from "zod";
 
-/** One prop set used for tests and golden frames. framesMs are times (ms from the clip start) to check. */
+/**
+ * One prop set used for tests and golden frames. framesMs are times (ms from the clip start) to check. sourceUris is
+ * the list of media URIs the clip's shot produced; the golden harness passes it to the compiler for a sourceBound
+ * component (every fixture of such a component must set it).
+ */
 export type ComponentFixture = {
   name: string;
   durationMs: number;
   props: Record<string, unknown>;
   framesMs: number[];
+  sourceUris?: string[];
 };
 
 export type ComponentDefinition = {
@@ -21,6 +26,12 @@ export type ComponentDefinition = {
   /** Scalar props that the template declares in data-composition-variables (structured props are not declared). */
   declaredVariables: string[];
   fixtures: ComponentFixture[];
+  /**
+   * When true, every media URI in the clip's props must be one of the URIs its own shot produced. The caller passes
+   * those URIs to compile() per clip (CompileOptions.clipSourceUris). A clip without them is refused: fail closed.
+   * Used by stopmotion.player (Bible 7.1), whose frames are the outputs of the shot's own image calls.
+   */
+  sourceBound?: boolean;
 };
 
 export type ComponentLibrary = Readonly<Record<string, ComponentDefinition>>;

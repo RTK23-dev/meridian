@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"fps","type":"number","label":"Frames per second","default":12,"min":8,"max":12,"step":1,"unit":"fps"},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="stopmotion.player" data-width="1080" data-height="1920">
+  <div class="sm-root"></div>
+  <style>
+    /* Full-frame picture: every frame fills the box the clip is given, cropped to cover it. */
+    .sm-root {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--kit-background);
+    }
+    .sm-frame {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+    }
+    .sm-frame img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var root = document.querySelector(".sm-root");
+      root.style.background = kit.getPropertyValue("--kit-background");
+      var frames = Array.isArray(vars.frameUris) ? vars.frameUris : [];
+      var fps = vars.fps;
+      var tl = gsap.timeline({ paused: true });
+
+      // Frame i shows from round(i * 1000 / fps) to the next frame's start, clamped to the clip (Bible 7.1). A frame
+      // that starts at or after the clip end is never shown. Each frame is set on the composition clock, so any frame
+      // can be drawn without playing the ones before it.
+      frames.forEach(function (uri, index) {
+        var startMs = Math.round(index * 1000 / fps);
+        if (startMs >= vars.durationMs) {
+          return;
+        }
+        var endMs = Math.min(Math.round((index + 1) * 1000 / fps), vars.durationMs);
+        var frame = document.createElement("div");
+        frame.className = "sm-frame";
+        var img = document.createElement("img");
+        img.setAttribute("src", uri);
+        img.setAttribute("alt", "");
+        frame.appendChild(img);
+        root.appendChild(frame);
+        tl.set(frame, { opacity: 1, immediateRender: false }, startMs / 1000);
+        if (endMs < vars.durationMs) {
+          tl.set(frame, { opacity: 0, immediateRender: false }, endMs / 1000);
+        }
+      });
+      tl.set({}, {}, vars.durationMs / 1000);
+      window.__timelines["stopmotion.player"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

@@ -1,4 +1,71 @@
-# STATUS: engine compose (W9): compiler, style kit, thirteen components, golden frames
+# STATUS: engine compose (W9): compiler, style kit, fourteen components, golden frames
+
+## Chain work: `stopmotion.player` (Bible 7.1 `stop_motion`, contract `engine-contracts@5`)
+
+Branch `worktree-agent-a70192d499308ef8a`. The worktree had no commits of its own, so it was fast-forwarded from d0e8f63 to
+cef526c (the engine tree and the v5 chain contract) before this work. Details of the component are in `components/STATUS.md`.
+
+**The component.** `stopmotion.player` plays an ordered list of frame images at a frame rate, inside the composition.
+Props: `fps` (a whole number, 8 to 12, required) and `frameUris` (2 to 36 image URIs, png, jpg, jpeg or webp, in order).
+`durationMs` is the reserved clip span. Limits: 2 frames at least, 36 at most (the refusal gives the count), fps 8 to 12.
+The frame count must run to the clip end; a shorter list is refused with the frame count it needs.
+
+**The timing.** Frame i shows from `round(i * 1000 / fps)` to the next frame's start, clamped to the clip. A frame that starts
+at or after the clip end is not drawn. Times are whole milliseconds.
+
+**The source rule (the compiler change).** The component is `sourceBound`: each frame must be one of the clip's own shot
+sources. `compile(edl, kit, components, options)` takes `options.clipSourceUris`, a map from clip id to the media URIs that
+clip's shot produced (its takes). A sourceBound clip with no entry, or with a frame outside its entry, is refused, and the
+reason names the frame. Other components and every existing caller are unchanged. Existing callers that pass no options:
+`jobs/handlers/compose.ts` and `jobs/handlers/render.ts`. They refuse a stop-motion EDL with the reason until they pass
+`clipSourceUris`. Those files are eng-pipeline's and were not changed.
+
+**Where the component is registered.** `components/index.ts` holds `COMPONENT_LIBRARY`. `library.ts` holds only the types, so
+it gained the `sourceBound` flag and the fixture's `sourceUris`.
+
+**Decisions for the lead to confirm.**
+
+1. The floor is 2 frames, not the Bible's 24. Bible 7.1 plans 24 to 36 frames. The task set the ceiling at 36, and a floor of
+   24 would refuse a short shot at 12 fps (2 s needs 24 frames). The planner should keep to 24 to 36; the component allows 2.
+2. Undershoot is refused, not held. The task's rule clamps frames past the shot; it does not say what shows after the last
+   frame. A blank end would be a silent defect, so the clip is refused with the frame count that covers it (`framesNeeded`).
+3. Overshoot is clamped, as the task says: frames 24 to 35 of a 36-frame list on a 2 s clip are never drawn.
+4. Frame times are rounded to whole milliseconds (12 fps is 83.33 ms per frame). The rounding is the same in the template and
+   in `props.ts`, and the golden frames check the boundaries by colour.
+5. No holds in this version. Bible 9.2 lists holds; the task's timing has none, and each frame is held for 1000 / fps.
+6. The plan-side check (`plan/sources.ts`, `checkComponentProps`) validates the props schema only. The source rule is enforced
+   at compile, because only the compiler sees the takes. Plan cannot prove it.
+
+**Golden harness.** `test/golden/harness.ts` draws each `frame-NN` placeholder in its own colour (36 distinct colours, a
+golden-angle hue walk), so a frame shown a window early or late is a different colour in the golden check. It passes each
+fixture's `sourceUris` to the compiler. Existing placeholders and PNGs are unchanged (the other components' PNGs were not rewritten).
+
+**Tests and golden frames (run in this worktree).**
+
+- New: `components/stopmotion.player.test.ts` (prop limits with reasons, timing over every legal fps and clip length, the source
+  rule through `compile`, determinism, registration and the template's timing expression).
+- Changed: `components/components.test.ts` (the library holds fourteen components); `components/e2.test.ts` (its all-components
+  composition now passes the source list for the sourceBound clip; the test was also renamed, since "ten" was out of date).
+- Golden frames: 9 PNGs for 3 fixtures, in `components/stopmotion.player/golden/`, written with `golden.update.ts` filtered to this
+  component, viewed (one full frame by eye), and checked by reading each frame's centre colour against the colour of the expected
+  frame index (9 of 9 match). The compare run (`golden.run.ts`, filtered) passes 3 of 3.
+- `hyperframes lint` (filtered to this component) passes the 3 fixtures with zero errors and zero warnings.
+
+**Owner's live run for stop motion (agents hold no keys).**
+
+1. Price first. Bible 7.1 and the v5 note: `image.edit` is token-priced, so a stop-motion chain has no known price, and the
+   estimate refuses it, naming the shot. The owner sets the price before any live spend.
+2. One stop-motion shot end to end: 24 `image.edit` calls from the hero image (each frame the input of the next), each take
+   recorded. Compile with `clipSourceUris` set to the final take URIs of that clip. Render through the HyperFrames cloud.
+3. Check the cloud frames against the local golden frames for the same composition: for an 8 fps, 3 s clip, the frames at
+   60, 1060 and 2940 ms show frames 1, 9 and 24 of the list. Also check the 36-frame clamp case at 12 fps.
+4. Check that the cloud waits for each frame image to load before it captures. The frames are `<img>` elements set from
+   the script; a capture before decode would show a blank frame.
+5. Record the take ids, the asset ids, the composition hash (the idempotency key), the render id, the video id, the ledger
+   entries (estimate and actual) and the artifact ids.
+
+**Blockers.** None in this code. Needed elsewhere: the chain stage must pass the takes of each clip's calls as
+`clipSourceUris` (eng-pipeline), the image.edit price (owner), and an EDL that places the component (eng-plan-review / the editor).
 
 ## E5: three visual-type components (`kinetic.type`, `screen.mock`, `character.rig`) on branch `eng-e5-visual-types`
 
