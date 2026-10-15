@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { prices } from "../config/prices.ts";
 import { VISUAL_TYPES, type VisualType } from "../contracts/index.ts";
-import { filterCandidates, mustAllowedTypes, type FilterInput } from "./filter.ts";
+import { filterCandidates, kitRejection, mustAllowedTypes, type FilterInput } from "./filter.ts";
 import { PROPERTY_TYPES } from "./tables.ts";
 import type { Candidate, PlanKits } from "./types.ts";
 
@@ -127,8 +128,11 @@ test("rule 6 names the build gaps that remain, and a gap is not a kit", () => {
   const details = filterCandidates(base({})).rejected.filter((item) => item.rule === "rule6_kit");
   const gapOf = (type: VisualType) => details.find((item) => item.visualType === type)?.detail ?? "";
   assert.match(gapOf("react_clip"), /no source can be built for it yet/);
-  assert.match(gapOf("cartoon_generated"), /no source can be built for it yet/);
-  assert.doesNotMatch(gapOf("cartoon_generated"), /kit it needs/);
+  // cartoon_generated is a chain the source can carry now (contract v5), so with its generated sheet rule 6 keeps it.
+  assert.equal(gapOf("cartoon_generated"), "", "cartoon_generated is not a gap, and its kit is present");
+  assert.equal(kitRejection("cartoon_generated", ALL_KITS), null);
+  // stop_motion's closing component is checked by rule 6 after its price (chains.test.ts), so the kit check does not name it.
+  assert.equal(kitRejection("stop_motion", ALL_KITS), null);
   // screen_mock and cartoon_rigged are built (E5 sources, opened in E5 follow-up): they have no gap, so rule 6 keeps them.
   assert.equal(gapOf("screen_mock"), "", "screen_mock is not rejected by rule 6 when its kits are present");
   assert.equal(gapOf("cartoon_rigged"), "", "cartoon_rigged is not rejected by rule 6 when its rig is present");
@@ -146,7 +150,7 @@ test("rule 5: an unknown (null) price removes the candidate; it is never priced 
   const reasons = filterCandidates(input).rejected.filter((item) => item.visualType === "stop_motion");
   assert.equal(reasons.length, 1);
   assert.equal(reasons[0].rule, "rule5_budget");
-  assert.match(reasons[0].detail, /unknown price/);
+  assert.match(reasons[0].detail, new RegExp(`^unknown_price: ${prices.routeFor["image.edit"]} has no known price`));
   assert.ok(!keptTypes(input).includes("stop_motion"));
 });
 
@@ -158,9 +162,11 @@ test("rule 6: a type whose kit is missing is removed", () => {
   const riggedDetail = filterCandidates(noRig).rejected.find((item) => item.visualType === "cartoon_rigged")?.detail ?? "";
   assert.match(riggedDetail, /the kit it needs is missing: rigCharacter/, "without a usable rig, cartoon_rigged is removed for its kit");
   assert.ok(keptTypes(base({})).includes("cartoon_rigged"), "with the rig, cartoon_rigged is kept");
-  // cartoon_generated is a build gap, so it is removed whatever the kits are; the rig kit is not its reason.
-  const generatedDetail = filterCandidates(noRig).rejected.find((item) => item.visualType === "cartoon_generated")?.detail ?? "";
-  assert.doesNotMatch(generatedDetail, /rig/);
+  // cartoon_generated needs the generated character, not the rig: without the rig it is kept, and without the generated sheet it is removed.
+  assert.ok(keptTypes(noRig).includes("cartoon_generated"), "the rig is not cartoon_generated's kit");
+  const noGenerated = base({ kits: { ...ALL_KITS, generatedCharacter: false } });
+  const generatedDetail = filterCandidates(noGenerated).rejected.find((item) => item.visualType === "cartoon_generated")?.detail ?? "";
+  assert.match(generatedDetail, /the kit it needs is missing: generatedCharacter/);
   const noProduct = base({ kits: { ...ALL_KITS, productKit: false } });
   assert.ok(rejectedBy(noProduct, "rule6_kit").includes("product_hero"));
   // stop_motion has no known price, so rule 5 removes it before rule 6 is reached.

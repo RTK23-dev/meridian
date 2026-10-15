@@ -2,25 +2,29 @@
 // planner wrote, with the code's style for its type in front (tables.ts PROMPT_STYLE). A stock shot takes its query. A component
 // shot takes props drawn from the shot's own words, the product kit and the character sheet (text, prices and logos are drawn by
 // code, L8). Every component's props are checked against the library's own schema, so a shot the library cannot draw is refused
-// here, not at render time. cartoon_generated and stop_motion are chains of calls (tables.ts GENERATION_CHAINS): a ShotSource
-// carries one call, so their builders refuse and name the chain; the chain builders below return the calls for the produce step.
+// here, not at render time. cartoon_generated and stop_motion are chains of calls (chains.ts, contract v5): their source is the chain
+// of calls, each with its prompt, its inputs and its output name, and the produce stage runs them in order.
 
 import { COMPONENT_LIBRARY } from "../compose/components/index.ts";
 import type { MouthEvent, RigPose, RigViseme } from "../compose/components/character.rig/props.ts";
 import { MAX_APP_ROWS, MAX_CHAT_MESSAGES } from "../compose/components/screen.mock/props.ts";
 import type { ComponentDefinition } from "../compose/library.ts";
-import type { BeatRole, CharacterSheet, ModelClass, Persona, ProductKit, ShotLayer, ShotSource, VisualType } from "../contracts/index.ts";
+import type {
+  BeatRole,
+  CharacterSheet,
+  ChainCall,
+  ChainInput,
+  ModelClass,
+  Persona,
+  ProductKit,
+  ShotLayer,
+  ShotSource,
+  VisualType,
+} from "../contracts/index.ts";
 import { rigSheetProblem } from "./character.ts";
+import { CHAIN_TYPES, frameOutputName, stopMotionTiming, type ChainType, type Checked } from "./chains.ts";
 import { heroUriOf } from "./product.ts";
-import {
-  KINETIC_WORDS_PER_LINE,
-  PROMPT_STYLE,
-  RIG_ID,
-  RIG_PLAY,
-  STOP_MOTION_FPS,
-  STOP_MOTION_FRAMES,
-  type StyledVisualType,
-} from "./tables.ts";
+import { KINETIC_WORDS_PER_LINE, PROMPT_STYLE, RIG_ID, RIG_PLAY, type StyledVisualType } from "./tables.ts";
 
 /** The component names of the library that the plan draws with (Bible 9.2). */
 export const COMPONENT_FOR = {
@@ -75,9 +79,6 @@ export type BuiltSource = { layer: ShotLayer; source: ShotSource };
 export type SourceResult = { ok: true; built: BuiltSource } | { ok: false; reason: string };
 
 export type PropsCheck = { ok: true } | { ok: false; reason: string };
-
-/** A value or the reason it cannot be built. Used by the chain builders and the timing helpers. */
-export type Checked<T> = { ok: true; value: T } | { ok: false; reason: string };
 
 /** The lines of a kinetic.punchline shot: its words, KINETIC_WORDS_PER_LINE to a line, in script order. */
 export function kineticLinesOf(words: readonly string[]): string[] {
@@ -330,77 +331,75 @@ function screenSource(input: BuildSourceInput): SourceResult {
   );
 }
 
-/** Why a chain cannot be built, named for the shot: a ShotSource carries one call, so cartoon_generated and stop_motion refuse. */
-const CHAIN_REFUSAL = {
-  cartoon_generated:
-    "cartoon_generated is a chain (a style keyframe, then the video), and a shot source carries one call (sources.ts cartoonGeneratedChain)",
-  stop_motion:
-    "stop_motion is a chain of frame calls and a player, and a shot source carries one call (sources.ts stopMotionChain)",
-} as const;
-
-/** The calls of a cartoon_generated shot (tables.ts GENERATION_CHAINS): the keyframe, then the video that starts from it. */
-export type CartoonGeneratedChain = {
-  keyframe: { modelClass: "image.keyframe"; prompt: string; refs: string[] };
-  video: { modelClass: "video.budget"; prompt: string; refs: string[]; takes: 1 };
-};
-
-/** Every character reference is sent with every call (Bible 13). The keyframe is produced first; the video takes it as its first frame. */
-export function cartoonGeneratedChain(input: BuildSourceInput): Checked<CartoonGeneratedChain> {
-  if (input.prompt === undefined) return { ok: false, reason: "no prompt was written for this cartoon shot" };
-  const sheet = input.character;
-  if (sheet === undefined || sheet.kind !== "generated") {
-    return { ok: false, reason: "the page's generated character sheet is needed" };
+/**
+ * The kit and timing a chain needs, checked without the planner's prompt, so the filter can remove the type before the planner writes
+ * anything (componentBuildRefusals). Null when the chain can be built from the shot's kits. A cartoon chain needs the page's generated
+ * character sheet with references, and a stop-motion chain needs the product's hero image and a length it can make.
+ */
+export function chainKitRefusal(visualType: ChainType, input: Pick<BuildSourceInput, "shot" | "character" | "productKit">): string | null {
+  if (visualType === "cartoon_generated") {
+    const sheet = input.character;
+    if (sheet === undefined || sheet.kind !== "generated") return "the page's generated character sheet is needed";
+    if ((sheet.references ?? []).length === 0) return "the character sheet has no references to send with each call";
+    return null;
   }
-  const references = sheet.references ?? [];
-  if (references.length === 0) return { ok: false, reason: "the character sheet has no references to send with each call" };
+  if (input.productKit === undefined || heroUriOf(input.productKit) === null) return "a stop-motion shot starts from the product's hero image";
+  const timing = stopMotionTiming(input.shot.durationMs);
+  return timing.ok ? null : timing.reason;
+}
+
+/**
+ * The calls of a cartoon_generated shot (contract v5 chain): the keyframe, then the video that starts from it (7.1). Every character
+ * reference is sent with every call (Bible 13). Both calls carry the code's look for the type in front of the planner's prompt.
+ */
+export function cartoonGeneratedChain(input: BuildSourceInput): Checked<ChainCall[]> {
+  if (input.prompt === undefined) return { ok: false, reason: "no prompt was written for this cartoon shot" };
+  const kitReason = chainKitRefusal("cartoon_generated", input);
+  if (kitReason !== null) return { ok: false, reason: kitReason };
+  const references = [...(input.character?.references ?? [])];
   const prompt = styledPrompt("cartoon_generated", input.prompt);
+  const refs: ChainInput[] = references.map((uri) => ({ kind: "asset", uri }));
   return {
     ok: true,
-    value: {
-      keyframe: { modelClass: "image.keyframe", prompt, refs: [...references] },
-      video: { modelClass: "video.budget", prompt, refs: [...references], takes: 1 },
-    },
+    value: [
+      { output: "keyframe", modelClass: "image.keyframe", prompt, refs, takes: 1 },
+      {
+        output: "clip",
+        modelClass: "video.budget",
+        prompt,
+        refs,
+        firstFrame: { kind: "output", output: "keyframe" },
+        takes: 1,
+      },
+    ],
   };
 }
 
-/** The frame count and frame rate of a stop-motion shot (7.1): 24 to 36 frames at 8 to 12 per second, from the shot's length. */
-export function stopMotionTiming(durationMs: number): Checked<{ frames: number; fps: number }> {
-  const seconds = durationMs / 1000;
-  const frames = Math.min(STOP_MOTION_FRAMES.max, Math.max(STOP_MOTION_FRAMES.min, Math.round(seconds * STOP_MOTION_FPS.max)));
-  const fps = frames / seconds;
-  if (fps < STOP_MOTION_FPS.min || fps > STOP_MOTION_FPS.max) {
-    return {
-      ok: false,
-      reason: `a stop-motion shot runs about 2 to 4.5 seconds (${STOP_MOTION_FRAMES.min} to ${STOP_MOTION_FRAMES.max} frames at ${STOP_MOTION_FPS.min} to ${STOP_MOTION_FPS.max} per second), and this one is ${seconds} seconds`,
-    };
-  }
-  return { ok: true, value: { frames, fps: Math.round(fps * 1000) / 1000 } };
-}
-
-/** The calls of a stop_motion shot (tables.ts GENERATION_CHAINS): frames from the hero image, then the player that holds them. */
-export type StopMotionChain = {
-  hero: string;
-  frame: { modelClass: "image.edit"; prompt: string; refs: [string] };
-  frames: number;
-  fps: number;
-  player: "stopmotion.player";
-};
-
-export function stopMotionChain(input: BuildSourceInput): Checked<StopMotionChain> {
+/**
+ * The calls of a stop_motion shot (contract v5 chain, 7.1): 24 to 36 frames from the hero image, each reading the hero and the frame
+ * before it. The closing player is a component, not a call, so the chain ends with the last frame.
+ */
+export function stopMotionChain(input: BuildSourceInput): Checked<ChainCall[]> {
   if (input.prompt === undefined) return { ok: false, reason: "no prompt was written for this stop-motion shot" };
+  const kitReason = chainKitRefusal("stop_motion", input);
+  if (kitReason !== null) return { ok: false, reason: kitReason };
   const hero = input.productKit === undefined ? null : heroUriOf(input.productKit);
-  if (hero === null) return { ok: false, reason: "a stop-motion shot starts from the product's hero image" };
   const timing = stopMotionTiming(input.shot.durationMs);
+  if (hero === null) return { ok: false, reason: "a stop-motion shot starts from the product's hero image" };
   if (!timing.ok) return timing;
+  const prompt = styledPrompt("stop_motion", input.prompt);
   return {
     ok: true,
-    value: {
-      hero,
-      frame: { modelClass: "image.edit", prompt: styledPrompt("stop_motion", input.prompt), refs: [hero] },
-      frames: timing.value.frames,
-      fps: timing.value.fps,
-      player: "stopmotion.player",
-    },
+    value: Array.from({ length: timing.value.frames }, (_, index): ChainCall => {
+      const previous: ChainInput[] = index === 0 ? [] : [{ kind: "output", output: frameOutputName(index) }];
+      return {
+        output: frameOutputName(index + 1),
+        modelClass: "image.edit",
+        prompt,
+        refs: [{ kind: "asset", uri: hero }, ...previous],
+        takes: 1,
+      };
+    }),
   };
 }
 
@@ -471,8 +470,12 @@ export function buildSource(input: BuildSourceInput): SourceResult {
     case "screen_mock":
       return screenSource(input);
     case "cartoon_generated":
-    case "stop_motion":
-      return refuse(CHAIN_REFUSAL[visualType]);
+    case "stop_motion": {
+      // A chain (contract v5): its calls are the source. The planner's prompt is in front of every call, and the code's look for the type.
+      const calls = visualType === "cartoon_generated" ? cartoonGeneratedChain(input) : stopMotionChain(input);
+      if (!calls.ok) return refuse(calls.reason);
+      return { ok: true, built: { layer: "base", source: { kind: "chain", calls: calls.value } } };
+    }
     default:
       return refuse(`${visualType} has no source in the E3 plan`);
   }
@@ -485,15 +488,20 @@ export function buildSource(input: BuildSourceInput): SourceResult {
 export const COMPONENT_BUILD_TYPES: readonly VisualType[] = ["kinetic_type", "coded_graphics", "cartoon_rigged", "screen_mock"];
 
 /**
- * The component types this shot cannot be built as, with the reason: each one's source is built here from the shot's words,
- * timings, kits and sheet. Pure. The filter (rule 6) removes these types for the shot, so the planner never picks a type the plan
- * cannot draw, and the plan does not fail later at sources_built.
+ * The types this shot cannot be built as, with the reason: each component is built here from the shot's words, timings, kits and
+ * sheet; each chain is checked for its kits and its length (chainKitRefusal), since its prompt is not written yet. Pure. The filter
+ * (rule 6) removes these types for the shot, so the planner never picks a type the plan cannot draw, and the plan does not fail
+ * later at sources_built.
  */
 export function componentBuildRefusals(input: Omit<BuildSourceInput, "visualType">): Partial<Record<VisualType, string>> {
   const refusals: Partial<Record<VisualType, string>> = {};
   for (const visualType of COMPONENT_BUILD_TYPES) {
     const result = buildSource({ ...input, visualType });
     if (!result.ok) refusals[visualType] = result.reason;
+  }
+  for (const visualType of CHAIN_TYPES) {
+    const reason = chainKitRefusal(visualType, input);
+    if (reason !== null) refusals[visualType] = reason;
   }
   return refusals;
 }

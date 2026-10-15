@@ -5,20 +5,21 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { RIG_EXPRESSIONS, RIG_POSES, propsSchema as rigPropsSchema } from "../compose/components/character.rig/props.ts";
 import { COMPONENT_LIBRARY } from "../compose/components/index.ts";
-import { VISUAL_TYPES, type BeatRole, type VisualType } from "../contracts/index.ts";
+import { VISUAL_TYPES, type BeatRole } from "../contracts/index.ts";
 import { promptAsksForText } from "../review/gates/promptText.ts";
+import { CHAIN_TYPES } from "./chains.ts";
 import {
+  ARTIFACT_RISK_PRIOR,
   BUILD_GAPS,
   BUILDABLE_TYPES,
-  CHAIN_TYPES,
   DOWNGRADE_TO,
-  GENERATION_CHAINS,
   PROMPT_STYLE,
   RECIPES,
   RIG_ID,
   RIG_PLAY,
   STOP_MOTION_FPS,
   STOP_MOTION_FRAMES,
+  isGeneratedType,
 } from "./tables.ts";
 
 const BEAT_ROLES: BeatRole[] = ["hook", "setup", "item", "proof", "twist", "payoff", "cta"];
@@ -57,21 +58,20 @@ describe("the rig's play (Bible 9.2): every beat plays a pose and expression the
   });
 });
 
-describe("the chains (GENERATION_CHAINS) use the models the recipes price (RECIPES)", () => {
-  it("cartoon_generated: the keyframe is an image call, and the video is the budget video class the recipe bills", () => {
-    const [keyframe, video] = GENERATION_CHAINS.cartoon_generated;
-    assert.equal(keyframe.modelClass, "image.keyframe");
-    assert.equal(video.modelClass, RECIPES.cartoon_generated.kind === "generate" ? RECIPES.cartoon_generated.modelClass : "none");
-    assert.equal(video.firstFrame, "the keyframe");
+describe("the chains (contract v5, chains.ts) are recipes whose calls are priced one by one (RECIPES)", () => {
+  it("cartoon_generated and stop_motion are chain recipes, and the other generated types keep their single-call recipe", () => {
+    assert.deepEqual(RECIPES.cartoon_generated, { kind: "chain" });
+    assert.deepEqual(RECIPES.stop_motion, { kind: "chain" });
+    assert.equal(RECIPES.cinematic.kind, "generate");
+    assert.equal(RECIPES.product_hero.kind, "generate");
   });
 
-  it("stop_motion: the frames are image.edit calls, and the recipe bills 12 frames a second (7.1's top of the range)", () => {
-    const [frame, player] = GENERATION_CHAINS.stop_motion;
-    const recipe = RECIPES.stop_motion;
-    assert.equal(frame.modelClass, "image.edit");
-    assert.ok(recipe.kind === "generate" && recipe.billing === "frame" && recipe.modelClass === frame.modelClass);
-    assert.ok(recipe.kind === "generate" && recipe.billing === "frame" && recipe.framesPerSecond === STOP_MOTION_FPS.max);
-    assert.equal(player.component, "stopmotion.player");
+  it("a chain is a generated type, so it has a prompt, a redo allowance and a fallback like any generated type", () => {
+    assert.equal(isGeneratedType("cartoon_generated"), true);
+    assert.equal(isGeneratedType("stop_motion"), true);
+    assert.equal(isGeneratedType("stock_footage"), false);
+    assert.equal(isGeneratedType("kinetic_type"), false);
+    assert.equal(ARTIFACT_RISK_PRIOR.chain, ARTIFACT_RISK_PRIOR.generate);
   });
 
   it("the stop-motion frame bounds are Bible 7.1's: 24 to 36 frames, 8 to 12 per second", () => {
@@ -81,14 +81,14 @@ describe("the chains (GENERATION_CHAINS) use the models the recipes price (RECIP
 });
 
 describe("build gaps: the E5 types that are built, and the ones that stay gaps", () => {
-  it("cartoon_generated is a gap, and says why (its chain)", () => {
-    assert.match(BUILD_GAPS.cartoon_generated ?? "", /chain/);
-    assert.equal(BUILDABLE_TYPES.includes("cartoon_generated"), false);
+  it("cartoon_generated is built now (its chain is in the source), so it is not a gap", () => {
+    assert.equal(BUILD_GAPS.cartoon_generated, undefined);
+    assert.ok(BUILDABLE_TYPES.includes("cartoon_generated"));
   });
 
-  it("stop_motion has no gap entry: its unknown price removes it first (rule 5), and buildSource refuses its chain", () => {
+  it("stop_motion has no static gap: its unknown price removes it first (rule 5), and its closing component is checked in chains.ts", () => {
     assert.equal(BUILD_GAPS.stop_motion, undefined);
-    assert.equal(RECIPES.stop_motion.kind, "generate");
+    assert.ok(BUILDABLE_TYPES.includes("stop_motion"));
   });
 
   it("cartoon_rigged and screen_mock are built, so they are not gaps; their sources are checked per shot (sources.ts)", () => {
@@ -98,13 +98,9 @@ describe("build gaps: the E5 types that are built, and the ones that stay gaps",
     assert.ok(BUILDABLE_TYPES.includes("screen_mock"));
   });
 
-  it("buildable means no gap and no chain: every other type is buildable, and the two chains are not", () => {
+  it("only react_clip is a static gap: every other type is buildable", () => {
     for (const type of VISUAL_TYPES) {
-      const expected = BUILD_GAPS[type] === undefined && type !== "cartoon_generated" && type !== "stop_motion";
-      assert.equal(BUILDABLE_TYPES.includes(type), expected, type);
-    }
-    for (const type of ["kinetic_type", "cinematic", "coded_graphics", "stock_footage", "ugc_presenter", "product_hero", "cartoon_rigged", "screen_mock"] as VisualType[]) {
-      assert.ok(BUILDABLE_TYPES.includes(type), type);
+      assert.equal(BUILDABLE_TYPES.includes(type), type !== "react_clip", type);
     }
     assert.deepEqual([...CHAIN_TYPES].sort(), ["cartoon_generated", "stop_motion"]);
   });

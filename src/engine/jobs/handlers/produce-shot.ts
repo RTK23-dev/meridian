@@ -19,8 +19,26 @@
 // this handler's (gateway/download.ts). The router's own downloader is not set, so no take is downloaded twice.
 
 import { z } from "zod";
-import { EngineError, assetSpecSchema, contentHash, decisionSchema, newId, scenePlanSchema, takeSchema, type AssetSpec, type Decision, type ProviderError, type ShotSpec, type Take } from "../../contracts/index.ts";
+import {
+  EngineError,
+  assetSpecSchema,
+  contentHash,
+  decisionSchema,
+  modelClassSchema,
+  newId,
+  scenePlanSchema,
+  sumUsd,
+  takeSchema,
+  type AssetSpec,
+  type ChainCall,
+  type ChainInput,
+  type Decision,
+  type ProviderError,
+  type ShotSpec,
+  type Take,
+} from "../../contracts/index.ts";
 import type { ProviderPoll } from "../../contracts/assets.ts";
+import { closingComponentOf, closingComponentProblem, libraryHas } from "../../plan/chains.ts";
 import type { AsyncAssetRouter, ProduceInput, ProduceReport, StepReport } from "../../assets/router.ts";
 import { parseAssetJob, type AssetJob } from "../../assets/job.ts";
 import type { StockOutcome } from "../../assets/stock.ts";
@@ -97,6 +115,11 @@ export type ProduceShotPorts = {
   /** Object storage for the take's media (Bible 5.2). */
   objects: MediaStorePort;
   now?: () => number;
+  /**
+   * Whether the component library draws a closing component (a chain's player). Absent, the library itself answers. A chain whose
+   * closing component is not drawn is refused before its first call, so no frame is paid for a shot that cannot be drawn.
+   */
+  componentHas?: (component: string) => boolean;
 };
 
 /** Turns a router report into a ShotProduction. The router's facts are kept; nothing is inferred. */
@@ -443,9 +466,233 @@ function attemptFor(ctx: StageContext): number {
   return attempt;
 }
 
+// --- Chains (contract v5, Bible 7.1). A shot whose source is a chain makes its calls in order. Each call is one generation on the
+// request's reservation: its own spec (so its own cache key, the input hash), its own ledger entry (the router writes it on the submit),
+// and its own output, which a later call of the same chain reads by name. The last call's video is the shot's take. A chain that ends
+// in an image (stop-motion frames) has no take: its closing component draws the frames (Bible 6.6), so the output names the component
+// and holds no take. A refused or failed call stops the chain: no later call is made, and the hold names the call.
+
+/** One finished call of a chain: what a later call may read (its uri), and what the call cost. */
+export const chainOutputSchema = z.object({
+  output: z.string().min(1),
+  modelClass: modelClassSchema,
+  uri: z.string().min(1),
+  mediaType: z.string().min(1).nullable(),
+  providerId: z.string().min(1),
+  promptHash: z.string().min(1),
+  costUsd: z.number().nonnegative(),
+  costIsEstimate: z.boolean(),
+  cacheHit: z.boolean(),
+  ledgerEntryId: z.string().min(1).nullable(),
+});
+export type ChainOutput = z.infer<typeof chainOutputSchema>;
+
+/** How far a chain has got: the index of its next call, when it started, and the outputs of the calls made. Carried on the poll. */
+export const chainProgressSchema = z.object({
+  index: z.number().int().nonnegative(),
+  startedAt: z.string().min(1),
+  outputs: z.array(chainOutputSchema),
+});
+export type ChainProgress = z.infer<typeof chainProgressSchema>;
+
+/** The asset spec of one call of a chain. Its inputs are the assets it names and the outputs of the earlier calls, as their uris. */
+export function chainCallSpecFor(input: {
+  requestId: string;
+  shot: ShotSpec;
+  calls: readonly ChainCall[];
+  index: number;
+  attempt: number;
+  hints: readonly string[];
+  outputs: readonly ChainOutput[];
+}): AssetSpec {
+  const call = input.calls[input.index];
+  if (call === undefined) {
+    throw new EngineError("internal", `${input.shot.shotId} has no call ${input.index} in its chain`, { stage: "produce_shot" });
+  }
+  const resolve = (ref: ChainInput): string => {
+    if (ref.kind === "asset") return ref.uri;
+    const made = input.outputs.find((output) => output.output === ref.output);
+    if (made === undefined) {
+      throw new EngineError("internal", `call ${call.output} of ${input.shot.shotId} reads ${ref.output}, which no earlier call made`, {
+        stage: "produce_shot",
+      });
+    }
+    return made.uri;
+  };
+  // The label names the call, so each call of a chain has its own seed, spec id and cache key (the input hash, Bible 10.4).
+  const label = `${input.requestId}|${input.shot.shotId}|${input.attempt}|${call.output}`;
+  const firstFrame = call.firstFrame === undefined ? undefined : resolve(call.firstFrame);
+  const lastFrame = call.lastFrame === undefined ? undefined : resolve(call.lastFrame);
+  return assetSpecSchema.parse({
+    schema: "meridian.asset_spec/v1",
+    specId: stableId("asp_", `asset|${label}`),
+    shotId: input.shot.shotId,
+    modelClass: call.modelClass,
+    prompt: promptWithHints(call.prompt, input.hints),
+    refs: call.refs.map(resolve),
+    ...(firstFrame === undefined ? {} : { firstFrame }),
+    ...(lastFrame === undefined ? {} : { lastFrame }),
+    durationMs: input.shot.endMs - input.shot.startMs,
+    aspect: "9:16",
+    width: TAKE_WIDTH,
+    height: TAKE_HEIGHT,
+    seed: seedFor(label),
+    takes: call.takes,
+  });
+}
+
+/** What a chain run carries from one call to the next. */
+type ChainRun = {
+  ctx: StageContext;
+  ports: ProduceShotPorts;
+  shot: ShotSpec;
+  calls: readonly ChainCall[];
+  planArtifactId: string;
+  epoch: number;
+  attempt: number;
+  progress: ChainProgress;
+  decisions: Decision[];
+};
+
+/** The chain's progress carried on a poll, parsed again (the poll payload is stored JSON, Bible 1). Absent for a generate shot. */
+function chainCarryOf(carry: unknown): ChainProgress | null {
+  const value = typeof carry === "object" && carry !== null ? (carry as { chain?: unknown }).chain : undefined;
+  if (value === undefined) return null;
+  const parsed = chainProgressSchema.safeParse(value);
+  if (!parsed.success) throw new EngineError("internal", "the chain progress carried by a poll does not parse", { stage: "produce_shot" });
+  return parsed.data;
+}
+
 /**
- * The produce_shot stage. run() makes the take for a generate or stock shot. For an asynchronous generator it returns submitted, and
- * finish() settles the call when the poller sees it done or refused.
+ * Makes the calls of a chain in order (Bible 7.1). `settled` is the answer already in hand for the call at the progress index (a settled
+ * poll), or null to make that call now. Returns submitted while a call is with the provider, the take when the last call is a video, or
+ * the hold of the call that stopped the chain. Each call's ledger entry is written by the router, so every call has one (checked here).
+ */
+async function driveChain(run: ChainRun, settled: ShotProduction | null): Promise<StageRunResult> {
+  const { ctx, ports, shot } = run;
+  let progress = run.progress;
+  let decisions = run.decisions;
+  let answer = settled;
+  for (;;) {
+    const call = run.calls[progress.index];
+    if (call === undefined) return finishChain({ ...run, progress, decisions });
+    const spec = chainCallSpecFor({
+      requestId: ctx.requestId,
+      shot,
+      calls: run.calls,
+      index: progress.index,
+      attempt: run.attempt,
+      hints: ctx.payload.hints,
+      outputs: progress.outputs,
+    });
+    const production =
+      answer ??
+      (await ports.generator.generate({
+        sql: ctx.sql,
+        organizationId: ctx.organizationId,
+        requestId: ctx.requestId,
+        reservationId: requireReservation(ctx),
+        spec,
+        visualType: shot.visualType,
+      }));
+    answer = null;
+
+    if (production.status === "submitted") {
+      return {
+        kind: "submitted",
+        provider: production.providerId,
+        jobRef: production.jobRef,
+        submittedAt: production.submittedAt,
+        carry: { job: production.job, decisions: [...decisions, ...production.decisions], chain: progress },
+      };
+    }
+
+    if (production.status !== "done") {
+      // A refusal or a failure stops the chain here. No later call is made, and the hold names the call that stopped it.
+      const { made, decisions: callDecisions } = await fromProduction(ctx, ports, shot, run.planArtifactId, run.attempt, production, spec, Date.parse(progress.startedAt));
+      const named: Stored | Refused =
+        made.kind === "hold" && made.hold.kind === "budget" ? { kind: "hold", hold: { kind: "budget", reason: `${call.output}: ${made.hold.reason}` } } : made;
+      const stop: Decision = {
+        at: new Date((ports.now ?? Date.now)()).toISOString(),
+        chose: `stopped at ${call.output}`,
+        alternatives: [],
+        reason: `call ${progress.index + 1} of ${run.calls.length} (${call.modelClass}) did not make an output, so no later call is made`,
+        by: "scorer",
+      };
+      return { kind: "done", output: outputFor(shot.shotId, run.epoch, named, [...decisions, ...callDecisions, stop]) };
+    }
+
+    if (!production.cacheHit && production.ledgerEntryId === null) {
+      throw new EngineError("internal", `call ${call.output} of ${shot.shotId} was made with no ledger entry`, { stage: "produce_shot" });
+    }
+    const made: ChainOutput = {
+      output: call.output,
+      modelClass: call.modelClass,
+      uri: production.uri,
+      mediaType: production.mediaType,
+      providerId: production.providerId,
+      promptHash: contentHash(spec.prompt),
+      costUsd: production.costUsd,
+      costIsEstimate: production.costIsEstimate,
+      cacheHit: production.cacheHit,
+      ledgerEntryId: production.ledgerEntryId,
+    };
+    progress = { index: progress.index + 1, startedAt: progress.startedAt, outputs: [...progress.outputs, made] };
+    decisions = [...decisions, ...production.decisions];
+    if (progress.index >= run.calls.length) return finishChain({ ...run, progress, decisions });
+  }
+}
+
+/**
+ * The end of a chain whose calls were all made. A video last call is the shot's take: it is downloaded and checked like any take, and
+ * its cost is the sum of every call. A chain that ends in an image has no take: the closing component draws the frames, and the output
+ * names it (decision), with no take and no hold.
+ */
+async function finishChain(run: ChainRun): Promise<StageRunResult> {
+  const { ctx, ports, shot } = run;
+  const clock = ports.now ?? Date.now;
+  const last = run.progress.outputs[run.progress.outputs.length - 1];
+  const finalCall = run.calls[run.calls.length - 1];
+  if (last === undefined || finalCall === undefined) {
+    throw new EngineError("internal", `the chain of ${shot.shotId} ended with no output`, { stage: "produce_shot" });
+  }
+  if (!finalCall.modelClass.startsWith("video.")) {
+    const component = closingComponentOf(shot.visualType);
+    if (component === undefined) {
+      throw new EngineError("invalid_input", `${shot.shotId} ends in an image and has no closing component`, { stage: "produce_shot" });
+    }
+    const closing: Decision = {
+      at: new Date(clock()).toISOString(),
+      chose: component,
+      alternatives: [],
+      reason: `the ${run.calls.length} frames are made; ${component} draws them after the last call, so the shot has no take (Bible 6.6)`,
+      by: "scorer",
+    };
+    return {
+      kind: "done",
+      output: { stage: "produce_shot", subjectId: shot.shotId, shotId: shot.shotId, takeId: null, epoch: run.epoch, artifacts: {}, decisions: [...run.decisions, closing] },
+    };
+  }
+  const { provider, model } = splitAdapterId(last.providerId);
+  const made = await storeTake(ctx, ports, {
+    shotId: shot.shotId,
+    planArtifactId: run.planArtifactId,
+    attempt: run.attempt,
+    providerId: provider,
+    model,
+    url: last.uri,
+    downloadProvider: provider,
+    promptHash: last.promptHash,
+    costUsd: sumUsd(run.progress.outputs.map((output) => output.costUsd)),
+    latencyMs: clock() - Date.parse(run.progress.startedAt),
+    createdAt: new Date(clock()).toISOString(),
+  });
+  return { kind: "done", output: outputFor(shot.shotId, run.epoch, made, run.decisions) };
+}
+
+/**
+ * The produce_shot stage. run() makes the take for a generate or stock shot, or drives a chain's calls. For an asynchronous generator it
+ * returns submitted, and finish() settles the call when the poller sees it done or refused.
  */
 export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler {
   const now = ports.now ?? Date.now;
@@ -526,6 +773,26 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
         return { kind: "done", output: outputFor(shot.shotId, epoch, made, [decision]) };
       }
 
+      if (source.kind === "chain") {
+        // Before the first call: a chain whose closing component is not drawn would pay for frames it cannot show, so it is refused here.
+        const gap = closingComponentProblem(shot.visualType, ports.componentHas ?? libraryHas);
+        if (gap !== null) throw new EngineError("config", `${shot.shotId}: ${gap}; no call is made`, { stage: "produce_shot", retryable: false });
+        return driveChain(
+          {
+            ctx,
+            ports,
+            shot,
+            calls: source.calls,
+            planArtifactId,
+            epoch,
+            attempt,
+            progress: { index: 0, startedAt: new Date((ports.now ?? Date.now)()).toISOString(), outputs: [] },
+            decisions: [],
+          },
+          null,
+        );
+      }
+
       throw new EngineError("invalid_input", `${shot.shotId} is a ${source.kind} shot and needs no produce job`, { stage: "produce_shot" });
     },
 
@@ -538,6 +805,28 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
       const carried = carriedDecisionsOf(submission.carry);
       const { shot, planArtifactId } = await planShotOf(ctx);
       const attempt = attemptFor(ctx);
+      const chain = chainCarryOf(submission.carry);
+      if (chain !== null) {
+        // A call of a chain: settle it, then carry on with the calls that follow (Bible 7.1). The spec is rebuilt from the same outputs.
+        if (shot.source.kind !== "chain") throw new EngineError("internal", `${shot.shotId} carries chain progress but its source is ${shot.source.kind}`, { stage: "produce_shot" });
+        const calls = shot.source.calls;
+        const spec = chainCallSpecFor({ requestId: ctx.requestId, shot, calls, index: chain.index, attempt, hints: ctx.payload.hints, outputs: chain.outputs });
+        const settled = await ports.generator.settle(
+          { sql: ctx.sql, organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId: requireReservation(ctx), spec, visualType: shot.visualType },
+          job,
+          polled,
+        );
+        if (settled.status === "submitted") {
+          return {
+            kind: "submitted",
+            provider: settled.providerId,
+            jobRef: settled.jobRef,
+            submittedAt: settled.submittedAt,
+            carry: { job: settled.job, decisions: [...carried, ...settled.decisions], chain },
+          };
+        }
+        return driveChain({ ctx, ports, shot, calls, planArtifactId, epoch: epochFor(ctx), attempt, progress: chain, decisions: carried }, settled);
+      }
       const spec = assetSpecFor({ requestId: ctx.requestId, shot, attempt, hints: ctx.payload.hints });
       const production = await ports.generator.settle(
         { sql: ctx.sql, organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId: requireReservation(ctx), spec, visualType: shot.visualType },

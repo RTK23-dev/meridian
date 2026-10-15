@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { personaFixture, productKitFixture } from "../contracts/fixtures/index.ts";
 import type { CharacterSheet } from "../contracts/index.ts";
+import { stopMotionTiming } from "./chains.ts";
 import {
   COMPONENT_BUILD_TYPES,
   buildSource,
   cartoonGeneratedChain,
   checkComponentProps,
+  chainKitRefusal,
   componentBuildRefusals,
   componentRefusals,
   emphasisIn,
@@ -15,7 +17,6 @@ import {
   mouthTimelineOf,
   sentencesOf,
   stopMotionChain,
-  stopMotionTiming,
   timedLinesOf,
   wordSpanOf,
   type BuildSourceInput,
@@ -387,13 +388,18 @@ describe("screen_mock: a screen from the shot's own words and the product kit, w
   });
 });
 
-describe("cartoon_generated and stop_motion: chains that one shot source cannot carry", () => {
-  it("refuses both in buildSource, and names the chain builder that makes their calls", () => {
-    const cartoon = buildSource(input({ visualType: "cartoon_generated", prompt: "x" }));
-    assert.match(cartoon.ok ? "" : cartoon.reason, /chain/);
-    assert.match(cartoon.ok ? "" : cartoon.reason, /cartoonGeneratedChain/);
-    const stop = buildSource(input({ visualType: "stop_motion", prompt: "x" }));
-    assert.match(stop.ok ? "" : stop.reason, /stopMotionChain/);
+describe("cartoon_generated and stop_motion: chains of calls (contract v5)", () => {
+  it("buildSource returns a chain source for both, with the calls the builders make", () => {
+    const cartoon = buildSource(input({ visualType: "cartoon_generated", prompt: "The bean jumps.", character: GENERATED_SHEET }));
+    assert.ok(cartoon.ok);
+    if (!cartoon.ok) return;
+    assert.equal(cartoon.built.layer, "base");
+    assert.equal(cartoon.built.source.kind, "chain");
+    const stop = buildSource(input({ visualType: "stop_motion", prompt: "A bean hops.", productKit: productKitFixture, shot: { durationMs: 2500 } }));
+    assert.ok(stop.ok);
+    if (!stop.ok) return;
+    assert.equal(stop.built.source.kind, "chain");
+    assert.equal(stop.built.source.kind === "chain" ? stop.built.source.calls.length : 0, 30);
   });
 
   it("builds the cartoon chain: a keyframe with every reference, then a video that takes the keyframe, both in the code's look", () => {
@@ -401,10 +407,11 @@ describe("cartoon_generated and stop_motion: chains that one shot source cannot 
     assert.ok(chain.ok);
     if (!chain.ok) return;
     const style = `${PROMPT_STYLE.cartoon_generated} The bean jumps.`;
-    assert.deepEqual(chain.value, {
-      keyframe: { modelClass: "image.keyframe", prompt: style, refs: GENERATED_SHEET.references },
-      video: { modelClass: "video.budget", prompt: style, refs: GENERATED_SHEET.references, takes: 1 },
-    });
+    const refs = (GENERATED_SHEET.references ?? []).map((uri) => ({ kind: "asset", uri }));
+    assert.deepEqual(chain.value, [
+      { output: "keyframe", modelClass: "image.keyframe", prompt: style, refs, takes: 1 },
+      { output: "clip", modelClass: "video.budget", prompt: style, refs, firstFrame: { kind: "output", output: "keyframe" }, takes: 1 },
+    ]);
   });
 
   it("refuses the cartoon chain without a generated sheet, without references, or without a prompt", () => {
@@ -425,16 +432,47 @@ describe("cartoon_generated and stop_motion: chains that one shot source cannot 
     assert.equal(stopMotionTiming(1900).ok, false);
   });
 
-  it("builds the stop-motion chain from the hero image, and refuses it without one", () => {
+  it("builds the stop-motion chain: each frame reads the hero image and the frame before it, in order", () => {
+    const hero = productKitFixture.heroImages[0].uri;
     const chain = stopMotionChain(input({ visualType: "stop_motion", prompt: "A bean hops.", productKit: productKitFixture, shot: { durationMs: 2500 } }));
     assert.ok(chain.ok);
     if (!chain.ok) return;
-    assert.equal(chain.value.hero, productKitFixture.heroImages[0].uri);
-    assert.deepEqual(chain.value.frame.refs, [productKitFixture.heroImages[0].uri]);
-    assert.equal(chain.value.frame.modelClass, "image.edit");
-    assert.equal(chain.value.frames, 30);
-    assert.equal(chain.value.player, "stopmotion.player");
+    assert.equal(chain.value.length, 30);
+    const [first, second, last] = [chain.value[0], chain.value[1], chain.value[29]];
+    assert.equal(first?.output, "frame_01");
+    assert.deepEqual(first?.refs, [{ kind: "asset", uri: hero }]);
+    assert.equal(second?.output, "frame_02");
+    assert.deepEqual(second?.refs, [{ kind: "asset", uri: hero }, { kind: "output", output: "frame_01" }]);
+    assert.equal(last?.output, "frame_30");
+    assert.deepEqual(last?.refs, [{ kind: "asset", uri: hero }, { kind: "output", output: "frame_29" }]);
+    assert.ok(chain.value.every((call) => call.modelClass === "image.edit" && call.takes === 1));
+    assert.ok(chain.value.every((call) => call.prompt === `${PROMPT_STYLE.stop_motion} A bean hops.`));
+  });
+
+  it("refuses the stop-motion chain without a hero image, without a prompt, or at a length it cannot make", () => {
     assert.equal(stopMotionChain(input({ visualType: "stop_motion", prompt: "x", shot: { durationMs: 2500 } })).ok, false);
+    assert.equal(stopMotionChain(input({ visualType: "stop_motion", productKit: productKitFixture, shot: { durationMs: 2500 } })).ok, false);
+    const long = stopMotionChain(input({ visualType: "stop_motion", prompt: "x", productKit: productKitFixture, shot: { durationMs: 6000 } }));
+    assert.equal(long.ok, false);
+    assert.match(long.ok ? "" : long.reason, /2 to 4.5 seconds/);
+  });
+
+  it("chainKitRefusal names the kit a chain needs, without a prompt, so the filter can remove the type first", () => {
+    assert.equal(chainKitRefusal("cartoon_generated", input({ character: GENERATED_SHEET })), null);
+    assert.match(chainKitRefusal("cartoon_generated", input({ character: RIG_SHEET })) ?? "", /generated character sheet/);
+    assert.equal(chainKitRefusal("stop_motion", input({ productKit: productKitFixture, shot: { durationMs: 2500 } })), null);
+    assert.match(chainKitRefusal("stop_motion", input({ shot: { durationMs: 2500 } })) ?? "", /hero image/);
+    assert.match(chainKitRefusal("stop_motion", input({ productKit: productKitFixture, shot: { durationMs: 6000 } })) ?? "", /2 to 4.5 seconds/);
+  });
+
+  it("componentBuildRefusals removes a chain whose kit or length it cannot make, and keeps one it can", () => {
+    const base = { shot: input({}).shot, claimIds: [] as string[] };
+    const withKits = componentBuildRefusals({ ...base, productKit: productKitFixture, character: GENERATED_SHEET, shot: { ...base.shot, durationMs: 2500 } });
+    assert.equal(withKits.cartoon_generated, undefined);
+    assert.equal(withKits.stop_motion, undefined);
+    const bare = componentBuildRefusals({ ...base, shot: { ...base.shot, durationMs: 2500 } });
+    assert.match(bare.cartoon_generated ?? "", /generated character sheet/);
+    assert.match(bare.stop_motion ?? "", /hero image/);
   });
 });
 
@@ -518,7 +556,8 @@ describe("componentBuildRefusals: each component's source is built before the pl
 
   it("names the component types the shot can be drawn as, with no refusal when every source builds", () => {
     const refusals = componentBuildRefusals({ ...SHOT_INPUT, productKit: productKitFixture, character: RIG_SHEET });
-    assert.deepEqual(refusals, {}, "a shot with its kits and sheet is drawable as every component type");
+    for (const type of COMPONENT_BUILD_TYPES) assert.equal(refusals[type], undefined, `${type} is drawable with its kits and sheet`);
+    assert.match(refusals.cartoon_generated ?? "", /generated character sheet/, "a rig sheet is not the generated sheet a cartoon chain needs");
     assert.deepEqual(COMPONENT_BUILD_TYPES, ["kinetic_type", "coded_graphics", "cartoon_rigged", "screen_mock"]);
   });
 

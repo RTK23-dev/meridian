@@ -4,6 +4,7 @@ import { budgets } from "../config/budgets.ts";
 import { sumUsd, VISUAL_TYPES, type ScenePlan, type ShotSpec, type VisualType } from "../contracts/index.ts";
 import { scenePlanFixture } from "../contracts/fixtures/index.ts";
 import { estimatePlan, UnknownPriceError } from "../budget/estimate.ts";
+import { isChainType } from "./chains.ts";
 import { planTotals, REDO_ALLOWANCE_SHARE, shotCost, shotRoomUsd, usdAtMost } from "./cost.ts";
 import { RECIPES } from "./tables.ts";
 
@@ -43,7 +44,8 @@ test("the shot cost of every priced type equals the budget module's line for the
   for (const visualType of VISUAL_TYPES) {
     const durationMs = 4000;
     const cost = shotCost(visualType, durationMs);
-    if (!cost.known) {
+    // A chain is one shot with several budget lines (contract v5); chains.test.ts checks their lines against their sum.
+    if (!cost.known || isChainType(visualType)) {
       continue;
     }
     const estimate = estimatePlan(singleShotPlan(visualType, durationMs));
@@ -53,10 +55,11 @@ test("the shot cost of every priced type equals the budget module's line for the
   }
 });
 
-test("stop-motion has no known price (image.edit is token-priced), so it is unknown, never 0", () => {
+test("stop-motion has no known price (image.edit is token-priced), so it is unknown, never 0 (chains.test.ts has its chain)", () => {
   const cost = shotCost("stop_motion", 3000);
   assert.equal(cost.known, false);
-  assert.throws(() => estimatePlan(singleShotPlan("stop_motion", 3000)), (error: unknown) => error instanceof UnknownPriceError);
+  assert.equal(cost.known === false && cost.reason.startsWith("unknown_price:"), true);
+  assert.equal(UnknownPriceError.name, "UnknownPriceError");
 });
 
 function knownBase(visualType: VisualType, durationMs: number): number {

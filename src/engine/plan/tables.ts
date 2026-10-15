@@ -59,25 +59,28 @@ export const PROPOSALS: Record<ReferenceShotType, readonly VisualType[]> = {
 // --- 7.1 and 7.6: how each type is made, which decides its cost ------------------------------------------------------
 
 /** A generated type is billed per second of shot (times takes), or per frame for stop-motion. */
-export type GenerateRecipe =
-  | { kind: "generate"; modelClass: ModelClass; takes: 1 | 2; billing: "second" }
-  | { kind: "generate"; modelClass: ModelClass; takes: 1 | 2; billing: "frame"; framesPerSecond: number };
-
-/** Stock and components cost what their price key says (pexels, code_component). */
-export type Recipe = GenerateRecipe | { kind: "stock" } | { kind: "component" };
+export type GenerateRecipe = { kind: "generate"; modelClass: ModelClass; takes: 1 | 2; billing: "second" };
 
 /**
- * One recipe per visual type (7.1). cinematic uses 2 takes (7.1 "2 takes"). stop_motion bills 12 frames per second, the
- * top of the 8 to 12 fps range in 7.1, so the planner never under-costs it. cartoon_generated bills its video model
- * only: the keyframe image is not priced in the budget contract yet (see plan/STATUS.md).
+ * A chain (contract v5): a generated type that makes several calls, in order. Its calls and their prices are in chains.ts; the
+ * recipe only says that the type is generated.
+ */
+export type ChainRecipe = { kind: "chain" };
+
+/** Stock and components cost what their price key says (pexels, code_component). */
+export type Recipe = GenerateRecipe | ChainRecipe | { kind: "stock" } | { kind: "component" };
+
+/**
+ * One recipe per visual type (7.1). cinematic uses 2 takes (7.1 "2 takes"). cartoon_generated and stop_motion are chains (chains.ts):
+ * a keyframe and a video, and 24 to 36 frames and a player. Each call of a chain is priced on its own, so nothing is under-costed.
  */
 export const RECIPES: Record<VisualType, Recipe> = {
   ugc_presenter: { kind: "generate", modelClass: "avatar", takes: 1, billing: "second" },
   product_hero: { kind: "generate", modelClass: "video.budget", takes: 1, billing: "second" },
   cinematic: { kind: "generate", modelClass: "video.cinematic", takes: 2, billing: "second" },
-  cartoon_generated: { kind: "generate", modelClass: "video.budget", takes: 1, billing: "second" },
+  cartoon_generated: { kind: "chain" },
   react_clip: { kind: "generate", modelClass: "avatar", takes: 1, billing: "second" },
-  stop_motion: { kind: "generate", modelClass: "image.edit", takes: 1, billing: "frame", framesPerSecond: 12 },
+  stop_motion: { kind: "chain" },
   stock_footage: { kind: "stock" },
   cartoon_rigged: { kind: "component" },
   coded_graphics: { kind: "component" },
@@ -85,8 +88,10 @@ export const RECIPES: Record<VisualType, Recipe> = {
   screen_mock: { kind: "component" },
 };
 
+/** A generated type is one that pays for a generation: one call, or a chain of calls (both need a prompt and a reservation). */
 export function isGeneratedType(visualType: VisualType): boolean {
-  return RECIPES[visualType].kind === "generate";
+  const kind = RECIPES[visualType].kind;
+  return kind === "generate" || kind === "chain";
 }
 
 // --- 7.1 "Downgrade to": the fallback chain (an empty list means none is needed) ------------------------------------
@@ -167,7 +172,7 @@ export const FAMILY_OF: Record<VisualType, VisualFamily> = {
 // --- 7.5 artifactRisk prior: the catalogue gives no failure rates, so the prior is by how the type is made --------------
 
 /** Prior take failure rate used until a type has enough takes (see score.ts). INITIAL, not measured. */
-export const ARTIFACT_RISK_PRIOR = { generate: 0.3, stock: 0.05, component: 0 } as const;
+export const ARTIFACT_RISK_PRIOR = { generate: 0.3, chain: 0.3, stock: 0.05, component: 0 } as const;
 
 // --- 13 and 7.2 rule 6: the kit each type needs ------------------------------------------------------------------------
 
@@ -202,8 +207,6 @@ export const PRODUCT_PIXEL_RISK: Partial<Record<VisualType, "always" | "unless_p
 
 export const BUILD_GAPS: Partial<Record<VisualType, string>> = {
   react_clip: "it needs an owned or licensed clip, and no clip source exists yet",
-  cartoon_generated:
-    "its style keyframe is a second paid call, and its video is priced without that call; one shot source cannot carry the chain (GENERATION_CHAINS, plan/STATUS.md)",
 };
 
 /** Words per line of a kinetic.punchline shot: the shot's words are grouped in order (7.1 kinetic_type). Structural. */
@@ -228,37 +231,10 @@ export const STOP_MOTION_FRAMES = { min: 24, max: 36 } as const;
 export const STOP_MOTION_FPS = { min: 8, max: 12 } as const;
 
 /**
- * The calls a generated type makes, in order (Bible 7.1). A ShotSource carries one call, so a chain is a build gap in
- * BUILD_GAPS until the source can carry it (a contract change, owned by the lead). Written here so the recipe is in one place.
+ * The visual types the plan can build a source for: no static build gap (sources.ts buildSource builds each of these). A chain's
+ * calls are in chains.ts; its closing component is checked by closingComponentProblem (chains.ts), not here.
  */
-export const GENERATION_CHAINS = {
-  cartoon_generated: [
-    { step: "keyframe", modelClass: "image.keyframe", refs: "every character reference (Bible 13)" },
-    { step: "video", modelClass: "video.budget", takes: 1, firstFrame: "the keyframe" },
-  ],
-  stop_motion: [
-    {
-      step: "frame",
-      modelClass: "image.edit",
-      count: STOP_MOTION_FRAMES,
-      fps: STOP_MOTION_FPS,
-      refs: "the hero image, then the previous frame",
-    },
-    { step: "player", component: "stopmotion.player" },
-  ],
-} as const;
-
-/**
- * The visual types whose source is a chain of calls. sources.ts refuses them (a ShotSource carries one call), so they are not
- * buildable in E5 whatever their gaps say. stop_motion has no gap entry on purpose: its image.edit price is unknown, so rule 5
- * removes it first, and minimum.test.ts pins that reason (`unknown_price`).
- */
-export const CHAIN_TYPES = Object.keys(GENERATION_CHAINS) as VisualType[];
-
-/** The visual types the plan can build a source for: no build gap and no chain (sources.ts buildSource builds each of these). */
-export const BUILDABLE_TYPES: readonly VisualType[] = VISUAL_TYPES.filter(
-  (visualType) => BUILD_GAPS[visualType] === undefined && !CHAIN_TYPES.includes(visualType),
-);
+export const BUILDABLE_TYPES: readonly VisualType[] = VISUAL_TYPES.filter((visualType) => BUILD_GAPS[visualType] === undefined);
 
 /**
  * The pose and expression a beat role plays in a character.rig shot (9.2 asks the planner for a pose timeline per beat; E5 code

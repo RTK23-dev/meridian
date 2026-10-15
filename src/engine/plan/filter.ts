@@ -2,6 +2,7 @@
 // requests to the types that can deliver them (7.3). Pure code.
 
 import { VISUAL_TYPES, type VisualType } from "../contracts/index.ts";
+import { closingComponentProblem } from "./chains.ts";
 import { shotCost, usdAtMost, type KnownShotCost } from "./cost.ts";
 import { BUILD_GAPS, KIT_REQUIREMENTS, PRODUCT_PIXEL_RISK, PROPERTY_TYPES, isGeneratedType, type KitNeed } from "./tables.ts";
 import type { Candidate, ClassifiedRequest, PlanKits, Rejection } from "./types.ts";
@@ -137,7 +138,7 @@ export function filterCandidates(input: FilterInput): FilterResult {
     // Rule 5: the cheapest cost must fit the remaining budget. An unknown price removes the candidate.
     const cost = shotCost(visualType, input.durationMs);
     if (!cost.known) {
-      reject("rule5_budget", `unknown price: ${cost.reason}`);
+      reject("rule5_budget", cost.reason);
       continue;
     }
     if (!usdAtMost(cost.totalUsd, input.remainingUsd)) {
@@ -149,6 +150,12 @@ export function filterCandidates(input: FilterInput): FilterResult {
     const kitReason = kitRejection(visualType, input.kits);
     if (kitReason !== null) {
       reject("rule6_kit", kitReason);
+      continue;
+    }
+    // A chain's closing component must be drawable (chains.ts). Checked after the price, as rule 5 comes first.
+    const closing = closingComponentProblem(visualType);
+    if (closing !== null) {
+      reject("rule6_kit", `no source can be built for it yet: ${closing}`);
       continue;
     }
     const refusal = input.refusals?.[visualType];
