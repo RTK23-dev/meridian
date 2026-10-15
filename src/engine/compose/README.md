@@ -18,8 +18,8 @@ Implements Bible section **9** (compiler and component library), **13** (style k
 | `snapshots/edl-fixture/` | 17.3 | Snapshot of the compiled contracts EDL fixture (`UPDATE_SNAPSHOTS=1` rewrites it). |
 
 Components shipped: E1 `captions.karaoke`, `title.hook`, `kinetic.punchline`, `product.card`, `cta.card`; E2 `react.layout`,
-`list.tierBoard`, `compare.split`, `price.reveal`, `chat.thread`. The rest of the 9.2 list arrives in E5 (and later
-phases).
+`list.tierBoard`, `compare.split`, `price.reveal`, `chat.thread`; E5 `kinetic.type`, `screen.mock`, `character.rig` (the
+rig Bible 9.2 calls `cartoon.rig`). The rest of the 9.2 list arrives in later phases.
 
 ## Output shape
 

@@ -1,4 +1,46 @@
-# STATUS: engine compose (W9): compiler, style kit, ten components, golden frames
+# STATUS: engine compose (W9): compiler, style kit, thirteen components, golden frames
+
+## E5: three visual-type components (`kinetic.type`, `screen.mock`, `character.rig`) on branch `eng-e5-visual-types`
+
+Cut from `code/beautiful-cori-1zfk11` (d5a62c1). The compiler, the style kit and `html.ts` are unchanged (no contract change).
+
+- **`kinetic.type`**: full kinetic typography beyond kinetic.punchline. Lines of script text, one on screen at a time, each
+  until the next starts. Words arrive in sequence (`stagger`) or the line pops in (`pop`). Emphasis words take the kit accent
+  and a punch. Up to six lines, 24 words in all, 40 characters a line, four emphasis words. Text is drawn with `textContent`.
+- **`screen.mock`**: a phone or desktop UI mock. A discriminated union on `screen`: `notification` (app, headline, body, time
+  label, optional icon), `app` (title, up to four labelled rows, optional picture) or `chat` (up to six messages on either
+  side). Pictures are image URIs only, and the compiler maps them to local assets.
+- **`character.rig`**: one SVG rig (`bean.v1`) drawn by its template from named parts: head, brows, eyes with lids, two arms,
+  torso, legs, five mouth shapes (`closed`, `open`, `wide`, `round`, `teeth`). Six poses (`idle`, `point`, `shrug`, `cheer`,
+  `think`, `surprise`) and four expressions (`neutral`, `happy`, `surprised`, `annoyed`) from fixed libraries in the template.
+  Props give a pose timeline and a mouth timeline on the clip clock, with fixed blinks every 2.6 s. Colours come from the kit
+  only. No pixels are generated or fetched. The character sheet's `rigUri` (an SVG file) is not drawn: the compiler does not
+  read SVG and components may not fetch. The rig's names are the contract between the sheet and the component.
+- Golden frames: 16 PNGs (`kinetic.type` 5, `screen.mock` 5, `character.rig` 6) written with the golden harness and viewed
+  by eye (not every frame; see `components/STATUS.md`). `npm run engine:golden`, with the local headless shell from
+  `/opt/pw-browsers`: **39 fixtures pass, 0 fail** (30 existing, 9 new). The lint tests (`hyperframes lint`) pass for all 39
+  fixtures and the EDL fixture. `npm run typecheck` exits 0. `npm run lint` exits 0 with 0 errors and the same four warnings
+  in `src/components/` that were there before E5.
+- Tests: `components/e5.test.ts` (prop limits, escaping through the compiler, media mapping, a three-component composition
+  that compiles to the same hash twice), and the contract checks in `components/components.test.ts` now cover all thirteen.
+- Fixes found by viewing the frames: the rig's `fromTo` and `set` calls use `immediateRender: false` (GSAP would otherwise
+  apply the last state at build time, so the first frames showed the wrong pose and mouth); the `think` arm and the surprised
+  brow height were corrected; the emphasis punch was reduced so a scaled word no longer covers its neighbour's space.
+
+### Owner's live run for E5 (agents hold no keys)
+
+No component has a provider cost; the ledger records only the cloud render. The owner runs one composition holding one clip of
+each new component through the HeyGen HyperFrames cloud, and checks, against the golden frames for the same composition:
+
+1. `kinetic.type`: the stagger and the pop entrance, and the emphasis colour and punch, in the cloud frames.
+2. `screen.mock`: a notification on a phone with a real product icon, an app screen with a product picture, a desktop chat.
+   The markup message shows as text.
+3. `character.rig`: the arms, the brows, the blinks and the five mouth shapes move on the clock. The cloud frames match the
+   local golden frames within the 1% pixel rule (Bible 17.3), for the same composition (Bible 6.9).
+4. Record the render id, the video id, the ledger entries (estimate and actual) and the artifact ids. Font check as E1: the kit's
+   fonts are bundled, and the golden fixtures use Inter only.
+
+## E2: five more components (`react.layout`, `list.tierBoard`, `compare.split`, `price.reveal`, `chat.thread`)
 
 Phase E2 (W9, the second component set) on branch `eng-e2-components`, cut from `code/beautiful-cori-1zfk11` (a4b04c7).
 Phase E1 history below. Covers `src/engine/compose/` (and the `components/`, `golden/` and `snapshots/` folders inside

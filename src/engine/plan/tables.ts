@@ -7,6 +7,7 @@
 
 import { z } from "zod";
 import { VISUAL_TYPES, type BeatRole, type ModelClass, type ReferenceShotType, type VisualType } from "../contracts/index.ts";
+import type { RigExpression, RigPose } from "../compose/components/character.rig/props.ts";
 
 export const PLAN_TABLES_VERSION = "planTables@1";
 
@@ -197,14 +198,78 @@ export const PRODUCT_PIXEL_RISK: Partial<Record<VisualType, "always" | "unless_p
 // The list shrinks as E5 lands; a type is added only with a note in plan/STATUS.md.
 
 export const BUILD_GAPS: Partial<Record<VisualType, string>> = {
-  cartoon_rigged: "the rig component is not in the E3 component library (E5)",
+  cartoon_rigged:
+    "the character.rig component and its source are built (E5, sources.ts), and the gap stays until the lead opens it (plan/STATUS.md)",
   react_clip: "it needs an owned or licensed clip, and no clip source exists yet",
-  screen_mock: "the chat component is not in the E3 component library (E2 and E5)",
-  cartoon_generated: "its style keyframe is a second paid call that one shot source cannot carry (plan/STATUS.md)",
+  screen_mock:
+    "the screen.mock component and its source are built (E5, sources.ts), and the gap stays until the lead opens it (plan/STATUS.md)",
+  cartoon_generated:
+    "its style keyframe is a second paid call, and its video is priced without that call; one shot source cannot carry the chain (GENERATION_CHAINS, plan/STATUS.md)",
 };
+
+/**
+ * stop_motion has no gap entry on purpose: its image.edit price is unknown, so rule 5 removes it first, and minimum.test.ts
+ * pins that reason (`unknown_price`). Its chain (GENERATION_CHAINS) is refused by sources.ts buildSource.
+ */
 
 /** The visual types the E3 planner can build a source for: every type that has no build gap. */
 export const BUILDABLE_TYPES: readonly VisualType[] = VISUAL_TYPES.filter((visualType) => BUILD_GAPS[visualType] === undefined);
 
 /** Words per line of a kinetic.punchline shot: the shot's words are grouped in order (7.1 kinetic_type). Structural. */
 export const KINETIC_WORDS_PER_LINE = 4;
+
+// --- E5: the look, the chains and the rig's timing for the generated and rigged types (7.1, 9.2, 13). ------------------------
+
+/**
+ * The look each generated type is asked for, written by code so every shot of one type looks alike. The planner writes the
+ * scene; the style is the same for every shot (Bible 7.1). Words here name looks and framing only, never text, a price, a logo
+ * or a name. A test runs the plan gate's own text check (review/gates/promptText.ts) on each style.
+ */
+export const PROMPT_STYLE = {
+  cinematic: "Cinematic film look, anamorphic lens, slow controlled camera move, soft key light, vertical 9:16 framing.",
+  cartoon_generated: "Stylised 3D cartoon, bold clean shapes, one consistent character design, soft even light, vertical 9:16 framing.",
+  stop_motion: "Stop-motion animation look, handmade clay texture, held poses, soft studio light, vertical 9:16 framing.",
+} as const;
+export type StyledVisualType = keyof typeof PROMPT_STYLE;
+
+/** Stop-motion frame count and frame rate (7.1: 24 to 36 frames, 8 to 12 frames per second, held frames). */
+export const STOP_MOTION_FRAMES = { min: 24, max: 36 } as const;
+export const STOP_MOTION_FPS = { min: 8, max: 12 } as const;
+
+/**
+ * The calls a generated type makes, in order (Bible 7.1). A ShotSource carries one call, so a chain is a build gap in
+ * BUILD_GAPS until the source can carry it (a contract change, owned by the lead). Written here so the recipe is in one place.
+ */
+export const GENERATION_CHAINS = {
+  cartoon_generated: [
+    { step: "keyframe", modelClass: "image.keyframe", refs: "every character reference (Bible 13)" },
+    { step: "video", modelClass: "video.budget", takes: 1, firstFrame: "the keyframe" },
+  ],
+  stop_motion: [
+    {
+      step: "frame",
+      modelClass: "image.edit",
+      count: STOP_MOTION_FRAMES,
+      fps: STOP_MOTION_FPS,
+      refs: "the hero image, then the previous frame",
+    },
+    { step: "player", component: "stopmotion.player" },
+  ],
+} as const;
+
+/**
+ * The pose and expression a beat role plays in a character.rig shot (9.2 asks the planner for a pose timeline per beat; E5 code
+ * maps the beat role, so the choice is deterministic and logged). A sheet that does not list the pose falls back to idle.
+ */
+export const RIG_PLAY: Record<BeatRole, { pose: RigPose; expression: RigExpression }> = {
+  hook: { pose: "surprise", expression: "surprised" },
+  setup: { pose: "idle", expression: "neutral" },
+  item: { pose: "point", expression: "neutral" },
+  proof: { pose: "shrug", expression: "neutral" },
+  twist: { pose: "think", expression: "annoyed" },
+  payoff: { pose: "cheer", expression: "happy" },
+  cta: { pose: "point", expression: "happy" },
+};
+
+/** The rig this library draws. A character sheet names no rig id, so E5 uses this one (components/character.rig). */
+export const RIG_ID = "bean.v1";

@@ -1,4 +1,75 @@
-# STATUS: the plan stage (W7), E3
+# STATUS: the plan stage (W7), E3 and E5 (W9 plan-side support)
+
+## E5: visual-type recipes and component sources (branch `eng-e5-visual-types`)
+
+Granted files: `tables.ts`, `sources.ts` and their tests (`sources.test.ts`, the new `tables.test.ts`). Nothing else in `plan/`
+was changed, and `filter.test.ts`, `minimum.test.ts` and `build.ts` were not touched.
+
+- **Looks (`tables.ts` PROMPT_STYLE).** cinematic, cartoon_generated and stop_motion each have one code-written look, put in
+  front of the planner's scene. The looks name no text, price, logo or name. A test runs the plan gate's own text rule
+  (`review/gates/promptText.ts`) on each look.
+- **Chains (`tables.ts` GENERATION_CHAINS, `sources.ts`).** cartoon_generated is a keyframe call (image.keyframe, with every
+  character reference, Bible 13), then a video call (video.budget, one take) that starts from the keyframe. stop_motion is 24 to
+  36 image.edit frames from the hero image (8 to 12 per second, from the shot length, 2 to 4.5 s), then stopmotion.player. A
+  ShotSource carries one call, so `buildSource` refuses both and names its chain builder. `cartoonGeneratedChain` and
+  `stopMotionChain` build the calls for the produce step, and are tested but not yet called.
+- **cartoon_rigged (`sources.ts` rigSource).** Draws `character.rig` (bean.v1). Needs a rigged sheet that lists the `idle` pose
+  and the `closed` and `open` mouth shapes (else refused with the reason). The pose comes from the beat role (`tables.ts`
+  RIG_PLAY, in code: the planner's output has no pose field); a pose the sheet does not list falls back to idle. Mouth shapes
+  come from the words: each word opens the mouth (round for o and u, wide for e, i and y, open otherwise) and closes it at its
+  end. A shape the sheet does not list falls back to open.
+- **screen_mock (`sources.ts` screenSource).** Two or more sentences make a chat (alternating sides, up to six messages). One
+  sentence with approved claims makes an app screen (the product name, the claims as rows, the hero picture). One sentence with
+  no claims makes a notification (the product name as the app, the sentence as the headline, the hero as the icon). No product
+  name for a one-line screen is a refusal, and so is a shot with no words.
+- **kinetic_type (`sources.ts`).** A shot that speaks emphasis words is drawn by `kinetic.type`, with its lines timed by the
+  words' spans. A shot with no emphasis is drawn by `kinetic.punchline` exactly as before (the E3 test still holds).
+- **Word timings.** `SourceShot.spans` (optional, relative to the shot's start) and `BuildSourceInput.character` (optional).
+  Without spans, the words share the shot's length evenly; that is only for animation timing, and the voice remains the clock
+  (Bible 6.3). A span list that does not match the words is refused.
+- **Build gaps (`tables.ts` BUILD_GAPS).** Texts updated. cartoon_rigged and screen_mock **keep their gap**, because
+  `filter.test.ts` pins them (lines 110, 128 and 129). cartoon_generated keeps its gap, with the chain and the missing keyframe
+  price as the reason. stop_motion has **no gap entry**, because `minimum.test.ts` pins its `unknown_price` reason, and rule 5
+  already removes it (its image.edit price is null).
+
+### Decisions for the lead (not made in code)
+
+1. **Opening cartoon_rigged and screen_mock.** Their sources are built and tested, but the plan cannot choose them while their
+   gaps stand. To open them: delete their two BUILD_GAPS entries in `tables.ts`, then update `filter.test.ts` (lines 110, 128
+   and 129, and the rule-6 assertion for cartoon_rigged around line 148), and re-run the plan tests. That file is outside this
+   grant.
+2. **build.ts must pass the new inputs.** The call to `buildSource` in `build.ts` (around line 363) should pass `character` (the
+   page's character sheet from the validated kits) and the shot's `spans` (the voice words' times, relative to the shot start).
+   Until it does, cartoon_rigged refuses (no sheet), and the timing of kinetic.type and the rig is the even approximation.
+3. **cartoon_generated is under-priced and cannot be a single call.** RECIPES bills video.budget only; the keyframe
+   (image.keyframe, seedream_5_flash at $0.018 an image) is not in the estimate. Its chain needs produce_shot to make two calls
+   (a contract change, owner of the contracts).
+4. **stop_motion stays out.** image.edit is token-priced (price null), so its cost is unknown and rule 5 removes it. Its chain also
+   needs a frame-chain step and the stopmotion.player component (not built).
+5. **stock_footage's downgrade differs from Bible 7.1.** 7.1 says it falls back to a `cinematic` budget model; `DOWNGRADE_TO.stock_footage`
+   is []. Not changed here (it changes which shots can be re-planned and what they cost).
+6. **Behaviour changes to confirm.** (a) kinetic shots with emphasis now draw kinetic.type; (b) the cinematic prompt now starts
+   with the look, so the video model receives a longer prompt for the same scene; (c) the rig's pose is set by the beat role in
+   code, not by the planner (Bible 9.2 asks the planner for a timeline; the planner's contract has no pose field).
+7. **Names.** Bible 9.2 calls the rig `cartoon.rig`; the lead's brief named it `character.rig`. The code uses `character.rig`.
+
+### Tests (E5)
+
+`NODE_ENV=development node --experimental-strip-types --test 'src/engine/compose/**/*.test.ts' 'src/engine/plan/**/*.test.ts'`
+runs 387 tests, 387 pass, 0 fail, 0 skipped (the baseline before E5 was 296; the compose folder includes the hyperframes lint
+tests for every fixture). The new cases are in `sources.test.ts` (chat, app,
+notification, the rig's timeline and fallbacks, the chains and their refusals, the word helpers) and `tables.test.ts` (new: looks,
+rig names, chain models against RECIPES, build gaps, downgrade paths).
+
+### Owner's live run for E5 (agents hold no keys)
+
+The three new component sources (cartoon_rigged, screen_mock, the emphasis form of kinetic_type) have no provider cost, so the
+only paid part of their live run is the cloud render. The owner runs, after decisions 1 and 2:
+1. One cartoon_rigged shot and one screen_mock shot through a real plan (the reference's beats, a page's character sheet, the
+   product kit), and records the plan gate's checks, the source props and the cloud render (components cost $0; the ledger
+   records the render only).
+2. The kinetic.type shot from a real script with emphasis, with real voice spans, to check the line timing against the voice.
+3. Nothing for cartoon_generated or stop_motion until their chains have a produce step and prices.
 
 ## E3 integration pass (branch `eng-e3-wiring`)
 

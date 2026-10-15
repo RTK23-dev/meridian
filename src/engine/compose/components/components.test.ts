@@ -97,7 +97,7 @@ for (const definition of Object.values(COMPONENT_LIBRARY)) {
 describe("safe zones (Bible 8.3)", () => {
   // Text boxes end at 88% of the width, so the right 12% stays clear. The bands sit below the top 10% and above
   // the bottom 20%: the lowest band (top 60% for captions, 52% for titles) keeps two or three lines inside 80%.
-  for (const name of ["captions.karaoke", "title.hook", "kinetic.punchline"]) {
+  for (const name of ["captions.karaoke", "title.hook", "kinetic.punchline", "kinetic.type"]) {
     it(`${name} keeps its text inside the right-hand 88% line`, () => {
       const template = COMPONENT_LIBRARY[name].template;
       assert.match(template, /left: 6%;\s*(?:\S[^;]*;\s*)*width: 82%;/, "text box spans 6% to 88%");
@@ -111,17 +111,20 @@ describe("safe zones (Bible 8.3)", () => {
 });
 
 describe("component library", () => {
-  it("holds the ten E1 and E2 components, each keyed by its name", () => {
+  it("holds the thirteen E1, E2 and E5 components, each keyed by its name", () => {
     assert.deepEqual(Object.keys(COMPONENT_LIBRARY).sort(), [
       "captions.karaoke",
+      "character.rig",
       "chat.thread",
       "compare.split",
       "cta.card",
       "kinetic.punchline",
+      "kinetic.type",
       "list.tierBoard",
       "price.reveal",
       "product.card",
       "react.layout",
+      "screen.mock",
       "title.hook",
     ]);
     for (const [key, definition] of Object.entries(COMPONENT_LIBRARY)) {
