@@ -11,6 +11,7 @@ import {
   type BudgetReservation,
   type Composition,
   type CompositionFile,
+  type Decision,
   type DnaSegment,
   type EditDecisionList,
   type EditGrammar,
@@ -358,6 +359,16 @@ export const scenePlanFixture: ScenePlan = {
       by: "director",
     },
   ],
+};
+
+// An editor decision (contract v4, Bible L7). Its subject is an EDL clip: `at` is the clip id (edlFixture, track base). The
+// cut into it is sampled from the grammar's transition mix (hard 0.8, whip 0.2) with the request's seed, and came out hard.
+export const editorDecisionFixture: Decision = {
+  at: "c_base_3",
+  chose: "hard",
+  alternatives: [{ option: "whip", score: 0.2 }],
+  reason: "The cut into this clip is sampled from the grammar's transition mix (hard 0.8, whip 0.2) with the request seed; it came out hard.",
+  by: "editor",
 };
 
 export const assetSpecFixture: AssetSpec = {
@@ -782,6 +793,24 @@ export const ledgerClaudeFixture: LedgerEntry = {
   promptVersion: "planner@1",
 };
 
+// A frame_reader call (contract v4): Haiku reads the captions, shake and speed ramps of the sampled frames, as measurements.
+// The estimate is 12k in and 1k out at Haiku's $1 / $5 (the proposed Bible 11.1 row, not yet confirmed); the actual is 11.2k
+// in and 0.9k out.
+export const ledgerFrameReaderFixture: LedgerEntry = {
+  entryId: ID.ledgerFrameReader,
+  requestId: ID.request,
+  stage: "analyze_reference",
+  provider: "openrouter",
+  model: "anthropic/claude-haiku-5.5",
+  estimateUsd: 0.017,
+  reservedUsd: 0.017,
+  actualUsd: 0.0157,
+  idempotencyKey: contentHash({ role: "frame_reader", promptVersion: "frame_reader@1", model: "anthropic/claude-haiku-5.5", input: ID.request }),
+  at: "2026-10-13T09:01:50.000Z",
+  role: "frame_reader",
+  promptVersion: "frame_reader@1",
+};
+
 const generatedUsd = takesFixture.map((take) => take.costUsd);
 
 // Role calls of the video (manifest v2). The planner is the ledger's planner call (ledgerClaudeFixture): same cost. The
@@ -841,7 +870,7 @@ export const manifestFixture: Manifest = {
     { shotId: ID.shot3, visualType: "product_hero", takeId: ID.take3b, provider: "openrouter", model: "seedance-2.0-mini", attempts: 2 },
   ],
   gates: [...gateResults, postRenderGateFixture],
-  decisions: scenePlanFixture.decisions,
+  decisions: [...scenePlanFixture.decisions, editorDecisionFixture],
   cost: {
     brain: 0.44,
     generation: sumUsd(generatedUsd),

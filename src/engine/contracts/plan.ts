@@ -40,12 +40,22 @@ export const SHOT_LAYERS = ["base", "cutaway", "presenter", "graphics"] as const
 export const shotLayerSchema = z.enum(SHOT_LAYERS);
 export type ShotLayer = z.infer<typeof shotLayerSchema>;
 
+/** Who made a logged choice (Bible L7). `editor` (contract v4) is the deterministic editor of Bible 8.2. */
+export const DECISION_AUTHORS = ["scorer", "director", "human", "editor"] as const;
+export const decisionAuthorSchema = z.enum(DECISION_AUTHORS);
+export type DecisionAuthor = z.infer<typeof decisionAuthorSchema>;
+
+/**
+ * One logged choice with its reason (Bible L7). `at` is the id of the subject: a beat or a shot for the planner and the
+ * director, and an EDL clip id (`EdlClip.clipId`) for the editor (contract v4). Editor decisions with no alternative set
+ * use an empty `alternatives` list; a score is never invented.
+ */
 export const decisionSchema = z.object({
   at: z.string().min(1),
   chose: z.string().min(1),
   alternatives: z.array(z.object({ option: z.string().min(1), score: z.number().finite() })),
   reason: z.string().min(1),
-  by: z.enum(["scorer", "director", "human"]),
+  by: decisionAuthorSchema,
 });
 export type Decision = z.infer<typeof decisionSchema>;
 

@@ -51,6 +51,8 @@ export type BudgetReservation = z.infer<typeof budgetReservationSchema>;
 /**
  * The Claude roles of Bible 11.1. A Claude call's ledger entry names its role, so cost is traceable per role. A new role is
  * a contract change (a version bump and a Bible section 4 note).
+ * `frame_reader` (contract v4) is the Haiku vision role that reads captions, shake and speed ramps from sampled frames, as
+ * measurements only. It returns no visible text (Bible 1, copy genes never content).
  */
 export const CLAUDE_ROLES = [
   "segmenter",
@@ -63,6 +65,7 @@ export const CLAUDE_ROLES = [
   "critic_final",
   "prompt_fixer",
   "variant_writer",
+  "frame_reader",
 ] as const;
 export const claudeRoleSchema = z.enum(CLAUDE_ROLES);
 export type ClaudeRole = z.infer<typeof claudeRoleSchema>;
