@@ -5,6 +5,7 @@
 //   4. reconciles the ledger, runs the injected render-integrity check, and stores the video.
 // The HTTP contract is the one the HyperFrames CLI 0.8.154 calls (see render/README.md for the source lines).
 // Keys come only from the injected credential function, which is Meridian's credential resolver at wiring time.
+// Steps 1 to 4 are runRender(), which the Shotstack fallback (shotstack.ts) shares; only the payload differs.
 
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -79,14 +80,39 @@ export type TransportResponse = { status: number; body: Uint8Array };
  */
 export type RenderTransport = (request: TransportRequest) => Promise<TransportResponse>;
 
+/**
+ * Wraps a transport so that a network failure (the host cannot be reached, the request was aborted) becomes a retryable
+ * provider error. A typed EngineError from the transport (the gateway's not-connected config error) passes through as it is.
+ * The fallback policy counts provider errors as render failures, so a dropped connection moves the render on.
+ */
+export function guardTransport(transport: RenderTransport): RenderTransport {
+  return async (request) => {
+    try {
+      return await transport(request);
+    } catch (error) {
+      if (error instanceof EngineError) throw error;
+      const origin = request.url.split("/").slice(0, 3).join("/");
+      throw new EngineError("provider", `${request.method} ${origin} did not complete: the request failed in transit`, {
+        retryable: true,
+        stage: "render",
+        cause: error,
+      });
+    }
+  };
+}
+
 // ---- the adapter interface ------------------------------------------------------------------------------------
 
-export type RenderSubmitInput = {
-  /** Composition.contentHash. The same key on a second submit returns the same render. */
+/** What every renderer's submit input carries. The key is the same on a second submit, and that submit returns the same render. */
+export type RenderSubmitBase = {
+  /** Composition.contentHash for HyperFrames; the hash of the timeline for Shotstack. Also the ledger key. */
   idempotencyKey: string;
-  /** The zip of the composition and its assets. */
-  archive: Uint8Array;
   title: string;
+};
+
+/** The HyperFrames payload: the zip of the composition and its assets. */
+export type RenderSubmitInput = RenderSubmitBase & {
+  archive: Uint8Array;
 };
 
 export type RenderSubmission = { renderId: string; status: string };
@@ -102,11 +128,11 @@ export type RenderStatus = {
 export type FetchedVideo = { bytes: Uint8Array };
 
 /** Submit, poll and fetch. Each adapter is one renderer; the caller decides on fallbacks (Bible 6.11). */
-export interface RenderAdapter {
+export interface RenderAdapter<Input extends RenderSubmitBase = RenderSubmitInput> {
   readonly renderer: string;
   /** Throws a config error when the adapter cannot send a request (for example, no key). Runs before any budget hold. */
   ready(): Promise<void>;
-  submit(input: RenderSubmitInput): Promise<RenderSubmission>;
+  submit(input: Input): Promise<RenderSubmission>;
   poll(renderId: string): Promise<RenderStatus>;
   fetchResult(status: RenderStatus): Promise<FetchedVideo>;
 }
@@ -202,7 +228,7 @@ export class HyperframesCloudAdapter implements RenderAdapter {
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(options: HyperframesCloudOptions) {
-    this.transport = options.transport;
+    this.transport = guardTransport(options.transport);
     this.credential = options.credential;
     this.baseUrl = (options.baseUrl ?? HEYGEN_API_BASE_URL).replace(/\/+$/, "");
     this.sleep = options.sleep ?? defaultSleep;
@@ -388,11 +414,10 @@ export type RenderRequest = {
   title?: string;
 };
 
-export type RenderDeps = {
-  adapter: RenderAdapter;
+/** What the shared render flow needs from its caller, for any renderer (Bible 6.11, 14.1). */
+export type RenderFlowDeps<Input extends RenderSubmitBase = RenderSubmitInput> = {
+  adapter: RenderAdapter<Input>;
   ledger: LedgerStore;
-  /** Resolves a media URI to its bytes (Bible 5.2 storage). */
-  resolveAsset: (uri: string) => Promise<Uint8Array>;
   /** The render-integrity check (Bible 6.11, 12.3). It is injected: the probe and the rule come from eng-media-assets. */
   verifyIntegrity: (input: IntegrityInput) => Promise<GateResult>;
   /** Stores the finished video and returns its URI (Bible 5.2). */
@@ -401,6 +426,12 @@ export type RenderDeps = {
   maxPolls?: number;
   sleep?: (ms: number) => Promise<void>;
   newVideoId?: () => string;
+};
+
+/** The HyperFrames flow: the flow's deps plus the resolver for the composition's media bytes. */
+export type RenderDeps = RenderFlowDeps<RenderSubmitInput> & {
+  /** Resolves a media URI to its bytes (Bible 5.2 storage). */
+  resolveAsset: (uri: string) => Promise<Uint8Array>;
 };
 
 export type RenderOutcome = {
@@ -444,17 +475,65 @@ export async function renderComposition(request: RenderRequest, deps: RenderDeps
   const composition = compositionSchema.parse(request.composition);
   checkFilesMatch(composition, request.files);
   const key = composition.contentHash;
-  const provider = HYPERFRAMES_LEDGER_PROVIDER;
+  const title = request.title ?? composition.edlId;
+  return runRender(deps, {
+    reservationId: request.reservationId,
+    idempotencyKey: key,
+    provider: HYPERFRAMES_LEDGER_PROVIDER,
+    model: HYPERFRAMES_LEDGER_MODEL,
+    edlId: composition.edlId,
+    durationMs: request.durationMs,
+    estimateUsd: request.estimateUsd,
+    now: request.now,
+    prepare: async () => {
+      const assetFiles: CompiledFile[] = [];
+      for (const asset of request.assets) {
+        assetFiles.push({ path: asset.path, bytes: await deps.resolveAsset(asset.uri) });
+      }
+      const archive = buildZip([...request.files, ...assetFiles]);
+      if (archive.byteLength > DIRECT_UPLOAD_LIMIT_BYTES) {
+        throw new EngineError("invalid_input", "the composition with its assets is above the 200 MB direct-upload limit", {
+          stage: "render",
+        });
+      }
+      return { idempotencyKey: key, archive, title };
+    },
+  });
+}
+
+/** One render through the shared flow: what the ledger and the reservation need, and the renderer's payload builder. */
+export type RenderFlow<Input extends RenderSubmitBase> = {
+  reservationId: string;
+  /** The idempotency key. It is also the ledger key, so it must be the same on every resubmit of the same render. */
+  idempotencyKey: string;
+  provider: string;
+  model: string;
+  edlId: string;
+  durationMs: number;
+  /** The render line of the reservation, in USD (an estimate until the reconciled actual is written). */
+  estimateUsd: number;
+  now: string;
+  /** Builds the renderer's submit input. It runs after the budget hold, so a failure here keeps the hold, as it did before. */
+  prepare: () => Promise<Input>;
+};
+
+/**
+ * The render flow every renderer shares (Bible 6.11, 14.1): the budget hold (the ledger entry is written before the
+ * call), the submit with the idempotency key, the poll, the download, the reconciliation, the integrity check and the
+ * store. Every refusal, failure and integrity miss throws EngineError; nothing is stored unless the check passed.
+ */
+export async function runRender<Input extends RenderSubmitBase>(deps: RenderFlowDeps<Input>, flow: RenderFlow<Input>): Promise<RenderOutcome> {
+  const key = flow.idempotencyKey;
 
   await deps.adapter.ready();
   const hold = await authorizeCall(deps.ledger, {
-    reservationId: request.reservationId,
+    reservationId: flow.reservationId,
     stage: "render",
-    provider,
-    model: HYPERFRAMES_LEDGER_MODEL,
-    estimateUsd: request.estimateUsd,
+    provider: flow.provider,
+    model: flow.model,
+    estimateUsd: flow.estimateUsd,
     idempotencyKey: key,
-    at: request.now,
+    at: flow.now,
   });
   if (hold.status === "refused") {
     throw new EngineError("conflict", `render refused by the budget: ${hold.reason}`, { stage: "render" });
@@ -463,18 +542,13 @@ export async function renderComposition(request: RenderRequest, deps: RenderDeps
     throw new EngineError("conflict", `idempotency key ${key} was already used for a different render`, { stage: "render" });
   }
 
-  const assetFiles: CompiledFile[] = [];
-  for (const asset of request.assets) {
-    assetFiles.push({ path: asset.path, bytes: await deps.resolveAsset(asset.uri) });
-  }
-  const archive = buildZip([...request.files, ...assetFiles]);
-  if (archive.byteLength > DIRECT_UPLOAD_LIMIT_BYTES) {
-    throw new EngineError("invalid_input", "the composition with its assets is above the 200 MB direct-upload limit", {
+  const input = await flow.prepare();
+  if (input.idempotencyKey !== key) {
+    throw new EngineError("internal", "the submit input carries a different idempotency key from its ledger entry", {
       stage: "render",
     });
   }
-
-  const submission = await deps.adapter.submit({ idempotencyKey: key, archive, title: request.title ?? composition.edlId });
+  const submission = await deps.adapter.submit(input);
   const status = await pollUntilDone(deps, submission.renderId);
 
   if (status.status === "failed") {
@@ -499,7 +573,7 @@ export async function renderComposition(request: RenderRequest, deps: RenderDeps
       videoId,
       renderId: submission.renderId,
       bytes: fetched.bytes,
-      durationMs: request.durationMs,
+      durationMs: flow.durationMs,
       width: RENDER_EXPECTATION.width,
       height: RENDER_EXPECTATION.height,
       fps: RENDER_EXPECTATION.fps,
@@ -517,10 +591,10 @@ export async function renderComposition(request: RenderRequest, deps: RenderDeps
   const uri = await deps.storeVideo({ videoId, bytes: fetched.bytes, idempotencyKey: key });
   const video = renderedVideoSchema.parse({
     videoId,
-    edlId: composition.edlId,
+    edlId: flow.edlId,
     uri,
-    renderer: HYPERFRAMES_CLOUD_RENDERER,
-    durationMs: request.durationMs,
+    renderer: deps.adapter.renderer,
+    durationMs: flow.durationMs,
     bytes: fetched.bytes.byteLength,
     costUsd: actualUsd,
     idempotencyKey: key,
@@ -533,7 +607,7 @@ export async function renderComposition(request: RenderRequest, deps: RenderDeps
   };
 }
 
-async function pollUntilDone(deps: RenderDeps, renderId: string): Promise<RenderStatus> {
+async function pollUntilDone<Input extends RenderSubmitBase>(deps: RenderFlowDeps<Input>, renderId: string): Promise<RenderStatus> {
   const interval = deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const maxPolls = deps.maxPolls ?? DEFAULT_MAX_POLLS;
   const sleep = deps.sleep ?? defaultSleep;
