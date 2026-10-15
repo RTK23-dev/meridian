@@ -45,6 +45,26 @@ header. The response carries no cost: reconcile from the price table, flagged as
 ### Chat with structured output
 Already wrapped by `gateway/openrouter.ts` (`structuredChat`); used by `src/engine/claude`.
 
+### Model ids in `config/routes.ts`: verification, 2026-10-15 (item d)
+Recorded by route key, not by model name. Source, retrieved 2026-10-15: the models guide at
+https://openrouter.ai/docs/guides/overview/models, which documents the list endpoint `GET /api/v1/models` and the single-model
+endpoint `GET /api/v1/model/{author}/{slug}`.
+- The list read returned 10 entries and `has_more: false`, but the guide says the catalogue has "400+ models". That read was
+  incomplete, so it cannot show that an id is absent. No id is recorded as absent on that basis.
+- The single-model endpoint returned a model object whose `id` matched exactly for each id checked below. The read went through
+  a fetch tool that summarises the page, so the match is that tool's reading of the response. The owner's live run confirms it.
+
+| Route key (`config/routes.ts`) | Target | Status |
+| --- | --- | --- |
+| `llm.direction`, `llm.analysis`, `llm.check` | first | Partly verified (single-model endpoint, exact id) |
+| `video.cinematic` | first | Partly verified (same) |
+| `video.budget` | third | Partly verified (same) |
+| `image.keyframe` | second | Partly verified (same) |
+| Every other OpenRouter target | any | Not verified. The id is null in `routes.ts`, so there is nothing to check |
+| Stock, render, media-function and discovery routes | any | Not OpenRouter ids. See the Pexels, Pixabay, Shotstack and Apify sections |
+
+The `verified` flags in `routes.ts` stay `false`. The owner's live run sets them.
+
 ## Pexels (base `https://api.pexels.com`, header `Authorization: <key>`, no scheme)
 `GET /videos/search?query=…&orientation=portrait&size=medium&per_page=…&page=…`. Response: `{ page, per_page,
 total_results, next_page, videos: [{ id, width, height, duration, url, image, user: { id, name, url },
@@ -94,7 +114,7 @@ estimated until the owner confirms the plan.
 `POST /actors/{actorId}/run-sync-get-dataset-items`, where `actorId` is `owner~name` (for example `apify~instagram-reel-scraper`).
 The body is the actor's input as JSON (`Content-Type: application/json`). Query parameters used: `maxItems` (caps the items
 Apify charges for on a pay-per-result actor; it does not limit the items returned) and `timeout` (seconds). Documented answers:
-201 with a JSON array of the dataset items (the client accepts 200 and 201); 400 invalid input; 401 missing or invalid token;
+201 with a JSON array of the dataset items (the client also accepts 200, which the part of the page read does not list); 400 invalid input; 401 missing or invalid token;
 402 no credit or usage limit; 403 insufficient permissions; 408 when the run passes 300 seconds. The endpoint also takes
 `maxTotalChargeUsd`, a USD cap for the run. It is not used, because no price is confirmed.
 
@@ -103,7 +123,7 @@ Input (documented): `hashtags` (array, one term per entry, with or without `#`),
 `"posts"`; the description says posts or reels), `resultsLimit` (integer, per hashtag), `keywordSearch` (boolean, not used).
 Sent: `{ hashtags: [term], resultsType: "posts", resultsLimit }`.
 Output fields in the documented samples: `id`, `type` (`"Image"` or `"Video"`; reels are `"Video"`), `url` (the `/p/` or `/reel/`
-form), `shortCode`, `ownerUsername`, `timestamp` (ISO 8601, UTC), `caption`, `hashtags`, `videoPlayCount` (on reel samples),
+form), `shortCode`, `ownerUsername`, `timestamp` (an ISO-style string in the samples; the time zone is not stated), `caption`, `hashtags`, `videoPlayCount` (on reel samples),
 `likesCount` (`-1` when the creator hides it), `commentsCount`, `videoDuration`. `videoViewCount` appears only in the keyword-search
 sample, so it is not used for hashtag results. One reading also listed `igPlayCount`; it is not used.
 Price: the page header says "from $1.90 / 1,000 results" (pay per event); the README gives $2.60 per 1,000 on the Free plan and
@@ -129,4 +149,30 @@ Price: the header says "from $1.00 / 1,000 reels", the README gives $2.60 per 1,
 - Not confirmed: the `resultsType` value that returns reels only (the code asks for `"posts"` and keeps the `"Video"` items);
   whether a hashtag search returns reels as `"Video"` in every case; the plan price per 1,000 results.
 - No field is read as a guess. An absent or unreadable field is null, and a `-1` like count is null.
+
+### Verification status, 2026-10-15 (item a)
+All sources above, retrieved 2026-10-15. "Verified" means the page states it. "Partly" means the name or an example is on the page,
+but its meaning, or the full set of values, is not.
+
+| Item | Status |
+| --- | --- |
+| `POST /actors/{actorId}/run-sync-get-dataset-items`, `actorId` as `owner~name` | Verified (act-run-sync page) |
+| Body is the actor input as JSON; query `maxItems` and `timeout` | Verified (act-run-sync page) |
+| `Authorization: Bearer <token>` | Verified (getting-started page) |
+| Success 201 with the item array | Verified. 200 is not in the part of the page read; the client accepts it as a tolerance |
+| 400, 401, 402, 403, and 408 for a run past 300 seconds | Verified (act-run-sync page) |
+| Hashtag input `hashtags`, `resultsLimit` | Verified (hashtag actor page) |
+| Hashtag `resultsType: "posts"` | Partly. `"posts"` is the page's example; the accepted values are not listed |
+| Reel input `username` (array), `resultsLimit`, `skipPinnedPosts` | Verified (reel actor page) |
+| Output `url`, `ownerUsername`, `timestamp`, `caption`, `hashtags`, `id`, `commentsCount` | Verified. The time zone of `timestamp` is not stated |
+| `likesCount` of `-1` means hidden, read as null | Verified (hashtag actor FAQ) |
+| `videoPlayCount` as the view count | Partly. Named in both samples. The hashtag table says "reel views/plays" without naming it; the reel table has the label "Video views and play count". How it differs from `videoViewCount` is not stated |
+| `type` (`"Video"` for reels) | Partly. Sample only, with no description |
+| `shortCode` | Partly. Sample only, with no description |
+| Price per 1,000 results | Not verified. The pages give conflicting figures, so no price is set |
+
+Decision, 2026-10-15: no code change. Every field the code reads is named in an actor's own output list or sample, so none is
+absent from the docs. The partly verified fields are read as named. Nulling `videoPlayCount` would stop every rating, and nulling
+`type` would drop every hashtag result. The owner confirms them at the first live run. Under a stricter reading, the fields to
+null are `videoPlayCount`, `type` and `shortCode`.
 
