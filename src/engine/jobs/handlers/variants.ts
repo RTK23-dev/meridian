@@ -34,6 +34,14 @@ import {
   productionRequestSchema,
   scenePlanSchema,
   sumUsd,
+  takeSchema,
+  validatedRequestSchema,
+  videoDnaSchema,
+  voiceTrackSchema,
+  type StyleKit,
+  type Take,
+  type ValidatedRequest,
+  type VideoDNA,
   type EditDecisionList,
   type Persona,
   type ProductKit,
@@ -61,6 +69,9 @@ import { generationWorkOf, variantWorkItemSchema, VARIANT_PHASES, type VariantWo
 import type { VoicePorts } from "../../voice/voice.ts";
 import type { RoleDeps } from "../../claude/client.ts";
 import { NOT_CONNECTED, notConnectedReason } from "../../media/stt-connection.ts";
+import { assembleVariantEdl, type AssemblyInput } from "../../variants/assemble.ts";
+import { editIdentity } from "../../edit/editor.ts";
+import { editGate, emphasisOf, type EditKitScope } from "./edit.ts";
 import { readJobInputs, type StoredArtifact } from "../artifact-store.ts";
 import { stableId } from "../stable-id.ts";
 import { writeArtifactOnce } from "../../deliver/write-once.ts";
@@ -113,6 +124,11 @@ export type VariantPorts = {
   workspaceMonthBudget?: (scope: { organizationId: string; requestId: string; now: string }) => Promise<number | null>;
   /** The generation ports. Absent: each generation variant is deferred and nothing is charged. */
   generation?: VariantGenerationPorts;
+  /**
+   * The style kit the validated request names (the edit's own port, Bible 13). An assembly needs it to build the variant's EDL with the same
+   * look as the master. An undefined answer, or a kit that is not the version the request names, fails the variant's assembly.
+   */
+  loadStyleKit: (scope: EditKitScope) => Promise<StyleKit | undefined>;
 };
 
 const REQUEST_TYPE = "production_request";
@@ -255,12 +271,19 @@ function withItemWork(variant: PlannedVariant, item: VariantWorkItem | undefined
 }
 
 /** The variant.planned event of a generation variant from its work item (a phase's outcome). */
-function itemEvent(item: VariantWorkItem, requestId: string, controlEdlId: string, status: "deferred" | "not_built", reason: string): LearningEvent {
+function itemEvent(
+  item: VariantWorkItem,
+  requestId: string,
+  controlEdlId: string,
+  status: "built" | "deferred" | "not_built",
+  reason: string,
+  keyPrefix = "variant-planned",
+): LearningEvent {
   return {
     kind: "variant.planned",
     stage: "variants",
     subjectId: requestId,
-    dedupeKey: `variant-planned:${requestId}:${item.key}`,
+    dedupeKey: `${keyPrefix}:${requestId}:${item.key}`,
     body: {
       key: item.key,
       attribute: item.attribute,
@@ -654,6 +677,7 @@ async function runVariantPhase(ctx: StageContext, ports: VariantPorts, details: 
   if (item.subject !== ctx.subjectId) throw refuse(`the variant phase is for ${ctx.subjectId}, but its work item is ${item.subject}`);
   const reservationId = ctx.payload.budgetReservationId;
   if (reservationId === null) throw refuse("a variant phase needs its budget reservation; no call is made");
+  if (details.phase === "assemble") return runAssemblePhase(ctx, ports, details, item);
   const inputs = await readPhaseInputs(ctx.sql, ctx);
   const at = ports.now();
   const generation = ports.generation;
@@ -684,6 +708,93 @@ async function runVariantPhase(ctx: StageContext, ports: VariantPorts, details: 
   await settlePhase(ports, ctx, item, details.masterEdlId, outcome, outcome.status === "done" ? { takes: outcome.produce.length } : null);
   const artifacts = outcome.status === "done" ? outcome.artifacts : {};
   return { kind: "done", output: { stage: "variants", subjectId: ctx.subjectId, artifacts, phase: "plan", key, outcome } };
+}
+
+function parseOrRefuse<S extends z.ZodType>(schema: S, value: unknown, what: string): z.infer<S> {
+  const result = schema.safeParse(value);
+  if (!result.success) throw refuse(`the ${what} of the variant's assembly does not parse`);
+  return result.data;
+}
+
+/**
+ * The assembly of a generation variant (Bible 6.13, variants/assemble.ts): the EDL is built by the editor over the variant's own plan, its
+ * voice and the takes its EDL plays, with the same style kit and DNA as the master. The edit gate decides it. A passing build writes the edl
+ * artifact, and a failing one writes nothing and fails the variant with the failing checks. Pure code: no call, no charge.
+ */
+async function runAssemblePhase(ctx: StageContext, ports: VariantPorts, details: PhaseDetails, item: VariantWorkItem): Promise<StageRunResult> {
+  const at = ports.now();
+  const stored = await readJobInputs(ctx.sql, { organizationId: ctx.organizationId, requestId: ctx.requestId, inputArtifactIds: ctx.payload.inputArtifactIds });
+  const ofType = (type: string): StoredArtifact[] => stored.filter((artifact) => artifact.envelope.type === type);
+  const one = (type: string): StoredArtifact => {
+    const found = ofType(type);
+    const [only] = found;
+    if (found.length !== 1 || only === undefined) throw refuse(`an assembly needs exactly one ${type} input, and it has ${found.length}`);
+    return only;
+  };
+  const plan = parseOrRefuse(scenePlanSchema, one(PLAN_TYPE).envelope.body, "scene plan");
+  const dna: VideoDNA = parseOrRefuse(videoDnaSchema, one("video_dna").envelope.body, "video DNA");
+  const voice: VoiceTrack = parseOrRefuse(voiceTrackSchema, one("voice_track").envelope.body, "voice track");
+  const validated: ValidatedRequest = parseOrRefuse(validatedRequestSchema, one("validated_request").envelope.body, "validated request");
+  const takes: Take[] = ofType("take").map((artifact) => parseOrRefuse(takeSchema, artifact.envelope.body, "take"));
+  if (plan.requestId !== ctx.requestId || voice.requestId !== ctx.requestId || validated.requestId !== ctx.requestId) {
+    throw refuse("an assembly input belongs to another request");
+  }
+  if (plan.videoDnaId !== dna.videoDnaId) throw refuse("the variant's plan was made from another video DNA");
+  if (plan.voiceTrackId !== voice.voiceTrackId) throw refuse("the variant's plan was made from another voice track");
+
+  const kitRef = validated.kits.styleKit;
+  const kit = await ports.loadStyleKit({ organizationId: ctx.organizationId, requestId: ctx.requestId, validated });
+  if (kit === undefined || kit.styleKitId !== kitRef.id || kit.version !== kitRef.version) {
+    const reason =
+      kit === undefined
+        ? `style kit ${kitRef.id} version ${kitRef.version} did not load`
+        : `style kit ${kit.styleKitId} version ${kit.version} is not the one the request names (${kitRef.id} version ${kitRef.version})`;
+    const { edlId } = editIdentity({ requestId: ctx.requestId, planId: plan.planId, voiceTrackId: voice.voiceTrackId, kitRef });
+    const gate = editGate(edlId, [{ rule: "style_kit_loaded", pass: false, detail: reason }], []);
+    await emit(ports, ctx, [itemEvent(item, ctx.requestId, details.masterEdlId, "not_built", reason, "variant-assembled")]);
+    return { kind: "done", output: { stage: "variants", subjectId: ctx.subjectId, artifacts: {}, phase: "assemble", key: item.key, edlId, gate, outcome: { status: "not_built", reason } } };
+  }
+
+  const input: AssemblyInput = {
+    requestId: ctx.requestId,
+    masterEdlId: details.masterEdlId,
+    plan,
+    voice,
+    dna,
+    takes,
+    kit,
+    emphasis: emphasisOf(validated),
+  };
+  const result = assembleVariantEdl(input);
+  const gate = editGate(result.edlId, result.checks, result.failingShotIds);
+  if (result.status === "not_built") {
+    await emit(ports, ctx, [itemEvent(item, ctx.requestId, details.masterEdlId, "not_built", result.reason, "variant-assembled")]);
+    return { kind: "done", output: { stage: "variants", subjectId: ctx.subjectId, artifacts: {}, phase: "assemble", key: item.key, edlId: result.edlId, gate, outcome: { status: "not_built", reason: result.reason } } };
+  }
+  const written = await writeArtifactOnce(ctx.sql, {
+    organizationId: ctx.organizationId,
+    requestId: ctx.requestId,
+    stage: ctx.stage,
+    type: "edl",
+    body: result.edl,
+    parentIds: ctx.payload.inputArtifactIds,
+    createdAt: at,
+    artifactId: stableId("art_", `variant-edl|${ctx.requestId}|${result.edlId}`),
+  });
+  await emit(ports, ctx, [itemEvent(item, ctx.requestId, details.masterEdlId, "built", "assembled: its EDL passed the edit gate", "variant-assembled")]);
+  return {
+    kind: "done",
+    output: {
+      stage: "variants",
+      subjectId: ctx.subjectId,
+      artifacts: { [`edl:${result.edlId}`]: written.artifactId },
+      phase: "assemble",
+      key: item.key,
+      edlId: result.edlId,
+      gate,
+      outcome: { status: "done" },
+    },
+  };
 }
 
 async function emit(ports: VariantPorts, ctx: StageContext, events: LearningEvent[]): Promise<void> {

@@ -23,7 +23,7 @@
 
 import { adapters } from "../config/adapters.ts";
 import { EngineError } from "../contracts/errors.ts";
-import { assetCacheKey, providerErrorSchema, type AssetSpec, type ProviderError, type ProviderPoll } from "../contracts/assets.ts";
+import { providerErrorSchema, type AssetSpec, type ProviderError, type ProviderPoll } from "../contracts/assets.ts";
 import { contentHash } from "../contracts/hash.ts";
 import { sumUsd } from "../contracts/money.ts";
 import type { Decision } from "../contracts/plan.ts";
@@ -35,7 +35,7 @@ import { gatewayDownloader, type MediaDownloader } from "../gateway/download.ts"
 import type { LockableLedger } from "../gateway/paid.ts";
 import { type MediaStore, type RoutedAdapter } from "./adapter.ts";
 import { classifyError, excerpt, type ProviderErrorKind } from "./classify.ts";
-import { type AssetCache, type CachedAsset } from "./cache.ts";
+import { type AssetCache, type CachedAsset, routeCacheKey } from "./cache.ts";
 import { type ProviderStats, type AttemptOutcome, type AttemptRecord, medianLatencyMs, successRate } from "./stats.ts";
 import { type BreakerSettings, type BreakerStore, evaluateBreaker, openBreaker } from "./breaker.ts";
 import { type BucketStore, bucketClassFor, type BucketClass } from "./buckets.ts";
@@ -608,7 +608,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         excluded.push(`${adapter.id}: circuit open until ${new Date(open.openUntilMs).toISOString()}`);
         continue;
       }
-      candidates.push({ priority, route, adapter, estimateUsd, cacheKey: assetCacheKey(spec, adapter.id) });
+      candidates.push({ priority, route, adapter, estimateUsd, cacheKey: routeCacheKey(spec, adapter.id, input) });
     }
     if (candidates.length === 0) {
       if (notConnected.length > 0 && excluded.length === 0) return report(session, { status: "not_connected", reasons: notConnected });
@@ -686,7 +686,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
       throw new EngineError("invalid_input", `job ${job.idempotencyKey} belongs to another request or workspace`, { stage: input.stage });
     }
     const target = job.targets[job.targetIndex] as AssetTarget;
-    if (input.spec.modelClass !== job.modelClass || assetCacheKey(input.spec, target.adapterId) !== target.cacheKey) {
+    if (input.spec.modelClass !== job.modelClass || routeCacheKey(input.spec, target.adapterId, input) !== target.cacheKey) {
       throw new EngineError("invalid_input", `the spec does not match the submit of job ${job.idempotencyKey}`, { stage: input.stage });
     }
   }

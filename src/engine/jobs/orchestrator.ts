@@ -14,6 +14,7 @@ import { jobSettings, type RequestPriority } from "./settings.ts";
 import type { EngineEvent, EnginePayload, ProduceHold, QueuedJob, ShotSourceKind, ShotSummary, StageOutput } from "./types.ts";
 import { nextPhaseOf } from "../variants/work.ts";
 import {
+  applyAssemblyOutcome,
   applyPlanOutcome,
   applyProduceResult,
   applyVerdict,
@@ -23,6 +24,7 @@ import {
   isTerminal,
   markIssued,
   newVariantRun,
+  passVariantRun,
   shotsToIssue,
   takesToCheck,
   variantDecision,
@@ -30,6 +32,9 @@ import {
 } from "./variant-runs.ts";
 
 export const ORCHESTRATOR_STATE_SCHEMA = "engine.orchestrator_state/v1" as const;
+
+/** The stages of a branch's chain (Bible 6.9 to 6.12). */
+const CHAIN_STAGES = ["compose", "pre_render_gate", "render", "post_render_review"] as const;
 
 /** The stages that run once per request. Shots, takes and branches are tracked in their own maps. */
 export const SINGLE_NODES = ["intake", "analyze_reference", "voice", "plan", "estimate_reserve", "edit", "variants", "deliver"] as const;
@@ -87,6 +92,11 @@ export type TakeState = {
 export type BranchState = {
   edlId: string;
   variantOf: string | null;
+  /**
+   * The generation variant this branch is the chain of (its run's key), or null. A caption, music or master branch has none. A
+   * generation variant's branch fails alone (escalateBranch), and it never revises the master's shots or edit.
+   */
+  variantKey?: string | null;
   stage: BranchStage;
   queued: boolean;
   status: "running" | "passed" | "escalated" | "superseded";
@@ -277,6 +287,7 @@ export function advance(current: OrchestratorState | null, event: EngineEvent): 
       applyHumanChoice(state, event, effects);
       break;
   }
+  settleVariantAssembly(state, effects);
   return { state, jobs: schedule(state), effects };
 }
 
@@ -337,6 +348,7 @@ function applyOutput(state: OrchestratorState, output: StageOutput, effects: Eng
       return applyPostRender(state, output, effects);
     case "variants":
       if (output.phase === "request") return applyVariants(state, output);
+      if (output.phase === "assemble") return applyVariantAssembly(state, output, effects);
       return applyVariantPhase(state, output, effects);
     case "deliver":
       return applyDeliver(state, output, effects);
@@ -778,6 +790,11 @@ function applyPreRender(state: OrchestratorState, output: Extract<StageOutput, {
     reviewBranch(state, branch, output.gate, artifactWithPrefix(output.artifacts, "gate:"), effects);
     return;
   }
+  // A variant's chain never revises the master's shots or the master's edit: its failure is its own (Bible 6.13).
+  if (branch.variantOf !== null) {
+    retryBranchStage(state, branch, "pre_render_gate", output.gate, effects, "the pre-render gate failed");
+    return;
+  }
   const shots = failingShotIds(state, output.gate);
   if (shots.length > 0) {
     reviseFromShots(state, branch, shots, output.gate, effects);
@@ -810,6 +827,12 @@ function applyPostRender(state: OrchestratorState, output: Extract<StageOutput, 
     branch.stage = "done";
     branch.status = "passed";
     branch.hints = [];
+    const run = runOfBranch(state, branch);
+    if (run !== null) {
+      const before = isTerminal(run);
+      passVariantRun(run);
+      endedRun(before, run, effects);
+    }
     return;
   }
   if (verdictOf(state, output.gate) === "review") {
@@ -817,7 +840,7 @@ function applyPostRender(state: OrchestratorState, output: Extract<StageOutput, 
     return;
   }
   const shots = failingShotIds(state, output.gate);
-  if (shots.length > 0) {
+  if (shots.length > 0 && branch.variantOf === null) {
     reviseFromShots(state, branch, shots, output.gate, effects);
     return;
   }
@@ -888,6 +911,13 @@ function escalateBranch(
 ): void {
   branch.status = "escalated";
   branch.queued = false;
+  // A generation variant's chain that escalates fails that variant alone: the request is not paused, and the master is not revised.
+  const run = runOfBranch(state, branch);
+  if (run !== null) {
+    const before = isTerminal(run);
+    failVariantRun(run, reason);
+    endedRun(before, run, effects);
+  }
   if (branch.variantOf === null) {
     pauseWith(state, { kind: "escalation", stage: branchStageName(branch.stage), subjectId: branch.edlId, reason });
   }
@@ -1005,6 +1035,86 @@ function variantRunOfDead(state: OrchestratorState, stage: EngineStage, subjectI
   return null;
 }
 
+/** The run a branch is the chain of, or null for a caption, music or master branch. */
+function runOfBranch(state: OrchestratorState, branch: BranchState): VariantRun | null {
+  if (branch.variantKey === undefined || branch.variantKey === null) return null;
+  return variantRunsOf(state)[branch.variantKey] ?? null;
+}
+
+/**
+ * The take each generated or stock shot of the master plan plays in a variant's EDL: the variant's own accepted take for a shot it changed,
+ * else the master's accepted take. Null when a shot the EDL plays has no take (the variant cannot be assembled, Bible 6.13).
+ */
+function picksOf(state: OrchestratorState, run: VariantRun): Record<string, string> | null {
+  const picked: Record<string, string> = {};
+  for (const shot of Object.values(state.shots)) {
+    if (!needsProduce(shot.sourceKind)) continue;
+    const own = run.shots[shot.shotId];
+    const takeId = own !== undefined ? own.takeId : shot.acceptedTakeId;
+    if (takeId === null) return null;
+    const artifactId = own !== undefined ? run.artifacts[`take:${takeId}`] : state.artifacts[`take:${takeId}`];
+    if (artifactId === undefined) return null;
+    picked[takeId] = artifactId;
+  }
+  return picked;
+}
+
+/** A run that is assembling records which take each shot plays. A shot with no take to play fails the run, so nothing waits on it. */
+function settleVariantAssembly(state: OrchestratorState, effects: EngineEffect[]): void {
+  for (const run of Object.values(variantRunsOf(state))) {
+    if (run.status !== "assembling" || run.phase !== null || run.picked !== null) continue;
+    const before = isTerminal(run);
+    const picked = picksOf(state, run);
+    if (picked === null) failVariantRun(run, "a shot the variant keeps has no accepted take to play");
+    else run.picked = picked;
+    endedRun(before, run, effects);
+  }
+}
+
+/** The artifacts a variant's chain reads that are its own: its plan and its voice, and the takes its EDL plays. */
+function variantChainIds(state: OrchestratorState, run: VariantRun): { plan: string | undefined; voice: string | undefined; takes: string[] } {
+  return {
+    plan: run.artifacts[`plan:${run.key}`],
+    voice: run.voiceTrackId === null ? state.artifacts.voice : run.artifacts[`voice:${run.key}`],
+    takes: Object.values(run.picked ?? {}),
+  };
+}
+
+/**
+ * The inputs of a variant's pre-render gate, which are its own (Bible 6.10): its composition and EDL, its plan and voice (not the master's),
+ * the validated request and the DNA, and the takes its EDL plays.
+ */
+function preRenderIdsOf(state: OrchestratorState, run: VariantRun, edlId: string): (string | undefined)[] {
+  const own = variantChainIds(state, run);
+  return [state.artifacts[`composition:${edlId}`], state.artifacts[`edl:${edlId}`], own.plan, state.artifacts.validated, own.voice, state.artifacts.dna, ...own.takes];
+}
+
+/**
+ * The assembly of a generation variant (Bible 6.13): its EDL is built over its own inputs, and it becomes a branch of its own. The branch's
+ * chain (compose, pre-render, render, review) runs as the master's does, with the variant's own plan, voice and takes.
+ */
+function applyVariantAssembly(
+  state: OrchestratorState,
+  output: Extract<StageOutput, { stage: "variants"; phase: "assemble" }>,
+  effects: EngineEffect[],
+): void {
+  const run = variantRunsOf(state)[output.key];
+  if (!run || run.subject !== output.subjectId) invalid(`variant ${output.key} is not in the variant work list`, "variants");
+  if (run.phase !== "assemble") conflict(`variant ${output.key} is not waiting for its assembly`, "variants");
+  const before = isTerminal(run);
+  effects.push({ kind: "gate", gate: output.gate });
+  mergeArtifacts(state, output.artifacts);
+  if (output.outcome.status === "done") {
+    if (state.branches[output.edlId]) invalid(`variant EDL ${output.edlId} already has a branch`, "variants");
+    for (const [takeId, artifactId] of Object.entries(run.picked ?? {})) state.artifacts[`take:${takeId}`] = artifactId;
+    state.branches[output.edlId] = { ...newBranch(output.edlId, state.masterEdlId), variantKey: run.key };
+    applyAssemblyOutcome(run, { status: "done", edlId: output.edlId });
+  } else {
+    applyAssemblyOutcome(run, { status: "not_built", reason: output.outcome.reason });
+  }
+  endedRun(before, run, effects);
+}
+
 function applyDeliver(state: OrchestratorState, output: Extract<StageOutput, { stage: "deliver" }>, effects: EngineEffect[]): void {
   expectQueued(state, "deliver", output.subjectId);
   mergeArtifacts(state, output.artifacts);
@@ -1022,6 +1132,12 @@ function applyDead(state: OrchestratorState, event: Extract<EngineEvent, { type:
   const { stage, subjectId, reason } = event;
   const variant = variantRunOfDead(state, stage, subjectId);
   if (variant !== null) return applyVariantDead(variant, event, effects);
+  // A dead job of a generation variant's chain (or of a caption or music chain) ends that chain, not the request (Bible 6.13).
+  const chain = (CHAIN_STAGES as readonly string[]).includes(stage) ? state.branches[subjectId] : undefined;
+  if (chain !== undefined && chain.variantOf !== null) {
+    if (!chain.queued) conflict(`${stage} for ${subjectId} is not in flight`, stage);
+    return escalateBranch(state, chain, `${stage} for ${subjectId} died: ${reason}`, effects);
+  }
   if (isSingleNode(stage) && subjectId === state.requestId) {
     const node = state.nodes[stage];
     if (node.status !== "queued") conflict(`${stage} is not queued, so its dead job cannot apply`, stage);
@@ -1332,6 +1448,19 @@ function schedule(state: OrchestratorState): QueuedJob[] {
       take.checkQueued = true;
       add("check_take", take.takeId, { shotId: take.shotId, takeId: take.takeId, variantKey: run.key }, [], [], [take.artifactId ?? undefined, run.artifacts[`plan:${run.key}`]]);
     }
+    // The assembly: the variant's EDL is built over its own plan, voice and takes (variants/assemble.ts). It waits for the picks.
+    if (run.status === "assembling" && run.phase === null && run.picked !== null && state.masterEdlId !== null) {
+      run.phase = "assemble";
+      const own = variantChainIds(state, run);
+      add(
+        "variants",
+        run.subject,
+        { phase: "assemble", variantKey: run.key, masterEdlId: state.masterEdlId, work: run.work, text: null, voiceTrackId: run.voiceTrackId },
+        [],
+        [],
+        [own.plan, state.artifacts.dna, state.artifacts.validated, own.voice, ...own.takes],
+      );
+    }
   }
 
   for (const branch of Object.values(state.branches).sort((a, b) => a.edlId.localeCompare(b.edlId))) {
@@ -1339,7 +1468,9 @@ function schedule(state: OrchestratorState): QueuedJob[] {
     branch.queued = true;
     const hints = branch.hints;
     branch.hints = [];
-    add(branch.stage, branch.edlId, { edlId: branch.edlId, variantOf: branch.variantOf }, branchSlots(state, branch), hints);
+    const run = runOfBranch(state, branch);
+    const explicit = run !== null && branch.stage === "pre_render_gate" ? preRenderIdsOf(state, run, branch.edlId) : undefined;
+    add(branch.stage, branch.edlId, { edlId: branch.edlId, variantOf: branch.variantOf }, branchSlots(state, branch), hints, explicit);
   }
 
   return jobs;

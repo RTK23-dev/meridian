@@ -258,8 +258,9 @@ test("a variant's produced takes are checked, and the variant is produced once e
   assert.equal(flow.jobsFor("deliver").length, 0, "delivery waits for the variant's run to end");
 
   flow.succeed({ stage: "check_take", subjectId: take, shotId: SHOT_A, takeId: take, gate: gate("take", true), verdict: verdict(take, true), artifacts: { [`verdict:${take}`]: fixtureId("art_", 93) } });
-  assert.ok(flow.effects.some((effect) => effect.kind === "decision" && effect.decision.chose === "produced" && effect.decision.at === `variant:${HOOK_KEY}`));
-  assert.equal(flow.jobsFor("deliver").length, 1, "delivery is queued once the variant is produced");
+  assert.deepEqual(flow.jobsFor("variants").map((job) => job.payload.details.phase), ["assemble"], "the variant is assembled once every shot passed");
+  assert.equal(flow.jobsFor("deliver").length, 0, "delivery waits for the variant's EDL and its chain");
+  assert.equal(flow.effects.some((effect) => effect.kind === "decision" && effect.decision.chose === "produced"), false, "not produced until its chain passes review");
 });
 
 test("a failed take is produced again with the failed rules as hints, and after the redos the variant fails", () => {
@@ -305,4 +306,144 @@ test("a caption-free matrix with no generation work queues no variant job at all
 test("two variants with the same key are refused, and nothing is queued for the second", () => {
   const flow = flowToMasterPassed(2);
   assert.throws(() => requestPhase(flow, [hookItem(), hookItem()]), /already in the variant work list/);
+});
+
+// --- The assembly and the variant's own chain (Bible 6.13: the variant's EDL is built over its own inputs, then compose, pre-render, render
+// and review run for it, as for the master). The variant's EDL, its takes and its voice are the variant's own.
+
+const VEDL = fixtureId("edl_", 73);
+const VARIANT_TAKE = fixtureId("take_", 91);
+const VARIANT_TAKE_ART = fixtureId("art_", 92);
+const MASTER_TAKE_B_ART = fixtureId("art_", 82);
+const DNA_ART = fixtureId("art_", 42);
+const VALIDATED_ART = fixtureId("art_", 41);
+const MASTER_VOICE_ART = fixtureId("art_", 43);
+const VARIANT_VOICE_ART = fixtureId("art_", 140);
+const VARIANT_PLAN_ART = fixtureId("art_", 141);
+
+/** A hook variant, through its writer, voice and plan, and through its one produce and check: it is now assembling. */
+function hookToAssembly(): Flow {
+  const flow = requestPhase(flowToMasterPassed(1), [hookItem()]);
+  flow.succeed(writerDone(HOOK_KEY, HOOK_SUBJECT));
+  flow.succeed(voiceDone(HOOK_KEY, HOOK_SUBJECT));
+  flow.succeed(planDone(HOOK_KEY, HOOK_SUBJECT, [shot(SHOT_A)]));
+  const subject = variantShotSubjectOf(HOOK_SUBJECT, SHOT_A);
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: subject, shotId: SHOT_A, takeId: VARIANT_TAKE, artifacts: { [`take:${VARIANT_TAKE}`]: VARIANT_TAKE_ART } });
+  flow.succeed({ stage: "check_take", subjectId: VARIANT_TAKE, shotId: SHOT_A, takeId: VARIANT_TAKE, gate: gate("take", true), verdict: verdict(VARIANT_TAKE, true), artifacts: {} });
+  return flow;
+}
+
+function assemblyJob(flow: Flow): QueuedJob {
+  const job = flow.jobsFor("variants").find((candidate) => candidate.payload.details.phase === "assemble");
+  assert.ok(job, "the assembly job is queued");
+  return job;
+}
+
+function assembled(flow: Flow, status: "done" | "not_built"): void {
+  const outcome = status === "done" ? { status: "done" as const } : { status: "not_built" as const, reason: "the variant's EDL did not pass the edit gate: captions_grouped_in_range" };
+  flow.succeed({
+    stage: "variants",
+    phase: "assemble",
+    subjectId: HOOK_SUBJECT,
+    key: HOOK_KEY,
+    edlId: VEDL,
+    gate: gate("edit", status === "done"),
+    artifacts: status === "done" ? { [`edl:${VEDL}`]: fixtureId("art_", 150) } : {},
+    outcome,
+  });
+}
+
+test("the assembly reads the variant's own plan, DNA, voice and the takes its EDL plays: its own take for the shot it changed, the master's for the rest", () => {
+  const flow = hookToAssembly();
+  const job = assemblyJob(flow);
+  assert.equal(job.subjectId, HOOK_SUBJECT);
+  assert.deepEqual(job.payload.inputArtifactIds.slice().sort(), [VARIANT_PLAN_ART, DNA_ART, VALIDATED_ART, VARIANT_VOICE_ART, VARIANT_TAKE_ART, MASTER_TAKE_B_ART].sort(), "its inputs are its own, and the master's take of the shot the variant keeps");
+  assert.equal(job.payload.inputArtifactIds.includes(MASTER_VOICE_ART), false, "the master's voice is not its voice");
+  assert.equal(job.payload.inputArtifactIds.includes(fixtureId("art_", 82)) && job.payload.inputArtifactIds.includes(fixtureId("art_", 81)), false, "the master's take of the changed shot is not played");
+});
+
+test("a passing assembly becomes a branch of the variant: its compose runs on the variant's EDL, and the master's edit is not run again", () => {
+  const flow = hookToAssembly();
+  const editsBefore = flow.history.filter((job) => job.stage === "edit").length;
+  assembled(flow, "done");
+  assert.deepEqual(flow.jobs.map((job) => [job.stage, job.subjectId]), [["compose", VEDL]]);
+  assert.equal(flow.history.filter((job) => job.stage === "edit").length, editsBefore, "the master's edit is not redone for the variant");
+  assert.equal(flow.current.artifacts[`edl:${VEDL}`], fixtureId("art_", 150), "the variant's EDL is a request artifact, so deliver can see it");
+  assert.equal(flow.current.artifacts[`take:${VARIANT_TAKE}`], VARIANT_TAKE_ART, "the variant's take is a request artifact, so deliver can see the EDL's media");
+  assert.equal(flow.current.artifacts[`voice:${HOOK_KEY}`], undefined, "the variant's voice is not a request artifact");
+});
+
+test("the variant's pre-render gate reads its own plan and voice, and the takes its EDL plays", () => {
+  const flow = hookToAssembly();
+  assembled(flow, "done");
+  flow.succeed({ stage: "compose", subjectId: VEDL, edlId: VEDL, artifacts: { [`composition:${VEDL}`]: fixtureId("art_", 151) } });
+  const preRender = flow.jobs.find((job) => job.stage === "pre_render_gate");
+  assert.ok(preRender, "the pre-render gate is queued");
+  assert.deepEqual(
+    preRender.payload.inputArtifactIds.slice().sort(),
+    [fixtureId("art_", 151), fixtureId("art_", 150), VARIANT_PLAN_ART, VALIDATED_ART, VARIANT_VOICE_ART, DNA_ART, VARIANT_TAKE_ART, MASTER_TAKE_B_ART].sort(),
+    "its inputs are the variant's composition, EDL, plan, voice and takes, with the master's accepted take for the shot it keeps",
+  );
+});
+
+test("a variant's chain that passes review produces the variant, records it, and lets deliver run with the master", () => {
+  const flow = hookToAssembly();
+  assembled(flow, "done");
+  flow.succeed({ stage: "compose", subjectId: VEDL, edlId: VEDL, artifacts: { [`composition:${VEDL}`]: fixtureId("art_", 151) } });
+  flow.succeed({ stage: "pre_render_gate", subjectId: VEDL, edlId: VEDL, gate: gate("pre_render", true), artifacts: {} });
+  flow.succeed({ stage: "render", subjectId: VEDL, edlId: VEDL, gate: gate("render_integrity", true), artifacts: { [`render:${VEDL}`]: fixtureId("art_", 152) } });
+  assert.equal(flow.jobsFor("deliver").length, 0, "delivery waits for the variant's review");
+  flow.succeed({ stage: "post_render_review", subjectId: VEDL, edlId: VEDL, gate: gate("post_render", true), artifacts: {} });
+  assert.ok(flow.effects.some((effect) => effect.kind === "decision" && effect.decision.chose === "produced" && effect.decision.at === `variant:${HOOK_KEY}`));
+  assert.equal(flow.jobsFor("deliver").length, 1, "delivery is queued once the variant's chain has passed");
+  assert.ok(flow.jobsFor("deliver")[0]?.payload.inputArtifactIds.includes(fixtureId("art_", 150)), "deliver receives the variant's EDL");
+});
+
+test("a variant whose pre-render gate fails without a proven check is reviewed in its own branch: the request is not paused and the master's edit is not redone", () => {
+  const flow = hookToAssembly();
+  assembled(flow, "done");
+  flow.succeed({ stage: "compose", subjectId: VEDL, edlId: VEDL, artifacts: { [`composition:${VEDL}`]: fixtureId("art_", 151) } });
+  const editsBefore = flow.history.filter((job) => job.stage === "edit").length;
+  flow.succeed({ stage: "pre_render_gate", subjectId: VEDL, edlId: VEDL, gate: gate("pre_render", false), artifacts: {} });
+  assert.equal(flow.current.status, "running", "the request is not paused by a variant's chain");
+  assert.equal(flow.current.pause, null);
+  assert.equal(flow.history.filter((job) => job.stage === "edit").length, editsBefore, "the master's edit is not redone");
+  assert.ok(flow.effects.some((effect) => effect.kind === "decision" && effect.decision.chose === "failed" && /pre_render/.test(effect.decision.reason)));
+  assert.equal(flow.jobsFor("deliver").length, 1, "delivery goes on without the failed variant");
+});
+
+test("a dead job in a variant's chain fails that variant alone: the request keeps running and delivers", () => {
+  const flow = hookToAssembly();
+  assembled(flow, "done");
+  flow.apply({ type: "dead", stage: "compose", subjectId: VEDL, reason: "provider timed out" });
+  assert.equal(flow.current.status, "running", "a variant's dead compose does not pause the request");
+  assert.equal(flow.current.pause, null);
+  assert.ok(flow.effects.some((effect) => effect.kind === "decision" && effect.decision.chose === "failed"));
+  assert.equal(flow.jobsFor("deliver").length, 1);
+});
+
+test("an assembly whose EDL does not pass the edit gate fails the variant with the reason: nothing is composed for it", () => {
+  const flow = hookToAssembly();
+  assembled(flow, "not_built");
+  assert.equal(flow.jobsFor("compose").length, 0, "no composition for an EDL that did not pass");
+  assert.ok(flow.effects.some((effect) => effect.kind === "decision" && effect.decision.chose === "failed" && /captions_grouped_in_range/.test(effect.decision.reason)));
+  assert.equal(flow.current.artifacts[`edl:${VEDL}`], undefined, "no EDL is stored");
+  assert.equal(flow.jobsFor("deliver").length, 1);
+});
+
+test("a variant that changes no generated shot goes straight to its assembly after its plan", () => {
+  const flow = requestPhase(flowToMasterPassed(1), [{ ...hookItem(), produceShotIds: [] }]);
+  flow.succeed(writerDone(HOOK_KEY, HOOK_SUBJECT));
+  flow.succeed(voiceDone(HOOK_KEY, HOOK_SUBJECT));
+  flow.succeed(planDone(HOOK_KEY, HOOK_SUBJECT, []));
+  assert.equal(flow.jobsFor("produce_shot").length, 0, "no produce job for a variant with no shot to make again");
+  assert.deepEqual(flow.jobsFor("variants").map((job) => job.payload.details.phase), ["assemble"]);
+});
+
+test("a variant's assembly that dies fails that variant alone, and the request keeps running", () => {
+  const flow = hookToAssembly();
+  flow.apply({ type: "dead", stage: "variants", subjectId: HOOK_SUBJECT, reason: "the assembly timed out" });
+  assert.equal(flow.current.status, "running");
+  assert.equal(flow.current.pause, null);
+  assert.equal(flow.jobsFor("deliver").length, 1);
 });

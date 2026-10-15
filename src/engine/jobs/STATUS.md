@@ -1,19 +1,36 @@
 # STATUS: engine jobs and orchestration (W2)
 
-## E5 item 3 (generation variants, this branch): the work list, the phases and the variant runs are built; assembly is not
+## E5 item 3 (generation variants, this branch): built through assembly and the variant's own chain
 
-Status: lead items 1 to 6 are built and their six tests pass (the work list, production wiring, the full voice re-speak as a recorded
-deviation, the product prompt as `variant_writer@2`, the hook design, and the tests). E5 item 3 is not closed: a generation variant does not
-yet reach an assembled video (see the last bullet).
+Status: a generation variant now runs end to end on recorded answers: its work list, its writer, voice and plan phases, its produce and check
+jobs, its assembly (the EDL rebuilt by the editor over its own inputs), and its chain (compose, pre-render, render, review). Delivery receives
+its EDL. A variant fails alone at every step. The voice is a full re-speak (a recorded deviation); the splice is a recorded future step.
+Production does not yet wire the voice or the produce for variants (`../variants/STATUS.md`, blockers).
 
 Full account in `../variants/STATUS.md`. What is in this folder:
 
-- **Work list (`types.ts`, `orchestrator.ts`).** `StageOutput`'s `variants` member is now phased. The request phase carries `work`, one item
-  per funded generation variant (`variants/work.ts`, `VariantWorkItem`). The writer, voice and plan phases each report one variant's outcome.
-  The orchestrator's variant branch applies each outcome to that variant's run.
+- **Work list (`types.ts`, `orchestrator.ts`).** `StageOutput`'s `variants` member is phased: the request phase carries `work`, one item per
+  funded generation variant (`variants/work.ts`, `VariantWorkItem`). The writer, voice, plan and assemble phases each report one variant's
+  outcome. The orchestrator's variant branch applies each outcome to that variant's run.
 - **Variant runs (`variant-runs.ts`, pure).** A run is `preparing` (its phases), then `producing` (one produce job per shot the change makes
-  again, then one check per take, with the shot's redos), then `produced` or `failed`. A failure ends that variant alone: it never pauses the
-  request. Its decision is recorded (`variantDecision`). State is `OrchestratorState.variantRuns`, absent in older states (read as none).
+  again, then one check per take, with the shot's redos), then `assembling` (its EDL is queued), then `rendering` (its chain), then `produced`
+  (the chain passed review) or `failed`. A failure ends that variant alone: it never pauses the request. Its decision is recorded
+  (`variantDecision`). State is `OrchestratorState.variantRuns`, absent in older states (read as none).
+- **Assembly (`variants/assemble.ts`, phase `assemble`).** Its inputs are its own: its plan, the DNA, its voice (or the master's, for a product),
+  the validated request and the takes its EDL plays (`picksOf`: its own take for each shot it changed, the master's accepted take for the rest).
+  The edit gate decides it; a passing build writes `edl:<id>` (with `variantOf` the master), and the EDL becomes a branch with `variantKey`.
+- **The chain (`applyPreRender`, `applyRender`, `applyPostRender`, `escalateBranch`, `applyDead`).** A variant's chain never revises the
+  master's shots or the master's edit (the caption and music chains no longer do either, which was a latent bug). A chain's failure is retried
+  in its own stage up to the stage redos, then the variant fails. A dead chain job fails the variant, not the request. A passing review
+  produces the variant. The pre-render gate reads the variant's own plan, voice and takes (`preRenderIdsOf`).
+- **Scheduling.** Phase jobs are `engine.variants` jobs with subject `variantSubjectOf(key)` and `details.phase`. Produce jobs for a variant
+  shot have subject `<variant subject>.<shotId>`, and their inputs are the variant's plan artifact, not the master's. Their takes are named by
+  that subject (`handlers/produce-shot.ts`: `takeIdFor`, `assetSpecFor` take the subject; a master job's subject is its shot id, so master ids
+  are unchanged). Check jobs read the take and the variant's plan. The take picks are settled before the assembly is queued (`advance`,
+  `settleVariantAssembly`).
+- **Deliver.** Delivery waits for every variant run to end (`variantsSettled`). The variant's plan and voice stay with its run. Its EDL and
+  its takes are request artifacts, so deliver can see the EDL's media (`deliver/manifest.ts` `shotsFor` finds the take of each clip by URI).
+  A dead variant job or a refused produce ends its run as `failed`.
 - **Scheduling.** Phase jobs are `engine.variants` jobs with subject `variantSubjectOf(key)` and `details.phase`. Produce jobs for a variant
   shot have subject `<variant subject>.<shotId>`, and their inputs are the variant's plan artifact, not the master's. Their takes are named by
   that subject (`handlers/produce-shot.ts`: `takeIdFor`, `assetSpecFor` take the subject; a master job's subject is its shot id, so master ids
@@ -27,10 +44,9 @@ Full account in `../variants/STATUS.md`. What is in this folder:
 - **Production (`production-ports.ts`, `runtime.ts`, `kit-store.ts`).** `productionVariantPorts` is passed by `productionEngineRuntime`. The
   writer's route is read through the gateway; a route with no key is NOT_CONNECTED with no call. The voice is not connected (no voice port in
   production), so a variant that needs one is NOT_CONNECTED with its reason. `productKitBySku` reads a product kit by its SKU.
-- **Not built.** The assembly of a generation variant (EDL with its new takes and voice; compose, pre-render, render, review). The audio
-  splice contract. A produced variant's takes are kept and not used. Owner or lead decides whether produce waits for the assembly.
-- The "Not built" sections below describe the state before this item. The variant sub-graph they name is now built as described here, up to
-  `produced`.
+- **Not built.** The production voice and produce ports for a variant (the worker's composition). The audio splice (a recorded future step for
+  changed-lines-only, not needed for the full re-speak).
+- The "Not built" sections below describe the state before this item. The variant sub-graph they name is now built as described here.
 
 ## W2 leftovers: wiring pass (branch `eng-e45-leftovers-2`, base 5d5925b)
 
