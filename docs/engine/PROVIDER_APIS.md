@@ -74,3 +74,59 @@ Response 200/201: `{ success, message, response: { id, message } }` (the docs al
 `GET /render/{id}`: `{ success, message, response: { id, status, error, duration, renderTime, url, poster, thumbnail,
 created, updated } }`. Status values seen: `queued`, `fetching`, `rendering`, `saving`, `done`, `failed`. `url` is a
 temporary asset URL (download it to our storage).
+
+## Apify (base `https://api.apify.com/v2`, `Authorization: Bearer <token>`)
+
+Read on 2026-10-15 from docs.apify.com and the two actors' store pages. Nothing here was called live. Sources:
+- Run an Actor synchronously and get its dataset items: https://docs.apify.com/api/v2/act-run-sync-get-dataset-items-post
+- Authentication (the header is recommended; a `token` query parameter is also documented): https://docs.apify.com/platform/integrations/api
+- The header form `Authorization: Bearer YOUR_API_TOKEN`: https://docs.apify.com/api/v2/getting-started
+- Hashtag actor `apify/instagram-hashtag-scraper`: https://apify.com/apify/instagram-hashtag-scraper
+- Reel actor `apify/instagram-reel-scraper`: https://apify.com/apify/instagram-reel-scraper
+- Checked and not used: `apify/instagram-scraper` (https://apify.com/apify/instagram-scraper)
+
+Gateway: provider `apify` in `gateway/providers.ts`, credential category `apify` (a workspace key in Settings; the deployment
+key `APIFY_TOKEN` only with `APIFY_SHARED_DEFAULT=deployment`). Routes: `discovery.instagram` (hashtag actor) and
+`discovery.instagram.creator` (reel actor) in `config/routes.ts`, with `verified: false`. Their price is null: no cost is
+estimated until the owner confirms the plan.
+
+### Run an actor synchronously and read its items
+`POST /actors/{actorId}/run-sync-get-dataset-items`, where `actorId` is `owner~name` (for example `apify~instagram-reel-scraper`).
+The body is the actor's input as JSON (`Content-Type: application/json`). Query parameters used: `maxItems` (caps the items
+Apify charges for on a pay-per-result actor; it does not limit the items returned) and `timeout` (seconds). Documented answers:
+201 with a JSON array of the dataset items (the client accepts 200 and 201); 400 invalid input; 401 missing or invalid token;
+402 no credit or usage limit; 403 insufficient permissions; 408 when the run passes 300 seconds. The endpoint also takes
+`maxTotalChargeUsd`, a USD cap for the run. It is not used, because no price is confirmed.
+
+### Hashtag actor: `apify~instagram-hashtag-scraper` (niche search)
+Input (documented): `hashtags` (array, one term per entry, with or without `#`), `resultsType` (the docs' example value is
+`"posts"`; the description says posts or reels), `resultsLimit` (integer, per hashtag), `keywordSearch` (boolean, not used).
+Sent: `{ hashtags: [term], resultsType: "posts", resultsLimit }`.
+Output fields in the documented samples: `id`, `type` (`"Image"` or `"Video"`; reels are `"Video"`), `url` (the `/p/` or `/reel/`
+form), `shortCode`, `ownerUsername`, `timestamp` (ISO 8601, UTC), `caption`, `hashtags`, `videoPlayCount` (on reel samples),
+`likesCount` (`-1` when the creator hides it), `commentsCount`, `videoDuration`. `videoViewCount` appears only in the keyword-search
+sample, so it is not used for hashtag results. One reading also listed `igPlayCount`; it is not used.
+Price: the page header says "from $1.90 / 1,000 results" (pay per event); the README gives $2.60 per 1,000 on the Free plan and
+$2.30 on Starter. The two disagree, so no price is set (null).
+
+### Reel actor: `apify~instagram-reel-scraper` (creator baseline, and checkpoints)
+Input (documented): `username` (array; accepts usernames, profile URLs, profile IDs, or direct reel URLs, each processed on its own),
+`resultsLimit` (per profile or URL; ignored for direct reel URLs), `skipPinnedPosts` (boolean). Sent for a creator:
+`{ username: [handle], resultsLimit: 30, skipPinnedPosts: true }`. Sent for one reel's checkpoint: `{ username: [permalink], resultsLimit: 1 }`.
+Output fields in the documented samples: `id`, `type` (`"Video"` for reels), `url` (the `/p/` form in the sample), `shortCode`,
+`ownerUsername`, `timestamp`, `caption`, `hashtags`, `videoViewCount` and `videoPlayCount` (both appear in the samples; the docs do not
+define how they differ), `likesCount` (`-1` when hidden), `commentsCount`.
+Price: the header says "from $1.00 / 1,000 reels", the README gives $2.60 per 1,000 on Free and $2.30 on Starter. Add-ons
+(transcripts, video downloads) are billed separately, with no rate given. No price is set (null).
+
+### What the code uses, and what is not confirmed
+- The view count used for ratings is `videoPlayCount`. It is the field present on every reel sample of both actors. The docs do
+  not say whether it is Instagram's view count, so the owner confirms this at the first live run. Candidate and baseline use the
+  same field, so the ratio compares like with like.
+- Creator follower counts are not in the documented output lists. They are stored as null, and a tier that depends on them is
+  shown as not rated.
+- Shares: `includeSharesCount` exists, but the output field name is not shown. Shares are null.
+- Not confirmed: the `resultsType` value that returns reels only (the code asks for `"posts"` and keeps the `"Video"` items);
+  whether a hashtag search returns reels as `"Video"` in every case; the plan price per 1,000 results.
+- No field is read as a guess. An absent or unreadable field is null, and a `-1` like count is null.
+

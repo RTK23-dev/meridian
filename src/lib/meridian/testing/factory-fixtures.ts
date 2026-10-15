@@ -17,6 +17,7 @@ import { scrapeSocialUrl } from "../sources/scraper/social-scraper.ts";
 import { SourceRegistry } from "../sources/registry.ts";
 import type { SourceAdapter, SourceHealth, SourceKind, SourceReference } from "../sources/types.ts";
 import type { Transport } from "../providers/http.ts";
+import { notConnectedApifyClient } from "../sources/apify/client.ts";
 
 export const FACTORY_TEST_ORG = "org-factory";
 export const FACTORY_TEST_BRAND = "brand-factory";
@@ -303,5 +304,7 @@ export function fixtureGatherDeps(options: { metaToken: string | null; scrapeSoc
     scrapeSocial: options.scrapeSocial ?? scrapeSocialUrl,
     metaToken: async () => options.metaToken,
     metaTransport: adLibraryTransport(),
+    // No Apify key in the fixtures: the Instagram volume source reports not connected, and no request is sent.
+    apify: notConnectedApifyClient("Apify has no key for this workspace in the test, so no Instagram candidates were gathered."),
   };
 }

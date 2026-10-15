@@ -8,6 +8,9 @@ import type { PostSnapshot } from "../discovery/types.ts";
 
 export type InstantRatingTier = "S" | "A" | "B" | "C";
 
+/** The part of a snapshot that velocity reads. Widened so a checkpoint with no likes or friend tags observed can be used. */
+export type VelocityPoint = Pick<PostSnapshot, "hoursSincePost" | "views">;
+
 export interface InstantRatingInput {
   views: number;
   creatorFollowers: number;
@@ -15,7 +18,7 @@ export interface InstantRatingInput {
   creatorVariance?: number;
   nichePriorMean?: number;
   nichePriorVariance?: number;
-  snapshots?: PostSnapshot[];
+  snapshots?: VelocityPoint[];
   commentsCount: number;
   sharesCount?: number | null;
   friendTagCommentsCount?: number;
@@ -44,9 +47,9 @@ export interface InstantRatingResult {
 }
 
 /**
- * Calculates views acceleration slope from multiple snapshot checkpoints (0h, 6h, 24h, 72h).
+ * Calculates views acceleration slope from the snapshot checkpoints (0h, 24h and 72h after discovery, SNAPSHOT_CADENCE_HOURS).
  */
-export function calculateVelocityScore(snapshots: PostSnapshot[] = []): number | null {
+export function calculateVelocityScore(snapshots: VelocityPoint[] = []): number | null {
   // One snapshot shows no change over time, so velocity is not observed. It is not reported as a neutral score.
   if (snapshots.length < 2) return null;
 

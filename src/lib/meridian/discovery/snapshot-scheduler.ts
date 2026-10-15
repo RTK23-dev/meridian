@@ -2,7 +2,7 @@
  * Longitudinal Snapshot Scheduler for Organic Candidate Reels
  * 
  * Tracks candidate post performance over time:
- * - Snapshots target intervals: 0h (discovery), 6h, 24h, and 72h.
+ * - Snapshots are taken at 0h (the discovery observation), +24h and +72h after the first snapshot (SNAPSHOT_CADENCE_HOURS).
  * - Computes view velocity (slope) and acceleration between intervals.
  * - Triggers re-rating via Empirical Bayes Instant Rating when snapshots arrive.
  */
@@ -19,17 +19,33 @@ export interface ScheduledSnapshot {
   status: "pending" | "completed" | "skipped" | "failed";
 }
 
-export const SNAPSHOT_CADENCE_HOURS = [0, 6, 24, 72] as const;
+/**
+ * The checkpoints, in hours after the first snapshot. The first snapshot is taken at discovery, so the offsets count from
+ * discovery, not from posting: a reel found a week after it was posted still gets its +24h and +72h checkpoints.
+ */
+export const SNAPSHOT_CADENCE_HOURS = [0, 24, 72] as const;
+
+/**
+ * A checkpoint whose views and comments were observed. Likes, shares and friend-tag comments are optional, because the
+ * sources do not always report them, and an absent value is never filled in with 0.
+ */
+export type RatingSnapshot = {
+  hoursSincePost: number;
+  views: number;
+  comments: number;
+  shares?: number;
+  friendTagComments?: number;
+};
 
 export class SnapshotScheduler {
   /**
-   * Generates initial snapshot schedule for a newly discovered reel.
+   * Generates the snapshot schedule for a newly discovered reel. `firstSnapshotIso` is the time of the first snapshot (discovery).
    */
-  static generateSchedule(reelId: string, postedAtIso: string): ScheduledSnapshot[] {
-    const postTime = new Date(postedAtIso).getTime();
+  static generateSchedule(reelId: string, firstSnapshotIso: string): ScheduledSnapshot[] {
+    const baseTime = new Date(firstSnapshotIso).getTime();
 
     return SNAPSHOT_CADENCE_HOURS.map((hours) => {
-      const scheduledTime = new Date(postTime + hours * 3600 * 1000);
+      const scheduledTime = new Date(baseTime + hours * 3600 * 1000);
       return {
         id: `snap-sched-${reelId}-${hours}h`,
         reelId,
@@ -96,7 +112,7 @@ export class SnapshotScheduler {
     creatorVariance?: number;
     nichePriorMean?: number;
     nichePriorVariance?: number;
-    snapshots: PostSnapshot[];
+    snapshots: RatingSnapshot[];
   }): InstantRatingResult {
     const latest = [...params.snapshots].sort((a, b) => a.hoursSincePost - b.hoursSincePost).pop();
     if (!latest) {

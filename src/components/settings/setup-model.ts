@@ -87,6 +87,7 @@ const KEYED_LABEL: Record<CredentialCategory, string> = {
   pinterest: "Pinterest",
   tiktok: "TikTok",
   licensed: "Licensed ad data",
+  apify: "Apify (Instagram volume)",
 };
 
 const DRIVE_VARIABLES = ["GOOGLE_SERVICE_ACCOUNT_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"];
