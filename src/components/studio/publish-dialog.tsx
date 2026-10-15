@@ -181,7 +181,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
               {form.watch("trialFirst") ? (
                 <Field
                   label="How the trial graduates"
-                  hint="The Graph API does not graduate a trial reel, and it documents no field that reports graduation. Until a graduation is observed, Meridian shows the feed step as needing a person to graduate it in the Instagram app."
+                  hint="The Graph API does not graduate a trial reel, and it documents no field that reports graduation. A MANUAL trial graduates when a person does it in the Instagram app. An SS_PERFORMANCE trial graduates when Instagram decides it has performed well. Until Meridian observes a graduation, it does not record the feed step as done."
                   error={errors.trialGraduation?.message}
                 >
                   <SelectInput {...register("trialGraduation")} disabled={pending}>

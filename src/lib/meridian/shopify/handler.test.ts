@@ -157,7 +157,7 @@ test("a topic other than orders/create is acknowledged and not stored", async ()
 test("an order whose landing site carries the reel's utm_content is stored against that reel by the utm rule", async () => {
   const db = fakeShopifyDb(CONNECTED);
   const response = await handleShopifyWebhook(delivery(UTM_BODY, { hmac: UTM_HMAC }), depsFor(db));
-  assert.equal(response.status, 202);
+  assert.equal(response.status, 200);
   assert.equal(await response.text(), "recorded");
   assert.equal(db.orders.length, 1);
   assert.deepEqual(db.orders[0], {
@@ -182,7 +182,7 @@ test("a repeat of the same order is answered already received, and the first sto
 test("an order with the DM keyword as a discount code is matched by the keyword rule", async () => {
   const db = fakeShopifyDb(CONNECTED);
   const response = await handleShopifyWebhook(delivery(KEYWORD_BODY, { hmac: KEYWORD_HMAC }), depsFor(db));
-  assert.equal(response.status, 202);
+  assert.equal(response.status, 200);
   assert.equal(db.orders[0]?.creativeId, CREATIVE);
   assert.equal(db.orders[0]?.matchRule, "dm_keyword");
 });
@@ -190,7 +190,7 @@ test("an order with the DM keyword as a discount code is matched by the keyword 
 test("an order that no reel matches is stored with null, never guessed to a reel", async () => {
   const db = fakeShopifyDb(CONNECTED);
   const response = await handleShopifyWebhook(delivery(UNMATCHED_BODY, { hmac: UNMATCHED_HMAC }), depsFor(db));
-  assert.equal(response.status, 202);
+  assert.equal(response.status, 200);
   assert.equal(db.orders[0]?.creativeId, null);
   assert.equal(db.orders[0]?.matchRule, null);
 });

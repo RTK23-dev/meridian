@@ -28,7 +28,7 @@ export const TRIAL_CHECK_MAX_CHECKS = 7;
 
 /** Why a feed step is not recorded as graduated. Meta documents no read-back of trial state, so this is the live answer. */
 export const GRADUATION_NOT_DOCUMENTED =
-  "The Graph API documents no field that reports trial state or graduation, and it cannot graduate a trial reel. Graduate the reel to the feed in the Instagram app.";
+  "The Graph API documents no field that reports trial state or graduation, and it cannot graduate a trial reel. A MANUAL trial graduates when a person does it in the Instagram app. An SS_PERFORMANCE trial graduates when Instagram decides it has performed well. Meridian records the feed step only when it observes the graduation.";
 
 /**
  * Reads a trial choice from a request. Absent or null means no trial. Anything else must name a documented strategy, and a value that

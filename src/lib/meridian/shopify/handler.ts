@@ -5,7 +5,8 @@
  * 408). The shop domain must be a myshopify.com domain, and it must be connected to a workspace (401, the same answer as a bad
  * signature, so an unsigned caller learns nothing). The workspace's Shopify secret must be usable (503 NOT_CONNECTED). The HMAC
  * over the raw body must match (401). Only then is the JSON read (400 when malformed), the order matched to a reel, and the
- * order stored by its Shopify id (202 "recorded", or 200 "already received" for a repeat).
+ * order stored by its Shopify id. Shopify treats only a 200 as receipt, so both a new order ("recorded") and a repeat ("already
+ * received") answer 200. Any other status makes Shopify retry the delivery.
  *
  * The body is untrusted data. It is validated, and it is never rendered as HTML or run.
  */
@@ -111,5 +112,5 @@ export async function handleShopifyWebhook(request: Request, deps: ShopifyWebhoo
     creativeId: match?.creativeId ?? null,
     matchRule: match?.rule ?? null,
   });
-  return stored ? new Response("recorded", { status: 202 }) : new Response("already received", { status: 200 });
+  return stored ? new Response("recorded", { status: 200 }) : new Response("already received", { status: 200 });
 }

@@ -74,9 +74,9 @@ How Meridian uses them:
   note attribute named `dm_keyword` or `meridian_keyword`. A tie or no match is stored unmatched. The rule that matched is stored.
 - An order is stored once per shop and Shopify order id. Its totals are stored as the decimal text Shopify sends, and a total that
   is missing or malformed is stored as unknown. No customer details are stored.
-- Open finding, not changed on 2026-10-15: a stored order is answered `202` with `recorded` (`src/lib/meridian/shopify/handler.ts`,
-  and its tests assert 202). The Shopify page says "Only a 200 response confirms receipt", and the first bullet above says any other
-  response is an error. Shopify may therefore retry orders that were stored. Answering `200` for a stored order would match the docs.
+- A stored order is answered `200` with `recorded`, and a repeat with `200` with `already received`. Shopify's page says "Only a 200
+  response confirms receipt", so any other status would make Shopify retry a stored order. This was a `202` before the fix on
+  2026-10-15 (`src/lib/meridian/shopify/handler.ts`), and the tests now assert 200.
 
 ## Infrastructure (environment only)
 
@@ -137,9 +137,9 @@ its two strategy values, the publish response and the read-back fields. Partly v
   reel, and it does not record a feed step unless an observation says so. Today no observation exists.
 - **Publish response.** `media_publish` returns `{"id": "<IG_MEDIA_ID>"}` and nothing about trial state.
   https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media_publish
-- **Strategy note, open.** The docs say a `SS_PERFORMANCE` reel graduates by itself if it performs well. The build's note
-  (`GRADUATION_NOT_DOCUMENTED` in `trial.ts`) tells the person to graduate the reel by hand for both strategies, so the note is wrong
-  for `SS_PERFORMANCE`. Not changed on 2026-10-15.
+- **Strategy note, fixed 2026-10-15.** The docs say a `SS_PERFORMANCE` reel graduates by itself if it performs well, and a `MANUAL`
+  reel is graduated by hand in the native app. The note in `trial.ts` (`GRADUATION_NOT_DOCUMENTED`) and the publish dialog hint now say
+  so for each strategy. Meridian still records the feed step only when it observes a graduation.
 - **Not verified.** Eligibility (a third-party guide cites about 1,000 followers; Meta publishes no threshold). Whether a trial's media
   id stays the same after graduation. Whether the trial parameter is accepted on v21.0. Trial calls use v25.0, and the rest of the
   Instagram flow stays on v21.0 (`TRIAL_GRAPH_BASE` in `src/lib/meridian/distribution/graph.ts`). A third-party summary says Meta does not
