@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { budgetReservationSchema, EngineError, scenePlanSchema, takeSchema, type ScenePlan, type ShotSpec, type Take } from "../../contracts/index.ts";
-import { FIXTURE_IDS, fixtureId } from "../../contracts/fixtures/index.ts";
+import { FIXTURE_IDS, cartoonChainShotFixture, fixtureId } from "../../contracts/fixtures/index.ts";
 import { gatewayWith, fixture, json, probeOf, recordedTransport, fakeMedia, fakeObjects, MP4_BYTES } from "../test/harness.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../test/pg-test-db.ts";
 import { startEngineRequest } from "../orchestrator-sql.ts";
@@ -53,6 +53,14 @@ describe("check_take helpers", () => {
     assert.equal(presenter.product, null);
 
     assert.equal(takeShotOf(shotOf("stock_footage", { kind: "stock", query: "kitchen", minMs: 4000 })).motionRequired, true);
+  });
+
+  test("a chain-produced take is a generated take: its shot must move, like a single generated call (contract v5)", () => {
+    const chain = takeShotOf({ ...cartoonChainShotFixture, shotId: FIXTURE_IDS.shotCartoonChain });
+    assert.equal(chain.motionRequired, true, "the clip is a video, so the motion check applies to the chain's take");
+    assert.equal(chain.product, null);
+    assert.equal(chain.plannedDurationMs, 3000);
+    assert.equal(takeShotOf(shotOf("coded_graphics", { kind: "component", component: "product.card", props: {} })).motionRequired, false);
   });
 
   test("the probed duration is the only measurement the default gives; every other one is unknown", () => {
@@ -194,6 +202,28 @@ describe("check_take on PostgreSQL", () => {
       select type, stage from engine_artifacts where organization_id = ${ORG} and request_id = ${taken.requestId} and type = 'take_verdict'
     `;
     assert.deepEqual(stored, [{ type: "take_verdict", stage: "check_take" }]);
+  });
+
+  test("a chain-produced take is checked like any take: the motion check is evaluated, and missing evidence routes to review", async () => {
+    const shot: ShotSpec = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 71) };
+    const taken = await takeWithPlan(shot, MP4_BYTES);
+    const critic = recordedTransport({ "POST /api/v1/chat/completions": json(200, fixture("openrouter-critic-take-ok.json")) });
+    const handler = createCheckTakeHandler({
+      gateway: gatewayWith(critic.transport),
+      media: fakeMedia({ probe: () => probeOf({ durationMs: 3000 }) }),
+      objects: objects,
+      now: () => NOW,
+    });
+
+    const result = await handler.run(contextFor(taken));
+    assert.equal(result.kind, "done");
+    if (result.kind !== "done" || result.output.stage !== "check_take") throw new Error("expected a check output");
+    const { verdict, gate } = result.output;
+    assert.equal(verdict.takeId, taken.takeId);
+    assert.equal(gate.pass, false, "a chain take with no connected evidence is not a pass");
+    const motion = verdict.checks.find((check) => check.rule === "motion_present");
+    assert.ok(motion, "the motion check is in the verdict for a chain take");
+    assert.equal(motion.pass, false, "the motion is not measured here, so it is named as not evaluated");
   });
 
   test("a stored take whose media is missing from the object store fails the stage: nothing is judged and no verdict is written", async () => {

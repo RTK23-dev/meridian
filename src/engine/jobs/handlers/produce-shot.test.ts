@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { assetCacheKey, EngineError, scenePlanSchema, type ScenePlan, type ShotSpec } from "../../contracts/index.ts";
-import { FIXTURE_IDS, fixtureId } from "../../contracts/fixtures/index.ts";
+import { assetCacheKey, EngineError, scenePlanSchema, type AssetSpec, type ScenePlan, type ShotSpec } from "../../contracts/index.ts";
+import { FIXTURE_IDS, cartoonChainShotFixture, fixtureId, scenePlanFixture, stopMotionChainShotFixture } from "../../contracts/fixtures/index.ts";
 import type { ProviderPoll } from "../../contracts/assets.ts";
+import { estimatePlan } from "../../budget/estimate.ts";
+import { prices } from "../../config/prices.ts";
+import { withPriceOverlay } from "../../plan/test/priceOverlay.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../test/pg-test-db.ts";
 import { startEngineRequest } from "../orchestrator-sql.ts";
 import { writeArtifact, mediaKey, readArtifact } from "../artifact-store.ts";
@@ -10,6 +13,7 @@ import { fakeMedia, fakeObjects, MP4_BYTES, probeOf } from "../test/harness.ts";
 import type { StageContext } from "../types.ts";
 import {
   assetSpecFor,
+  chainCallSpecFor,
   createProduceShotHandler,
   isMp4,
   productionFromReport,
@@ -593,6 +597,251 @@ describe("the produce_shot stage on PostgreSQL", () => {
       (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
     );
     assert.equal(generator.asked, 0, "nothing is called for a refused job");
+  });
+});
+
+// --- Chains (contract v5, Bible 7.1). The generator answers each call from a script, in the order the calls are made, and records
+// the spec it was asked for. Nothing here calls a provider; the answers are the recorded shape of the router's report.
+
+const KEYFRAME_PROVIDER = "openrouter:fixture/keyframe-image";
+const CLIP_PROVIDER = "openrouter:fixture/budget-video";
+const FRAME_PROVIDER = "openrouter:fixture/frame-image";
+/** The price key of the image.edit route, read from the route table's own price (never a model name in a test). */
+const EDIT_PRICE_KEY = prices.routeFor["image.edit"];
+
+/** A keyframe as the image adapter reports it: a store uri, a PNG, and the call's own ledger entry. */
+function keyframeDone(): ShotProduction {
+  return doneProduction({ providerId: KEYFRAME_PROVIDER, uri: "store://keyframes/kf-1.png", mediaType: "image/png", costUsd: 0.018, ledgerEntryId: "led_keyframe" });
+}
+
+/** The clip from the keyframe, as the video adapter reports it: an https link to the video, and its own ledger entry. */
+function clipDone(): ShotProduction {
+  return doneProduction({
+    providerId: CLIP_PROVIDER,
+    uri: "https://openrouter.ai/api/v1/videos/job-clip/content?index=0",
+    mediaType: "video/mp4",
+    costUsd: 0.1008,
+    ledgerEntryId: "led_clip",
+  });
+}
+
+function frameDone(number: number): ShotProduction {
+  return doneProduction({
+    providerId: FRAME_PROVIDER,
+    uri: `store://frames/frame-${number}.png`,
+    mediaType: "image/png",
+    costUsd: 0.02,
+    ledgerEntryId: `led_frame_${number}`,
+  });
+}
+
+/** A generator that answers the calls in order from a script, and keeps the spec of every call it was asked for. */
+function scriptedGenerator(answers: ShotProduction[]): ShotGenerator & { specs: AssetSpec[] } {
+  const generator = {
+    specs: [] as AssetSpec[],
+    async generate(input: { spec: AssetSpec }) {
+      generator.specs.push(input.spec);
+      const answer = answers[generator.specs.length - 1];
+      if (answer === undefined) throw new Error(`the script has no answer for call ${generator.specs.length}`);
+      return answer;
+    },
+    async settle(): Promise<ShotProduction> {
+      throw new Error("settle is not scripted for this generator");
+    },
+  };
+  return generator;
+}
+
+describe("a chain of calls on the produce_shot stage (contract v5)", () => {
+  test("a cartoon chain makes the keyframe, then the clip from it, and stores one take that costs both calls", async () => {
+    const shot = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 61) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const generator = scriptedGenerator([keyframeDone(), clipDone()]);
+    const { ports } = portsFor({ generator });
+    const handler = createProduceShotHandler(ports);
+
+    const result = await handler.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(result.kind, "done");
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.equal(result.output.takeId, takeIdFor(requestId, shot.shotId, 1), "the shot's take is the clip's");
+    assert.equal(result.output.hold, undefined);
+
+    assert.deepEqual(generator.specs.map((spec) => spec.modelClass), ["image.keyframe", "video.budget"], "the keyframe first, then the clip");
+    const [keyframeSpec, clipSpec] = generator.specs;
+    assert.equal(keyframeSpec?.firstFrame, undefined, "the keyframe starts from nothing");
+    assert.equal(clipSpec?.firstFrame, "store://keyframes/kf-1.png", "the clip's first frame is the keyframe the first call made");
+    assert.notEqual(assetCacheKey(keyframeSpec as AssetSpec, KEYFRAME_PROVIDER), assetCacheKey(clipSpec as AssetSpec, CLIP_PROVIDER), "each call has its own input hash");
+
+    const rows = await takeRowsFor(requestId);
+    assert.equal(rows.length, 1, "one take for the shot, not one per call");
+    const artifactId = result.output.artifacts[`take:${result.output.takeId}`];
+    const stored = await readArtifact(db.sql, { organizationId: ORG, artifactId: artifactId ?? "" });
+    const take = stored.envelope.body as { provider: string; model: string; costUsd: number; durationMs: number; shotId: string };
+    assert.equal(take.shotId, shot.shotId);
+    assert.equal(take.provider, "openrouter");
+    assert.equal(take.model, "fixture/budget-video", "the take is the clip's model");
+    assert.equal(take.costUsd, 0.1188, "the take costs the keyframe plus the clip");
+  });
+
+  test("every call of a chain is made on its own spec, and a paid call with no ledger entry is an internal error", async () => {
+    const shot = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 62) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const unrecorded = doneProduction({ providerId: KEYFRAME_PROVIDER, uri: "store://keyframes/kf-2.png", mediaType: "image/png", costUsd: 0.018, ledgerEntryId: null });
+    const generator = scriptedGenerator([unrecorded, clipDone()]);
+    const handler = createProduceShotHandler(portsFor({ generator }).ports);
+    await assert.rejects(
+      handler.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId })),
+      (error: unknown) => error instanceof EngineError && error.kind === "internal" && /no ledger entry/.test(error.message),
+    );
+    assert.equal(generator.specs.length, 1, "the chain stops at the call with no ledger entry; the next call is not made");
+
+    const cached = doneProduction({ providerId: KEYFRAME_PROVIDER, uri: "store://keyframes/kf-3.png", mediaType: "image/png", costUsd: 0, cacheHit: true, ledgerEntryId: null });
+    const replayed = scriptedGenerator([cached, clipDone()]);
+    const replay = createProduceShotHandler(portsFor({ generator: replayed }).ports);
+    const result = await replay.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(result.kind, "done", "a cache hit makes no paid call, so it has no entry and is not an error");
+    assert.equal(replayed.specs.length, 2);
+  });
+
+  test("a second call refused for the budget stops the chain with its reason, and no further call is made", async () => {
+    const shot = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 63) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const refused: ShotProduction = { status: "refused", reasons: ["the request reservation has no room for the clip"], decisions: [] };
+    const generator = scriptedGenerator([keyframeDone(), refused, clipDone()]);
+    const { ports, downloads } = portsFor({ generator });
+    const handler = createProduceShotHandler(ports);
+
+    const result = await handler.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(result.kind, "done");
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.equal(result.output.takeId, null);
+    assert.deepEqual(result.output.hold, { kind: "budget", reason: "clip: the request reservation has no room for the clip" });
+    assert.equal(generator.specs.length, 2, "the keyframe and the refused clip; nothing after the refusal");
+    assert.deepEqual(downloads, [], "nothing is downloaded for a stopped chain");
+    assert.equal((await takeRowsFor(requestId)).length, 0);
+    assert.ok(result.output.decisions?.some((decision) => decision.chose === "stopped at clip"), "the stop is logged with its reason (Bible L7)");
+  });
+
+  test("a stop-motion chain with a fake price makes its frames in order, then names the player, and writes no take", async () => {
+    const shot = { ...stopMotionChainShotFixture, shotId: fixtureId("shot_", 64) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const answers = Array.from({ length: 30 }, (_, index) => frameDone(index + 1));
+    const generator = scriptedGenerator(answers);
+    const { ports } = portsFor({ generator });
+    const handler = createProduceShotHandler({ ...ports, componentHas: (component) => component === "stopmotion.player" });
+
+    await withPriceOverlay({ [EDIT_PRICE_KEY]: { unit: "per_image", usd: 0.02, source: "list_oct_2026" } }, async () => {
+      const plan: ScenePlan = { ...scenePlanFixture, planId: "plan_stop_price", shots: [shot], estimatedUsd: 0.6, decisions: [] };
+      assert.equal(estimatePlan(plan).shotsUsd, 0.6, "the estimate prices the 30 frames at the fake price");
+
+      const result = await handler.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+      assert.equal(result.kind, "done");
+      if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+      assert.equal(result.output.takeId, null, "a shot that ends in frames has no take of its own");
+      assert.equal(result.output.hold, undefined, "and no hold: the closing component draws the frames");
+      assert.ok(result.output.decisions?.some((decision) => decision.chose === "stopmotion.player"), "the player is the closing step, logged");
+    });
+
+    assert.equal(generator.specs.length, 30, "one call per frame, in order");
+    assert.deepEqual(generator.specs.map((spec) => spec.modelClass), Array(30).fill("image.edit"));
+    assert.deepEqual(generator.specs[1]?.refs.slice(1), ["store://frames/frame-1.png"], "frame 2 reads frame 1");
+    const keys = new Set(generator.specs.map((spec) => assetCacheKey(spec, FRAME_PROVIDER)));
+    assert.equal(keys.size, 30, "every frame has its own input hash, so no frame is a duplicate of another");
+    assert.equal((await takeRowsFor(requestId)).length, 0);
+  });
+
+  test("a stop-motion chain whose player is not drawn makes no call at all (fail closed before any spend)", async () => {
+    const shot = { ...stopMotionChainShotFixture, shotId: fixtureId("shot_", 65) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const generator = scriptedGenerator([]);
+    const handler = createProduceShotHandler({ ...portsFor({ generator }).ports, componentHas: () => false });
+    await assert.rejects(
+      handler.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId })),
+      (error: unknown) => error instanceof EngineError && error.kind === "config" && /stopmotion\.player/.test(error.message),
+    );
+    assert.equal(generator.specs.length, 0, "no frame is paid for a shot that cannot be drawn");
+  });
+
+  test("a chain whose call is submitted carries its progress; finish settles that call and then makes the calls that follow", async () => {
+    const shot = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 66) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const submittedAt = new Date(NOW).toISOString();
+    const keyframeJob = assetJobOf("job-keyframe", submittedAt);
+    const made: AssetSpec[] = [];
+    const generator: ShotGenerator = {
+      async generate(input) {
+        made.push(input.spec);
+        if (made.length === 1) return { status: "submitted", providerId: KEYFRAME_PROVIDER, jobRef: "job-keyframe", submittedAt, job: keyframeJob, runAfterMs: 0, decisions: [] };
+        return clipDone();
+      },
+      async settle(_input, job, polled: ProviderPoll) {
+        assert.equal(job.jobRef, "job-keyframe", "settle receives the keyframe's job");
+        assert.equal(polled.state, "done");
+        return keyframeDone();
+      },
+    };
+    const { ports } = portsFor({ generator });
+    const handler = createProduceShotHandler(ports);
+
+    const started = await handler.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(started.kind, "submitted", "the keyframe is with the provider");
+    if (started.kind !== "submitted") return;
+    assert.equal((started.carry as { chain?: { index: number } }).chain?.index, 0, "the carry says the keyframe is the call in flight");
+
+    assert.ok(handler.finish, "a chain finishes through the poller");
+    const result = await handler.finish(
+      contextFor({ requestId, planArtifactId, shotId: shot.shotId, poll: { provider: KEYFRAME_PROVIDER, jobRef: "job-keyframe", submittedAt, carry: started.carry } }),
+      { state: "done", uri: "store://keyframes/kf-1.png", actualUsd: 0.018 },
+    );
+    assert.equal(result.kind, "done");
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.equal(result.output.takeId, takeIdFor(requestId, shot.shotId, 1));
+    assert.deepEqual(made.map((spec) => spec.modelClass), ["image.keyframe", "video.budget"]);
+    assert.equal(made[1]?.firstFrame, "store://keyframes/kf-1.png", "the clip reads the keyframe the poll settled");
+    assert.equal((await takeRowsFor(requestId)).length, 1);
+  });
+
+  test("a chain whose settled call is refused by the provider stops there, with the hold and no further call", async () => {
+    const shot = { ...cartoonChainShotFixture, shotId: fixtureId("shot_", 67) };
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const submittedAt = new Date(NOW).toISOString();
+    const job = assetJobOf("job-refused", submittedAt);
+    const made: AssetSpec[] = [];
+    const generator: ShotGenerator = {
+      async generate(input) {
+        made.push(input.spec);
+        return { status: "submitted", providerId: KEYFRAME_PROVIDER, jobRef: "job-refused", submittedAt, job, runAfterMs: 0, decisions: [] };
+      },
+      async settle() {
+        return { status: "failed", providerId: KEYFRAME_PROVIDER, error: { kind: "content_policy", retryable: false, message: "refused" }, decisions: [] };
+      },
+    };
+    const handler = createProduceShotHandler(portsFor({ generator }).ports);
+    const started = await handler.run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    assert.equal(started.kind, "submitted");
+    if (started.kind !== "submitted") return;
+    const result = await handler.finish!(
+      contextFor({ requestId, planArtifactId, shotId: shot.shotId, poll: { provider: KEYFRAME_PROVIDER, jobRef: "job-refused", submittedAt, carry: started.carry } }),
+      { state: "failed", error: { kind: "content_policy", retryable: false, message: "refused" } },
+    );
+    assert.equal(result.kind, "done");
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.deepEqual(result.output.hold, { kind: "refused", errorKind: "content_policy", hint: "content_policy" });
+    assert.equal(made.length, 1, "the clip is never asked for once the keyframe is refused");
+  });
+
+  test("the call's input is resolved from the outputs before it, and an output no earlier call made is refused", () => {
+    const outputs = [
+      { output: "keyframe", modelClass: "image.keyframe" as const, uri: "store://keyframes/kf-1.png", mediaType: "image/png", providerId: KEYFRAME_PROVIDER, promptHash: "h", costUsd: 0.018, costIsEstimate: false, cacheHit: false, ledgerEntryId: "led_keyframe" },
+    ];
+    const calls = cartoonChainShotFixture.source.kind === "chain" ? cartoonChainShotFixture.source.calls : [];
+    const clip = chainCallSpecFor({ requestId: FIXTURE_IDS.request, shot: cartoonChainShotFixture, calls, index: 1, attempt: 1, hints: [], outputs });
+    assert.equal(clip.firstFrame, "store://keyframes/kf-1.png");
+    assert.notEqual(clip.seed, chainCallSpecFor({ requestId: FIXTURE_IDS.request, shot: cartoonChainShotFixture, calls, index: 0, attempt: 1, hints: [], outputs }).seed, "each call is seeded by its name");
+    assert.throws(
+      () => chainCallSpecFor({ requestId: FIXTURE_IDS.request, shot: cartoonChainShotFixture, calls, index: 1, attempt: 1, hints: [], outputs: [] }),
+      (error: unknown) => error instanceof EngineError && error.kind === "internal" && /reads keyframe, which no earlier call made/.test(error.message),
+    );
   });
 });
 

@@ -5,6 +5,7 @@
 import { budgets } from "../config/budgets.ts";
 import { priceFor, prices, type PriceKey, type PriceUnit } from "../config/prices.ts";
 import { roundUsd, sumUsd, type VisualType } from "../contracts/index.ts";
+import { chainPriceOf, type ChainType } from "./chains.ts";
 import { RECIPES, type Recipe } from "./tables.ts";
 
 /** The redo allowance share (6.5, 14.1), tuned in config. */
@@ -29,9 +30,13 @@ export function usdAtMost(value: number, limit: number): boolean {
 export type KnownShotCost = {
   known: true;
   visualType: VisualType;
+  /** The route key of the first paid call (a chain has a key for each call, and its calls are priced in chains.ts). */
   routeKey: PriceKey;
   generated: boolean;
+  /** Takes made by the type: a generate type's takes, and 1 for a chain (its last call's take). */
   takes: number;
+  /** Paid generation calls: 1 for a generate type, the chain's length for a chain, 0 for stock and components. */
+  calls: number;
   /** Shot cost before the redo allowance. */
   baseUsd: number;
   /** Redo allowance for a generated shot (6.5), zero otherwise. */
@@ -49,7 +54,9 @@ export type UnknownShotCost = {
 
 export type ShotCost = KnownShotCost | UnknownShotCost;
 
-function routeKeyOf(recipe: Recipe): PriceKey {
+type SingleCallRecipe = Exclude<Recipe, { kind: "chain" }>;
+
+function routeKeyOf(recipe: SingleCallRecipe): PriceKey {
   switch (recipe.kind) {
     case "generate":
       return prices.routeFor[recipe.modelClass];
@@ -61,12 +68,9 @@ function routeKeyOf(recipe: Recipe): PriceKey {
 }
 
 /** Billable units for one shot, mirroring estimate.ts. Null when the unit cannot price this shot. */
-function billableUnits(recipe: Recipe, unit: PriceUnit, durationMs: number): number | null {
+function billableUnits(recipe: SingleCallRecipe, unit: PriceUnit, durationMs: number): number | null {
   const seconds = durationMs / 1000;
   const takes = recipe.kind === "generate" ? recipe.takes : 1;
-  if (recipe.kind === "generate" && recipe.billing === "frame") {
-    return unit === "per_image" ? Math.ceil(seconds * recipe.framesPerSecond) * takes : null;
-  }
   if (unit === "per_second") {
     return seconds * takes;
   }
@@ -76,13 +80,40 @@ function billableUnits(recipe: Recipe, unit: PriceUnit, durationMs: number): num
   return null;
 }
 
+/**
+ * A chain's cost (contract v5): the sum of its calls, each priced and rounded as the estimate rounds it (chains.ts). One unknown call
+ * makes the whole chain unknown, so the type is removed. A chain is never priced at the calls it knows.
+ */
+function chainShotCost(visualType: ChainType, durationMs: number): ShotCost {
+  const price = chainPriceOf(visualType, durationMs);
+  if (!price.known) {
+    return { known: false, visualType, routeKey: price.routeKey, reason: price.reason };
+  }
+  const baseUsd = price.baseUsd;
+  const allowanceUsd = roundUsd(baseUsd * REDO_ALLOWANCE_SHARE);
+  return {
+    known: true,
+    visualType,
+    routeKey: price.routeKey,
+    generated: true,
+    takes: 1,
+    calls: price.calls,
+    baseUsd,
+    allowanceUsd,
+    totalUsd: sumUsd([baseUsd, allowanceUsd]),
+  };
+}
+
 /** The cost of one candidate type on a shot of durationMs. A null price, or a unit that cannot price the shot, is unknown. */
 export function shotCost(visualType: VisualType, durationMs: number): ShotCost {
   const recipe = RECIPES[visualType];
+  if (recipe.kind === "chain") {
+    return chainShotCost(visualType as ChainType, durationMs);
+  }
   const routeKey = routeKeyOf(recipe);
   const price = priceFor(routeKey);
   if (price.usd === null) {
-    return { known: false, visualType, routeKey, reason: `${routeKey} has no known price` };
+    return { known: false, visualType, routeKey, reason: `unknown_price: ${routeKey} has no known price` };
   }
   const units = billableUnits(recipe, price.unit, durationMs);
   if (units === null) {
@@ -90,7 +121,7 @@ export function shotCost(visualType: VisualType, durationMs: number): ShotCost {
       known: false,
       visualType,
       routeKey,
-      reason: `${routeKey} is priced ${price.unit}, which cannot price this shot`,
+      reason: `unknown_price: ${routeKey} is priced ${price.unit}, which cannot price this shot`,
     };
   }
   const generated = recipe.kind === "generate";
@@ -102,6 +133,7 @@ export function shotCost(visualType: VisualType, durationMs: number): ShotCost {
     routeKey,
     generated,
     takes: recipe.kind === "generate" ? recipe.takes : 1,
+    calls: generated ? 1 : 0,
     baseUsd,
     allowanceUsd,
     totalUsd: sumUsd([baseUsd, allowanceUsd]),

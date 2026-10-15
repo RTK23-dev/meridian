@@ -36,9 +36,12 @@ import type { StageContext, StageHandler, StageOutput, StageRunResult } from "..
 const PRODUCT_VISUAL_TYPES = new Set(["product_hero"]);
 const PERSONA_VISUAL_TYPES = new Set(["ugc_presenter"]);
 
-/** A take that the plan made with a model or from stock must move, so the motion check applies (Bible 6.7). */
+/**
+ * A take that the plan made with a model, from a chain of calls (contract v5), or from stock must move, so the motion check applies
+ * (Bible 6.7). A chain's take is its last call's video, so it is generated like any other take.
+ */
 function motionRequiredFor(shot: ShotSpec): boolean {
-  return shot.source.kind === "generate" || shot.source.kind === "stock";
+  return shot.source.kind === "generate" || shot.source.kind === "stock" || shot.source.kind === "chain";
 }
 
 /** The shot facts the take check needs, from the plan. Kits are not loaded here, so their lists are empty (not evaluated). */

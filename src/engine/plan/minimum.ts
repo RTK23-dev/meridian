@@ -22,6 +22,7 @@ import {
   type VisualType,
 } from "../contracts/index.ts";
 import { rigSheetOf } from "./character.ts";
+import { closingComponentProblem } from "./chains.ts";
 import { planTotals, shotCost, usdUnits, type KnownShotCost, type ShotCost } from "./cost.ts";
 import { kitRejection, mustAllowedTypes, mustShowsProduct, productPixelRejection } from "./filter.ts";
 import { productImageUris } from "./product.ts";
@@ -63,7 +64,7 @@ export type MasterMinimum = {
 const REDO_ALLOWANCE_LABEL = "redo_allowance";
 const MS_PER_MINUTE = 60_000;
 const WORD = /\S+/g;
-const KIND_RANK: Record<(typeof RECIPES)[VisualType]["kind"], number> = { component: 0, stock: 1, generate: 2 };
+const KIND_RANK: Record<(typeof RECIPES)[VisualType]["kind"], number> = { component: 0, stock: 1, generate: 2, chain: 2 };
 
 /**
  * The spoken length of each beat in milliseconds: words divided by words per minute (6.1 step 4). Throws invalid_input for a
@@ -149,13 +150,19 @@ export function cheapestOption(beatId: string, options: readonly Option[]): Know
   return best;
 }
 
-/** The options of one beat: every allowed type that passes rules 2 and 6 of 7.2 (the rules that do not need a price). */
+/**
+ * The options of one beat: every allowed type that passes rules 2 and 6 of 7.2. An unknown price stays an option, so the minimum
+ * refuses with unknown_price (rule 5 comes before the closing component, as in the filter); a priced type whose closing component
+ * cannot be drawn is not an option.
+ */
 function optionsFor(allowed: readonly VisualType[], durationMs: number, showsProduct: boolean, kits: PlanKits): Option[] {
   const options: Option[] = [];
   for (const visualType of allowed) {
     if (productPixelRejection(visualType, showsProduct, kits.productKit) !== null) continue;
     if (kitRejection(visualType, kits) !== null) continue;
-    options.push({ visualType, cost: shotCost(visualType, durationMs) });
+    const cost = shotCost(visualType, durationMs);
+    if (cost.known && closingComponentProblem(visualType) !== null) continue;
+    options.push({ visualType, cost });
   }
   return options;
 }

@@ -1,5 +1,77 @@
 # STATUS: intake and estimate_reserve stage handlers (A4, updated in E2)
 
+## Chains on produce_shot and check_take (contract v5; branch `worktree-agent-a2631ad1048c21356`, from `cef526c`)
+
+There is no `produce/` folder: the produce_shot handler is `produce-shot.ts`, so its status is here. The plan side is in `../../plan/STATUS.md`.
+
+**produce_shot: a chain makes its calls in order (`produce-shot.ts`, Bible 7.1, contract v5)**
+
+- A shot whose source is a chain runs its calls one after another. Each call is one generation on the request's reservation, with its
+  own spec: the spec id, the seed and the cache key (the input hash, `assetCacheKey`) all name the call (its shot, attempt and output name).
+  The router writes the call's ledger entry on submit, so each call has its own entry. A paid call that comes back with no ledger entry
+  is an internal error, and the chain stops there.
+- A call's inputs are resolved before it is made: an asset is its uri; an output is the uri the earlier call made. An output that no earlier
+  call made is an internal error (the schema already refuses it at parse time).
+- A call that is submitted returns `submitted`, with the chain's progress on the carry (`carry.chain`: the next call's index, the start time,
+  and each finished call's output, its ledger entry, its prompt hash and its cost). The poller's `finish` settles the call, rebuilds its
+  spec from the same outputs (the router refuses a settle whose spec differs), and carries on with the calls that follow.
+- A refused call (budget) or a failed call (content policy, invalid input) stops the chain. No later call is made. The hold names the call
+  (`clip: <reason>`), the refusal keeps its hint, and a decision records the stop (Bible L7).
+- **Cartoon** (`cartoon_generated`): the last call is a video, so the shot's take is that clip (downloaded, probed and stored like any take).
+  Its cost is the sum of both calls, and its provider and model are the clip's.
+- **Stop-motion** (`stop_motion`): the last call is an image, so there is no take. The output names the closing component
+  (`stopmotion.player`) in a decision, and holds no take and no hold. The stage's outputs are: `takeId: null`, no `hold`.
+- **Before the first call:** the closing component must be drawn (`componentHas`, default: the component library). A stop-motion chain
+  whose player is not drawn throws `config` and makes no call, so no frame is paid for.
+- `produce-shot.ts` exports `chainCallSpecFor`, `chainProgressSchema`, `chainOutputSchema`, and the types `ChainOutput` and `ChainProgress`.
+
+**check_take**
+
+- A chain's take is generated, so the motion check applies (`motionRequiredFor` counts `chain`). The rest of the check is unchanged.
+
+**edit: not changed (blocked, see below)**
+
+- The edit handler passes every take to the editor. The editor (`edit/editor.ts`, not in this task's grant) treats only `generate` and
+  `stock` as media shots, so a chain take fails `takes_match_plan`, and a chain shot with no take passes `shot_sources_available` (the
+  shot is not required to have one). Both must change before a chain reaches edit: one predicate that includes `chain` in both places.
+
+**Blockers outside this grant (the lead decides; see `../../plan/STATUS.md` for the full list)**
+
+1. `jobs/handlers/plan.ts` `shotSummaryOf` refuses a chain (`notImplementedError`), so a plan that picks cartoon_generated fails the plan stage.
+2. `jobs/types.ts` (`ShotSourceKind`), `jobs/orchestrator.ts` (`needsProduce`, `providerKeyFor`, `applyProduce`): a chain is not a
+   produce shot, and a takeless output with no hold is refused by `applyProduce`.
+3. `edit/editor.ts` media rule (lines 136 and 162), above.
+4. Not checked here, but they test `source.kind === "generate"` for paid generation and need `chain` before a chain plan runs:
+   `variants/expand.ts` (line 134), `deliver/manifest.ts` (line 110). `review/gates/plan.ts` and `review/slideshowRisk.ts` already treat a chain as generated.
+5. Adapters (`assets/providers/openrouterImage.ts`): the image adapter refuses any reference or frame ("image models take no references or
+   frames in this adapter; no call is made"), so the keyframe (character references) and every image.edit frame would be refused live.
+   The video adapter needs an https first frame (`normaliseHttpsUrl`), and the keyframe's uri is a store uri. Both are the same questions
+   product_hero already has with its hero frame, and the live run answers them.
+6. Frames are not stored as artifacts. Their uris live in the job's carry until the job ends, and no artifact type holds a chain output.
+
+**Tests (this section)**
+
+- `produce-shot.test.ts`, the `a chain of calls on the produce_shot stage` block (8 tests, on PostgreSQL with recorded answers): the cartoon
+  chain makes the keyframe, then the clip from it, and one take that costs both calls; each call has its own input hash, and a paid call
+  with no ledger entry is an internal error (a cache hit with none is not); a second call refused for the budget stops the chain with its
+  reason and makes no further call, with nothing downloaded; a stop-motion chain with a fake price (the overlay) makes 30 frames in order,
+  each with its own key, then names the player and writes no take; a stop-motion chain whose player is not drawn makes no call; a chain
+  whose call is submitted carries its progress, and finish settles it and makes the next call; a settled call refused by the provider stops
+  the chain; the inputs resolve from earlier outputs, and an output no earlier call made is refused.
+- `check-take.test.ts`: a chain shot's take must move (the motion check applies); a chain take runs through the stored-take path and the
+  motion check is in its verdict.
+
+Run: `NODE_ENV=development node --experimental-strip-types --test src/engine/jobs/handlers/produce-shot.test.ts src/engine/jobs/handlers/check-take.test.ts src/engine/jobs/handlers/edit.test.ts`
+Result: 47 tests in those three files pass, 0 fail (before this change: 37; produce-shot 21 to 29, check-take 8 to 10, edit 8).
+The whole handlers folder (`src/engine/jobs/handlers/*.test.ts`) runs 138 tests, 138 pass, 0 fail.
+
+**The owner's live run (agents hold no keys)**
+
+1. With the orchestrator and the plan handler accepting chains (blockers 1 and 2) and the editor's media rule fixed (blocker 3): one
+   cartoon_generated beat on a page with a generated character sheet. Record the keyframe's call and ledger entry, the clip's call and
+   ledger entry (the cache key of each), the take artifact id, its cost (the sum of the two) and the check_take verdict.
+2. The same beat with a refused keyframe (content policy) to see the stop and the planner's one rewrite, with the hold reason.
+
 ## W2 leftovers: wiring pass (branch `eng-e45-leftovers-2`; the full account is `../STATUS.md`)
 
 Not run: no tests, typecheck or lint in this pass (owner instruction).

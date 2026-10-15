@@ -1,5 +1,104 @@
 # STATUS: the plan stage (W7), E3 and E5 (W9 plan-side support)
 
+## Chains (contract v5): cartoon_generated and stop_motion are planned as chains (branch `worktree-agent-a2631ad1048c21356`, from `cef526c`)
+
+This section supersedes the chain items of the E5 and E3 sections below: the build gaps for cartoon_generated, the single-call
+recipe for stop_motion, and "stop-motion and cartoon chains still refused by buildSource".
+
+**What is built**
+
+- **`chains.ts` (new, pure).** The calls of each chain type (`chainStepsOf`): cartoon_generated is `keyframe` (image.keyframe), then
+  `clip` (video.budget, first frame the keyframe); stop_motion is 24 to 36 frame calls `frame_01` to `frame_NN` (image.edit), from
+  `stopMotionTiming` (moved here from sources.ts). The same steps price the chain (`chainPriceOf`, `callPriceOf`), with the estimate's
+  billing rule (budget/estimate.ts): per second times the shot's length and the takes, or per image or per call times the takes. Each
+  call is rounded to 4 decimals, as the estimate rounds each line, and an unknown call makes the whole chain unknown. `closingComponentOf`
+  names the closing component (stop_motion: `stopmotion.player`, a component, not a call); `closingComponentProblem` checks it against the
+  library the caller gives (`libraryHas` is the default).
+- **`tables.ts`.** `RECIPES` has `{ kind: "chain" }` for both types (the frame-billing recipe is gone). `isGeneratedType` is true for a
+  chain. `BUILD_GAPS` no longer lists cartoon_generated. `GENERATION_CHAINS` and `CHAIN_TYPES` moved to chains.ts. `BUILDABLE_TYPES` is
+  "no static gap". `ARTIFACT_RISK_PRIOR.chain` is the generate prior (a chain is generated).
+- **`cost.ts`.** `shotCost` prices a chain as the sum of its calls, with the redo allowance on the sum. `KnownShotCost.calls` is new (the
+  paid generation calls: 1 for a generate type, the chain's length, 0 for stock and components). Every unknown reason starts with
+  `unknown_price:`.
+- **`filter.ts`.** Rule 5 passes the cost's reason through (`unknown_price: <the image.edit route> has no known price (the chain makes 30 calls)`).
+  Rule 6 checks the closing component after the kit check, so the price comes before the library (rule 5 before rule 6, as in 7.2).
+- **`minimum.ts`.** A chain ranks as generate. An unknown price stays an option, so the minimum refuses with `unknown_price` (it did
+  before). A priced type whose closing component is missing is not an option.
+- **`sources.ts`.** `buildSource` returns the chain as the shot's source (`{ kind: "chain", calls }`, layer base). `cartoonGeneratedChain`
+  returns the two calls, with every character reference on both and the keyframe as the clip's first frame, both in the code's look.
+  `stopMotionChain` returns the frames: frame 1 reads the hero image; frame n reads the hero and frame n-1 (as an output name). The
+  closing player is not in the chain (the v5 note). `chainKitRefusal` checks the kits without a prompt (a generated sheet with references;
+  the hero image; a length the frames can make). `componentBuildRefusals` includes these, so the filter removes the type before the
+  planner writes anything.
+- **`test/priceOverlay.ts` (new, test only).** `withPriceOverlay` puts a price into the table for one run and restores it in `finally`.
+  The budget estimate reads the same table (through `priceFor`), and budget/ is not ours to change, so a test that needs "the owner has
+  priced image.edit" has to overlay the table. Production code does not touch it.
+
+**Priced today (list prices, prices@2)**
+
+- cartoon_generated at 3 s: keyframe (the image.keyframe route, one image) $0.018, clip (the video.budget route, per second) $0.0336 a second x 3 = $0.1008. Base
+  $0.1188, redo allowance $0.0297, total $0.1485. The estimate's shot lines are the two calls, and their sum is the planner's base.
+- stop_motion: `image.edit` is routed to a route whose price is `per_token` with no usd, so every frame is unknown.
+
+**Refused, and why**
+
+- **stop_motion, until the owner prices image.edit (rule 5, reason `unknown_price`).** The reason names the first unknown call and
+  the number of calls. Tested both ways: without the price, rule 5 removes it; with a per-image price in the overlay, rule 5 passes.
+- **stop_motion, after a price, until stopmotion.player is in the component library (rule 6).** The reason is "no source can be built for
+  it yet: the closing component stopmotion.player is not in the component library yet". This is deliberate: a plan that chose stop_motion
+  could not be drawn. The produce stage refuses the same chain before its first call (chains produce `config`, no call made).
+- **Any stop-motion shot that is not 2 to 4.5 seconds (rule 6, the build refusal).** The frame bounds in 7.1.
+- **cartoon_generated with no generated character sheet, or a sheet with no references (rule 6, the build refusal).** A rig sheet is
+  not the sheet the chain needs.
+- **react_clip** is unchanged (a build gap: no clip source).
+
+**Decisions for the lead (not made in code)**
+
+1. **Merge order (must).** The plan stage refuses any chain shot before anything is stored (`jobs/handlers/plan.ts` `shotSummaryOf`,
+   `notImplementedError`). The planner can now choose cartoon_generated, so a plan that picks it fails the plan stage. Before this change
+   such a plan could not be chosen (it was a build gap). Land the plan handler and the orchestrator change (point 2) in the same merge, or
+   keep the chains out of the planner until they land. The v5 note says the readers come first.
+2. **Orchestrator and plan handler (not granted to this task).** `jobs/types.ts` `ShotSourceKind` has no `chain`; `needsProduce` and
+   `providerKeyFor` (orchestrator.ts) do not know one; `applyProduce` refuses a takeless output with no hold (a stop-motion chain ends with
+   no take, the player draws the frames). A chain needs: `ShotSourceKind` plus `chain`; `needsProduce(chain)` true; `providerKeyFor` by the
+   first call's model class; `applyProduce` accepting a closing-component end (no take, no hold) for a stop_motion shot.
+3. **The editor (must, before any chain reaches edit).** `edit/editor.ts` treats only `generate` and `stock` as media shots (lines 136
+   and 162). So a chain take is refused (`takes_match_plan`), and a chain shot with no take is not required to have one (the editor would
+   build an EDL that drops the shot without failing). The fix is one predicate that includes `chain` in both places.
+4. **Closing component gate.** Stop-motion stays out of the plan until `stopmotion.player` exists in the component library. Confirm that
+   this is the order you want (a price alone does not make the type work).
+5. **Stop-motion frames are not kept.** The frames are media in the store, and their uris live in the job's carry until the job ends.
+   Nothing persists them as artifacts (no artifact type for chain outputs), so a player stage cannot read them later. A later version
+   needs a chain-output artifact (a contract change).
+6. **Downgrade and redo.** A refused frame stops the chain, and the planner's one rewrite then re-plans the whole shot, so the frames
+   already paid are lost. The redo allowance (25%) does not cover that. A redo of a check failure repeats every call (a new attempt is a
+   new seed and new keys), so the redo costs the whole chain again. Both are cost questions for the owner.
+
+**Tests (this section)**
+
+- `chains.test.ts` (new, 13 tests): the chain types; cartoon's two calls and their output names, checked against the contract fixture;
+  stop-motion's 30 frames and the 2 to 4.5 second bound; the per-call price; the cartoon chain's sum (0.1188) and its allowance; the
+  estimate's lines against the planner (per call, the sum); stop_motion unknown with its reason, and the estimate refuses it; the price
+  overlay (30 frames at $0.02, 30 budget lines, the estimate equals the sum, the overlay restored, and restored after a throw); the
+  builder's chain costs what its calls cost; the closing component check; both sides at the filter (no price: rule 5; with the price:
+  rule 6 for the missing player); every chain type is priced or unknown with `unknown_price`.
+- `sources.test.ts`: buildSource returns a chain for both; the cartoon chain's calls; the bounds; the frame chain's inputs (frame 2 reads
+  frame 1); the refusals without a sheet, a hero, a prompt or the length; `chainKitRefusal`; `componentBuildRefusals` for chains.
+- `tables.test.ts`, `filter.test.ts`, `cost.test.ts`, `minimum.test.ts`: the pins moved to the new behaviour (no cartoon gap, chain recipes,
+  `unknown_price` wording, the generated-sheet kit, the price before the closing component).
+
+Run: `NODE_ENV=development node --experimental-strip-types --test src/engine/plan/*.test.ts src/engine/plan/test/*.test.ts`
+Result: 219 tests, 219 pass, 0 fail (before this change: 203).
+
+**The owner's live run (agents hold no keys)**
+
+1. Set the image.edit route's price to a per-image price (the chain bills one image per call) in `config/prices.ts`, and confirm its OpenRouter model id in
+   `config/routes.ts`. Plan a request with a stop-motion beat: the planner stays without stop_motion until stopmotion.player is drawn; the
+   plan's rule 5 check then shows the price.
+2. Plan a cartoon beat with a generated character sheet: the plan's cartoon_generated shot has two calls and `estimatedUsd` equals the
+   estimate's shot total. Record the estimate's two budget lines and the ledger's two entries after the produce stage (points 1 and 2 above
+   must be merged first).
+
 ## E5 follow-up: the plan gaps closed (branch `eng-plan-gaps-2`, from `code/beautiful-cori-1zfk11`)
 
 This section supersedes the E5 items it names: decisions 1, 2 and 5 of the E5 section below, and the build-gap list of E3.
