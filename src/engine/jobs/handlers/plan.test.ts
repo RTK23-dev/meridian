@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { EngineError, type ScenePlan } from "../../contracts/index.ts";
-import { FIXTURE_IDS, WORKSPACE_ID, videoDnaFixture, voiceTrackFixture } from "../../contracts/fixtures/index.ts";
+import { cartoonChainShotFixture, FIXTURE_IDS, WORKSPACE_ID, videoDnaFixture, voiceTrackFixture } from "../../contracts/fixtures/index.ts";
 import { fixtureKitBodies, depsWith, recordedAnswer, validatedWithBudget } from "../../plan/test/helpers.ts";
 import { readArtifact, writeArtifact } from "../artifact-store.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../test/pg-test-db.ts";
@@ -151,6 +151,13 @@ test("the summary of a generated shot names its model class and its takes, and a
     modelClass: null,
     takesWanted: 1,
   });
+});
+
+test("a chain shot has no summary: the plan stage refuses it, because no stage produces a chain yet (contract v5)", () => {
+  assert.throws(
+    () => shotSummaryOf(cartoonChainShotFixture),
+    (error: unknown) => error instanceof EngineError && error.kind === "not_implemented" && error.message.includes(cartoonChainShotFixture.shotId),
+  );
 });
 
 test("a plan with no reservation is refused before any call: nothing is spent, and the stage says why", async () => {

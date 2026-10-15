@@ -34,6 +34,15 @@ version bump, a note in Bible section 4 and the lead's approval.
 - A manifest's role calls (v2, optional `roleCalls`) name a Bible 11.1 role. Each call's prompt version is the one `promptVersions`
   records for its role. An unknown cost, and an invalid answer, are held as the estimate (`actualIsEstimate: true`).
 
+## Contract v5 (`CONTRACTS_VERSION`, see Bible section 4 "v5 changes and migration")
+
+- `ShotSpec.source` takes a fifth kind, `chain`: `{ kind: 'chain', calls }`, at least two calls. Each `ChainCall` names its
+  `output`, its `modelClass`, its `prompt`, its typed `refs` (`{ kind: 'asset', uri }` or `{ kind: 'output', output }`), its
+  optional `firstFrame` and `lastFrame`, and its `takes`. `chainProblem` (exported from `plan.ts`) refuses a repeated output
+  name and any output input that no earlier call of the chain makes.
+- The schema literal stays `meridian.scene_plan/v1`: the change is additive, and every single-call shot parses unchanged.
+- Fixtures: `cartoonChainShotFixture` (keyframe, then clip), `stopMotionChainShotFixture` (30 frames), `scenePlanChainFixture`.
+
 ## Contract v3 (`CONTRACTS_VERSION`, see Bible section 4 "v3 changes and migration")
 
 - `Manifest` is `meridian.manifest/v2`. It takes an optional `roleCalls` array of `ManifestRoleCall` (exported from `manifest.ts`):

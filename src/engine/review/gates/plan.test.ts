@@ -3,8 +3,10 @@ import test from "node:test";
 import { gateResultSchema, productionRequestSchema, type GateResult, type ProductionRequest, type ScenePlan } from "../../contracts/index.ts";
 import {
   BLENDER_FRONT_URI,
+  cartoonChainShotFixture,
   productKitFixture,
   productionRequestFixture,
+  scenePlanChainFixture,
   scenePlanFixture,
   voiceTrackFixture,
 } from "../../contracts/fixtures/index.ts";
@@ -179,6 +181,29 @@ test("downgrade: a generated shot with no downgradeTo fails and names it", () =>
   const result = checkPlan(fixtureInput({ plan }));
   assert.equal(check(result, "generated_shots_have_downgrade").pass, false);
   assert.deepEqual(result.failingShotIds, [SHOT1]);
+});
+
+test("chains (contract v5): the chain fixture plan passes every check, with its shots estimated call by call", () => {
+  const result = checkPlan(fixtureInput({ plan: structuredClone(scenePlanChainFixture) }));
+  assert.equal(result.pass, true, JSON.stringify(result.checks.filter((item) => !item.pass)));
+});
+
+test("chains (contract v5): a call whose prompt asks for text fails the text check and names the chain's shot", () => {
+  const plan: ScenePlan = structuredClone(scenePlanChainFixture);
+  const chain = plan.shots[0].source;
+  if (chain.kind !== "chain") assert.fail("the chain fixture's first shot is a chain");
+  chain.calls[1] = { ...chain.calls[1], prompt: 'The clip ends on a card reading "SALE 50% OFF".' };
+  const result = checkPlan(fixtureInput({ plan }));
+  assert.equal(check(result, "no_text_in_generation_prompts").pass, false);
+  assert.ok(result.failingShotIds?.includes(cartoonChainShotFixture.shotId));
+});
+
+test("chains (contract v5): a chain with no downgradeTo fails the downgrade check, as a generated shot does", () => {
+  const plan: ScenePlan = structuredClone(scenePlanChainFixture);
+  plan.shots[0] = { ...plan.shots[0], downgradeTo: undefined };
+  const result = checkPlan(fixtureInput({ plan }));
+  assert.equal(check(result, "generated_shots_have_downgrade").pass, false);
+  assert.deepEqual(result.failingShotIds, [cartoonChainShotFixture.shotId]);
 });
 
 test("budget: a plan whose reservation exceeds the request budget fails estimate_within_budget", () => {

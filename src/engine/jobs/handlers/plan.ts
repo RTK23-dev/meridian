@@ -38,6 +38,11 @@ export type PlanPorts = {
 /** The summary the orchestrator plans work from (ShotSummary). The plan body itself is not passed on. */
 export function shotSummaryOf(shot: ShotSpec): ShotSummary {
   const source = shot.source;
+  if (source.kind === "chain") {
+    // No stage produces a chain yet (contract v5). The orchestrator would treat a chain as needing no produce job and skip its
+    // calls, so the plan stage refuses the shot here, before anything is reserved or made.
+    throw notImplementedError(`${shot.shotId} is a chain of ${source.calls.length} calls, and no stage produces a chain yet`, "plan");
+  }
   return {
     shotId: shot.shotId,
     visualType: shot.visualType,
@@ -134,6 +139,8 @@ export function createPlanHandler(ports: PlanPorts): StageHandler {
       const artifacts: Record<string, string> = {};
       let shots: ShotSummary[] = [];
       if (planned.plan !== null) {
+        // The summaries refuse a chain (contract v5) before anything is written, so no plan the pipeline cannot run is stored.
+        const summaries = planned.plan.shots.map(shotSummaryOf);
         const written = await writeArtifact(ctx.sql, {
           organizationId: ctx.organizationId,
           requestId: ctx.requestId,
@@ -144,7 +151,7 @@ export function createPlanHandler(ports: PlanPorts): StageHandler {
           createdAt: new Date().toISOString(),
         });
         artifacts.plan = written.artifactId;
-        shots = planned.plan.shots.map(shotSummaryOf);
+        shots = summaries;
       }
       return { kind: "done", output: { stage: "plan", subjectId: ctx.subjectId, artifacts, gate: planned.gate, shots } };
     },

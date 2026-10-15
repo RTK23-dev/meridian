@@ -27,6 +27,8 @@ export const FIXTURE_IDS = {
   shot3: fixtureId("shot_", 13),
   shot4: fixtureId("shot_", 14),
   shot5: fixtureId("shot_", 15),
+  shotCartoonChain: fixtureId("shot_", 16),
+  shotStopChain: fixtureId("shot_", 17),
   take1: fixtureId("take_", 21),
   take2: fixtureId("take_", 22),
   take3a: fixtureId("take_", 23),

@@ -9,6 +9,7 @@ import {
   scenePlanSchema,
   sumUsd,
   type BudgetLine,
+  type ModelClass,
   type ScenePlan,
   type ShotSpec,
 } from "../contracts/index.ts";
@@ -24,7 +25,10 @@ export class UnknownPriceError extends EngineError {
 }
 
 export type Estimate = {
-  /** One line per shot (generation, stock, component or asset), then the fixed per-master lines. */
+  /**
+   * One line per paid call, in shot order, then the fixed per-master lines. A generate, stock, component or asset shot has one
+   * line; a chain (contract v5) has one line for each of its calls.
+   */
   lines: BudgetLine[];
   /** Sum of the shot lines. For a valid plan this equals ScenePlan.estimatedUsd. */
   shotsUsd: number;
@@ -79,20 +83,34 @@ function shotCost(key: PriceKey, shot: ShotSpec, takes: number): number {
   return roundUsd(price.usd * units);
 }
 
-function lineForShot(shot: ShotSpec): { line: BudgetLine; generated: boolean } {
+/** One line for one paid call of a shot: the route's price key for its model class, priced over the call's takes. */
+function callLine(shot: ShotSpec, modelClass: ModelClass, takes: number): BudgetLine {
+  const key = prices.routeFor[modelClass];
+  return { stage: "produce_shot", shotId: shot.shotId, provider: key, estimateUsd: shotCost(key, shot, takes) };
+}
+
+/**
+ * The lines of one shot, and whether it is generated (the redo allowance is a share of generated lines). A generate shot has one
+ * call. A chain (contract v5) has one line per call, so every link is reserved: a per-second call bills the shot's length, and a
+ * per-image call bills its takes. Components, stock and assets have one line at their source's price.
+ */
+function linesForShot(shot: ShotSpec): { lines: BudgetLine[]; generated: boolean } {
   const { source } = shot;
-  if (source.kind === "generate") {
-    const key = prices.routeFor[source.modelClass];
-    return {
-      line: { stage: "produce_shot", shotId: shot.shotId, provider: key, estimateUsd: shotCost(key, shot, source.takes) },
-      generated: true,
-    };
+  switch (source.kind) {
+    case "generate":
+      return { lines: [callLine(shot, source.modelClass, source.takes)], generated: true };
+    case "chain":
+      return { lines: source.calls.map((call) => callLine(shot, call.modelClass, call.takes)), generated: true };
+    case "component":
+    case "stock":
+    case "asset": {
+      const key = prices.sourceRoutes[source.kind];
+      return {
+        lines: [{ stage: "produce_shot", shotId: shot.shotId, provider: key, estimateUsd: shotCost(key, shot, 1) }],
+        generated: false,
+      };
+    }
   }
-  const key = prices.sourceRoutes[source.kind];
-  return {
-    line: { stage: "produce_shot", shotId: shot.shotId, provider: key, estimateUsd: shotCost(key, shot, 1) },
-    generated: false,
-  };
 }
 
 /**
@@ -120,9 +138,9 @@ export function estimatePlan(plan: ScenePlan): Estimate {
     });
   }
 
-  const shotResults = parsed.data.shots.map(lineForShot);
-  const shotLines = shotResults.map((result) => result.line);
-  const generatedLines = shotResults.filter((result) => result.generated).map((result) => result.line);
+  const shotResults = parsed.data.shots.map(linesForShot);
+  const shotLines = shotResults.flatMap((result) => result.lines);
+  const generatedLines = shotResults.filter((result) => result.generated).flatMap((result) => result.lines);
   const fixed = fixedBudgetLines();
 
   const shotsUsd = sumUsd(shotLines.map((line) => line.estimateUsd));

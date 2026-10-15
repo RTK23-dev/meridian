@@ -47,7 +47,7 @@ test("each config file carries its version string", () => {
 });
 
 test("the contract set is at version 4 (frame_reader role and the editor's decisions)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@4");
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@5");
 });
 
 test("the assets constants moved to config keep the values assets/STATUS.md recorded", () => {

@@ -1,6 +1,17 @@
 # STATUS: engine budget and cost ledger (W12)
 
-## Phase E3: contract version `engine-contracts@3` (current)
+## Chains: contract version `engine-contracts@5` (current)
+
+- `estimatePlan` prices every call of a chain (contracts `ShotSpec.source` kind `chain`, Bible section 4 "v5"). A chain has one
+  budget line per call (stage `produce_shot`, the shot's id, the route key of the call's model class), priced over the call's
+  takes. A per-second call bills the shot's length. Every call counts as generated for the redo allowance.
+- A generate, component, stock or asset shot keeps one line at its old price, so the fixture reservation is unchanged.
+- An unknown price on any call (the stop-motion frames are token-priced) refuses the whole estimate, naming the shot.
+- Not changed: `reserve`, `preflight`, `reconcile`, `store` and the cap mode. The ledger's per-call entries need a call id when
+  the produce stage writes them (contracts STATUS, decision 4).
+- Tests: `estimate.test.ts` (the chain cases above). The budget folder's other tests pass unchanged.
+
+## Phase E3: contract version `engine-contracts@3`
 
 Branch `eng-e3-contracts`, based on `origin/code/beautiful-cori-1zfk11` at aa3bcf8. Not pushed. The lead's brief for E3, item by
 item. Fixture-tested only; no live call. Covered by `budget/README.md` (the pre-flight hold section).

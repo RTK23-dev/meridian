@@ -23,6 +23,8 @@ import {
   renderedVideoSchema,
   reviewResultSchema,
   scenePlanSchema,
+  shotSpecSchema,
+  chainProblem,
   styleKitSchema,
   takeSchema,
   takeVerdictSchema,
@@ -36,6 +38,9 @@ import {
   fixtures,
   productionRequestFixture,
   scenePlanFixture,
+  scenePlanChainFixture,
+  cartoonChainShotFixture,
+  stopMotionChainShotFixture,
   videoDnaFixture,
   voiceTrackFixture,
   VOICE_DURATION_MS,
@@ -62,6 +67,7 @@ const schemas = {
   videoDna: videoDnaSchema,
   voiceTrack: voiceTrackSchema,
   scenePlan: scenePlanSchema,
+  scenePlanChain: scenePlanSchema,
   assetSpec: assetSpecSchema,
   take: takeSchema,
   takeVerdict: takeVerdictSchema,
@@ -283,4 +289,51 @@ test("the frame_reader role is a Haiku check role: its ledger row and its role c
   assert.equal(ledgerEntrySchema.safeParse(ledgerFrameReaderFixture).success, true);
   const call = { ...manifestRoleCallsFixture[1], role: "frame_reader", promptVersion: "frame_reader@1" };
   assert.equal(manifestRoleCallSchema.safeParse(call).success, true);
+});
+
+test("contract v5 is additive: every single-call shot of the fixture plan parses unchanged, and the plan round-trips", () => {
+  assert.deepEqual(scenePlanSchema.parse(scenePlanFixture), scenePlanFixture);
+  for (const shot of scenePlanFixture.shots) {
+    assert.notEqual(shot.source.kind, "chain");
+    assert.deepEqual(shotSpecSchema.parse(shot), shot, `${shot.shotId} changed when it parsed`);
+  }
+});
+
+test("a chain shot parses, keeps its calls in order and round-trips unchanged (contract v5)", () => {
+  assert.deepEqual(shotSpecSchema.parse(cartoonChainShotFixture), cartoonChainShotFixture);
+  assert.deepEqual(shotSpecSchema.parse(stopMotionChainShotFixture), stopMotionChainShotFixture);
+  assert.deepEqual(scenePlanSchema.parse(scenePlanChainFixture), scenePlanChainFixture);
+
+  const cartoon = cartoonChainShotFixture.source;
+  assert.equal(cartoon.kind, "chain");
+  if (cartoon.kind !== "chain") return;
+  assert.deepEqual(
+    cartoon.calls.map((call) => call.output),
+    ["keyframe", "clip"],
+  );
+  assert.deepEqual(
+    cartoon.calls.map((call) => call.modelClass),
+    ["image.keyframe", "video.budget"],
+  );
+  assert.deepEqual(cartoon.calls[1].firstFrame, { kind: "output", output: "keyframe" });
+
+  const stop = stopMotionChainShotFixture.source;
+  const frames = stop.kind === "chain" ? stop.calls : [];
+  assert.equal(frames.length, 30);
+  for (let i = 1; i < frames.length; i++) {
+    assert.ok(
+      frames[i].refs.some((ref) => ref.kind === "output" && ref.output === frames[i - 1].output),
+      `${frames[i].output} reads the frame before it`,
+    );
+  }
+});
+
+test("a chain link that refers to an unknown output is refused, and the refusal names the output (contract v5)", () => {
+  const broken = structuredClone(cartoonChainShotFixture);
+  if (broken.source.kind !== "chain") throw new Error("the fixture is a chain");
+  broken.source.calls[1].firstFrame = { kind: "output", output: "keyframe_missing" };
+  const result = shotSpecSchema.safeParse(broken);
+  assert.equal(result.success, false);
+  assert.ok(!result.success && result.error.issues.some((issue) => issue.message.includes('"keyframe_missing"')));
+  assert.equal(chainProblem(broken.source.calls)?.index, 1);
 });

@@ -86,11 +86,79 @@ const assetSourceSchema = z.object({
   assetUri: z.string().min(1),
 });
 
+// --- Chains (contract v5, Bible section 4 "v5 changes and migration"). A shot whose source is several paid calls. Each call
+// reads its inputs, which are assets or the outputs of earlier calls of the same chain, and every call is priced.
+
+/** A chain has at least two calls. One call is a generate source. */
+export const CHAIN_MIN_CALLS = 2;
+
+/** An output name: a call makes it, and a later call of the same chain reads it. Lower case, so it is never an asset uri. */
+export const chainOutputNameSchema = z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, {
+  message: "an output name is lower-case letters, digits and underscores, starting with a letter, at most 40 characters",
+});
+
+/** An input of a chain call: an asset (a store uri, a kit image or a hero image), or the output of an earlier call. */
+export const chainInputSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("asset"), uri: z.string().min(1) }),
+  z.object({ kind: z.literal("output"), output: chainOutputNameSchema }),
+]);
+export type ChainInput = z.infer<typeof chainInputSchema>;
+
+/** One paid call of a chain. `output` is the name later calls read. `takes` is the take count, as for a generate source. */
+export const chainCallSchema = z.object({
+  output: chainOutputNameSchema,
+  modelClass: modelClassSchema,
+  prompt: z.string().min(1),
+  refs: z.array(chainInputSchema),
+  firstFrame: chainInputSchema.optional(),
+  lastFrame: chainInputSchema.optional(),
+  takes: z.union([z.literal(1), z.literal(2)]),
+});
+export type ChainCall = z.infer<typeof chainCallSchema>;
+
+/** The inputs one call reads: its refs, then its first and last frame when it has them. */
+export function chainInputsOf(call: ChainCall): ChainInput[] {
+  const frames = [call.firstFrame, call.lastFrame].filter((input): input is ChainInput => input !== undefined);
+  return [...call.refs, ...frames];
+}
+
+/**
+ * The first problem in a chain, or null. Output names are unique. An input that names an output must name one that an
+ * EARLIER call of the same chain makes: an unknown name, a name a later call makes, or the call's own name is refused.
+ */
+export function chainProblem(calls: readonly ChainCall[]): { index: number; message: string } | null {
+  const madeBefore = new Set<string>();
+  for (const [index, call] of calls.entries()) {
+    for (const input of chainInputsOf(call)) {
+      if (input.kind === "output" && !madeBefore.has(input.output)) {
+        return { index, message: `call "${call.output}" refers to output "${input.output}", which no earlier call of this chain makes` };
+      }
+    }
+    if (madeBefore.has(call.output)) {
+      return { index, message: `output "${call.output}" is made by more than one call of this chain` };
+    }
+    madeBefore.add(call.output);
+  }
+  return null;
+}
+
+const chainSourceSchema = z
+  .object({
+    kind: z.literal("chain"),
+    calls: z.array(chainCallSchema).min(CHAIN_MIN_CALLS),
+  })
+  .superRefine((source, ctx) => {
+    const problem = chainProblem(source.calls);
+    if (problem !== null) ctx.addIssue({ code: "custom", message: problem.message, path: ["calls", problem.index] });
+  });
+export type ChainSource = z.infer<typeof chainSourceSchema>;
+
 export const shotSourceSchema = z.discriminatedUnion("kind", [
   generateSourceSchema,
   componentSourceSchema,
   stockSourceSchema,
   assetSourceSchema,
+  chainSourceSchema,
 ]);
 export type ShotSource = z.infer<typeof shotSourceSchema>;
 

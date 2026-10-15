@@ -24,6 +24,7 @@ import {
   type ReviewResult,
   type ScenePlan,
   type ScriptBeat,
+  type ChainCall,
   type ShotSpec,
   type Take,
   type TakeVerdict,
@@ -358,6 +359,93 @@ export const scenePlanFixture: ScenePlan = {
       reason: "The hero image is pinned as the first frame, so the product stays real.",
       by: "director",
     },
+  ],
+};
+
+// --- Chains (contract v5, Bible 7.1): a shot whose source is several paid calls, each reading earlier outputs ----------------
+
+export const CHARACTER_SHEET_URI = "store://characters/fixture/sheet-1.png";
+const CARTOON_KEYFRAME_PROMPT = "A stylised cartoon character stands on a clean kitchen counter, arms open, no text in frame.";
+const CARTOON_CLIP_PROMPT = "The cartoon character hops once and settles, camera static, soft light, no text in frame.";
+const STOP_MOTION_PROMPT = "A small clay character hops beside the blender on a clean counter, held poses, no text in frame.";
+const STOP_MOTION_FRAMES = 30;
+
+/**
+ * A cartoon_generated shot (7.1): the style keyframe is one image call, and the 3 s clip is a video call that starts from it.
+ * Both calls read the character sheet. Its estimate is 0.018 (one image) plus 3 s at $0.0336 a second.
+ */
+export const cartoonChainShotFixture: ShotSpec = {
+  shotId: ID.shotCartoonChain,
+  beatId: "b1",
+  startMs: 0,
+  endMs: 3000,
+  visualType: "cartoon_generated",
+  layer: "base",
+  source: {
+    kind: "chain",
+    calls: [
+      {
+        output: "keyframe",
+        modelClass: "image.keyframe",
+        prompt: CARTOON_KEYFRAME_PROMPT,
+        refs: [{ kind: "asset", uri: CHARACTER_SHEET_URI }],
+        takes: 1,
+      },
+      {
+        output: "clip",
+        modelClass: "video.budget",
+        prompt: CARTOON_CLIP_PROMPT,
+        refs: [{ kind: "asset", uri: CHARACTER_SHEET_URI }],
+        firstFrame: { kind: "output", output: "keyframe" },
+        takes: 1,
+      },
+    ],
+  },
+  downgradeTo: "cartoon_rigged",
+};
+
+/**
+ * A stop_motion shot (7.1): 30 image-edit frames from the hero image, each reading the hero and the frame before it, over 2.5 s.
+ * The closing player is a component, not a call, so it is not in the chain (contract v5 note). Its image-edit price is unknown,
+ * so the estimate refuses it, naming the shot.
+ */
+export const stopMotionChainShotFixture: ShotSpec = {
+  shotId: ID.shotStopChain,
+  beatId: "b3",
+  startMs: 9000,
+  endMs: 11500,
+  visualType: "stop_motion",
+  layer: "base",
+  source: {
+    kind: "chain",
+    calls: Array.from({ length: STOP_MOTION_FRAMES }, (_, index): ChainCall => {
+      const name = `frame_${String(index + 1).padStart(2, "0")}`;
+      const hero = { kind: "asset" as const, uri: BLENDER_FRONT_URI };
+      const previous = index === 0 ? [] : [{ kind: "output" as const, output: `frame_${String(index).padStart(2, "0")}` }];
+      return { output: name, modelClass: "image.edit", prompt: STOP_MOTION_PROMPT, refs: [hero, ...previous], takes: 1 };
+    }),
+  },
+  downgradeTo: "product_hero",
+};
+
+/**
+ * The fixture plan with its first shot drawn by the cartoon chain instead of a presenter. The shots come to 0.3204: the chain
+ * (0.1188) and shot 3 (0.2016). Other shots and decisions are the fixture's.
+ */
+export const scenePlanChainFixture: ScenePlan = {
+  ...scenePlanFixture,
+  planId: "plan_fixture_chain",
+  shots: [cartoonChainShotFixture, ...scenePlanFixture.shots.slice(1)],
+  estimatedUsd: 0.3204,
+  decisions: [
+    {
+      at: "b1",
+      chose: "cartoon_generated",
+      alternatives: [],
+      reason: "The beat is a sketch joke; a cartoon keyframe carries the character, and the page's character sheet is available.",
+      by: "scorer",
+    },
+    ...scenePlanFixture.decisions.slice(1),
   ],
 };
 
