@@ -1,0 +1,21 @@
+{
+  "id": "gen-e4-frame-reader-ok-0001",
+  "model": "anthropic/claude-haiku-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"frames\":[{\"index\":0,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":2,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":1,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":3,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":2,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":2,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":3,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":3,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":4,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":2,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":5,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":3,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":6,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":2,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":7,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":3,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":8,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":2,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":9,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":3,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":10,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":2,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":11,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":3,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":12,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":2,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":13,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":3,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"},{\"index\":14,\"confidence\":0.9,\"captions\":[{\"box\":{\"x\":0.1,\"y\":0.78,\"w\":0.8,\"h\":0.07},\"words\":2,\"style\":\"outlined\",\"highlight\":\"one_word\"}],\"overlays\":[],\"textWords\":0,\"shake\":\"none\",\"speedRamp\":\"none\"}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 12160,
+    "completion_tokens": 905,
+    "total_tokens": 13065,
+    "cost": 0.016685
+  }
+}

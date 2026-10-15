@@ -28,3 +28,9 @@ Built 2026-10-14 by eng-pipeline on branch `eng-a5-claude-client`. Not pushed.
 ## Owner's live check
 
 The prompt is exercised by the segmenter's live check in `src/engine/claude/STATUS.md`. Nothing here is separate.
+
+## frame_reader@1 (eng-detectors)
+
+`frame_reader@1.md` is the prompt of the `frame_reader` role (`claude/roles/frame_reader.ts`). Its hash is pinned in
+`frame_reader.test.ts`. It has the four parts of Bible 11.2. Its output is measurements only: no free text, and the answer contract
+refuses any key it does not name.

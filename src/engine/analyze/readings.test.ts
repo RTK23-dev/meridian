@@ -13,7 +13,12 @@ import type { PictureClient, PictureRequest } from "../media/index.ts";
 import { pictureReadings } from "./readings.ts";
 import type { ReadingsScope } from "./reference.ts";
 
-const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), "test", "fixtures", "picture-captured.json");
+const FIXTURE = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "test",
+  "fixtures",
+  "picture-captured.json",
+);
 const captured = JSON.parse(readFileSync(FIXTURE, "utf8")) as { results: Record<string, unknown> };
 
 /** One recorded answer, checked against the picture contract (a fixture that no longer matches fails here, not later). */
@@ -36,6 +41,9 @@ function replaying(result: PictureResult): { client: PictureClient; requests: Pi
 function scope(overrides: Partial<ReadingsScope> = {}): ReadingsScope {
   return {
     organizationId: "ws_test",
+    requestId: "req_01JABCDEFGHJKMNPQRSTVWXYZ0",
+    reservationId: "res_01JABCDEFGHJKMNPQRSTVWXYZ0",
+    attempt: 1,
     source: { kind: "url", url: "https://media.example.test/reels/fixture-0001.mp4" },
     durationMs: 2000,
     cutsMs: [],
@@ -48,7 +56,11 @@ describe("the readings from the picture measures (analyze/readings.ts)", () => {
   it("reads the centred zoom-in of the punch clip as one jump at 1000 ms of about 1.2, and no loop", async () => {
     const { client } = replaying(recorded("punch"));
     const readings = await pictureReadings(client)(scope());
-    assert.equal(readings.captions, null, "captions are not read here (the vision reader is not built)");
+    assert.equal(
+      readings.captions,
+      null,
+      "captions are not read here (the vision reader is not built)",
+    );
     assert.equal(readings.loop, false);
     assert.ok(readings.zoom !== null);
     assert.equal(readings.zoom?.jumps.length, 1);
@@ -93,17 +105,32 @@ describe("the readings from the picture measures (analyze/readings.ts)", () => {
   it("reports no zoom reading when every pair straddles a cut (not measured, not zero)", async () => {
     const allCut = pictureResultSchema.parse({
       ...recorded("loop"),
-      pairs: recorded("loop").pairs.map((pair) => ({ ...pair, usable: false, scale: null, fit: null })),
+      pairs: recorded("loop").pairs.map((pair) => ({
+        ...pair,
+        usable: false,
+        scale: null,
+        fit: null,
+      })),
     });
     const readings = await pictureReadings(replaying(allCut).client)(scope());
     assert.equal(readings.zoom, null);
-    assert.equal(readings.loop, true, "the loop is still measured from the first and last frame (the loop clip)");
+    assert.equal(
+      readings.loop,
+      true,
+      "the loop is still measured from the first and last frame (the loop clip)",
+    );
   });
 
   it("lets a failed picture call throw: the stage fails, nothing is guessed", async () => {
     const failing: PictureClient = async () => {
-      throw new EngineError("provider", "media function /picture failed (HTTP 503)", { retryable: true, stage: "media.picture" });
+      throw new EngineError("provider", "media function /picture failed (HTTP 503)", {
+        retryable: true,
+        stage: "media.picture",
+      });
     };
-    await assert.rejects(pictureReadings(failing)(scope()), (error: unknown) => error instanceof EngineError && error.retryable);
+    await assert.rejects(
+      pictureReadings(failing)(scope()),
+      (error: unknown) => error instanceof EngineError && error.retryable,
+    );
   });
 });

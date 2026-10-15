@@ -14,6 +14,15 @@ These are test inputs. No test here calls a live API. Each file says whether it 
   by the role, so the tests check the retry.
 - `speech-recorded.json` (**synthetic**): a speech-to-text answer with eight words over the reel's speech, in the vendor-neutral
   shape of `media/stt.ts`.
-- `readings.json` (**synthetic**): caption, zoom and loop readings in the shape the readers will return. No reader exists yet.
+- `readings.json` (**synthetic**): caption, zoom and loop readings in the shape the readers return. The default readings of the
+  harness (the jobs tests use it). The analysis readings of the tests are built from `picture-captured.json` and the two frame_reader
+  answers below.
+- `picture-captured.json` (**captured**): the `/picture` answers of the punch and loop clips (see `media/STATUS.md`).
+- `openrouter-frame-reader.json` (**synthetic**): a frame_reader answer in the OpenRouter chat shape, one reading for each of the 15
+  frames the reel's plan gives (the frame plan of `media/frames.ts` at 6000 ms with the measured cuts). Every frame has a caption of
+  two or three words in the lower band, outlined, with one word highlighted. No overlays, no text, no shake, no speed ramp. The reel
+  is four flat colour shots, so it has no captions: the caption and motion readings are authored to the contract, not read.
+- `openrouter-frame-reader-text.json` (**synthetic**): a frame_reader answer with a `text` key on its first frame. The strict contract
+  refuses it, so the retry takes the next recorded answer. Tests use it to show that words cannot come back.
 
 The shot-length labels the tests check against are the reel's cut times (1500, 3000 and 4500 ms), not the functions' output.

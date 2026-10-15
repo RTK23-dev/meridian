@@ -22,3 +22,12 @@ other roles of this folder are eng-pipeline's and are not changed here. Nothing 
 
 Run `runRole` with `variant_writer` on the hook beat of one recorded request, through the Haiku route. Record the answer, the ledger
 row and the role-call row. Haiku's rate is still $1 / $5 (prices@2, an owner check).
+
+## frame_reader (eng-detectors)
+
+- `frame_reader.ts` (+ `frame_reader.test.ts`, 12 tests): Haiku with vision, `llm.check`, stage `analyze_reference`, prompt
+  `frame_reader@1`. Reads up to 24 frames (768 px) for captions, overlay boxes, a text word count, and shake and speed-ramp
+  judgements, as measurements only. The answer is strict with no string field except fixed enums (a test walks the JSON schema).
+- Estimate 12k in and 2k out ($0.022). The output cap is 2k, not the 1k Bible 11.1 proposes (owner to confirm).
+- Used by `analyze/frameReader.ts` (analyze, through `analysisReadings`) and `analyze/renderReadings.ts` (the render review).
+- Live (owner): see `analyze/STATUS.md`, item 6 of the live steps.

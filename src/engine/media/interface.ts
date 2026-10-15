@@ -2,28 +2,37 @@
 // it never imports the in-process implementation (see local.ts and boundaries.test.ts).
 
 import type {
+  BlackFramesResult,
   CutsResult,
+  FlickerResult,
   FramesRequest,
   FramesResult,
   LoudnessRequest,
   LoudnessResult,
   MediaSource,
+  MotionResult,
   ProbeRequest,
   ProbeResult,
+  SilenceResult,
   TimelineRequest,
   TimelineResult,
 } from "../../../functions/ffmpeg/types.ts";
 
 export type {
+  BlackFramesResult,
   CutsResult,
+  DetectRun,
+  FlickerResult,
   Frame,
   FramesRequest,
   FramesResult,
   LoudnessRequest,
   LoudnessResult,
   MediaSource,
+  MotionResult,
   ProbeRequest,
   ProbeResult,
+  SilenceResult,
   TimelineRequest,
   TimelineResult,
   TimelineSample,
@@ -47,4 +56,20 @@ export interface MediaFunctions {
   cuts(request: CutsCallRequest): Promise<CutsResult>;
   /** Per-sample brightness, motion, momentary loudness and the audio envelope of one video (Bible 6.2 step 2). */
   timeline(request: TimelineRequest): Promise<TimelineResult>;
+}
+
+/** What a caller passes to a detector: the media only. */
+export type DetectorRequest = { source: MediaSource };
+
+/**
+ * The detectors (Bible 6.7 step 1, 12.2, 12.3): black and frozen frames, flicker, motion and silence. They are a sibling of
+ * MediaFunctions, not part of it: adding required members to MediaFunctions would break every object typed as MediaFunctions
+ * (the voice and jobs test fixtures). Each consumer takes the detectors it needs with Pick<MediaDetectors, ...>. The same
+ * rules as MediaFunctions apply: a validated result or a typed EngineError, never a default.
+ */
+export interface MediaDetectors {
+  blackFrames(request: DetectorRequest): Promise<BlackFramesResult>;
+  flicker(request: DetectorRequest): Promise<FlickerResult>;
+  motion(request: DetectorRequest): Promise<MotionResult>;
+  silence(request: DetectorRequest): Promise<SilenceResult>;
 }

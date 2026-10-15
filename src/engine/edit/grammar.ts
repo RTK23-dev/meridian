@@ -28,8 +28,9 @@ export type MeasuredCaptions = EditGrammar["captions"];
 
 /**
  * The zoom measures (Bible 8.1 motion): each jump is a sudden scale change, `scale` is the new scale over the old (above 1 is a
- * zoom-in). The jumps come from the picture measures (analyze/zoom.ts). shake and speedRamps have no measurement yet: null
- * until one is connected, and the motion fields that need them stay unknown (CLAUDE.md rule 1).
+ * zoom-in). The jumps come from the picture measures (analyze/zoom.ts). shake and speedRamps come from the frame_reader role
+ * (analyze/frameReader.ts): null when its judgements are too few, and the motion fields that need them stay unknown (CLAUDE.md
+ * rule 1).
  */
 export type MeasuredZoom = {
   jumps: ReadonlyArray<{ atMs: number; scale: number }>;
@@ -52,6 +53,11 @@ export type GrammarInput = {
   zoom: MeasuredZoom | null;
   /** Whether the last frame is within the image-similarity threshold of the first (Bible 8.1 endsOnLoop), or null. */
   loop: boolean | null;
+  /**
+   * Why a null reading is null, when its reader has said so (Bible 1: a reason, never a guess). The reason replaces the generic
+   * wording of the unknown note; the field is still unknown either way.
+   */
+  reasons?: { captions?: string; zoom?: string; loop?: string; motion?: string };
 };
 
 export type GrammarResult =
@@ -132,7 +138,7 @@ export function computeEditGrammar(input: GrammarInput): GrammarResult {
   let transitions: EditGrammar["transitions"] | null = null;
   if (zoom === null) {
     unknown.push(
-      "zoom (zoom jumps and shake, Bible 8.1): no zoom reading is connected, so rehookIntervalMs, motion and transitions are unknown",
+      `zoom (zoom jumps and shake, Bible 8.1): ${input.reasons?.zoom ?? "no zoom reading is connected"}, so rehookIntervalMs, motion and transitions are unknown`,
     );
   } else {
     // rehookIntervalMs: the median gap between pattern interrupts: a cut that changes the shot type, a zoom jump, or a sound hit.
@@ -162,7 +168,7 @@ export function computeEditGrammar(input: GrammarInput): GrammarResult {
     const punchScales = punchIns.map((jump) => jump.scale);
     if (zoom.shake === null || zoom.speedRamps === null) {
       unknown.push(
-        "motion (shakeOnImpact and speedRamps, Bible 8.1): no shake or speed-ramp reading is connected, so the motion fields are unknown",
+        `motion (shakeOnImpact and speedRamps, Bible 8.1): ${input.reasons?.motion ?? "no shake or speed-ramp reading is connected"}, so the motion fields are unknown`,
       );
     } else {
       motion = {
@@ -206,10 +212,10 @@ export function computeEditGrammar(input: GrammarInput): GrammarResult {
     }
   }
 
-  // captions: measured on frames (OCR). No reader, no value.
+  // captions: read on frames by the frame_reader role (Bible v4 note). No reading, no value.
   if (input.captions === null) {
     unknown.push(
-      "captions (words per caption, position, style and highlight, Bible 6.2 step 6 and 8.1): no OCR reading is connected",
+      `captions (words per caption, position, style and highlight, Bible 6.2 step 6 and 8.1): ${input.reasons?.captions ?? "no caption reading is connected"}`,
     );
   }
 
@@ -239,7 +245,7 @@ export function computeEditGrammar(input: GrammarInput): GrammarResult {
   // endsOnLoop: the frame reading decides it. No reading, no value.
   if (input.loop === null) {
     unknown.push(
-      "loop (the last frame against the first, Bible 8.1): no image-similarity reading is connected",
+      `loop (the last frame against the first, Bible 8.1): ${input.reasons?.loop ?? "no image-similarity reading is connected"}`,
     );
   }
 
