@@ -42,6 +42,7 @@ export const SOURCE_CREDENTIAL_CATEGORIES = [
   "pinterest",
   "tiktok",
   "licensed",
+  "apify",
 ] as const;
 
 export type SourceCredentialCategory = (typeof SOURCE_CREDENTIAL_CATEGORIES)[number];
@@ -58,6 +59,8 @@ export const SOURCE_KEY_ENV: Record<SourceCredentialCategory, readonly string[]>
   pinterest: ["PINTEREST_ACCESS_TOKEN"],
   tiktok: ["TIKTOK_ACCESS_TOKEN"],
   licensed: ["LICENSED_DATA_API_KEY", "SENSOR_TOWER_API_KEY"],
+  // Apify runs the Instagram volume actors (Factory Gather). The deployment key is used only with APIFY_SHARED_DEFAULT=deployment.
+  apify: ["APIFY_TOKEN"],
 };
 
 /** Where a usable key came from. */
@@ -100,6 +103,7 @@ export const CREDENTIAL_VAULT_TYPE: Record<CredentialCategory, string> = {
   pinterest: "provider_config:source:pinterest",
   tiktok: "provider_config:source:tiktok",
   licensed: "provider_config:source:licensed",
+  apify: "provider_config:source:apify",
 };
 
 /**
@@ -127,6 +131,7 @@ export const SHARED_DEFAULT_ENV: Record<CredentialCategory, { variable: string; 
   pinterest: { variable: "PINTEREST_SHARED_DEFAULT", accepts: "deployment" },
   tiktok: { variable: "TIKTOK_SHARED_DEFAULT", accepts: "deployment" },
   licensed: { variable: "LICENSED_SHARED_DEFAULT", accepts: "deployment" },
+  apify: { variable: "APIFY_SHARED_DEFAULT", accepts: "deployment" },
 };
 
 /**

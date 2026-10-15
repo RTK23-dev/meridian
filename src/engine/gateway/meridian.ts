@@ -1,7 +1,7 @@
 // The connector to Meridian's credential resolver (src/lib/meridian/credentials/resolve.ts), the one place keys are read.
 // The engine never reads a key from the environment; this source asks the resolver at the moment of each call.
 //
-// The credential ids `openrouter`, `heygen` and `anthropic` are Meridian's workspace credential categories of the same
+// The credential ids `openrouter`, `heygen`, `anthropic` and `apify` are Meridian's workspace credential categories of the same
 // names. With an organization in scope, each is resolved for that workspace only (resolveCredential): the workspace's own
 // key first, an unusable saved key never replaced by the deployment key, and the deployment key only with its opt-in.
 // With no organization in scope, no workspace key is ever read: OpenRouter falls back to the deployment-only chat key
@@ -13,15 +13,21 @@ import type { CredentialLookup, CredentialSource } from "./types.ts";
 type Resolution = { status: "ready"; secret: string } | { status: "unusable" | "not_configured"; reason: string };
 
 /** The workspace categories this connector maps. The credential id and the category have the same name. */
-export type MeridianWorkspaceCategory = "openrouter" | "heygen" | "anthropic";
+export type MeridianWorkspaceCategory = "openrouter" | "heygen" | "anthropic" | "apify";
 
 const CATEGORY_OF: Record<string, MeridianWorkspaceCategory> = {
   openrouter: "openrouter",
   heygen: "heygen",
   anthropic: "anthropic",
+  apify: "apify",
 };
 
-const LABEL: Record<MeridianWorkspaceCategory, string> = { openrouter: "OpenRouter", heygen: "HeyGen", anthropic: "Anthropic" };
+const LABEL: Record<MeridianWorkspaceCategory, string> = {
+  openrouter: "OpenRouter",
+  heygen: "HeyGen",
+  anthropic: "Anthropic",
+  apify: "Apify",
+};
 
 export type MeridianResolver = {
   /** The deployment-only key, for a call with no workspace in scope. */

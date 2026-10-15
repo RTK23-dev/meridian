@@ -3,22 +3,19 @@ import test from "node:test";
 import { SnapshotScheduler } from "./snapshot-scheduler.ts";
 import type { PostSnapshot } from "./types.ts";
 
-test("SnapshotScheduler generates standard 0h, 6h, 24h, 72h schedule", () => {
-  const postedAt = "2026-10-07T00:00:00.000Z";
-  const schedule = SnapshotScheduler.generateSchedule("reel-abc-123", postedAt);
+test("SnapshotScheduler generates the 0h, 24h and 72h schedule from the first snapshot", () => {
+  const firstSnapshot = "2026-10-07T00:00:00.000Z";
+  const schedule = SnapshotScheduler.generateSchedule("reel-abc-123", firstSnapshot);
 
-  assert.equal(schedule.length, 4);
-  assert.equal(schedule[0].targetHoursSincePost, 0);
+  assert.deepEqual(
+    schedule.map((entry) => entry.targetHoursSincePost),
+    [0, 24, 72],
+    "the decided cadence is 0, +24 h and +72 h; there is no 6 h checkpoint",
+  );
   assert.equal(schedule[0].scheduledFor, "2026-10-07T00:00:00.000Z");
-
-  assert.equal(schedule[1].targetHoursSincePost, 6);
-  assert.equal(schedule[1].scheduledFor, "2026-10-07T06:00:00.000Z");
-
-  assert.equal(schedule[2].targetHoursSincePost, 24);
-  assert.equal(schedule[2].scheduledFor, "2026-10-08T00:00:00.000Z");
-
-  assert.equal(schedule[3].targetHoursSincePost, 72);
-  assert.equal(schedule[3].scheduledFor, "2026-10-10T00:00:00.000Z");
+  assert.equal(schedule[1].scheduledFor, "2026-10-08T00:00:00.000Z");
+  assert.equal(schedule[2].scheduledFor, "2026-10-10T00:00:00.000Z");
+  assert.ok(schedule.every((entry) => entry.status === "pending"));
 });
 
 test("SnapshotScheduler analyzes velocity slope and acceleration", () => {

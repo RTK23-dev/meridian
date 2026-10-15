@@ -7,6 +7,8 @@
  *  - the source adapters in the registry search the run's niche on the run's platforms (one discovery run for both the crawl
  *    and the search);
  *  - the Meta Ad Library collector stores the ads that grading reads;
+ *  - the Instagram volume source (Apify, through the engine gateway) stores reel candidates with their creator's baseline and
+ *    their tier (instagram-volume.ts), for a run that covers Instagram;
  *  - uploads, which no intake stores yet.
  *
  * Each source records one state on the run: ok, not_connected, or failed with its error. A source that is not connected or
@@ -28,6 +30,8 @@ import { scrapeSocialUrl, type ScrapedSocialPost } from "../sources/scraper/soci
 import { collectMetaAdLibrary } from "../providers/meta-research.ts";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { persistMetaAd } from "../research/store.ts";
+import { liveApifyClient, type ApifyClient } from "../sources/apify/client.ts";
+import { gatherInstagramVolume } from "./instagram-volume.ts";
 
 /** The most ads one run asks the Ad Library for. */
 export const AD_LIBRARY_LIMIT = 25;
@@ -88,6 +92,8 @@ export type GatherDeps = {
   /** The saved Ad Library token for the workspace, or null when none is saved. */
   metaToken: (organizationId: string) => Promise<string | null>;
   metaTransport: Transport;
+  /** Apify, for the Instagram volume source. Production reaches it through the engine gateway; a test passes a recorded client. */
+  apify: ApifyClient;
 };
 
 export function defaultGatherDeps(): GatherDeps {
@@ -97,6 +103,7 @@ export function defaultGatherDeps(): GatherDeps {
     scrapeSocial: scrapeSocialUrl,
     metaToken: async (organizationId) => (await sourceKeyFor("meta_ad_library", organizationId)).secret,
     metaTransport: liveTransport(),
+    apify: liveApifyClient(),
   };
 }
 
@@ -275,6 +282,19 @@ async function closeCollectionRun(
   `;
 }
 
+/** The Instagram volume source. A throw from it is recorded as this source's failure, so the other sources still run. */
+async function gatherVolumeSafely(sql: Sql, input: GatherInput, deps: GatherDeps): Promise<Call> {
+  try {
+    return await gatherInstagramVolume(
+      sql,
+      { organizationId: input.organizationId, brandId: input.brandId, runId: input.runId, niche: input.niche },
+      deps.apify,
+    );
+  } catch (error) {
+    return { state: "failed", reason: messageOf(error), items: 0 };
+  }
+}
+
 /** Collects the brand's niche from the Meta Ad Library and stores each ad, with its stop time and countries, for grading. */
 async function gatherAdLibrary(sql: Sql, input: GatherInput, country: string, deps: GatherDeps): Promise<Call> {
   let collectionRunId = "";
@@ -386,6 +406,11 @@ export async function gatherForRun(sql: Sql, input: GatherInput, deps: GatherDep
 
   const meta = await gatherAdLibrary(sql, input, country, deps);
 
+  // The Instagram volume source runs for a run that covers Instagram: every run when no platform is named. A failure is that
+  // source's failed state, and the run goes on.
+  const volume: Call | null =
+    input.platforms.length === 0 || input.platforms.includes("instagram") ? await gatherVolumeSafely(sql, input, deps) : null;
+
   const platformRows: GatheredSource[] = platformAdapters.map((adapterId) => {
     const call = combine(
       calls((state) => state.adapterId === adapterId && state.seed === input.niche),
@@ -401,6 +426,7 @@ export async function gatherForRun(sql: Sql, input: GatherInput, deps: GatherDep
     { source: "social_scraper", ...social },
     { source: "meta_ad_library", ...meta },
     ...platformRows,
+    ...(volume ? [{ source: "instagram_volume", ...volume }] : []),
     { source: "upload", state: "not_connected", reason: UPLOAD_REASON, items: 0 },
   ];
   await writeRunSources(sql, input, rows);

@@ -60,6 +60,7 @@ const CATEGORY_LABEL: Record<CredentialCategory, string> = {
   pinterest: "Pinterest",
   tiktok: "TikTok",
   licensed: "licensed data",
+  apify: "Apify",
 };
 
 /**

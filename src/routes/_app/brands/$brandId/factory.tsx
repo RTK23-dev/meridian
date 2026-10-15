@@ -91,6 +91,7 @@ function runListItems(board: FactoryBoard): RunListItem[] {
       settings: run.settings,
       spend: run.spend,
       runSources: run.runSources,
+      runCandidates: run.runCandidates,
       picks: picksOf(board, run.picks),
       receiptLines: creatives.flatMap((item) => item.receipts.map((receipt) => `${item.format} creative: ${receiptLine(receipt)}`)),
       measurementLines: creatives.flatMap((item) => item.measurements.map((row) => `${row.surface} ${row.platform}: ${metricLine(row.surface, row.metrics)}`)),

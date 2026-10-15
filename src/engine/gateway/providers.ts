@@ -3,7 +3,7 @@
 
 import type { ProviderSpec } from "./types.ts";
 
-export const PROVIDER_IDS = ["openrouter", "anthropic", "heygen", "media_functions", "pexels", "pixabay", "shotstack"] as const;
+export const PROVIDER_IDS = ["openrouter", "anthropic", "heygen", "media_functions", "pexels", "pixabay", "shotstack", "apify"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export type ProviderRegistry = Record<ProviderId, ProviderSpec>;
@@ -57,6 +57,15 @@ export const DEFAULT_PROVIDERS: ProviderRegistry = {
     auth: { kind: "api_key", header: "x-api-key", scheme: null },
     credentialId: "shotstack",
     defaultHeaders: { Accept: "application/json" },
+  },
+  // Apify: the Instagram discovery actors (Factory Gather, Instagram volume). Bearer token, documented at docs.apify.com
+  // (api/v2, getting-started). Its shapes are recorded in docs/engine/PROVIDER_APIS.md. Not a model API: no price is set.
+  apify: {
+    id: "apify",
+    baseUrl: "https://api.apify.com/v2",
+    auth: { kind: "api_key", header: "Authorization", scheme: "Bearer" },
+    credentialId: "apify",
+    defaultHeaders: {},
   },
   // The serverless ffmpeg functions. The deployment sets the base URL; until then they are not connected.
   media_functions: {

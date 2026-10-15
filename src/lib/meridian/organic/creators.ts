@@ -14,8 +14,9 @@ export type CreatorProfile = {
   handle: string;
   displayName?: string | null;
   niche?: string | null;
-  followerCount: number;
-  engagementRate: number;
+  /** Null when the source did not report the follower count. */
+  followerCount: number | null;
+  engagementRate: number | null;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -37,7 +38,7 @@ export async function upsertCreatorProfile(
   const id = `cr_${input.platform}_${input.handle.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
   const rows = await sql<CreatorProfile>`
     insert into creators (
-      id, organization_id, platform, handle, display_name, niche, follower_count, engagement_rate, metadata, updated_at
+      id, organization_id, platform, handle, display_name, niche, followers_count, engagement_rate, metadata, updated_at
     ) values (
       ${id},
       ${input.organizationId},
@@ -45,17 +46,17 @@ export async function upsertCreatorProfile(
       ${input.handle},
       ${input.displayName ?? null},
       ${input.niche ?? null},
-      ${input.followerCount ?? 0},
-      ${input.engagementRate ?? 0},
+      ${input.followerCount ?? null},
+      ${input.engagementRate ?? null},
       ${JSON.stringify(input.metadata ?? {})}::jsonb,
       now()
     )
     on conflict (organization_id, platform, handle) do update set
       display_name = coalesce(excluded.display_name, creators.display_name),
       niche = coalesce(excluded.niche, creators.niche),
-      follower_count = excluded.follower_count,
-      engagement_rate = excluded.engagement_rate,
-      metadata = excluded.metadata,
+      followers_count = coalesce(excluded.followers_count, creators.followers_count),
+      engagement_rate = coalesce(excluded.engagement_rate, creators.engagement_rate),
+      metadata = case when excluded.metadata = '{}'::jsonb then creators.metadata else excluded.metadata end,
       updated_at = now()
     returning
       id,
@@ -64,7 +65,7 @@ export async function upsertCreatorProfile(
       handle,
       display_name as "displayName",
       niche,
-      follower_count as "followerCount",
+      followers_count as "followerCount",
       engagement_rate as "engagementRate",
       metadata,
       created_at as "createdAt",
@@ -88,7 +89,7 @@ export async function getCreatorProfile(
       handle,
       display_name as "displayName",
       niche,
-      follower_count as "followerCount",
+      followers_count as "followerCount",
       engagement_rate as "engagementRate",
       metadata,
       created_at as "createdAt",
@@ -114,14 +115,14 @@ export async function listCreatorsByNiche(
       handle,
       display_name as "displayName",
       niche,
-      follower_count as "followerCount",
+      followers_count as "followerCount",
       engagement_rate as "engagementRate",
       metadata,
       created_at as "createdAt",
       updated_at as "updatedAt"
     from creators
     where organization_id = ${organizationId} and niche = ${niche}
-    order by follower_count desc
+    order by followers_count desc nulls last
     limit ${limit}
   `;
   return rows;

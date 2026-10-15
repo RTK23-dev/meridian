@@ -20,6 +20,9 @@ export const CAPABILITIES = [
   "render.cloud",
   "render.fallback",
   "media.functions",
+  // Instagram discovery at volume (Factory Gather). Apify actors, not model APIs: the "model" is the actor id.
+  "discovery.instagram",
+  "discovery.instagram.creator",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -100,6 +103,15 @@ export const routes = {
       targets: [{ provider: "shotstack", model: "edit-v1", priceKey: "render_shotstack", verified: false }],
     },
     "media.functions": { targets: [{ provider: "media_functions", model: "ffmpeg", priceKey: null, verified: false }] },
+
+    // Apify actors (docs/engine/PROVIDER_APIS.md, Apify). The price is unknown until the owner confirms the plan, so the
+    // priceKey is null and no cost is estimated. "verified" stays false until the owner's live run.
+    "discovery.instagram": {
+      targets: [{ provider: "apify", model: "apify~instagram-hashtag-scraper", priceKey: null, verified: false }],
+    },
+    "discovery.instagram.creator": {
+      targets: [{ provider: "apify", model: "apify~instagram-reel-scraper", priceKey: null, verified: false }],
+    },
   } satisfies Record<Capability, Route>,
 } as const;
 

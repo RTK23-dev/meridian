@@ -84,6 +84,7 @@ const KEY_LABEL: Record<CredentialCategory, string> = {
   pinterest: "Pinterest",
   tiktok: "TikTok",
   licensed: "licensed data",
+  apify: "Apify",
 };
 
 /** Readiness as the resolver reports it. "usable" means a call would use the credential shown. */
