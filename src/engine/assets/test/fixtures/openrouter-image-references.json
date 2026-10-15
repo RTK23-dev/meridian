@@ -1,5 +1,5 @@
 {
-  "_provenance": "Recorded shape of a POST /images answer (docs/engine/PROVIDER_APIS.md, Images). The b64_json is a valid 1 x 1 PNG padded with an ancillary tEXt chunk to clear the adapter's 1 KiB floor (the adapter refuses smaller images). The input_references element shape is not in the provider notes: the adapter sends it as the frame_images element is documented, and the owner's live run records the real answer. No call was made to write this file.",
+  "_provenance": "Recorded shape of a POST /images answer (docs/engine/PROVIDER_APIS.md, Images). The b64_json is a valid 1 x 1 PNG padded with an ancillary tEXt chunk to clear the adapter's 1 KiB floor (the adapter refuses smaller images). The input_references element shape is the one in OpenRouter's image generation guide (https://openrouter.ai/docs/guides/overview/multimodal/image-generation, checked 2026-10-15; PROVIDER_APIS.md, Images, Input references). The guide states no maximum count of reference images, so the adapter's limit stays unverified until the owner's live run. No call was made to write this file.",
   "request": {
     "method": "POST",
     "path": "/api/v1/images",

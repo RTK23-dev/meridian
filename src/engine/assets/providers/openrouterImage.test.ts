@@ -54,6 +54,25 @@ describe("OpenRouter image", () => {
     assert.equal(adapter.price(assetSpec({ modelClass: "image.keyframe" })).estimateUsd, 0.04);
   });
 
+  it("sends exactly the request fields of the documented image shape, and each reference element is type plus image_url.url only", async () => {
+    const recorded = fixture<{ request: { body_shape: Record<string, unknown> }; answer: unknown }>("openrouter-image-references.json");
+    const { adapter, script } = setup({ [PATH]: json(200, recorded.answer) });
+    await adapter.submit(
+      assetSpec({
+        modelClass: "image.edit",
+        firstFrame: "https://media.example.test/engine/org_1/req_1/chain/frame-1.png",
+        refs: ["https://media.example.test/engine/org_1/req_1/chain/hero.png"],
+      }),
+      "sha256:shape",
+    );
+    const sent = JSON.parse(String(script.requests[0]?.body)) as Record<string, unknown>;
+    assert.deepEqual(Object.keys(sent).sort(), Object.keys(recorded.request.body_shape).sort(), "the body has the documented fields and no others");
+    const [element] = sent.input_references as Array<Record<string, unknown>>;
+    assert.deepEqual(Object.keys(element ?? {}).sort(), ["image_url", "type"]);
+    assert.deepEqual(Object.keys(element?.image_url as Record<string, unknown>), ["url"]);
+    assert.equal(element?.type, "image_url");
+  });
+
   it("sends the first frame and then the references as input references, in order, from the recorded answer", async () => {
     const recorded = fixture<{ answer: unknown }>("openrouter-image-references.json");
     const { adapter, script } = setup({ [PATH]: json(200, recorded.answer) });

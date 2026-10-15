@@ -6,10 +6,11 @@
 // the result is a failed poll that still carries usage.cost, so the router records the real bill.
 //
 // Reference images. A spec's references, and its first frame when it has one (the image the call starts from, image-to-image), are
-// sent as `input_references`, in that order. PROVIDER_APIS.md names the field but not the shape of one element, so each element is
-// written as the documented frame_images element is (`{ type: "image_url", image_url: { url } }`). That shape and the count limit
-// below are unverified until the owner's live run. Every reference must be an https URL the provider can fetch: a store uri is not,
-// so it is refused before any call (no money is spent on a call the provider cannot read). A last frame is refused the same way.
+// sent as `input_references`, in that order. The element shape (`{ type: "image_url", image_url: { url } }`) is the one OpenRouter's
+// image generation guide documents, checked 2026-10-15 (PROVIDER_APIS.md, "Input references"). The guide states no maximum count of
+// reference images, so IMAGE_REFERENCES_MAX is unverified until the owner's live run. Every reference must be an https URL the
+// provider can fetch: a store uri is not, so it is refused before any call (no money is spent on a call the provider cannot read).
+// A last frame is refused the same way.
 // Every call asks for one image; a second take is the caller's second call with a new seed.
 
 import { adapters } from "../../config/adapters.ts";
@@ -30,12 +31,13 @@ const PROVIDER = "openrouter";
 export const IMAGE_TIMEOUT_MS = adapters.timeoutsMs.image.value;
 
 /**
- * The reference images one image call takes (the first frame counts as one). The provider documents no limit, so this is an
- * initial bound that the live run replaces with the measured one. A spec with more is refused before any call.
+ * The reference images one image call takes (the first frame counts as one). UNVERIFIED: OpenRouter's image generation guide
+ * (checked 2026-10-15) states no maximum, and says only that the number accepted varies by provider. This is an initial bound
+ * that the owner's live run replaces with the measured limit. A spec with more is refused before any call.
  */
 export const IMAGE_REFERENCES_MAX = 4;
 
-/** One element of `input_references`, in the shape of the documented frame_images element (see the file header). */
+/** One element of `input_references`, as OpenRouter's image generation guide documents it (see the file header). */
 export type ImageReference = { type: "image_url"; image_url: { url: string } };
 
 /**
