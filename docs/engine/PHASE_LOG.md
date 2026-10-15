@@ -346,3 +346,6 @@ Merged after the completion pass (commits 3c6c92e and c9b5d8d):
 Still open, and needing the owner: the EDL audio contract step (changed-lines-only voice); the product naming question in variant copy;
 the Apify plan price, the HyperFrames price and the `image.edit` price; the media functions URL and host; the production shot ports'
 deployment configuration; the keys and database URLs; the speech-to-text vendor; the live runs; and merging PR #71.
+
+Checks on the final head (c9b5d8d, with the phase-log commit after it): the full local `src` run gave 5,101 tests, 5,060 pass, 0 fail, 41
+skipped (PostgreSQL and credential gated). CI on 8ae9552 is green.
