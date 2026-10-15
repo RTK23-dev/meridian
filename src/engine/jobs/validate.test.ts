@@ -37,6 +37,7 @@ test("an output that answers the job for its subject and parses is returned unch
     subjectId: REQ,
     gate: gate("request"),
     budgetReservationId: FIXTURE_IDS.reservation,
+    budgetPause: null,
     artifacts: { validated: fixtureId("art_", 40) },
   };
   assert.equal(validateStageOutput(output, payload()), output);
@@ -48,15 +49,15 @@ test("an output for another stage, another subject, or a malformed id is refused
     /the result is for voice, but the job is for intake/,
   );
   refused(
-    () => validateStageOutput({ stage: "intake", subjectId: fixtureId("req_", 9), gate: gate("request"), budgetReservationId: null, artifacts: {} }, payload()),
+    () => validateStageOutput({ stage: "intake", subjectId: fixtureId("req_", 9), gate: gate("request"), budgetReservationId: null, budgetPause: null, artifacts: {} }, payload()),
     /for req_/,
   );
   refused(
-    () => validateStageOutput({ stage: "intake", subjectId: REQ, gate: gate("request"), budgetReservationId: "not-a-reservation", artifacts: {} }, payload()),
+    () => validateStageOutput({ stage: "intake", subjectId: REQ, gate: gate("request"), budgetReservationId: "not-a-reservation", budgetPause: null, artifacts: {} }, payload()),
     /reservation id/,
   );
   refused(
-    () => validateStageOutput({ stage: "intake", subjectId: REQ, gate: gate("request"), budgetReservationId: null, artifacts: { validated: "art-1" } }, payload()),
+    () => validateStageOutput({ stage: "intake", subjectId: REQ, gate: gate("request"), budgetReservationId: null, budgetPause: null, artifacts: { validated: "art-1" } }, payload()),
     /artifact map/,
   );
 });
@@ -64,7 +65,7 @@ test("an output for another stage, another subject, or a malformed id is refused
 test("a gate that does not parse against the gate contract is refused, so no unknown result reaches the graph", () => {
   const broken = { gate: "request", subjectId: REQ, pass: true, checks: [] } as unknown as GateResult;
   refused(
-    () => validateStageOutput({ stage: "intake", subjectId: REQ, gate: broken, budgetReservationId: null, artifacts: {} }, payload()),
+    () => validateStageOutput({ stage: "intake", subjectId: REQ, gate: broken, budgetReservationId: null, budgetPause: null, artifacts: {} }, payload()),
     /request gate/,
   );
 });

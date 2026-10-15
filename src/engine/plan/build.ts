@@ -200,6 +200,7 @@ async function runDirector(
     ...(choice.prompt === null ? {} : { prompt: choice.prompt }),
     ...(choice.mustSatisfy === null ? {} : { mustSatisfy: choice.mustSatisfy }),
     showsProduct: choice.showsProduct,
+    ...(choice.beatText === undefined ? {} : { beatText: choice.beatText }),
   }));
   const run = await runDirectorCheck(input.deps, {
     requestId: input.requestId,
@@ -334,6 +335,7 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
       durationMs: shot.endMs - shot.startMs,
       showsProduct: shot.flags.showsProduct,
       mustSatisfy: choice.mustSatisfy,
+      beatText: input.request.script.beats.find((beat) => beat.beatId === shot.beatId)?.text,
       visualType: choice.visualType,
       generated: choice.generated,
       baseUsd: choice.baseUsd,

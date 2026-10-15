@@ -23,6 +23,11 @@ export type DirectorChoice = {
   durationMs: number;
   showsProduct: boolean;
   mustSatisfy: string | null;
+  /**
+   * The script's text of the shot's beat, shown to the director as untrusted data (Bible 7.7). Only the director sees it: the
+   * planner's prompts never carry script text (L8), and a prompt edit that asks for text is still ignored below.
+   */
+  beatText?: string;
   visualType: VisualType;
   generated: boolean;
   baseUsd: number;

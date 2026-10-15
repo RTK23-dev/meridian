@@ -32,7 +32,11 @@ export type StageOutputBase = { subjectId: string; artifacts: Record<string, str
 export type ProduceHold = { kind: "budget"; reason: string } | { kind: "refused"; errorKind: "content_policy" | "invalid_input"; hint: string };
 
 export type StageOutput =
-  | (StageOutputBase & { stage: "intake"; gate: GateResult; budgetReservationId: string | null })
+  /**
+   * budgetReservationId is the pre-flight hold, set on a pass. budgetPause is set when the hold was paused or refused (or the
+   * workspace month is not connected): the request pauses on budget with that reason, and a resume runs intake again (Bible 14).
+   */
+  | (StageOutputBase & { stage: "intake"; gate: GateResult; budgetReservationId: string | null; budgetPause: string | null })
   | (StageOutputBase & { stage: "analyze_reference"; gate: GateResult })
   | (StageOutputBase & { stage: "voice"; gate: GateResult })
   | (StageOutputBase & { stage: "plan"; gate: GateResult; shots: ShotSummary[] })

@@ -202,7 +202,7 @@ test("one request from plan through estimate, produce and check: a stock shot an
     }),
   );
   const apply = (output: StageOutput) => applyEngineEvent(db.sql, { organizationId: ORG, requestId: REQUEST_ID, event: { type: "succeeded", output } });
-  await apply({ stage: "intake", subjectId: REQUEST_ID, gate: gate("request", REQUEST_ID), budgetReservationId: HOLD_ID, artifacts: { validated: fixtureId("art_", 502) } });
+  await apply({ stage: "intake", subjectId: REQUEST_ID, gate: gate("request", REQUEST_ID), budgetReservationId: HOLD_ID, budgetPause: null, artifacts: { validated: fixtureId("art_", 502) } });
   await apply({ stage: "voice", subjectId: REQUEST_ID, gate: gate("voice", REQUEST_ID), artifacts: { voice: fixtureId("art_", 503) } });
 
   const scenePlan = plan();

@@ -104,7 +104,7 @@ class Flow {
 /** Runs the single-node stages through estimate with the given plan shots, leaving produce jobs waiting. */
 function flowToProduce(shots: ShotSummary[], options: { cachedDna?: boolean; variantCount?: number } = {}): Flow {
   const flow = new Flow().apply(start({ cachedDna: options.cachedDna ?? false, variantCount: options.variantCount ?? 0 }));
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: { validated: fixtureId("art_", 41) } });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: { validated: fixtureId("art_", 41) } });
   if (!options.cachedDna) flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", true), artifacts: { dna: fixtureId("art_", 42) } });
   flow.succeed({ stage: "voice", subjectId: REQ, gate: gate("voice", true), artifacts: { voice: fixtureId("art_", 43) } });
   flow.succeed({ stage: "plan", subjectId: REQ, gate: gate("plan", true), shots, artifacts: { plan: fixtureId("art_", 44) } });
@@ -138,7 +138,7 @@ test("rush and batch requests carry the priority numbers that run them first and
 test("a passing intake with a reservation queues analysis and voice together, both paid and on the reservation", () => {
   const flow = new Flow().apply(start());
   const [intake] = flow.jobs;
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: { validated: fixtureId("art_", 41) } });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: { validated: fixtureId("art_", 41) } });
   assert.deepEqual(flow.jobs.map((job) => job.stage).sort(), ["analyze_reference", "voice"]);
   for (const job of flow.jobs) {
     assert.equal(job.paid, true);
@@ -151,14 +151,14 @@ test("a passing intake with a reservation queues analysis and voice together, bo
 test("a cached VideoDNA skips analysis and queues only voice", () => {
   const dna = fixtureId("art_", 45);
   const flow = new Flow().apply(start({ cachedDna: true, cachedDnaArtifactId: dna }));
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} });
   assert.deepEqual(flow.jobs.map((job) => job.stage), ["voice"]);
   assert.equal(flow.current.artifacts.dna, dna);
 });
 
 test("a failing intake rejects the request with its reasons and queues nothing", () => {
   const flow = new Flow().apply(start());
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", false), budgetReservationId: null, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", false), budgetReservationId: null, budgetPause: null, artifacts: {} });
   assert.equal(flow.current.status, "rejected");
   assert.equal(flow.jobs.length, 0);
   const rejected = flow.effects.find((effect) => effect.kind === "rejected");
@@ -168,7 +168,7 @@ test("a failing intake rejects the request with its reasons and queues nothing",
 
 test("a passing intake advances without a reservation: intake is passed, and no intake pause is set", () => {
   const flow = new Flow().apply(start());
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: null, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: null, budgetPause: null, artifacts: {} });
   assert.equal(flow.current.nodes.intake.status, "passed");
   assert.equal(flow.current.budgetReservationId, null, "intake holds nothing");
   assert.notEqual(flow.current.pause?.stage, "intake");
@@ -176,7 +176,7 @@ test("a passing intake advances without a reservation: intake is passed, and no 
 
 test("a passing intake with no reservation pauses on the first paid stage, which is named, and queues no paid job (fail closed)", () => {
   const flow = new Flow().apply(start());
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: null, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: null, budgetPause: null, artifacts: {} });
   assert.equal(flow.current.status, "paused");
   assert.equal(flow.current.pause?.kind, "budget");
   assert.equal(flow.current.pause?.stage, "analyze_reference", "analysis is the first paid stage");
@@ -187,7 +187,7 @@ test("a passing intake with no reservation pauses on the first paid stage, which
 
 test("with a cached VideoDNA and no reservation, voice is the paid stage that waits, and it is named", () => {
   const flow = new Flow().apply(start({ cachedDna: true, cachedDnaArtifactId: fixtureId("art_", 45) }));
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: null, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: null, budgetPause: null, artifacts: {} });
   assert.equal(flow.current.status, "paused");
   assert.equal(flow.current.pause?.stage, "voice");
   assert.equal(flow.jobs.length, 0);
@@ -195,7 +195,7 @@ test("with a cached VideoDNA and no reservation, voice is the paid stage that wa
 
 test("a reservation that analysis and voice need is accepted from intake: they queue on it, and the plan waits for both", () => {
   const flow = new Flow().apply(start());
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} });
   assert.equal(flow.current.status, "running");
   assert.deepEqual(flow.jobs.map((job) => job.stage).sort(), ["analyze_reference", "voice"]);
   assert.equal(flow.current.budgetReservationId, RES);
@@ -203,7 +203,7 @@ test("a reservation that analysis and voice need is accepted from intake: they q
 
 test("estimate_reserve is queued with the plan and the request artifacts, so it can read the request budget", () => {
   const flow = new Flow().apply(start());
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} });
   flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", true), artifacts: { dna: fixtureId("art_", 42) } });
   flow.succeed({ stage: "voice", subjectId: REQ, gate: gate("voice", true), artifacts: { voice: fixtureId("art_", 43) } });
   flow.succeed({ stage: "plan", subjectId: REQ, gate: gate("plan", true), shots: [shot({ shotId: SHOT_A, sourceKind: "component", modelClass: null, visualType: "coded_graphics", downgradeTo: null })], artifacts: { plan: fixtureId("art_", 44) } });
@@ -215,7 +215,7 @@ test("estimate_reserve is queued with the plan and the request artifacts, so it 
 
 test("plan waits for both analysis and voice, whichever finishes first", () => {
   const flow = new Flow().apply(start());
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} });
   flow.succeed({ stage: "voice", subjectId: REQ, gate: gate("voice", true), artifacts: { voice: fixtureId("art_", 43) } });
   assert.equal(flow.jobs.length, 0, "plan is not queued with analysis still running");
   flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", true), artifacts: { dna: fixtureId("art_", 42) } });
@@ -225,7 +225,7 @@ test("plan waits for both analysis and voice, whichever finishes first", () => {
 
 test("a failing DNA gate redoes analysis once with a hint, then escalates the request", () => {
   const flow = new Flow().apply(start());
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} });
   flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", false), artifacts: {} });
   const [redo] = flow.jobsFor("analyze_reference");
   assert.equal(redo?.attempt, "2");
@@ -242,7 +242,7 @@ test("a failing DNA gate redoes analysis once with a hint, then escalates the re
 test("a plan that fails validation twice escalates (Bible 6.4)", () => {
   assert.equal(orchestratorLimits.planRedos, 1);
   const flow = new Flow().apply(start());
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} });
   flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", true), artifacts: {} });
   flow.succeed({ stage: "voice", subjectId: REQ, gate: gate("voice", true), artifacts: {} });
   flow.succeed({ stage: "plan", subjectId: REQ, gate: gate("plan", false), shots: [], artifacts: {} });
@@ -253,7 +253,7 @@ test("a plan that fails validation twice escalates (Bible 6.4)", () => {
 
 test("an over-budget reservation pauses the request rather than failing it", () => {
   const flow = new Flow().apply(start());
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} });
   flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", true), artifacts: {} });
   flow.succeed({ stage: "voice", subjectId: REQ, gate: gate("voice", true), artifacts: {} });
   flow.succeed({ stage: "plan", subjectId: REQ, gate: gate("plan", true), shots: [shot({ shotId: SHOT_A })], artifacts: {} });
@@ -537,15 +537,15 @@ test("stale and duplicate results are refused, and a rejected request accepts no
     (error: unknown) => error instanceof EngineError && error.kind === "conflict",
     "voice is not queued yet",
   );
-  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} });
   assert.throws(
-    () => advance(flow.current, { type: "succeeded", output: { stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} } }),
+    () => advance(flow.current, { type: "succeeded", output: { stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} } }),
     (error: unknown) => error instanceof EngineError && error.kind === "conflict",
     "a second intake result is refused",
   );
 
   const rejected = new Flow().apply(start());
-  rejected.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", false), budgetReservationId: null, artifacts: {} });
+  rejected.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", false), budgetReservationId: null, budgetPause: null, artifacts: {} });
   assert.equal(rejected.current.status, "rejected");
   assert.throws(() => advance(rejected.current, { type: "resume" }), (error: unknown) => error instanceof EngineError && error.kind === "conflict");
 });
@@ -553,14 +553,14 @@ test("stale and duplicate results are refused, and a rejected request accepts no
 test("a gate reported under the wrong name is refused as invalid input", () => {
   const flow = new Flow().apply(start());
   assert.throws(
-    () => advance(flow.current, { type: "succeeded", output: { stage: "intake", subjectId: REQ, gate: gate("dna", true), budgetReservationId: RES, artifacts: {} } }),
+    () => advance(flow.current, { type: "succeeded", output: { stage: "intake", subjectId: REQ, gate: gate("dna", true), budgetReservationId: RES, budgetPause: null, artifacts: {} } }),
     (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
   );
 });
 
 test("the same state and event give the same jobs and keys (replay is safe)", () => {
   const before = new Flow().apply(start());
-  const event: EngineEvent = { type: "succeeded", output: { stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, artifacts: {} } };
+  const event: EngineEvent = { type: "succeeded", output: { stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} } };
   const first = advance(before.current, event);
   const second = advance(before.current, event);
   assert.deepEqual(first.jobs.map((job) => job.key), second.jobs.map((job) => job.key));
@@ -570,7 +570,7 @@ test("the same state and event give the same jobs and keys (replay is safe)", ()
 test("a result for another request's subject is refused", () => {
   const flow = new Flow().apply(start());
   assert.throws(
-    () => advance(flow.current, { type: "succeeded", output: { stage: "intake", subjectId: fixtureId("req_", 99), gate: gate("request", true), budgetReservationId: RES, artifacts: {} } }),
+    () => advance(flow.current, { type: "succeeded", output: { stage: "intake", subjectId: fixtureId("req_", 99), gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: {} } }),
     (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
   );
 });

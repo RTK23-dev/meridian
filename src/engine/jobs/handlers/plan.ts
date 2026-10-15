@@ -25,11 +25,14 @@ import type { StageContext, StageHandler, StageRunResult, ShotSummary } from "..
 import { notImplementedError } from "../types.ts";
 import type { KitScope, ResolvedKits } from "./intake.ts";
 
-/** The ports the plan stage needs from outside: the kit store (the same port intake uses) and the Claude client's deps per workspace. */
+/**
+ * The ports the plan stage needs from outside: the kit store (the same port intake uses) and the Claude client's deps for one
+ * request. The deps carry that request's role-call journal, so the classification intake already paid for is reused, not paid again.
+ */
 export type PlanPorts = {
   loadKits: (scope: KitScope) => Promise<ResolvedKits>;
-  /** The gateway, the ledger, the clock and the call journal for one workspace (claude/client.ts RoleDeps). */
-  roleDeps: (organizationId: string) => RoleDeps;
+  /** The gateway, the ledger, the clock and the call journal for one request (claude/client.ts RoleDeps). */
+  roleDeps: (scope: { organizationId: string; requestId: string; reservationId: string }) => RoleDeps;
 };
 
 /** The summary the orchestrator plans work from (ShotSummary). The plan body itself is not passed on. */
@@ -97,7 +100,7 @@ export function createPlanHandler(ports: PlanPorts): StageHandler {
         ...(kits.productKit === undefined ? {} : { productKit: kits.productKit }),
         characters: [...kits.characters],
       };
-      const deps = ports.roleDeps(ctx.organizationId);
+      const deps = ports.roleDeps({ organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId });
       const attempt = attemptOf(ctx.payload.attempt);
 
       const classified = await classifyVisualRequests(deps, {

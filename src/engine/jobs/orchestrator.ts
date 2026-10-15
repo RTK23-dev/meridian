@@ -332,13 +332,19 @@ function escalateRequest(state: OrchestratorState, pause: Pause, detail: Record<
 }
 
 /**
- * A passing intake advances the request. Intake does not reserve (Bible 6.1: the budget is priced after the plan), so a pass
- * with a null reservation is normal. A reservation id that intake does give is kept as the request's hold. Whether a paid stage
- * may run before estimate_reserve is decided in schedule(): with no reservation on the request, the first such stage pauses.
+ * A passing intake advances the request and keeps its pre-flight hold as the request's reservation (Bible 6.1 step 8, E3 lead
+ * decision 1). A pass with no reservation is still accepted, and schedule() then pauses the request at the first paid stage,
+ * naming it, so no paid call runs unfunded.
  */
 function applyIntake(state: OrchestratorState, output: Extract<StageOutput, { stage: "intake" }>, effects: EngineEffect[]): void {
   expectQueued(state, "intake", output.subjectId);
   mergeArtifacts(state, output.artifacts);
+  // The pre-flight hold was paused or refused: nothing is spent, the request waits for budget, and a resume runs intake again.
+  if (output.budgetPause !== null) {
+    state.nodes.intake.status = "idle";
+    pauseWith(state, { kind: "budget", stage: "intake", subjectId: state.requestId, reason: `Budget: ${output.budgetPause}` });
+    return;
+  }
   if (!output.gate.pass) {
     state.nodes.intake.status = "idle";
     state.status = "rejected";
@@ -1020,7 +1026,8 @@ function schedule(state: OrchestratorState): QueuedJob[] {
     plan: ["validated", "dna", "voice"],
     // The request artifact carries the request's budget (constraints.budgetUsd), which the reservation needs (Bible 14.1).
     estimate_reserve: ["plan", "request"],
-    edit: ["plan", "dna", "voice", ...Object.values(state.shots).flatMap((shot) => (shot.acceptedTakeId ? [`take:${shot.acceptedTakeId}`] : []))],
+    // The validated request names the style kit and carries the emphasis marks the editor reads (E3, edit/STATUS.md item 1).
+    edit: ["plan", "dna", "voice", "validated", ...Object.values(state.shots).flatMap((shot) => (shot.acceptedTakeId ? [`take:${shot.acceptedTakeId}`] : []))],
     variants: state.masterEdlId === null ? [] : [`edl:${state.masterEdlId}`],
     deliver: Object.keys(state.artifacts),
   };

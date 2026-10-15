@@ -109,7 +109,7 @@ test("a passing intake with a reservation queues analysis and voice on the reque
     dedupeKey: `job:${intakeJob}`,
     event: {
       type: "succeeded",
-      output: { stage: "intake", subjectId: requestId, gate: passGate("request", requestId), budgetReservationId: reservationId, artifacts: { validated: fixtureId("art_", 401) } },
+      output: { stage: "intake", subjectId: requestId, gate: passGate("request", requestId), budgetReservationId: reservationId, budgetPause: null, artifacts: { validated: fixtureId("art_", 401) } },
     },
   });
   assert.equal(applied.applied, true);
@@ -135,7 +135,7 @@ test("a repeated job completion is applied once: the same dedupe key changes not
   const intakeJob = await jobIdOf(db.sql, organizationId, "engine.intake");
   const event = {
     type: "succeeded" as const,
-    output: { stage: "intake" as const, subjectId: requestId, gate: passGate("request", requestId), budgetReservationId: reservationId, artifacts: {} },
+    output: { stage: "intake" as const, subjectId: requestId, gate: passGate("request", requestId), budgetReservationId: reservationId, budgetPause: null, artifacts: {} },
   };
   const first = await applyEngineEvent(db.sql, { organizationId, requestId, event, triggerJobId: intakeJob, dedupeKey: `job:${intakeJob}` });
   const second = await applyEngineEvent(db.sql, { organizationId, requestId, event, triggerJobId: intakeJob, dedupeKey: `job:${intakeJob}` });
@@ -163,7 +163,7 @@ test("a failing intake rejects the request, persists its gate result, and queues
     requestId,
     triggerJobId: intakeJob,
     dedupeKey: `job:${intakeJob}`,
-    event: { type: "succeeded", output: { stage: "intake", subjectId: requestId, gate: failGate("request", requestId), budgetReservationId: null, artifacts: {} } },
+    event: { type: "succeeded", output: { stage: "intake", subjectId: requestId, gate: failGate("request", requestId), budgetReservationId: null, budgetPause: null, artifacts: {} } },
   });
   assert.equal(applied.status, "rejected");
   assert.equal(applied.queued, 0);
@@ -179,7 +179,7 @@ test("an intake without a reservation advances, then the request pauses on analy
     requestId,
     triggerJobId: intakeJob,
     dedupeKey: `job:${intakeJob}`,
-    event: { type: "succeeded", output: { stage: "intake", subjectId: requestId, gate: passGate("request", requestId), budgetReservationId: null, artifacts: {} } },
+    event: { type: "succeeded", output: { stage: "intake", subjectId: requestId, gate: passGate("request", requestId), budgetReservationId: null, budgetPause: null, artifacts: {} } },
   });
   const read = await readEngineRequest(db.sql, organizationId, requestId);
   assert.equal(read?.status, "paused");
@@ -203,7 +203,7 @@ test("an escalation writes a review item carrying its detail, and the request is
     requestId,
     triggerJobId: intakeJob,
     dedupeKey: `job:${intakeJob}`,
-    event: { type: "succeeded", output: { stage: "intake", subjectId: requestId, gate: passGate("request", requestId), budgetReservationId: reservationId, artifacts: {} } },
+    event: { type: "succeeded", output: { stage: "intake", subjectId: requestId, gate: passGate("request", requestId), budgetReservationId: reservationId, budgetPause: null, artifacts: {} } },
   });
   await applyEngineEvent(db.sql, {
     organizationId,

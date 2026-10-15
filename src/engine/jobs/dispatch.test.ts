@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { EngineError, type GateResult } from "../contracts/index.ts";
-import { fixtureId } from "../contracts/fixtures/index.ts";
+import { fixtureId, productionRequestFixture } from "../contracts/fixtures/index.ts";
+import { writeArtifact } from "./artifact-store.ts";
 import type { ExecutableJob } from "../../lib/meridian/jobs/execute.ts";
 import { executeJob } from "../../lib/meridian/jobs/execute.ts";
 import { executeEngineJob } from "./dispatch.ts";
@@ -133,6 +134,7 @@ test("a finished stage applies its output once: the next jobs are queued, and a 
           subjectId: ctx.subjectId,
           gate: passGate("request", requestId),
           budgetReservationId: reservation,
+          budgetPause: null,
           artifacts: { validated: fixtureId("art_", 531) },
         },
       }),
@@ -165,6 +167,7 @@ test("a handler that answers for another stage or subject is refused, and nothin
           subjectId: fixtureId("req_", 999),
           gate: passGate("request", requestId),
           budgetReservationId: null,
+          budgetPause: null,
           artifacts: {},
         },
       }),
@@ -243,12 +246,24 @@ test("a job that runs past its timeout fails with a retryable provider error", a
   assert.equal(controller.signal.aborted, true, "the handler is told to stop");
 });
 
-test("the engine branch in execute.ts routes engine.* jobs here, and Meridian's own job types are unchanged", async () => {
-  const { job } = await startedRequest(9);
-  await assert.rejects(
-    executeJob(db.sql, job),
-    (error: unknown) => error instanceof EngineError && (error as { kind: string }).kind === "not_implemented",
-  );
+test("the engine branch in execute.ts routes engine.* jobs to the production runtime: intake runs, refuses before any money, and the request is rejected", async () => {
+  const { organizationId, requestId, job } = await startedRequest(9);
+  await writeArtifact(db.sql, {
+    organizationId,
+    requestId,
+    stage: "intake",
+    type: "production_request",
+    body: { ...productionRequestFixture, requestId, workspaceId: organizationId },
+    createdAt: "2026-10-14T10:00:00.000Z",
+    artifactId: fixtureId("art_", 519),
+  });
+  // No kits are seeded and no monthly budget is set, so the production intake refuses the request before any hold or call.
+  const result = await executeJob(db.sql, job);
+  assert.equal(result, "advanced:intake:0");
+  const stored = await readEngineRequest(db.sql, organizationId, requestId);
+  assert.equal(stored?.status, "rejected");
+  const holds = await db.sql<{ n: number | string }>`select count(*) as n from engine_reservations where request_id = ${requestId}`;
+  assert.equal(Number(holds[0]?.n ?? 0), 0, "no reservation was made");
   const meridian: ExecutableJob = { ...job, id: "job-market", job_type: "market.normalize", payload: "{}", brand_id: null };
   await assert.rejects(executeJob(db.sql, meridian), /market\.normalize has no payload work/);
 });

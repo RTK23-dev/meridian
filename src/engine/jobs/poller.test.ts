@@ -190,6 +190,7 @@ test("a finished provider call finishes the stage through its finish step and ad
         subjectId: ctx.subjectId,
         gate: passGate("request", requestId),
         budgetReservationId: reservation,
+        budgetPause: null,
         artifacts: { validated: fixtureId("art_", 631) },
       };
       return output;

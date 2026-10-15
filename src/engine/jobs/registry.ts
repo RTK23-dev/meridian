@@ -55,17 +55,26 @@ const timeoutMsByClass: Record<TimeoutClass, number> = {
   render: thresholds.jobs.leaseMs.render,
 };
 
-type Row = Omit<StageSpec, "jobType" | "timeoutMs" | "maxAttempts">;
+type Row = Omit<StageSpec, "jobType" | "timeoutMs" | "maxAttempts"> & {
+  /**
+   * The lease of this stage is its timeout class times this factor. The plan makes three Claude calls (classification, planner
+   * and director, each with its own HTTP timeout) under one lease, so it gets three Claude leases (lead decision, E3). A
+   * thresholds.jobs.leaseMs.plan entry should replace the factor when the config owner adds it.
+   */
+  timeoutFactor?: number;
+};
 
 const rows: Record<EngineStage, Row> = {
+  // intake is not paid in this table: it reserves its own pre-flight hold first, and every paid call it makes is on that hold
+  // (handlers/intake.ts). The dispatcher therefore never refuses it for want of a reservation.
   intake: { stage: "intake", group: 1, timeoutClass: "claude", paid: false, reads: ["production_request"], writes: ["validated_request"], gate: "request" },
   analyze_reference: { stage: "analyze_reference", group: 2, timeoutClass: "claude", paid: true, reads: ["production_request"], writes: ["video_dna"], gate: "dna" },
   voice: { stage: "voice", group: 2, timeoutClass: "generation", paid: true, reads: ["production_request"], writes: ["voice_track"], gate: "voice" },
-  plan: { stage: "plan", group: 3, timeoutClass: "claude", paid: true, reads: ["validated_request", "video_dna", "voice_track"], writes: ["scene_plan"], gate: "plan" },
+  plan: { stage: "plan", group: 3, timeoutClass: "claude", timeoutFactor: 3, paid: true, reads: ["validated_request", "video_dna", "voice_track"], writes: ["scene_plan"], gate: "plan" },
   estimate_reserve: { stage: "estimate_reserve", group: 3, timeoutClass: "claude", paid: false, reads: ["scene_plan", "production_request"], writes: ["budget_reservation"], gate: "budget" },
   produce_shot: { stage: "produce_shot", group: 4, timeoutClass: "generation", paid: true, reads: ["scene_plan"], writes: ["take"], gate: null },
   check_take: { stage: "check_take", group: 4, timeoutClass: "claude", paid: true, reads: ["take", "scene_plan"], writes: ["take_verdict"], gate: "take" },
-  edit: { stage: "edit", group: 5, timeoutClass: "claude", paid: false, reads: ["scene_plan", "take", "voice_track", "video_dna"], writes: ["edl"], gate: "edit" },
+  edit: { stage: "edit", group: 5, timeoutClass: "claude", paid: false, reads: ["scene_plan", "take", "voice_track", "video_dna", "validated_request"], writes: ["edl"], gate: "edit" },
   compose: { stage: "compose", group: 6, timeoutClass: "claude", paid: false, reads: ["edl"], writes: ["composition"], gate: null },
   pre_render_gate: { stage: "pre_render_gate", group: 6, timeoutClass: "claude", paid: false, reads: ["composition", "edl"], writes: ["gate_result"], gate: "pre_render" },
   render: { stage: "render", group: 6, timeoutClass: "render", paid: true, reads: ["composition"], writes: ["rendered_video"], gate: "render_integrity" },
@@ -75,10 +84,11 @@ const rows: Record<EngineStage, Row> = {
 };
 
 function specOf(row: Row): StageSpec {
+  const { timeoutFactor = 1, ...spec } = row;
   return {
-    ...row,
+    ...spec,
     jobType: `engine.${row.stage}`,
-    timeoutMs: timeoutMsByClass[row.timeoutClass],
+    timeoutMs: timeoutMsByClass[row.timeoutClass] * timeoutFactor,
     maxAttempts: thresholds.jobs.maxAttempts,
   };
 }
