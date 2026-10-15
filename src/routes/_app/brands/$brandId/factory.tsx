@@ -22,6 +22,8 @@ import { usdOfMicros } from "@/lib/meridian/factory/spend-lines";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { RunBuilder } from "@/components/factory/run-builder";
 import { RunList, type RunListItem, type RunPickLine } from "@/components/factory/run-list";
+import { SleepModePanel } from "@/components/factory/sleep-mode-panel";
+import { SalesByReelPanel } from "@/components/factory/sales-by-reel";
 import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { qk } from "@/lib/query/keys";
 
@@ -537,6 +539,8 @@ function FactoryPage({ brandId }: { brandId: string }) {
         </TabsContent>
 
         <TabsContent value="learnings" className="space-y-4">
+          <SalesByReelPanel brandId={brandId} canAdmin={canAdmin} />
+          <SleepModePanel brandId={brandId} canAdmin={canAdmin} />
           <section className="space-y-3">
             <h2 className="text-section font-semibold">Weekly strategist report</h2>
             <p className="text-muted">{board.report.note}</p>
