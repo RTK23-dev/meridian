@@ -8,6 +8,7 @@ import {
   characterSheetSchema,
   compositionSchema,
   contentHash,
+  decisionSchema,
   edlSchema,
   envelopeSchema,
   gateResultSchema,
@@ -44,6 +45,7 @@ import {
   manifestFixture,
   manifestRoleCallsFixture,
   ledgerClaudeFixture,
+  ledgerFrameReaderFixture,
   renderedVideoFixture,
   compositionFixture,
   reviewResultFixture,
@@ -73,6 +75,8 @@ const schemas = {
   ledgerEntry: ledgerEntrySchema,
   ledgerEntryEstimated: ledgerEntrySchema,
   ledgerEntryClaude: ledgerEntrySchema,
+  ledgerEntryFrameReader: ledgerEntrySchema,
+  decision: decisionSchema,
   providerError: providerErrorSchema,
   styleKit: styleKitSchema,
   persona: personaSchema,
@@ -260,4 +264,23 @@ test("the manifest's planner role call is the ledger's planner call: same model,
   assert.equal(planner.promptVersion, ledgerClaudeFixture.promptVersion);
   assert.equal(planner.costUsd, ledgerClaudeFixture.actualUsd);
   assert.equal(manifestFixture.promptVersions.planner, ledgerClaudeFixture.promptVersion);
+});
+
+test("the editor's decision is about an EDL clip: its subject id is a clip of the EDL, and it is in the manifest (contract v4)", () => {
+  const clipIds = new Set(edlFixture.tracks.flatMap((track) => track.clips.map((clip) => clip.clipId)));
+  const editorDecisions = manifestFixture.decisions.filter((decision) => decision.by === "editor");
+  assert.equal(editorDecisions.length, 1, "the manifest fixture logs one editor decision");
+  for (const decision of editorDecisions) {
+    assert.ok(clipIds.has(decision.at), `editor decision subject ${decision.at} is not a clip of the EDL`);
+    assert.equal(decisionSchema.parse(decision).by, "editor");
+  }
+});
+
+test("the frame_reader role is a Haiku check role: its ledger row and its role call parse, and its prompt version is its own", () => {
+  assert.equal(ledgerFrameReaderFixture.role, "frame_reader");
+  assert.equal(ledgerFrameReaderFixture.model, "anthropic/claude-haiku-5.5");
+  assert.equal(ledgerFrameReaderFixture.promptVersion, "frame_reader@1");
+  assert.equal(ledgerEntrySchema.safeParse(ledgerFrameReaderFixture).success, true);
+  const call = { ...manifestRoleCallsFixture[1], role: "frame_reader", promptVersion: "frame_reader@1" };
+  assert.equal(manifestRoleCallSchema.safeParse(call).success, true);
 });

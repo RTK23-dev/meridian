@@ -1,6 +1,124 @@
 # STATUS: engine contracts (W1, with config)
 
-## Phase E3: contract version `engine-contracts@3` (current)
+## E3 follow-up: contract version `engine-contracts@4` (current)
+
+Branch `eng-e3-contracts-2`, from `origin/code/beautiful-cori-1zfk11` (1a13ebb), then merged with that branch at f6b70d5 (E4).
+Not pushed; the lead merges. Bible section 4 has the "v4 changes and migration" note. Commit: see `git log` on the branch.
+
+### Changes (the lead's list, and the review move)
+
+1. **`frame_reader` in `CLAUDE_ROLES` (`ledger.ts`).** A Haiku vision role on the `llm.check` route. It reads captions, shake and
+   speed ramps from sampled frames, as measurements only. Bible 11.1 has its row (the tokens and cost are proposals). Fixture:
+   `ledgerEntryFrameReader` (`led_` fixture 35). No prompt and no role file are written here (they belong to the analyze role
+   work). Bible 6.2 step 6 and 8.1 say OCR; the v4 note says the reading is `frame_reader`.
+2. **Editor constants into `config/thresholds.ts` (`thresholds@3`, `thresholds.editor`).** Each value has its Bible section or is a
+   Tunable with bounds (see "Replacements" below for every line in `edit/`). The Bible gives cut snap 80/250/120 ms, the fit
+   shares 0.5 and 1.5, the hook times 500 and 300 ms, the loop 500 ms, the 10 per cent jitter and the 18 dB duck, so those are
+   plain. Everything else is a Tunable with bounds that the lead confirms.
+3. **Plan lease (`thresholds.jobs.leaseMs.plan`).** `3 * CLAUDE_LEASE_MS` = 360 000 ms. The plan job runs up to three Claude
+   calls (request classification, planner, director check) under one lease. The constant `CLAUDE_LEASE_MS` is 120 000 and the
+   plan lease follows it. The comment in `thresholds.ts` says so.
+4. **Editor decisions (`plan.ts`, `Decision.by`).** `by` gains `editor` (`DECISION_AUTHORS`, `decisionAuthorSchema` exported).
+   The subject is an EDL clip: `Decision.at` holds the clip id, as it already holds a beat or shot id for the planner and the
+   director. No field is added. An editor decision with no real score uses `alternatives: []`; a score is never invented.
+   Fixture: `editorDecisionFixture` (subject `c_base_3`, a clip of `edlFixture`), in the manifest fixture's decisions. Tests
+   check the subject is a clip of the EDL, and that an unknown author, an empty subject and an infinite score are refused.
+5. **Review move (`review/tuning.ts` into `thresholds.slideshow`, 12.3).** `codedRunMax` is plain 4 (Bible 19 E4: five coded
+   shots in a row is blocked). The six slideshow weights are Tunables, each 1 with bounds 0.5 to 2 (the floor keeps the mean's
+   divisor positive). `contentWordMinLength` is a Tunable, 4 with bounds 3 to 6. The word list, the component list, the effect
+   kinds, the still model classes, the claim types and the prefix are documented data. `config.test.ts` checks that the effect
+   kinds, model classes and claim types are members of the contract enums. `REVIEW_TUNING.version` has no reader and is dropped.
+6. **Version.** `CONTRACTS_VERSION = "engine-contracts@4"`. `meridian.manifest/v2` keeps its literal (see decisions).
+
+### Decisions for the lead
+
+- **`Decision` has no typed subject field.** `at` already carries the subject for the other authors. A typed `subject: { kind, id }`
+  would be a further change (v5). Say if you want it.
+- **The manifest literal stays `/v2`.** Its accepted roles and decision authors widen; no v2 manifest becomes invalid. Say if the
+  literal should move to `/v3`.
+- **Migrations for eng-pipeline (none written here).** (a) `engine_decisions.decided_by` (migration 0077) allows only scorer,
+  director and human; a migration must add `editor` before an editor decision is written. (b) If a role column gets a check, it
+  must include `frame_reader`.
+- **Bible 5.1's lease list does not name `plan`.** Section 4's v4 note does. The Bible text is not edited beyond section 4 and the
+  11.1 row, so the lead decides whether 5.1 gets a line.
+- **The editor's EDL identity.** The editor hashes `EDIT_TUNING.version` into the EDL id. The replacement is `thresholds.version`,
+  so every EDL id changes once, and then again on every thresholds bump (the same rule as Bible 16.3). Edit tests that pin an
+  EDL id will need the new value. The alternative is a fixed editor version key in `thresholds.editor`.
+- **Not moved from `edit/tuning.ts`.** `drawableTransitions` and `drawableEffects` are compiler capabilities (the list the
+  compiler draws), not numbers. They stay in `tuning.ts` with `CaptionBand`. The lead may move them into `compose/compiler.ts`.
+- **Not in the code yet (Bible 8.2, noted for the editor).** Ducking attack 150 ms and release 400 ms (step 11), and the J and L cut
+  offsets of 4 and 3 frames (step 7). The editor does not place them; they are not in config.
+
+### Replacements for the lead (not made here: `edit/` and `review/` belong to other workstreams)
+
+Verified in a scratch script: every path below resolves, and every moved value equals the value it replaces (`thresholds.version`
+is `thresholds@3`; `jobs.leaseMs.plan` is 360000). The `.value` suffix is needed where the thresholds entry is a Tunable.
+
+`src/engine/edit/tuning.ts` keeps only the two capability lists and the `CaptionBand` type. Its new content:
+
+    import { thresholds } from "../config/thresholds.ts";
+    export const EDIT_TUNING = {
+      drawableTransitions: ["hard", "fade", "whip"],
+      drawableEffects: ["punch_in", "shake", "flash"],
+    } as const;
+    export type CaptionBand = keyof typeof thresholds.editor.geometry.captionTopShare;
+
+Replacements (`EDIT_TUNING.X` becomes the path shown; the import of `thresholds` is added in each file):
+
+| File and line | Old | New |
+| --- | --- | --- |
+| `edit/words.ts` 26 | `EDIT_TUNING.cutSnap.gapMinMs` | `thresholds.editor.cutSnap.gapMinMs` |
+| `edit/words.ts` 56 | `EDIT_TUNING.cutSnap` | `thresholds.editor.cutSnap` |
+| `edit/words.ts` 72 | `EDIT_TUNING.cutSnap.beatWindowMs` | `thresholds.editor.cutSnap.beatWindowMs` |
+| `edit/words.ts` 98 | `EDIT_TUNING.captions.breakPattern.test(word.text)` | `new RegExp(thresholds.editor.captions.breakPattern).test(word.text)`, built once at module level |
+| `edit/editor.ts` 126, 127 | `EDIT_TUNING.captions.maxWordsPerCaption` (twice) | `thresholds.editor.captions.maxWordsPerCaption.value` |
+| `edit/editor.ts` 204 | `EDIT_TUNING.punch.minScale` | `thresholds.editor.punch.minScale.value` |
+| `edit/editor.ts` 205 | `EDIT_TUNING.punch.intensityDivisor` | `thresholds.editor.punch.intensityDivisor.value` |
+| `edit/editor.ts` 206 | `EDIT_TUNING.punch.jitterShare` | `thresholds.editor.punch.jitterShare` |
+| `edit/editor.ts` 207 | `EDIT_TUNING.punch.floorScale`, `EDIT_TUNING.punch.maxScale` | `thresholds.editor.punch.floorScale.value`, `thresholds.editor.punch.maxScale.value` |
+| `edit/editor.ts` 231 | `EDIT_TUNING.effectClashMs` | `thresholds.editor.effectClashMs.value` |
+| `edit/editor.ts` 247 | `EDIT_TUNING.version` | `thresholds.version` (see the EDL identity decision) |
+| `edit/editor.ts` 305 | `EDIT_TUNING.hook.captionByMs` | `thresholds.editor.hook.captionByMs` |
+| `edit/editor.ts` 340 | `EDIT_TUNING.captions.maxPerClip` | `thresholds.editor.captions.maxPerClip.value` |
+| `edit/editor.ts` 349 | `EDIT_TUNING.loopMs` | `thresholds.editor.loopMs` |
+| `edit/editor.ts` 401 | `EDIT_TUNING.music.baseGainDb` | `thresholds.editor.music.baseGainDb.value` |
+| `edit/editor.ts` 402 | `EDIT_TUNING.music.duckDb` | `thresholds.editor.music.duckDb` |
+| `edit/time.ts` 20 | `EDIT_TUNING.fit.shortShare` | `thresholds.editor.fit.shortShare` |
+| `edit/geometry.ts` 18, 48 | `EDIT_TUNING.geometry`, `EDIT_TUNING.geometry.assumedFaceBox` | `thresholds.editor.geometry`; every Tunable read gets `.value` (`captionLeftShare`, `captionWidthShare`, `captionHeightShare`, `captionTopShare[band]`, and the four `assumedFaceBox` fields, which replace the spread with `{ x, y, w, h }`) |
+| `edit/geometry.test.ts` 38 | `EDIT_TUNING.geometry` | the same mapping, with `.value` |
+| `edit/rules.ts` 300, 303 | `EDIT_TUNING.loudnessRoundingLufs` | `thresholds.editor.loudnessRoundingLufs.value` |
+| `edit/rules.ts` 311 | `EDIT_TUNING.maxDrawableGainDb` | `thresholds.editor.maxDrawableGainDb.value` |
+| `edit/rules.ts` 319 | `EDIT_TUNING.music.duckDb` | `thresholds.editor.music.duckDb` |
+| `edit/rules.ts` 416 | `EDIT_TUNING.hook.captionByMs` | `thresholds.editor.hook.captionByMs` |
+| `edit/rules.ts` 423 | `EDIT_TUNING.hook.motionWithinMs` | `thresholds.editor.hook.motionWithinMs` |
+| `edit/rules.ts` 482, 488 | `EDIT_TUNING.drawableTransitions`, `EDIT_TUNING.drawableEffects` | unchanged (they stay in `tuning.ts`) |
+| `edit/pieces.ts` 123 | `EDIT_TUNING.fit.shortShare` | `thresholds.editor.fit.shortShare` |
+| `edit/pieces.ts` 199, 220 | `EDIT_TUNING.fit.longShare` | `thresholds.editor.fit.longShare` |
+| `review/slideshowRisk.ts` 13 | `import { REVIEW_TUNING } from "./tuning.ts"` | `import { thresholds } from "../config/thresholds.ts"` |
+| `review/slideshowRisk.ts` 53 to 57 | `REVIEW_TUNING.motionEffectKinds`, `stillModelClasses`, `textLedComponents`, `cinematicClaimTypes`, `stopWords` | `thresholds.slideshow.` of the same name |
+| `review/slideshowRisk.ts` 110 | `REVIEW_TUNING.contentWordMinLength` | `thresholds.slideshow.contentWordMinLength.value` |
+| `review/slideshowRisk.ts` 124 | `REVIEW_TUNING.motionModelClassPrefix` | `thresholds.slideshow.motionModelClassPrefix` |
+| `review/slideshowRisk.ts` 141, 242 | `REVIEW_TUNING.codedRunMax` | `thresholds.slideshow.codedRunMax` |
+| `review/slideshowRisk.ts` 232 | `REVIEW_TUNING.slideshowWeights` | `thresholds.slideshow.weights`; the two `weights[item.dimension]` uses (lines 233 and 235) get `.value` |
+| `review/slideshowRisk.test.ts` 4, 54, 62 | `REVIEW_TUNING` | `thresholds` and `thresholds.slideshow.codedRunMax` |
+
+After the replacements, delete `src/engine/review/tuning.ts`, and `src/engine/edit/tuning.ts` keeps only the content above.
+
+### Tests (this worktree, this follow-up)
+
+- `NODE_ENV=development node --experimental-strip-types --test 'src/engine/contracts/**/*.test.ts' 'src/engine/config/**/*.test.ts' 'src/engine/budget/**/*.test.ts'`:
+  292 pass, 0 fail (the E3 baseline was 274).
+- `... 'src/engine/review/**/*.test.ts' 'src/engine/edit/**/*.test.ts' 'src/engine/plan/**/*.test.ts'`: 480 pass, 0 fail. These consume
+  the changed fixtures (`manifestFixture` decisions, the new fixture ids) and pass unchanged.
+- `npm run typecheck`: exit 0. `npm run lint`: exit 0, 0 errors, 4 warnings, all in `src/components/` (pre-existing).
+- The full `npm test` was not run here; the lead runs it after merging.
+
+### Live run: owner
+
+Nothing in this follow-up calls a provider, so there is no live step for the contracts. The owner confirms the `frame_reader`
+tokens and cost (12k in, 1k out, about $0.02 at Haiku's proposed rate) with one billed analyze call, when the role exists.
+
+## Phase E3: contract version `engine-contracts@3`
 
 Branch `eng-e3-contracts`, based on `origin/code/beautiful-cori-1zfk11` at aa3bcf8. Not pushed; for the lead to review and merge.
 Covers `src/engine/contracts/`, `src/engine/config/`, and the budget pre-flight hold (`src/engine/budget/`, see its STATUS). Bible

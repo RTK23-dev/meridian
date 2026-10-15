@@ -54,6 +54,8 @@ export const fixtures = {
   ledgerEntry: chain.ledgerRenderFixture,
   ledgerEntryEstimated: chain.ledgerSttFixture,
   ledgerEntryClaude: chain.ledgerClaudeFixture,
+  ledgerEntryFrameReader: chain.ledgerFrameReaderFixture,
+  decision: chain.editorDecisionFixture,
   providerError: providerErrorFixture,
   styleKit: styleKitFixture,
   persona: personaFixture,

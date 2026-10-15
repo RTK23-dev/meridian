@@ -351,6 +351,38 @@ Approved by the lead for E3. The set version is `CONTRACTS_VERSION` in `src/engi
   the Bible does not give is an initial Tunable with bounds. The Bible gives 1080 x 1920 and the 7-day window as plain
   constants.
 
+### v4 changes and migration (E3 follow-up, contract version `engine-contracts@4`)
+
+Approved by the lead for E3. The set version is `CONTRACTS_VERSION` in `src/engine/contracts/version.ts`. Every change widens
+an accepted value set, so no document written under v1 to v3 becomes invalid.
+
+- **Claude role `frame_reader` (11.1, `ledger.ts` `CLAUDE_ROLES`).** A Haiku vision role on the `llm.check` route. It reads the
+  sampled frames of a reference for three things, as measurements only: the captions (words per caption, band, size, style,
+  whether the current word is highlighted), the shake (high-frequency global motion) and the speed ramps (motion-speed
+  discontinuities inside a shot). It returns no visible text and no field copies one (Bible 1). Its prompt is `frame_reader@<n>`.
+  This role does the reading that Bible 6.2 step 6 and 8.1 call OCR: captions, shake and speed ramps are read by `frame_reader`,
+  not by local OCR (principle 8). This note supersedes the OCR wording in those two places. `LedgerEntry.role` and
+  `ManifestRoleCall.role` accept the new value. Migration for eng-pipeline: `engine_ledger` needs no backfill for it, and if a
+  check or enum is put on a role column it must include `frame_reader`.
+- **Decision author `editor` (4.3, `plan.ts` `decisionSchema`).** `Decision.by` gains `editor`. The deterministic editor (8.2)
+  logs each decision with its reason (L7): a merge, a split, the hook cut, a dropped transition and the transition it samples.
+  The subject of an editor decision is an EDL clip, so `Decision.at` holds the clip id (`EdlClip.clipId`). That is how `at`
+  already names a beat or a shot for the planner and the director; no field is added. An editor decision with no real
+  alternative set uses an empty `alternatives` list, because a score is never invented. Migration for eng-pipeline: the check
+  constraint on `engine_decisions.decided_by` (migration 0077) allows only scorer, director and human. A new migration must add
+  `editor` before any editor decision is written. The contracts workstream writes no migration.
+- **Manifest (4.4): the literal stays `meridian.manifest/v2`.** Its `roleCalls` and `decisions` accept the two new values, so no v2
+  manifest changes. The set version carries the bump. Lead decision: say if the literal should move to `/v3` instead.
+- **Config (not a contract): `thresholds@3`.** `jobs.leaseMs.plan` is three Claude leases in sequence, 6 minutes, because the plan
+  job runs up to three Claude calls under one lease. Section 5.1's lease list does not name it; the job registry's `plan` entry
+  must read it. `thresholds.editor` holds the 8.2 numbers moved from `edit/tuning.ts`. The Bible gives some of them (the cut snap,
+  the fit shares, the hook times, the loop, the 10 per cent jitter, the 18 dB duck) and they are plain. The rest are initial
+  Tunables with bounds. `thresholds.slideshow` holds the 12.3 numbers and lists moved from `review/tuning.ts`: `codedRunMax` is
+  plain (the 19 E4 acceptance), the six slideshow weights are initial Tunables, and the word and component lists are documented
+  initial data.
+- **Bible 11.1:** the `frame_reader` row is added. Its tokens (12k in, 1k out) and its cost (about $0.02) are proposals at
+  Haiku's $1 / $5 rate, to confirm with the analyze stage's batch size.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.
@@ -747,6 +779,7 @@ Claude is called through one adapter (`engine/claude/`), which sends every call 
 | `critic_final` | post\_render | Haiku, vision; Sonnet if unsure | 12 frames, EDL summary | checks with scores | 15k / 1k | \~$0.02 |
 | `prompt_fixer` | produce | Haiku | Failed prompt, failure kind | rewritten prompt | 1k / 0.3k | <$0.01 |
 | `variant_writer` | variants | Haiku | Master script, matrix row, voice file | new lines | 2k / 0.5k | <$0.01 |
+| `frame_reader` | analyze | Haiku, vision | Sampled frames of the reference (768 px), cut list | captions, shake and speed-ramp measurements (no text) | 12k / 1k (proposed) | ~$0.02 (proposed) |
 
 Rates used: Opus 5.5 $4 / $20 and Sonnet 5.5 $2 / $10 per million tokens in / out; Haiku costed at Haiku 4.5's $1 / $5 until Haiku 5.5's rate is confirmed; cached reads $0.20 per million; Batch API at half price. About $0.40 of Claude per master, plus Critic calls per take and render.
 

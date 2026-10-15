@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MODEL_CLASSES } from "../contracts/plan.ts";
-import { EngineError, sumUsd } from "../contracts/index.ts";
+import { EFFECT_KINDS, EngineError, MODEL_CLASSES, sumUsd, VISUAL_TYPES } from "../contracts/index.ts";
 import { adapters } from "./adapters.ts";
 import { budgets } from "./budgets.ts";
 import { CONTRACTS_VERSION } from "../contracts/version.ts";
@@ -32,7 +31,7 @@ test("every Tunable in the config has floor <= value <= ceiling", () => {
   collectTunables(weights, "weights", found);
   collectTunables(budgets, "budgets", found);
   collectTunables(adapters, "adapters", found);
-  assert.equal(found.length, 51, `expected 51 tunables (thresholds 19, weights 16, budgets 1, adapters 15), found ${found.length}`);
+  assert.equal(found.length, 78, `expected 78 tunables (thresholds 46, weights 16, budgets 1, adapters 15), found ${found.length}`);
   for (const [path, value] of found) {
     assert.ok(value.floor <= value.value && value.value <= value.ceiling, `${path} is outside its bounds`);
     assert.ok(Number.isFinite(value.value), `${path} is not finite`);
@@ -40,15 +39,15 @@ test("every Tunable in the config has floor <= value <= ceiling", () => {
 });
 
 test("each config file carries its version string", () => {
-  assert.equal(thresholds.version, "thresholds@2");
+  assert.equal(thresholds.version, "thresholds@3");
   assert.equal(weights.version, "weights@1");
   assert.equal(prices.version, "prices@2");
   assert.equal(budgets.version, "budgets@1");
   assert.equal(adapters.version, "adapters@1");
 });
 
-test("the contract set is at version 3 (manifest roleCalls, E3)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@3");
+test("the contract set is at version 4 (frame_reader role and the editor's decisions)", () => {
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@4");
 });
 
 test("the assets constants moved to config keep the values assets/STATUS.md recorded", () => {
@@ -77,6 +76,110 @@ test("the Bible gives 1080 x 1920 output, the 7-day reliability window and the l
   assert.equal(thresholds.jobs.leaseMs.generation, 600_000);
   assert.equal(thresholds.jobs.leaseMs.claude, 120_000);
   assert.equal(thresholds.jobs.leaseMs.render, 300_000);
+});
+
+test("the plan lease is three Claude leases in sequence (6 minutes), so it moves with the Claude lease (thresholds@3)", () => {
+  assert.equal(thresholds.jobs.leaseMs.plan, 3 * thresholds.jobs.leaseMs.claude);
+  assert.equal(thresholds.jobs.leaseMs.plan, 360_000);
+});
+
+test("the editor's Bible 8.2 numbers are plain where the Bible gives them, with the values edit/tuning.ts held", () => {
+  const editor = thresholds.editor;
+  assert.deepEqual(editor.cutSnap, { gapMinMs: 80, windowMs: 250, beatWindowMs: 120 }, "8.2 step 3: 80 ms gap, 250 ms and 120 ms windows");
+  assert.deepEqual(editor.fit, { shortShare: 0.5, longShare: 1.5 }, "8.2 step 4: 0.5x and 1.5x the target");
+  assert.deepEqual(editor.hook, { captionByMs: 500, motionWithinMs: 300 }, "8.2 step 5: caption by 500 ms, motion within 300 ms");
+  assert.equal(editor.loopMs, 500, "8.2 step 12: the last 500 ms");
+  assert.equal(editor.punch.jitterShare, 0.1, "8.2 step 13: within +-10 per cent");
+  assert.equal(editor.music.duckDb, -18, "8.2 step 11: ducked by 18 dB");
+});
+
+test("the editor's Tunables keep the values edit/tuning.ts held, inside their bounds", () => {
+  const editor = thresholds.editor;
+  assert.equal(editor.effectClashMs.value, 300);
+  assert.equal(editor.punch.minScale.value, 1.02);
+  assert.equal(editor.punch.floorScale.value, 1.01);
+  assert.equal(editor.punch.maxScale.value, 1.5);
+  assert.equal(editor.punch.intensityDivisor.value, 4);
+  assert.equal(editor.music.baseGainDb.value, -12);
+  assert.equal(editor.captions.maxPerClip.value, 60);
+  assert.equal(editor.captions.maxWordsPerCaption.value, 8);
+  assert.equal(editor.maxDrawableGainDb.value, 12);
+  assert.equal(editor.loudnessRoundingLufs.value, 0.05);
+  assert.equal(editor.geometry.captionLeftShare.value, 0.06);
+  assert.equal(editor.geometry.captionWidthShare.value, 0.82);
+  assert.equal(editor.geometry.captionHeightShare.value, 0.07);
+  assert.deepEqual(
+    { upper: editor.geometry.captionTopShare.upper.value, middle: editor.geometry.captionTopShare.middle.value, lower: editor.geometry.captionTopShare.lower.value },
+    { upper: 0.16, middle: 0.47, lower: 0.6 },
+  );
+  assert.deepEqual(
+    {
+      x: editor.geometry.assumedFaceBox.x.value,
+      y: editor.geometry.assumedFaceBox.y.value,
+      w: editor.geometry.assumedFaceBox.w.value,
+      h: editor.geometry.assumedFaceBox.h.value,
+    },
+    { x: 0.2, y: 0.1, w: 0.6, h: 0.4 },
+  );
+});
+
+test("the break pattern is the regular expression edit/tuning.ts held, so caption breaks do not change", () => {
+  assert.equal(new RegExp(thresholds.editor.captions.breakPattern).source, /[.!?;:,]$/.source);
+  const breaks = new RegExp(thresholds.editor.captions.breakPattern);
+  assert.equal(breaks.test("sky."), true);
+  assert.equal(breaks.test("sky"), false);
+});
+
+test("the caption boxes at their initial values sit inside the Bible 8.3 safe zones (top 10, bottom 20, right 12 per cent)", () => {
+  const geometry = thresholds.editor.geometry;
+  const top = geometry.captionTopShare;
+  assert.ok(top.upper.value >= 0.1, "the upper band starts at or below the top 10 per cent");
+  assert.ok(top.lower.value + geometry.captionHeightShare.value <= 0.8, "the lower band ends at or above the bottom 20 per cent");
+  assert.ok(geometry.captionLeftShare.value + geometry.captionWidthShare.value <= 0.88, "the caption ends inside the right 12 per cent");
+  assert.ok(top.upper.floor >= 0.1, "no bound lets the upper band into the top 10 per cent");
+  assert.ok(top.lower.ceiling + geometry.captionHeightShare.value <= 0.8 + 1e-9, "the lower band's ceiling keeps it above the bottom 20 per cent");
+});
+
+test("the slideshow risk numbers and lists moved from review/tuning.ts keep their values (12.3, thresholds@3)", () => {
+  const slideshow = thresholds.slideshow;
+  assert.equal(slideshow.codedRunMax, 4, "five coded shots in a row is blocked (Bible 19 E4), so four is the longest that passes");
+  assert.deepEqual(Object.keys(slideshow.weights).sort(), [
+    "decorative_visuals",
+    "repetition",
+    "shot_intent",
+    "typography_over_reliance",
+    "unsupported_cinematic_claims",
+    "weak_motion",
+  ]);
+  for (const [dimension, weight] of Object.entries(slideshow.weights)) {
+    assert.equal(weight.value, 1, `${dimension} starts equal`);
+    assert.ok(weight.floor > 0, `${dimension} has a positive floor, so the weighted mean never divides by zero`);
+  }
+  assert.equal(slideshow.contentWordMinLength.value, 4);
+  assert.ok(slideshow.stopWords.includes("about") && slideshow.stopWords.includes("yours"));
+  assert.equal(slideshow.motionModelClassPrefix, "video.");
+});
+
+test("the slideshow lists name only members of the contract enums (no typo can silently change a check)", () => {
+  const slideshow = thresholds.slideshow;
+  for (const kind of slideshow.motionEffectKinds) {
+    assert.ok((EFFECT_KINDS as readonly string[]).includes(kind), `${kind} is not an EDL effect kind`);
+  }
+  for (const modelClass of slideshow.stillModelClasses) {
+    assert.ok((MODEL_CLASSES as readonly string[]).includes(modelClass), `${modelClass} is not a model class`);
+  }
+  for (const type of slideshow.cinematicClaimTypes) {
+    assert.ok((VISUAL_TYPES as readonly string[]).includes(type), `${type} is not a visual type`);
+  }
+  assert.ok(
+    MODEL_CLASSES.some((modelClass) => modelClass.startsWith(slideshow.motionModelClassPrefix)),
+    "the motion prefix matches a model class",
+  );
+});
+
+test("the audio gain cap is the compiler's 3.98 (+12 dB), so the ceiling of the drawable gain is that cap", () => {
+  assert.equal(thresholds.editor.maxDrawableGainDb.ceiling, 12);
+  assert.ok(Math.abs(10 ** (thresholds.editor.maxDrawableGainDb.value / 20) - 3.98) < 0.01, "+12 dB is about 3.98 times");
 });
 
 test("the breaker minimum sample and the scoring minimum are integers inside their bounds (E3 initial values)", () => {
