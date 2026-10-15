@@ -1,5 +1,31 @@
 # STATUS: engine compose (W9): compiler, style kit, fourteen components, golden frames
 
+## Decision (lead, 2026-10-15): stop-motion frame floor is 24, and overshoot is refused, not clamped
+
+This supersedes decisions 1 and 3 of the chain work below (floor 2; overshoot clamped). Decisions 2, 4, 5 and 6 still stand.
+
+- **Floor 24, ceiling 36** (Bible 7.1: 24 to 36 image.edit calls). A list shorter than 24 is refused with its count, never padded. A
+  list longer than 36 is refused with its count, never truncated.
+- **Accepted only when the list is the count its clip needs**: `framesNeeded(durationMs, fps)`, the first n whose start reaches the
+  clip end. Undershoot (a blank end) is refused, as before. **Overshoot** (frames that start at or after the clip end and would never
+  show) is refused with how many frames are extra. This is the case the old component clamped.
+- **Timing** is unchanged: frame i shows from `round(i * 1000 / fps)` to the next start; the last frame ends with the clip. The page no
+  longer skips frames past the clip, because the props refuse such a list before compile.
+- **Fixtures**. `eight-fps-three-seconds` is unchanged (24 frames, 3000 ms). `ten-fps-two-seconds` (20 frames, below the floor) is now
+  `ten-fps-two-and-a-half-seconds` (25 frames, 2500 ms). `twelve-fps-max-frames-clipped` (36 frames on 2000 ms, an overshoot) is now
+  `twelve-fps-max-frames-three-seconds` (36 frames, 3000 ms). Six golden PNGs are new and six old ones are removed; the eight-fps PNGs are
+  unchanged.
+- **Golden frames.** The six new PNGs come from a scratch render of only these two fixtures through the harness, because the full
+  update rewrites every component's PNGs. Checked: the centre colour of each new frame matches its frame index (9 of 9 frames across the
+  three fixtures). Compare run for all three fixtures: 9 of 9 pass at 0.000% differing pixels. **Not checked by eye**: the colour check
+  stands in for viewing.
+- **Planner.** `plan/chains.ts` takes its frame count from this component's `framesNeeded` at 12 per second, so the calls and the clip agree
+  (see `plan/STATUS.md`, same date).
+- **Tests.** `components/stopmotion.player.test.ts`: floor and ceiling refusals with their counts; overshoot refused with "refused, not
+  clamped"; an exhaustive check over 8 to 12 fps, 1 to 5 s clips and 24 to 36 frames (accepted exactly when the count is `framesNeeded`); every
+  fixture accepted; compile refuses an overshooting list.
+- **Run here**: `compose`, `plan` and `assets` test folders, 620 pass, 0 fail. `npx tsc --noEmit` exit 0. `npx eslint` on the changed files exit 0.
+
 ## Chain work: `stopmotion.player` (Bible 7.1 `stop_motion`, contract `engine-contracts@5`)
 
 Branch `worktree-agent-a70192d499308ef8a`. The worktree had no commits of its own, so it was fast-forwarded from d0e8f63 to

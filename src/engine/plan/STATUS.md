@@ -1,5 +1,29 @@
 # STATUS: the plan stage (W7), E3 and E5 (W9 plan-side support)
 
+## Decision (lead, 2026-10-15): stop-motion call count is 24 to 36, refused above 36, never clamped
+
+This replaces the frame count and rate of the stop-motion chain described below (`stopMotionTiming`). The chain's call count only
+changed; the rest of the chain (the calls, prices and closing component) is as before.
+
+- **Count.** `stopMotionTiming(durationMs)` uses 12 frames per second, the top of the Bible's range and a whole number the player accepts.
+  The count is `framesNeeded(durationMs, 12)` from `compose/components/stopmotion.player/props.ts`, so the planner and the player use one
+  rule. A count in 24 to 36 gives that many `image.edit` calls. A count above 36 is refused ("needs N frames at 12 per second, more than the
+  36 allowed ... refused, not clamped"). A count below 24 is refused ("fewer than the 24 allowed").
+- **Before.** `frames = clamp(round(12 * s), 24, 36)` and `fps = frames / s`. Shots longer than about 3 s were clamped to 36 frames, and the
+  fps was fractional for most lengths, which the player refuses (whole fps only).
+- **Shot lengths now built: about 1.92 s to 3.00 s** (24 frames at 1918 ms, 36 frames at 3000 ms). Examples: 2.0 s gives 24 calls, 2.5 s gives 30,
+  3.0 s gives 36.
+- **Consequence for the lead (not decided here).** Shots of 3.0 to 4.5 s, which the Bible's 8 to 12 fps range allows, are now refused.
+  Building them needs a lower whole fps per shot: 10 fps gives 35 frames for 3.5 s, and 8 fps gives 36 frames for 4.5 s. Choosing fps per shot
+  is outside this grant ("the chain's call count only"), so it is left for a decision.
+- **Consumers.** `fps` has no consumer outside `chains.ts` yet (the closing component is not placed by the orchestrator). The count is the
+  only value that reaches the calls.
+- **Tests.** `chains.test.ts`: the stop-motion bounds (1.92 to 3.00 s, 3.5 s refused with 42 frames), and an exhaustive check for 1 to 5 s
+  in 10 ms steps that every made chain has 24 to 36 calls and the player's `framesNeeded` count. Boundaries at 1917/1918 and 3000/3010 ms.
+  `MIN`/`MAX` in `tables.ts` equal the player's. `sources.test.ts`: the timing table (2.0 s, 2.5 s, 3.0 s, 4.5 s refused, 1.9 s refused) and
+  the refusal text ("about 2 to 3 seconds").
+- **Run here**: `compose`, `plan` and `assets` test folders, 620 pass, 0 fail (with the component change). `npx tsc --noEmit` exit 0.
+
 ## Cartoon chain end to end (contract v5): cartoon_generated built and tested; stop_motion refused until image.edit is priced
 
 Branch `worktree-agent-adcc78d81ea833bab`, on top of `244e3e8`. The plan side hands the chain to the stages (`jobs/handlers/plan.ts`,

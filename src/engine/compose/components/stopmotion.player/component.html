@@ -43,14 +43,11 @@
       var fps = vars.fps;
       var tl = gsap.timeline({ paused: true });
 
-      // Frame i shows from round(i * 1000 / fps) to the next frame's start, clamped to the clip (Bible 7.1). A frame
-      // that starts at or after the clip end is never shown. Each frame is set on the composition clock, so any frame
-      // can be drawn without playing the ones before it.
+      // Frame i shows from round(i * 1000 / fps) to the next frame's start (Bible 7.1); the last one ends with the clip.
+      // The props accept only a list whose frames all start before the clip ends, so nothing is skipped or clamped here.
+      // Each frame is set on the composition clock, so any frame can be drawn without playing the ones before it.
       frames.forEach(function (uri, index) {
         var startMs = Math.round(index * 1000 / fps);
-        if (startMs >= vars.durationMs) {
-          return;
-        }
         var endMs = Math.min(Math.round((index + 1) * 1000 / fps), vars.durationMs);
         var frame = document.createElement("div");
         frame.className = "sm-frame";
