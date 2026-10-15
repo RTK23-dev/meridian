@@ -14,7 +14,7 @@ export const MEDIA_FUNCTIONS_BASE_URL_SETTING = "MEDIA_FUNCTIONS_BASE_URL";
 
 /** The base URL with no trailing slash, or null when the setting is unset or not a usable https origin. */
 export function engineMediaFunctionsBaseUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const value = (env[MEDIA_FUNCTIONS_BASE_URL_SETTING] ?? "").trim();
+  const value = (env.MEDIA_FUNCTIONS_BASE_URL ?? "").trim();
   if (!value) return null;
   let parsed: URL;
   try {
