@@ -1,6 +1,32 @@
-# STATUS: component library (Bible 9.2), E1 and E2 sets
+# STATUS: component library (Bible 9.2), E1, E2 and E5 sets
 
-Phase E2, branch `eng-e2-components`, cut from `code/beautiful-cori-1zfk11` (a4b04c7). Full status is in `../STATUS.md`.
+Full status is in `../STATUS.md`. E5 is on branch `eng-e5-visual-types`.
+
+## E5 components (`kinetic.type`, `screen.mock`, `character.rig`)
+
+- **`kinetic.type`** (`props.ts`: `lines` of `{text, atMs}`, `emphasis`, `entrance` stagger or pop, `wordStepMs`, `band`).
+  Fixtures: `stagger-three-lines` (frames 1200, 2200), `pop-emphasis-upper` (400, 1500), `lower-band-long-line` (1200).
+  Used by `kinetic_type` shots that speak emphasis words (plan/sources.ts). Without emphasis, `kinetic.punchline` stays.
+- **`screen.mock`** (`props.ts`: discriminated union on `screen`). Fixtures: `notification-phone` (1100), `app-rows-phone`
+  (900, 1500), `chat-desktop-markup` (1600, 2600). The markup message shows as text.
+- **`character.rig`** (`props.ts`: `rigId` (`bean.v1` only), `characterId`, `position`, `poses`, `mouth`). The template
+  is a static SVG with named parts, driven by GSAP `fromTo` and `set` calls that use `immediateRender: false`. Fixtures:
+  `idle-talk` (700, 1250), `point-and-cheer` (1000, 2100), `think-surprise` (600, 1500).
+- Golden PNGs: 16 frames, written by the golden harness for the three new components only (the same code path as
+  `golden.update.ts`, run for these names), so the existing PNGs did not change. The frames were viewed by eye: `character.rig` idle-talk@700,
+  point-and-cheer@2100, think-surprise@600 and @1500; `screen.mock` notification-phone@1100, app-rows-phone@1500,
+  chat-desktop-markup@2600; `kinetic.type` stagger-three-lines@2200, pop-emphasis-upper@400 and @1500. The other frames were
+  written from the same render but not viewed one by one; the lead should view them before merge.
+- Fixed while viewing: the think arm (-40 hung down; now -120 raises it to head height); the surprised brow lift (-14 touched
+  the head outline; now -8); the emphasis punch of kinetic.type (0.3 overlapped the neighbour word; now 0.18, with 0.05em
+  padding per word). The `kinetic.type` box is centred on 47% of the width, as title.hook is (6% to 88%, the right 12% kept clear).
+- The rig is one built-in SVG. Its names are the contract with the character sheet: poses and mouth shapes must be names the
+  rig draws. `characterSheetFixture` in contracts/fixtures lists visemes `A, E, O, M, rest`, which the rig does not draw, so
+  that sheet cannot drive it (plan/sources.ts refuses it, with the reason).
+
+## E2 set (the E2 notes below still hold)
+
+Phase E2, branch `eng-e2-components`, cut from `code/beautiful-cori-1zfk11` (a4b04c7).
 
 - Done in E1: `captions.karaoke`, `title.hook`, `kinetic.punchline`, `product.card`, `cta.card`.
 - Done in E2: `react.layout`, `list.tierBoard`, `compare.split`, `price.reveal`, `chat.thread`. Each has `component.html`,

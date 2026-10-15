@@ -1,7 +1,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { personaFixture, productKitFixture } from "../contracts/fixtures/index.ts";
-import { buildSource, checkComponentProps, componentRefusals, emphasisIn, kineticLinesOf, type BuildSourceInput } from "./sources.ts";
+import type { CharacterSheet } from "../contracts/index.ts";
+import {
+  buildSource,
+  cartoonGeneratedChain,
+  checkComponentProps,
+  componentRefusals,
+  emphasisIn,
+  kineticLinesOf,
+  mouthShapeFor,
+  mouthTimelineOf,
+  sentencesOf,
+  stopMotionChain,
+  stopMotionTiming,
+  timedLinesOf,
+  wordSpanOf,
+  type BuildSourceInput,
+} from "./sources.ts";
+import { PROMPT_STYLE } from "./tables.ts";
 
 const SHOT: Omit<BuildSourceInput["shot"], "words"> = {
   shotId: "shot_01JABCDEFGHJKMNPQRSTVWXYZ0",
@@ -148,7 +165,303 @@ describe("buildSource: each type's source from its inputs", () => {
   });
 
   it("refuses a type the plan has no source for", () => {
-    const result = buildSource(input({ visualType: "stop_motion" }));
+    const result = buildSource(input({ visualType: "react_clip" }));
     assert.equal(result.ok, false);
+  });
+});
+
+// --- E5 -----------------------------------------------------------------------------------------------------------------
+
+const RIG_SHEET: CharacterSheet = {
+  characterId: "char_rig_test",
+  version: 1,
+  kind: "rigged_svg",
+  rigUri: "store://rigs/test.svg",
+  poses: ["idle", "point", "shrug", "cheer", "think", "surprise"],
+  visemes: ["closed", "open", "wide", "round", "teeth"],
+};
+
+const GENERATED_SHEET: CharacterSheet = {
+  characterId: "char_gen_test",
+  version: 1,
+  kind: "generated",
+  references: ["store://characters/front.png", "store://characters/side.png"],
+  styleNotes: "Rounded shapes",
+};
+
+describe("cinematic: the code's look goes in front of the planner's scene", () => {
+  it("prefixes the cinematic style to the prompt, and keeps the scene after it", () => {
+    const result = buildSource(input({ visualType: "cinematic", prompt: "A kitchen at dawn, slow push-in." }));
+    assert.ok(result.ok);
+    if (!result.ok || result.built.source.kind !== "generate") return;
+    assert.equal(result.built.source.prompt, `${PROMPT_STYLE.cinematic} A kitchen at dawn, slow push-in.`);
+    assert.equal(result.built.source.modelClass, "video.cinematic");
+    assert.equal(result.built.source.takes, 2);
+  });
+});
+
+describe("kinetic.type: emphasis words make a kinetic shot, and each line starts at its word's time", () => {
+  it("draws kinetic.type with the lines' start times from the voice spans, and the emphasis the shot speaks", () => {
+    const spans = [
+      { startMs: 0, endMs: 300 },
+      { startMs: 300, endMs: 600 },
+      { startMs: 600, endMs: 700 },
+      { startMs: 700, endMs: 1100 },
+      { startMs: 1200, endMs: 1500 },
+    ];
+    const result = buildSource(
+      input({
+        visualType: "kinetic_type",
+        words: ["Stop", "buying", "the", "expensive", "blender"],
+        shot: { emphasis: ["Expensive", "later"], durationMs: 2000, spans },
+      }),
+    );
+    assert.ok(result.ok);
+    if (!result.ok || result.built.source.kind !== "component") return;
+    assert.equal(result.built.source.component, "kinetic.type");
+    assert.deepEqual(result.built.source.props, {
+      lines: [
+        { text: "Stop buying the expensive", atMs: 0 },
+        { text: "blender", atMs: 1200 },
+      ],
+      emphasis: ["Expensive"],
+      entrance: "stagger",
+      band: "middle",
+    });
+  });
+
+  it("shares the shot's length evenly between the words when the voice spans are not given", () => {
+    const result = buildSource(
+      input({ visualType: "kinetic_type", words: ["Stop", "buying", "the", "expensive", "blender"], shot: { emphasis: ["blender"], durationMs: 2000 } }),
+    );
+    assert.ok(result.ok && result.built.source.kind === "component");
+    if (!result.ok || result.built.source.kind !== "component") return;
+    assert.deepEqual((result.built.source.props as { lines: unknown[] }).lines, [
+      { text: "Stop buying the expensive", atMs: 0 },
+      { text: "blender", atMs: 1600 },
+    ]);
+  });
+
+  it("refuses word timings that do not line up with the words, for any type", () => {
+    const result = buildSource(
+      input({ visualType: "kinetic_type", words: ["a", "b"], shot: { spans: [{ startMs: 0, endMs: 100 }] } }),
+    );
+    assert.equal(result.ok, false);
+    assert.match(result.ok ? "" : result.reason, /word timings/);
+  });
+
+  it("refuses kinetic type with more emphasis words than the component holds (four)", () => {
+    const refusals = componentRefusals({
+      durationMs: 3000,
+      beatRole: "item",
+      showsProduct: false,
+      words: ["one", "two", "three", "four", "five"],
+      emphasis: ["one", "two", "three", "four", "five"],
+    });
+    assert.ok(refusals.kinetic_type, "five emphasis words are too many for kinetic.type");
+  });
+
+  it("refuses kinetic type, and does not read past the end, when the word timings do not match the words", () => {
+    const refusals = componentRefusals({
+      durationMs: 2000,
+      beatRole: "item",
+      showsProduct: false,
+      words: ["a", "b"],
+      emphasis: ["a"],
+      spans: [{ startMs: 0, endMs: 100 }],
+    });
+    assert.match(refusals.kinetic_type ?? "", /word timings/);
+  });
+});
+
+describe("cartoon_rigged: one rig, drawn from the page's character sheet", () => {
+  const shot = { words: ["Four", "smoothies"], durationMs: 1000, beatRole: "twist" as const, showsProduct: false, emphasis: [] };
+
+  it("refuses without a sheet, with a generated sheet, and with a sheet that lacks the idle pose or the open and closed mouths", () => {
+    const none = buildSource({ visualType: "cartoon_rigged", shot: { shotId: "s", ...shot }, claimIds: [] });
+    assert.match(none.ok ? "" : none.reason, /rigged character sheet/);
+    const generated = buildSource({ visualType: "cartoon_rigged", shot: { shotId: "s", ...shot }, character: GENERATED_SHEET, claimIds: [] });
+    assert.match(generated.ok ? "" : generated.reason, /not a rigged SVG sheet/);
+    const noIdle = buildSource({
+      visualType: "cartoon_rigged",
+      shot: { shotId: "s", ...shot },
+      character: { ...RIG_SHEET, poses: ["point"] },
+      claimIds: [],
+    });
+    assert.match(noIdle.ok ? "" : noIdle.reason, /idle pose/);
+    const fixtureSheet = buildSource({
+      visualType: "cartoon_rigged",
+      shot: { shotId: "s", ...shot },
+      character: { ...RIG_SHEET, visemes: ["A", "E", "O", "M", "rest"] },
+      claimIds: [],
+    });
+    assert.match(fixtureSheet.ok ? "" : fixtureSheet.reason, /closed and open/);
+  });
+
+  it("draws character.rig: the beat's pose and expression at 0, and one mouth shape per word from its first vowel", () => {
+    const result = buildSource({ visualType: "cartoon_rigged", shot: { shotId: "s", ...shot }, character: RIG_SHEET, claimIds: [] });
+    assert.ok(result.ok);
+    if (!result.ok || result.built.source.kind !== "component") return;
+    assert.equal(result.built.source.component, "character.rig");
+    assert.equal(result.built.layer, "graphics");
+    assert.deepEqual(result.built.source.props, {
+      rigId: "bean.v1",
+      characterId: "char_rig_test",
+      position: "center",
+      poses: [{ atMs: 0, pose: "think", expression: "annoyed" }],
+      mouth: [
+        { atMs: 0, shape: "round" },
+        { atMs: 350, shape: "closed" },
+        { atMs: 500, shape: "round" },
+        { atMs: 850, shape: "closed" },
+      ],
+    });
+  });
+
+  it("falls back to the idle pose and the open mouth when the sheet does not list the role's pose or shape", () => {
+    const sheet = { ...RIG_SHEET, poses: ["idle"], visemes: ["closed", "open"] };
+    const result = buildSource({ visualType: "cartoon_rigged", shot: { shotId: "s", ...shot }, character: sheet, claimIds: [] });
+    assert.ok(result.ok && result.built.source.kind === "component");
+    if (!result.ok || result.built.source.kind !== "component") return;
+    const props = result.built.source.props as { poses: Array<{ pose: string; expression: string }>; mouth: Array<{ shape: string }> };
+    assert.equal(props.poses[0].pose, "idle");
+    assert.equal(props.poses[0].expression, "annoyed", "the expression is the beat's; only the pose falls back");
+    assert.ok(props.mouth.every((event) => event.shape === "open" || event.shape === "closed"));
+  });
+});
+
+describe("screen_mock: a screen from the shot's own words and the product kit, with no invented content", () => {
+  const kitInput = { productKit: productKitFixture };
+
+  it("shows two or more sentences as a chat, alternating sides, each message at its sentence's start", () => {
+    const chat = buildSource(input({ visualType: "screen_mock", words: ["Is", "this", "loud?", "Not", "at", "all."], shot: { durationMs: 2000 } }));
+    assert.ok(chat.ok && chat.built.source.kind === "component");
+    if (!chat.ok || chat.built.source.kind !== "component") return;
+    assert.equal(chat.built.source.component, "screen.mock");
+    assert.deepEqual(chat.built.source.props, {
+      screen: "chat",
+      messages: [
+        { side: "left", text: "Is this loud?", atMs: 0 },
+        { side: "right", text: "Not at all.", atMs: 1000 },
+      ],
+    });
+  });
+
+  it("shows one sentence with approved claims as an app screen of those claims, with the product picture", () => {
+    const result = buildSource(
+      input({ visualType: "screen_mock", words: ["Four", "smoothies", "in", "two", "minutes"], claimIds: ["claim_fixture_1"], ...kitInput }),
+    );
+    assert.ok(result.ok && result.built.source.kind === "component");
+    if (!result.ok || result.built.source.kind !== "component") return;
+    assert.deepEqual(result.built.source.props, {
+      screen: "app",
+      title: productKitFixture.name,
+      rows: [{ label: "Makes four smoothies in under two minutes" }],
+      imageUri: productKitFixture.heroImages[0].uri,
+    });
+  });
+
+  it("shows one sentence with no claims as a notification from the product's app", () => {
+    const result = buildSource(input({ visualType: "screen_mock", words: ["Four", "smoothies", "in", "two", "minutes"], ...kitInput }));
+    assert.ok(result.ok && result.built.source.kind === "component");
+    if (!result.ok || result.built.source.kind !== "component") return;
+    assert.deepEqual(result.built.source.props, {
+      screen: "notification",
+      app: productKitFixture.name,
+      title: "Four smoothies in two minutes",
+      timeLabel: "now",
+      iconUri: productKitFixture.heroImages[0].uri,
+    });
+  });
+
+  it("refuses a one-line notification with no product kit (no app name to show), an empty shot, and a chat over six messages", () => {
+    const noApp = buildSource(input({ visualType: "screen_mock", words: ["Four", "smoothies"] }));
+    assert.match(noApp.ok ? "" : noApp.reason, /product's name/);
+    const silent = buildSource(input({ visualType: "screen_mock", words: [], ...kitInput }));
+    assert.match(silent.ok ? "" : silent.reason, /no words/);
+    const seven = Array.from({ length: 7 }, (_, index) => `Line ${index + 1}.`);
+    const long = buildSource(input({ visualType: "screen_mock", words: seven, shot: { durationMs: 7000 } }));
+    assert.match(long.ok ? "" : long.reason, /holds 6 messages/);
+  });
+});
+
+describe("cartoon_generated and stop_motion: chains that one shot source cannot carry", () => {
+  it("refuses both in buildSource, and names the chain builder that makes their calls", () => {
+    const cartoon = buildSource(input({ visualType: "cartoon_generated", prompt: "x" }));
+    assert.match(cartoon.ok ? "" : cartoon.reason, /chain/);
+    assert.match(cartoon.ok ? "" : cartoon.reason, /cartoonGeneratedChain/);
+    const stop = buildSource(input({ visualType: "stop_motion", prompt: "x" }));
+    assert.match(stop.ok ? "" : stop.reason, /stopMotionChain/);
+  });
+
+  it("builds the cartoon chain: a keyframe with every reference, then a video that takes the keyframe, both in the code's look", () => {
+    const chain = cartoonGeneratedChain(input({ visualType: "cartoon_generated", prompt: "The bean jumps.", character: GENERATED_SHEET }));
+    assert.ok(chain.ok);
+    if (!chain.ok) return;
+    const style = `${PROMPT_STYLE.cartoon_generated} The bean jumps.`;
+    assert.deepEqual(chain.value, {
+      keyframe: { modelClass: "image.keyframe", prompt: style, refs: GENERATED_SHEET.references },
+      video: { modelClass: "video.budget", prompt: style, refs: GENERATED_SHEET.references, takes: 1 },
+    });
+  });
+
+  it("refuses the cartoon chain without a generated sheet, without references, or without a prompt", () => {
+    assert.equal(cartoonGeneratedChain(input({ visualType: "cartoon_generated", prompt: "x", character: RIG_SHEET })).ok, false);
+    assert.equal(
+      cartoonGeneratedChain(input({ visualType: "cartoon_generated", prompt: "x", character: { ...GENERATED_SHEET, references: [] } })).ok,
+      false,
+    );
+    assert.equal(cartoonGeneratedChain(input({ visualType: "cartoon_generated", character: GENERATED_SHEET })).ok, false);
+  });
+
+  it("times stop-motion frames at 24 to 36 frames and 8 to 12 per second, and refuses shots outside about 2 to 4.5 seconds", () => {
+    assert.deepEqual(stopMotionTiming(2000), { ok: true, value: { frames: 24, fps: 12 } });
+    assert.deepEqual(stopMotionTiming(2500), { ok: true, value: { frames: 30, fps: 12 } });
+    assert.deepEqual(stopMotionTiming(3000), { ok: true, value: { frames: 36, fps: 12 } });
+    assert.deepEqual(stopMotionTiming(4500), { ok: true, value: { frames: 36, fps: 8 } });
+    assert.equal(stopMotionTiming(4600).ok, false);
+    assert.equal(stopMotionTiming(1900).ok, false);
+  });
+
+  it("builds the stop-motion chain from the hero image, and refuses it without one", () => {
+    const chain = stopMotionChain(input({ visualType: "stop_motion", prompt: "A bean hops.", productKit: productKitFixture, shot: { durationMs: 2500 } }));
+    assert.ok(chain.ok);
+    if (!chain.ok) return;
+    assert.equal(chain.value.hero, productKitFixture.heroImages[0].uri);
+    assert.deepEqual(chain.value.frame.refs, [productKitFixture.heroImages[0].uri]);
+    assert.equal(chain.value.frame.modelClass, "image.edit");
+    assert.equal(chain.value.frames, 30);
+    assert.equal(chain.value.player, "stopmotion.player");
+    assert.equal(stopMotionChain(input({ visualType: "stop_motion", prompt: "x", shot: { durationMs: 2500 } })).ok, false);
+  });
+});
+
+describe("word timing helpers", () => {
+  it("opens the mouth on a round vowel for o and u, a wide one for e, i and y, and an open one otherwise", () => {
+    assert.equal(mouthShapeFor("Four"), "round");
+    assert.equal(mouthShapeFor("in"), "wide");
+    assert.equal(mouthShapeFor("cat"), "open");
+    assert.equal(mouthShapeFor("mmm"), "open");
+  });
+
+  it("splits sentences at . ! or ?, with the index of each sentence's first word", () => {
+    const sentences = sentencesOf(["Stop.", "Now", "go!", "ok"]);
+    assert.deepEqual(sentences, [
+      { words: ["Stop."], start: 0 },
+      { words: ["Now", "go!"], start: 1 },
+      { words: ["ok"], start: 3 },
+    ]);
+  });
+
+  it("places each word evenly when no spans are given, and uses the spans when they are", () => {
+    const even = { durationMs: 1000, words: ["a", "b", "c", "d"] };
+    assert.deepEqual(wordSpanOf(even, 2), { startMs: 500, endMs: 675 }, "250 ms a word, the word held for 70 per cent of it");
+    const timed = { ...even, spans: [{ startMs: 0, endMs: 200 }, { startMs: 200, endMs: 400 }, { startMs: 500, endMs: 900 }, { startMs: 900, endMs: 1000 }] };
+    assert.deepEqual(wordSpanOf(timed, 2), { startMs: 500, endMs: 900 });
+    assert.deepEqual(mouthTimelineOf(timed).slice(4, 6), [
+      { atMs: 500, shape: "open" },
+      { atMs: 900, shape: "closed" },
+    ]);
+    assert.deepEqual(timedLinesOf(even).map((line) => line.atMs), [0]);
   });
 });

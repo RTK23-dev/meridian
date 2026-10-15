@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"entrance","type":"enum","label":"Entrance","default":"stagger","options":[{"value":"stagger","label":"Stagger"},{"value":"pop","label":"Pop"}]},{"id":"wordStepMs","type":"number","label":"Word step (ms)","default":120,"min":40,"max":300,"step":1,"unit":"ms"},{"id":"band","type":"enum","label":"Band","default":"middle","options":[{"value":"upper","label":"Upper"},{"value":"middle","label":"Middle"},{"value":"lower","label":"Lower"}]},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="kinetic.type" data-width="1080" data-height="1920">
+  <div class="kt-layer kt-layer-middle">
+    <div class="kt-box"></div>
+  </div>
+  <style>
+    .kt-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+    /* The text box spans 6% to 88% of the width, and each band keeps its lines above the bottom 20%. */
+    .kt-box {
+      position: absolute;
+      left: 6%;
+      width: 82%;
+      text-align: center;
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 120px;
+      line-height: 1.05;
+      color: var(--kit-text);
+      text-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+      transform-origin: 50% 50%;
+    }
+    .kt-layer-upper .kt-box { top: 14%; }
+    .kt-layer-middle .kt-box { top: 38%; }
+    .kt-layer-lower .kt-box { top: 52%; }
+    .kt-line { display: none; }
+    .kt-word { display: inline-block; padding: 0 0.05em; }
+    .kt-em { color: var(--kit-accent); }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var accent = kit.getPropertyValue("--kit-accent").trim();
+      var band = vars.band === "upper" || vars.band === "lower" ? vars.band : "middle";
+      var layer = document.querySelector(".kt-layer");
+      layer.className = "kt-layer kt-layer-" + band;
+      var box = document.querySelector(".kt-box");
+
+      function key(word) {
+        return String(word).toLowerCase().replace(/[^a-z0-9]/g, "");
+      }
+      var lines = Array.isArray(vars.lines) ? vars.lines : [];
+      var emphasis = Array.isArray(vars.emphasis) ? vars.emphasis.map(key) : [];
+      var step = vars.wordStepMs / 1000;
+      var seconds = vars.durationMs / 1000;
+      var pop = vars.entrance === "pop";
+      var tl = gsap.timeline({ paused: true });
+
+      lines.forEach(function (line, index) {
+        var start = line.atMs / 1000;
+        var end = index + 1 < lines.length ? lines[index + 1].atMs / 1000 : seconds;
+        var el = document.createElement("div");
+        el.className = "kt-line";
+        box.appendChild(el);
+        var words = String(line.text).split(/\s+/).filter(Boolean);
+        var spans = [];
+        words.forEach(function (word, i) {
+          var span = document.createElement("span");
+          span.className = "kt-word";
+          span.textContent = word;
+          if (key(word) && emphasis.indexOf(key(word)) !== -1) {
+            span.className = "kt-word kt-em";
+            span.style.color = accent;
+          }
+          el.appendChild(span);
+          if (i < words.length - 1) {
+            el.appendChild(document.createTextNode(" "));
+          }
+          spans.push(span);
+        });
+
+        // The line is on screen from its start to the next line's start (or the end of the clip).
+        tl.set(el, { display: "block" }, start);
+        tl.set(el, { display: "none" }, end);
+
+        if (pop) {
+          tl.fromTo(el, { opacity: 0, scale: 1 + 0.25 * motion }, { opacity: 1, scale: 1, duration: 0.18, ease: "back.out(1.6)" }, start);
+          spans.forEach(function (span) {
+            if (span.classList.contains("kt-em")) {
+              tl.fromTo(span, { scale: 1 + 0.18 * motion }, { scale: 1, duration: 0.2, ease: "back.out(2)" }, start);
+            }
+          });
+        } else {
+          spans.forEach(function (span, i) {
+            var at = start + i * step;
+            tl.fromTo(span, { opacity: 0, y: 36 * motion }, { opacity: 1, y: 0, duration: 0.14, ease: "power2.out" }, at);
+            if (span.classList.contains("kt-em")) {
+              tl.fromTo(span, { scale: 1 + 0.18 * motion }, { scale: 1, duration: 0.2, ease: "back.out(2)" }, at);
+            }
+          });
+        }
+      });
+
+      tl.set({}, {}, seconds);
+      window.__timelines["kinetic.type"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

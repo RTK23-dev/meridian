@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"rigId","type":"enum","label":"Rig","default":"bean.v1","options":[{"value":"bean.v1","label":"Bean v1"}]},{"id":"characterId","type":"string","label":"Character","default":""},{"id":"position","type":"enum","label":"Position","default":"center","options":[{"value":"left","label":"Left"},{"value":"center","label":"Center"},{"value":"right","label":"Right"}]},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="character.rig" data-width="1080" data-height="1920">
+  <div class="cr-root cr-center">
+    <div class="cr-box">
+      <svg class="cr-svg" viewBox="0 0 300 450" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <ellipse class="cr-shadow" cx="150" cy="432" rx="92" ry="12"></ellipse>
+        <rect class="cr-torso" x="100" y="230" width="100" height="168" rx="50"></rect>
+        <rect class="cr-leg" x="116" y="380" width="30" height="46" rx="12"></rect>
+        <rect class="cr-leg" x="154" y="380" width="30" height="46" rx="12"></rect>
+        <g transform="translate(104 255)">
+          <g class="cr-arm cr-arm-left">
+            <path class="cr-arm-outline" d="M0 0 L0 116"></path>
+            <path class="cr-arm-fill" d="M0 0 L0 116"></path>
+            <circle class="cr-hand" cx="0" cy="124" r="20"></circle>
+          </g>
+        </g>
+        <g transform="translate(196 255)">
+          <g class="cr-arm cr-arm-right">
+            <path class="cr-arm-outline" d="M0 0 L0 116"></path>
+            <path class="cr-arm-fill" d="M0 0 L0 116"></path>
+            <circle class="cr-hand" cx="0" cy="124" r="20"></circle>
+          </g>
+        </g>
+        <g transform="translate(150 150)">
+          <g class="cr-head">
+            <ellipse class="cr-face" cx="0" cy="0" rx="80" ry="86"></ellipse>
+            <ellipse class="cr-eye-white" cx="-30" cy="-14" rx="20" ry="24"></ellipse>
+            <ellipse class="cr-eye-white" cx="30" cy="-14" rx="20" ry="24"></ellipse>
+            <circle class="cr-pupil" cx="-28" cy="-10" r="9"></circle>
+            <circle class="cr-pupil" cx="32" cy="-10" r="9"></circle>
+            <rect class="cr-lid cr-lid-left" x="-50" y="-38" width="40" height="48"></rect>
+            <rect class="cr-lid cr-lid-right" x="10" y="-38" width="40" height="48"></rect>
+            <path class="cr-brow cr-brow-left" d="M-54 -60 L-14 -54"></path>
+            <path class="cr-brow cr-brow-right" d="M14 -54 L54 -60"></path>
+            <ellipse class="cr-cheek" cx="-52" cy="20" rx="12" ry="9"></ellipse>
+            <ellipse class="cr-cheek" cx="52" cy="20" rx="12" ry="9"></ellipse>
+            <path class="cr-mouth cr-mouth-closed" d="M-16 42 Q0 48 16 42"></path>
+            <ellipse class="cr-mouth cr-mouth-open" cx="0" cy="44" rx="16" ry="12"></ellipse>
+            <ellipse class="cr-mouth cr-mouth-wide" cx="0" cy="42" rx="26" ry="9"></ellipse>
+            <circle class="cr-mouth cr-mouth-round" cx="0" cy="44" r="9"></circle>
+            <g class="cr-mouth cr-mouth-teeth">
+              <rect x="-20" y="36" width="40" height="14" rx="4"></rect>
+              <path d="M-20 43 L20 43"></path>
+            </g>
+          </g>
+        </g>
+      </svg>
+    </div>
+  </div>
+  <style>
+    .cr-root { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+    /* The rig box is 60% wide and sits from 26% down, so it ends at 77% of the height. Its left edge keeps the right 12% clear. */
+    .cr-box { position: absolute; top: 26%; width: 60%; aspect-ratio: 2 / 3; }
+    .cr-left .cr-box { left: 6%; }
+    .cr-center .cr-box { left: 20%; }
+    .cr-right .cr-box { left: 28%; }
+    .cr-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+    .cr-shadow { fill: rgba(0, 0, 0, 0.18); }
+    .cr-torso { fill: var(--kit-primary); stroke: var(--kit-text); stroke-width: 7; }
+    .cr-leg { fill: var(--kit-secondary); stroke: var(--kit-text); stroke-width: 6; }
+    .cr-arm-outline { fill: none; stroke: var(--kit-text); stroke-width: 40; stroke-linecap: round; }
+    .cr-arm-fill { fill: none; stroke: var(--kit-primary); stroke-width: 28; stroke-linecap: round; }
+    .cr-hand { fill: var(--kit-secondary); stroke: var(--kit-text); stroke-width: 6; }
+    .cr-face { fill: var(--kit-secondary); stroke: var(--kit-text); stroke-width: 7; }
+    .cr-eye-white { fill: var(--kit-background); stroke: var(--kit-text); stroke-width: 5; }
+    .cr-pupil { fill: var(--kit-text); }
+    .cr-lid { fill: var(--kit-secondary); }
+    .cr-brow { fill: none; stroke: var(--kit-text); stroke-width: 9; stroke-linecap: round; }
+    .cr-cheek { fill: var(--kit-accent); opacity: 0.6; }
+    .cr-mouth { fill: var(--kit-text); stroke: var(--kit-text); stroke-width: 5; stroke-linecap: round; opacity: 0; }
+    .cr-mouth-closed { fill: none; stroke-width: 7; opacity: 1; }
+    .cr-mouth-teeth rect { fill: var(--kit-background); stroke: var(--kit-text); stroke-width: 5; }
+    .cr-mouth-teeth path { fill: none; stroke: var(--kit-text); stroke-width: 4; }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var lift = 1 + 0.5 * motion;
+      var position = vars.position === "left" || vars.position === "right" ? vars.position : "center";
+      document.querySelector(".cr-root").className = "cr-root cr-" + position;
+      var seconds = vars.durationMs / 1000;
+      var tl = gsap.timeline({ paused: true });
+
+      // The pose library: arm angles in degrees (positive swings the left arm out and the right arm in), and the head tilt.
+      var POSES = {
+        idle: { left: 12, right: -12, head: 0 },
+        point: { left: 14, right: -100, head: 0 },
+        shrug: { left: 60, right: -60, head: 0 },
+        cheer: { left: 150, right: -150, head: 0 },
+        think: { left: 12, right: -120, head: -8 },
+        surprise: { left: 70, right: -70, head: 0 }
+      };
+      // The face library: lid cover (0 open, 1 shut), brow tilts and brow height.
+      var FACES = {
+        neutral: { lid: 0, browL: 0, browR: 0, browY: 0 },
+        happy: { lid: 0.4, browL: -8, browR: 8, browY: 0 },
+        surprised: { lid: 0, browL: 0, browR: 0, browY: -8 },
+        annoyed: { lid: 0.2, browL: 18, browR: -18, browY: 4 }
+      };
+
+      var leftArm = document.querySelector(".cr-arm-left");
+      var rightArm = document.querySelector(".cr-arm-right");
+      var head = document.querySelector(".cr-head");
+      var browLeft = document.querySelector(".cr-brow-left");
+      var browRight = document.querySelector(".cr-brow-right");
+      var lidLeft = document.querySelector(".cr-lid-left");
+      var lidRight = document.querySelector(".cr-lid-right");
+      var lids = [lidLeft, lidRight];
+
+      gsap.set([leftArm, rightArm, head], { svgOrigin: "0 0" });
+      gsap.set(browLeft, { svgOrigin: "-34 -57" });
+      gsap.set(browRight, { svgOrigin: "34 -57" });
+      gsap.set(lidLeft, { svgOrigin: "-30 -38" });
+      gsap.set(lidRight, { svgOrigin: "30 -38" });
+
+      var state = { left: POSES.idle.left, right: POSES.idle.right, head: 0, face: FACES.neutral, at: 0 };
+      gsap.set(leftArm, { rotation: state.left });
+      gsap.set(rightArm, { rotation: state.right });
+      gsap.set(lids, { scaleY: FACES.neutral.lid });
+      gsap.set(browLeft, { rotation: 0, y: 0 });
+      gsap.set(browRight, { rotation: 0, y: 0 });
+
+      var poses = Array.isArray(vars.poses) ? vars.poses : [];
+      var faceAt = [];
+      poses.forEach(function (event) {
+        var target = POSES[event.pose];
+        var face = FACES[event.expression || "neutral"];
+        var at = event.atMs / 1000;
+        var from = state;
+        tl.fromTo(leftArm, { rotation: from.left }, { rotation: target.left, duration: 0.25, ease: "power2.out", immediateRender: false }, at);
+        tl.fromTo(rightArm, { rotation: from.right }, { rotation: target.right, duration: 0.25, ease: "power2.out", immediateRender: false }, at);
+        tl.fromTo(head, { rotation: from.head }, { rotation: target.head, duration: 0.2, ease: "power2.out", immediateRender: false }, at);
+        tl.fromTo(browLeft, { rotation: from.face.browL, y: from.face.browY * lift }, { rotation: face.browL, y: face.browY * lift, duration: 0.2, ease: "power2.out", immediateRender: false }, at);
+        tl.fromTo(browRight, { rotation: from.face.browR, y: from.face.browY * lift }, { rotation: face.browR, y: face.browY * lift, duration: 0.2, ease: "power2.out", immediateRender: false }, at);
+        tl.fromTo(lids, { scaleY: from.face.lid }, { scaleY: face.lid, duration: 0.2, ease: "power1.out", immediateRender: false }, at);
+        state = { left: target.left, right: target.right, head: target.head, face: face, at: at };
+        faceAt.push({ at: at, lid: face.lid });
+      });
+
+      // Blinks on a fixed clock (every 2.6 s from 1.4 s), shut for 120 ms. The lid level is the face in force at the blink.
+      function lidAt(seconds) {
+        var lid = FACES.neutral.lid;
+        faceAt.forEach(function (entry) {
+          if (entry.at <= seconds) {
+            lid = entry.lid;
+          }
+        });
+        return lid;
+      }
+      for (var blink = 1.4; blink + 0.12 < seconds; blink += 2.6) {
+        var base = lidAt(blink);
+        tl.fromTo(lids, { scaleY: base }, { scaleY: 1, duration: 0.05, ease: "none", immediateRender: false }, blink);
+        tl.fromTo(lids, { scaleY: 1 }, { scaleY: base, duration: 0.07, ease: "none", immediateRender: false }, blink + 0.05);
+      }
+
+      // Mouth shapes: each event shows its shape and hides the others, in array order (the later event wins at equal times).
+      var shapes = ["closed", "open", "wide", "round", "teeth"].map(function (name) {
+        return document.querySelector(".cr-mouth-" + name);
+      });
+      var names = ["closed", "open", "wide", "round", "teeth"];
+      var mouth = Array.isArray(vars.mouth) ? vars.mouth : [];
+      mouth.forEach(function (event) {
+        var at = event.atMs / 1000;
+        shapes.forEach(function (shape) {
+          tl.set(shape, { opacity: 0, immediateRender: false }, at);
+        });
+        tl.set(shapes[names.indexOf(event.shape)], { opacity: 1, immediateRender: false }, at);
+      });
+
+      tl.set({}, {}, seconds);
+      window.__timelines["character.rig"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"device","type":"enum","label":"Device","default":"phone","options":[{"value":"phone","label":"Phone"},{"value":"desktop","label":"Desktop"}]},{"id":"screen","type":"enum","label":"Screen","default":"notification","options":[{"value":"notification","label":"Notification"},{"value":"app","label":"App"},{"value":"chat","label":"Chat"}]},{"id":"title","type":"string","label":"Title","default":""},{"id":"app","type":"string","label":"App name","default":""},{"id":"body","type":"string","label":"Body","default":""},{"id":"timeLabel","type":"string","label":"Time label","default":"now"},{"id":"atMs","type":"number","label":"Enters (ms)","default":0,"min":0,"max":3600000,"step":1,"unit":"ms"},{"id":"rowStepMs","type":"number","label":"Row step (ms)","default":220,"min":60,"max":600,"step":1,"unit":"ms"},{"id":"iconUri","type":"string","label":"Icon (local asset path)","default":""},{"id":"imageUri","type":"string","label":"Picture (local asset path)","default":""},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="screen.mock" data-width="1080" data-height="1920">
+  <div class="sm-root sm-phone">
+    <div class="sm-device">
+      <div class="sm-chrome">
+        <span class="sm-dot"></span><span class="sm-dot"></span><span class="sm-dot"></span>
+        <span class="sm-title"></span>
+      </div>
+      <div class="sm-notch"></div>
+      <div class="sm-screen"></div>
+    </div>
+  </div>
+  <style>
+    .sm-root { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+    /* A phone sits 24% to 76% across and 14% to 77% down; a desktop window sits inside the 6% to 88% box. The frame keeps
+       its graphics clear of the top 10%, the bottom 20% and the right 12%. */
+    .sm-device { position: absolute; box-sizing: border-box; overflow: hidden; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3); }
+    .sm-phone .sm-device {
+      left: 24%;
+      top: 14%;
+      width: 52%;
+      aspect-ratio: 9 / 19.5;
+      border-radius: 96px;
+      padding: 18px;
+      background: var(--kit-text);
+    }
+    .sm-desktop .sm-device {
+      left: 6%;
+      top: 26%;
+      width: 82%;
+      aspect-ratio: 16 / 10;
+      border-radius: 28px;
+      background: var(--kit-secondary);
+    }
+    .sm-screen { position: absolute; overflow: hidden; box-sizing: border-box; background: var(--kit-background); }
+    .sm-phone .sm-screen { left: 18px; right: 18px; top: 18px; bottom: 18px; border-radius: 80px; padding: 120px 36px 36px; }
+    .sm-desktop .sm-screen { left: 0; right: 0; bottom: 0; top: 88px; padding: 36px 40px; border-radius: 0 0 28px 28px; }
+    .sm-notch { display: none; }
+    .sm-phone .sm-notch {
+      display: block;
+      position: absolute;
+      left: 50%;
+      top: 40px;
+      width: 30%;
+      height: 40px;
+      margin-left: -15%;
+      border-radius: 22px;
+      background: var(--kit-text);
+      z-index: 2;
+    }
+    .sm-chrome { display: none; }
+    .sm-desktop .sm-chrome {
+      display: flex;
+      align-items: center;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 88px;
+      padding: 0 30px;
+      gap: 14px;
+      box-sizing: border-box;
+      background: var(--kit-secondary);
+    }
+    .sm-dot { display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: var(--kit-accent); opacity: 0.85; }
+    .sm-title {
+      margin-left: 20px;
+      font-family: var(--kit-font-body), sans-serif;
+      font-weight: 600;
+      font-size: 30px;
+      color: var(--kit-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sm-notif {
+      display: flex;
+      align-items: flex-start;
+      gap: 22px;
+      padding: 26px 28px;
+      box-sizing: border-box;
+      border-radius: 36px;
+      background: var(--kit-secondary);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+      opacity: 0;
+    }
+    .sm-notif-icon { flex: none; width: 96px; height: 96px; border-radius: 22px; object-fit: cover; display: block; }
+    .sm-notif-text { flex: 1; min-width: 0; }
+    .sm-notif-head {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--kit-font-body), sans-serif;
+      font-size: 24px;
+      color: var(--kit-text);
+      opacity: 0.75;
+    }
+    .sm-notif-title {
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 38px;
+      line-height: 1.2;
+      color: var(--kit-text);
+      overflow-wrap: anywhere;
+    }
+    .sm-notif-body {
+      margin-top: 6px;
+      font-family: var(--kit-font-body), sans-serif;
+      font-size: 30px;
+      line-height: 1.3;
+      color: var(--kit-text);
+      overflow-wrap: anywhere;
+    }
+    .sm-app-title {
+      margin-bottom: 24px;
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 56px;
+      line-height: 1.1;
+      color: var(--kit-text);
+      overflow-wrap: anywhere;
+    }
+    .sm-app-image { display: block; width: 100%; height: 300px; object-fit: cover; border-radius: 28px; margin-bottom: 24px; }
+    .sm-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      padding: 22px 0;
+      border-bottom: 3px solid var(--kit-secondary);
+      font-family: var(--kit-font-body), sans-serif;
+      font-size: 36px;
+      color: var(--kit-text);
+      opacity: 0;
+    }
+    .sm-row-label { overflow-wrap: anywhere; }
+    .sm-row-value { flex: none; font-weight: 700; color: var(--kit-primary); }
+    .sm-msg-row { display: flex; width: 100%; margin-bottom: 18px; }
+    .sm-msg-row.sm-left { justify-content: flex-start; }
+    .sm-msg-row.sm-right { justify-content: flex-end; }
+    .sm-bubble {
+      max-width: 78%;
+      box-sizing: border-box;
+      padding: 18px 24px;
+      border-radius: 34px;
+      font-family: var(--kit-font-body), sans-serif;
+      font-size: 34px;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+      opacity: 0;
+    }
+    .sm-left .sm-bubble { background: var(--kit-secondary); color: var(--kit-text); }
+    .sm-right .sm-bubble { background: var(--kit-accent); color: var(--kit-background); }
+    .sm-desktop .sm-app-title { font-size: 40px; }
+    .sm-desktop .sm-notif-title { font-size: 30px; }
+    .sm-desktop .sm-notif-body { font-size: 24px; }
+    .sm-desktop .sm-row { font-size: 28px; padding: 16px 0; }
+    .sm-desktop .sm-app-image { height: 180px; }
+    .sm-desktop .sm-bubble { font-size: 26px; }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var seconds = vars.durationMs / 1000;
+      var isDesktop = vars.device === "desktop";
+      var root = document.querySelector(".sm-root");
+      root.className = "sm-root " + (isDesktop ? "sm-desktop" : "sm-phone");
+      var titleEl = document.querySelector(".sm-title");
+      var screenEl = document.querySelector(".sm-screen");
+      var tl = gsap.timeline({ paused: true });
+
+      function str(value) {
+        return typeof value === "string" ? value : "";
+      }
+      function make(tag, className, value) {
+        var el = document.createElement(tag);
+        el.className = className;
+        el.textContent = str(value);
+        return el;
+      }
+
+      var headline = vars.screen === "notification" ? str(vars.app) : str(vars.title);
+      if (isDesktop) {
+        titleEl.textContent = headline;
+      }
+
+      if (vars.screen === "notification") {
+        var card = document.createElement("div");
+        card.className = "sm-notif";
+        if (str(vars.iconUri).length > 0) {
+          var icon = document.createElement("img");
+          icon.className = "sm-notif-icon";
+          icon.setAttribute("src", vars.iconUri);
+          icon.setAttribute("alt", "");
+          card.appendChild(icon);
+        }
+        var textBox = document.createElement("div");
+        textBox.className = "sm-notif-text";
+        var head = document.createElement("div");
+        head.className = "sm-notif-head";
+        head.appendChild(make("span", "", vars.app));
+        head.appendChild(make("span", "", vars.timeLabel));
+        textBox.appendChild(head);
+        textBox.appendChild(make("div", "sm-notif-title", vars.title));
+        if (str(vars.body).length > 0) {
+          textBox.appendChild(make("div", "sm-notif-body", vars.body));
+        }
+        card.appendChild(textBox);
+        screenEl.appendChild(card);
+        var at = (vars.atMs || 0) / 1000;
+        tl.fromTo(card, { opacity: 0, y: -90 * motion }, { opacity: 1, y: 0, duration: 0.35, ease: "back.out(1.4)" }, at);
+      } else if (vars.screen === "app") {
+        if (str(vars.imageUri).length > 0) {
+          var picture = document.createElement("img");
+          picture.className = "sm-app-image";
+          picture.setAttribute("src", vars.imageUri);
+          picture.setAttribute("alt", "");
+          screenEl.appendChild(picture);
+        }
+        screenEl.appendChild(make("div", "sm-app-title", vars.title));
+        var rows = Array.isArray(vars.rows) ? vars.rows : [];
+        var stepSeconds = vars.rowStepMs / 1000;
+        var start = (vars.atMs || 0) / 1000;
+        rows.forEach(function (row, index) {
+          var el = document.createElement("div");
+          el.className = "sm-row";
+          el.appendChild(make("span", "sm-row-label", row.label));
+          if (typeof row.value === "string") {
+            el.appendChild(make("span", "sm-row-value", row.value));
+          }
+          screenEl.appendChild(el);
+          tl.fromTo(el, { opacity: 0, x: 24 * motion }, { opacity: 1, x: 0, duration: 0.25, ease: "power2.out" }, start + index * stepSeconds);
+        });
+      } else {
+        if (str(vars.title).length > 0) {
+          screenEl.appendChild(make("div", "sm-app-title", vars.title));
+        }
+        var messages = Array.isArray(vars.messages) ? vars.messages : [];
+        messages.forEach(function (message) {
+          var row = document.createElement("div");
+          row.className = "sm-msg-row " + (message.side === "right" ? "sm-right" : "sm-left");
+          var bubble = make("div", "sm-bubble", message.text);
+          row.appendChild(bubble);
+          screenEl.appendChild(row);
+          tl.fromTo(bubble, { opacity: 0, y: 20 * motion }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, message.atMs / 1000);
+        });
+      }
+
+      tl.set({}, {}, seconds);
+      window.__timelines["screen.mock"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>
