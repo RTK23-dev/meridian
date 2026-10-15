@@ -26,11 +26,15 @@ export type GrammarSegment = {
 /** The caption block as measured on frames (OCR, Bible 8.1 captions). Its shape is the contract's. */
 export type MeasuredCaptions = EditGrammar["captions"];
 
-/** The zoom measures (Bible 8.1 motion): each jump is a sudden scale change, `scale` is the new scale over the old. */
+/**
+ * The zoom measures (Bible 8.1 motion): each jump is a sudden scale change, `scale` is the new scale over the old (above 1 is a
+ * zoom-in). The jumps come from the picture measures (analyze/zoom.ts). shake and speedRamps have no measurement yet: null
+ * until one is connected, and the motion fields that need them stay unknown (CLAUDE.md rule 1).
+ */
 export type MeasuredZoom = {
   jumps: ReadonlyArray<{ atMs: number; scale: number }>;
-  shake: boolean;
-  speedRamps: boolean;
+  shake: boolean | null;
+  speedRamps: boolean | null;
 };
 
 export type GrammarInput = {
@@ -152,16 +156,22 @@ export function computeEditGrammar(input: GrammarInput): GrammarResult {
       gaps.push((boundaries[index] ?? 0) - (boundaries[index - 1] ?? 0));
     rehookIntervalMs = Math.round(median(gaps.filter((gap) => gap > 0)));
 
-    // motion: zoom jumps per 10 s and their median scale; shake and speed ramps as measured. No jump means scale 1 (no change).
-    const scales = zoom.jumps
-      .map((jump) => jump.scale)
-      .filter((scale) => Number.isFinite(scale) && scale > 0);
-    motion = {
-      punchInsPer10s: d > 0 ? zoom.jumps.length / (d / 10_000) : 0,
-      punchInScale: scales.length > 0 ? median(scales) : 1,
-      shakeOnImpact: zoom.shake,
-      speedRamps: zoom.speedRamps,
-    };
+    // motion (Bible 8.1): punch-ins are the zoom-ins among the jumps, per 10 s, with their median scale. No punch-in means scale 1.
+    // shakeOnImpact and speedRamps need their own readings; without them the motion fields stay unknown.
+    const punchIns = zoom.jumps.filter((jump) => Number.isFinite(jump.scale) && jump.scale > 1);
+    const punchScales = punchIns.map((jump) => jump.scale);
+    if (zoom.shake === null || zoom.speedRamps === null) {
+      unknown.push(
+        "motion (shakeOnImpact and speedRamps, Bible 8.1): no shake or speed-ramp reading is connected, so the motion fields are unknown",
+      );
+    } else {
+      motion = {
+        punchInsPer10s: d > 0 ? punchIns.length / (d / 10_000) : 0,
+        punchInScale: punchScales.length > 0 ? median(punchScales) : 1,
+        shakeOnImpact: zoom.shake,
+        speedRamps: zoom.speedRamps,
+      };
+    }
 
     // transitions: each cut is zoom (a zoom jump at it), flash (brightness step), whip (motion spike) or hard.
     if (cuts.length === 0) {

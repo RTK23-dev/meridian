@@ -1,5 +1,5 @@
-// The serverless entry point: a Web-standard Request in, a Response out. Routes: POST /probe, /frames, /loudness, /cuts, /timeline
-// and GET /health (tool versions). Errors are typed: the body carries kind, retryable and message, and the status
+// The serverless entry point: a Web-standard Request in, a Response out. Routes: POST /probe, /frames, /loudness, /cuts, /timeline,
+// /picture and GET /health (tool versions). Errors are typed: the body carries kind, retryable and message, and the status
 // follows from the kind. Unexpected errors return a generic message, never a stack trace.
 
 import { EngineError } from "../../src/engine/contracts/errors.ts";
@@ -8,6 +8,7 @@ import { runTool, type ToolPaths } from "./exec.ts";
 import { FFMPEG_LIMITS } from "./limits.ts";
 import * as frames from "./frames.ts";
 import * as loudness from "./loudness.ts";
+import * as picture from "./picture.ts";
 import * as probe from "./probe.ts";
 import * as timeline from "./timeline.ts";
 import type { UrlPolicy } from "./source.ts";
@@ -16,11 +17,19 @@ import {
   wireCutsRequestSchema,
   wireTimelineRequestSchema,
   wireFramesRequestSchema,
+  wirePictureRequestSchema,
   wireProbeRequestSchema,
   framesToWire,
   type WireFramesResult,
 } from "./wire.ts";
-import { parseInput, type CutsResult, type LoudnessResult, type ProbeResult, type TimelineResult } from "./types.ts";
+import {
+  parseInput,
+  type CutsResult,
+  type LoudnessResult,
+  type PictureResult,
+  type ProbeResult,
+  type TimelineResult,
+} from "./types.ts";
 
 export type HandlerOptions = {
   urlPolicy?: UrlPolicy;
@@ -128,6 +137,14 @@ const ROUTES: Record<string, Route> = {
   "/timeline": async (body, options) => {
     const input = parseInput(wireTimelineRequestSchema, body, "media.http");
     const result: TimelineResult = await timeline.run({ source: sourceFromWire(input.source) }, options);
+    return result;
+  },
+  "/picture": async (body, options) => {
+    const input = parseInput(wirePictureRequestSchema, body, "media.http");
+    const result: PictureResult = await picture.run(
+      { source: sourceFromWire(input.source), cutsMs: input.cutsMs },
+      options,
+    );
     return result;
   },
   "/cuts": async (body, options) => {

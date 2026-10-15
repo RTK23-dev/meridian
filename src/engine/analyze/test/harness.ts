@@ -19,6 +19,7 @@ import {
 import { productionRequestFixture } from "../../contracts/fixtures/index.ts";
 import {
   cutsResultSchema,
+  pictureResultSchema,
   probeResultSchema,
   timelineResultSchema,
 } from "../../../../functions/ffmpeg/types.ts";
@@ -27,6 +28,7 @@ import type { MediaFunctions, MediaSource } from "../../media/index.ts";
 import { recordedSpeechToText, type RecordedSttFixture } from "../../media/stt.ts";
 import type { ProductionRequest } from "../../contracts/index.ts";
 import type { GrammarReadings, ReferencePorts, ReferenceRun } from "../reference.ts";
+import { pictureReadings } from "../readings.ts";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const read = <T>(name: string): T => JSON.parse(readFileSync(join(FIXTURES, name), "utf8")) as T;
@@ -111,13 +113,25 @@ export function referenceRun(overrides: Partial<ReferenceRun> = {}): ReferenceRu
 }
 
 /**
+ * The readings port built from the recorded picture answers of one clip (picture-captured.json), through the same
+ * pictureReadings the production wiring uses. The picture function is not called.
+ */
+export function recordedPictureReadings(kind: "punch" | "loop"): ReferencePorts["readings"] {
+  const captured = read<{ results: Record<string, unknown> }>("picture-captured.json");
+  const result = pictureResultSchema.parse(captured.results[kind]);
+  return pictureReadings(async () => result);
+}
+
+/**
  * The ports of one run on recorded answers: the media, the speech (connected or not), the role calls in order, the source
- * store (which records what it resolved and released), and the readings (null to leave them unconnected).
+ * store (which records what it resolved and released), and the readings (null to leave them unconnected). readingsPort, when
+ * given, is the readings port itself (for example the picture readings).
  */
 export async function referencePorts(options: {
   responses: Array<Record<string, unknown>>;
   media?: MediaFunctions;
   readings?: GrammarReadings | null;
+  readingsPort?: ReferencePorts["readings"];
   speechConnected?: boolean;
   reservedUsd?: number;
 }) {
@@ -143,7 +157,11 @@ export async function referencePorts(options: {
         released.push(referenceVideo);
       },
     },
-    ...(options.readings === null ? {} : { readings: async () => options.readings ?? readings }),
+    ...(options.readingsPort !== undefined
+      ? { readings: options.readingsPort }
+      : options.readings === null
+        ? {}
+        : { readings: async () => options.readings ?? readings }),
     newDnaId: () => DNA_ID,
   };
   return { ports, requests: gateway.requests, stt, released, resolved, ledger };

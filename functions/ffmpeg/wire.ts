@@ -8,6 +8,7 @@ import {
   mediaUrlSchema,
   sceneScoreSchema,
   MAX_FRAMES_PER_CALL,
+  MAX_PICTURE_CUTS,
   type FramesResult,
   type MediaSource,
 } from "./types.ts";
@@ -25,6 +26,11 @@ export const wireProbeRequestSchema = z.strictObject({ source: wireSourceSchema 
 export const wireLoudnessRequestSchema = wireProbeRequestSchema;
 /** The timeline takes the same body as the probe: one source. */
 export const wireTimelineRequestSchema = wireProbeRequestSchema;
+/** The picture measures take the source and the scene-cut times (see types.ts pictureRequestSchema). */
+export const wirePictureRequestSchema = z.strictObject({
+  source: wireSourceSchema,
+  cutsMs: z.array(z.int().nonnegative()).max(MAX_PICTURE_CUTS),
+});
 export const wireCutsRequestSchema = z.strictObject({
   source: wireSourceSchema,
   sceneScore: sceneScoreSchema,

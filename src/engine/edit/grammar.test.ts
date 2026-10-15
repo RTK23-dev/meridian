@@ -130,6 +130,29 @@ describe("the edit grammar of a reference (Bible 8.1)", () => {
     assert.equal(grammar?.motion.shakeOnImpact, true);
   });
 
+  it("counts only zoom-ins as punch-ins: a zoom-out is a jump for the re-hook, not a punch-in", () => {
+    const zoom: MeasuredZoom = {
+      jumps: [
+        { atMs: 1000, scale: 1.2 },
+        { atMs: 3000, scale: 0.9 },
+      ],
+      shake: false,
+      speedRamps: false,
+    };
+    const result = computeEditGrammar(complete({ zoom }));
+    assert.deepEqual(result.unknown, []);
+    assert.equal(result.grammar?.motion.punchInsPer10s, 1 / 0.6);
+    assert.equal(result.grammar?.motion.punchInScale, 1.2);
+  });
+
+  it("leaves the motion fields unknown, and no grammar, when shake and speed ramps are not measured", () => {
+    const zoom: MeasuredZoom = { jumps: [{ atMs: 1000, scale: 1.2 }], shake: null, speedRamps: null };
+    const result = computeEditGrammar(complete({ zoom }));
+    assert.equal(result.grammar, null);
+    assert.equal(result.unknown.length, 1);
+    assert.match(result.unknown[0] ?? "", /^motion \(shakeOnImpact and speedRamps/);
+  });
+
   it("refuses to return a grammar when a reading is missing, and says which", () => {
     const result = computeEditGrammar(
       complete({ captions: null, zoom: null, loop: null, sound: null, loudness: [] }),

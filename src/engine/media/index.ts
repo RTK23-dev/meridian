@@ -19,6 +19,17 @@ export type {
   LoudnessSample,
 } from "./interface.ts";
 export { timelineInProcess, timelineOverWire, type TimelineClient } from "./timeline.ts";
+export {
+  pictureInProcess,
+  pictureOverWire,
+  PICTURE_PATH,
+  type PictureClient,
+} from "./picture.ts";
+export type {
+  PicturePair,
+  PictureRequest,
+  PictureResult,
+} from "../../../functions/ffmpeg/types.ts";
 export { httpMediaFunctions, type HttpMediaFunctions } from "./http.ts";
 export {
   type MediaTransport,

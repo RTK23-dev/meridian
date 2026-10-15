@@ -35,6 +35,22 @@ export const analyzeConfig = {
   /** A zoom jump within this many milliseconds of a cut is a zoom transition (initial). */
   zoomCutWindowMs: 250,
 
+  /**
+   * A zoom jump is a scale change between two thumbnails 100 ms apart of more than this (Bible 8.1: "frame scale change above
+   * 8%"). The scale is new over old, so the change is |scale - 1|.
+   */
+  zoomJumpMinChange: 0.08,
+  /**
+   * The scale model must explain at least this share of the frame difference of a jump: a fit ratio (0 is a perfect fit, 1 is no
+   * gain) at or below this. A pan or a change of picture is not a zoom (initial).
+   */
+  zoomFitMax: 0.6,
+  /**
+   * The loop test (Bible 8.1, endsOnLoop): the mean luma difference (0 to 1) between the first frame and the last frame is at most
+   * this. Frames of one still picture differ by about 0.01 after encoding (initial).
+   */
+  loopMaxDistance: 0.04,
+
   /** The window of brightness and motion read on each side of a cut (initial). */
   cutWindowMs: 500,
 
