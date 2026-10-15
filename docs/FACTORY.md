@@ -15,7 +15,8 @@ A run stores the settings it started with, so a later change to the brand does n
 | `intent` | `organic`, `ad`, `both` | Which publish path and which metrics. Default `organic`. |
 | `formats` | `image`, `video`, `carousel` (one or more) | What the run makes. Default `video`. |
 | `platforms` | for example `instagram`, `facebook`, `youtube`, `tiktok` | A platform with no connection is reported as not connected. |
-| `providers` | per format: `auto` or a provider id | `auto` lets the capability matrix choose. A named provider that is not ready stops the run with its reason. |
+| `providers` | per format: `auto`, a provider id, or `engine` for video | `auto` lets the capability matrix choose. `engine` is the Meridian video engine (see [Produce](#produce)). A named provider that is not ready stops the run with its reason. |
+| `pageId` | a theme page id, or none | The theme page the run targets. Its kits fill the engine request, and its trial default applies to the run's Instagram posts. The page is checked against the brand when the run starts (see [Theme pages](#theme-pages)). |
 | `caps` | `dailyCents`, `totalCents`, `maxVariants` | Spend caps and the variant limit. See the caveat on caps below. |
 | `targetingCountries` | ISO 3166-1 alpha-2 codes in capitals, such as `US` and `GB` | The countries a paid ad is targeted to. Empty means none is set. A live paid publish needs at least one. |
 | `costPerMasterUsd` | USD, at most 2 decimals, or `null` (not set) | The budget the user sets for every master. It is never below the fixed per-master cost ($0.52). A run that makes video needs one; an image-only run does not. Owner decision, 2026-10-14. The engine checks the exact minimum of each video at intake. A stored run from before this setting reads as `null`. |
@@ -75,6 +76,11 @@ cap is checked two ways: a total over the run, and a daily total over the last 2
 `factory_costs` for the run. A spend or publish stage is refused with the reason before it runs, in every mode, when either cap is
 reached. Produce checks the caps again before each provider call, so the call that would pass the cap is never made.
 
+The grade stage checks the same things before each engine call that a grade needs: the kill switch first, then the total and daily caps
+(`factory/worker.ts`, `gradeCallStop`). A grade the engine already stored for the same questions is not asked again, so it makes no call and
+is not checked. A refused call leaves its ad graded on observed signal only, with the reason; an engine grade already stored for that ad is
+kept. The run is then paused at grade with the same reason, and the stages after grade hold until a person starts it again.
+
 `full` also needs a cap to be set. A `full` run with no cap stops before any spend, with "Full automation needs a spend cap".
 
 A metered row is written from one of two things, and its basis says which (`factory_costs.basis`):
@@ -116,6 +122,12 @@ Produce materializes each variant of the run for each format the run makes, thro
   produced while the job is running. A video that fails for good leaves its variant with no video, as a failed image does.
 - **Caps for video.** A video's cost is a declared estimate, not a cost the provider reports, so it is not a metered row. The estimates of the
   run's own video jobs that have not failed count toward the run's total and daily caps, and a video that would pass a cap is not sent.
+- **Videos through the Meridian video engine.** A run whose video provider is `engine` calls no provider of its own. Each variant's plan is
+  mapped to an engine request (`factory/engine-request.ts`), started through the engine's API (`src/engine/api`), and the run waits while
+  the engine works (`factory/produce-engine.ts`). When the engine delivers the master, its MP4 and manifest become the variant's creative, as
+  Studio's do. A request the engine cannot run is refused with the engine's own reason, such as no connected key, no cost per master, or a
+  field the plan does not carry. The request's budget counts against the run's caps until the engine records what it spent. Nothing is
+  marked produced while the engine is still working. No live engine run is recorded yet (see [PHASE_LOG](engine/PHASE_LOG.md)).
 - A named provider that is not ready stops the run before any reservation or call, with the provider's reason (`NOT_CONFIGURED` or the
   matrix's refusal). This is the same for images, slides and videos.
 - The provider is the run's choice for the format. `auto` lets the capability matrix choose. A named provider that is not configured
@@ -232,6 +244,13 @@ launch summary and is never sent.
   characters, a public https `APP_URL`, or (for TikTok) a host listed in `TIKTOK_VERIFIED_MEDIA_DOMAINS`, the channel shows not connected
   with its reason and sends nothing. TikTok reports a post as published only with the post id it returns. An unaudited app can post only
   privately, and TikTok returns no public post id for a private post, so its receipts are unconfirmed until the app is audited.
+- **Instagram trial reels.** An Instagram post can start as a trial reel. Its graduation strategy is `MANUAL` (a person graduates it in the
+  Instagram app) or `SS_PERFORMANCE` (Instagram graduates it if it performs well). A run takes its theme page's default
+  (`trialDefaultForRunPage`), and a Studio publish names the strategy in its dialog. The publish posts the reel as a trial. A recorded trial
+  step keeps the media id, and a scheduled check reads the reel's documented fields once a day, for up to seven checks (`distribution/trial.ts`,
+  `distribution/trial-check.ts`). The **feed step is recorded only when a graduation is observed.** Meta documents no field that reports
+  graduation, and the live reader observes none, so the feed step reads "manual action required" with that reason. Nothing here is
+  verified against a live account.
 - **Receipts:** `organic_posts` and `provider_objects` both carry a `surface` column (migration 0069). A failure is recorded as a
   receipt with no external id, so a retry can publish the creative again without overwriting a confirmed object.
 
@@ -377,9 +396,76 @@ table, the sample size, the report date and the method version), or "Not enough 
 threshold is never shown for an uncalibrated brand. A calibrated report whose value is not applied says so, and says that the registry
 threshold stands.
 
+## Theme pages
+
+A theme page is the account-level object a run can target (`pages/model.ts`, `pages/store.ts`, `pages/actions.ts`). It is managed on the
+**Pages** screen at `/brands/<brand>/pages`. A page holds its linked platform account, its persona, its voice and style kits, its posting
+schedule and whether its Instagram posts start as trial reels.
+
+- A page's status is `active`, `paused` or `archived`. Archiving is its own action, so an edit never retires a page.
+- Posting times are local times in the page's time zone. A schedule with no time zone is refused, not given UTC. An empty schedule is stored
+  as no schedule.
+- A trial-first page needs a graduation strategy (`MANUAL` or `SS_PERFORMANCE`). It is refused without one.
+- The kit ids on a page are checked on save against `engine_kits`, because a kit id is not unique on its own (migration 0091).
+- A run names its page with `pageId`. The page is checked against the brand when the run starts. Its kits fill the engine request, and its
+  trial default applies to the run's Instagram posts.
+
+## Sales attribution (Shopify)
+
+Each workspace sells through its own Shopify shop, and the shop is connected from the **Sales by reel** panel on the Factory screen's
+Learnings tab. The panel shows whether a secret is saved and the webhook path to paste into Shopify, `/api/webhooks/shopify`. A shop is recorded for one brand
+(`shopify_shops`, migration 0092). A shop already connected to another workspace is refused, and nothing changes.
+
+Shopify sends `orders/create` to the Meridian webhook at `https://<public origin>/api/webhooks/shopify`. The public origin is the
+deployment's own origin, the one its users open (see [OPERATIONS.md](OPERATIONS.md#environment-variables) for `APP_URL`). Each delivery is checked in this order
+(`shopify/handler.ts`):
+
+| Check | Answer when it fails |
+| --- | --- |
+| Content type is `application/json` | 415 |
+| The body arrives within the cap and the deadline | 413 (too large) or 408 (too slow) |
+| The `X-Shopify-Shop-Domain` header is a `myshopify.com` domain connected to a workspace | 401, the same answer as a bad signature |
+| The workspace's Shopify secret is usable | 503 `NOT_CONNECTED`, with the reason; nothing is stored |
+| The `X-Shopify-Hmac-Sha256` header matches the raw body under that secret | 401 |
+| The body is JSON and reads as an order | 400 |
+
+The secret is the workspace's own Shopify secret, saved in Settings, or `SHOPIFY_WEBHOOK_SECRET` with `SHOPIFY_SHARED_DEFAULT=deployment`.
+Shopify treats only a 200 as receipt, so a new order answers 200 `recorded`, and a repeat delivery answers 200 `already received`. A delivery
+for another topic answers 200 and stores nothing.
+
+The order is matched to a reel by one of two rules, in order (`shopify/attribution.ts`):
+
+1. `utm_content`: the order's landing site carries a reel's `utm_content`.
+2. `dm_keyword`: a discount code, or a note attribute with a name the code lists, equals a reel's DM keyword (case-insensitive).
+
+One reel must match. A tie, or no match, is stored as no reel, and the join never guesses. The match and its rule are stored with the order.
+Orders keep their attribution fields and totals, not customer data (migration 0092). The sales panel shows the orders per reel. No live shop
+has sent an order yet, so this is tested on fixtures only.
+
+## Sleep mode
+
+Sleep mode (`factory/sleep.ts`, settings in `sleep_mode_settings`, migration 0092) is off until a member turns it on and sets a niche. A
+night runs once a day at the workspace's night time, 03:00 by default, in the workspace's time zone, UTC by default
+(`factory/sleep-time.ts`). The night's result is its morning summary (`sleep_mode_nights`), shown at the top of the Sleep mode panel on the
+Learnings tab.
+
+A night:
+
+- **Gathers, grades and plans** through the same stage functions a run uses: discover, ingest, decode, grade, trend, pick and template. It
+  never runs produce, gate, review, launch or test. The run it creates **waits at produce** for a person's approval, so nothing is produced or
+  published on the night's own authority.
+- **Assigns a holdout.** Each planned item goes to the holdout or to the treated arm by a hash of its id. The holdout share is 10%
+  (`thresholds.learning.holdoutShare`). Each assignment is stored in `factory_holdouts`. The summary says that production does not read the
+  holdout yet.
+- **Holds tuned values to a change cap.** A proposed change to a tuned value is held to 15% of its value a night (`MAX_NIGHTLY_CHANGE_SHARE`).
+  The part beyond the cap is refused and the value is kept at the cap, and the summary lists each refusal. Production passes a night no
+  proposals yet, so the cap has nothing to hold in production. A night writes no engine configuration: an accepted change is recorded only.
+- **Stops, and says why,** when there is no budget, no connected source, or the kill switch is engaged.
+
 ## Not built yet
 
-What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
+Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is still open, and the live gaps, are listed here and in
+[ROADMAP.md](ROADMAP.md):
 
 - A video's cost is an estimate from the provider's declared price, not a price the provider reports, so it is not metered in
   `factory_costs`. Its estimate is held against the run's caps, but it does not appear as priced spend.
@@ -394,8 +480,8 @@ What is left after work-queue items 10 and 11 (NORTH_STAR section 8):
 - Organic outcomes are still one observation per post. A later organic measurement of the same post is not added to `organic_observations`.
   The paid path is per measurement (see [Learning per surface](#learning-per-surface)).
 - Spend from perception reads is not metered. A perception read is a separate call from the decision, and it writes no row.
-- The Factory screen was not checked in a browser from this branch. Its before and after screenshots, and the button audit, need a run of
-  the app that this change did not make.
+- Screens: before and after screenshots of the changed screens are in [feature-screens](feature-screens/README.md). The studio publish dialog
+  and the B2 tier counts were not captured. The PHASE_LOG records no run of the button audit (`npm run ui:button-audit`) for these changes.
 - The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
 - The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
 - A live paid publish from a run is refused until the run carries a Facebook Page id and a destination link. A run has a targeting country
@@ -436,3 +522,23 @@ Each source records one state on the run, in `factory_run_sources`:
 A source that is not connected or fails does not stop the run. Items go to the evidence tables that already exist: `research_ads` for
 Ad Library ads, `discovered_items`, `sources` and `discovered_page_evidence` for pages and posts. Uploads are `not_connected`, because no
 upload intake stores a swipe file yet. The Factory board lists each recent run's states in `runSources`.
+
+### Instagram volume through Apify
+
+A run that covers Instagram also gathers reel candidates for its niche through Apify (`factory/instagram-volume.ts`, `sources/apify/`).
+The requests go through the engine's API gateway, which adds the workspace's Apify key, so the source never reads a key itself. The
+settings are in `sources/apify/config.ts`; every number there is an initial value, except where the provider documents it:
+
+- Up to 1,000 candidates per niche in any rolling seven days, across all runs, and up to 1,000 per run. The caps count results asked of
+  Apify, so a retried run cannot overrun them.
+- Up to five of the niche's hashtags per run, with the niche's hashtag search (`apify/instagram-hashtag-scraper`).
+- For each creator, the median views of their last 30 reels is the baseline. A baseline is reused for seven days, and one run rates at most
+  40 creators' baselines.
+- Each reel is rated S, A, B or C against its creator's baseline (`grading/reel-rating.ts`). A reel is "not rated", with the reason, when the
+  creator has no usable baseline, the baseline's median is zero, no checkpoint has both views and comments, or the follower count is not
+  reported and the small-creator rule would change the tier.
+- Each reel is observed when the run gathers it (0 hours) and again at 24 and 72 hours, by the job queue.
+
+Without a usable Apify key for the workspace (saved in Settings, or the deployment key with `APIFY_SHARED_DEFAULT=deployment`), the source
+is `not_connected` and nothing is sent. The cost per 1,000 results is not known: it is null until the owner confirms the plan price, so no
+discovery cost is estimated. This is tested on recorded fixtures. The Apify key and the plan price are open (see [ROADMAP.md](ROADMAP.md)).

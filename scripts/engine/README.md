@@ -39,10 +39,13 @@ and composition, so each makes its own render call.
 
 ### What the owner must set first
 
-1. **HeyGen credential.** Add a HeyGen category to `src/lib/meridian/credentials/contract.ts` and the resolver. Until it exists
-   the run reports `NOT_CONNECTED heygen`. This is an owner decision (`src/engine/gateway/STATUS.md`).
-2. **Media functions.** Deploy `functions/ffmpeg` and pass its HTTPS base URL with `--media-functions-url`. The gateway sends
-   no credential to them (`auth: none`), so restrict access to them (network or a gateway change) before a live run.
+1. **HeyGen key.** Save the HeyGen key for the workspace in Settings, or set `HEYGEN_API_KEY` with `HEYGEN_SHARED_DEFAULT=deployment`.
+   The HeyGen category is in `src/lib/meridian/credentials/contract.ts`. The gateway resolves it per workspace. Until a usable key
+   exists the run reports `NOT_CONNECTED heygen` and spends nothing.
+2. **Media functions.** Deploy `functions/ffmpeg` and pass its HTTPS base URL with `--media-functions-url`. The app reads the same URL
+   from `MEDIA_FUNCTIONS_BASE_URL` (see [OPERATIONS.md](../../docs/OPERATIONS.md#environment-variables)). This script reads only its
+   command line, not the environment, so pass the value. The gateway sends no credential to the functions (`auth: none`), so restrict
+   access to them (network or a gateway change) before a live run.
 3. **Platform file-size limit.** Pass `--platform-max-bytes` with the limit of the platform you deliver to, or set
    `thresholds.render.platformMaxBytes` in `src/engine/config/thresholds.ts` (eng-contracts). It is `null` now, and the
    integrity gate fails closed on a null limit, so the run reports `NOT_CONNECTED platform_size_limit` until one is given.
@@ -51,12 +54,16 @@ and composition, so each makes its own render call.
    ledger always lands in Postgres.
 5. **Google Drive.** Connect Drive for the workspace in Meridian. The run stores the rendered MP4 in the brand's object store
    under an `engine/<workspace>/<request>/render/...` key, and reads the two assets from the same store.
-6. **Assets.** Put the stock clip at `assets/e1-stock-kitchen.mp4` and the TTS voice file at `assets/e1-voice.wav` under the
-   brand, each at least 12 s long, or pass `--stock-uri store://...` and `--voice-uri store://...` for other keys. The voice
-   file is the TTS audio you already have. The run does not generate it, and it does not fetch stock footage.
+6. **Assets.** The run reads the stock clip and the TTS voice file from the brand's object store, at the default URIs
+   `store://assets/e1-stock-kitchen.mp4` and `store://assets/e1-voice.wav`. The EDL runs for 12 seconds (`E1_DURATION_MS` in
+   `scripts/engine/e1-build.ts`), so each file must be at least that long. Pass `--stock-uri` and
+   `--voice-uri` with other `store://` keys to use other files. The voice file is the TTS audio you already have. The run does not
+   generate it, and it does not fetch stock footage.
 7. **Budgets.** `--budget-usd` is the request budget of each master (default 1). `--month-budget-usd` is the workspace month
-   (default 50). Set them to what you accept. Each master reserves about $0.52 for the fixed lines, of which only the
-   render line ($0.05) is spent in E1.
+   (default 50). Set them to what you accept. Each master reserves about $0.52 for the fixed lines
+   (`fixedPerMasterUsd` in `src/engine/config/budgets.ts`, Bible 14.2). The render line of $0.05 is that fixed figure, an estimate.
+   It is not a HyperFrames price: `render_hyperframes_cloud` is `null` in `src/engine/config/prices.ts`, because the price is unknown.
+   The report's `billVerified` is `false`, because the render adapter reads no bill from HeyGen, so the actual is the list estimate.
 
 ### Exit codes
 

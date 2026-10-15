@@ -63,6 +63,22 @@ To connect with OAuth from the app instead, set `GOOGLE_CLIENT_ID` and `GOOGLE_C
 `<your origin>/api/drive/callback` as the redirect URI. An admin then connects from Settings → General. Uploads over 5 MB need
 `TOKEN_ENCRYPTION_KEY`, which `npm run setup` generates.
 
+## Variables for the video engine, the Factory and media links
+
+The full list, with each variable's kind and what reads it, is in [OPERATIONS.md](OPERATIONS.md#environment-variables). The variables this
+release reads are:
+
+| Variable | Kind | Purpose |
+| --- | --- | --- |
+| `APIFY_TOKEN`, `APIFY_SHARED_DEFAULT` | per-workspace key, with a deployment opt-in | Instagram volume discovery (Factory Gather). Save the key in Settings, or set the deployment key and `APIFY_SHARED_DEFAULT=deployment`. |
+| `SHOPIFY_WEBHOOK_SECRET`, `SHOPIFY_SHARED_DEFAULT` | per-workspace secret, with a deployment opt-in | Verifies the Shopify `orders/create` deliveries to `/api/webhooks/shopify`. |
+| `OPENROUTER_API_KEY`, `HEYGEN_API_KEY`, `ANTHROPIC_API_KEY`, each with its `*_SHARED_DEFAULT` | per-workspace key, with a deployment opt-in | The video engine's keys. Save them in Settings for each workspace. |
+| `MEDIA_FUNCTIONS_BASE_URL` | deployment configuration | The HTTPS base URL of the ffmpeg media functions. Restrict its host before setting it, because the functions carry no credential. |
+| `MEDIA_LINK_SECRET` | infrastructure (secret) | Signs the 15-minute media links for Instagram and TikTok. At least 32 characters. |
+| `APP_URL`, `PUBLIC_APP_URL` | deployment configuration | The public `https` origin the platforms fetch from. No path. |
+
+Until a variable is set, the feature that needs it stays NOT_CONNECTED and says so. Nothing is sent in its place.
+
 ## Publishing and approving work
 
 Publishing is optional. Paid ads (Meta, TikTok, Google) are created paused, and Meridian never switches them on. Regular posts go to a

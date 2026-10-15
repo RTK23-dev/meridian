@@ -63,6 +63,34 @@ Oct 11, 2026 · @Victor
 
 **Cyclone** ([RTK23-dev/cyclone-fleet](https://github.com/RTK23-dev/cyclone-fleet)), the Android phone agent, works through MCP `observe` / `act` and a Skill Compiler; its physical Pixel 8 acceptance is still marked **unverified**.
 
+## Status on 2026-10-15
+
+The state table above is the state on 11 October. This section is the state on 15 October, from [PHASE_LOG.md](PHASE_LOG.md) and a check of
+the code. The engine phases E1 to E6 and the Factory items are code complete on recorded fixtures. **No gate in the build plan is met**,
+because each gate needs a recorded live run, and agents hold no keys (NORTH_STAR decision 1). Each task below is marked with what was
+checked. The boxes stay unticked until a gate passes.
+
+| Phase | Status on 2026-10-15 |
+| --- | --- |
+| 0 Foundations | Partly done. 0.5 is done on fixtures. 0.1 and 0.4 are not done. 0.2 has a contradiction in the record (see below). 0.3 is built on fixtures. Gate not met. |
+| 1 Skill library and render | Engine E1 is code complete on fixtures. The live acceptance (one master rendered through HeyGen, its bill read for ten renders) is not run. Gate not met. |
+| 2 Claude chain and pixels | Engine E2 to E4 are code complete on fixtures. The speech-to-text vendor is the owner's to choose. Gate not met. |
+| 3 Discovery and 3 live pages | Discovery through Apify and theme pages are built on fixtures. No page is live. Gate not met. |
+| 4 Variants, learning, sales | Sleep mode, trial reels and Shopify attribution are built on fixtures. No live order or outcome is recorded. Gate not met. |
+| 5 Scale | Not started. |
+
+**Contradictions left unresolved, for the lead and the owner:**
+
+- **PR #39.** CLAUDE.md says PR #39 closed unmerged. This branch's history contains the merge commit `0fa9235` ("Merge pull request #39
+  from RTK23-dev/claude/production-audit-defects-6htuuv", dated 11 October 2026), and it is an ancestor of the head. Which is right is not
+  decided here.
+- **Locked decisions.** Decision 3 (Claude API direct) is superseded for the video engine by the owner's decision of 2026-10-14: model calls,
+  Claude included, go through OpenRouter by default, and the Anthropic API stays as a route target (PHASE_LOG). Decision 5 is narrowed: the
+  owner dropped Remotion Lambda on 2026-10-14, so Shotstack is the only fallback. Decision 9 is Apify, which the owner delegated to the lead
+  on 2026-10-14. The table itself is unchanged.
+- **The engine's data contract.** The build plan's timeline schema `meridian.timeline/v1` is not what the engine uses. The engine's plan is
+  the scene plan `meridian.scene_plan/v1` with an edit decision list (Bible section 4). Where the two differ, the Bible wins inside `src/engine/`.
+
 ## The target
 
 **The business.** A portfolio of niche Instagram theme pages (starting with 5: baby and parents, fashion, chains and jewelry, gadgets, car add-ons), each with its own Shopify store in the bio. Each page posts about 3 reels a day. Pages are bets with their own P&L: winners get budget, losers get re-themed. Money comes from store sales; ads are only placed behind reels that already beat their page's median organically.
@@ -146,61 +174,88 @@ Take the lowest-numbered unfinished task in the earliest open phase. A phase is 
 ### Phase 0: Foundations (weeks 1–2)
 
 - [ ] **0.1 Veo** — move the production Veo provider off the preview model to a current Veo model through OpenRouter (Veo 3.1 Fast or Lite). **Deadline 22 October.**
+  _Status 2026-10-15: not done. No production Veo provider exists in this repo (CLAUDE.md). The engine's route table lists `google/veo-3.1-lite` through OpenRouter as an unverified target (`src/engine/config/routes.ts`)._
 - [ ] **0.2 Merge #39** after one live smoke call per provider (Gemini, OpenAI, TypeSafe, OpenRouter, Higgsfield, Nano Banana) with real keys.
+  _Status 2026-10-15: not done. CLAUDE.md records PR #39 as closed unmerged, but the merge commit is in this branch's history. See the contradictions above._
 - [ ] **0.3 Instagram publishing** — replace the Instagram organic adapter with the Content Publishing API, including trial reels, on one owned test account.
+  _Status 2026-10-15: built on fixtures. Instagram publishes through a signed link and a Reels container, and a trial reel records its strategy (FACTORY.md, Publish). No live account has been used._
 - [ ] **0.4 Insights** — implement `fetchMetrics` for our own professional accounts on a schedule.
+  _Status 2026-10-15: not done. `fetchMetrics` returns null for Instagram, Facebook, YouTube and TikTok (`src/lib/meridian/distribution/`)._
 - [ ] **0.5 Factory fixes** — read `factory_pipeline_configs`; pass the brand's real claims at `worker.ts:330`; record real call costs in `factory.produce` instead of 12 cents.
+  _Status 2026-10-15: done on fixtures. `factory_pipeline_configs` is read (`factory/pipeline-config-store.ts`); the claims gate gets the brand's rules (`factory/worker.ts`); no 12-cent constant is left in `factory/`. Costs come only from metered calls._
 - [ ] **0.6 Discovery branch** — review `feat/instagram-discovery-factory` and fold anything reusable into phase 3.
+  _Status 2026-10-15: not checked in this pass. Discovery at volume (B1 and B2) is built on fixtures on this branch._
 - [ ] **0.7 UI stack** — run test, lint, build and screenshots on #45, then merge #40 to #45.
+  _Status 2026-10-15: the merges of #40, #43, #44 and #45 are in this branch's history (`88c94ae` merges #45). The test, lint and build results for #45 are not recorded here._
 
-**Gate:** a test reel posts with a real Instagram media id; Veo renders after 22 October; insights for that reel arrive.
+**Gate:** a test reel posts with a real Instagram media id; Veo renders after 22 October; insights for that reel arrive. _Not met on 2026-10-15._
 
 ### Phase 1: Skill library and render (weeks 1–4)
 
 - [ ] **1.1** Import as versioned data, with attribution: 26 hook formulas, humanizer lexicon (113 terms, 17 classes, 11 tells), edit craft rules, one voice file per page.
+  _Status 2026-10-15: not found. No hook-formula or humanizer data is in `src/` or `scripts/`._
 - [ ] **1.2** Timeline schema `meridian.timeline/v1` with a zod validator.
+  _Status 2026-10-15: superseded in the engine. The engine uses `meridian.scene_plan/v1` and an edit decision list (Bible section 4). The string `meridian.timeline` is not in `src/` or `scripts/`._
 - [ ] **1.3** Component library v1 in HyperFrames HTML: three caption styles, tier board, countdown, price reveal, split screen, react layout, product card, title card, CTA card, progress bar.
+  _Status 2026-10-15: built on fixtures as engine components: `captions.karaoke`, `title.hook`, `kinetic.punchline`, `product.card` and `cta.card` (E1); `react.layout`, `list.tierBoard`, `compare.split`, `price.reveal` and `chat.thread` (E2); `kinetic.type`, `screen.mock`, `character.rig` and `stopmotion.player` (E5). The PHASE_LOG names no countdown or progress bar._
 - [ ] **1.4** Compiler: timeline JSON → HyperFrames composition.
+  _Status 2026-10-15: built on fixtures (`src/engine/compose/`). Golden frames passed 30 of 30 at E2._
 - [ ] **1.5** HeyGen HyperFrames cloud render as a `VideoEngine`, with idempotency keys and cost to ledger.
+  _Status 2026-10-15: built on fixtures (`src/engine/render/`). The endpoints come from the HyperFrames CLI source and are not live-verified. The price per minute is unknown (owner item). The live run is pending._
 - [ ] **1.6** Claude adapter: Anthropic SDK, prompt caching, Batch API, keys via the credential resolver, tokens and cost to ledger.
+  _Status 2026-10-15: built on fixtures, with a change of route. Claude roles go through the gateway and OpenRouter by default (owner decision, 2026-10-14), and the Anthropic API is a route target. Token rates are in `src/engine/claude/rates.ts`. No live call has been made._
 
-**Gate:** a hand-written timeline renders through the API in under 2 minutes, and the bill for 10 test renders has been read.
+**Gate:** a hand-written timeline renders through the API in under 2 minutes, and the bill for 10 test renders has been read. _Not met on 2026-10-15: the live run is not recorded._
 
 ### Phase 2: Claude chain and pixels (weeks 3–6)
 
 - [ ] **2.1** Deconstructor with hosted speech-to-text (replaces WhisperX).
+  _Status 2026-10-15: not done. The speech-to-text interface has a recorded adapter. The vendor is the owner's decision (Bible 20.2)._
 - [ ] **2.2** Strategist, Director, Writer and Timeline author jobs, each a versioned prompt.
+  _Status 2026-10-15: partly built on fixtures as engine roles, each run through `runRole` with a structured answer (for example `analyze_reference`, `genome`, `planner`, `director`, `director_check` and `variant_writer@2`, PHASE_LOG E3 and E5)._
 - [ ] **2.3** OpenRouter adapter for video, avatar, image and voice, with an asset cache keyed by input hash.
+  _Status 2026-10-15: built on fixtures (E2: router, cache and circuit breaker; adapters for OpenRouter video, image and speech). Avatar IV is NOT_CONNECTED: no verified OpenRouter API exists for it._
 - [ ] **2.4** Critic and the seven gates (the quality-system section of the [master review](https://claude.ai/code/artifact/866b5081-469b-4136-8830-e816bd64dcbe)).
+  _Status 2026-10-15: built on fixtures: the E2 take gate, and the E4 pre-render gate, post-render review and `critic_final`._
 - [ ] **2.5** Retire `scripts/hypit-bridge.mjs` and the `HYPIT_BASE_URL` setting.
+  _Status 2026-10-15: not done. `scripts/hypit-bridge.mjs` is still in the repo, and `HYPIT_BASE_URL` is still in `.env.example`._
 
-**Gate:** one source reel in, one master and 20 variants out, with measured cost per video.
+**Gate:** one source reel in, one master and 20 variants out, with measured cost per video. _Not met on 2026-10-15._
 
 ### Phase 3: Discovery and 3 live pages (weeks 5–8)
 
 - [ ] **3.1** Instagram data API adapter (Apify or Bright Data), with creator medians.
+  _Status 2026-10-15: built on fixtures with Apify (`src/lib/meridian/sources/apify/`), with creator medians over the last 30 reels. The Apify key and plan price are open. Bright Data is not built._
 - [ ] **3.2** Cyclone scout adapter, after a 24-hour unattended run on a real phone.
+  _Status 2026-10-15: an adapter file exists (`src/lib/meridian/discovery/cyclone-scout-adapter.ts`). The 24-hour unattended run on a real phone is not recorded._
 - [ ] **3.3** Snapshot scheduler (0, +24 h, +72 h) and the Instant Rating on real snapshots.
+  _Status 2026-10-15: built on fixtures (`src/lib/meridian/discovery/snapshot-scheduler.ts`; reel ratings in `grading/reel-rating.ts`). Real snapshots need live data._
 - [ ] **3.4** Three pages posting daily through trial reels.
+  _Status 2026-10-15: not done. Theme pages and trial reels are built on fixtures. No page is live._
 
-**Gate:** 1,000 rated candidates per niche per week; 3 pages posting daily.
+**Gate:** 1,000 rated candidates per niche per week; 3 pages posting daily. _Not met on 2026-10-15._
 
 ### Phase 4: Variants, learning, sales (weeks 8–12)
 
 - [ ] **4.1** Probe-then-scale variants.
+  _Status 2026-10-15: not verified in this pass._
 - [ ] **4.2** Sleep mode v1: collect, score, plan tomorrow, morning brief; 10% holdout from day one.
+  _Status 2026-10-15: built on fixtures (B6). A night gathers, grades and plans, and waits at produce for approval. The 10% holdout is recorded, and production does not read it yet (FACTORY.md, Sleep mode)._
 - [ ] **4.3** Per-reel UTM tags, DM keywords and the Shopify order webhook into Meridian.
+  _Status 2026-10-15: built on fixtures (B4 link fields; B5 webhook at `/api/webhooks/shopify`). No live shop has sent an order._
 - [ ] **4.4** First calibration report from about 200 hand-labelled decisions.
+  _Status 2026-10-15: not done. Per-brand calibration reports are built, and each needs 100 measured outcomes per question. No set of hand-labelled decisions is recorded._
 
-**Gate:** cost per order measured per reel; 5 pages live.
+**Gate:** cost per order measured per reel; 5 pages live. _Not met on 2026-10-15._
 
 ### Phase 5: Scale (weeks 12–24)
 
 - [ ] **5.1** Sleep mode v2: gene refits, prompt challengers, model-route reviews.
+  _Status 2026-10-15: not started._
 - [ ] **5.2** Shared niches and cheaper-model swaps.
 - [ ] **5.3** 25 pages.
 
-**Gate:** cost per published reel under $0.80 with blind-test quality holding.
+**Gate:** cost per published reel under $0.80 with blind-test quality holding. _Not met on 2026-10-15._
 
 ## Working rules for agents
 
@@ -236,7 +291,7 @@ The 10 October honesty pass removed fake receipts and invented numbers from this
 
 ## Costs and budgets
 
-All-in, a published reel costs about **$1.07 at 5 pages and $0.76 at 25 pages**. Every figure here is an estimate from list prices; the cost ledger replaces them after the first 100 renders, and this section should then be updated.
+All-in, a published reel costs about **$1.07 at 5 pages and $0.76 at 25 pages**. Every figure here is an estimate from list prices; the cost ledger replaces them after the first 100 renders, and this section should then be updated. _Status 2026-10-15: the HyperFrames price is unknown and stays null in the engine's configuration until the owner confirms it (PHASE_LOG), so the render stays fail-closed. The other engine prices are not verified live._
 
 **Unit prices used** (as listed in October 2026):
 
@@ -273,10 +328,13 @@ All-in, a published reel costs about **$1.07 at 5 pages and $0.76 at 25 pages**.
 **Open decisions (owner to answer; agents should not guess):**
 
 - [ ] **Renderer sign-off:** confirm HyperFrames on HeyGen's cloud as primary after the phase-1 test bill.
+  _Status 2026-10-15: open. Shotstack is the only fallback (owner, 2026-10-14). The bill is not read yet._
 - [ ] **Discovery vendor and volume:** Apify or Bright Data; 1,000 candidates per niche per week is assumed.
+  _Status 2026-10-15: the vendor is Apify (the owner delegated the choice to the lead, 2026-10-14). The 1,000 a week is the initial value in the code. The plan price is open._
 - [ ] **First three niches** for phase 3, and each page's persona (becomes its voice file).
 - [ ] **Stores:** who sets up the Shopify stores, sources products (45%+ margin, $30+ order value) and handles fulfilment.
 - [ ] **Month-one budget:** about $480 a month running cost at 5 pages, plus build time.
+  _Status 2026-10-15: not recorded. The workspace's monthly video budget is a Settings field with no default (2026-10-14)._
 - [ ] **Reviewer:** who checks new concepts daily until they pass 50 in a row.
 - [ ] **Scout fleet:** number of Cyclone phones (one per niche assumed).
 

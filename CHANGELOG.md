@@ -21,6 +21,60 @@
   status in plain words, such as "Waiting for your approval". The approval rule is shared with the server, so a button appears only where
   the server would accept it.
 
+### Video engine (`src/engine/`, E1 to E6): code complete on recorded fixtures
+
+No live run is recorded for any phase. Agents hold no keys, so each phase's live acceptance (Bible section 19) waits for the owner. The
+details and the open items are in [docs/engine/PHASE_LOG.md](docs/engine/PHASE_LOG.md).
+
+- **E1, skeleton.** Every Bible section 4 contract as zod v4 with its fixtures, the versioned config, the budget engine (estimate, reserve,
+  reconcile, cap mode), the scene plan and the composition compiler with five components, the HyperFrames cloud render adapter with an
+  idempotency key and an integrity check, the ffmpeg media functions (`functions/ffmpeg`), the API gateway (`src/engine/gateway/`), and
+  `npm run engine:e1` (a dry run on recorded responses).
+- **E2, first visual types.** The asset router with its cache and circuit breaker; adapters for OpenRouter video, image and speech, Pexels and
+  Pixabay; the take gate; five more components. Avatar IV is NOT_CONNECTED, because no verified OpenRouter API exists for it.
+- **E3, planner and editor.** The plan stage and the director step, the planner, the director check and the request classifier; the
+  deterministic editor with the Bible 8.3 rules; the analyze-reference and voice roles; a pre-flight budget hold at intake; Postgres router
+  stores and a reservation-locked ledger.
+- **E4, gates.** The pre-render gate, the post-render review, `critic_final` with a Sonnet re-check, and the decision-to-label writer.
+- **E5, full range and variants.** The Shotstack fallback; generation variants (Bible 6.13); chain contract v5 and chain execution for
+  `cartoon_generated` shots; `stopmotion.player` with a 24-frame floor; the manifest writer; deliver; learning events. Stop motion is
+  refused until `image.edit` has a price. Production shot stages are NOT_CONNECTED until their deployment pieces are set.
+- **E6, operations.** Stage metrics, alerts, dead letters and replay (replay for an admin only), the batch plan, concurrency proposals and a
+  load test, with role-checked server functions in `src/lib/meridian/engine-ops`.
+- **Factory integration (I1 to I3).** A Factory video can name the engine as its provider, the run counts one spend total, and the Factory's
+  gates and review are shared with the engine.
+
+### Content Factory and the business layer (B1 to B6)
+
+- **Discovery at volume (B1, B2).** Instagram reel candidates per niche through Apify, with creator baselines, S to C tiers and the
+  outlier rater; "not rated" with the reason where a tier cannot be known.
+- **Theme pages (B3).** The account-level page a run can target, at `/brands/<brand>/pages`.
+- **Instagram trial reels (B4).** A trial post with a MANUAL or SS_PERFORMANCE graduation strategy. The feed step is recorded only when a
+  graduation is observed; the live reader observes none.
+- **Sales attribution (B5).** The Shopify `orders/create` webhook at `/api/webhooks/shopify` stores each order and links it to a reel by
+  `utm_content` or a DM keyword. It answers 200 for a stored order.
+- **Sleep mode (B6).** Off by default. A nightly run gathers, grades and plans, then waits at produce for approval. A 10% holdout is recorded.
+  Tuned values are held to a 15% change a night.
+- **Caps at the grade stage.** Before each engine call, the grade stage checks the kill switch and the run's daily and total caps. A refused
+  call leaves its ad graded on observed signal only, with the reason, and pauses the run.
+- **Provider facts.** Apify, Instagram trial reels, Shopify and the OpenRouter model ids are recorded in
+  [docs/PROVIDERS.md](docs/PROVIDERS.md) and [docs/engine/PROVIDER_APIS.md](docs/engine/PROVIDER_APIS.md), with their sources and the date
+  read (2026-10-15). They are partly verified; the `verified` flags in the engine's routes stay false until a live run.
+- **Screens.** Before and after screenshots of the changed screens are in [docs/feature-screens/](docs/feature-screens/README.md).
+
+### Decisions recorded (2026-10-14 and 2026-10-15)
+
+- Owner: the user sets the cost per master of each video. There is no default. Intake refuses a budget below the minimum for the request.
+- Owner: OpenRouter is the default platform for model calls, behind one gateway. The Anthropic API stays as a route target.
+- Owner: per-workspace credentials for OpenRouter, HeyGen and Anthropic, and a monthly video budget per workspace with no default.
+- Owner: Shotstack is the only render fallback. Remotion Lambda is dropped, because it needs an S3 bucket.
+- Delegated to the lead by the owner: Apify is the discovery provider.
+- Lead: the stop-motion floor is 24 frames. The kit image key convention is `kits/{org}/{brand}/{kind}/{kitId}/{name}.png`.
+
+### Migrations
+
+- `0077` to `0094` are new. `0083` to `0089` have no file in this repository. See [docs/OPERATIONS.md](docs/OPERATIONS.md) for each one.
+
 ## 0.1.0-beta.11 — prerelease
 
 The sections below this one are part of beta.11. Operators must read the upgrade notes in [docs/OPERATIONS.md](docs/OPERATIONS.md)
