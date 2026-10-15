@@ -174,6 +174,43 @@ export const thresholds = {
     slideshowRiskMax: tunable(0.35, 0.2, 0.5),
   },
 
+  // 12.3 slideshow risk (review/slideshowRisk.ts), moved from review/tuning.ts at thresholds@3. The Bible names the six dimensions
+  // and the 0.35 limit (postRender.slideshowRiskMax), not their weights, formulas or word lists.
+  // codedRunMax is plain: the Bible 19 E4 acceptance says five coded shots in a row is blocked, so four is the longest run that
+  // passes. The weights are initial Tunables, equal at 1. The mean divides by their sum, and the floor of 0.5 keeps that sum
+  // positive. The lists and the prefix are documented initial data (not numbers, so not Tunable); config.test.ts checks their
+  // members against the contract enums.
+  slideshow: {
+    codedRunMax: 4,
+    weights: {
+      repetition: tunable(1, 0.5, 2),
+      decorative_visuals: tunable(1, 0.5, 2),
+      weak_motion: tunable(1, 0.5, 2),
+      shot_intent: tunable(1, 0.5, 2),
+      typography_over_reliance: tunable(1, 0.5, 2),
+      unsupported_cinematic_claims: tunable(1, 0.5, 2),
+    },
+    // Decorative visuals: a shot illustrates its words when its text shares a content word with its beat. A word shorter than
+    // contentWordMinLength does not count, and neither does a word in stopWords. The length is an integer.
+    contentWordMinLength: tunable(4, 3, 6),
+    stopWords: [
+      "about", "after", "again", "against", "also", "because", "before", "being", "between", "could", "every", "from", "have", "here",
+      "into", "just", "like", "more", "most", "much", "only", "other", "over", "should", "some", "such", "than", "that", "their", "them",
+      "then", "there", "these", "they", "this", "those", "through", "very", "were", "what", "when", "where", "which", "while", "will",
+      "with", "would", "your", "yours",
+    ],
+    // Typography over-reliance: a component whose picture is text. A kinetic_type shot is text-led by its type.
+    textLedComponents: ["title.hook", "kinetic.punchline", "cta.card", "label.lower", "sticker.pop"],
+    // Weak motion: an edit effect of one of these kinds inside a shot makes a still move (EFFECT_KINDS).
+    motionEffectKinds: ["punch_in", "shake", "flash", "speed_ramp"],
+    // Weak motion: a generation model class that makes a still image, not a moving one (MODEL_CLASSES).
+    stillModelClasses: ["image.keyframe", "image.edit"],
+    // Unsupported cinematic claims: the visual types that claim motion footage (VISUAL_TYPES), and the model class prefix that
+    // makes a generated shot a moving one.
+    cinematicClaimTypes: ["cinematic", "stock_footage"],
+    motionModelClassPrefix: "video.",
+  },
+
   // 6.14 deliver: sampling of delivered videos for human review.
   sampling: {
     baseShare: 0.05,

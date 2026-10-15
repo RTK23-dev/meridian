@@ -5,10 +5,15 @@ Bible marks initial, in one versioned place. Logic elsewhere reads these; it nev
 
 ## Files
 
-- `thresholds.ts` (`thresholds@2`): jobs, intake, reference, voice, plan, take and render checks, EDL rules (8.3),
-  post-render checks, sampling, router concurrency and breaker (10.4), prompt challengers (11.3) and gold sets (12.4).
-  `thresholds@2` adds `router.breaker.minSample` (the breaker's minimum sample) and `router.minAttempts` (the unknown-score
-  policy for provider reliability). Both are initial values the Bible does not give.
+- `thresholds.ts` (`thresholds@3`): jobs and leases, intake, reference, voice, plan, take and render checks, EDL rules (8.3),
+  the editor's build steps (`editor`, 8.2), post-render checks, slideshow risk (`slideshow`, 12.3), sampling, router concurrency
+  and breaker (10.4), prompt challengers (11.3) and gold sets (12.4).
+  `thresholds@2` added `router.breaker.minSample` and `router.minAttempts`, both initial values the Bible does not give.
+  `thresholds@3` adds `jobs.leaseMs.plan` (three Claude leases, 6 minutes, because the plan job runs three Claude calls under
+  one lease), the `editor` block moved from `edit/tuning.ts`, and the `slideshow` block moved from `review/tuning.ts`. A value
+  the Bible gives is plain (for example `editor.cutSnap.gapMinMs` 80, Bible 8.2 step 3, or `slideshow.codedRunMax` 4, from the
+  19 E4 acceptance). A value it does not give is a Tunable with bounds, a proposal the lead confirms. The lists in `slideshow`
+  are documented initial data; `config.test.ts` checks their members against the contract enums.
 - `weights.ts` (`weights@1`): the visual-type score weights (7.5) and the provider score weights (10.2).
 - `prices.ts` (`prices@2`): the 10.3 list prices, each `{ unit, usd, source: 'list_oct_2026' }`, and the default route
   for each model class (the first provider in 10.3 priority order). `tokenRates` (contract v2) holds the Claude token

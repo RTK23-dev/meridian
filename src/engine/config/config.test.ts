@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MODEL_CLASSES } from "../contracts/plan.ts";
-import { EngineError, sumUsd } from "../contracts/index.ts";
+import { EFFECT_KINDS, EngineError, MODEL_CLASSES, sumUsd, VISUAL_TYPES } from "../contracts/index.ts";
 import { adapters } from "./adapters.ts";
 import { budgets } from "./budgets.ts";
 import { CONTRACTS_VERSION } from "../contracts/version.ts";
@@ -32,7 +31,7 @@ test("every Tunable in the config has floor <= value <= ceiling", () => {
   collectTunables(weights, "weights", found);
   collectTunables(budgets, "budgets", found);
   collectTunables(adapters, "adapters", found);
-  assert.equal(found.length, 71, `expected 71 tunables (thresholds 39, weights 16, budgets 1, adapters 15), found ${found.length}`);
+  assert.equal(found.length, 78, `expected 78 tunables (thresholds 46, weights 16, budgets 1, adapters 15), found ${found.length}`);
   for (const [path, value] of found) {
     assert.ok(value.floor <= value.value && value.value <= value.ceiling, `${path} is outside its bounds`);
     assert.ok(Number.isFinite(value.value), `${path} is not finite`);
@@ -139,6 +138,43 @@ test("the caption boxes at their initial values sit inside the Bible 8.3 safe zo
   assert.ok(geometry.captionLeftShare.value + geometry.captionWidthShare.value <= 0.88, "the caption ends inside the right 12 per cent");
   assert.ok(top.upper.floor >= 0.1, "no bound lets the upper band into the top 10 per cent");
   assert.ok(top.lower.ceiling + geometry.captionHeightShare.value <= 0.8 + 1e-9, "the lower band's ceiling keeps it above the bottom 20 per cent");
+});
+
+test("the slideshow risk numbers and lists moved from review/tuning.ts keep their values (12.3, thresholds@3)", () => {
+  const slideshow = thresholds.slideshow;
+  assert.equal(slideshow.codedRunMax, 4, "five coded shots in a row is blocked (Bible 19 E4), so four is the longest that passes");
+  assert.deepEqual(Object.keys(slideshow.weights).sort(), [
+    "decorative_visuals",
+    "repetition",
+    "shot_intent",
+    "typography_over_reliance",
+    "unsupported_cinematic_claims",
+    "weak_motion",
+  ]);
+  for (const [dimension, weight] of Object.entries(slideshow.weights)) {
+    assert.equal(weight.value, 1, `${dimension} starts equal`);
+    assert.ok(weight.floor > 0, `${dimension} has a positive floor, so the weighted mean never divides by zero`);
+  }
+  assert.equal(slideshow.contentWordMinLength.value, 4);
+  assert.ok(slideshow.stopWords.includes("about") && slideshow.stopWords.includes("yours"));
+  assert.equal(slideshow.motionModelClassPrefix, "video.");
+});
+
+test("the slideshow lists name only members of the contract enums (no typo can silently change a check)", () => {
+  const slideshow = thresholds.slideshow;
+  for (const kind of slideshow.motionEffectKinds) {
+    assert.ok((EFFECT_KINDS as readonly string[]).includes(kind), `${kind} is not an EDL effect kind`);
+  }
+  for (const modelClass of slideshow.stillModelClasses) {
+    assert.ok((MODEL_CLASSES as readonly string[]).includes(modelClass), `${modelClass} is not a model class`);
+  }
+  for (const type of slideshow.cinematicClaimTypes) {
+    assert.ok((VISUAL_TYPES as readonly string[]).includes(type), `${type} is not a visual type`);
+  }
+  assert.ok(
+    MODEL_CLASSES.some((modelClass) => modelClass.startsWith(slideshow.motionModelClassPrefix)),
+    "the motion prefix matches a model class",
+  );
 });
 
 test("the audio gain cap is the compiler's 3.98 (+12 dB), so the ceiling of the drawable gain is that cap", () => {
