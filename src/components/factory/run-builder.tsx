@@ -39,9 +39,12 @@ export function RunBuilder({
   onStart,
   onSaveDefaults,
   onDirtyChange,
+  pages,
 }: {
   defaults: RunSettings;
   channels: RunChannel[];
+  /** The brand's theme pages that are not archived. The run uses the one a person picks, or none. */
+  pages: ReadonlyArray<{ id: string; name: string; status: string }>;
   channelsState: "loading" | "ready" | "error";
   canEdit: boolean;
   /** Admins and owners save the brand's run defaults. Other roles see the draft and cannot save it. */
@@ -208,6 +211,15 @@ export function RunBuilder({
         </Field>
         {countryNote ? <p className="text-sm text-muted">{countryNote}</p> : null}
       </fieldset>
+
+      <Field label="Theme page" hint="The page's kits, schedule and Instagram trial default apply to this run. No page keeps the run's own settings.">
+        <SelectInput value={draft.pageId} onChange={(event) => update("pageId", event.target.value)} disabled={!canEdit}>
+          <option value="">No page</option>
+          {pages.map((page) => (
+            <option key={page.id} value={page.id}>{page.name} ({page.status})</option>
+          ))}
+        </SelectInput>
+      </Field>
 
       <Field
         label="Cost per master (USD)"

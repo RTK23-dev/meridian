@@ -9,6 +9,7 @@ import { getFactoryBoard } from "@/lib/meridian/factory/actions";
 import { getStudioBriefReview, getStudioSession, listHeldBudgetReservations, listWindowReleasedBudget } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
+import { listThemePagesAction } from "@/lib/meridian/pages/actions";
 import { getJevAccountIntelligenceFn, updateWhitespaceStatusFn, runAccountIntelligenceAnalysisFn } from "@/lib/meridian/jev/actions";
 import {
   listPublishingQueueAction,
@@ -110,6 +111,10 @@ export const organicQueryOptions = (userId: string | null | undefined, brandId: 
 export const accountsQueryOptions = (userId: string | null | undefined, brandId: string, platform?: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.accounts(brandId, platform)),
   queryFn: () => getPlatformAccountsAction({ data: { brandId, platform } }),
+});
+export const themePagesQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.pages(brandId)),
+  queryFn: () => listThemePagesAction({ data: { brandId } }),
 });
 export const accountIntelligenceQueryOptions = (userId: string | null | undefined, brandId: string, platform: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.accountIntelligence(brandId, platform)),
@@ -304,6 +309,11 @@ export const useOrganicDistributionQuery = (brandId: string, enabled = true) => 
 export const usePlatformAccountsQuery = (brandId: string, platform?: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...accountsQueryOptions(userId, brandId, platform), enabled: ready && enabled && !!brandId });
+};
+
+export const useThemePagesQuery = (brandId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...themePagesQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
 };
 
 export const useAccountIntelligenceQuery = (brandId: string, platform = "instagram", enabled = true) => {

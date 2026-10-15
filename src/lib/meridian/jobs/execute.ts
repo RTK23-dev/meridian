@@ -182,6 +182,11 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     const pulled = await pullRunMeasurements(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
     return pulled.summary;
   }
+  if (job.job_type === "distribution.trial_check") {
+    // The scheduled check for an Instagram trial reel. It reads the reel's documented fields and records the feed step (distribution/trial-check.ts).
+    const { runTrialCheckJob } = await import("../distribution/trial-check.ts");
+    return runTrialCheckJob(sql, job, payload);
+  }
   if (job.job_type === "experiment.process") {
     const variants = Array.isArray(payload.variants) ? (payload.variants as TrafficVariant[]) : [];
     const bucket = typeof payload.bucketKey === "string" ? payload.bucketKey : job.id;

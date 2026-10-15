@@ -58,6 +58,8 @@ export type BuilderDraft = {
   costPerMasterDollars: string;
   maxVariants: string;
   countries: string;
+  /** The theme page the run targets, by id. Blank is no page. */
+  pageId: string;
 };
 
 /** The draft a run starts from: the brand's run defaults, with an empty niche. */
@@ -76,6 +78,7 @@ export function draftFromDefaults(defaults: RunSettings): BuilderDraft {
     costPerMasterDollars: defaults.costPerMasterUsd === null ? "" : String(defaults.costPerMasterUsd),
     maxVariants: String(defaults.caps.maxVariants),
     countries: defaults.targetingCountries.join(", "),
+    pageId: defaults.pageId ?? "",
   };
 }
 
@@ -213,6 +216,7 @@ export function settingsFromDraft(draft: BuilderDraft): RunSettings {
     },
     targetingCountries: countries.ok ? countries.value : [],
     costPerMasterUsd: cost.ok ? cost.value : null,
+    pageId: draft.pageId.trim() || null,
   };
 }
 

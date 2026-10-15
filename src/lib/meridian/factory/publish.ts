@@ -19,6 +19,8 @@ import { metaPublishEngine, publishEngineById, type PublishEngine, type PublishE
 import { loadTenantProviderToken } from "../performance/ownership.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import type { RunSettings } from "./run-settings.ts";
+import type { TrialRequest } from "../distribution/trial.ts";
+import { trialDefaultForRunPage } from "../pages/store.ts";
 
 /** The organic channel each platform a run names publishes through. A platform with no organic channel is reported, not skipped. */
 export const ORGANIC_CHANNEL_BY_PLATFORM: Readonly<Record<string, string>> = {
@@ -107,6 +109,7 @@ async function publishOrganic(
   creativeId: string,
   platforms: string[],
   actorId: string,
+  trial: TrialRequest | null,
 ): Promise<{ results: PublishChannelResult[]; alreadyPublished: number; unmapped: string[]; error: string }> {
   const done = await sql<{ platform: string }>`
     select platform from organic_posts
@@ -137,6 +140,8 @@ async function publishOrganic(
       creativeId,
       channelIds,
       userId: actorId,
+      // The run's page default. Null is an ordinary publish, and the service applies it to Instagram only.
+      trial,
     });
     return { results, alreadyPublished, unmapped, error: "" };
   } catch (error) {
@@ -302,6 +307,8 @@ export async function launchFactoryRun(
   const wantsOrganic = input.settings.intent === "organic" || input.settings.intent === "both";
   const wantsPaid = input.settings.intent === "ad" || input.settings.intent === "both";
   const platforms = organicPlatformsOf(input.settings);
+  // The page the run targets sets whether its Instagram posts start as a trial. A run with no page has no trial default.
+  const trial = wantsOrganic ? await trialDefaultForRunPage(sql, scope, input.settings.pageId) : null;
 
   const outcome: LaunchOutcome = {
     organic: { published: 0, notConnected: 0, failed: 0, alreadyPublished: 0 },
@@ -315,7 +322,7 @@ export async function launchFactoryRun(
 
   for (const creative of eligible) {
     if (wantsOrganic) {
-      const organic = await publishOrganic(sql, scope, creative.creativeId, platforms, input.actorId);
+      const organic = await publishOrganic(sql, scope, creative.creativeId, platforms, input.actorId, trial);
       outcome.organic.alreadyPublished += organic.alreadyPublished;
       for (const platform of organic.unmapped) if (!outcome.unmapped.includes(platform)) outcome.unmapped.push(platform);
       if (organic.error) outcome.organic.failed += 1;

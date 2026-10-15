@@ -16,6 +16,7 @@ import {
   type VariantMatrix,
 } from "../../../engine/contracts/request.ts";
 import type { CreativePlan } from "../creative/plan.ts";
+import type { PageRequestKits } from "../pages/model.ts";
 
 type VisualRequest = ProductionRequest["visualRequests"][number];
 type Priority = ProductionRequest["constraints"]["priority"];
@@ -59,6 +60,11 @@ export type EngineVideoInput = {
    * the run has none, and no budget is set. Absent (undefined), the plan's own estimate for the deliverable is used.
    */
   budgetUsd?: number | null;
+  /**
+   * The run's theme page (pages/model.ts pageRequestKits). When given, its kit ids fill request.page, and the page fields in `engine` are not
+   * used. Without a page, those fields are used as before.
+   */
+  themePage?: PageRequestKits | null;
 };
 
 /**
@@ -100,6 +106,20 @@ function present(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
+/**
+ * The request.page kit fields. A theme page supplies them, and a kit the page does not set stays absent, so the engine schema reports it
+ * as missing. Without a page the engine's own fields are used.
+ */
+function pageKitFields(page: PageRequestKits | null | undefined, engine: EngineOnlyFields): Record<string, unknown> {
+  if (!page) return { pageId: engine.pageId, styleKitId: engine.styleKitId, personaId: engine.personaId, voiceId: engine.voiceId };
+  return {
+    pageId: page.pageId,
+    styleKitId: page.styleKitId ?? undefined,
+    personaId: page.personaId ?? undefined,
+    voiceId: page.voiceId ?? undefined,
+  };
+}
+
 /** Maps one Factory video to the engine's production request, and checks it with the engine's own schema. */
 export function mapVideoToEngineRequest(input: EngineVideoInput): EngineMapping {
   const engine = input.engine ?? {};
@@ -124,10 +144,7 @@ export function mapVideoToEngineRequest(input: EngineVideoInput): EngineMapping 
     visualRequests: engine.visualRequests,
     product: engine.product,
     page: present({
-      pageId: engine.pageId,
-      styleKitId: engine.styleKitId,
-      personaId: engine.personaId,
-      voiceId: engine.voiceId,
+      ...pageKitFields(input.themePage, engine),
       characterIds: engine.characterIds,
     }),
     constraints: present({

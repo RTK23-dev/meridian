@@ -45,6 +45,7 @@ import { Route as AppBrandsBrandIdLearningRouteImport } from './routes/_app/bran
 import { Route as AppBrandsBrandIdLibraryRouteImport } from './routes/_app/brands/$brandId/library'
 import { Route as AppBrandsBrandIdMarketRouteImport } from './routes/_app/brands/$brandId/market'
 import { Route as AppBrandsBrandIdOpportunitiesRouteImport } from './routes/_app/brands/$brandId/opportunities'
+import { Route as AppBrandsBrandIdPagesRouteImport } from './routes/_app/brands/$brandId/pages'
 import { Route as AppBrandsBrandIdProductsRouteImport } from './routes/_app/brands/$brandId/products'
 import { Route as AppBrandsBrandIdReviewsRouteImport } from './routes/_app/brands/$brandId/reviews'
 import { Route as AppBrandsBrandIdStudioRouteImport } from './routes/_app/brands/$brandId/studio'
@@ -233,6 +234,11 @@ const AppBrandsBrandIdOpportunitiesRoute =
     path: '/brands/$brandId/opportunities',
     getParentRoute: () => AppRoute,
   } as any)
+const AppBrandsBrandIdPagesRoute = AppBrandsBrandIdPagesRouteImport.update({
+  id: '/brands/$brandId/pages',
+  path: '/brands/$brandId/pages',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBrandsBrandIdProductsRoute =
   AppBrandsBrandIdProductsRouteImport.update({
     id: '/brands/$brandId/products',
@@ -285,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/brands/$brandId/library': typeof AppBrandsBrandIdLibraryRoute
   '/brands/$brandId/market': typeof AppBrandsBrandIdMarketRoute
   '/brands/$brandId/opportunities': typeof AppBrandsBrandIdOpportunitiesRoute
+  '/brands/$brandId/pages': typeof AppBrandsBrandIdPagesRoute
   '/brands/$brandId/products': typeof AppBrandsBrandIdProductsRoute
   '/brands/$brandId/reviews': typeof AppBrandsBrandIdReviewsRoute
   '/brands/$brandId/studio': typeof AppBrandsBrandIdStudioRoute
@@ -325,6 +332,7 @@ export interface FileRoutesByTo {
   '/brands/$brandId/library': typeof AppBrandsBrandIdLibraryRoute
   '/brands/$brandId/market': typeof AppBrandsBrandIdMarketRoute
   '/brands/$brandId/opportunities': typeof AppBrandsBrandIdOpportunitiesRoute
+  '/brands/$brandId/pages': typeof AppBrandsBrandIdPagesRoute
   '/brands/$brandId/products': typeof AppBrandsBrandIdProductsRoute
   '/brands/$brandId/reviews': typeof AppBrandsBrandIdReviewsRoute
   '/brands/$brandId/studio': typeof AppBrandsBrandIdStudioRoute
@@ -367,6 +375,7 @@ export interface FileRoutesById {
   '/_app/brands/$brandId/library': typeof AppBrandsBrandIdLibraryRoute
   '/_app/brands/$brandId/market': typeof AppBrandsBrandIdMarketRoute
   '/_app/brands/$brandId/opportunities': typeof AppBrandsBrandIdOpportunitiesRoute
+  '/_app/brands/$brandId/pages': typeof AppBrandsBrandIdPagesRoute
   '/_app/brands/$brandId/products': typeof AppBrandsBrandIdProductsRoute
   '/_app/brands/$brandId/reviews': typeof AppBrandsBrandIdReviewsRoute
   '/_app/brands/$brandId/studio': typeof AppBrandsBrandIdStudioRoute
@@ -409,6 +418,7 @@ export interface FileRouteTypes {
     | '/brands/$brandId/library'
     | '/brands/$brandId/market'
     | '/brands/$brandId/opportunities'
+    | '/brands/$brandId/pages'
     | '/brands/$brandId/products'
     | '/brands/$brandId/reviews'
     | '/brands/$brandId/studio'
@@ -449,6 +459,7 @@ export interface FileRouteTypes {
     | '/brands/$brandId/library'
     | '/brands/$brandId/market'
     | '/brands/$brandId/opportunities'
+    | '/brands/$brandId/pages'
     | '/brands/$brandId/products'
     | '/brands/$brandId/reviews'
     | '/brands/$brandId/studio'
@@ -490,6 +501,7 @@ export interface FileRouteTypes {
     | '/_app/brands/$brandId/library'
     | '/_app/brands/$brandId/market'
     | '/_app/brands/$brandId/opportunities'
+    | '/_app/brands/$brandId/pages'
     | '/_app/brands/$brandId/products'
     | '/_app/brands/$brandId/reviews'
     | '/_app/brands/$brandId/studio'
@@ -765,6 +777,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBrandsBrandIdOpportunitiesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/brands/$brandId/pages': {
+      id: '/_app/brands/$brandId/pages'
+      path: '/brands/$brandId/pages'
+      fullPath: '/brands/$brandId/pages'
+      preLoaderRoute: typeof AppBrandsBrandIdPagesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/brands/$brandId/products': {
       id: '/_app/brands/$brandId/products'
       path: '/brands/$brandId/products'
@@ -813,6 +832,7 @@ interface AppRouteChildren {
   AppBrandsBrandIdLibraryRoute: typeof AppBrandsBrandIdLibraryRoute
   AppBrandsBrandIdMarketRoute: typeof AppBrandsBrandIdMarketRoute
   AppBrandsBrandIdOpportunitiesRoute: typeof AppBrandsBrandIdOpportunitiesRoute
+  AppBrandsBrandIdPagesRoute: typeof AppBrandsBrandIdPagesRoute
   AppBrandsBrandIdProductsRoute: typeof AppBrandsBrandIdProductsRoute
   AppBrandsBrandIdReviewsRoute: typeof AppBrandsBrandIdReviewsRoute
   AppBrandsBrandIdStudioRoute: typeof AppBrandsBrandIdStudioRoute
@@ -843,6 +863,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppBrandsBrandIdLibraryRoute: AppBrandsBrandIdLibraryRoute,
   AppBrandsBrandIdMarketRoute: AppBrandsBrandIdMarketRoute,
   AppBrandsBrandIdOpportunitiesRoute: AppBrandsBrandIdOpportunitiesRoute,
+  AppBrandsBrandIdPagesRoute: AppBrandsBrandIdPagesRoute,
   AppBrandsBrandIdProductsRoute: AppBrandsBrandIdProductsRoute,
   AppBrandsBrandIdReviewsRoute: AppBrandsBrandIdReviewsRoute,
   AppBrandsBrandIdStudioRoute: AppBrandsBrandIdStudioRoute,

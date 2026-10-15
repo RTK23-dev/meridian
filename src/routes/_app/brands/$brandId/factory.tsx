@@ -10,7 +10,7 @@ import { factoryControlsPayload, factoryControlsSchema, type FactoryControlsInpu
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
-import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
+import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation, useThemePagesQuery } from "@/lib/query/hooks";
 import { approveFactoryStage, attestFactoryLicence, checkFactoryLearning, confirmFactoryAiLabel, resumeFactoryRun, revokeFactoryAiLabel, revokeFactoryLicence, saveFactoryRunDefaults, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import type { LicenceKind } from "@/lib/meridian/factory/rights-wording";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
@@ -107,6 +107,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
   const query = useFactoryQuery(brandId);
   const board = query.data ?? null;
   const channelsQuery = useDistributionChannelsQuery(brandId);
+  const pagesQuery = useThemePagesQuery(brandId);
   const organicQuery = useOrganicDistributionQuery(brandId);
   const pipelineQuery = usePipelineConfigQuery(brandId);
   // Workspace provider summary: the Gemini production key and the Google Drive setting, for the engine states.
@@ -278,6 +279,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
               canAdmin={canAdmin}
               busy={startRun.isPending}
               savingDefaults={saveRunDefaults.isPending}
+              pages={(pagesQuery.data ?? []).map((page) => ({ id: page.id, name: page.name, status: page.status }))}
               onStart={({ niche, settings }) => { void startRun.mutateAsync({ niche, settings }).catch(() => undefined); }}
               onSaveDefaults={(settings) => { void saveRunDefaults.mutateAsync(settings).catch(() => undefined); }}
               onDirtyChange={setBuilderDirty}

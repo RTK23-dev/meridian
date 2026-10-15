@@ -2,7 +2,7 @@ import { useState } from "react";
 import { HeldReservationsPanel } from "@/components/held-reservations-panel";
 import type { ReviewAction, ReviewPayload } from "./review-rules.ts";
 import { ReviewDialog, type ReviewTarget } from "./review-dialog.tsx";
-import { PublishDialog, type PublishChannel, type PublishTarget } from "./publish-dialog.tsx";
+import { PublishDialog, type PublishChannel, type PublishTarget, type PublishTrial } from "./publish-dialog.tsx";
 import { ImageLightbox, type LightboxTarget } from "./image-lightbox.tsx";
 import { EvidenceDrawer } from "./evidence-drawer.tsx";
 import { VariantGallery } from "./variant-gallery.tsx";
@@ -26,7 +26,7 @@ type ReviewStepProps = {
   recordingTest: boolean;
   recordingOrganic: boolean;
   onReviewSubmit: (creativeId: string, payload: ReviewPayload) => Promise<unknown>;
-  onPublishConfirm: (target: PublishTarget, channelIds: string[], caption: string) => Promise<unknown>;
+  onPublishConfirm: (target: PublishTarget, channelIds: string[], caption: string, trial: PublishTrial) => Promise<unknown>;
   onPublishClose: () => void;
   onRetry: (variant: StudioVariant) => void;
   onRecordTest: () => void;
@@ -133,8 +133,8 @@ export function ReviewStep(props: ReviewStepProps) {
         pending={props.publishPending}
         results={props.publishResults}
         onClose={() => { setPublishTarget(null); props.onPublishClose(); }}
-        onConfirm={(channelIds, caption) => {
-          if (publishTarget) void props.onPublishConfirm(publishTarget, channelIds, caption).catch(() => undefined);
+        onConfirm={(channelIds, caption, trial) => {
+          if (publishTarget) void props.onPublishConfirm(publishTarget, channelIds, caption, trial).catch(() => undefined);
         }}
       />
 
