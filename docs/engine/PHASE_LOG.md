@@ -239,3 +239,36 @@ Owner items raised in this wave: the Shotstack credential slot; confirmation of 
 
 In progress: config adoption in edit and review, E4/E5 orchestration consolidation with scenario tests, frame_reader and
 media detectors, and the remaining visual types (kinetic.type, screen.mock, character.rig, generated-type recipes).
+
+## 2026-10-15 Waves E4 to E6, Factory integration (I1 to I3) and the business layer (B1 to B6): merged, checks green on fixtures
+
+Merged into code/beautiful-cori-1zfk11 (PR #71), in order: plan gaps (voice word spans to components, rig sheet check, build
+refusals before planning, stock downgrade); E4/E5 leftovers (media detectors in check_take and post_render_review, frame_reader
+readings, production HyperFrames and Shotstack deps with 15-minute signed links, caption-variant fixture); E6 ops (metrics,
+alerts, dead letters and replay, batch plan, concurrency proposals, load test); the Factory integration I1 to I3 (engine
+requests from the Factory, one spend total, shared gates and review); theme pages (B3) and trial reels (B4, migration 0091);
+Factory discovery at volume through Apify with the outlier rater wired (B1, B2, migration 0090); sales attribution through
+Shopify orders and sleep mode with its holdout (B5, B6, migration 0092). Migration 0093 makes a creator's niche nullable.
+
+Checks on b6b51c6: CI green (typecheck, lint and build; all six test shards; e2e; sidecar; ui-smoke). Locally, the `src` tests
+run in six parallel groups; the counts are recorded below once every group has finished. Typecheck was clean and lint had 0
+errors and 5 warnings on the merged branch before the last test-only fixes; CI typecheck and lint pass on b6b51c6.
+
+Not done, and why:
+- Generation variant sub-graph (E4/E5 item 3). Shots are request-scoped and cannot be edited per variant; voice has no
+  beat-scoped call; there is no variant prompt or product/persona reference source; the variant writer is never called.
+  Deferred. Task #8 holds the decision: keep it deferred to the owner's live phase, or design it.
+- Chain contract for cartoon_generated and stop_motion. ShotSource is one call, so the chains need a versioned contract change
+  through eng-contracts (Bible section 4). Task #7.
+- Live acceptance for every phase needs the owner's keys (agents hold none), so none of the recorded runs here is a live run.
+
+Migrations: 0082 (Factory engine requests), 0090 (discovery volume), 0091 (theme pages), 0092 (attribution and sleep), 0093
+(creator niche nullable). The route tree was regenerated for the new screens and API routes; the generator drops the
+`declare module '@tanstack/react-start'` Register block, which is restored by hand after each regeneration.
+
+Owner items: the Shotstack credential slot; the two critic_final craft items; the `paidPartnership` disclosure default; the Apify
+key and plan price (the cost per 1,000 results stays unknown until confirmed); the Shopify shop domain and webhook secret
+(`SHOPIFY_WEBHOOK_SECRET` or the workspace secret); the platform file-size limit; the media functions URL (detectors stay
+NOT_CONNECTED until one is set); the HyperFrames price (render stays fail-closed until it is known); the speech-to-text
+vendor; the monthly video budget per workspace; the Instagram trial graduation path (the Graph API documents no graduation
+field, so the feed step stays a person's action until one is observed).
