@@ -37,7 +37,7 @@ export const GRADUATION_NOT_DOCUMENTED =
 export function parseTrialRequest(value: unknown): { ok: true; value: TrialRequest | null } | { ok: false; error: string } {
   if (value === undefined || value === null) return { ok: true, value: null };
   if (typeof value !== "object" || Array.isArray(value)) {
-    return { ok: false, error: "The trial choice must be an object with a graduation strategy." };
+    return { ok: false, error: `The trial choice must be an object whose graduation strategy is ${TRIAL_GRADUATION_STRATEGIES.join(" or ")}.` };
   }
   const strategy = (value as { graduationStrategy?: unknown }).graduationStrategy;
   if (typeof strategy !== "string" || !(TRIAL_GRADUATION_STRATEGIES as readonly string[]).includes(strategy)) {

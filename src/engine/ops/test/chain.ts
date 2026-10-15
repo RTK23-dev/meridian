@@ -268,7 +268,8 @@ export async function chainWorld(sql: Sql, organizationId: string): Promise<Chai
     styleKit: async () => fx.styleKitFixture,
     preRender: {
       renderBudget: async () => ({ remainingUsd: 10, renderEstimateUsd: 0.05 }),
-      licensedUris: async () => mediaUrisOf(render.edl),
+      // The music variant swaps in the fixture track, which is licensed like the master's music (the same track the E5 scenarios use).
+      licensedUris: async () => new Set([...mediaUrisOf(render.edl), MUSIC.uri]),
       productImageUris: async () => [fx.BLENDER_FRONT_URI],
       disclosures: async () => ({ aiGeneratedPeople: true }),
     },
@@ -440,8 +441,9 @@ export async function startChainRequest(world: ChainWorld, input: ChainRequestIn
   await produceAndCheck(shot1, take1, fx.take1Fixture, true);
   const take3aArtifact = await store("produce_shot", "take", ids.value(fx.take3aFixture));
   await answer("produce_shot", shot3, { stage: "produce_shot", subjectId: shot3, shotId: shot3, epoch: 0, takeId: take3a, artifacts: { [`take:${take3a}`]: take3aArtifact } });
-  await produceAndCheck(shot3, take3b, fx.take3bFixture, true);
+  // The failed check of take 3a queues the redo of shot 3, which produces take 3b. The check comes first: the redo is not queued before it.
   await answerCheck(shot3, take3a, false);
+  await produceAndCheck(shot3, take3b, fx.take3bFixture, true);
   await produceAndCheck(shot2, take2, fx.take2Fixture, true);
 
   const render = cleanRenderOnce();

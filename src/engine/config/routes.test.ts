@@ -27,6 +27,8 @@ describe("route table", () => {
   it("uses OpenRouter for every model API", () => {
     for (const capability of CAPABILITIES) {
       if (capability === "render.cloud" || capability === "render.fallback" || capability === "media.functions" || capability === "stock") continue;
+      // Instagram discovery runs Apify actors, which are not model APIs. Its own routes are checked where they are declared.
+      if (capability.startsWith("discovery.")) continue;
       for (const target of routes.table[capability].targets) assert.equal(target.provider, "openrouter", capability);
     }
   });

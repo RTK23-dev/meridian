@@ -83,6 +83,9 @@ type Scenario = {
 /** Stores a rendered video of the clean render under its own id, its EDL, a reservation for the Critic and its object. */
 async function scenario(options: { withIntegrity?: boolean; objectPresent?: boolean } = {}): Promise<Scenario> {
   counter += 1;
+  // The role-call journal is keyed by request, and every scenario shares one request. A stored answer from an earlier test would be
+  // reused in place of the call, so each scenario starts with no stored calls.
+  await db.sql`delete from engine_role_calls where request_id = ${REQ}`;
   const render = cleanRender();
   const videoId = counter === 1 ? VIDEO_ID : fixtureId("vid_", 400 + counter);
   const uri = "store://renders/" + videoId + ".mp4";
