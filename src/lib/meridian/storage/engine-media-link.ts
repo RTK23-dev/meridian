@@ -1,12 +1,20 @@
 /**
- * Signed, 15-minute links to one engine object (a take, a voice file, a rendered video) for Shotstack, which fetches its source
- * media by URL (Bible 6.11, owner decision 2026-10-14). The engine never reads the environment: it takes a MediaLinkSigner (the
- * port in src/engine/jobs/media-link.ts), and this file is the Meridian implementation that the production runtime passes in.
+ * Signed, 15-minute links to one engine object for a provider that fetches its input by URL: Shotstack fetches the sources of a
+ * component-free EDL (Bible 6.11, owner decision 2026-10-14), and a chain's keyframe and clip read their references and first frame
+ * the same way (Bible 10.1). The engine never reads the environment: it takes a MediaLinkSigner (the port in
+ * src/engine/jobs/media-link.ts), and this file is the Meridian implementation that the production runtime passes in.
+ *
+ * Two kinds of object can be linked, each for its own organization only:
+ *   - an engine media object (a take, a voice file, a rendered video): engine/{org}/{requestId}/{stage}/{artifactId}.{mp4|wav|png};
+ *   - a kit image (Bible 13), the character sheet, persona portrait or product image a page's kit names:
+ *     kits/{org}/{brand}/{kind}/{kitId}/{name}.png, where kind is character, persona or product. The brand is in the key because the
+ *     store keys an object by organization, brand and name, so the route reads the object under the brand its key names.
  *
  * The link is an HMAC-SHA256 over a domain label, the organization, the object key and the expiry, made with MEDIA_LINK_SECRET (the
  * same server secret as the creative links, media-link.ts, but a different label, so a creative link never verifies here and the
  * reverse). The route (routes/api/engine-media.ts, serveEngineMedia here) checks the signature and the expiry before it reads
- * anything, then reads the object only for the organization the link names, and only from the request that owns the key.
+ * anything, then reads the object only for the organization the link names: an engine object only from the request that owns the key,
+ * a kit image only under its own organization and brand.
  *
  * Fail closed: without MEDIA_LINK_SECRET (at least 32 characters) or a public https origin (APP_URL or PUBLIC_APP_URL), the signer
  * answers not_connected with the reason, and nothing is signed. The route answers as if nothing exists when the secret is unset.
@@ -30,12 +38,19 @@ const SAFE_PART = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 /** The engine's media extensions and the MIME type each one is served as. */
 const MIME_BY_EXTENSION: Readonly<Record<string, string>> = { mp4: "video/mp4", wav: "audio/wav", png: "image/png" };
 
+/**
+ * The kit-store prefix (Bible 13). A kit image is a png under its organization, its brand, the kind of kit it belongs to (only the kinds
+ * that carry images: a character sheet, a persona's portraits, a product's images) and the kit's id. Kit images are png in this rule;
+ * other image types are refused until the owner decides them (jobs/STATUS.md).
+ */
+const KIT_KEY = /^kits\/([^/]+)\/([^/]+)\/(character|persona|product)\/([^/]+)\/([^/]+)\.png$/;
+
 const MIN_SECRET_REASON = "MEDIA_LINK_SECRET is not set to at least 32 characters on the server";
 
 export type EngineMediaLinkResult =
   | { status: "ok"; url: string; expires: number }
   | { status: "not_connected"; reason: string }
-  /** The object is not an engine media object of the organization: nothing is signed (a refusal of the input, not a fault). */
+  /** The object is not a linkable object of the organization: nothing is signed (a refusal of the input, not a fault). */
   | { status: "refused"; reason: string };
 
 /** The Meridian signer's shape. It is structurally the engine's MediaLinkSigner, so the engine never imports this file. */
@@ -56,6 +71,30 @@ export function isEngineMediaKey(organizationId: string, key: string): boolean {
   if (!match) return false;
   const parts = [match[1], match[2], match[3], match[4]];
   return organizationId === match[1] && parts.every((part) => part !== undefined && SAFE_PART.test(part) && !part.includes(".."));
+}
+
+export type KitKeyParts = { organizationId: string; brandId: string; kind: string; kitId: string; name: string };
+
+/** The parts of a kit-store key, or null when the key is not one. Every part passes the path rule the engine's keys pass. */
+export function kitKeyParts(key: string): KitKeyParts | null {
+  const match = KIT_KEY.exec(key);
+  if (!match) return null;
+  const [, organizationId, brandId, kind, kitId, name] = match;
+  if (organizationId === undefined || brandId === undefined || kind === undefined || kitId === undefined || name === undefined) return null;
+  const parts = [organizationId, brandId, kitId, name];
+  if (!parts.every((part) => SAFE_PART.test(part) && !part.includes(".."))) return null;
+  return { organizationId, brandId, kind, kitId, name };
+}
+
+/** Whether a key is a kit image of this organization (its key names the organization, and no other). */
+export function isKitMediaKey(organizationId: string, key: string): boolean {
+  const parts = kitKeyParts(key);
+  return parts !== null && parts.organizationId === organizationId;
+}
+
+/** Whether the signer may link an object: an engine media object or a kit image, of this organization only. */
+export function isLinkableMediaKey(organizationId: string, key: string): boolean {
+  return isEngineMediaKey(organizationId, key) || isKitMediaKey(organizationId, key);
 }
 
 function signatureOf(secret: string, organizationId: string, objectKey: string, expires: number): string {
@@ -92,7 +131,8 @@ export type EngineMediaLinkOptions = {
 /**
  * The Meridian signer the engine's production runtime passes in. A missing secret or origin is not_connected with its reason. The
  * caller's ttl may not exceed the 15 minutes of the link policy (media-link.ts); a ttl outside that range is a programming error and
- * throws. A key or organization that is not an engine media key is refused before anything is signed.
+ * throws. A key that is not an engine media object or a kit image of the organization is refused before anything is signed, so a kit
+ * image of another organization is never linked.
  */
 export function engineMediaLinkSigner(options: EngineMediaLinkOptions = {}): EngineMediaLinkSigner {
   const secretOf = options.secret ?? (() => mediaLinkSecret());
@@ -103,18 +143,21 @@ export function engineMediaLinkSigner(options: EngineMediaLinkOptions = {}): Eng
       if (!Number.isInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > MEDIA_LINK_TTL_SECONDS) {
         throw new Error(`engine media links last 1 to ${MEDIA_LINK_TTL_SECONDS} seconds`);
       }
-      if (!isEngineMediaKey(organizationId, objectKey)) {
-        return { status: "refused", reason: "the object is not an engine media object of this organization. Nothing was signed." };
+      if (!isLinkableMediaKey(organizationId, objectKey)) {
+        return {
+          status: "refused",
+          reason: "the object is not an engine media object or a kit image of this organization. Nothing was signed.",
+        };
       }
       const secret = secretOf();
       if (!secret) {
-        return { status: "not_connected", reason: `Shotstack fetches the media from a signed link, and ${MIN_SECRET_REASON}. Nothing was sent.` };
+        return { status: "not_connected", reason: `A signed media link cannot be made: ${MIN_SECRET_REASON}. Nothing was sent.` };
       }
       const origin = originOf();
       if (!origin) {
         return {
           status: "not_connected",
-          reason: "Shotstack fetches the media from a signed link, and no public https origin is set (APP_URL or PUBLIC_APP_URL). Nothing was sent.",
+          reason: "A signed media link cannot be made: no public https origin is set (APP_URL or PUBLIC_APP_URL). Nothing was sent.",
         };
       }
       const expires = nowSeconds() + ttlSeconds;
@@ -151,9 +194,24 @@ const refused = (message: string) =>
   new Response(message, { status: 403, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
 
 /**
- * Serves one engine object through a signed link. The order is fixed: the secret, then the link (its shape, its signature and its
- * expiry), then the database (the request that owns the key, in the organization the link names), then the object. A link that
- * does not verify reads nothing.
+ * The brand a linked object is stored under, or null when none is found. A kit image names its brand in its key: the store is keyed
+ * by organization, brand and name, so a brand of another organization finds nothing. An engine object's brand is the brand of the
+ * request that owns its key, in the organization the link names.
+ */
+async function brandOfLinkedKey(sql: Sql, organizationId: string, objectKey: string): Promise<string | null> {
+  const kit = kitKeyParts(objectKey);
+  if (kit !== null) return kit.brandId;
+  const requestId = objectKey.split("/")[2] ?? "";
+  const rows = await sql<{ brand_id: string | null }>`
+    select brand_id from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1
+  `;
+  return rows[0]?.brand_id ?? null;
+}
+
+/**
+ * Serves one linked object (an engine media object or a kit image) through a signed link. The order is fixed: the secret, then the
+ * link (its shape, its signature and its expiry), then the database (the request that owns an engine key, in the organization the
+ * link names; the brand a kit key names), then the object. A link that does not verify reads nothing.
  */
 export async function serveEngineMedia(input: ServeEngineMediaInput): Promise<Response> {
   const secret = input.secret === undefined ? mediaLinkSecret() : input.secret;
@@ -162,7 +220,7 @@ export async function serveEngineMedia(input: ServeEngineMediaInput): Promise<Re
   const url = new URL(input.request.url);
   const organizationId = url.searchParams.get("org") ?? "";
   const objectKey = url.searchParams.get("key") ?? "";
-  if (!isEngineMediaKey(organizationId, objectKey)) return refused("This link is not valid.");
+  if (!isLinkableMediaKey(organizationId, objectKey)) return refused("This link is not valid.");
   const nowSeconds = input.nowSeconds ? input.nowSeconds() : Math.floor(Date.now() / 1000);
   const check = verifyEngineMediaLink({
     organizationId,
@@ -176,12 +234,7 @@ export async function serveEngineMedia(input: ServeEngineMediaInput): Promise<Re
   if (check !== "ok") return refused("This link is not valid.");
 
   const sql = await input.getSql();
-  const requestId = objectKey.split("/")[2] ?? "";
-  // The request must belong to the organization the link names. Its brand is the brand the object is stored under.
-  const rows = await sql<{ brand_id: string | null }>`
-    select brand_id from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1
-  `;
-  const brandId = rows[0]?.brand_id ?? null;
+  const brandId = await brandOfLinkedKey(sql, organizationId, objectKey);
   if (brandId === null) return notFound();
 
   let object;

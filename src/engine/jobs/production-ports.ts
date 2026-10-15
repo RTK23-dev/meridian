@@ -18,9 +18,10 @@ import { createShotstackAdapter, type ShotstackDeps } from "../render/shotstack.
 import { mediaKey, type MediaStorePort } from "./artifact-store.ts";
 import { scopedLedgerStore } from "./asset-stores-sql.ts";
 import { kitPorts, productKitBySku, readKit } from "./kit-store.ts";
-import { sourceUrlResolver, type MediaLinkSigner } from "./media-link.ts";
+import { ENGINE_MEDIA_LINK_TTL_SECONDS, sourceUrlResolver, type MediaLinkSigner } from "./media-link.ts";
 import { sqlEventStore } from "./event-store-sql.ts";
 import { withReservationLedger } from "./sql-ledger-store.ts";
+import type { ProduceShotPorts } from "./handlers/produce-shot.ts";
 import type { PostRenderPorts } from "./handlers/post-render-review.ts";
 import type { RenderPorts, RenderScope } from "./handlers/render.ts";
 import type { VariantGenerationPorts, VariantPorts } from "./handlers/variants.ts";
@@ -236,4 +237,76 @@ async function writerReasonOf(gateway: Gateway, organizationId: string): Promise
   }
   const status = await gateway.connection(providerId, organizationId);
   return status.connected ? null : notConnectedReason(status.reason ?? `the ${providerId} key is not connected for this workspace`);
+}
+
+/** The link a chain input gets for the provider that reads it (Bible 10.1): an https URL the provider can fetch (produce-shot.ts linksFor). */
+export type ProviderUrl = NonNullable<ProduceShotPorts["providerUrl"]>;
+
+/**
+ * The model classes a chain's calls can use (contract v5, Bible 7.1). Their routes name the providers a chain's calls reach, so the
+ * providers of these routes are the ones whose base URL a chain needs.
+ */
+export const CHAIN_MODEL_CLASSES = ["image.keyframe", "image.edit", "video.cinematic", "video.budget", "video.i2v_pinned"] as const;
+
+/** The providers a chain's calls go to: the providers of the routed targets of its model classes, in route order, each once. */
+export function chainProvidersOf(gateway: Gateway): string[] {
+  const providers: string[] = [];
+  for (const modelClass of CHAIN_MODEL_CLASSES) {
+    for (const route of gateway.routes(modelClass)) {
+      if (!providers.includes(route.provider.id)) providers.push(route.provider.id);
+    }
+  }
+  return providers;
+}
+
+/** The URI scheme of Meridian's store. A kit image is store://<object key> (Bible 13). A uri without it is taken as an object key. */
+export const STORE_URI_PREFIX = "store://";
+
+/** The object key a chain input's uri names: the key after the store scheme, or the uri itself. */
+export function objectKeyOfUri(uri: string): string {
+  return uri.startsWith(STORE_URI_PREFIX) ? uri.slice(STORE_URI_PREFIX.length) : uri;
+}
+
+/** The reason a provider has no base URL on this deployment, or null when it has one. The gateway sends nothing here. */
+function baseUrlProblem(gateway: Gateway, providerId: string): string | null {
+  try {
+    gateway.baseUrlFor(providerId);
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : `${providerId} has no base URL set on this deployment`;
+  }
+}
+
+export type ProductionProviderUrlInput = {
+  gateway: Gateway;
+  /** Meridian's signer (lib/meridian/storage/engine-media-link.ts) in production; the engine never reads the secret itself. */
+  mediaLinks: MediaLinkSigner;
+};
+
+/**
+ * The providerUrl of production (Bible 10.1). A chain input becomes a 15-minute https link to its engine object or kit image, for the
+ * organization of the call. Before any link is signed, every provider the chain reaches must have a base URL on this deployment: one
+ * with none is NOT_CONNECTED, with its reason, and nothing is signed. An input the signer refuses (another organization's object, or a
+ * uri that is neither an engine object nor a kit image) is invalid input: the chain stops there as a hold, and no link is made.
+ */
+export function productionProviderUrl(input: ProductionProviderUrlInput): ProviderUrl {
+  return async ({ organizationId, uri }) => {
+    for (const providerId of chainProvidersOf(input.gateway)) {
+      const problem = baseUrlProblem(input.gateway, providerId);
+      if (problem !== null) {
+        throw new EngineError("config", notConnectedReason(`the chain's provider cannot be called: ${problem}`), { stage: "produce_shot" });
+      }
+    }
+    const result = await input.mediaLinks.sign(organizationId, objectKeyOfUri(uri), ENGINE_MEDIA_LINK_TTL_SECONDS);
+    if (result.status === "not_connected") {
+      throw new EngineError("config", notConnectedReason(`a chain input cannot be linked: ${result.reason}`), { stage: "produce_shot" });
+    }
+    if (result.status === "refused") {
+      throw new EngineError("invalid_input", `a chain input cannot be linked: ${result.reason}`, { stage: "produce_shot" });
+    }
+    if (!result.url.startsWith("https://")) {
+      throw new EngineError("config", "the signed link for a chain input is not https, so the provider cannot fetch it", { stage: "produce_shot" });
+    }
+    return result.url;
+  };
 }

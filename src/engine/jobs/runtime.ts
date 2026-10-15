@@ -7,6 +7,9 @@
 //     workspace's monthly budget (Meridian's Settings, through workspaceBudgetFromSettings).
 //   - with shotPorts: produce_shot and check_take. Their media functions, object store and asset-media store are deployment
 //     wiring that does not exist yet, so production does not register them. They stay not_implemented, which fails closed.
+//     The chain's providerUrl (Bible 10.1) is built by productionComposition from the gateway's base URLs and Meridian's
+//     signer, and passed to produce_shot with the shot ports, so it is ready when the shot ports are. A chain provider with no
+//     base URL makes that link NOT_CONNECTED with its reason (jobs/STATUS.md).
 //   - with their ports: analyze_reference (the `analysis` ports) and voice (the `voice` ports), both W6. Without ports they stay
 //     not_implemented. A composition may also pass a handler for render (W10) through `handlers`.
 //   - E4 and E5 (this file, later pass): compose, pre_render_gate, variants and deliver are always registered. They need no provider:
@@ -31,8 +34,16 @@ import type { ReferencePorts } from "../analyze/reference.ts";
 import { analysisReadings } from "../analyze/frameReader.ts";
 import type { PictureClient } from "../media/index.ts";
 import type { TakeDetectors } from "./gate-measures.ts";
-import { gatewayMediaFunctions, productionPostRenderPorts, productionRenderPorts, productionVariantPorts } from "./production-ports.ts";
+import {
+  gatewayMediaFunctions,
+  productionPostRenderPorts,
+  productionProviderUrl,
+  productionRenderPorts,
+  productionVariantPorts,
+  type ProviderUrl,
+} from "./production-ports.ts";
 import { engineMediaLinkSigner, engineObjectStore } from "../../lib/meridian/storage/engine-media-link.ts";
+import type { MediaLinkSigner } from "./media-link.ts";
 import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
@@ -50,7 +61,7 @@ import { createEstimateReserveHandler, type WorkspaceBudgetSource } from "./hand
 import { createCheckTakeHandler, type CheckTakePorts } from "./handlers/check-take.ts";
 import { createIntakeHandler, type IntakePorts } from "./handlers/intake.ts";
 import { createPlanHandler } from "./handlers/plan.ts";
-import { createProduceShotHandler, routerGenerator } from "./handlers/produce-shot.ts";
+import { createProduceShotHandler, routerGenerator, type ProduceShotPorts } from "./handlers/produce-shot.ts";
 import { registerEngineHandlers } from "./handlers/register.ts";
 import { kitPorts } from "./kit-store.ts";
 import type { MediaStorePort } from "./artifact-store.ts";
@@ -119,6 +130,12 @@ export type EngineComposition = {
   variants?: VariantPorts;
   /** deliver (Bible 6.14). Absent, the stage reads and writes the engine tables of this database. */
   deliver?: DeliverPorts;
+  /**
+   * The link a chain input gets for its provider (Bible 10.1), passed to produce_shot with the shot ports. Production:
+   * productionProviderUrl (production-ports.ts), which links through Meridian's signer and needs each chain provider's base URL. Absent,
+   * a chain's stored uris are sent as they are and the adapters refuse them (fail closed).
+   */
+  providerUrl?: ProviderUrl;
 };
 
 /** The model classes whose adapters can be polled (the router's submit targets). A poll resolves the adapter by its id. */
@@ -190,6 +207,30 @@ export function analysisPortsOf(analysis: ReferencePorts, picture: PictureClient
   return { ...analysis, readings: analysisReadings({ picture, roles: analysis.roles }) };
 }
 
+/**
+ * The ports of produce_shot for a composition with shot ports. The composition's providerUrl (Bible 10.1) is passed on here, so a chain's
+ * inputs are linked for the provider that reads them. Absent the providerUrl, the field is absent too (the adapters refuse the stored uris).
+ */
+export function produceShotPortsOf(composition: EngineComposition, shot: ShotPorts): ProduceShotPorts {
+  const now = composition.now ?? isoNow;
+  return {
+    generator: routerGenerator(routerFor(composition, shot)),
+    stock: (input) =>
+      searchStock({
+        gateway: composition.gateway,
+        organizationId: input.organizationId,
+        query: input.query,
+        minDurationMs: input.minDurationMs,
+        providerFor: (route) => stockProviderFor(route, composition.gateway),
+      }),
+    downloader: gatewayDownloader(composition.gateway),
+    media: shot.media,
+    objects: shot.objects,
+    now: () => Date.parse(now()),
+    ...(composition.providerUrl === undefined ? {} : { providerUrl: composition.providerUrl }),
+  };
+}
+
 /** The runtime for a composition. Each handler is built from the ports it is given, and nothing else is read. */
 export function createEngineRuntime(composition: EngineComposition): EngineRuntime {
   const now = composition.now ?? isoNow;
@@ -256,21 +297,7 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
       ...(shot.similarity === undefined ? {} : { scorer: shot.similarity }),
       ...(shot.detectors === undefined ? {} : { detectors: shot.detectors }),
     };
-    handlers.produce_shot = createProduceShotHandler({
-      generator: routerGenerator(routerFor(composition, shot)),
-      stock: (input) =>
-        searchStock({
-          gateway: composition.gateway,
-          organizationId: input.organizationId,
-          query: input.query,
-          minDurationMs: input.minDurationMs,
-          providerFor: (route) => stockProviderFor(route, composition.gateway),
-        }),
-      downloader: gatewayDownloader(composition.gateway),
-      media: shot.media,
-      objects: shot.objects,
-      now: () => Date.parse(now()),
-    });
+    handlers.produce_shot = createProduceShotHandler(produceShotPortsOf(composition, shot));
     handlers.check_take = createCheckTakeHandler(checkPorts);
   }
 
@@ -281,6 +308,38 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
 const productionRuntimes = new WeakMap<Sql, EngineRuntime>();
 
 /**
+ * The seams of the production composition. Production passes none: the gateway reads Meridian's credentials and sends over the
+ * gateway's own fetch, and the signer reads the server's secret and origin. A test passes its own gateway or signer, nothing else.
+ */
+export type ProductionDeps = {
+  gateway?: Gateway;
+  mediaLinks?: MediaLinkSigner;
+};
+
+/**
+ * The composition Meridian's production runtime is built from. Every network call goes through the gateway, every key comes from its
+ * credential source, and every link comes from the signer. The chain's providerUrl (Bible 10.1) is the production one: a chain input is
+ * linked through the signer, and a chain provider with no base URL on this deployment is NOT_CONNECTED with its reason.
+ */
+export function productionComposition(sql: Sql, deps: ProductionDeps = {}): EngineComposition {
+  const gateway = deps.gateway ?? createGateway({ transport: fetchHttpTransport, credentials: meridianCredentialSource() });
+  const mediaLinks = deps.mediaLinks ?? engineMediaLinkSigner();
+  // The render and post-render deps (owner decision 2026-10-14): HyperFrames and Shotstack through the gateway, the engine's objects in
+  // Meridian's store, and the 15-minute source links signed by Meridian. Each is fail closed on its own (NOT_CONNECTED, price unknown).
+  const objects = engineObjectStore(sql);
+  const media = gatewayMediaFunctions(gateway);
+  const workspaceBudget = workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql));
+  return {
+    sql,
+    gateway,
+    workspaceBudget,
+    render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks, now: isoNow }),
+    postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
+    providerUrl: productionProviderUrl({ gateway, mediaLinks }),
+  };
+}
+
+/**
  * The runtime Meridian's worker uses (lib/meridian/jobs/execute.ts). Its gateway takes its keys from Meridian's credential resolver
  * and its transport is the gateway's own fetch. Only the stages that have every port they need are registered; see the header.
  * One runtime per database handle.
@@ -288,24 +347,19 @@ const productionRuntimes = new WeakMap<Sql, EngineRuntime>();
 export function productionEngineRuntime(sql: Sql): EngineRuntime {
   const existing = productionRuntimes.get(sql);
   if (existing) return existing;
-  const gateway = createGateway({ transport: fetchHttpTransport, credentials: meridianCredentialSource() });
-  // The render and post-render deps (owner decision 2026-10-14): HyperFrames and Shotstack through the gateway, the engine's objects in
-  // Meridian's store, and the 15-minute source links signed by Meridian. Each is fail closed on its own (NOT_CONNECTED, price unknown).
-  const objects = engineObjectStore(sql);
-  const media = gatewayMediaFunctions(gateway);
-  const workspaceBudget = workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql));
-  const composition: EngineComposition = {
-    sql,
-    gateway,
-    workspaceBudget,
-    render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks: engineMediaLinkSigner(), now: isoNow }),
-    postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
-  };
+  const composition = productionComposition(sql);
   // The variants stage (Bible 6.13): the writer over the gateway, the kits and the month budget. Its voice is not connected in production,
   // so a variant that needs one is NOT_CONNECTED with its reason and no call is made (variants/STATUS.md).
   const runtime = createEngineRuntime({
     ...composition,
-    variants: productionVariantPorts({ sql, gateway, roles: rolesFor(composition), workspaceBudget, loadStyleKit: kitPorts(sql).loadStyleKit, now: isoNow }),
+    variants: productionVariantPorts({
+      sql,
+      gateway: composition.gateway,
+      roles: rolesFor(composition),
+      workspaceBudget: composition.workspaceBudget,
+      loadStyleKit: kitPorts(sql).loadStyleKit,
+      now: isoNow,
+    }),
   });
   productionRuntimes.set(sql, runtime);
   return runtime;
