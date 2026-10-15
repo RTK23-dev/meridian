@@ -36,6 +36,17 @@ Request: `model` (for example `bytedance-seed/seedream-4.5`), `prompt`, optional
   "usage": { "prompt_tokens": 0, "completion_tokens": 4175, "total_tokens": 4175, "cost": 0.04 } }
 ```
 
+**Input references, checked 2026-10-15.** Source: OpenRouter image generation guide, https://openrouter.ai/docs/guides/overview/multimodal/image-generation
+(the page covers generation and image-to-image on `POST /api/v1/images`; there is no separate edit endpoint and no mask field).
+- Shape, as documented: `input_references` is an array. Each element is `{ "type": "image_url", "image_url": { "url": "<https URL or base64 data URL>" } }`.
+  `src/engine/assets/providers/openrouterImage.ts` sends exactly this shape, so no change was needed.
+- Limit: **not stated.** The page says only that the number accepted varies by provider. `IMAGE_REFERENCES_MAX` in that file is an
+  initial bound, marked unverified, to be replaced by the owner's live run.
+- Other fields the page documents: `aspect_ratio` (`auto`, or ratios such as `9:16`; the full set per provider is not stated),
+  `n` (1 to 10), `seed` (integer; range not stated), `output_format` (`png`, `jpeg`, `webp`, `svg`).
+- Image-input page (`https://openrouter.ai/docs/features/multimodal/image-inputs` and `.../guides/overview/multimodal/images`): both
+  returned HTTP 404 on 2026-10-15 and were not read. The image generation guide above is the only source used for this check.
+
 ### Speech (TTS): `POST /audio/speech`
 Request: `model`, `input` (text), `voice` (provider-specific; required unless the provider documents a default),
 `response_format` (`mp3` or `pcm`, default `pcm`), `speed`, `input_references` (voice cloning; not used without the

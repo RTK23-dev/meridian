@@ -26,8 +26,14 @@ import {
   stopMotionTiming,
 } from "./chains.ts";
 import { stopMotionChain } from "./sources.ts";
+import { STOP_MOTION_FRAMES } from "./tables.ts";
 import { withPriceOverlay } from "./test/priceOverlay.ts";
 import type { Candidate } from "./types.ts";
+import {
+  MAX_STOP_MOTION_FRAMES,
+  MIN_STOP_MOTION_FRAMES,
+  framesNeeded,
+} from "../compose/components/stopmotion.player/props.ts";
 
 /** The price keys of the three routes the chains bill, read from the route table (never written out in a test). */
 const KEYFRAME_KEY = prices.routeFor["image.keyframe"];
@@ -80,7 +86,7 @@ test("cartoon_generated is a keyframe call, then a video call (7.1); the output 
   );
 });
 
-test("stop_motion is 24 to 36 image.edit frames for a 2 to 4.5 second shot, named frame_01 to frame_NN, and refused outside that", () => {
+test("stop_motion is 24 to 36 image.edit frames for a shot of about 2 to 3 seconds, named frame_01 to frame_NN, and refused outside that", () => {
   const steps = chainStepsOf("stop_motion", 2500);
   assert.ok(steps.ok);
   if (!steps.ok) return;
@@ -88,15 +94,33 @@ test("stop_motion is 24 to 36 image.edit frames for a 2 to 4.5 second shot, name
   assert.equal(steps.value[0]?.output, "frame_01");
   assert.equal(steps.value[29]?.output, "frame_30");
   assert.ok(steps.value.every((step) => step.modelClass === "image.edit" && step.takes === 1));
-  assert.equal(
-    chainStepsOf("stop_motion", 6000).ok,
-    false,
-    "a 6 second stop-motion shot has no frame count in the bounds",
-  );
+  assert.equal(chainStepsOf("stop_motion", 6000).ok, false, "a 6 second shot needs 72 frames at 12 per second");
+  const long = chainStepsOf("stop_motion", 3500);
+  assert.equal(long.ok, false, "a 3.5 second shot needs 42 frames at 12 per second: refused, not clamped to 36");
+  assert.match(long.ok ? "" : long.reason, /needs 42 frames at 12 per second, more than the 36 allowed/);
   assert.equal(frameOutputName(7), "frame_07");
   const short = stopMotionTiming(2000);
   assert.ok(short.ok);
   if (short.ok) assert.equal(short.value.frames, 24);
+});
+
+test("stop_motion accepts exactly the shot lengths whose clip needs 24 to 36 frames at 12 per second, and the count is the player's own", () => {
+  assert.equal(MIN_STOP_MOTION_FRAMES, STOP_MOTION_FRAMES.min, "the player's floor is the planner's floor");
+  assert.equal(MAX_STOP_MOTION_FRAMES, STOP_MOTION_FRAMES.max, "the player's ceiling is the planner's ceiling");
+  assert.equal(stopMotionTiming(1917).ok, false, "23 frames: below the floor");
+  assert.equal(stopMotionTiming(1918).ok, true, "24 frames");
+  assert.equal(stopMotionTiming(3000).ok, true, "36 frames, the ceiling");
+  assert.equal(stopMotionTiming(3010).ok, false, "37 frames: above the ceiling");
+  for (let durationMs = 1000; durationMs <= 5000; durationMs += 10) {
+    const steps = chainStepsOf("stop_motion", durationMs);
+    if (!steps.ok) {
+      assert.equal(stopMotionTiming(durationMs).ok, false, `${durationMs} ms is refused by both`);
+      continue;
+    }
+    const count = steps.value.length;
+    assert.ok(count >= 24 && count <= 36, `${durationMs} ms makes ${count} calls`);
+    assert.equal(count, framesNeeded(durationMs, 12), `${durationMs} ms: the player needs the same count`);
+  }
 });
 
 test("a call is priced by its route's price, billed as the estimate bills it (per second times the shot, per image per take)", () => {

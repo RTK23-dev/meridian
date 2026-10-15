@@ -423,13 +423,17 @@ describe("cartoon_generated and stop_motion: chains of calls (contract v5)", () 
     assert.equal(cartoonGeneratedChain(input({ visualType: "cartoon_generated", character: GENERATED_SHEET })).ok, false);
   });
 
-  it("times stop-motion frames at 24 to 36 frames and 8 to 12 per second, and refuses shots outside about 2 to 4.5 seconds", () => {
+  it("times stop-motion frames at 12 per second: the count the clip needs, 24 to 36, and refuses a shot whose count is outside that", () => {
     assert.deepEqual(stopMotionTiming(2000), { ok: true, value: { frames: 24, fps: 12 } });
     assert.deepEqual(stopMotionTiming(2500), { ok: true, value: { frames: 30, fps: 12 } });
     assert.deepEqual(stopMotionTiming(3000), { ok: true, value: { frames: 36, fps: 12 } });
-    assert.deepEqual(stopMotionTiming(4500), { ok: true, value: { frames: 36, fps: 8 } });
+    const long = stopMotionTiming(4500);
+    assert.equal(long.ok, false, "54 frames: refused, not clamped to 36");
+    assert.match(long.ok ? "" : long.reason, /needs 54 frames at 12 per second, more than the 36 allowed/);
     assert.equal(stopMotionTiming(4600).ok, false);
-    assert.equal(stopMotionTiming(1900).ok, false);
+    const short = stopMotionTiming(1900);
+    assert.equal(short.ok, false);
+    assert.match(short.ok ? "" : short.reason, /fewer than the 24 allowed/);
   });
 
   it("builds the stop-motion chain: each frame reads the hero image and the frame before it, in order", () => {
@@ -454,7 +458,7 @@ describe("cartoon_generated and stop_motion: chains of calls (contract v5)", () 
     assert.equal(stopMotionChain(input({ visualType: "stop_motion", productKit: productKitFixture, shot: { durationMs: 2500 } })).ok, false);
     const long = stopMotionChain(input({ visualType: "stop_motion", prompt: "x", productKit: productKitFixture, shot: { durationMs: 6000 } }));
     assert.equal(long.ok, false);
-    assert.match(long.ok ? "" : long.reason, /2 to 4.5 seconds/);
+    assert.match(long.ok ? "" : long.reason, /about 2 to 3 seconds/);
   });
 
   it("chainKitRefusal names the kit a chain needs, without a prompt, so the filter can remove the type first", () => {
@@ -462,7 +466,7 @@ describe("cartoon_generated and stop_motion: chains of calls (contract v5)", () 
     assert.match(chainKitRefusal("cartoon_generated", input({ character: RIG_SHEET })) ?? "", /generated character sheet/);
     assert.equal(chainKitRefusal("stop_motion", input({ productKit: productKitFixture, shot: { durationMs: 2500 } })), null);
     assert.match(chainKitRefusal("stop_motion", input({ shot: { durationMs: 2500 } })) ?? "", /hero image/);
-    assert.match(chainKitRefusal("stop_motion", input({ productKit: productKitFixture, shot: { durationMs: 6000 } })) ?? "", /2 to 4.5 seconds/);
+    assert.match(chainKitRefusal("stop_motion", input({ productKit: productKitFixture, shot: { durationMs: 6000 } })) ?? "", /about 2 to 3 seconds/);
   });
 
   it("componentBuildRefusals removes a chain whose kit or length it cannot make, and keeps one it can", () => {

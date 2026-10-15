@@ -10,7 +10,9 @@ import { compile } from "../compiler.ts";
 import { COMPONENT_LIBRARY } from "./index.ts";
 import { stopmotionPlayer } from "./stopmotion.player/index.ts";
 import {
+  MAX_STOP_MOTION_FPS,
   MAX_STOP_MOTION_FRAMES,
+  MIN_STOP_MOTION_FPS,
   MIN_STOP_MOTION_FRAMES,
   frameStartMs,
   frameWindows,
@@ -68,9 +70,19 @@ describe("stopmotion.player props: limits, with the reason for each refusal", ()
     assert.equal(accepts({ fps: 8, frameUris: takes(24) }, 3000), true);
   });
 
-  it("accepts the ceiling of 36 frames at 12 fps, and a clip shorter than the frames (they are clamped)", () => {
+  it("accepts the ceiling of 36 frames at 12 fps for three seconds: the clip needs exactly 36", () => {
     assert.equal(MAX_STOP_MOTION_FRAMES, 36);
-    assert.equal(accepts({ fps: 12, frameUris: takes(36) }, 2000), true);
+    assert.equal(accepts({ fps: 12, frameUris: takes(36) }, 3000), true);
+  });
+
+  it("refuses 36 frames at 12 fps for two seconds: the clip needs 24, so 12 frames would never show (refused, not clamped)", () => {
+    const reasons = refusals({ fps: 12, frameUris: takes(36) }, 2000);
+    assert.equal(reasons.length, 1);
+    assert.match(reasons[0], /run to 3000 ms, past the 2000 ms clip/);
+    assert.match(reasons[0], /12 of them start at or after the clip end/);
+    assert.match(reasons[0], /refused, not clamped/);
+    assert.match(reasons[0], /at 12 fps it needs 24 frames/);
+    assert.equal(accepts({ fps: 12, frameUris: takes(24) }, 2000), true, "24 frames are exactly the clip");
   });
 
   it("refuses 37 frames, and the reason gives the count and the ceiling", () => {
@@ -80,10 +92,18 @@ describe("stopmotion.player props: limits, with the reason for each refusal", ()
     assert.match(reasons[0], /this one has 37/);
   });
 
-  it("refuses a single frame, since one frame is a still", () => {
-    assert.equal(MIN_STOP_MOTION_FRAMES, 2);
-    const reasons = refusals({ fps: 8, frameUris: takes(1) }, 100);
-    assert.ok(reasons.some((reason) => /at least 2 frames; this one has 1/.test(reason)), reasons.join(" | "));
+  it("refuses 23 frames, below the floor of 24, even where 23 frames would exactly fit the clip", () => {
+    assert.equal(MIN_STOP_MOTION_FRAMES, 24);
+    assert.equal(framesNeeded(2875, 8), 23);
+    const reasons = refusals({ fps: 8, frameUris: takes(23) }, 2875);
+    assert.ok(reasons.some((reason) => /at least 24 frames \(Bible 7\.1\); this one has 23/.test(reason)), reasons.join(" | "));
+    assert.equal(accepts({ fps: 8, frameUris: takes(23) }, 2875), false);
+  });
+
+  it("refuses a clip that needs fewer than 24 frames at its fps, and says so", () => {
+    const reasons = refusals({ fps: 10, frameUris: takes(24) }, 2000);
+    assert.equal(reasons.length, 1);
+    assert.match(reasons[0], /at 10 fps the 2000 ms clip needs 20 frames, fewer than the 24 allowed/);
   });
 
   it("holds the frame rate to whole numbers from 8 to 12 (Bible 7.1)", () => {
@@ -132,11 +152,11 @@ describe("stopmotion.player frame timing: frame i shows from round(i * 1000 / fp
     assert.deepEqual(windows[23], { index: 23, startMs: 2875, endMs: 3000 });
   });
 
-  it("clamps 36 frames at 12 fps to a two-second clip: frames 24 to 35 start after the clip and are not shown", () => {
-    const windows = frameWindows(36, 12, 2000);
-    assert.equal(windows.length, 24);
-    assert.deepEqual(windows[23], { index: 23, startMs: 1917, endMs: 2000 });
-    assert.ok(windows.every((window) => window.startMs < 2000 && window.endMs <= 2000));
+  it("36 frames at 12 fps tile a three-second clip exactly, and the last frame ends with the clip", () => {
+    const windows = frameWindows(36, 12, 3000);
+    assert.equal(windows.length, 36);
+    assert.deepEqual(windows[35], { index: 35, startMs: 2917, endMs: 3000 });
+    assert.ok(windows.every((window) => window.startMs < 3000 && window.endMs <= 3000));
   });
 
   it("tiles the clip for every legal frame rate and clip length: contiguous from 0 to the clip end", () => {
@@ -158,6 +178,45 @@ describe("stopmotion.player frame timing: frame i shows from round(i * 1000 / fp
     assert.equal(framesNeeded(3100, 8), 25);
     assert.equal(framesNeeded(2000, 12), 24);
     assert.equal(framesNeeded(2000, 10), 20);
+  });
+});
+
+describe("stopmotion.player: a list is accepted only when it is the count its clip needs (refused, never clamped)", () => {
+  it("accepts exactly the framesNeeded count for each rate and clip length, and refuses every other count from 24 to 36", () => {
+    for (let fps = MIN_STOP_MOTION_FPS; fps <= MAX_STOP_MOTION_FPS; fps++) {
+      for (let durationMs = 1000; durationMs <= 5000; durationMs += 50) {
+        const needed = framesNeeded(durationMs, fps);
+        for (let count = MIN_STOP_MOTION_FRAMES; count <= MAX_STOP_MOTION_FRAMES; count++) {
+          assert.equal(
+            accepts({ fps, frameUris: takes(count) }, durationMs),
+            count === needed,
+            `${count} frames at ${fps} fps for ${durationMs} ms (the clip needs ${needed})`,
+          );
+        }
+      }
+    }
+  });
+
+  it("refuses a list that runs past the clip by one frame, and the reason says how many frames are extra", () => {
+    const reasons = refusals({ fps: 8, frameUris: takes(25) }, 3000);
+    assert.equal(reasons.length, 1);
+    assert.match(reasons[0], /1 of them start at or after the clip end/);
+    assert.match(reasons[0], /at 8 fps it needs 24 frames/);
+  });
+
+  it("refuses an overshooting list at compile time with the props reason, so no frame is silently dropped", () => {
+    const frames = takes(36);
+    const edl = clipEdl("c_stop", 2000, { fps: 12, frameUris: frames });
+    assert.throws(
+      () => compile(edl, styleKitFixture, COMPONENT_LIBRARY, { clipSourceUris: new Map([["c_stop", frames]]) }),
+      /props for stopmotion\.player are invalid: frameUris: .*refused, not clamped/,
+    );
+  });
+
+  it("accepts every fixture the library ships, so the golden frames are of lists the props accept", () => {
+    for (const fixture of stopmotionPlayer.fixtures) {
+      assert.deepEqual(refusals(fixture.props, fixture.durationMs), [], `${fixture.name} is accepted`);
+    }
   });
 });
 
@@ -203,8 +262,8 @@ describe("stopmotion.player through the compiler: every frame is one of the shot
   });
 
   it("the same clip and the same takes compile to the same bytes and the same hash", () => {
-    const frames = takes(20);
-    const edl = clipEdl("c_stop", 2000, { fps: 10, frameUris: frames });
+    const frames = takes(25);
+    const edl = clipEdl("c_stop", 2500, { fps: 10, frameUris: frames });
     const sources = new Map([["c_stop", frames]]);
     const first = compile(edl, styleKitFixture, COMPONENT_LIBRARY, { clipSourceUris: sources });
     const second = compile(edl, styleKitFixture, COMPONENT_LIBRARY, { clipSourceUris: sources });
@@ -237,6 +296,6 @@ describe("stopmotion.player: the library entry and its template", () => {
   it("draws the frame timing with the same expression the props module uses", () => {
     assert.ok(stopmotionPlayer.template.includes("Math.round(index * 1000 / fps)"));
     assert.ok(stopmotionPlayer.template.includes("Math.min(Math.round((index + 1) * 1000 / fps), vars.durationMs)"));
-    assert.ok(stopmotionPlayer.template.includes("if (startMs >= vars.durationMs) {"), "frames past the clip are not drawn");
+    assert.equal(stopmotionPlayer.template.includes("startMs >= vars.durationMs"), false, "no frame is skipped in the page: the props refuse such a list");
   });
 });

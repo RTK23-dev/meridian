@@ -10,6 +10,7 @@
 // unknown and the type is removed by rule 5, with the reason `unknown_price`.
 
 import { COMPONENT_LIBRARY } from "../compose/components/index.ts";
+import { framesNeeded } from "../compose/components/stopmotion.player/props.ts";
 import { priceFor, prices, type PriceKey, type PriceUnit } from "../config/prices.ts";
 import { roundUsd, sumUsd, type ModelClass, type VisualType } from "../contracts/index.ts";
 import { STOP_MOTION_FPS, STOP_MOTION_FRAMES } from "./tables.ts";
@@ -38,21 +39,33 @@ export function frameOutputName(number: number): string {
   return `frame_${String(number).padStart(2, "0")}`;
 }
 
-/** The frame count and frame rate of a stop-motion shot (7.1): 24 to 36 frames at 8 to 12 per second, from the shot's length. */
+/**
+ * The frame count and frame rate of a stop-motion shot (7.1). The rate is the top of the Bible's range, 12 per second: a whole
+ * number the player accepts. The count is the count the clip needs at that rate, which is the player's own rule (framesNeeded), so
+ * the planner and the component agree by construction. A shot that needs more than 36 frames, or fewer than 24, is refused with
+ * that count. Nothing is clamped: a clamp would give the calls and the clip different timing.
+ */
 export function stopMotionTiming(durationMs: number): Checked<{ frames: number; fps: number }> {
+  if (!(durationMs > 0)) {
+    return { ok: false, reason: `a stop-motion shot needs a positive length, and this one is ${durationMs} ms` };
+  }
+  const fps = STOP_MOTION_FPS.max;
+  const frames = framesNeeded(durationMs, fps);
   const seconds = durationMs / 1000;
-  const frames = Math.min(
-    STOP_MOTION_FRAMES.max,
-    Math.max(STOP_MOTION_FRAMES.min, Math.round(seconds * STOP_MOTION_FPS.max)),
-  );
-  const fps = frames / seconds;
-  if (fps < STOP_MOTION_FPS.min || fps > STOP_MOTION_FPS.max) {
+  const allowed = `${STOP_MOTION_FRAMES.min} to ${STOP_MOTION_FRAMES.max} frames at ${fps} per second is about ${STOP_MOTION_FRAMES.min / fps} to ${STOP_MOTION_FRAMES.max / fps} seconds`;
+  if (frames > STOP_MOTION_FRAMES.max) {
     return {
       ok: false,
-      reason: `a stop-motion shot runs about 2 to 4.5 seconds (${STOP_MOTION_FRAMES.min} to ${STOP_MOTION_FRAMES.max} frames at ${STOP_MOTION_FPS.min} to ${STOP_MOTION_FPS.max} per second), and this one is ${seconds} seconds`,
+      reason: `a stop-motion shot of ${seconds} seconds needs ${frames} frames at ${fps} per second, more than the ${STOP_MOTION_FRAMES.max} allowed (Bible 7.1): it is refused, not clamped (${allowed})`,
     };
   }
-  return { ok: true, value: { frames, fps: Math.round(fps * 1000) / 1000 } };
+  if (frames < STOP_MOTION_FRAMES.min) {
+    return {
+      ok: false,
+      reason: `a stop-motion shot of ${seconds} seconds needs ${frames} frames at ${fps} per second, fewer than the ${STOP_MOTION_FRAMES.min} allowed (Bible 7.1): lengthen the shot (${allowed})`,
+    };
+  }
+  return { ok: true, value: { frames, fps } };
 }
 
 /** The calls of a chain type for a shot of durationMs, in order. Refused when the shot's length cannot be made (stop-motion bounds). */
