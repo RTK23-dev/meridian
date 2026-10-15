@@ -31,6 +31,8 @@ Pure code (no network, no store):
   and it may still fail that gate with its failing shots named (6.10).
 - `tables.ts`: the plan tables, `planTables@1` (see `STATUS.md`), plus `BUILD_GAPS`, `BUILDABLE_TYPES` and
   `KINETIC_WORDS_PER_LINE` (E3).
+- `character.ts`: the page's rig sheet (`rigSheetOf`, `rigSheetProblem`). A sheet drives character.rig only with the rig's own
+  pose and mouth names (Bible 13, 9.2). `minimum.ts` and `build.ts` read the same rule.
 - `types.ts`, `fixtureInputs.ts`: shared types and the E1 fixture inputs.
 
 Claude calls (through the Claude client, `claude/client.ts`, only against a reservation):

@@ -33,14 +33,15 @@ import {
 import { check, gateResult } from "../review/gates/common.ts";
 import { checkPlan } from "../review/gates/plan.ts";
 import type { VisualClassification } from "../review/gates/request.ts";
-import { alignmentDecisions, alignShots, DEFAULT_SHOT_LENGTH, wordsOfShot, type AlignOutput, type ShotLengthLimits } from "./align.ts";
+import { alignmentDecisions, alignShots, DEFAULT_SHOT_LENGTH, timedWordsOfShot, type AlignOutput, type ShotLengthLimits } from "./align.ts";
+import { rigSheetOf } from "./character.ts";
 import { planTotals } from "./cost.ts";
 import { applyDirectorCheck, runDirectorCheck, type DirectorChoice } from "./director.ts";
 import { kitRejection, mustAllowedTypes, productPixelRejection } from "./filter.ts";
 import { planKitsOf } from "./minimum.ts";
 import { directorTaskOf, needsPrompt, needsQuery, plannerTaskOf } from "./prompts.ts";
 import { heroUriOf, productImageUris } from "./product.ts";
-import { buildSource, emphasisIn } from "./sources.ts";
+import { buildSource, componentBuildRefusals, emphasisIn, type WordSpan } from "./sources.ts";
 import { DOWNGRADE_TO } from "./tables.ts";
 import type { PlanKits, ShotInput } from "./types.ts";
 import { decideVisuals, type ShotChoice, type VisualDecisionResult } from "./visual.ts";
@@ -135,15 +136,22 @@ export function downgradeFor(visualType: VisualType, shot: ShotInput, kits: Plan
   return undefined;
 }
 
-/** The spoken words and emphasis of one shot, from the voice track and the script beat. */
-function shotText(shot: ShotInput, input: PlanSceneInput): { words: string[]; emphasis: string[] } {
+/** The spoken words of one shot, each timed from the shot's start (the voice's spans), and its emphasis (from the script beat). */
+type ShotText = { words: string[]; spans: WordSpan[]; emphasis: string[] };
+
+function shotText(shot: ShotInput, input: PlanSceneInput): ShotText {
   const span = input.voice.beatSpans.find((item) => item.beatId === shot.beatId);
   if (span === undefined) {
     throw new EngineError("invalid_input", `beat ${shot.beatId} has no voice span`);
   }
   const beat = input.request.script.beats.find((item) => item.beatId === shot.beatId);
-  const words = wordsOfShot(input.voice.words, shot, span);
-  return { words, emphasis: emphasisIn(words, beat?.emphasis ?? []) };
+  const timed = timedWordsOfShot(input.voice.words, shot, span);
+  const words = timed.map((word) => word.text);
+  return {
+    words,
+    spans: timed.map((word) => ({ startMs: word.startMs, endMs: word.endMs })),
+    emphasis: emphasisIn(words, beat?.emphasis ?? []),
+  };
 }
 
 /** A refused plan: no plan, the checks that stopped it, and the shots at fault. */
@@ -258,15 +266,40 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
     },
     limits,
   );
-  const shotsById = new Map(aligned.shots.map((shot) => [shot.shotId, shot]));
   const productKit = input.kits.productKit;
   const hero = productKit === undefined ? null : heroUriOf(productKit);
   const planKits = planKitsOf(input.kits);
   const budgetUsd = input.request.constraints.budgetUsd;
+  const rigSheet = rigSheetOf(input.kits.characters);
+
+  // Rule 6 at build time (7.2): a component type this shot's own words, timings, kits and sheet cannot draw is refused before
+  // the planner writes anything, so the filter never offers it and the plan does not fail later at sources_built.
+  const textsById = new Map(aligned.shots.map((shot) => [shot.shotId, shotText(shot, input)]));
+  const refusableShots: ShotInput[] = aligned.shots.map((shot) => {
+    const text = textsById.get(shot.shotId);
+    if (text === undefined) throw new EngineError("internal", `shot ${shot.shotId} has no text`);
+    const built = componentBuildRefusals({
+      shot: {
+        shotId: shot.shotId,
+        durationMs: shot.endMs - shot.startMs,
+        beatRole: shot.beatRole,
+        showsProduct: shot.flags.showsProduct,
+        words: text.words,
+        emphasis: text.emphasis,
+        spans: text.spans,
+      },
+      ...(input.kits.persona === undefined ? {} : { persona: input.kits.persona }),
+      ...(productKit === undefined ? {} : { productKit }),
+      ...(rigSheet === undefined ? {} : { character: rigSheet }),
+      claimIds: input.request.product?.claimIds ?? [],
+    });
+    return { ...shot, refusals: { ...shot.refusals, ...built } };
+  });
+  const shotsById = new Map(refusableShots.map((shot) => [shot.shotId, shot]));
 
   // Steps 3 and 4 (7.5, 7.6): score every candidate and fit the budget.
   const decided: VisualDecisionResult = decideVisuals({
-    shots: aligned.shots,
+    shots: refusableShots,
     styleKit: { preferredTypes: style.preferredTypes, bannedTypes: style.bannedTypes },
     kits: planKits,
     requestBudgetUsd: budgetUsd,
@@ -358,7 +391,8 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
   const sourced = applied.choices.map((choice) => {
     const shot = shotsById.get(choice.shotId);
     if (shot === undefined) throw new EngineError("internal", `shot ${choice.shotId} is missing`);
-    const text = shotText(shot, input);
+    const text = textsById.get(shot.shotId);
+    if (text === undefined) throw new EngineError("internal", `shot ${shot.shotId} has no text`);
     const query = texts.get(shot.shotId)?.query;
     const result = buildSource({
       visualType: choice.visualType,
@@ -369,11 +403,13 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
         showsProduct: shot.flags.showsProduct,
         words: text.words,
         emphasis: text.emphasis,
+        spans: text.spans,
       },
       ...(choice.prompt === null ? {} : { prompt: choice.prompt }),
       ...(query === undefined ? {} : { query }),
       ...(input.kits.persona === undefined ? {} : { persona: input.kits.persona }),
       ...(productKit === undefined ? {} : { productKit }),
+      ...(rigSheet === undefined ? {} : { character: rigSheet }),
       claimIds: input.request.product?.claimIds ?? [],
     });
     if (!result.ok) {
@@ -386,10 +422,11 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
     return unbuilt(requestId, [...kitChecks, check("sources_built", false, { detail: reasons.join("; ") })], failingShots, calls, alerts);
   }
 
-  // Assemble the plan. Every generated shot names its fallback (6.4 step 5).
+  // Assemble the plan. Every generated shot names its fallback (6.4 step 5). A shot whose type has a 7.1 fallback names it too (for
+  // example stock_footage, and cartoon_rigged, which falls back to kinetic_type); downgradeFor keeps only a target the shot can take.
   const shots: ShotSpec[] = sourced.map(({ choice, shot, result }) => {
     if (!result.ok) throw new EngineError("internal", "a shot reached assembly without a source");
-    const downgradeTo = choice.generated ? downgradeFor(choice.visualType, shot, planKits) : undefined;
+    const downgradeTo = downgradeFor(choice.visualType, shot, planKits);
     const layer: ShotLayer = result.built.layer;
     const source: ShotSource = result.built.source;
     return {

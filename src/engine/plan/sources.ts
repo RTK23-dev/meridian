@@ -10,6 +10,7 @@ import type { MouthEvent, RigPose, RigViseme } from "../compose/components/chara
 import { MAX_APP_ROWS, MAX_CHAT_MESSAGES } from "../compose/components/screen.mock/props.ts";
 import type { ComponentDefinition } from "../compose/library.ts";
 import type { BeatRole, CharacterSheet, ModelClass, Persona, ProductKit, ShotLayer, ShotSource, VisualType } from "../contracts/index.ts";
+import { rigSheetProblem } from "./character.ts";
 import { heroUriOf } from "./product.ts";
 import {
   KINETIC_WORDS_PER_LINE,
@@ -49,7 +50,8 @@ export type SourceShot = {
   emphasis: readonly string[];
   /**
    * Each word's time inside the shot, aligned with `words`. Optional. Without it the words share the shot's length evenly, which
-   * is an approximation for animation timing only (the voice track is the clock, 6.3); build.ts should pass the voice's spans.
+   * is an approximation for animation timing only (the voice track is the clock, 6.3). build.ts passes the voice's spans, timed
+   * from the shot's start and clamped to it (align.ts timedWordsOfShot).
    */
   spans?: readonly WordSpan[];
 };
@@ -241,27 +243,19 @@ export function mouthShapeFor(word: string): RigViseme {
   return "open";
 }
 
-/** The mouth timeline of a shot: each word opens the mouth at its start and closes it at its end (the voice is the clock). */
+/**
+ * The mouth timeline of a shot: each word opens the mouth at its start and closes it at its end (the voice is the clock). A
+ * mouth closes no later than the next word opens, so the events stay in time order even when two word spans touch or overlap.
+ */
 export function mouthTimelineOf(shot: Pick<SourceShot, "durationMs" | "words" | "spans">): MouthEvent[] {
   const events: MouthEvent[] = [];
   shot.words.forEach((word, index) => {
     const span = wordSpanOf(shot, index);
+    const nextOpens = index + 1 < shot.words.length ? wordSpanOf(shot, index + 1).startMs : span.endMs;
     events.push({ atMs: span.startMs, shape: mouthShapeFor(word) });
-    events.push({ atMs: span.endMs, shape: "closed" });
+    events.push({ atMs: Math.min(span.endMs, nextOpens), shape: "closed" });
   });
   return events;
-}
-
-/** Why a character sheet cannot drive character.rig, or null. The rig starts idle and must close and open its mouth. */
-function rigSheetProblem(sheet: CharacterSheet): string | null {
-  if (sheet.kind !== "rigged_svg") return "the page's character is not a rigged SVG sheet";
-  const poses = sheet.poses ?? [];
-  const visemes = sheet.visemes ?? [];
-  if (!poses.includes("idle")) return "the character sheet does not list the idle pose that the rig starts in";
-  if (!visemes.includes("closed") || !visemes.includes("open")) {
-    return "the character sheet does not list the closed and open mouth shapes the rig needs";
-  }
-  return null;
 }
 
 function rigSource(input: BuildSourceInput): SourceResult {
@@ -482,4 +476,24 @@ export function buildSource(input: BuildSourceInput): SourceResult {
     default:
       return refuse(`${visualType} has no source in the E3 plan`);
   }
+}
+
+/**
+ * The component types whose source needs only the shot's own words and timings, the kits and the page's sheet (no planner text).
+ * A shot cannot be drawn as these when their source is refused, so build.ts checks them before the planner writes anything.
+ */
+export const COMPONENT_BUILD_TYPES: readonly VisualType[] = ["kinetic_type", "coded_graphics", "cartoon_rigged", "screen_mock"];
+
+/**
+ * The component types this shot cannot be built as, with the reason: each one's source is built here from the shot's words,
+ * timings, kits and sheet. Pure. The filter (rule 6) removes these types for the shot, so the planner never picks a type the plan
+ * cannot draw, and the plan does not fail later at sources_built.
+ */
+export function componentBuildRefusals(input: Omit<BuildSourceInput, "visualType">): Partial<Record<VisualType, string>> {
+  const refusals: Partial<Record<VisualType, string>> = {};
+  for (const visualType of COMPONENT_BUILD_TYPES) {
+    const result = buildSource({ ...input, visualType });
+    if (!result.ok) refusals[visualType] = result.reason;
+  }
+  return refusals;
 }

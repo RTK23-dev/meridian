@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 import { personaFixture, productKitFixture } from "../contracts/fixtures/index.ts";
 import type { CharacterSheet } from "../contracts/index.ts";
 import {
+  COMPONENT_BUILD_TYPES,
   buildSource,
   cartoonGeneratedChain,
   checkComponentProps,
+  componentBuildRefusals,
   componentRefusals,
   emphasisIn,
   kineticLinesOf,
@@ -463,5 +465,87 @@ describe("word timing helpers", () => {
       { atMs: 900, shape: "closed" },
     ]);
     assert.deepEqual(timedLinesOf(even).map((line) => line.atMs), [0]);
+  });
+
+  it("closes a mouth no later than the next word opens, so overlapping word spans keep the timeline in order", () => {
+    const overlapping = { durationMs: 1000, words: ["a", "b"], spans: [{ startMs: 0, endMs: 600 }, { startMs: 400, endMs: 900 }] };
+    assert.deepEqual(mouthTimelineOf(overlapping), [
+      { atMs: 0, shape: "open" },
+      { atMs: 400, shape: "closed" },
+      { atMs: 400, shape: "open" },
+      { atMs: 900, shape: "closed" },
+    ]);
+  });
+});
+
+// --- E5 follow-up: the spans and the page's sheet reach the sources; a shot the sources cannot draw is refused before planning ---
+
+describe("the voice's spans and the page's rig reach the rig and the screen (E5 follow-up)", () => {
+  it("times the rig's mouth from the spans the shot is given, not from an even split", () => {
+    const shot = { words: ["Four", "smoothies"], durationMs: 1000, beatRole: "twist" as const, showsProduct: false, emphasis: [] };
+    const result = buildSource({
+      visualType: "cartoon_rigged",
+      shot: { shotId: "s", ...shot, spans: [{ startMs: 100, endMs: 300 }, { startMs: 600, endMs: 700 }] },
+      character: RIG_SHEET,
+      claimIds: [],
+    });
+    assert.ok(result.ok && result.built.source.kind === "component");
+    if (!result.ok || result.built.source.kind !== "component") return;
+    assert.deepEqual((result.built.source.props as { mouth: unknown[] }).mouth, [
+      { atMs: 100, shape: "round" },
+      { atMs: 300, shape: "closed" },
+      { atMs: 600, shape: "round" },
+      { atMs: 700, shape: "closed" },
+    ]);
+  });
+
+  it("starts each chat message at its first word's span, not at an even split of the shot", () => {
+    const result = buildSource(
+      input({
+        visualType: "screen_mock",
+        words: ["Is", "this", "loud?", "Not", "at", "all."],
+        shot: { durationMs: 2000, spans: [0, 200, 400, 1500, 1600, 1700].map((startMs) => ({ startMs, endMs: startMs + 100 })) },
+      }),
+    );
+    assert.ok(result.ok && result.built.source.kind === "component");
+    if (!result.ok || result.built.source.kind !== "component") return;
+    assert.deepEqual((result.built.source.props as { messages: Array<{ atMs: number }> }).messages.map((message) => message.atMs), [0, 1500]);
+  });
+});
+
+describe("componentBuildRefusals: each component's source is built before the planner runs, and a refusal names the reason", () => {
+  const SHOT_INPUT = { shot: { ...SHOT, words: ["Four", "smoothies", "in", "two", "minutes"] }, claimIds: ["claim_fixture_1"] };
+
+  it("names the component types the shot can be drawn as, with no refusal when every source builds", () => {
+    const refusals = componentBuildRefusals({ ...SHOT_INPUT, productKit: productKitFixture, character: RIG_SHEET });
+    assert.deepEqual(refusals, {}, "a shot with its kits and sheet is drawable as every component type");
+    assert.deepEqual(COMPONENT_BUILD_TYPES, ["kinetic_type", "coded_graphics", "cartoon_rigged", "screen_mock"]);
+  });
+
+  it("refuses cartoon_rigged without a sheet that lists the rig's names, with the reason from the sheet", () => {
+    const none = componentBuildRefusals(SHOT_INPUT);
+    assert.match(none.cartoon_rigged ?? "", /rigged character sheet/);
+    const phonemes = componentBuildRefusals({ ...SHOT_INPUT, character: { ...RIG_SHEET, visemes: ["A", "E", "O", "M", "rest"] } });
+    assert.match(phonemes.cartoon_rigged ?? "", /closed and open/);
+  });
+
+  it("refuses a one-line screen with no product name, and a chat whose messages are over the component's text limit", () => {
+    const oneLine = componentBuildRefusals({ shot: { ...SHOT, words: ["Four", "smoothies"] }, claimIds: [] });
+    assert.match(oneLine.screen_mock ?? "", /product's name/);
+    const longSentence = Array.from({ length: 40 }, () => "smoothie").join(" ") + ".";
+    const chat = componentBuildRefusals({
+      shot: { ...SHOT, words: [...longSentence.split(" "), "Yes."], durationMs: 6000 },
+      productKit: productKitFixture,
+      claimIds: [],
+    });
+    assert.ok(chat.screen_mock, "a message of 40 words, about 360 characters, is over the chat's 160-character limit");
+  });
+
+  it("refuses kinetic type for a shot whose words the component cannot hold, and coded graphics for a product card with no kit", () => {
+    const words = Array.from({ length: 30 }, (_, index) => `w${index}`);
+    const kinetic = componentBuildRefusals({ shot: { ...SHOT, words, emphasis: [] }, claimIds: [] });
+    assert.ok(kinetic.kinetic_type, "thirty words are over the six lines of kinetic.punchline");
+    const product = componentBuildRefusals({ shot: { ...SHOT, showsProduct: true, words: ["Four"] }, claimIds: [] });
+    assert.match(product.coded_graphics ?? "", /product kit/, "a product card needs the product kit and its hero image");
   });
 });
