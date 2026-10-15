@@ -144,11 +144,9 @@ export async function readStageMetrics(sql: Sql, scope: OpsScope, options: Metri
   }
   const wall: number[] = [];
   let unknownWall = 0;
-  let deliveredCount = 0;
   const statusCounts = { delivered: 0, paused: 0, rejected: 0, running: 0 };
   for (const request of requests) {
     if (request.status === "delivered") {
-      deliveredCount += 1;
       statusCounts.delivered += 1;
       const endMs = deliveredAt.get(request.id);
       const startMs = msOf(request.created_at);
