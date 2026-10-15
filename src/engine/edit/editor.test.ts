@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compile } from "../compose/compiler.ts";
+import { thresholds } from "../config/thresholds.ts";
 import { contentHash, edlSchema, idSchema, type EditDecisionList, type EdlClip, type StyleKit } from "../contracts/index.ts";
 import * as fx from "../contracts/fixtures/index.ts";
-import { buildEdl, type EditBuild, type EditInput } from "./editor.ts";
+import { buildEdl, editIdentity, type EditBuild, type EditInput } from "./editor.ts";
 import { shotId, synthInput, takeId, type SynthOptions } from "./test/inputs.ts";
 
 /** The E1 acceptance chain: five shots over a 24 s voice, three takes, the fixture grammar and the fixture style kit. */
@@ -87,6 +88,15 @@ test("the same inputs give the same EDL, the same id, the same seed and the same
   assert.equal(second.seed, first.seed);
   assert.equal(contentHash(second.edl), contentHash(first.edl));
   assert.match(first.edlId, /^edl_[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
+});
+
+test("the EDL id is named by thresholds.version, so a config change gives every EDL a new id (Bible 16.3)", () => {
+  const input = chainInput();
+  const built = buildEdl(input);
+  const expected = editIdentity({ tuning: thresholds.version, input });
+  assert.equal(built.edlId, expected.edlId, "the id is the identity of the configuration version and the input");
+  assert.equal(built.inputHash, expected.inputHash);
+  assert.notEqual(editIdentity({ tuning: "thresholds@0", input }).edlId, built.edlId, "another configuration version names another EDL");
 });
 
 test("a different request gives a different seed and EDL id, and the input is not changed", () => {

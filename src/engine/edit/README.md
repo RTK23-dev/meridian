@@ -13,7 +13,7 @@ section 6.8. Pure code: no model call, no clock, no environment. The same inputs
 | `words.ts` | Word helpers: cut snapping (word gaps, word edges, beats, frames), caption breaks, the caption-grouping DP, emphasis matching. |
 | `geometry.ts` | Caption bands and safe zones as fractions of the frame. |
 | `time.ts`, `prng.ts` | Frame grid and the shot-length target; the seed (from the request id) and the mulberry32 generator. |
-| `tuning.ts` | The 8.2 constants that no config file holds yet (see STATUS.md). |
+| `tuning.ts` | The drawable transitions and effects (what the compiler draws) and the caption band type. The 8.2 numbers are in `config/thresholds.ts` (`thresholds.editor`, thresholds@3). |
 | `test/inputs.ts` | Test helper: synthetic editor inputs built from a short description. |
 
 `grammar.ts` belongs to W6 and is not in this folder on this branch. The editor reads the grammar from the contract

@@ -1,6 +1,6 @@
 // Frame grid and the grammar's shot-length target (Bible 8.2 step 1 and step 4). Pure.
 
-import { EDIT_TUNING } from "./tuning.ts";
+import { thresholds } from "../config/thresholds.ts";
 
 /** The EDL frame rate. contracts/edl.ts fixes fps at 30. */
 export const FPS = 30;
@@ -17,6 +17,6 @@ export function roundToFrame(ms: number): number {
 export function shotTargetMs(curve: readonly number[], midMs: number, totalMs: number): number {
   const share = totalMs > 0 ? Math.min(Math.max(midMs / totalMs, 0), 0.999999) : 0;
   const tenth = Math.floor(share * curve.length);
-  const value = curve[tenth] ?? curve[curve.length - 1] ?? EDIT_TUNING.fit.shortShare;
+  const value = curve[tenth] ?? curve[curve.length - 1] ?? thresholds.editor.fit.shortShare;
   return Math.max(value, 1);
 }

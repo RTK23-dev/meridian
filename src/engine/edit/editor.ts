@@ -26,7 +26,7 @@ import { checkEdl, LOOP_CLIP_ID, type RuleResult } from "./rules.ts";
 import { captionBreaks, emphasisStarts, groupWords, snapCut, type SnapContext } from "./words.ts";
 import { createRng, pickWeighted, seedFromRequestId, type Rng } from "./prng.ts";
 import { shotTargetMs } from "./time.ts";
-import { EDIT_TUNING, type CaptionBand } from "./tuning.ts";
+import type { CaptionBand } from "./tuning.ts";
 import { MIN_SHOT_MS, mergeShortPieces, placeShots, snapBoundaries, splitHook, splitLongPieces, type Piece } from "./pieces.ts";
 
 /** One emphasis mark from the script: a beat and a term. Claude's intent marks, copied from the request (Bible 8.2). */
@@ -123,8 +123,8 @@ function preconditions(input: EditInput): Preconditions {
 
   add(
     "caption_range_drawable",
-    grammar.captions.wordsPerCaption[1] <= EDIT_TUNING.captions.maxWordsPerCaption,
-    `the captions component draws up to ${EDIT_TUNING.captions.maxWordsPerCaption} words a caption`,
+    grammar.captions.wordsPerCaption[1] <= thresholds.editor.captions.maxWordsPerCaption.value,
+    `the captions component draws up to ${thresholds.editor.captions.maxWordsPerCaption.value} words a caption`,
   );
 
   const karaoke = kit.captionStyle.component === "captions.karaoke";
@@ -201,10 +201,10 @@ function preconditions(input: EditInput): Preconditions {
 
 /** The punch-in scale for one effect: the grammar's amplitude scaled by motion intensity, with a seeded jitter (Bible 8.2 step 10). */
 function punchScale(rng: Rng, grammar: EditGrammar, intensity: number): number {
-  const full = Math.max(grammar.motion.punchInScale, EDIT_TUNING.punch.minScale);
-  const base = 1 + ((full - 1) * (intensity + 1)) / EDIT_TUNING.punch.intensityDivisor;
-  const jitter = 1 + EDIT_TUNING.punch.jitterShare * (2 * rng.next() - 1);
-  const scale = Math.min(Math.max(base * jitter, EDIT_TUNING.punch.floorScale), EDIT_TUNING.punch.maxScale);
+  const full = Math.max(grammar.motion.punchInScale, thresholds.editor.punch.minScale.value);
+  const base = 1 + ((full - 1) * (intensity + 1)) / thresholds.editor.punch.intensityDivisor.value;
+  const jitter = 1 + thresholds.editor.punch.jitterShare * (2 * rng.next() - 1);
+  const scale = Math.min(Math.max(base * jitter, thresholds.editor.punch.floorScale.value), thresholds.editor.punch.maxScale.value);
   return round3(scale);
 }
 
@@ -228,7 +228,7 @@ function transitionMix(grammar: EditGrammar, intensity: number, notes: string[])
 
 /** Adds an optional punch-in unless another effect is within the clash distance (Bible 8.2 steps 6 and 10). */
 function addOptional(effects: Effect[], atMs: number, rng: Rng, grammar: EditGrammar, intensity: number): void {
-  if (effects.some((effect) => Math.abs(effect.atMs - atMs) < EDIT_TUNING.effectClashMs)) return;
+  if (effects.some((effect) => Math.abs(effect.atMs - atMs) < thresholds.editor.effectClashMs.value)) return;
   effects.push({ atMs, kind: "punch_in", params: { scale: punchScale(rng, grammar, intensity) } });
 }
 
@@ -244,7 +244,7 @@ function rehookTime(point: number, emphasis: readonly number[], halfWindow: numb
 
 /** Builds the EDL for one request. Pure and deterministic: the same input gives the same result (Bible 8.2). */
 export function buildEdl(input: EditInput): EditBuild {
-  const { inputHash, edlId } = editIdentity({ tuning: EDIT_TUNING.version, input });
+  const { inputHash, edlId } = editIdentity({ tuning: thresholds.version, input });
   const seed = seedFromRequestId(input.requestId);
   const notes: string[] = [];
   const pre = preconditions(input);
@@ -302,7 +302,7 @@ export function buildEdl(input: EditInput): EditBuild {
     if (startWord === undefined || endWord === undefined) {
       throw new EngineError("internal", "a caption range falls outside the voice words", { stage: "edit" });
     }
-    const startMs = index === 0 ? Math.min(startWord.startMs, EDIT_TUNING.hook.captionByMs) : startWord.startMs;
+    const startMs = index === 0 ? Math.min(startWord.startMs, thresholds.editor.hook.captionByMs) : startWord.startMs;
     const endMs = endWord.endMs;
     const overPresenter = pieces.some((piece) => piece.layer === "presenter" && piece.startMs < endMs && startMs < piece.endMs);
     const band: CaptionBand = overPresenter ? "lower" : grammar.captions.position;
@@ -337,7 +337,7 @@ export function buildEdl(input: EditInput): EditBuild {
   };
   for (const caption of captions) {
     const head = group[0];
-    if (head !== undefined && (head.band !== caption.band || group.length >= EDIT_TUNING.captions.maxPerClip)) flush();
+    if (head !== undefined && (head.band !== caption.band || group.length >= thresholds.editor.captions.maxPerClip.value)) flush();
     group.push(caption);
   }
   flush();
@@ -346,7 +346,7 @@ export function buildEdl(input: EditInput): EditBuild {
   const loopClips: EdlClip[] = [];
   if (grammar.endsOnLoop) {
     const first = pieces[0];
-    const loopStart = snapCut(total - EDIT_TUNING.loopMs, { lo: 1, hi: total - MIN_SHOT_MS }, snap);
+    const loopStart = snapCut(total - thresholds.editor.loopMs, { lo: 1, hi: total - MIN_SHOT_MS }, snap);
     const cutawayBusy = pieces.some((piece) => piece.layer === "cutaway" && piece.endMs > loopStart);
     if (first === undefined || first.media === null) {
       notes.push("loop skipped: the first shot is a component, so it has no first frame to return to");
@@ -398,8 +398,8 @@ export function buildEdl(input: EditInput): EditBuild {
       uri: input.music.uri,
       startMs: 0,
       endMs: total,
-      gainDb: EDIT_TUNING.music.baseGainDb,
-      duckDb: EDIT_TUNING.music.duckDb,
+      gainDb: thresholds.editor.music.baseGainDb.value,
+      duckDb: thresholds.editor.music.duckDb,
     };
   } else if (grammar.sound.music) {
     notes.push("no music track was supplied, so the EDL has no music (the reference has music)");

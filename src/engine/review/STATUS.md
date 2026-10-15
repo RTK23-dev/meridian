@@ -4,6 +4,19 @@ Phase E1, wave B. Branch `engine/e1-w7-w11`, cut from `code/beautiful-cori-1zfk1
 `src/engine/review/`: the three pre-production gates (`request`, `plan`, `budget`), the gold-set loader and routing.
 Pure code, fixture-tested. No Claude call and no store access.
 
+## Config adoption: thresholds@3 (branch `eng-config-adoption`)
+
+Cut from `origin/code/beautiful-cori-1zfk11` at d5a62c1. Not pushed. Applies the lead's replacement table for `review/slideshowRisk.ts`
+and its test. `review/tuning.ts` is deleted.
+
+- `slideshowRisk.ts` reads `thresholds.slideshow`: the six weights (`.value`, equal at 1), `codedRunMax` (4), `contentWordMinLength`
+  (`.value`, 4), `stopWords`, `textLedComponents`, `motionEffectKinds`, `stillModelClasses`, `cinematicClaimTypes` and
+  `motionModelClassPrefix`. The values and lists are unchanged.
+- `slideshowRisk.test.ts` reads `thresholds.slideshow.codedRunMax` (the duplicate `tuning.ts` import is gone).
+- Verification: the review tests pass inside the 512 edit, review and compose tests (see `edit/STATUS.md`, "Config adoption"). The
+  A/B run against HEAD gave identical slideshow results and dimensions on 300 random plans.
+- The blocker in `edit/STATUS.md` (variants/expand.test.ts uses `EDIT_TUNING.music`) is not a review issue, but it fails typecheck.
+
 ## Done
 
 - `gates/request.ts` (12.1 and 6.1 steps 1 to 7): schema, kits resolved and at the version intake used, claims approved,
@@ -194,7 +207,7 @@ and its test, `prompts/critic_final@1.md`, `jobs/handlers/pre-render-gate.ts` an
   render price fails). Safe zones are the `checkEdl` rules `captions_in_safe_zone` and `captions_off_presenter_face`.
 - `slideshowRisk.ts`: the six dimensions of 12.3 (repetition, decorative visuals, weak motion, shot intent, typography over-reliance,
   unsupported cinematic claims), each 0 to 1, and the weighted mean, which must be below `thresholds.postRender.slideshowRiskMax`.
-  Checks: `slideshow_coded_run` (no run of coded shots, source kind `component`, longer than `REVIEW_TUNING.codedRunMax`) and
+  Checks: `slideshow_coded_run` (no run of coded shots, source kind `component`, longer than `thresholds.slideshow.codedRunMax`) and
   `slideshow_risk_below_max`. The Bible's acceptance "five coded shots in a row is blocked" is the first check.
 - `gates/postRender.ts`: `checkPostRender(input)`, pure, returns the GateResult and the review failures (rule, shot, layer). Checks:
   `render_integrity_passed` (the render stage's integrity result for this video), `loudness_within_tolerance` (-14 LUFS plus or minus
@@ -246,10 +259,9 @@ and its test, `prompts/critic_final@1.md`, `jobs/handlers/pre-render-gate.ts` an
 
 ### Decisions for the lead
 
-1. **Config values not in `config/`.** `review/tuning.ts` holds initial values that the lead should move into `config/thresholds.ts`:
-   `codedRunMax` (4: five in a row is blocked), the six `slideshowWeights` (equal, 1 each), `contentWordMinLength`, `stopWords`,
-   `textLedComponents`, `motionEffectKinds`, `stillModelClasses`, `cinematicClaimTypes` and `motionModelClassPrefix`. The final rubric uses
-   `thresholds.take.slopRubricItemMin` and the critic floor uses `thresholds.escalation.criticConfidence`; no new number was needed for them.
+1. **Config values not in `config/`.** Done at thresholds@3 (see "Config adoption" above): the values are in `thresholds.slideshow`
+   and `review/tuning.ts` is deleted. The final rubric uses `thresholds.take.slopRubricItemMin` and the critic floor uses
+   `thresholds.escalation.criticConfidence`; no new number was needed for them.
 2. **Slideshow dimensions are my definitions.** The Bible names the six dimensions, not their formulas. Mine are in `slideshowRisk.ts`
    (for example, decorative means no content word shared with the beat and no must request; weak motion means still assets or still
    generations with no motion effect in the shot). Each feeds a check that cannot block until its gold set meets the target.

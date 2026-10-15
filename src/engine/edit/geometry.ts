@@ -2,7 +2,7 @@
 // frame, so a pixel box from an EDL clip is converted once and then compared the same way everywhere. Pure.
 
 import { thresholds } from "../config/thresholds.ts";
-import { EDIT_TUNING, type CaptionBand } from "./tuning.ts";
+import type { CaptionBand } from "./tuning.ts";
 
 export const FRAME_WIDTH = 1080;
 export const FRAME_HEIGHT = 1920;
@@ -13,14 +13,14 @@ export type Rect = { x: number; y: number; w: number; h: number };
 /** Tolerance for comparisons of fractions (a right edge of exactly 0.88 is inside the zone limit, not past it). */
 const EPS = 1e-9;
 
-/** The box a caption band occupies when captions.karaoke draws it (see EDIT_TUNING.geometry). */
+/** The box a caption band occupies when captions.karaoke draws it (see thresholds.editor.geometry). */
 export function captionBandRect(band: CaptionBand): Rect {
-  const geometry = EDIT_TUNING.geometry;
+  const geometry = thresholds.editor.geometry;
   return {
-    x: geometry.captionLeftShare,
-    y: geometry.captionTopShare[band],
-    w: geometry.captionWidthShare,
-    h: geometry.captionHeightShare,
+    x: geometry.captionLeftShare.value,
+    y: geometry.captionTopShare[band].value,
+    w: geometry.captionWidthShare.value,
+    h: geometry.captionHeightShare.value,
   };
 }
 
@@ -45,5 +45,6 @@ export function rectsOverlap(a: Rect, b: Rect): boolean {
 
 /** The face area used when a presenter clip carries no face box. */
 export function assumedFaceRect(): Rect {
-  return { ...EDIT_TUNING.geometry.assumedFaceBox };
+  const face = thresholds.editor.geometry.assumedFaceBox;
+  return { x: face.x.value, y: face.y.value, w: face.w.value, h: face.h.value };
 }
