@@ -1,24 +1,30 @@
-// The beat-scoped voice call of a variant (Video Engine Bible 6.3, 6.13). Only the lines the variant changed are spoken. The voice stage
-// (voice/voice.ts, runVoice) runs on a request whose script is those beats, with their new text, so the speech, the timing, the
-// loudness and the gate are the voice stage's own. The track it returns covers those beats only: its beatSpans start at zero.
+// The voice call of a generation variant (Video Engine Bible 6.3, 6.13). A variant speaks its own full script: every beat, with the lines the
+// writer changed in place of the master's (variants/work.ts). The voice stage (voice/voice.ts, runVoice) runs on that request, so the
+// speech, the timing, the loudness and the gate are the voice stage's own. The track covers every beat, and its beatSpans start at zero.
 //
-// Not solved here: an EDL has one voice clip (contracts/edl.ts), so a segment cannot yet be placed in a variant's EDL. Until an audio
-// splice exists, a variant whose voice is a segment is not assembled (variants/STATUS.md).
+// Deliberate deviation (variants/STATUS.md): Bible 6.13 asks for the changed lines only. An EDL holds one voice clip and there is no
+// audio splice yet, so the variant's track is re-spoken whole. The cost is the speech of the unchanged beats, and it is on the ledger.
+//
+// The call is scoped to its variant. The asset router keys its cache and its ledger on the spec (prompt, seed, duration), not on the
+// voice, so the same text in another voice would return or charge the master's narration. The speech spec's seed therefore carries the
+// variant's scope (callScopeOf), and the speech of one variant never shares a cache entry or a ledger key with the master or another variant.
 
-import { EngineError, type ProductionRequest, type ScriptBeat, type VoiceKit } from "../contracts/index.ts";
+import { EngineError, type ProductionRequest, type VoiceKit } from "../contracts/index.ts";
 import { runVoice, type VoiceOutcome, type VoicePorts, type VoiceRun } from "../voice/voice.ts";
+import { callScopeOf, variantRequestFor } from "./work.ts";
 
-const STAGE = "variants";
+/** The seed range of the speech specs (a 31-bit signed integer, as the asset spec's seed is). */
+const SEED_MODULUS = 2_147_483_647;
 
-/** One beat's new text. The beat must be one of the request's beats, and each beat may appear once. */
-export type ChangedLine = { beatId: string; text: string };
-
-export type SpeakChangedRun = {
+/** One variant's voice call: the master request, the lines the writer changed, and the voice that speaks. */
+export type VariantSpeech = {
   organizationId: string;
   requestId: string;
   reservationId: string;
+  /** The job's infrastructure attempt, from 1 (Bible 5.1). */
   attempt: number;
-  subjectId: string;
+  /** The variant's job subject (variants/work.ts). It names the gate and scopes the provider calls. */
+  subject: string;
   /** The master request: its beats give the order, and its maxMs bounds the narration. */
   request: ProductionRequest;
   /** The language the lines are spoken in: the request's own, or the variant's for a language change. */
@@ -27,56 +33,65 @@ export type SpeakChangedRun = {
   voice: VoiceKit;
   /** Approved claim texts the narration may make. */
   claims: string[];
-  lines: ChangedLine[];
+  /** The changed lines, by beat. Empty for a persona change, which speaks the master's own text in the persona's voice. */
+  lines: { beatId: string; text: string }[];
 };
 
-/** Runs the voice stage on one run. The default is runVoice; a test passes a recorded runner. */
-export type VoiceRunner = (run: VoiceRun, ports: VoicePorts) => Promise<VoiceOutcome>;
-
 /**
- * The request the voice stage speaks for a changed set of lines: the beats that changed, in script order, with their new text. An
- * emphasis word survives only when the new text still contains it. Pure.
+ * Runs the voice stage on one run. Its ports are absent when no speech route is wired: the runner then refuses before any call. The
+ * default is runVoice; a test passes a recorded runner.
  */
-export function changedRequestFor(run: Pick<SpeakChangedRun, "request" | "language" | "lines">): ProductionRequest {
-  const textOf = new Map<string, string>();
-  for (const line of run.lines) {
-    if (textOf.has(line.beatId)) {
-      throw new EngineError("invalid_input", `beat ${line.beatId} has two lines in one variant`, { stage: STAGE });
-    }
-    textOf.set(line.beatId, line.text);
-  }
-  const known = new Set(run.request.script.beats.map((beat) => beat.beatId));
-  for (const beatId of textOf.keys()) {
-    if (!known.has(beatId)) throw new EngineError("invalid_input", `beat ${beatId} is not a beat of the request`, { stage: STAGE });
-  }
-  const beats: ScriptBeat[] = run.request.script.beats
-    .filter((beat) => textOf.has(beat.beatId))
-    .map((beat) => {
-      const text = textOf.get(beat.beatId) ?? beat.text;
-      return { ...beat, text, emphasis: (beat.emphasis ?? []).filter((word) => text.includes(word)) };
+export type VoiceRunner = (run: VoiceRun, ports: VoicePorts | undefined) => Promise<VoiceOutcome>;
+
+/** The default runner: the voice stage over its ports. Without ports it refuses (NOT_CONNECTED), before any call. */
+export const runVoiceOverPorts: VoiceRunner = async (run, ports) => {
+  if (ports === undefined) {
+    throw new EngineError("config", "NOT_CONNECTED: the voice stage's ports (speech route, speech-to-text, media, audio) are not wired", {
+      stage: "variants",
     });
-  if (beats.length === 0) throw new EngineError("invalid_input", "a variant speaks at least one changed line", { stage: STAGE });
-  return { ...run.request, script: { language: run.language, beats } };
+  }
+  return runVoice(run, ports);
+};
+
+/** The ports with the router's speech spec scoped to one variant (see the header). Only `produce` is changed. Absent stays absent. */
+export function scopedVoicePorts(ports: VoicePorts | undefined, subject: string): VoicePorts | undefined {
+  if (ports === undefined) return undefined;
+  const scope = callScopeOf(subject);
+  const router = ports.router;
+  return {
+    ...ports,
+    router: {
+      ...router,
+      produce: (input) =>
+        router.produce({
+          ...input,
+          spec: { ...input.spec, seed: (input.spec.seed + scope) % SEED_MODULUS },
+        }),
+    },
+  };
 }
 
 /**
- * Speaks only the changed lines (Bible 6.13: voice is regenerated for changed lines only). It refuses an empty set of lines before
- * anything is called. The outcome is the voice stage's: not_connected, or done with a gate and, when it passes, the track.
+ * Speaks one variant's full script (Bible 6.13, the deviation above). The outcome is the voice stage's: not_connected, or done with a
+ * gate and, when it passes, the track. A line that names no beat of the request is refused by variantRequestFor, before any call.
  */
-export async function speakChangedLines(ports: VoicePorts, run: SpeakChangedRun, runner: VoiceRunner = runVoice): Promise<VoiceOutcome> {
-  if (run.lines.length === 0) throw new EngineError("invalid_input", "a voice call needs at least one changed line", { stage: STAGE });
-  const request = changedRequestFor(run);
+export async function speakVariantScript(
+  ports: VoicePorts | undefined,
+  run: VariantSpeech,
+  runner: VoiceRunner = runVoiceOverPorts,
+): Promise<VoiceOutcome> {
+  const request = variantRequestFor({ request: run.request, language: run.language, lines: run.lines });
   return runner(
     {
       organizationId: run.organizationId,
       requestId: run.requestId,
       reservationId: run.reservationId,
       attempt: run.attempt,
-      subjectId: run.subjectId,
+      subjectId: run.subject,
       request,
       voice: run.voice,
       claims: run.claims,
     },
-    ports,
+    scopedVoicePorts(ports, run.subject),
   );
 }

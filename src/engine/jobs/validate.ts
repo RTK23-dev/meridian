@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { EngineError, decisionSchema, gateResultSchema, idSchema, modelClassSchema, takeVerdictSchema, visualTypeSchema } from "../contracts/index.ts";
 import type { EnginePayload, ProduceHold, ShotSummary, StageOutput } from "./types.ts";
+import { variantWorkItemSchema } from "../variants/work.ts";
 
 export const shotSummarySchema = z.object({
   shotId: idSchema("shot_"),
@@ -71,8 +72,16 @@ export function validateStageOutput(output: StageOutput, payload: EnginePayload)
   if (output.stage === "render" && output.decisions !== undefined) {
     parseOrRefuse(z.array(decisionSchema), output.decisions, "the render decisions", stage);
   }
-  if (output.stage === "variants") {
+  if (output.stage === "variants" && output.phase === "request") {
     for (const variant of output.variants) parseOrRefuse(idSchema("edl_"), variant.edlId, "a variant EDL id", stage);
+    for (const item of output.work) parseOrRefuse(variantWorkItemSchema, item, "a variant's work item", stage);
+  }
+  if (output.stage === "variants" && output.phase !== "request") {
+    parseOrRefuse(z.string().min(1).max(120), output.key, "the variant key", stage);
+    if (output.outcome.status === "not_built") parseOrRefuse(z.string().min(1), output.outcome.reason, "the variant's reason", stage);
+    if (output.phase === "plan" && output.outcome.status === "done") {
+      parseOrRefuse(z.array(shotSummarySchema), output.outcome.produce, "the variant plan's shots", stage);
+    }
   }
   if ("edlId" in output) parseOrRefuse(idSchema("edl_"), output.edlId, "the EDL id", stage);
   if (output.stage === "deliver") parseOrRefuse(idSchema("vid_"), output.manifestId, "the manifest's video id", stage);

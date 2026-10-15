@@ -116,9 +116,9 @@ function contextFor(inputArtifactIds: string[], options: { masterEdlId?: string;
 }
 
 /** The variants output, narrowed: the stage is asserted, so the union is not read as if every stage had variants. */
-function variantsOf(output: StageOutput): { stage: "variants"; artifacts: Record<string, string>; variants: { edlId: string }[] } {
+function variantsOf(output: StageOutput): Extract<StageOutput, { stage: "variants"; phase: "request" }> {
   assert.equal(output.stage, "variants");
-  if (output.stage !== "variants") throw new Error("the output is not a variants output");
+  if (output.stage !== "variants" || output.phase !== "request") throw new Error("the output is not the variants request phase");
   return output;
 }
 
@@ -212,7 +212,7 @@ test("a hook variant is deferred, not built: the stage reports the shots it woul
   const body = deferred?.body as { status: string; work: { produceShotIds: string[]; voiceBeatIds: string[] } };
   assert.equal(body.status, "deferred");
   assert.deepEqual(body.work.produceShotIds, [FIXTURE_IDS.shot1], "only the generated shot of the hook beat");
-  assert.deepEqual(body.work.voiceBeatIds, ["b1"]);
+  assert.deepEqual(body.work.voiceBeatIds, ["b1", "b2", "b3", "b4", "b5"], "the voice is a full re-speak of the variant's script");
   assert.equal((await h.ledger.listEntries(RESERVATION)).length, 0);
 });
 

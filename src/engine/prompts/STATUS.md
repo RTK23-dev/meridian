@@ -1,5 +1,14 @@
 # Role prompts: status (W3, task A5)
 
+## E5 generation variants (this worktree, `agent-a88fc87eb7108bf53`)
+
+- **`variant_writer@2.md`** is new, a complete file for the role's two tasks: `lines` (the hook and language lines of @1, unchanged in
+  substance) and `product_prompts` (a new generation prompt for each product shot, naming the variant's product and not the master's, with
+  no quotation marks). `variant_writer@1.md` is kept as shipped and its bytes are pinned. The role's version is 2.
+- Both versions are pinned in `load.test.ts` (`variant_writer@1` and `variant_writer@2`). A change to either is a new file and a new number.
+- The planner's rule "No names" (`planner@1.md`) is not changed. The product variant's prompt names the product by its kit's name, as the
+  lead asked. That is an open policy question (`variants/STATUS.md`, blocker 5).
+
 ## E3 integration pass (branch `eng-e3-wiring`)
 
 - **`director_check@2.md`** is new: a copy of `@1` with the shot table's `beatText` described as untrusted script text, which the

@@ -29,6 +29,11 @@ export type VariantPlanInput = {
   shotIds: readonly string[];
   /** The variant's voice track when its voice was regenerated. The master's voice track otherwise. */
   voiceTrackId?: string;
+  /**
+   * The new generation prompt of each touched shot (a product variant, Bible 6.13): the writer's prompt that names the variant's product.
+   * Every touched shot needs one. Absent means the shots keep the master's prompt.
+   */
+  prompts?: Readonly<Record<string, string>>;
   /** What the variant chose, in plain words, for the decision record. */
   chose: string;
 };
@@ -56,8 +61,17 @@ export function variantScenePlan(master: ScenePlan, input: VariantPlanInput): Va
     if (shot.source.kind !== "generate") {
       throw new EngineError("invalid_input", `shot ${shot.shotId} is not generated, so the ${input.attribute} variant cannot re-produce it`, { stage: STAGE });
     }
-    if (input.reference === null) return shot;
-    return { ...shot, source: { ...shot.source, refs: [input.reference] } };
+    const prompt = input.prompts === undefined ? undefined : input.prompts[shot.shotId];
+    if (input.prompts !== undefined && (prompt === undefined || prompt.length === 0)) {
+      throw new EngineError("invalid_input", `shot ${shot.shotId} has no new prompt for the ${input.attribute} variant`, { stage: STAGE });
+    }
+    if (input.reference === null && prompt === undefined) return shot;
+    const source = {
+      ...shot.source,
+      ...(input.reference === null ? {} : { refs: [input.reference] }),
+      ...(prompt === undefined ? {} : { prompt }),
+    };
+    return { ...shot, source };
   });
   for (const shotId of touched) {
     if (!found.has(shotId)) throw new EngineError("invalid_input", `shot ${shotId} is not in the master plan`, { stage: STAGE });

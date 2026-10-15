@@ -31,7 +31,7 @@ import type { ReferencePorts } from "../analyze/reference.ts";
 import { analysisReadings } from "../analyze/frameReader.ts";
 import type { PictureClient } from "../media/index.ts";
 import type { TakeDetectors } from "./gate-measures.ts";
-import { gatewayMediaFunctions, productionPostRenderPorts, productionRenderPorts } from "./production-ports.ts";
+import { gatewayMediaFunctions, productionPostRenderPorts, productionRenderPorts, productionVariantPorts } from "./production-ports.ts";
 import { engineMediaLinkSigner, engineObjectStore } from "../../lib/meridian/storage/engine-media-link.ts";
 import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
@@ -292,12 +292,19 @@ export function productionEngineRuntime(sql: Sql): EngineRuntime {
   // Meridian's store, and the 15-minute source links signed by Meridian. Each is fail closed on its own (NOT_CONNECTED, price unknown).
   const objects = engineObjectStore(sql);
   const media = gatewayMediaFunctions(gateway);
-  const runtime = createEngineRuntime({
+  const workspaceBudget = workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql));
+  const composition: EngineComposition = {
     sql,
     gateway,
-    workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
+    workspaceBudget,
     render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks: engineMediaLinkSigner(), now: isoNow }),
     postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
+  };
+  // The variants stage (Bible 6.13): the writer over the gateway, the kits and the month budget. Its voice is not connected in production,
+  // so a variant that needs one is NOT_CONNECTED with its reason and no call is made (variants/STATUS.md).
+  const runtime = createEngineRuntime({
+    ...composition,
+    variants: productionVariantPorts({ sql, gateway, roles: rolesFor(composition), workspaceBudget, now: isoNow }),
   });
   productionRuntimes.set(sql, runtime);
   return runtime;

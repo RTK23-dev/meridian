@@ -475,7 +475,7 @@ test("variants fan out to their own compose stage after the master passes, and d
   const flow = flowToDelivery(1);
   passBranch(flow, EDL_1);
   assert.deepEqual(flow.jobs.map((job) => job.stage), ["variants"]);
-  flow.succeed({ stage: "variants", subjectId: REQ, variants: [{ edlId: EDL_2 }], artifacts: { [`edl:${EDL_2}`]: fixtureId("art_", 131) } });
+  flow.succeed({ stage: "variants", phase: "request", subjectId: REQ, work: [], variants: [{ edlId: EDL_2 }], artifacts: { [`edl:${EDL_2}`]: fixtureId("art_", 131) } });
   assert.deepEqual(flow.jobs.map((job) => job.stage), ["compose"]);
   assert.equal(flow.jobs[0]?.subjectId, EDL_2);
   assert.equal(flow.jobs[0]?.payload.details.variantOf, EDL_1);
@@ -489,7 +489,9 @@ test("a prepared generation variant's plan and voice are not request artifacts, 
   passBranch(flow, EDL_1);
   flow.succeed({
     stage: "variants",
+    phase: "request",
     subjectId: REQ,
+    work: [],
     variants: [{ edlId: EDL_2 }],
     artifacts: { [`edl:${EDL_2}`]: fixtureId("art_", 131), "plan:product:SKU-2": fixtureId("art_", 132), "voice:hook:1": fixtureId("art_", 133) },
   });
@@ -505,7 +507,7 @@ test("a caption variant (a re-render only, no generation) runs its own chain and
   const flow = flowToDelivery(1);
   passBranch(flow, EDL_1);
   const before = flow.history.length;
-  flow.succeed({ stage: "variants", subjectId: REQ, variants: [{ edlId: EDL_2 }], artifacts: { [`edl:${EDL_2}`]: fixtureId("art_", 131) } });
+  flow.succeed({ stage: "variants", phase: "request", subjectId: REQ, work: [], variants: [{ edlId: EDL_2 }], artifacts: { [`edl:${EDL_2}`]: fixtureId("art_", 131) } });
   passBranch(flow, EDL_2);
   const afterMaster = flow.history.slice(before).map((job) => job.stage);
   assert.ok(afterMaster.includes("compose"), "the caption variant is composed");

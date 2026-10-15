@@ -98,8 +98,18 @@ const rows: Record<EngineStage, Row> = {
     writes: ["review_result"],
     gate: "post_render",
   },
-  // The variants stage expands the request's matrix against the request and its plan (Bible 6.13).
-  variants: { stage: "variants", group: 8, timeoutClass: "claude", paid: true, reads: ["production_request", "scene_plan", "edl"], writes: ["edl"], gate: null },
+  // The variants stage (Bible 6.13) runs in phases, each one job: the request phase (funding, caption and music EDLs, the work list), then
+  // each generation variant's writer call, voice (a full re-speak, so a generation lease) and plan. The voice phase is a generation call,
+  // so the stage has the generation lease. Its artifacts are EDLs, scene plans and voice tracks.
+  variants: {
+    stage: "variants",
+    group: 8,
+    timeoutClass: "generation",
+    paid: true,
+    reads: ["production_request", "scene_plan", "edl"],
+    writes: ["edl", "scene_plan", "voice_track"],
+    gate: null,
+  },
   deliver: { stage: "deliver", group: 8, timeoutClass: "claude", paid: false, reads: [], writes: ["manifest"], gate: null },
 };
 
