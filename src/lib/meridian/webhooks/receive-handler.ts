@@ -43,7 +43,7 @@ function refusal(message: string, status: number): Response {
  * Reads the body up to the cap and within the deadline. The result is the text, or the refusal to return instead.
  * The deadline is one timer for the whole read, not a timeout per chunk, so a trickle of bytes cannot extend it.
  */
-async function readBoundedBody(request: Request, deadlineMs: number): Promise<{ text: string } | { refusal: Response }> {
+export async function readBoundedBody(request: Request, deadlineMs: number): Promise<{ text: string } | { refusal: Response }> {
   const declared = request.headers.get("content-length");
   if (declared !== null) {
     if (!/^\d+$/.test(declared)) return { refusal: refusal("Content-Length must be a number.", 400) };

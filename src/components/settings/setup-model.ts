@@ -74,6 +74,7 @@ const KEYED_LABEL: Record<CredentialCategory, string> = {
   perception: "Gemini perception",
   production: "Gemini production",
   hypit: "Hypit video",
+  shopify: "Shopify orders",
   openrouter: "OpenRouter",
   heygen: "HeyGen",
   anthropic: "Anthropic",
@@ -210,6 +211,7 @@ export function setupRows(input: SetupInput): SetupRow[] {
     keyedRow("perception", summaries.perception),
     keyedRow("production", summaries.production),
     keyedRow("hypit", summaries.hypit),
+    keyedRow("shopify", summaries.shopify),
     ...VIDEO_ENGINE_CREDENTIAL_CATEGORIES.map((category) => keyedRow(category, summaries[category])),
     keyedRow("meta_ad_library", summaries.meta_ad_library),
     ...SOURCE_CREDENTIAL_CATEGORIES.filter((category) => category !== "meta_ad_library").map((category) =>

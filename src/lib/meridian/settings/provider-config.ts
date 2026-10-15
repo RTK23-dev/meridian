@@ -71,6 +71,7 @@ const KEY_LABEL: Record<CredentialCategory, string> = {
   perception: "Gemini",
   production: "Gemini production",
   hypit: "Hypit",
+  shopify: "Shopify",
   openrouter: "OpenRouter",
   heygen: "HeyGen",
   anthropic: "Anthropic",

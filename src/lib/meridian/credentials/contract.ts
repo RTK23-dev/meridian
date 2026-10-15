@@ -15,6 +15,7 @@ export type CredentialCategory =
   | "production"
   | "openai"
   | "hypit"
+  | "shopify"
   | VideoEngineCredentialCategory
   | SourceCredentialCategory;
 
@@ -87,6 +88,7 @@ export const CREDENTIAL_VAULT_TYPE: Record<CredentialCategory, string> = {
   production: "provider_config:production",
   openai: "provider_config:openai",
   hypit: "provider_config:hypit",
+  shopify: "provider_config:shopify",
   openrouter: "provider_config:openrouter",
   heygen: "provider_config:heygen",
   anthropic: "provider_config:anthropic",
@@ -112,6 +114,7 @@ export const SHARED_DEFAULT_ENV: Record<CredentialCategory, { variable: string; 
   production: { variable: "PRODUCTION_SHARED_DEFAULT", accepts: "deployment" },
   openai: { variable: "OPENAI_SHARED_DEFAULT", accepts: "deployment" },
   hypit: { variable: "HYPIT_SHARED_DEFAULT", accepts: "deployment" },
+  shopify: { variable: "SHOPIFY_SHARED_DEFAULT", accepts: "deployment" },
   // The same opt-in as the deployment-only OpenRouter chat key below: one variable decides whether the deployment's
   // OPENROUTER_API_KEY is shared, for the chat path and for a workspace with no OpenRouter key of its own.
   openrouter: { variable: "OPENROUTER_SHARED_DEFAULT", accepts: "deployment" },

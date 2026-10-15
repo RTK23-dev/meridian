@@ -14,6 +14,7 @@ section 1, for the rules.
 | Gemini production | Omni video and image generation | Production | `MERIDIAN_GEMINI_API_KEY` or the Google aliases, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured. Nothing is generated |
 | Higgsfield | Video generation | Production | `HIGGSFIELD_API_KEY`, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured |
 | Hypit | Video runtime | Hypit | `HYPIT_API_TOKEN` or `HYPIT_API_KEY`, with `HYPIT_SHARED_DEFAULT=deployment` | Not connected. Set `HYPIT_BASE_URL` for the runtime itself |
+| Shopify | Order webhooks, for sales attribution (see below) | Shopify | `SHOPIFY_WEBHOOK_SECRET`, with `SHOPIFY_SHARED_DEFAULT=deployment` | Not configured. Orders are refused with `NOT_CONNECTED` (503) and nothing is stored |
 
 Sources keep one key per connector. Each has its own opt-in, named `<CATEGORY>_SHARED_DEFAULT`:
 
@@ -35,6 +36,37 @@ Reddit's API is not connected in this release; direct post URLs are still read f
 
 OpenRouter is used only for copy generation, and only from the deployment: `OPENROUTER_API_KEY`, with
 `OPENROUTER_SHARED_DEFAULT=deployment`. It is never a decision engine.
+
+## Shopify orders (sales attribution)
+
+What the Shopify documentation says, checked on 2026-10-15:
+
+- Each HTTPS delivery is signed. `X-Shopify-Hmac-Sha256` holds the base64 of HMAC-SHA256 over the raw request body, keyed with the
+  app's client secret. Compute it over the raw body before any parser runs, and compare it in constant time. Source:
+  https://shopify.dev/docs/apps/build/webhooks/subscribe/https and https://shopify.dev/docs/apps/build/webhooks/verify-deliveries
+- Headers: `X-Shopify-Topic` (for example `orders/create`), `X-Shopify-Shop-Domain` (the `myshopify.com` domain of the store),
+  `X-Shopify-Hmac-Sha256`, `X-Shopify-Webhook-Id` (unique per delivery) and `X-Shopify-Event-Id` (shared by one merchant action).
+  Source: https://shopify.dev/docs/apps/build/webhooks/delivery-structure
+- The receiver must answer `200` within five seconds. Any other response, including 3xx, is an error, and Shopify retries eight
+  times over four hours. Source: https://shopify.dev/docs/apps/build/webhooks/subscribe/https
+- The `orders/create` sample payload is an Order object at the top level: `id`, `name`, `currency`, `total_price`,
+  `subtotal_price`, `total_tax`, `created_at`, `landing_site`, `referring_site`, `source_name`, `note_attributes` (a list of
+  `{name, value}`) and `discount_codes` (a list of `{code, amount, type}`). Sources: https://shopify.dev/docs/api/webhooks/2026-01
+  (topic list and sample payloads) and https://shopify.dev/docs/api/admin-rest/2026-01/resources/order (sample payload). The
+  reference pages do not describe `landing_site`, `referring_site`, `note_attributes` or `source_name` in words, so the reader
+  relies on those sample shapes only.
+
+How Meridian uses them:
+
+- The endpoint is `POST /api/webhooks/shopify`. The shop is routed by its `myshopify.com` domain, which a brand connects in the
+  Factory's sales panel. A shop that is not connected gets `401` with the same answer as a bad signature.
+- A connected shop with no usable secret gets `503 NOT_CONNECTED` and nothing is stored. The secret is the workspace's own
+  `shopify` credential, saved in Settings. `SHOPIFY_WEBHOOK_SECRET` is read only with `SHOPIFY_SHARED_DEFAULT=deployment`.
+- A bad signature gets `401 HMAC validation failed.` A topic other than `orders/create` is acknowledged and not stored.
+- An order is matched to a reel by `utm_content` in its landing site first, then by its DM keyword as a discount code or as a
+  note attribute named `dm_keyword` or `meridian_keyword`. A tie or no match is stored unmatched. The rule that matched is stored.
+- An order is stored once per shop and Shopify order id. Its totals are stored as the decimal text Shopify sends, and a total that
+  is missing or malformed is stored as unknown. No customer details are stored.
 
 ## Infrastructure (environment only)
 

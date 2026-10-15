@@ -47,6 +47,7 @@ const CATEGORY_LABEL: Record<CredentialCategory, string> = {
   production: "Gemini",
   openai: "OpenAI",
   hypit: "Hypit",
+  shopify: "Shopify",
   openrouter: "OpenRouter",
   heygen: "HeyGen",
   anthropic: "Anthropic",
@@ -75,6 +76,7 @@ function deploymentKeyFor(category: CredentialCategory, env: CredentialEnv): str
   }
   if (category === "openai") return env.OPENAI_API_KEY?.trim() ?? "";
   if (category === "hypit") return env.HYPIT_API_TOKEN?.trim() || env.HYPIT_API_KEY?.trim() || "";
+  if (category === "shopify") return env.SHOPIFY_WEBHOOK_SECRET?.trim() ?? "";
   if (category === "openrouter") return env.OPENROUTER_API_KEY?.trim() ?? "";
   if (category === "heygen") return env.HEYGEN_API_KEY?.trim() ?? "";
   if (category === "anthropic") return env.ANTHROPIC_API_KEY?.trim() ?? "";

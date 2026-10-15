@@ -46,6 +46,11 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     const { executeResearchCollection } = await import("../research/worker.ts");
     return executeResearchCollection(sql, job, payload);
   }
+  // Sleep mode's nightly job. It must sit before the factory prefix, which routes only the stages of a run.
+  if (job.job_type === "factory.sleep") {
+    const { runSleepNight } = await import("../factory/sleep.ts");
+    return runSleepNight(sql, job);
+  }
   if (job.job_type.startsWith("factory.")) {
     const { executeFactoryJob } = await import("../factory/worker.ts");
     return executeFactoryJob(sql, job, payload);
