@@ -1,5 +1,17 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## E5 item 3 (generation variants, this branch): PARTIAL, see `../variants/STATUS.md`
+
+- `orchestrator.ts` `applyVariants` merges only the `edl:` slots of a variants output into the request's artifacts. A prepared generation
+  variant's `plan:` and `voice:` slots stay with the stage: `deliver` reads every request artifact and needs exactly one `scene_plan`
+  (`handlers/deliver.ts`), so merging them would refuse the request. Test: `orchestrator.test.ts`, "a prepared generation variant's plan
+  and voice are not request artifacts".
+- The orchestrator's variant sub-graph is NOT built: `StageOutput`'s `variants` member has no key, work or shot list (`types.ts`), and the
+  shots, takes and edit are request-scoped. The proposal and the blockers (voice splice, prompts, wiring) are in `../variants/STATUS.md`.
+- The "Not built" sections below describe the state before this item. The handler work answers part of them (the writer call, the
+  beat-scoped voice, the variant plan and funding). The request-scoped shots, takes and edit, and the output that carries a variant's work,
+  remain open.
+
 ## W2 leftovers: wiring pass (branch `eng-e45-leftovers-2`, base 5d5925b)
 
 Owner instruction for this pass: no test, typecheck, lint or golden-frame run. Everything below is written and unverified. The lead runs

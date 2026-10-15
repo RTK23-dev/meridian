@@ -1,0 +1,21 @@
+{
+  "id": "gen-recorded-variant-writer-hook-0001",
+  "model": "recorded/variant-writer",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"lines\":[{\"beatId\":\"b1\",\"text\":\"Your counter has been lying to you all along.\"}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1180,
+    "completion_tokens": 46,
+    "total_tokens": 1226,
+    "cost": 0.0021
+  }
+}

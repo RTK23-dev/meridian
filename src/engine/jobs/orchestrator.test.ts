@@ -484,6 +484,23 @@ test("variants fan out to their own compose stage after the master passes, and d
   assert.deepEqual(flow.jobs.map((job) => job.stage), ["deliver"]);
 });
 
+test("a prepared generation variant's plan and voice are not request artifacts, so deliver is queued with one scene plan's worth of inputs", () => {
+  const flow = flowToDelivery(1);
+  passBranch(flow, EDL_1);
+  flow.succeed({
+    stage: "variants",
+    subjectId: REQ,
+    variants: [{ edlId: EDL_2 }],
+    artifacts: { [`edl:${EDL_2}`]: fixtureId("art_", 131), "plan:product:SKU-2": fixtureId("art_", 132), "voice:hook:1": fixtureId("art_", 133) },
+  });
+  passBranch(flow, EDL_2);
+  const deliver = flow.jobs.find((job) => job.stage === "deliver");
+  assert.ok(deliver, "deliver is queued");
+  assert.equal(deliver.payload.inputArtifactIds.includes(fixtureId("art_", 131)), true, "the variant EDL is an input");
+  assert.equal(deliver.payload.inputArtifactIds.includes(fixtureId("art_", 132)), false, "the variant plan is not");
+  assert.equal(deliver.payload.inputArtifactIds.includes(fixtureId("art_", 133)), false, "the variant voice is not");
+});
+
 test("a caption variant (a re-render only, no generation) runs its own chain and never queues a produce or voice job", () => {
   const flow = flowToDelivery(1);
   passBranch(flow, EDL_1);
