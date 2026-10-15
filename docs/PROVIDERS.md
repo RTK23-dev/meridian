@@ -15,6 +15,7 @@ section 1, for the rules.
 | Higgsfield | Video generation | Production | `HIGGSFIELD_API_KEY`, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured |
 | Hypit | Video runtime | Hypit | `HYPIT_API_TOKEN` or `HYPIT_API_KEY`, with `HYPIT_SHARED_DEFAULT=deployment` | Not connected. Set `HYPIT_BASE_URL` for the runtime itself |
 | Shopify | Order webhooks, for sales attribution (see below) | Shopify | `SHOPIFY_WEBHOOK_SECRET`, with `SHOPIFY_SHARED_DEFAULT=deployment` | Not configured. Orders are refused with `NOT_CONNECTED` (503) and nothing is stored |
+| Apify | Instagram volume discovery for Factory Gather (see below) | Apify | `APIFY_TOKEN`, with `APIFY_SHARED_DEFAULT=deployment` | Not configured. No Apify request is sent |
 
 Sources keep one key per connector. Each has its own opt-in, named `<CATEGORY>_SHARED_DEFAULT`:
 
@@ -56,6 +57,12 @@ What the Shopify documentation says, checked on 2026-10-15:
   reference pages do not describe `landing_site`, `referring_site`, `note_attributes` or `source_name` in words, so the reader
   relies on those sample shapes only.
 
+Status, 2026-10-15. Verified: the signature, the headers, the `orders/create` topic and the `myshopify.com` shop domain.
+Partly verified: `landing_site`, `referring_site`, `source_name` and `note_attributes` are named, with example values, in the
+`orders/create` sample, but no page says what they hold. The UTM values read from `landing_site` therefore have no documented
+meaning, and the first live order confirms them. `discount_codes` is described as "a list of discounts applied to the order", with
+`code`, `amount` and `type`. No code changed.
+
 How Meridian uses them:
 
 - The endpoint is `POST /api/webhooks/shopify`. The shop is routed by its `myshopify.com` domain, which a brand connects in the
@@ -67,6 +74,9 @@ How Meridian uses them:
   note attribute named `dm_keyword` or `meridian_keyword`. A tie or no match is stored unmatched. The rule that matched is stored.
 - An order is stored once per shop and Shopify order id. Its totals are stored as the decimal text Shopify sends, and a total that
   is missing or malformed is stored as unknown. No customer details are stored.
+- Open finding, not changed on 2026-10-15: a stored order is answered `202` with `recorded` (`src/lib/meridian/shopify/handler.ts`,
+  and its tests assert 202). The Shopify page says "Only a 200 response confirms receipt", and the first bullet above says any other
+  response is an error. Shopify may therefore retry orders that were stored. Answering `200` for a stored order would match the docs.
 
 ## Infrastructure (environment only)
 
@@ -105,21 +115,31 @@ Regular posts go through a connected account, saved per brand on Connected accou
 
 ## Instagram trial reels
 
-Verified 2026-10-15 against Meta's developer documentation. Nothing here was run against a live account.
+Checked 2026-10-15 against Meta's developer documentation. Nothing here was run against a live account. Verified: `trial_params`,
+its two strategy values, the publish response and the read-back fields. Partly verified: the request host (below).
 
 - **Trial parameter.** The IG User Media reference lists `trial_params` for `media_type=REELS`. Its `graduation_strategy` is `MANUAL` (the
   reel is graduated by hand in the native app) or `SS_PERFORMANCE` (the reel graduates automatically if it performs well).
   https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
 - **Request shape.** The Trial Reels section of the content publishing guide says trial reels are "only shared to non-followers". Its
   example sends a JSON body with `trial_params` as a nested object. It posts to graph.instagram.com/v25.0, while this build uses
-  graph.facebook.com. https://developers.facebook.com/docs/instagram-platform/content-publishing
-- **Container status.** The IG Container reference lists `status_code` as `EXPIRED`, `ERROR`, `FINISHED`, `IN_PROGRESS` or `PUBLISHED`.
-  It has no trial field. https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-container
+  graph.facebook.com. The IG User Media reference's image sample posts to graph.facebook.com, and the pages read do not say which
+  host a token type must use. Partly verified. https://developers.facebook.com/docs/instagram-platform/content-publishing
+- **Container status.** The IG Container reference documents `status_code` as `FINISHED` (ready to publish), `ERROR` (failed to complete
+  publishing), `EXPIRED` (not published within 24 hours), `IN_PROGRESS` and `PUBLISHED`. It has no trial field.
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-container
 - **Read-back.** The IG Media reference has no field that reports trial state or graduation. `is_shared_to_feed` (Reels only) says a
   reel "can appear in both the Feed and Reels tabs" when true, and Meta warns that neither value determines whether it appears there.
   It is stored as observed and is never read as graduation. https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-media
+- **Media type.** `media_product_type` (`AD`, `FEED`, `STORY` or `REELS`) is available for the Instagram API with Facebook Login only.
+  With another kind of token it may be absent, and the build keeps it unknown. Same page.
 - **Graduation by API.** Not documented. The docs say a MANUAL trial is graduated "in the native app". Meridian does not graduate a
   reel, and it does not record a feed step unless an observation says so. Today no observation exists.
+- **Publish response.** `media_publish` returns `{"id": "<IG_MEDIA_ID>"}` and nothing about trial state.
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media_publish
+- **Strategy note, open.** The docs say a `SS_PERFORMANCE` reel graduates by itself if it performs well. The build's note
+  (`GRADUATION_NOT_DOCUMENTED` in `trial.ts`) tells the person to graduate the reel by hand for both strategies, so the note is wrong
+  for `SS_PERFORMANCE`. Not changed on 2026-10-15.
 - **Not verified.** Eligibility (a third-party guide cites about 1,000 followers; Meta publishes no threshold). Whether a trial's media
   id stays the same after graduation. Whether the trial parameter is accepted on v21.0. Trial calls use v25.0, and the rest of the
   Instagram flow stays on v21.0 (`TRIAL_GRAPH_BASE` in `src/lib/meridian/distribution/graph.ts`). A third-party summary says Meta does not
@@ -138,6 +158,27 @@ How the build uses this (`src/lib/meridian/distribution/trial.ts`, `instagram.ts
 Owner live run (not done by an agent): on an Instagram account that is connected for a brand, publish one trial reel with
 `MANUAL` and record the container id, the media id, Meta's response, and what the Instagram app shows after the first check. Then
 graduate it by hand and record whether any later check observes it. Record both receipts in the run's Library.
+
+## Apify: Instagram volume (Factory Gather)
+
+Checked 2026-10-15 against the Apify pages. The request and output tables, with their statuses, are in
+`docs/engine/PROVIDER_APIS.md` (Apify). Nothing was run against a live account.
+
+- Request: `POST https://api.apify.com/v2/actors/{actorId}/run-sync-get-dataset-items`, with `actorId` as `owner~name`, and the header
+  `Authorization: Bearer <token>`. Verified: https://docs.apify.com/api/v2/act-run-sync-get-dataset-items-post and
+  https://docs.apify.com/api/v2/getting-started. A 201 response holds the item array. A 408 means the run passed 300 seconds.
+- Actors: `apify~instagram-hashtag-scraper` for niche search and `apify~instagram-reel-scraper` for creator baselines. Their input
+  names (`hashtags`, `resultsLimit`, `username`, `skipPinnedPosts`) are verified on https://apify.com/apify/instagram-hashtag-scraper
+  and https://apify.com/apify/instagram-reel-scraper.
+- Fields read and documented: `url`, `ownerUsername`, `timestamp`, `caption`, `hashtags`, `id` and `commentsCount`. A `likesCount`
+  of `-1` means the count is hidden, and it is read as unknown.
+- Partly verified: `videoPlayCount`, the view count used for ratings. It is named in the samples of both actors, and the docs describe
+  views in words, but they do not say how it differs from `videoViewCount`. `type` and `shortCode` appear only in the samples. The
+  accepted `resultsType` values are not listed.
+- Not verified: the price. The pages give conflicting figures, so no cost is estimated.
+
+No code changed. The owner confirms the partly verified fields at the first live run. Nulling `videoPlayCount` would stop every
+rating, and nulling `type` would drop every hashtag result, so the fields are kept and flagged.
 
 ## Engine choice
 
