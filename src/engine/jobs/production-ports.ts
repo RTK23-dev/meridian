@@ -84,7 +84,8 @@ export function renderLineUsd(durationMs: number): number | undefined {
 /** The integrity check of a rendered file: its probe against the render expectation (1080 x 1920, 30 fps). Bible 6.11. */
 function integrityCheck(media: Pick<MediaFunctions, "probe">): (input: IntegrityInput) => Promise<GateResult> {
   return async (input) => {
-    const probe = await media.probe({ source: { kind: "bytes", bytes: input.bytes } });
+    // An ArrayBuffer-backed copy: the media source type takes Uint8Array<ArrayBuffer> (post-render-review.ts does the same).
+    const probe = await media.probe({ source: { kind: "bytes", bytes: new Uint8Array(input.bytes) } });
     return checkRenderIntegrity({
       videoId: input.videoId,
       probe,

@@ -195,7 +195,7 @@ export async function serveEngineMedia(input: ServeEngineMediaInput): Promise<Re
   const extension = objectKey.slice(objectKey.lastIndexOf(".") + 1);
   if (MIME_BY_EXTENSION[extension] !== object.mimeType) return notFound();
 
-  return new Response(object.bytes, {
+  return new Response(new Uint8Array(object.bytes), {
     status: 200,
     headers: {
       "Content-Type": object.mimeType,
