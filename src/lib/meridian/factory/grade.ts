@@ -30,6 +30,14 @@ export const NO_ENGINE_GRADE = "graded on observed signal only: no decision engi
 /** The stored grade's reason when an ad has no creative DNA, so there is no concept to put to an engine. */
 export const NO_DNA_GRADE = "graded on observed signal only: no creative DNA is stored for this ad";
 
+/**
+ * The stored grade's reason when the run's caps or the kill switch refuse this ad's engine call. `stop` is the reason the call was
+ * refused, the same text the stage check gives. The ad keeps its observed signal, and it is graded again once the stop is cleared.
+ */
+export function cappedGradeReason(stop: string): string {
+  return `graded on observed signal only, because the engine call was refused. ${stop}`;
+}
+
 const GATE_NAME = "factory_grade";
 
 const GRADE_DESCRIPTION =

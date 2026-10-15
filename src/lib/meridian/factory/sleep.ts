@@ -7,10 +7,9 @@
  *
  * Every planned item is assigned to the holdout or to the treated arm by a hash of its id, and each assignment is stored
  * (factory_holdouts). The night's morning summary (sleep_mode_nights) says what ran, the counts, the holdout ids, the failures and
- * why the night stopped, if it did. A night with no budget, no connected source or the kill switch engaged records why and stops.
+ * why the night stopped, if it did, and each tuned-value change it refused under the nightly change cap (sleep-tuning.ts). A night with no budget, no connected source or the kill switch engaged records why and stops.
  */
 import { thresholds } from "../../../engine/config/thresholds.ts";
-import { MAX_NIGHTLY_CHANGE_SHARE } from "../../../engine/config/tunable.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import type { Sql } from "../learning/store.ts";
 import { adsMustPause } from "./kill-switch.ts";
@@ -20,6 +19,7 @@ import { capStopReason } from "./stage-decision.ts";
 import { runSettingsFromStorage, type RunSettings } from "./run-settings.ts";
 import { challengerArmOf, holdoutArmOf } from "./sleep-holdout.ts";
 import { localDateKey, nextNightAt, sleepScheduleIdOf } from "./sleep-time.ts";
+import { nightlyTuningOf, tuningSummaryOf, type TunedProposal } from "./sleep-tuning.ts";
 import { executeFactoryJob } from "./worker.ts";
 
 /** The stages a night runs, in order. Nothing after template runs here: production waits for a person's approval. */
@@ -120,10 +120,17 @@ async function runStage(
 }
 
 /**
+ * What a night is given beyond the database. `tuning` is the tuned values the night proposes to move, each with its current value and
+ * bounds. Every proposal is held to the nightly change cap (sleep-tuning.ts), and the morning summary records each refusal. Production
+ * passes none: sleep mode proposes no tuned value in this build, so the night records that the cap was not used.
+ */
+export type SleepSeams = { tuning?: readonly TunedProposal[] };
+
+/**
  * Runs one night for the workspace. The job returns a short result ("sleep:planned", "sleep:stopped", "sleep:failed", or
  * "sleep:off" when sleep mode is off). A database failure before the night row exists throws, so the job is retried.
  */
-export async function runSleepNight(sql: Sql, job: ExecutableJob, now: Date = new Date()): Promise<string> {
+export async function runSleepNight(sql: Sql, job: ExecutableJob, now: Date = new Date(), seams: SleepSeams = {}): Promise<string> {
   const organizationId = job.organization_id;
   const settingsRows = await sql<SleepSettingsRow>`
     select enabled, brand_id, night_time, time_zone, niche, updated_by from sleep_mode_settings
@@ -168,6 +175,7 @@ export async function runSleepNight(sql: Sql, job: ExecutableJob, now: Date = ne
       niche: settings.niche.trim(),
       updatedBy: settings.updated_by,
       timeZone: settings.time_zone,
+      tuningProposals: seams.tuning ?? [],
     });
     return `sleep:${end}`;
   } catch (error) {
@@ -182,7 +190,16 @@ export async function runSleepNight(sql: Sql, job: ExecutableJob, now: Date = ne
 
 async function runNight(
   sql: Sql,
-  input: { organizationId: string; brandId: string; nightId: string; nightKey: string; niche: string; updatedBy: string; timeZone: string },
+  input: {
+    organizationId: string;
+    brandId: string;
+    nightId: string;
+    nightKey: string;
+    niche: string;
+    updatedBy: string;
+    timeZone: string;
+    tuningProposals: readonly TunedProposal[];
+  },
 ): Promise<NightEnd> {
   const { organizationId, brandId, nightId, nightKey, niche } = input;
   const stages: StageRecord[] = [];
@@ -191,6 +208,13 @@ async function runNight(
   const holdoutIds: string[] = [];
   const counts: Record<string, number> = {};
   let runId = "";
+  // Every proposed tuned change is held to the nightly cap, whatever the night's own outcome, so the morning summary always says what was
+  // refused. Nothing is written to engine config here: an accepted change is recorded in change_budget only.
+  const tuning = nightlyTuningOf(input.tuningProposals);
+  const tuningNote =
+    input.tuningProposals.length === 0
+      ? "No tuned value was proposed tonight, so the nightly change cap was not used."
+      : "Each proposed change was held to the nightly cap. A change beyond it was refused for the excess, and the morning summary gives the reason. Sleep mode writes no engine config: an accepted change is recorded here only.";
 
   const conclude = async (outcome: { end: NightEnd; reason: string; summary: string; runStatus: string | null; runError: string; runStage: string }) => {
     if (outcome.runStatus !== null && runId) {
@@ -200,16 +224,20 @@ async function runNight(
       `;
     }
     const challengerDecision = challengerArmOf(`night:${nightKey}`, thresholds.claude.challengerShare.value, CHALLENGER_PROMPT_VERSIONS);
+    const morningSummary = [outcome.summary, tuningSummaryOf(tuning)].filter((part) => part !== "").join(" ");
     await sql`
       update sleep_mode_nights set
-        status = ${outcome.end}, run_id = ${runId}, reason = ${outcome.reason.slice(0, 400)}, summary = ${outcome.summary},
+        status = ${outcome.end}, run_id = ${runId}, reason = ${outcome.reason.slice(0, 400)}, summary = ${morningSummary},
         sources = ${JSON.stringify(sources)}, stages = ${JSON.stringify(stages)}, counts = ${JSON.stringify(counts)},
         holdout_item_ids = ${JSON.stringify(holdoutIds)}, failures = ${JSON.stringify(failures)},
         challenger = ${JSON.stringify({ share: thresholds.claude.challengerShare.value, versions: CHALLENGER_PROMPT_VERSIONS, decision: challengerDecision })},
         change_budget = ${JSON.stringify({
-          maxNightlyChangeShare: MAX_NIGHTLY_CHANGE_SHARE,
-          tunedValuesMoved: 0,
-          note: "The night gathers, grades and plans. It writes no tuned value, so the nightly change cap is not used tonight.",
+          maxNightlyChangeShare: tuning.maxChangeShare,
+          tunedValuesAccepted: tuning.accepted.length,
+          tunedValuesRefused: tuning.refused.length,
+          accepted: tuning.accepted,
+          refused: tuning.refused,
+          note: tuningNote,
         })},
         finished_at = now()
       where id = ${nightId} and organization_id = ${organizationId}
