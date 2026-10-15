@@ -1,5 +1,73 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## providerUrl and kit images (branch `worktree-agent-afd76db5012a9b7ba`, from `329b60a`)
+
+Scope: `runtime.ts`, `production-ports.ts`, `src/lib/meridian/storage/engine-media-link.ts` and its test, and the STATUS files. The variants
+handler, the orchestrator's variant branch and `src/engine/contracts/` are not touched. Tests were added to `runtime.test.ts` and
+`production-ports.test.ts`, the test files of the granted modules.
+
+**Wired (fixture-tested; nothing called live)**
+
+1. **`providerUrl` (Bible 10.1).** `production-ports.ts`: `productionProviderUrl({ gateway, mediaLinks })`. Each call first checks the base
+   URL (`gateway.baseUrlFor`) of every provider the chain reaches: `chainProvidersOf` takes the providers of the routed targets of
+   `image.keyframe`, `image.edit`, `video.cinematic`, `video.budget` and `video.i2v_pinned`. Today that is `openrouter` only. A provider with no
+   base URL throws `config` `NOT_CONNECTED: the chain's provider cannot be called: openrouter has no base URL set on this deployment`, and the
+   signer is not asked. Then Meridian's signer links the input: `store://<key>` becomes `<key>`, and an engine object or a kit image of the
+   organization becomes a 15-minute https link. A refused input (another organization's object, or a uri that is neither) is `invalid_input`,
+   which the chain turns into an `unlinked_input` hold, with no link made. A missing `MEDIA_LINK_SECRET` or origin is `config` NOT_CONNECTED
+   with the setting's name.
+   - The link's host is Meridian's public origin (`APP_URL` or `PUBLIC_APP_URL`), not the provider's base URL. Only Meridian's host serves
+     the engine's objects, so the base URL is the chain's reachability check, and the link comes from the signer.
+   - `runtime.ts`: `EngineComposition.providerUrl` (optional). `produceShotPortsOf(composition, shot)` passes it to `produce_shot` (with
+     the shot ports). `productionComposition(sql, deps)` builds the production composition with the production `providerUrl`, and
+     `productionEngineRuntime` is built from it.
+2. **Kit images (Bible 13).** The signer and the route accept kit-store objects of the organization, under the engine media rules: org-scoped,
+   HMAC-signed with the same secret under its own label, 15-minute links, refused for any other organization's key, and read only under
+   the organization, the brand the key names and the key itself. Engine media keys are unchanged.
+   - **Key convention (new; not in Bible 20.2; the lead confirms it):** `kits/{org}/{brand}/{kind}/{kitId}/{name}.png`, with kind
+     `character`, `persona` or `product` (the kinds that carry images), `png` only. The brand is in the key because the store keys an object
+     by organization, brand and name. `store://` names an object of Meridian's store by its key. Nothing in the repo wrote this prefix before.
+   - Engine objects still need the request's brand (`engine_requests`). A kit object needs no request, and the route reads it under the brand
+     its key names; the store finds nothing under another organization's brand.
+   - Reasons: the not-connected reasons no longer say "Shotstack" (they are used for chain inputs as well).
+
+**Still NOT_CONNECTED in production, and why**
+
+- **`produce_shot` and `check_take` are not registered in production.** `productionComposition` passes no `shotPorts`, so the dispatcher
+  refuses a chain stage with `not_implemented` (never a success). Shot ports need three things that do not exist: `assetMedia`, a `MediaStore`
+  for keyframe and speech bytes (no production implementation; a keyframe's uri must be an engine object key for the clip's first frame to
+  link), `videoProfiles` (the video models' listing: none), and the media functions (`gatewayMediaFunctions` is NOT_CONNECTED until the
+  deployment sets the `media_functions` base URL). **So this wiring alone does not unhold a cartoon shot in production.** The `providerUrl` is
+  ready for the stage when the ports are supplied. Test: `runtime.test.ts`, "the production runtime registers no produce_shot".
+- **No kit image is stored under `kits/...` yet.** Nothing writes kit images (the kit UI is not built). The keyframe takes the character
+  sheet's `references` (`plan/sources.ts`), so a reference links only when the kit body carries `store://kits/...` of an object that is stored.
+  Until then the reference is `store://<other>`, which is refused, and the chain holds with `unlinked_input`.
+- **Keys are not checked by `providerUrl`.** It checks base URLs, not credentials. A workspace with no OpenRouter key gets the gateway's
+  NOT_CONNECTED at call time, from the router. The link itself carries no key.
+- **Deployment settings.** `MEDIA_LINK_SECRET` (32 characters or more) and `APP_URL` or `PUBLIC_APP_URL` (https) must be set. Unset, every link is
+  NOT_CONNECTED with the setting's name, and the route answers 404.
+- **Not decided here (owner):** the image types a kit may carry (only png is linkable now), and the kit prefix itself if the owner wants another.
+
+**Tests run (this branch, `NODE_ENV=development node --experimental-strip-types --test`)**
+
+- `src/lib/meridian/storage/engine-media-link.test.ts`: 18 pass. Kit rules; another organization's kit is refused; an expired kit link is
+  refused; a re-pointed link is refused; a valid kit link resolves under its brand; NOT_CONNECTED for a kit key without the secret or origin.
+- `src/engine/jobs/production-ports.test.ts`: 16 pass. The chain providers; kit and engine links; NOT_CONNECTED for a missing base URL, with no
+  signer call; NOT_CONNECTED without the secret; another organization's kit is `invalid_input`; a non-linkable uri is `invalid_input`.
+- `src/engine/jobs/runtime.test.ts`: 10 pass. The production composition carries the `providerUrl` and links through the signer; a missing base
+  URL or secret is NOT_CONNECTED; `produce_shot`'s ports carry the composition's `providerUrl` (none when absent); with shot ports,
+  `produce_shot` and `check_take` register; the production runtime registers neither.
+- `npx tsc --noEmit`: exit 0. `npx eslint` on the six changed files: exit 0.
+
+**The owner's live run (after the deployment supplies the shot ports and the kit store)**
+
+1. Set `MEDIA_LINK_SECRET` and `APP_URL`. Fetch one signed kit link with curl: 200 and the bytes. Fetch it after its 15 minutes: 403.
+2. Store one kit image under `kits/{org}/{brand}/character/{characterId}/{name}.png`. Put `store://` of that key in the character body's
+   `references`. Record the link the `providerUrl` returns.
+3. Run one `cartoon_generated` beat on that page. Record the keyframe's call (its references as links), its ledger row and idempotency key;
+   the clip's call (its first frame, the keyframe output as a link), its ledger row and key; the take id, its cost (the sum of the two calls),
+   and the `check_take` verdict.
+
 ## E5 item 3 (generation variants, this branch): the work list, the phases and the variant runs are built; assembly is not
 
 ## Cartoon chain end to end (contract v5): the orchestrator's non-variant branch and the chain stores

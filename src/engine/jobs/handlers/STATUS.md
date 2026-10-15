@@ -1,5 +1,18 @@
 # STATUS: intake and estimate_reserve stage handlers (A4, updated in E2)
 
+## Update: providerUrl and kit images are wired (branch `worktree-agent-afd76db5012a9b7ba`); the full account is `../STATUS.md`
+
+- **Item 1 (`providerUrl` in runtime.ts): answered.** `productionComposition` builds the production `providerUrl` from the gateway's base
+  URLs (`chainProvidersOf`, `baseUrlFor`) and Meridian's signer, and `produceShotPortsOf` passes it to `produce_shot`. A chain provider with
+  no base URL is NOT_CONNECTED with its reason. **Correction to the item's premise:** production registers no `produce_shot` (it passes no
+  shot ports: no MediaStore, no video profiles), so a cartoon shot is still refused as not_implemented in production until those ports exist.
+- **Item 2 (kit images): answered, with a key convention the lead confirms.** `kits/{org}/{brand}/{kind}/{kitId}/{name}.png` is linkable for its
+  own organization; `store://<key>` names it. Nothing writes kit images yet. `jobs/STATUS.md` has the account.
+- **Blocker 5 of "Chains on produce_shot and check_take" is out of date.** The image adapter now sends https references as
+  `input_references` (`assets/providers/openrouterImage.ts`); it refuses only a store uri, a last frame, or too many references, before any
+  call. A store uri is linked first when `providerUrl` is wired.
+- **Item 3 (the chain output has no artifact type) and item 6 are unchanged.**
+
 ## Cartoon chain end to end: cartoon_generated built and tested; stop_motion refused until image.edit is priced
 
 Branch `worktree-agent-adcc78d81ea833bab`, on top of `244e3e8`. This supersedes the chain items of the sections below
