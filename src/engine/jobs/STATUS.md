@@ -1,5 +1,111 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## E4 and E5 orchestration (branch `eng-e45-orchestration`, from `origin/code/beautiful-cori-1zfk11` at d5a62c1)
+
+Lead task: consolidate orchestration so a request runs from intake to deliver on fixtures. Committed on the branch, not pushed; the lead
+merges. Migration `migrations/0081_engine_orchestration.sql` (after 0080). Scenario tests run on PGlite with recorded responses.
+
+### Done
+
+1. **Migration 0081.** `engine_decisions.decided_by` allows `editor` (contract v4). `engine_role_calls.role` gets a check equal to
+   `CLAUDE_ROLES` (`frame_reader` included). No SQL role check existed before; the list is the contract's, and `migration-0081.test.ts`
+   reads the constraint back from `pg_constraint` and compares it with the contract.
+2. **Gate routing by gold sets (orchestrator.ts).** `pre_render_gate`, `render` and `post_render_review` call
+   `decideGate(gate, state.gateMetrics)` (review/gold.ts, review/STATUS.md decision 5):
+   - pass: the next stage is queued, as before.
+   - block (a failing check has gold metrics that meet the target): redo the named shots, or redo the EDL (compose) for a gate with no
+     shot. Unchanged routing, now reached only for proven checks.
+   - review (no failing check is proven): the branch escalates. The request pauses and the review item carries a
+     `meridian.gate_review/v1` payload (`gateReviewItem`) for pre and post. Render integrity has no gate-review item; it carries its rules.
+   - `gateMetrics` come with the start event (`startEngineRequest({ gateMetrics })`) and are kept in the request state. Absent metrics
+     (or a state written before E4) prove nothing, so every gate failure reviews. Fail closed.
+   - `render` outputs may carry `decisions` (the Shotstack fallback); the orchestrator stores them in `engine_decisions`.
+3. **Registry and slots.** `registry.ts` reads: `compose` (edl, validated_request); `pre_render_gate` (composition, edl, scene_plan,
+   validated_request, voice_track, video_dna, take); `render` (composition, edl, validated_request); `post_render_review` (rendered_video,
+   edl, gate_result); `variants` (production_request, scene_plan, edl). The orchestrator passes the matching slots: `branchSlots(state,
+   branch)` (accepted takes included) and `variants: [edl:<master>, request, plan]`.
+4. **Compose and render stages (new handlers).** `handlers/compose.ts` compiles the EDL with the style kit and writes a `composition`
+   artifact. `handlers/render.ts` recompiles, checks the composition's contentHash, then runs `renderWithFallback` (HyperFrames twice,
+   Shotstack for a component-free EDL, else review). It stores the measured integrity gate (slot `integrity:<edl>`, a `gate_result`) on every
+   run and the `rendered_video` (slot `render:<edl>`) on a pass. A render price that is not in the table fails the integrity gate
+   (`render_price_known`), so nothing is rendered unpriced. Shotstack without deps is a failed attempt (not a success), which reviews.
+5. **Event store.** `event-store-sql.ts` (`sqlEventStore`) implements `events/store.ts` on `engine_events`, with the workspace's dedupe
+   key. `list` returns the learning kinds only; the orchestrator's own log rows (`stage.succeeded`, `resume`, ...) are not returned.
+6. **Manifests.** `manifest-store.ts` writes `engine_manifests` rows: id = the manifest artifact's id, body, content hash, write-once (a
+   different body under the same id is refused), organization-scoped. `deliver.ts` writes the row after the artifact. `engine-reads-sql.ts`
+   gives deliver the gate results and decisions the orchestrator stored.
+7. **Registration (runtime.ts).** Always: `pre_render_gate`, `compose`, `variants`, `deliver` (kit store, engine tables, reservation
+   ledger). With ports: `render` (`composition.render`: HyperFrames and Shotstack deps) and `post_render_review` (`composition.postRender`).
+   New composition fields: `styleKit`, `preRender` (budget, licences, product imagery, disclosure), `render`, `postRender`, `variants`,
+   `deliver`. Production gives no `render` or `postRender`, so the pipeline stops at render with `not_implemented`, which fails closed.
+8. **Output validation.** `validate.ts` checks a render's `decisions`.
+
+### Not built: the generation variant sub-graph (lead item 3, second half)
+
+Hook, product, persona and language variants are still reported as `deferred` by the variants stage, with no job and no ledger row. The
+sub-graph is not scheduled, and this is a decision for the lead, not a gap in the tests. What it needs, in order:
+- A voice job per variant for its changed beats. The voice stage is per request and has no beat-scoped job.
+- A produce job per changed shot with the variant's own inputs (new hook text, product SKU, persona). The produce handler takes its
+  prompt from the plan, and no variant source exists for a new prompt or a product reference.
+- A variant branch in the orchestrator's state with its own shot and take map. Shots are keyed by plan shot id, which a variant would reuse.
+- An `edit` for the variant EDL, then compose, pre-render, render and review as for the master.
+- Until those exist, a scheduled generation variant could only fail. Scheduling it now would charge generation with no path to finish.
+
+### Decisions to confirm (lead)
+
+- **Render integrity goes through `decideGate` like the other gates.** A failing integrity check has no gold set, so it reviews. HyperFrames
+  and Shotstack retries are inside the fallback policy and happen before the gate.
+- **The take gate keeps its verdict-driven redo.** `check_take` redoes on the Critic's action, as Bible 5.3 says. Only the three render
+  gates are routed by gold sets. Lead to confirm.
+- **A caption variant is a no-op on the chain fixture.** Every caption clip overlaps the presenter, and the editor's face rule keeps the
+  band, so `caption:*` reports `not_built: no_change`. The caption-only acceptance is tested with a music re-render variant instead:
+  no generation, one composed variant. The music track comes from `VariantPorts.loadMusicTrack`, which production leaves empty, so no
+  music variant is built in production.
+- **Pre-render gate results in two tests are the test's own answers.** The redo and the coded-shot block answer `pre_render_gate` with a
+  failing gate (the clean chain cannot produce those failing checks). The downgrade answers it with a passing gate, because the chain
+  fixtures have no EDL rebuilt from the downgraded plan. Each test says so in its comment; everything after them is the real handler.
+- **Stored state.** `gateMetrics` is stored in the request's state JSON. Metrics that change later do not affect a running request.
+
+### Tests (this worktree, PGlite)
+
+- `NODE_ENV=development node --experimental-strip-types --test 'src/engine/jobs/*.test.ts' 'src/engine/jobs/handlers/*.test.ts' 'src/engine/deliver/*.test.ts' 'src/engine/events/*.test.ts' 'src/engine/variants/*.test.ts'`: 390 pass, 0 fail.
+- `orchestrator.test.ts`: 46 pass. Four E3 tests now prove their failing checks (they expected a redo for an unproven failure). Six new E4
+  routing tests: an unproven pre-render failure reviews, an unproven overlay never reaches deliver, a proven post-render failure redoes,
+  an unproven integrity failure reviews, the metrics are kept, and a render fallback decision is effected.
+- `scenarios.test.ts` (9): E4 clean pass (manifest, reservation released), one redo, downgrade (decision recorded in the manifest), human
+  escalation (gold label, resume), broken overlay (never delivered), five coded shots blocked before render. E5 music re-render variant
+  (no generation job added), Shotstack fallback on a component-free EDL (decision, integrity pass, request matches the script), and a
+  component EDL with HyperFrames failing goes to review with no Shotstack request.
+- `event-store-sql.test.ts` (5), `manifest-store.test.ts` (4), `migration-0081.test.ts` (4), `handlers/compose.test.ts` (3),
+  `runtime.test.ts` (4).
+- `npm run typecheck`: exit 0. `npm run lint`: exit 0 (0 errors; the four warnings are the pre-existing ones in `src/components/`).
+- The full `npm test` was not run here, as the lead asked.
+
+### Owner must run live (agents hold no keys; nothing here calls a provider)
+
+1. Apply `migrations/0081_engine_orchestration.sql` on PostgreSQL after 0080. Expected: it applies; the two check constraints name `editor`
+   and the eleven roles. Run the new tests with `MERIDIAN_PG_TEST_URL` set: `src/engine/jobs/scenarios.test.ts`,
+   `event-store-sql.test.ts`, `manifest-store.test.ts`, `migration-0081.test.ts`.
+2. HyperFrames: set `render_hyperframes_cloud` in `config/prices.ts` (it is `null` now, so every render fails the price check). Then render
+   one real composition through `createRenderHandler` with the HyperFrames deps. Record the render id, the ledger row (estimate and actual),
+   the integrity gate's checks (resolution, fps, duration, audio) and the video URI.
+3. Shotstack: force a HyperFrames failure on a component-free EDL (for example a bad composition) and record the Shotstack POST body, the
+   render id, the ledger row (`shotstack`, `edit-v1`, the actual, or the hold with `actualIsEstimate`), the integrity gate and the decision.
+   Record whether a retried POST bills twice (render/STATUS.md item 5).
+4. Post-render: one real MP4 through `post_render_review`. Record the Critic's model and its ledger row, the black-frame, overlay and OCR
+   measurements (no measurement exists yet, so every overlay and caption check is not evaluated and the video reviews), and the review result.
+5. Gold sets: until a check's metrics meet the target (12.4), every gate failure reviews. Nothing blocks on a guess.
+
+### Blockers (for the lead)
+
+- The generation variant sub-graph (above). Lead decision: build it, or ship E5 with generation variants deferred.
+- Production wiring for `render` and `post_render_review`: the gateway transports, the object store as a media store, the media functions
+  (probe, frames, loudness, timeline), the HyperFrames adapter options, and the integrity probe. None is composed in
+  `productionEngineRuntime`.
+- Shotstack needs a signed https URL for each media URI (`resolveSourceUrl`). No storage port provides one, so the fallback cannot run in
+  production yet.
+- The W4 measurements (black frames, overlays, OCR) are optional ports. Without them no video passes post-render.
+
 ## E3 integration pass (branch `eng-e3-wiring`)
 
 Built on `origin/code/beautiful-cori-1zfk11` (the E3 branches and the router's submit and settle, merged in commit d5b78f7). Nothing is

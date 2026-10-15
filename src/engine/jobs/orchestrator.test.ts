@@ -4,6 +4,26 @@ import { EngineError, type GateId, type GateResult, type TakeVerdict } from "../
 import { FIXTURE_IDS, fixtureId } from "../contracts/fixtures/index.ts";
 import { advance, orchestratorLimits, type OrchestratorState } from "./orchestrator.ts";
 import type { EngineEvent, QueuedJob, ShotSummary, StageOutput } from "./types.ts";
+import type { GoldMetrics } from "../review/gold.ts";
+
+/** Gold metrics that meet the target (Bible 12.4): the named checks may block. Their keys are "gate:rule" (gold.ts checkKey). */
+function provenFor(keys: string[]): Record<string, GoldMetrics> {
+  const proven: GoldMetrics = {
+    total: 200,
+    failLabels: 100,
+    passLabels: 100,
+    caughtFailures: 95,
+    falseFails: 5,
+    recall: 0.95,
+    falseFailRate: 0.05,
+    enoughLabels: true,
+    meetsTarget: true,
+  };
+  return Object.fromEntries(keys.map((key) => [key, proven]));
+}
+
+/** The check keys the gate() helper's failing checks carry, by gate. */
+const BROKEN = (gateName: GateId): string => `${gateName}:${gateName}.broken`;
 
 const REQ = FIXTURE_IDS.request;
 const ORG = "org_fixture";
@@ -102,8 +122,14 @@ class Flow {
 }
 
 /** Runs the single-node stages through estimate with the given plan shots, leaving produce jobs waiting. */
-function flowToProduce(shots: ShotSummary[], options: { cachedDna?: boolean; variantCount?: number } = {}): Flow {
-  const flow = new Flow().apply(start({ cachedDna: options.cachedDna ?? false, variantCount: options.variantCount ?? 0 }));
+function flowToProduce(shots: ShotSummary[], options: { cachedDna?: boolean; variantCount?: number; gateMetrics?: Record<string, GoldMetrics> } = {}): Flow {
+  const flow = new Flow().apply(
+    start({
+      cachedDna: options.cachedDna ?? false,
+      variantCount: options.variantCount ?? 0,
+      ...(options.gateMetrics ? { gateMetrics: options.gateMetrics } : {}),
+    }),
+  );
   flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: { validated: fixtureId("art_", 41) } });
   if (!options.cachedDna) flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", true), artifacts: { dna: fixtureId("art_", 42) } });
   flow.succeed({ stage: "voice", subjectId: REQ, gate: gate("voice", true), artifacts: { voice: fixtureId("art_", 43) } });
@@ -400,8 +426,8 @@ test("resume is refused while a shot still waits for a human choice", () => {
 });
 
 /** Drives a one-shot request all the way through to delivery, with the given variant count. */
-function flowToDelivery(variantCount: number): Flow {
-  const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null, sourceKind: "generate" })], { variantCount });
+function flowToDelivery(variantCount: number, gateMetrics?: Record<string, GoldMetrics>): Flow {
+  const flow = flowToProduce([shot({ shotId: SHOT_A, downgradeTo: null, sourceKind: "generate" })], { variantCount, ...(gateMetrics ? { gateMetrics } : {}) });
   flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: { [`take:${TAKE_A1}`]: fixtureId("art_", 81) } });
   flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", true), verdict: verdict(TAKE_A1, true), artifacts: {} });
   flow.succeed({ stage: "edit", subjectId: REQ, gate: gate("edit", true), edlId: EDL_1, artifacts: { [`edl:${EDL_1}`]: fixtureId("art_", 111) } });
@@ -459,7 +485,8 @@ test("variants fan out to their own compose stage after the master passes, and d
 });
 
 test("a failing pre-render gate that names a shot sends only that shot back to produce, then rebuilds the edit", () => {
-  const flow = flowToDelivery(0);
+  // The failing check is proven (its gold set meets the target), so it may block (Bible 12.4, 5.3).
+  const flow = flowToDelivery(0, provenFor([BROKEN("pre_render")]));
   flow.succeed({ stage: "compose", subjectId: EDL_1, edlId: EDL_1, artifacts: {} });
   flow.succeed({ stage: "pre_render_gate", subjectId: EDL_1, edlId: EDL_1, gate: gate("pre_render", false, [SHOT_A]), artifacts: {} });
   const [produce] = flow.jobsFor("produce_shot");
@@ -473,10 +500,13 @@ test("a failing pre-render gate that names a shot sends only that shot back to p
 });
 
 test("a gate that names a component shot does not queue a produce job that could never run: it downgrades or escalates", () => {
-  const flow = flowToProduce([
-    shot({ shotId: SHOT_A, downgradeTo: null, sourceKind: "generate" }),
-    shot({ shotId: SHOT_B, sourceKind: "component", modelClass: null, visualType: "coded_graphics", downgradeTo: "product_hero" }),
-  ]);
+  const flow = flowToProduce(
+    [
+      shot({ shotId: SHOT_A, downgradeTo: null, sourceKind: "generate" }),
+      shot({ shotId: SHOT_B, sourceKind: "component", modelClass: null, visualType: "coded_graphics", downgradeTo: "product_hero" }),
+    ],
+    { gateMetrics: provenFor([BROKEN("pre_render")]) },
+  );
   flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_A1, artifacts: {} });
   flow.succeed({ stage: "check_take", subjectId: TAKE_A1, shotId: SHOT_A, takeId: TAKE_A1, gate: gate("take", true), verdict: verdict(TAKE_A1, true), artifacts: {} });
   flow.succeed({ stage: "edit", subjectId: REQ, gate: gate("edit", true), edlId: EDL_1, artifacts: {} });
@@ -489,7 +519,7 @@ test("a gate that names a component shot does not queue a produce job that could
 });
 
 test("a failing pre-render gate with no named shot re-runs the edit twice, then escalates", () => {
-  const flow = flowToDelivery(0);
+  const flow = flowToDelivery(0, provenFor([BROKEN("pre_render")]));
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     flow.succeed({ stage: "compose", subjectId: EDL_1, edlId: EDL_1, artifacts: {} });
     flow.succeed({ stage: "pre_render_gate", subjectId: EDL_1, edlId: EDL_1, gate: gate("pre_render", false), artifacts: {} });
@@ -503,7 +533,7 @@ test("a failing pre-render gate with no named shot re-runs the edit twice, then 
 });
 
 test("a render integrity failure re-renders up to the limit, then escalates", () => {
-  const flow = flowToDelivery(0);
+  const flow = flowToDelivery(0, provenFor([BROKEN("render_integrity")]));
   flow.succeed({ stage: "compose", subjectId: EDL_1, edlId: EDL_1, artifacts: {} });
   flow.succeed({ stage: "pre_render_gate", subjectId: EDL_1, edlId: EDL_1, gate: gate("pre_render", true), artifacts: {} });
   flow.succeed({ stage: "render", subjectId: EDL_1, edlId: EDL_1, gate: gate("render_integrity", false), artifacts: {} });
@@ -702,4 +732,73 @@ test("the review item of an escalated shot carries the review-inbox payload, bui
   assert.deepEqual(payload.takes[0]?.failing, ["slop.hands"]);
   assert.ok(payload.takes.every((take) => take.checks.length > 0));
   assert.ok(payload.actions.includes("choose_take"));
+});
+
+// --- E4: gate routing by the gold sets (Bible 5.3, 12.4). A failure with no proven check goes to review, never to a redo. ----
+
+test("an unproven pre-render failure that names a shot escalates for review: no produce redo, no render", () => {
+  const flow = flowToDelivery(0);
+  flow.succeed({ stage: "compose", subjectId: EDL_1, edlId: EDL_1, artifacts: {} });
+  flow.succeed({ stage: "pre_render_gate", subjectId: EDL_1, edlId: EDL_1, gate: gate("pre_render", false, [SHOT_A]), artifacts: { [`gate:${EDL_1}`]: fixtureId("art_", 91) } });
+  assert.equal(flow.jobsFor("produce_shot").length, 0, "an unproven failure is not redone");
+  assert.equal(flow.jobsFor("render").length, 0, "nothing is rendered");
+  assert.equal(flow.current.status, "paused");
+  assert.equal(flow.current.pause?.kind, "escalation");
+  const review = flow.effects.find((effect) => effect.kind === "review_item" && effect.subjectId === EDL_1);
+  assert.ok(review && review.kind === "review_item", "a review item names the EDL");
+  assert.equal((review.detail.gateReview as { schema?: string } | undefined)?.schema, "meridian.gate_review/v1");
+});
+
+test("an unproven post-render failure (a broken overlay) never reaches deliver", () => {
+  const flow = flowToDelivery(0, provenFor([BROKEN("pre_render")]));
+  flow.succeed({ stage: "compose", subjectId: EDL_1, edlId: EDL_1, artifacts: {} });
+  flow.succeed({ stage: "pre_render_gate", subjectId: EDL_1, edlId: EDL_1, gate: gate("pre_render", true), artifacts: {} });
+  flow.succeed({ stage: "render", subjectId: EDL_1, edlId: EDL_1, gate: gate("render_integrity", true), artifacts: { [`render:${EDL_1}`]: fixtureId("art_", 113) } });
+  flow.succeed({ stage: "post_render_review", subjectId: EDL_1, edlId: EDL_1, gate: gate("post_render", false), artifacts: { [`review:${fixtureId("vid_", 123)}`]: fixtureId("art_", 124) } });
+  assert.equal(flow.jobsFor("deliver").length, 0, "the video with a failed overlay is not delivered");
+  assert.equal(flow.current.status, "paused");
+  assert.equal(flow.current.pause?.stage, "post_render_review");
+  assert.equal(flow.current.branches[EDL_1]?.status, "escalated");
+});
+
+test("a proven post-render failure is redone at the compose stage, as the gold set allows", () => {
+  const flow = flowToDelivery(0, provenFor([BROKEN("post_render")]));
+  flow.succeed({ stage: "compose", subjectId: EDL_1, edlId: EDL_1, artifacts: {} });
+  flow.succeed({ stage: "pre_render_gate", subjectId: EDL_1, edlId: EDL_1, gate: gate("pre_render", true), artifacts: {} });
+  flow.succeed({ stage: "render", subjectId: EDL_1, edlId: EDL_1, gate: gate("render_integrity", true), artifacts: { [`render:${EDL_1}`]: fixtureId("art_", 113) } });
+  flow.succeed({ stage: "post_render_review", subjectId: EDL_1, edlId: EDL_1, gate: gate("post_render", false), artifacts: {} });
+  assert.deepEqual(flow.jobs.map((job) => job.stage), ["compose"], "the proven failure is redone");
+  assert.equal(flow.current.status, "running");
+});
+
+test("an unproven render integrity failure escalates; it is not re-rendered", () => {
+  const flow = flowToDelivery(0);
+  flow.succeed({ stage: "compose", subjectId: EDL_1, edlId: EDL_1, artifacts: {} });
+  flow.succeed({ stage: "pre_render_gate", subjectId: EDL_1, edlId: EDL_1, gate: gate("pre_render", true), artifacts: {} });
+  flow.succeed({ stage: "render", subjectId: EDL_1, edlId: EDL_1, gate: gate("render_integrity", false), artifacts: { [`integrity:${EDL_1}`]: fixtureId("art_", 114) } });
+  assert.equal(flow.jobsFor("render").length, 0);
+  assert.equal(flow.current.pause?.stage, "render");
+  assert.equal(flow.current.pause?.kind, "escalation");
+});
+
+test("the gold metrics a request starts with are kept in its state, and missing metrics read as unproven", () => {
+  const withMetrics = flowToDelivery(0, provenFor([BROKEN("pre_render")]));
+  assert.deepEqual(Object.keys(withMetrics.current.gateMetrics ?? {}), [BROKEN("pre_render")]);
+  const without = flowToDelivery(0);
+  assert.deepEqual(without.current.gateMetrics, {});
+});
+
+test("a render fallback decision is passed to the effects, so it is stored with the request", () => {
+  const flow = flowToDelivery(0, provenFor([BROKEN("pre_render")]));
+  flow.succeed({ stage: "compose", subjectId: EDL_1, edlId: EDL_1, artifacts: {} });
+  flow.succeed({ stage: "pre_render_gate", subjectId: EDL_1, edlId: EDL_1, gate: gate("pre_render", true), artifacts: {} });
+  const decision = {
+    at: `edl:${EDL_1}`,
+    chose: "shotstack",
+    alternatives: [{ option: "hyperframes", score: 0 }],
+    reason: "HyperFrames failed twice",
+    by: "scorer" as const,
+  };
+  flow.succeed({ stage: "render", subjectId: EDL_1, edlId: EDL_1, gate: gate("render_integrity", true), decisions: [decision], artifacts: { [`render:${EDL_1}`]: fixtureId("art_", 113) } });
+  assert.ok(flow.effects.some((effect) => effect.kind === "decision" && effect.decision.chose === "shotstack"));
 });

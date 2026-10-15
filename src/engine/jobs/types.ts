@@ -7,6 +7,7 @@ import { EngineError, idSchema } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { ENGINE_STAGES, type EngineStage } from "./registry.ts";
 import type { RequestPriority } from "./settings.ts";
+import type { GoldMetrics } from "../review/gold.ts";
 
 /** Where a shot's source comes from (ShotSpec.source.kind). Generation and stock need a produce job; the others do not. */
 export type ShotSourceKind = "generate" | "stock" | "component" | "asset";
@@ -50,7 +51,8 @@ export type StageOutput =
   | (StageOutputBase & { stage: "edit"; gate: GateResult; edlId: string })
   | (StageOutputBase & { stage: "compose"; edlId: string })
   | (StageOutputBase & { stage: "pre_render_gate"; edlId: string; gate: GateResult })
-  | (StageOutputBase & { stage: "render"; edlId: string; gate: GateResult })
+  /** decisions is set when the renderer was a fallback (Bible 6.11, L7): the manifest records why the video was rendered that way. */
+  | (StageOutputBase & { stage: "render"; edlId: string; gate: GateResult; decisions?: Decision[] })
   | (StageOutputBase & { stage: "post_render_review"; edlId: string; gate: GateResult })
   | (StageOutputBase & { stage: "variants"; variants: { edlId: string }[] })
   | (StageOutputBase & { stage: "deliver"; manifestId: string });
@@ -109,6 +111,8 @@ export type EngineEvent =
       cachedDnaArtifactId?: string;
       variantCount: number;
       requestArtifactId: string;
+      /** The gold metrics the request's gates are judged by (Bible 12.4). Absent: no check is proven, so every failure is reviewed. */
+      gateMetrics?: Record<string, GoldMetrics>;
     }
   | { type: "succeeded"; output: StageOutput }
   /** epoch is the plan epoch of a produce job (from its payload), so a dead job of an older plan does not pause the request. */

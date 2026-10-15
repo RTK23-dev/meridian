@@ -7,7 +7,8 @@
 
 import { EngineError, type Decision, type GateId, type GateResult, type ModelClass, type TakeVerdict } from "../contracts/index.ts";
 import { thresholds } from "../config/thresholds.ts";
-import { takeReviewItem } from "../review/inbox.ts";
+import { decideGate, type GateVerdict, type GoldMetrics } from "../review/gold.ts";
+import { gateReviewItem, takeReviewItem } from "../review/inbox.ts";
 import { STAGE_SPECS, engineJobKey, priorityNumber, type EngineStage } from "./registry.ts";
 import { jobSettings, type RequestPriority } from "./settings.ts";
 import type { EngineEvent, EnginePayload, ProduceHold, QueuedJob, ShotSourceKind, ShotSummary, StageOutput } from "./types.ts";
@@ -99,6 +100,12 @@ export type OrchestratorState = {
   /** Latest artifact id per slot: "request", "validated", "dna", "voice", "plan", "take:<id>", "verdict:<id>", "edl:<id>", ... */
   artifacts: Record<string, string>;
   manifestId: string | null;
+  /**
+   * The gold metrics this request's gates are judged by, by check key ("gate:rule"), as they were when the request started (Bible
+   * 12.4). A check whose metrics do not meet the target cannot block: its failure goes to review. Absent in states written before
+   * E4, which reads as no proven check.
+   */
+  gateMetrics?: Record<string, GoldMetrics>;
 };
 
 export type EngineEffect =
@@ -214,6 +221,7 @@ function initialState(event: Extract<EngineEvent, { type: "start" }>): Orchestra
       ...(event.cachedDnaArtifactId ? { dna: event.cachedDnaArtifactId } : {}),
     },
     manifestId: null,
+    gateMetrics: { ...(event.gateMetrics ?? {}) },
   };
 }
 
@@ -293,6 +301,7 @@ function applyOutput(state: OrchestratorState, output: StageOutput, effects: Eng
     case "render":
       checkGate(output.stage, output.gate);
       effects.push({ kind: "gate", gate: output.gate });
+      for (const decision of output.decisions ?? []) effects.push({ kind: "decision", decision });
       return applyRender(state, output, effects);
     case "post_render_review":
       checkGate(output.stage, output.gate);
@@ -694,6 +703,39 @@ function applyCompose(state: OrchestratorState, output: Extract<StageOutput, { s
   branch.stage = "pre_render_gate";
 }
 
+/** The gold metrics of this request, by check key (Bible 12.4). Absent metrics are unproven, so a failure of them is reviewed. */
+function metricsOf(state: OrchestratorState): Record<string, GoldMetrics | undefined> {
+  return state.gateMetrics ?? {};
+}
+
+/** How a failed gate routes (Bible 5.3, 12.4): block when a failing check is proven, review when none is. Pure. */
+function verdictOf(state: OrchestratorState, gate: GateResult): GateVerdict {
+  return decideGate(gate, metricsOf(state)).verdict;
+}
+
+/** The first artifact of a slot family ("integrity:", "review:"), or null. Stage outputs name their artifacts by slot. */
+function artifactWithPrefix(artifacts: Record<string, string>, prefix: string): string | null {
+  return Object.entries(artifacts).find(([slot]) => slot.startsWith(prefix))?.[1] ?? null;
+}
+
+/**
+ * A gate failure that no proven check explains goes to human review, not to a redo (Bible 5.3, 12.4). The branch escalates with a
+ * gate review item (meridian.gate_review/v1) for pre_render and post_render; render integrity has no such item and carries its rules.
+ */
+function reviewBranch(state: OrchestratorState, branch: BranchState, gate: GateResult, resultArtifactId: string | null, effects: EngineEffect[]): void {
+  const reason = `${gate.gate} failed without a proven gold set: ${failingRules(gate).join(", ") || "no failing check"}`;
+  const gateReview =
+    gate.gate === "pre_render" || gate.gate === "post_render"
+      ? gateReviewItem({
+          requestId: state.requestId,
+          gate: { gate: gate.gate, subjectId: gate.subjectId, checks: gate.checks, failingShotIds: gate.failingShotIds },
+          resultArtifactId,
+          failures: [],
+        })
+      : null;
+  escalateBranch(state, branch, reason, effects, { gate: gate.gate, rules: failingRules(gate), ...(gateReview ? { gateReview } : {}) });
+}
+
 function applyPreRender(state: OrchestratorState, output: Extract<StageOutput, { stage: "pre_render_gate" }>, effects: EngineEffect[]): void {
   const branch = expectBranch(state, output.edlId, "pre_render_gate", "pre_render_gate");
   mergeArtifacts(state, output.artifacts);
@@ -701,6 +743,10 @@ function applyPreRender(state: OrchestratorState, output: Extract<StageOutput, {
   if (output.gate.pass) {
     branch.stage = "render";
     branch.hints = [];
+    return;
+  }
+  if (verdictOf(state, output.gate) === "review") {
+    reviewBranch(state, branch, output.gate, artifactWithPrefix(output.artifacts, "gate:"), effects);
     return;
   }
   const shots = failingShotIds(state, output.gate);
@@ -720,6 +766,10 @@ function applyRender(state: OrchestratorState, output: Extract<StageOutput, { st
     branch.hints = [];
     return;
   }
+  if (verdictOf(state, output.gate) === "review") {
+    reviewBranch(state, branch, output.gate, artifactWithPrefix(output.artifacts, "integrity:"), effects);
+    return;
+  }
   retryBranchStage(state, branch, "render", output.gate, effects, `render integrity failed after ${orchestratorLimits.stageRedos} redos`);
 }
 
@@ -731,6 +781,10 @@ function applyPostRender(state: OrchestratorState, output: Extract<StageOutput, 
     branch.stage = "done";
     branch.status = "passed";
     branch.hints = [];
+    return;
+  }
+  if (verdictOf(state, output.gate) === "review") {
+    reviewBranch(state, branch, output.gate, artifactWithPrefix(output.artifacts, "review:"), effects);
     return;
   }
   const shots = failingShotIds(state, output.gate);
@@ -796,7 +850,13 @@ function supersedeBranch(branch: BranchState): void {
   branch.queued = false;
 }
 
-function escalateBranch(state: OrchestratorState, branch: BranchState, reason: string, effects: EngineEffect[]): void {
+function escalateBranch(
+  state: OrchestratorState,
+  branch: BranchState,
+  reason: string,
+  effects: EngineEffect[],
+  extra: Record<string, unknown> = {},
+): void {
   branch.status = "escalated";
   branch.queued = false;
   if (branch.variantOf === null) {
@@ -807,7 +867,7 @@ function escalateBranch(state: OrchestratorState, branch: BranchState, reason: s
     reviewKind: "escalation",
     reason,
     subjectId: branch.edlId,
-    detail: { edlId: branch.edlId, variantOf: branch.variantOf, stage: branch.stage },
+    detail: { edlId: branch.edlId, variantOf: branch.variantOf, stage: branch.stage, ...extra },
   });
 }
 
@@ -946,17 +1006,26 @@ function variantsSettled(state: OrchestratorState): boolean {
   return Object.values(state.branches).every((branch) => branch.variantOf === null || branch.status !== "running");
 }
 
-function branchSlots(branch: BranchState): string[] {
+/** The accepted take of every shot, as slots. Pre-render and the edit read them (Bible 6.10). */
+function acceptedTakeSlots(state: OrchestratorState): string[] {
+  return Object.values(state.shots).flatMap((shot) => (shot.acceptedTakeId ? [`take:${shot.acceptedTakeId}`] : []));
+}
+
+/**
+ * The artifact slots a branch stage reads (Bible 6.9 to 6.12). The render stage reads the validated request for the style kit; the
+ * pre-render gate reads every input its checks need, and the post-render review reads the render's integrity result.
+ */
+function branchSlots(state: OrchestratorState, branch: BranchState): string[] {
   const edl = `edl:${branch.edlId}`;
   switch (branch.stage) {
     case "compose":
-      return [edl];
+      return [edl, "validated"];
     case "pre_render_gate":
-      return [`composition:${branch.edlId}`, edl];
+      return [`composition:${branch.edlId}`, edl, "plan", "validated", "voice", "dna", ...acceptedTakeSlots(state)];
     case "render":
-      return [`composition:${branch.edlId}`];
+      return [`composition:${branch.edlId}`, edl, "validated"];
     case "post_render_review":
-      return [`render:${branch.edlId}`, edl];
+      return [`render:${branch.edlId}`, `integrity:${branch.edlId}`, edl];
     case "done":
       return [];
   }
@@ -1028,7 +1097,8 @@ function schedule(state: OrchestratorState): QueuedJob[] {
     estimate_reserve: ["plan", "request"],
     // The validated request names the style kit and carries the emphasis marks the editor reads (E3, edit/STATUS.md item 1).
     edit: ["plan", "dna", "voice", "validated", ...Object.values(state.shots).flatMap((shot) => (shot.acceptedTakeId ? [`take:${shot.acceptedTakeId}`] : []))],
-    variants: state.masterEdlId === null ? [] : [`edl:${state.masterEdlId}`],
+    // The variants stage expands the request's matrix against its plan and its master (Bible 6.13).
+    variants: state.masterEdlId === null ? [] : [`edl:${state.masterEdlId}`, "request", "plan"],
     deliver: Object.keys(state.artifacts),
   };
   for (const node of SINGLE_NODES) {
@@ -1093,7 +1163,7 @@ function schedule(state: OrchestratorState): QueuedJob[] {
     branch.queued = true;
     const hints = branch.hints;
     branch.hints = [];
-    add(branch.stage, branch.edlId, { edlId: branch.edlId, variantOf: branch.variantOf }, branchSlots(branch), hints);
+    add(branch.stage, branch.edlId, { edlId: branch.edlId, variantOf: branch.variantOf }, branchSlots(state, branch), hints);
   }
 
   return jobs;

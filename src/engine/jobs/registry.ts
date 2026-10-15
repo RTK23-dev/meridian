@@ -75,11 +75,31 @@ const rows: Record<EngineStage, Row> = {
   produce_shot: { stage: "produce_shot", group: 4, timeoutClass: "generation", paid: true, reads: ["scene_plan"], writes: ["take"], gate: null },
   check_take: { stage: "check_take", group: 4, timeoutClass: "claude", paid: true, reads: ["take", "scene_plan"], writes: ["take_verdict"], gate: "take" },
   edit: { stage: "edit", group: 5, timeoutClass: "claude", paid: false, reads: ["scene_plan", "take", "voice_track", "video_dna", "validated_request"], writes: ["edl"], gate: "edit" },
-  compose: { stage: "compose", group: 6, timeoutClass: "claude", paid: false, reads: ["edl"], writes: ["composition"], gate: null },
-  pre_render_gate: { stage: "pre_render_gate", group: 6, timeoutClass: "claude", paid: false, reads: ["composition", "edl"], writes: ["gate_result"], gate: "pre_render" },
-  render: { stage: "render", group: 6, timeoutClass: "render", paid: true, reads: ["composition"], writes: ["rendered_video"], gate: "render_integrity" },
-  post_render_review: { stage: "post_render_review", group: 7, timeoutClass: "claude", paid: true, reads: ["rendered_video", "edl"], writes: ["review_result"], gate: "post_render" },
-  variants: { stage: "variants", group: 8, timeoutClass: "claude", paid: true, reads: ["edl"], writes: ["edl"], gate: null },
+  compose: { stage: "compose", group: 6, timeoutClass: "claude", paid: false, reads: ["edl", "validated_request"], writes: ["composition"], gate: null },
+  // The pre-render gate reads every input its checks need: the plan and the DNA (the grammar), the voice, the validated request
+  // (the kit references and the script), and the accepted takes (Bible 6.10, review/STATUS.md decision 6).
+  pre_render_gate: {
+    stage: "pre_render_gate",
+    group: 6,
+    timeoutClass: "claude",
+    paid: false,
+    reads: ["composition", "edl", "scene_plan", "validated_request", "voice_track", "video_dna", "take"],
+    writes: ["gate_result"],
+    gate: "pre_render",
+  },
+  // The render stores its integrity gate result (a gate_result) next to the rendered video (Bible 6.11).
+  render: { stage: "render", group: 6, timeoutClass: "render", paid: true, reads: ["composition", "edl", "validated_request"], writes: ["rendered_video", "gate_result"], gate: "render_integrity" },
+  post_render_review: {
+    stage: "post_render_review",
+    group: 7,
+    timeoutClass: "claude",
+    paid: true,
+    reads: ["rendered_video", "edl", "gate_result"],
+    writes: ["review_result"],
+    gate: "post_render",
+  },
+  // The variants stage expands the request's matrix against the request and its plan (Bible 6.13).
+  variants: { stage: "variants", group: 8, timeoutClass: "claude", paid: true, reads: ["production_request", "scene_plan", "edl"], writes: ["edl"], gate: null },
   deliver: { stage: "deliver", group: 8, timeoutClass: "claude", paid: false, reads: [], writes: ["manifest"], gate: null },
 };
 
