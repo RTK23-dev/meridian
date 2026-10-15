@@ -56,6 +56,11 @@ export type RunSettings = {
    * intake. Owner decision, 2026-10-14.
    */
   costPerMasterUsd: number | null;
+  /**
+   * The theme page this run targets (pages/model.ts), or null for none. The page's kits fill the engine request, and its trial default
+   * applies to the run's Instagram posts. The page is checked against the brand when the run starts.
+   */
+  pageId: string | null;
 };
 
 export const DEFAULT_RUN_SETTINGS: RunSettings = {
@@ -68,6 +73,7 @@ export const DEFAULT_RUN_SETTINGS: RunSettings = {
   caps: { dailyCents: 0, totalCents: 0, maxVariants: 8 },
   targetingCountries: [],
   costPerMasterUsd: null,
+  pageId: null,
 };
 
 /**
@@ -131,6 +137,7 @@ const MAX_CENTS = 100_000_000;
 const MAX_VARIANTS = 40;
 const MAX_TARGETING_COUNTRIES = 25;
 const PLATFORM_ID = /^[a-z][a-z_]{1,19}$/;
+const PAGE_REFERENCE = /^[A-Za-z0-9_-]{1,64}$/;
 const PROVIDER_ID = /^[a-z0-9][a-z0-9_:.-]{1,59}$/;
 
 /**
@@ -253,6 +260,13 @@ export function parseRunSettings(input: unknown, base: RunSettings = DEFAULT_RUN
     const problem = costPerMasterShapeProblem(input.costPerMasterUsd);
     if (problem) return { ok: false, error: problem };
     next.costPerMasterUsd = input.costPerMasterUsd as number | null;
+  }
+  if (input.pageId !== undefined) {
+    // null means no page. A page id is checked against the brand when the run starts, because this function reads no database.
+    if (input.pageId !== null && (typeof input.pageId !== "string" || !PAGE_REFERENCE.test(input.pageId))) {
+      return { ok: false, error: "The page must be one of this brand's pages, or none." };
+    }
+    next.pageId = input.pageId as string | null;
   }
   return { ok: true, value: next };
 }

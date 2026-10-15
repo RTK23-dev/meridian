@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { liveTransport, type Transport, type TransportRequest } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
-import { GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
+import { GRAPH_BASE, TRIAL_GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
+import type { TrialReading, TrialRequest } from "./trial.ts";
 import type {
   ConnectionCheck,
   DistributionChannel,
@@ -98,6 +99,7 @@ export class InstagramReelsChannel implements DistributionChannel {
       accessToken: connection.accessToken,
       videoUrl,
       caption: request.caption,
+      trial: request.trial ?? null,
     });
   }
 
@@ -137,23 +139,51 @@ async function send(transport: Transport, request: TransportRequest, uploadStart
   return { ok: true, json };
 }
 
+/**
+ * The container request. An ordinary Reel is form-encoded on GRAPH_BASE, as before. A trial Reel sends the JSON body the trial example
+ * documents, with trial_params as a nested object, on TRIAL_GRAPH_BASE.
+ */
+function containerRequest(
+  options: { transport: Transport },
+  account: string,
+  headers: Record<string, string>,
+  input: { videoUrl: string; caption: string; trial: TrialRequest | null },
+): TransportRequest {
+  const caption = input.caption.slice(0, 2200);
+  if (input.trial) {
+    return {
+      method: "POST",
+      url: `${TRIAL_GRAPH_BASE}/${account}/media`,
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        media_type: "REELS",
+        video_url: input.videoUrl,
+        caption,
+        trial_params: { graduation_strategy: input.trial.graduationStrategy },
+      }),
+    };
+  }
+  return {
+    method: "POST",
+    url: `${GRAPH_BASE}/${account}/media`,
+    headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ media_type: "REELS", video_url: input.videoUrl, caption }).toString(),
+  };
+}
+
 /** The container flow. Each step is one request, and a failed step stops the flow with the reason. */
 export async function publishInstagramReel(
   options: Required<Omit<InstagramOptions, "transport">> & { transport: Transport },
-  input: { igUserId: string; accessToken: string; videoUrl: string; caption: string },
+  input: { igUserId: string; accessToken: string; videoUrl: string; caption: string; trial?: TrialRequest | null },
   now: Date = new Date(),
 ): Promise<OrganicPublishReceipt> {
   const headers = { Authorization: `Bearer ${input.accessToken}` };
   const account = encodeURIComponent(input.igUserId);
+  const trial = input.trial ?? null;
 
   const created = await send(
     options.transport,
-    {
-      method: "POST",
-      url: `${GRAPH_BASE}/${account}/media`,
-      headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ media_type: "REELS", video_url: input.videoUrl, caption: input.caption.slice(0, 2200) }).toString(),
-    },
+    containerRequest(options, account, headers, { videoUrl: input.videoUrl, caption: input.caption, trial }),
     false,
   );
   if (!created.ok) return created.receipt;
@@ -195,5 +225,41 @@ export async function publishInstagramReel(
   if (!published.ok) return published.receipt;
   const mediaId = responseId(published.json);
   if (!mediaId) return failure("instagram", "UNCONFIRMED", unconfirmed(LABEL, "the publish response had no media id"));
-  return { externalId: mediaId, platform: "instagram", status: "published", publishedAt: now.toISOString() };
+  // The trial step is a receipt of its own: the media id Meta returned, with the trial it was posted under.
+  return {
+    externalId: mediaId,
+    platform: "instagram",
+    status: "published",
+    publishedAt: now.toISOString(),
+    ...(trial ? { trial } : {}),
+  };
+}
+
+/**
+ * Reads the documented fields of one Reel: whether it still exists, and what Meta reports for feed sharing. The fields are on the IG Media
+ * reference (v25.0). No documented field reports trial state or graduation, so none is returned here. A failed read is returned with the
+ * reason, not as a state.
+ */
+export async function readInstagramTrial(transport: Transport, input: { mediaId: string; accessToken: string }): Promise<TrialReading> {
+  const sent = await send(
+    transport,
+    {
+      method: "GET",
+      url: `${TRIAL_GRAPH_BASE}/${encodeURIComponent(input.mediaId)}?fields=id,media_type,media_product_type,is_shared_to_feed,permalink`,
+      headers: { Authorization: `Bearer ${input.accessToken}` },
+    },
+    false,
+  );
+  if (!sent.ok) return { ok: false, error: sent.receipt.error ?? unconfirmed(LABEL, "the media read failed") };
+  if (responseId(sent.json) !== input.mediaId) {
+    return { ok: false, error: unconfirmed(LABEL, "the media read did not return the same media id") };
+  }
+  const record = (sent.json ?? {}) as Record<string, unknown>;
+  return {
+    ok: true,
+    mediaId: input.mediaId,
+    mediaProductType: typeof record.media_product_type === "string" ? record.media_product_type : null,
+    isSharedToFeed: typeof record.is_shared_to_feed === "boolean" ? record.is_shared_to_feed : null,
+    permalink: typeof record.permalink === "string" ? record.permalink : null,
+  };
 }

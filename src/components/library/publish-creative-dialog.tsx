@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PublishDialog, type PublishTarget } from "@/components/studio/publish-dialog";
+import { PublishDialog, type PublishTarget, type PublishTrial } from "@/components/studio/publish-dialog";
 import type { PublishReceipt } from "@/components/studio/types";
 import { publishMultiChannelVariant } from "@/lib/meridian/distribution/actions";
 import { useDistributionChannelsQuery, useScopedMutation } from "@/lib/query/hooks";
@@ -15,7 +15,8 @@ export function PublishCreativeDialog({ brandId, target, onClose }: { brandId: s
   const [results, setResults] = useState<PublishReceipt[] | null>(null);
   const publish = useScopedMutation({
     mutationKey: ["mutation", "library.publish"],
-    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string }) => publishMultiChannelVariant({ data: { brandId, ...vars } }),
+    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string; trial: PublishTrial }) =>
+      publishMultiChannelVariant({ data: { brandId, ...vars } }),
     invalidate: () => [qk.library(brandId), qk.studio(brandId), qk.organic(brandId)],
     success: "Publish finished. The receipts are in the dialog.",
     onSuccess: (receipts) => setResults(receipts as PublishReceipt[]),
@@ -28,8 +29,8 @@ export function PublishCreativeDialog({ brandId, target, onClose }: { brandId: s
       pending={publish.isPending}
       results={results}
       onClose={onClose}
-      onConfirm={(channelIds, caption) => {
-        void publish.mutateAsync({ creativeId: target.creativeId, channelIds, caption }).catch(() => undefined);
+      onConfirm={(channelIds, caption, trial) => {
+        void publish.mutateAsync({ creativeId: target.creativeId, channelIds, caption, trial }).catch(() => undefined);
       }}
     />
   );

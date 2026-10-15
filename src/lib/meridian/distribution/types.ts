@@ -1,4 +1,6 @@
 /** Standardized Multi-Channel Distribution Types (Organic Social + Paid Advertising). */
+import type { TrialRequest } from "./trial.ts";
+
 
 export type DistributionTargetType = "paid_ad" | "organic_post";
 
@@ -49,6 +51,12 @@ export type OrganicPublishRequest = {
   mediaUrl?: string;
   /** The hostnames TikTok has verified for this app, from TIKTOK_VERIFIED_MEDIA_DOMAINS. A TikTok channel refuses a URL outside them. */
   verifiedMediaDomains?: string[];
+
+  /**
+   * Instagram only: post this Reel as a trial first (trial.ts). Null or absent is an ordinary publish. The service sets it from the page or the
+   * person's choice, and a channel that does not take trials ignores it.
+   */
+  trial?: TrialRequest | null;
 };
 
 /**
@@ -67,6 +75,8 @@ export type OrganicPublishReceipt = {
   publishedAt?: string;
   error?: string;
   code?: ReceiptCode;
+  /** Set on the receipt of a trial step, so the scheduled check can record the feed step for the same media. */
+  trial?: TrialRequest;
 };
 
 export type ConnectionCheck = { connected: boolean; accountName?: string; reason?: string; code?: ReceiptCode };

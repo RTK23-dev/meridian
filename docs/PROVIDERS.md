@@ -71,6 +71,42 @@ Regular posts go through a connected account, saved per brand on Connected accou
   posts are sent as private (`SELF_ONLY`) until TikTok approves the app for public posting. The publish is reported as done only when
   TikTok reports `PUBLISH_COMPLETE`. Scheduling is refused. This is not run against TikTok's live service in this release.
 
+## Instagram trial reels
+
+Verified 2026-10-15 against Meta's developer documentation. Nothing here was run against a live account.
+
+- **Trial parameter.** The IG User Media reference lists `trial_params` for `media_type=REELS`. Its `graduation_strategy` is `MANUAL` (the
+  reel is graduated by hand in the native app) or `SS_PERFORMANCE` (the reel graduates automatically if it performs well).
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
+- **Request shape.** The Trial Reels section of the content publishing guide says trial reels are "only shared to non-followers". Its
+  example sends a JSON body with `trial_params` as a nested object. It posts to graph.instagram.com/v25.0, while this build uses
+  graph.facebook.com. https://developers.facebook.com/docs/instagram-platform/content-publishing
+- **Container status.** The IG Container reference lists `status_code` as `EXPIRED`, `ERROR`, `FINISHED`, `IN_PROGRESS` or `PUBLISHED`.
+  It has no trial field. https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-container
+- **Read-back.** The IG Media reference has no field that reports trial state or graduation. `is_shared_to_feed` (Reels only) says a
+  reel "can appear in both the Feed and Reels tabs" when true, and Meta warns that neither value determines whether it appears there.
+  It is stored as observed and is never read as graduation. https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-media
+- **Graduation by API.** Not documented. The docs say a MANUAL trial is graduated "in the native app". Meridian does not graduate a
+  reel, and it does not record a feed step unless an observation says so. Today no observation exists.
+- **Not verified.** Eligibility (a third-party guide cites about 1,000 followers; Meta publishes no threshold). Whether a trial's media
+  id stays the same after graduation. Whether the trial parameter is accepted on v21.0. Trial calls use v25.0, and the rest of the
+  Instagram flow stays on v21.0 (`TRIAL_GRAPH_BASE` in `src/lib/meridian/distribution/graph.ts`). A third-party summary says Meta does not
+  expose graduation through the API. That is not Meta's statement, and it was not checked against Meta.
+
+How the build uses this (`src/lib/meridian/distribution/trial.ts`, `instagram.ts`, `trial-check.ts`):
+
+1. The trial step publishes a Reel with `trial_params`, and its receipt is an `organic_posts` row with the media id that `media_publish`
+   returned. A refused or unconfirmed step is recorded as such, and no trial row is written.
+2. A row in `organic_trial_reels` links the receipt to the media id. A `distribution.trial_check` job runs one day later, and then daily,
+   for at most 7 checks. Each check reads `id`, `media_type`, `media_product_type`, `is_shared_to_feed` and `permalink` from the media.
+3. The feed step is `graduated` only when an observed graduation is recorded. The live reader observes none, so each check leaves the
+   feed step as `manual_action_required`, with the reason, until a person graduates the reel in the Instagram app. A failed read is
+   recorded as the last error, and nothing is read as a state.
+
+Owner live run (not done by an agent): on an Instagram account that is connected for a brand, publish one trial reel with
+`MANUAL` and record the container id, the media id, Meta's response, and what the Instagram app shows after the first check. Then
+graduate it by hand and record whether any later check observes it. Record both receipts in the run's Library.
+
 ## Engine choice
 
 Decisions use one engine per workspace (DECISIONS.md). `DECISION_ENGINE` sets the deployment default. A workspace's own choice,

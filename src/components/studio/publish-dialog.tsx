@@ -2,7 +2,7 @@ import { useId } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, DisabledReason, Dialog, DialogContent, DialogDescription, DialogTitle, Field, Textarea } from "@/components/ui";
+import { Button, DisabledReason, Dialog, DialogContent, DialogDescription, DialogTitle, Field, SelectInput, Textarea } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
 import { PlainErrorMessage } from "@/components/plain-error";
@@ -36,11 +36,27 @@ export type PublishChannel = {
 
 const CAPTION_MAX = 1000;
 
-/** distribution publish: at least one destination, and the caption is trimmed and cut at 1000 characters. */
-const publishFormSchema = z.object({
-  channelIds: z.array(z.string()).min(1, "Select at least one destination channel."),
-  caption: z.string().trim().max(CAPTION_MAX, `Use ${CAPTION_MAX} characters or fewer.`),
-});
+/**
+ * The Instagram trial choice for this post: null is an ordinary publish. A trial names its graduation strategy, which Meta documents as
+ * MANUAL or SS_PERFORMANCE (distribution/trial.ts).
+ */
+export type PublishTrial = { graduationStrategy: "MANUAL" | "SS_PERFORMANCE" } | null;
+
+/**
+ * distribution publish: at least one destination, and the caption is trimmed and cut at 1000 characters. A trial first needs its graduation
+ * strategy, and no strategy is chosen for the person.
+ */
+const publishFormSchema = z
+  .object({
+    channelIds: z.array(z.string()).min(1, "Select at least one destination channel."),
+    caption: z.string().trim().max(CAPTION_MAX, `Use ${CAPTION_MAX} characters or fewer.`),
+    trialFirst: z.boolean(),
+    trialGraduation: z.enum(["", "MANUAL", "SS_PERFORMANCE"]),
+  })
+  .refine((values) => !values.trialFirst || !values.channelIds.includes("instagram-reels") || values.trialGraduation !== "", {
+    path: ["trialGraduation"],
+    message: "Choose how the trial reel graduates to the feed.",
+  });
 
 type PublishFormValues = z.output<typeof publishFormSchema>;
 
@@ -50,7 +66,7 @@ type PublishDialogProps = {
   pending: boolean;
   results: readonly PublishReceipt[] | null;
   onClose: () => void;
-  onConfirm: (channelIds: string[], caption: string) => void;
+  onConfirm: (channelIds: string[], caption: string, trial: PublishTrial) => void;
   /** Starts the export package for manual posting. Shown as the way to deliver when no destination is connected. */
   onExportPackage?: () => void;
 };
@@ -61,9 +77,9 @@ type PublishDialogProps = {
  */
 export function PublishDialog({ target, channels, pending, results, onClose, onConfirm, onExportPackage }: PublishDialogProps) {
   const defaults = { channelIds: channels.filter((channel) => channel.connected).map((channel) => channel.id), caption: target?.defaultCaption ?? "" };
-  const form = useForm<{ channelIds: string[]; caption: string }, unknown, PublishFormValues>({
+  const form = useForm<{ channelIds: string[]; caption: string; trialFirst: boolean; trialGraduation: "" | "MANUAL" | "SS_PERFORMANCE" }, unknown, PublishFormValues>({
     resolver: zodResolver(publishFormSchema),
-    defaultValues: defaults,
+    defaultValues: { ...defaults, trialFirst: false, trialGraduation: "" },
     mode: "onChange",
   });
   const { register, formState: { errors, isDirty } } = form;
@@ -95,7 +111,11 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
             noValidate
             className="contents"
             onSubmit={form.handleSubmit((values) => {
-              onConfirm(values.channelIds, values.caption);
+              // A trial applies only while the Instagram Reel destination is selected. Otherwise the choice is not sent.
+              const trial: PublishTrial = values.channelIds.includes("instagram-reels") && values.trialFirst && values.trialGraduation
+                ? { graduationStrategy: values.trialGraduation }
+                : null;
+              onConfirm(values.channelIds, values.caption, trial);
               // The dialog stays open to show the receipts, so the sent choice becomes the baseline. Closing does not ask.
               form.reset(values, { keepValues: true });
             })}
@@ -150,6 +170,29 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
             <div><dt className="text-fg-muted">Format</dt><dd>{target.kind} · {frame.label}{target.durationMs ? ` · ${(target.durationMs / 1000).toFixed(1)} s` : ""}</dd></div>
             <div className="sm:col-span-2"><dt className="text-fg-muted">Destinations</dt><dd>{selectedNames.length > 0 ? selectedNames.join(", ") : "None selected"}</dd></div>
           </dl>
+
+          {selected.includes("instagram-reels") ? (
+            <fieldset className="mt-4 space-y-2 rounded-md border border-border p-3 text-sm">
+              <legend className="text-sm font-semibold">Instagram trial</legend>
+              <label className="flex min-h-11 items-start gap-3">
+                <input type="checkbox" className="mt-1 size-4 shrink-0" {...register("trialFirst")} disabled={pending} />
+                <span>Post the Reel as a trial first. A trial is shared only with people who do not follow the account.</span>
+              </label>
+              {form.watch("trialFirst") ? (
+                <Field
+                  label="How the trial graduates"
+                  hint="The Graph API does not graduate a trial reel, and it documents no field that reports graduation. Until a graduation is observed, Meridian shows the feed step as needing a person to graduate it in the Instagram app."
+                  error={errors.trialGraduation?.message}
+                >
+                  <SelectInput {...register("trialGraduation")} disabled={pending}>
+                    <option value="">Choose a graduation strategy</option>
+                    <option value="MANUAL">MANUAL: a person graduates it in the Instagram app</option>
+                    <option value="SS_PERFORMANCE">SS_PERFORMANCE: Instagram graduates it if it performs well</option>
+                  </SelectInput>
+                </Field>
+              ) : null}
+            </fieldset>
+          ) : null}
 
           <div className="mt-4 space-y-2">
             <Field label="Caption and hashtags" hint="Organic channels send this caption. The test publisher records an id and does not use it." error={errors.caption?.message}>

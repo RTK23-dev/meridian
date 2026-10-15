@@ -23,6 +23,7 @@ import {
   type FactoryLevel,
 } from "./autopilot.ts";
 import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
+import { runPageProblem } from "../pages/store.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
 import { NO_RUN_SPEND, runSpendFor } from "./spend.ts";
 import { factoryRunSourcesFor, RECENT_RUNS_LIMIT } from "./gather.ts";
@@ -386,6 +387,11 @@ export const startFactoryRun = createServerFn({ method: "POST" })
     // A run that makes video needs the user's cost per master, at or above the floor. The run screen checks it too; the server does not trust that.
     const costProblem = runCostProblem(effective);
     if (costProblem) throw new Error(costProblem);
+    // A run that names a page needs that page to be active and in this brand. The settings parser cannot check it without the database.
+    if (effective.pageId) {
+      const pageProblem = await runPageProblem(sql, { organizationId, brandId: data.brandId }, effective.pageId);
+      if (pageProblem) throw new Error(pageProblem);
+    }
     // The owner ceiling and the verified round trip apply to the mode through the level it is held to.
     const level = factoryLevelOfAutomation(effective.automation);
     const ceilingRows = await sql<{ ceiling: number }>`

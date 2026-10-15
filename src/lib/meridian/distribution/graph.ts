@@ -5,6 +5,12 @@ import type { OrganicPublishReceipt, PlatformId, ReceiptCode } from "./types.ts"
 /** The Graph API version the organic publishers call. */
 export const GRAPH_BASE = "https://graph.facebook.com/v21.0";
 
+/**
+ * The Graph API version the trial reel calls use. Meta documents trial_params and the IG Media fields it reads against v25.0, and the
+ * examples use v25.0. The rest of the Instagram flow stays on GRAPH_BASE. The version is not verified live (docs/PROVIDERS.md).
+ */
+export const TRIAL_GRAPH_BASE = "https://graph.facebook.com/v25.0";
+
 /** Graph error codes for rate limits. The request was refused before it was processed. */
 const RATE_LIMIT_CODES = new Set([4, 17, 32, 613, 80001]);
 

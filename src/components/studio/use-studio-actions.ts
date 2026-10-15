@@ -96,7 +96,8 @@ export function useStudioActions(brandId: string) {
 
   const publishMulti = useScopedMutation({
     mutationKey: studioKey("publish-channels"),
-    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string }) => publishMultiChannelVariant({ data: { brandId, ...vars } }),
+    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string; trial: { graduationStrategy: "MANUAL" | "SS_PERFORMANCE" } | null }) =>
+      publishMultiChannelVariant({ data: { brandId, ...vars } }),
     invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.organic(brandId)],
     success: "Publish finished. The receipts are in the dialog.",
     onSuccess: (receipts) => setPublishResults(receipts as PublishReceipt[]),
@@ -126,7 +127,7 @@ export function useStudioActions(brandId: string) {
   const anyActionPending = studioActions.some((action) => action.isPending);
 
   /** The test publisher goes through its own action; any other choice goes through the channel publish, with receipts. */
-  async function confirmPublish(target: { creativeId: string }, channelIds: string[], caption: string) {
+  async function confirmPublish(target: { creativeId: string }, channelIds: string[], caption: string, trial: { graduationStrategy: "MANUAL" | "SS_PERFORMANCE" } | null) {
     if (channelIds.length === 1 && channelIds[0] === "test-publisher") {
       await publishTest.mutateAsync(target.creativeId).then((stored) => {
         const publication = stored.publications.find((item) => item.creativeId === target.creativeId);
@@ -141,7 +142,7 @@ export function useStudioActions(brandId: string) {
       }, () => undefined);
       return;
     }
-    await publishMulti.mutateAsync({ creativeId: target.creativeId, channelIds, caption }).catch(() => undefined);
+    await publishMulti.mutateAsync({ creativeId: target.creativeId, channelIds, caption, trial }).catch(() => undefined);
   }
 
   return {
