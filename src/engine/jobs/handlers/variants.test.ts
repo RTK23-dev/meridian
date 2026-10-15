@@ -4,7 +4,6 @@ import { memoryLedgerStore, type LedgerStore } from "../../budget/store.ts";
 import { EngineError, edlSchema, type EditDecisionList, type ProductionRequest, type VariantMatrix } from "../../contracts/index.ts";
 import {
   budgetReservationFixture,
-  edlFixture,
   FIXTURE_IDS,
   productionRequestFixture,
   scenePlanFixture,
@@ -18,6 +17,8 @@ import type { VariantMusicTrack } from "../../variants/expand.ts";
 import type { EnginePayload, StageContext, StageOutput } from "../types.ts";
 import { validateStageOutput } from "../validate.ts";
 import { createVariantsHandler, type VariantPorts } from "./variants.ts";
+import { captionVariantMaster } from "../test/caption-variant.ts";
+import { checkControl, diffEdl, withCaptionBand } from "../../variants/diff.ts";
 
 const WS = "ws_variants";
 const REQ = FIXTURE_IDS.request;
@@ -39,23 +40,6 @@ before(async () => {
 after(async () => {
   await db.close();
 });
-
-/** The master EDL with its captions split: a caption over the presenter (keeps its band), and one after it. Its band is "upper". */
-function masterWithCaptions(): EditDecisionList {
-  const master = structuredClone(edlFixture);
-  master.tracks = master.tracks.map((layer) =>
-    layer.layer === "captions"
-      ? {
-          layer: "captions",
-          clips: [
-            { clipId: "c_cap_1", startMs: 0, endMs: 3000, component: "captions.karaoke", props: { band: "upper", captions: [] } },
-            { clipId: "c_cap_2", startMs: 3000, endMs: 24000, component: "captions.karaoke", props: { band: "upper", captions: [] } },
-          ],
-        }
-      : layer,
-  );
-  return master;
-}
 
 function requestWith(matrix: VariantMatrix): ProductionRequest {
   return { ...(productionRequestFixture as ProductionRequest), output: { master: true, variants: matrix } };
@@ -146,7 +130,7 @@ test("a caption-only variant is built from the master with no generation: no led
   const h = await harness();
   const requestId = await h.storeRequest(requestWith({ captionStyles: ["lower"], maxVariants: 4, budgetUsd: 1 }));
   const planId = await h.storePlan();
-  const masterId = await h.storeMaster(masterWithCaptions());
+  const masterId = await h.storeMaster(captionVariantMaster());
   const handler = createVariantsHandler(h.ports);
   const result = await handler.run(contextFor([requestId, planId, masterId]));
 
@@ -173,6 +157,17 @@ test("a caption-only variant is built from the master with no generation: no led
   assert.deepEqual((planned[0]?.body as { work: unknown }).work, { produceShotIds: [], voiceBeatIds: [], writerBeatIds: [] });
 });
 
+test("the caption fixture is a real caption change: the band moves the caption after the presenter, keeps the presenter's, and changes only captions", () => {
+  const master = captionVariantMaster();
+  const changed = withCaptionBand(master, "lower");
+  assert.equal(changed.changedClips, 1, "the caption after the presenter moves to the lower band");
+  assert.equal(changed.keptClips, 1, "the caption over the presenter keeps its band (the face rule, Bible 8.2 step 9)");
+  const changes = diffEdl(master, changed.edl);
+  assert.ok(changes.length > 0, "the variant is not a no-op");
+  assert.ok(changes.every((change) => change.surface === "captions"), "only the captions surface changes");
+  assert.equal(checkControl("caption", changes, new Set<string>()).pass, true);
+});
+
 test("twenty variants from one master are planned with no generation for caption and music, and all twenty are built", async () => {
   const tracks = new Map(Array.from({ length: 18 }, (_, index) => [`trk_${index + 1}`, track(index + 1)] as const));
   const h = await harness({ reservedUsd: 5, tracks });
@@ -185,7 +180,7 @@ test("twenty variants from one master are planned with no generation for caption
     }),
   );
   const planId = await h.storePlan();
-  const masterId = await h.storeMaster(masterWithCaptions());
+  const masterId = await h.storeMaster(captionVariantMaster());
   const result = await createVariantsHandler(h.ports).run(contextFor([requestId, planId, masterId]));
 
   assert.equal(result.kind, "done");
@@ -207,7 +202,7 @@ test("a hook variant is deferred, not built: the stage reports the shots it woul
   const h = await harness();
   const requestId = await h.storeRequest(requestWith({ hooks: 1, maxVariants: 2, budgetUsd: 1 }));
   const planId = await h.storePlan();
-  const masterId = await h.storeMaster(masterWithCaptions());
+  const masterId = await h.storeMaster(captionVariantMaster());
   const result = await createVariantsHandler(h.ports).run(contextFor([requestId, planId, masterId]));
   assert.equal(result.kind, "done");
   if (result.kind !== "done") return;
@@ -225,7 +220,7 @@ test("a paused reservation funds no variant: every planned one is skipped over t
   const h = await harness({ paused: true });
   const requestId = await h.storeRequest(requestWith({ captionStyles: ["lower"], maxVariants: 4, budgetUsd: 1 }));
   const planId = await h.storePlan();
-  const masterId = await h.storeMaster(masterWithCaptions());
+  const masterId = await h.storeMaster(captionVariantMaster());
   const result = await createVariantsHandler(h.ports).run(contextFor([requestId, planId, masterId]));
   assert.equal(result.kind, "done");
   if (result.kind !== "done") return;
@@ -238,7 +233,7 @@ test("an unknown music track is skipped with its reason, and the other variants 
   const h = await harness({ tracks: new Map([["trk_known", track(1)]]) });
   const requestId = await h.storeRequest(requestWith({ captionStyles: ["lower"], music: ["trk_known", "trk_unknown"], maxVariants: 4, budgetUsd: 1 }));
   const planId = await h.storePlan();
-  const masterId = await h.storeMaster(masterWithCaptions());
+  const masterId = await h.storeMaster(captionVariantMaster());
   const result = await createVariantsHandler(h.ports).run(contextFor([requestId, planId, masterId]));
   assert.equal(result.kind, "done");
   if (result.kind !== "done") return;
@@ -252,7 +247,7 @@ test("a retried job names the same EDL and writes no second copy or event", asyn
   const h = await harness();
   const requestId = await h.storeRequest(requestWith({ captionStyles: ["lower"], maxVariants: 4, budgetUsd: 1 }));
   const planId = await h.storePlan();
-  const masterId = await h.storeMaster(masterWithCaptions());
+  const masterId = await h.storeMaster(captionVariantMaster());
   const handler = createVariantsHandler(h.ports);
   const first = await handler.run(contextFor([requestId, planId, masterId]));
   const second = await handler.run(contextFor([requestId, planId, masterId]));
@@ -267,7 +262,7 @@ test("refuses a run without its request, its plan, its master, or its reservatio
   const h = await harness();
   const requestId = await h.storeRequest(requestWith({ captionStyles: ["lower"], maxVariants: 4, budgetUsd: 1 }));
   const planId = await h.storePlan();
-  const masterId = await h.storeMaster(masterWithCaptions());
+  const masterId = await h.storeMaster(captionVariantMaster());
   const handler = createVariantsHandler(h.ports);
 
   await assert.rejects(handler.run(contextFor([planId, masterId])), (error: unknown) => error instanceof EngineError && error.kind === "invalid_input");
@@ -282,6 +277,6 @@ test("refuses a request that names no variant matrix, since the orchestrator que
   const plain = { ...(productionRequestFixture as ProductionRequest), output: { master: true as const } };
   const requestId = await h.storeRequest(plain);
   const planId = await h.storePlan();
-  const masterId = await h.storeMaster(masterWithCaptions());
+  const masterId = await h.storeMaster(captionVariantMaster());
   await assert.rejects(createVariantsHandler(h.ports).run(contextFor([requestId, planId, masterId])), (error: unknown) => error instanceof EngineError && error.kind === "invalid_input");
 });

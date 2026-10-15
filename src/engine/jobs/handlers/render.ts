@@ -42,8 +42,11 @@ export type RenderScope = { organizationId: string; requestId: string; reservati
 /** What the composition root gives the render stage. Each renderer's deps carry its own adapter, ledger, integrity check and store. */
 export type RenderPorts = {
   loadStyleKit: (scope: RenderScope) => Promise<StyleKit | undefined>;
-  /** The render line of the reservation, in USD. Undefined means the render price is not known, so nothing is rendered (Bible 14.2). */
-  renderEstimateUsd: (scope: RenderScope) => Promise<number | undefined>;
+  /**
+   * The render line of the reservation for a video of this length, in USD. Undefined means the render price is not known, so nothing
+   * is rendered (Bible 14.2). Priced per minute, so the duration is part of the question.
+   */
+  renderEstimateUsd: (scope: RenderScope, durationMs: number) => Promise<number | undefined>;
   /** The HyperFrames cloud deps for this request. */
   hyperframes: (scope: RenderScope) => RenderDeps;
   /** The Shotstack deps for this request. Absent: Shotstack is not connected, so a component-free EDL that HyperFrames failed twice is reviewed. */
@@ -174,7 +177,7 @@ export function createRenderHandler(ports: RenderPorts): StageHandler {
         return { kind: "done", output };
       };
 
-      const renderPrice = await ports.renderEstimateUsd(scope);
+      const renderPrice = await ports.renderEstimateUsd(scope, edl.durationMs);
       if (renderPrice === undefined) {
         return finish(failedIntegrity(edl.edlId, "render_price_known", "the render price is not in the table"));
       }

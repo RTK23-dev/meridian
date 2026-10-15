@@ -1,5 +1,15 @@
 # STATUS: media clients, integrity and speech-to-text (W4), `src/engine/media/`
 
+## W2 wiring pass (branch `eng-e45-leftovers-2`)
+
+Not run in this pass.
+- The detectors (`MediaDetectors`: black frames, flicker, motion, silence) are wired into `check_take` (black, flicker, motion) and into
+  `post_render_review` (black frames and silence) through `jobs/gate-measures.ts`. A detector's `invalid_input` is missing evidence (null);
+  any other error throws, so the job retries.
+- Production media functions: `jobs/production-ports.ts` `gatewayMediaFunctions(gateway)` gives the media functions (and the detectors and
+  the picture client) over `gateway.transportFor("media_functions")`. They are NOT_CONNECTED while `media_functions` has no base URL in the
+  gateway's provider table. No deployment source for that URL exists yet (lead decision). No env read is added in `src/engine`.
+
 Phase E1, wave B. Branch `engine/e1-w4`, cut from `code/beautiful-cori-1zfk11` (7fd32ae). Covers `src/engine/media/` and
 the tests and fixtures under `src/engine/test/`. See `README.md` for the file list and the Bible sections.
 

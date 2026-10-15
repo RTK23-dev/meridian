@@ -10,6 +10,7 @@ import { sqlLedgerStore } from "../sql-ledger-store.ts";
 import type { StageContext } from "../types.ts";
 import { checkOneTake, createCheckTakeHandler, frameTimesFor, probedMeasurements, takeShotOf } from "./check-take.ts";
 import { notConnectedScorer } from "../../review/take/similarity.ts";
+import type { BlackFramesResult } from "../../media/interface.ts";
 
 const ORG = "org_check_test";
 const BRAND = "brand_check_test";
@@ -234,5 +235,62 @@ describe("check_take on PostgreSQL", () => {
     assert.equal(run.verdict.takeId, taken.takeId);
     assert.equal(run.calls.length, 1, "one Critic call for the take, on the request's reservation");
     assert.equal(run.verdict.action, "accept", "a take that every connected check passes is accepted");
+  });
+
+  test("the media detectors are the take's measurements when no measure port is given: their clean answers pass the code checks", async () => {
+    const shot = shotOf("cinematic", { kind: "generate", modelClass: "video.cinematic", prompt: "a counter", refs: [], takes: 1 });
+    const taken = await takeWithPlan(shot, MP4_BYTES);
+    const media = fakeMedia({ probe: () => probeOf() });
+    const critic = recordedTransport({ "POST /api/v1/chat/completions": json(200, fixture("openrouter-critic-take-ok.json")) });
+    const clean: BlackFramesResult = { videoPresent: true, durationMs: 5000, fps: 30, blackRuns: [], frozenRuns: [] };
+    const seenBytes: number[] = [];
+    const { run } = await checkOneTake(contextFor(taken), {
+      gateway: gatewayWith(critic.transport),
+      media,
+      objects,
+      scorer: { id: "similarity:fixture", async score() { return { status: "scored", score: 0.82, scorer: "similarity:fixture" }; } },
+      detectors: {
+        blackFrames: async ({ source }) => {
+          if (source.kind === "bytes") seenBytes.push(source.bytes.byteLength);
+          return clean;
+        },
+        flicker: async () => ({ videoPresent: true, frames: 150, flickerScore: 0.1 }),
+        motion: async () => ({ videoPresent: true, frames: 150, meanMotion: 0.22 }),
+      },
+      paletteHex: async () => ["#1a2b3c"],
+      metrics: async () => ({}),
+      now: () => NOW,
+    });
+    const rule = (name: string) => run.verdict.checks.find((check) => check.rule === name);
+    assert.deepEqual(seenBytes, [MP4_BYTES.byteLength], "the detector reads the take's own bytes");
+    assert.equal(rule("no_black_or_frozen_frames")?.pass, true, "a clean detector answer is a pass, not missing evidence");
+    assert.equal(rule("flicker_below_max")?.pass, true);
+    assert.equal(rule("motion_present")?.pass, true);
+  });
+
+  test("a detector that refuses the take's file leaves its measure missing, so the take is not accepted", async () => {
+    const shot = shotOf("cinematic", { kind: "generate", modelClass: "video.cinematic", prompt: "a counter", refs: [], takes: 1 });
+    const taken = await takeWithPlan(shot, MP4_BYTES);
+    const media = fakeMedia({ probe: () => probeOf() });
+    const critic = recordedTransport({ "POST /api/v1/chat/completions": json(200, fixture("openrouter-critic-take-ok.json")) });
+    const { run } = await checkOneTake(contextFor(taken), {
+      gateway: gatewayWith(critic.transport),
+      media,
+      objects,
+      scorer: { id: "similarity:fixture", async score() { return { status: "scored", score: 0.82, scorer: "similarity:fixture" }; } },
+      detectors: {
+        blackFrames: async () => {
+          throw new EngineError("invalid_input", "the take cannot be decoded", { stage: "media.detectors" });
+        },
+        flicker: async () => ({ videoPresent: true, frames: 150, flickerScore: 0.1 }),
+        motion: async () => ({ videoPresent: true, frames: 150, meanMotion: 0.22 }),
+      },
+      paletteHex: async () => ["#1a2b3c"],
+      metrics: async () => ({}),
+      now: () => NOW,
+    });
+    const black = run.verdict.checks.find((check) => check.rule === "no_black_or_frozen_frames");
+    assert.equal(black?.pass, false, "a refused detector is missing evidence for its check");
+    assert.notEqual(run.verdict.action, "accept", "the take goes to review, never to a pass");
   });
 });

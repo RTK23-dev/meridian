@@ -1,5 +1,17 @@
 # STATUS: engine render (W10): HyperFrames cloud adapter, integrity hook, zip
 
+## W2 wiring pass (branch `eng-e45-leftovers-2`)
+
+Not run in this pass.
+- `RenderPorts.renderEstimateUsd` takes the video's duration (`(scope, durationMs)`), since the render line is priced per minute.
+- Production deps (`jobs/production-ports.ts`, `productionRenderPorts`): HyperFrames through `gateway.transportFor("heygen")` and
+  `gateway.secretFor("heygen")`; Shotstack through `gateway.transportFor("shotstack")`, `gateway.connection("shotstack")`, and the
+  15-minute source links from `sourceUrlResolver` (`jobs/media-link.ts`). Stored media in Meridian's Drive-backed store.
+- The Shotstack source resolver fails closed: not connected (no `MEDIA_LINK_SECRET`, or no https origin) throws `NOT_CONNECTED:` with the
+  reason before any render hold; a URI that is not an engine object of the organization is refused (invalid_input).
+- The HyperFrames price is still null in `config/prices.ts`, so the production render stage fails `render_price_known` until the owner sets it.
+Tests: `jobs/production-ports.test.ts` (+2), `jobs/media-link.test.ts` (+1), `lib/meridian/storage/engine-media-link.test.ts`.
+
 Phase E1, wave B. Branch `engine/e1-w9-w10`, cut from `code/beautiful-cori-1zfk11` (7fd32ae). Covers `src/engine/render/`.
 Details: `README.md` in this folder.
 

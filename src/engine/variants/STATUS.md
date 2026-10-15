@@ -1,5 +1,15 @@
 # STATUS: variants (W13, phase E5)
 
+## W2 leftovers (branch `eng-e45-leftovers-2`): generation variants still deferred
+
+Not run in this pass. Lead item 3 (the generation variant sub-graph) is NOT built. Its blockers are in `../jobs/STATUS.md` ("Not built"):
+the request-scoped shots, takes and edit in the orchestrator; no beat-scoped voice job; no variant prompt or product and persona
+reference source for `produce_shot`; and the writer is never called. Generation variants stay `deferred`, with no job and no ledger row.
+
+Lead item 4 (a caption fixture that really changes captions): `src/engine/jobs/test/caption-variant.ts` (`captionVariantMaster`). Its caption
+after the presenter moves to the variant's band, and the one over the presenter keeps its band (the face rule). `handlers/variants.test.ts`
+asserts the change touches only the captions surface, and `orchestrator.test.ts` asserts the caption branch queues no produce or voice job.
+
 Branch `eng-e5-variants`, from `origin/code/beautiful-cori-1zfk11` at 79f7a92. Covers `src/engine/variants/`,
 `src/engine/deliver/`, `src/engine/events/`, `src/engine/claude/roles/variant_writer.ts` (with its test and
 `src/engine/prompts/variant_writer@1.md`), and the handlers `src/engine/jobs/handlers/variants.ts` and `deliver.ts`. Nothing is

@@ -1,5 +1,12 @@
 # STATUS: analyze_reference (W6), `src/engine/analyze/`, `src/engine/edit/grammar.ts`, `src/engine/claude/roles/genome.ts` and `tightener.ts`
 
+## W2 wiring pass (branch `eng-e45-leftovers-2`)
+
+Not run in this pass. `jobs/runtime.ts` `analysisPortsOf(analysis, picture)` wires `analysisReadings({ picture, roles })` into
+`analyze_reference` when the composition gives a `picture` client and no readings of its own (the wiring the Wiring section above asked
+for). `renderReadings.ts` is used by `post_render_review` through `readRenderedFrames` and `overlayMeasures`. Production passes no
+`analysis` composition yet, so the stage stays not_implemented in production (fail closed). Tests: `jobs/runtime-wiring.test.ts`.
+
 Phase E3, branch `eng-e3-analyze-voice`, cut from `code/beautiful-cori-1zfk11` (aa3bcf8). Covers Bible 6.2 (steps 1 to 7), 8.1
 (the edit grammar), 11.1 (the genome and tightener roles) and 4.1 (Video DNA). The stage handler is
 `src/engine/jobs/handlers/analyze-reference.ts`. See `README.md` for the file list.

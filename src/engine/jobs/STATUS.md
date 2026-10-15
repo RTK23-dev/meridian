@@ -1,5 +1,80 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## W2 leftovers: wiring pass (branch `eng-e45-leftovers-2`, base 5d5925b)
+
+Owner instruction for this pass: no test, typecheck, lint or golden-frame run. Everything below is written and unverified. The lead runs
+`npm test && npm run typecheck && npm run lint && npm run build` after all phases.
+
+### Done
+
+1. **Media detectors (`gate-measures.ts`).** `takeMeasurementsFromDetectors` gives `TakeMeasurements` from black or frozen runs (in
+   frames, `longestRunFrames`), flicker and motion, with the values `takeCodeMeasures` gives. `renderMeasuresFromDetectors` gives the
+   black frame at each required time (`blackFrameMeasures`) and the silence (`longestMs`). A detector that answers `invalid_input` gives
+   null for its measure (missing evidence); any other error throws, so the job retries. `check_take` takes `detectors` (`CheckTakePorts`,
+   `ShotPorts.detectors`) and `post_render_review` takes `detectors`. `measure` and `measureBlackFrames` still win when given.
+   `check_take` does not read frame_reader: its code measures are the detectors' only.
+2. **frame_reader overlays (`post_render_review`).** `frameReader: true` (off by default) reads the rendered frames at each graphics
+   clip's midpoint (`readRenderedFrames`, one call per 24 frames) and gives `overlayMeasures`. `measureOverlays` wins when given. OCR
+   stays undefined: measurements only (review/STATUS.md decision 5).
+3. **analyze_reference readings (`runtime.ts`, `analysisPortsOf`).** With `composition.picture` and no readings of its own, the readings are
+   `analysisReadings({ picture, roles })`: the picture measures and the frame_reader captions, shake and speed ramps. Production passes no
+   `analysis` yet, so the stage stays not_implemented in production.
+4. **Production render and post-render deps (`production-ports.ts`, in `productionEngineRuntime`).** HyperFrames over
+   `gateway.transportFor("heygen")` and `secretFor("heygen")`. Shotstack over `transportFor("shotstack")` and `connection("shotstack")`.
+   Stored media in Meridian's Drive-backed store (`engineObjectStore`). The render line is priced per minute at the higher of the
+   HyperFrames and Shotstack list prices, and is undefined while the HyperFrames price is null, so nothing renders unpriced. Media
+   functions over the gateway (`gatewayMediaFunctions`): NOT_CONNECTED while `media_functions` has no base URL.
+5. **Shotstack source links (`media-link.ts`, `src/lib/meridian/storage/engine-media-link.ts`).** `sourceUrlResolver`: a
+   `not_connected` signer throws a config error starting `NOT_CONNECTED:` with the reason; a `refused` source throws invalid_input; a
+   non-https link is refused. The signer makes 15-minute HMAC links (`MEDIA_LINK_SECRET`, 32+ characters; `APP_URL` or `PUBLIC_APP_URL`
+   as an https origin). Without either it answers not_connected. A key that is not an engine media key of the organization is now
+   `refused`, where it used to throw a plain Error. The route `src/routes/api/engine-media.ts` serves the object behind a link.
+   `routeTree.gen.ts` regenerates on the next dev or build (not hand-edited).
+6. **Caption fixture that changes captions (`src/engine/jobs/test/caption-variant.ts`).** The chain master with its captions split at
+   3 s, so the caption after the presenter really moves. `variants.test.ts` uses it and asserts the change touches only the captions surface.
+   `orchestrator.test.ts` asserts a caption variant runs compose, render and deliver and queues no produce_shot, voice or plan job.
+
+### Not built: the generation variant sub-graph (lead item 3)
+
+Not built in this pass, and it is not a wiring change. Blockers, each verified in code:
+- The orchestrator's shots, takes and edit are request-scoped (`state.shots`, `state.takes`, the single `edit` node,
+  `allShotsAccepted`). A variant needs its own shot and take map, and its own edit before its compose.
+- No beat-scoped voice job exists. The voice stage writes one `voice_track` per request from the production request.
+- `produce_shot` takes its prompt from the plan shot. No stage writes a variant prompt. `variant_writer` is never called by a stage.
+  Product and persona reference imagery is not a produce input.
+- Generation would charge the reservation with no path to a finished variant. Generation variants stay `deferred` (no job, no ledger
+  row), as before.
+Needed, in order: a variant plan and voice artifact per variant (prompts and lines), the product and persona reference sources, the writer
+wired into the variants stage, per-variant shot and take keys in the orchestrator state, and the variant EDL built from its takes and voice.
+Decision for the lead: keep generation deferred (fail closed, the current behaviour), or open a design for the list above.
+
+### Tests (written, not run)
+
+- `media-link.test.ts` (+1): a refused source is invalid input, and no link is made.
+- `src/lib/meridian/storage/engine-media-link.test.ts`: a non-engine key (and an external URL) is `refused`; the TTL case still throws.
+- `production-ports.test.ts` (+2): HyperFrames is ready with a HeyGen key and sends nothing; Shotstack is not ready without its key.
+- `handlers/check-take.test.ts` (+2): detectors feed the take gate on the take's bytes; a refused detector leaves its measure missing.
+- `handlers/post-render-review.test.ts` (+7): detector black frames fail the black check; detector silence is the silence measure; refused
+  detectors fail closed; frame_reader on with no overlay fails and with the overlays passes; frame_reader is off by default.
+- `handlers/variants.test.ts` (+1) and `orchestrator.test.ts` (+1): the caption change, and the caption branch's no-generation chain.
+- Existing: `gate-measures.test.ts`, `runtime-wiring.test.ts`, `production-ports.test.ts`, `media-link.test.ts`.
+
+### Owner must run live (agents hold no keys)
+
+1. HyperFrames: set `render_hyperframes_cloud` in `config/prices.ts`, then render one composition through production `render`. Record the
+   render id, the ledger row (estimate and actual), the integrity checks and the video URI.
+2. Shotstack: set `MEDIA_LINK_SECRET` (32+ characters) and `APP_URL` (https). Record one signed link, and its fetch by Shotstack.
+3. Detectors and frame_reader on one real MP4: black frames, silence, overlays. Record the frame_reader ledger row.
+4. `media_functions` base URL: no deployment source exists yet (see blockers). Until one is set, every detector, picture and frame call is
+   NOT_CONNECTED.
+
+### Blockers for the lead
+
+- Item 3 (above): keep deferred, or design it.
+- The `media_functions` base URL: which deployment setting carries it. The gateway's `providers` option is the place; no env read is allowed in
+  `src/engine`.
+- `routeTree.gen.ts`: run `npm run dev` or `npm run build` once, then commit the regenerated route tree.
+
 ## E4 and E5 orchestration (branch `eng-e45-orchestration`, from `origin/code/beautiful-cori-1zfk11` at d5a62c1)
 
 Lead task: consolidate orchestration so a request runs from intake to deliver on fixtures. Committed on the branch, not pushed; the lead

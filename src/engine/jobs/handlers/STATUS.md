@@ -1,5 +1,20 @@
 # STATUS: intake and estimate_reserve stage handlers (A4, updated in E2)
 
+## W2 leftovers: wiring pass (branch `eng-e45-leftovers-2`; the full account is `../STATUS.md`)
+
+Not run: no tests, typecheck or lint in this pass (owner instruction).
+
+- **`check-take.ts`.** `CheckTakePorts.detectors` (`TakeDetectors`: black, flicker, motion) gives the take's measurements through
+  `takeMeasurementsFromDetectors` (`../gate-measures.ts`). Precedence: `measure`, then `detectors`, then the probed values (all null,
+  so missing evidence). Each detector's `invalid_input` is a null measure; other errors throw. Tests: `check-take.test.ts` (+2).
+- **`post-render-review.ts`.** `PostRenderPorts.detectors` (black frames and silence) through `renderMeasuresFromDetectors`. The silence
+  comes from the detector when it is wired, otherwise from the timeline. `frameReader: true` reads overlays through the frame_reader role
+  at each graphics clip's midpoint (`overlaysFromFrameReader`, off by default). `measureBlackFrames` and `measureOverlays` win when given.
+  OCR is still undefined. Tests: `post-render-review.test.ts` (+7).
+- **`render.ts`.** `RenderPorts.renderEstimateUsd(scope, durationMs)`: the render line is priced for the video's length (per minute).
+- **`variants`.** Caption-fixture test in `variants.test.ts` (the captions change for real); the orchestrator's caption branch test is in
+  `../orchestrator.test.ts`. Generation variants are still deferred (see `../STATUS.md`).
+
 ## E4 and E5 (branch `eng-e45-orchestration`; the full account is `../STATUS.md`)
 
 - **`compose.ts`** (new, Bible 6.9). `createComposeHandler({ loadStyleKit, now })`. Reads the `edl` and the `validated_request`, compiles

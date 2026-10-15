@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { after, before, describe, test } from "node:test";
 import { budgetReservationSchema, EngineError, gateResultSchema, reviewResultSchema, type GateResult, type RenderedVideo } from "../../contracts/index.ts";
 import { FIXTURE_IDS, fixtureId } from "../../contracts/fixtures/index.ts";
-import type { TimelineResult } from "../../media/interface.ts";
+import type { BlackFramesResult, SilenceResult, TimelineResult } from "../../media/interface.ts";
+import type { RenderDetectors } from "../gate-measures.ts";
 import { cleanRender, clearBlackFrames, drawnOverlays, integrityPassed, VIDEO_ID, type CleanRender } from "../../review/test/render.ts";
 import { decideGate } from "../../review/gold.ts";
 import { readArtifact, writeArtifact } from "../artifact-store.ts";
@@ -14,7 +15,7 @@ import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../test
 import { fakeObjects, gatewayWith, json, PNG_1X1, recordedTransport, type Reply } from "../test/harness.ts";
 import type { EnginePayload, StageContext, StageOutput } from "../types.ts";
 import { validateStageOutput } from "../validate.ts";
-import { createPostRenderReviewHandler, criticSummaryOf, longestSilenceMs, type PostRenderPorts } from "./post-render-review.ts";
+import { createPostRenderReviewHandler, criticSummaryOf, graphicsClipsOf, longestSilenceMs, type PostRenderPorts } from "./post-render-review.ts";
 
 const WS = "ws_post_render";
 const BRAND = "brand_fixture";
@@ -162,6 +163,94 @@ async function reviewOf(artifactId: string) {
   return reviewResultSchema.parse(stored.envelope.body);
 }
 
+
+type HttpResponse = ReturnType<typeof json>;
+type Transport = ReturnType<typeof recordedTransport>;
+type OverlayAnswer = { box: { x: number; y: number; w: number; h: number }; kind: "graphic" };
+const WHOLE_FRAME = { x: 0, y: 0, w: 1, h: 1 };
+
+/** The critic's recorded answer, as the chat endpoint returns it. */
+function criticJson(name: string): HttpResponse {
+  return json(200, JSON.parse(readFileSync(join(here, "../../review/test/fixtures", `${name}.json`), "utf8")));
+}
+
+/** The text of a request body (the chat endpoint's JSON). */
+function bodyTextOf(request: { body?: string | Uint8Array }): string {
+  const body = request.body;
+  if (body === undefined) return "";
+  return typeof body === "string" ? body : new TextDecoder().decode(body);
+}
+
+/**
+ * One chat endpoint for both roles. A request whose schema is frame_reader_answer gets one reading per image it carries, with the
+ * overlays the callback gives for that frame's index. Any other request is the Critic, answered with its recorded fixture.
+ */
+function chatFor(overlaysFor: (index: number) => OverlayAnswer[]): Reply {
+  return (request: { body?: string | Uint8Array }): HttpResponse => {
+    const text = bodyTextOf(request);
+    if (!text.includes("frame_reader_answer")) return criticJson("openrouter-critic-final-ok");
+    const frames = (text.match(/"image_url":\{/g) ?? []).length;
+    const readings = Array.from({ length: frames }, (_, index) => ({
+      index,
+      confidence: 0.9,
+      captions: [],
+      overlays: overlaysFor(index),
+      textWords: 0,
+      shake: "none",
+      speedRamp: "none",
+    }));
+    return json(200, {
+      id: "gen-frame-reader-test",
+      model: "anthropic/claude-haiku-5.5",
+      object: "chat.completion",
+      choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: JSON.stringify({ frames: readings }) } }],
+      usage: { prompt_tokens: 12000, completion_tokens: 400, total_tokens: 12400, cost: 0.0124 },
+    });
+  };
+}
+
+/** The frame reader's overlay answer for each frame the review sends: the graphics clips judged at that frame's time. */
+function overlaysOfClips(s: Scenario): { overlaysFor: (index: number) => OverlayAnswer[]; frameCount: number } {
+  const clips = graphicsClipsOf(s.render.edl);
+  const times = [...new Set(clips.map((clip) => clip.atMs))].sort((a, b) => a - b);
+  return {
+    frameCount: times.length,
+    overlaysFor: (index) => clips.filter((clip) => clip.atMs === times[index]).map((clip) => ({ box: clip.box ?? WHOLE_FRAME, kind: "graphic" as const })),
+  };
+}
+
+/** Ports where the frame reader is the only overlay source (or off), and no black-frame port is given, so the detectors decide. */
+function readerPorts(s: Scenario, transport: Transport, options: { frameReader: boolean; detectors?: RenderDetectors }): PostRenderPorts {
+  const base = portsFor(s, { transport });
+  return {
+    gateway: base.gateway,
+    media: base.media,
+    objects: base.objects,
+    measureOcr: base.measureOcr,
+    forbiddenTerms: base.forbiddenTerms,
+    frameReader: options.frameReader,
+    ...(options.detectors === undefined ? {} : { detectors: options.detectors }),
+  };
+}
+
+/** Ports where the detectors are the black-frame and silence sources, and the overlays are the scenario's own (all drawn). */
+function detectorPorts(s: Scenario, transport: Transport, detectors: RenderDetectors): PostRenderPorts {
+  const base = portsFor(s, { transport });
+  return {
+    gateway: base.gateway,
+    media: base.media,
+    objects: base.objects,
+    measureOverlays: base.measureOverlays,
+    measureOcr: base.measureOcr,
+    forbiddenTerms: base.forbiddenTerms,
+    detectors,
+  };
+}
+
+function checkOf(output: { gate: GateResult }, rule: string) {
+  return output.gate.checks.find((check) => check.rule === rule);
+}
+
 describe("post_render_review on PostgreSQL (Bible 6.12, 12.3)", () => {
   test("a clean video passes: one Critic call, the review result is stored, and the output validates", async () => {
     const s = await scenario();
@@ -290,5 +379,89 @@ describe("post_render_review helpers", () => {
   test("the rendered video is read as the review's subject, and the decision is a review on a missing result", () => {
     const gate: GateResult = { gate: "post_render", subjectId: VIDEO_ID, pass: false, checks: [{ rule: "render_integrity_passed", pass: false }] };
     assert.equal(decideGate(gate, {}).verdict, "review");
+  });
+
+  test("the detectors are the black-frame measure: a video that is black at the sample times fails black_frames_absent", async () => {
+    const s = await scenario();
+    const durationMs = s.render.rendered.durationMs;
+    const transport = recordedTransport({ "POST /api/v1/chat/completions": criticJson("openrouter-critic-final-ok") });
+    const allBlack: BlackFramesResult = { videoPresent: true, durationMs, fps: 30, blackRuns: [{ startMs: 0, endMs: durationMs, durationMs }], frozenRuns: [] };
+    const quietAudio: SilenceResult = { audioPresent: true, durationMs, minSilenceMs: 100, silences: [], longestMs: 0 };
+    const result = await createPostRenderReviewHandler(
+      detectorPorts(s, transport, { blackFrames: async () => allBlack, silence: async () => quietAudio }),
+    ).run(contextFor(s));
+    if (result.kind !== "done" || result.output.stage !== "post_render_review") assert.fail("expected a done post_render_review output");
+    assert.equal(checkOf(result.output, "black_frames_absent")?.pass, false);
+    assert.equal(result.output.gate.pass, false);
+  });
+
+  test("the detectors are the silence measure: a detector that finds a second of silence fails silence_within_limit, even with a clean timeline", async () => {
+    const s = await scenario();
+    const durationMs = s.render.rendered.durationMs;
+    const transport = recordedTransport({ "POST /api/v1/chat/completions": criticJson("openrouter-critic-final-ok") });
+    const clearBlack: BlackFramesResult = { videoPresent: true, durationMs, fps: 30, blackRuns: [], frozenRuns: [] };
+    const silent: SilenceResult = {
+      audioPresent: true,
+      durationMs,
+      minSilenceMs: 100,
+      silences: [{ startMs: 1000, endMs: 2000, durationMs: 1000 }],
+      longestMs: 1000,
+    };
+    const result = await createPostRenderReviewHandler(
+      detectorPorts(s, transport, { blackFrames: async () => clearBlack, silence: async () => silent }),
+    ).run(contextFor(s));
+    if (result.kind !== "done" || result.output.stage !== "post_render_review") assert.fail("expected a done post_render_review output");
+    const silence = checkOf(result.output, "silence_within_limit");
+    assert.equal(silence?.pass, false);
+    assert.equal(silence?.value, 1000, "the detector's measured silence is the number in the check");
+    assert.equal(checkOf(result.output, "black_frames_absent")?.pass, true, "the clear black-frame answer passes its check");
+  });
+
+  test("a detector that refuses the rendered file is missing evidence: no black-frame measure and a null silence, so the gate fails closed", async () => {
+    const s = await scenario();
+    const transport = recordedTransport({ "POST /api/v1/chat/completions": criticJson("openrouter-critic-final-ok") });
+    const refuse = async (): Promise<never> => {
+      throw new EngineError("invalid_input", "the file cannot be decoded", { stage: "media.detectors" });
+    };
+    const result = await createPostRenderReviewHandler(detectorPorts(s, transport, { blackFrames: refuse, silence: refuse })).run(contextFor(s));
+    if (result.kind !== "done" || result.output.stage !== "post_render_review") assert.fail("expected a done post_render_review output");
+    assert.equal(checkOf(result.output, "silence_within_limit")?.pass, false, "a null silence is not a pass");
+    assert.equal(checkOf(result.output, "black_frames_absent")?.pass, false, "an unmeasured black-frame check is not a pass");
+    assert.equal(result.output.gate.pass, false);
+  });
+
+  test("frame_reader on: each graphics clip is judged by the reader's reading of its midpoint, and a frame with no overlay fails overlays_present", async () => {
+    const s = await scenario();
+    const transport = recordedTransport({ "POST /api/v1/chat/completions": chatFor(() => []) });
+    const result = await createPostRenderReviewHandler(readerPorts(s, transport, { frameReader: true })).run(contextFor(s));
+    if (result.kind !== "done" || result.output.stage !== "post_render_review") assert.fail("expected a done post_render_review output");
+    const overlays = checkOf(result.output, "overlays_present");
+    assert.equal(overlays?.pass, false, "the reader found no overlay in any graphics frame");
+    const readerCalls = transport.requests.filter((request) => bodyTextOf(request).includes("frame_reader_answer"));
+    assert.equal(readerCalls.length, 1, "one frame_reader call for the graphics midpoints");
+    const review = await reviewOf(result.output.artifacts[`review:${s.videoId}`] ?? "");
+    assert.ok(review.failures.some((failure) => failure.rule === "overlays_present" && failure.layer === "graphics"));
+  });
+
+  test("frame_reader on: a reader that sees each graphics clip in its frame passes overlays_present, with one reader call and the Critic", async () => {
+    const s = await scenario();
+    const clips = graphicsClipsOf(s.render.edl);
+    assert.ok(clips.length > 0, "the clean render has graphics clips to judge");
+    const { overlaysFor, frameCount } = overlaysOfClips(s);
+    assert.ok(frameCount > 0 && frameCount <= 24, "the midpoints fit one frame_reader call");
+    const transport = recordedTransport({ "POST /api/v1/chat/completions": chatFor(overlaysFor) });
+    const result = await createPostRenderReviewHandler(readerPorts(s, transport, { frameReader: true })).run(contextFor(s));
+    if (result.kind !== "done" || result.output.stage !== "post_render_review") assert.fail("expected a done post_render_review output");
+    assert.equal(checkOf(result.output, "overlays_present")?.pass, true);
+    assert.equal(transport.requests.length, 2, "one frame_reader call and one Critic call");
+  });
+
+  test("frame_reader is off by default: a review with no overlay port and no reader makes only the Critic call, and overlays are not evaluated", async () => {
+    const s = await scenario();
+    const transport = recordedTransport({ "POST /api/v1/chat/completions": criticJson("openrouter-critic-final-ok") });
+    const result = await createPostRenderReviewHandler(readerPorts(s, transport, { frameReader: false })).run(contextFor(s));
+    if (result.kind !== "done" || result.output.stage !== "post_render_review") assert.fail("expected a done post_render_review output");
+    assert.equal(transport.requests.length, 1, "no reader call is made unless it is asked for");
+    assert.equal(checkOf(result.output, "overlays_present")?.pass, false, "an unmeasured overlay is missing evidence, not a pass");
   });
 });

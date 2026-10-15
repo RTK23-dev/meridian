@@ -36,6 +36,10 @@ import { readArtifact, writeArtifact, type MediaStorePort } from "../artifact-st
 import { scopedLedgerStore } from "../asset-stores-sql.ts";
 import { sqlRoleCallJournal } from "../role-call-store.ts";
 import type { StageContext, StageHandler, StageRunResult } from "../types.ts";
+import { renderMeasuresFromDetectors, type RenderDetectors } from "../gate-measures.ts";
+import { overlayMeasures, readRenderedFrames, type GraphicsClip } from "../../analyze/renderReadings.ts";
+import { FRAME_READER_MAX_FRAMES } from "../../claude/roles/frame_reader.ts";
+import type { FrameScope, TimedReading } from "../../analyze/frameReader.ts";
 
 export const REVIEW_RESULT_SCHEMA = "meridian.review_result/v1";
 
@@ -49,9 +53,20 @@ export type PostRenderPorts = {
   media: Pick<MediaFunctions, "frames" | "loudness" | "timeline">;
   /** The object store the rendered file is read from. */
   objects: MediaStorePort;
+  /**
+   * The media detectors (Bible 12.3): black frames at the sample times and the silence of the file, measured on the bytes. Absent,
+   * the black-frame check is not evaluated and the silence comes from the timeline. `measureBlackFrames`, when given, takes
+   * precedence for the black frames.
+   */
+  detectors?: RenderDetectors;
   /** Black frames at the sample times. Absent, the black-frame check is not evaluated (no decoder is connected). */
   measureBlackFrames?: (input: { bytes: Uint8Array; times: readonly number[] }) => Promise<BlackFrameMeasurement[] | undefined>;
-  /** Whether each graphics overlay is drawn in its frame. Absent, the overlay check is not evaluated. */
+  /**
+   * Overlays are read by the frame_reader role on the rendered frames at each graphics clip's midpoint (Bible 12.3, overlays_present),
+   * on the review's ledger and reservation. Off by default, so a review makes no reader call unless it is asked to.
+   */
+  frameReader?: boolean;
+  /** Whether each graphics overlay is drawn in its frame. Takes precedence over `frameReader`. Absent, the overlay check is not evaluated. */
   measureOverlays?: (input: { bytes: Uint8Array; edl: EditDecisionList }) => Promise<OverlayMeasurement[] | undefined>;
   /** OCR of the captions and of the text on screen. Absent, the caption and claim checks are not evaluated. */
   measureOcr?: (input: { bytes: Uint8Array; edl: EditDecisionList }) => Promise<OcrMeasurement | undefined>;
@@ -91,11 +106,62 @@ export function criticSummaryOf(edl: EditDecisionList): { clips: CriticFinalClip
   return { clips };
 }
 
+/** The graphics clips of an EDL with the frame each is judged on (its midpoint) and its box, when the EDL sets one. */
+export function graphicsClipsOf(edl: EditDecisionList): GraphicsClip[] {
+  return edl.tracks
+    .filter((track) => track.layer === "graphics")
+    .flatMap((track) => track.clips)
+    .filter((clip) => clip.endMs > clip.startMs)
+    .map((clip) => ({ clipId: clip.clipId, atMs: Math.floor((clip.startMs + clip.endMs) / 2), ...(clip.box === undefined ? {} : { box: clip.box }) }));
+}
+
+/** The start of every visual clip after time zero: the cuts the frame reader is told about. */
+function cutsOf(edl: EditDecisionList): number[] {
+  const starts = new Set<number>();
+  for (const track of edl.tracks) for (const clip of track.clips) if (clip.startMs > 0) starts.add(clip.startMs);
+  return [...starts].sort((a, b) => a - b);
+}
+
 /** The frame times in chunks no larger than the media call allows (thresholds.reference.maxFrames). */
 function chunked(times: readonly number[], size: number): number[][] {
   const chunks: number[][] = [];
   for (let index = 0; index < times.length; index += size) chunks.push(times.slice(index, index + size));
   return chunks;
+}
+
+/**
+ * The overlay measure of each graphics clip (Bible 12.3), read by the frame_reader role on the rendered frames at the clips' midpoints.
+ * A frame the media functions refuse, or that the reader refuses or leaves unanswered, gives null for its clips, so the check is not
+ * evaluated.
+ */
+async function overlaysFromFrameReader(input: {
+  media: Pick<MediaFunctions, "frames">;
+  bytes: Uint8Array<ArrayBuffer>;
+  edl: EditDecisionList;
+  scope: FrameScope;
+  roles: RoleDeps;
+}): Promise<OverlayMeasurement[]> {
+  const clips = graphicsClipsOf(input.edl);
+  if (clips.length === 0) return [];
+  const times = [...new Set(clips.map((clip) => clip.atMs))].sort((a, b) => a - b);
+  const readings: TimedReading[] = [];
+  try {
+    for (const chunk of chunked(times, FRAME_READER_MAX_FRAMES)) {
+      const result = await input.media.frames({
+        source: { kind: "bytes", bytes: input.bytes },
+        atMs: chunk,
+        longSidePx: thresholds.claude.visionMaxLongSidePx,
+      });
+      // A frame the media functions did not return is missing evidence for its clips: nothing is read from a partial set.
+      if (result.frames.length !== chunk.length) return overlayMeasures(clips, []);
+      const outcome = await readRenderedFrames(input.roles, input.scope, [...result.frames].sort((a, b) => a.atMs - b.atMs));
+      if (outcome.status === "answered") readings.push(...outcome.readings);
+    }
+  } catch (error) {
+    if (!(error instanceof EngineError && error.kind === "invalid_input")) throw error;
+    return overlayMeasures(clips, []);
+  }
+  return overlayMeasures(clips, readings);
 }
 
 /**
@@ -187,14 +253,33 @@ export function createPostRenderReviewHandler(ports: PostRenderPorts): StageHand
       const loudnessResult = await ports.media.loudness({ source });
       const timeline = await ports.media.timeline({ source });
       const loudness: LoudnessMeasurement = { integratedLufs: loudnessResult.integratedLufs, truePeakDbtp: loudnessResult.truePeakDbtp };
-      const silence: SilenceMeasurement = { longestMs: longestSilenceMs(timeline, rendered.durationMs) };
 
       const required = requiredFrameTimes(edl);
+      // The detectors measure black frames and silence on the bytes (Bible 12.3). With no detectors, silence comes from the timeline and
+      // no black-frame measure exists. A detector that refused the file gives null silence, which fails the check (never a guess).
+      const detected = ports.detectors ? await renderMeasuresFromDetectors(ports.detectors, { bytes, times: required }) : undefined;
+      const silence: SilenceMeasurement = detected === undefined ? { longestMs: longestSilenceMs(timeline, rendered.durationMs) } : detected.silence;
       const criticTimes = criticFrameTimes(rendered.durationMs);
       const frames = await framesAt(ports, bytes, [...new Set([...required, ...criticTimes])].sort((a, b) => a - b));
 
-      const blackFrames = ports.measureBlackFrames ? await ports.measureBlackFrames({ bytes, times: required }) : undefined;
-      const overlays = ports.measureOverlays ? await ports.measureOverlays({ bytes, edl }) : undefined;
+      const roles: RoleDeps = {
+        gateway: ports.gateway,
+        ledger: scopedLedgerStore(ctx.sql, ctx.organizationId, reservationId),
+        now: ports.now ?? (() => new Date().toISOString()),
+        journal: sqlRoleCallJournal(ctx.sql, { organizationId: ctx.organizationId, requestId: ctx.requestId }) as RoleCallJournal,
+      };
+      const blackFrames = ports.measureBlackFrames ? await ports.measureBlackFrames({ bytes, times: required }) : detected?.blackFrames;
+      const overlays = ports.measureOverlays
+        ? await ports.measureOverlays({ bytes, edl })
+        : ports.frameReader
+          ? await overlaysFromFrameReader({
+              media: ports.media,
+              bytes,
+              edl,
+              scope: { organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId, attempt: attemptOf(ctx), durationMs: rendered.durationMs, cutsMs: cutsOf(edl) },
+              roles,
+            })
+          : undefined;
       const ocr = ports.measureOcr ? await ports.measureOcr({ bytes, edl }) : undefined;
       const forbiddenTerms = ports.forbiddenTerms ? await ports.forbiddenTerms(scope) : undefined;
 
@@ -210,13 +295,7 @@ export function createPostRenderReviewHandler(ports: PostRenderPorts): StageHand
       if (frames === null || pngs.length !== criticTimes.length) {
         critic = { status: "not_answered", reason: "the frames of the render could not be read for the final Critic" };
       } else {
-        const role: RoleDeps = {
-          gateway: ports.gateway,
-          ledger: scopedLedgerStore(ctx.sql, ctx.organizationId, reservationId),
-          now: ports.now ?? (() => new Date().toISOString()),
-          journal: sqlRoleCallJournal(ctx.sql, { organizationId: ctx.organizationId, requestId: ctx.requestId }) as RoleCallJournal,
-        };
-        const run = await runCriticFinal(role, {
+        const run = await runCriticFinal(roles, {
           requestId: ctx.requestId,
           workspaceId: ctx.organizationId,
           reservationId,
