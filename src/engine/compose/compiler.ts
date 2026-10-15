@@ -82,6 +82,14 @@ export type CompileResult = {
   assets: CompiledAsset[];
 };
 
+/**
+ * What the caller knows about a clip beyond the EDL. clipSourceUris maps a clip id to the media URIs the clip's shot
+ * produced (its takes). A sourceBound component (stopmotion.player) needs its entry; other components ignore it.
+ */
+export type CompileOptions = {
+  clipSourceUris?: ReadonlyMap<string, readonly string[]>;
+};
+
 /** Transitions the compiler knows how to draw. Anything else is refused, so nothing is silently dropped. */
 export const SUPPORTED_TRANSITIONS = ["hard", "fade", "whip"] as const;
 
@@ -221,18 +229,61 @@ function mapMediaUris(value: unknown, assets: AssetRegistry, key = ""): unknown 
   return value;
 }
 
+/** Every media URI in a props tree, in the order it appears (the same walk as mapMediaUris). */
+function collectMediaUris(value: unknown, out: string[], key = ""): void {
+  if (typeof value === "string" && MEDIA_KEY.test(key)) {
+    out.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectMediaUris(item, out, key);
+    }
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    for (const [childKey, child] of Object.entries(value)) {
+      collectMediaUris(child, out, childKey);
+    }
+  }
+}
+
+/**
+ * A sourceBound component draws only the media its own shot produced (Bible 7.1, 9.2). The caller must say which URIs
+ * those are for this clip. Without that list, or with a URI outside it, the clip is refused.
+ */
+function checkOwnSources(clip: EdlClip, definition: ComponentDefinition, props: unknown, options: CompileOptions): void {
+  const allowed = options.clipSourceUris?.get(clip.clipId);
+  if (allowed === undefined) {
+    throw invalid(
+      `clip ${clip.clipId} uses ${definition.name}, which draws only its own shot's media: pass the URIs that shot produced for this clip`,
+    );
+  }
+  const used: string[] = [];
+  collectMediaUris(props, used);
+  for (const uri of used) {
+    if (!allowed.includes(uri)) {
+      throw invalid(`clip ${clip.clipId} ${definition.name} uses ${uri}, which is not one of the shot's own sources`);
+    }
+  }
+}
+
 /** Validates a component clip's props, then maps every media URI in them to a local asset. */
 function componentValues(
   clip: EdlClip,
   definition: ComponentDefinition,
   durationMs: number,
   assets: AssetRegistry,
+  options: CompileOptions,
 ): Record<string, unknown> {
   const raw: Record<string, unknown> = { ...(clip.props ?? {}), [RESERVED_PROP_DURATION]: durationMs };
   const parsed = definition.propsSchema.safeParse(raw);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => `${issue.path.join(".") || "props"}: ${issue.message}`);
     throw invalid(`clip ${clip.clipId} props for ${definition.name} are invalid: ${issues.join("; ")}`);
+  }
+  if (definition.sourceBound === true) {
+    checkOwnSources(clip, definition, parsed.data, options);
   }
   return mapMediaUris(parsed.data, assets) as Record<string, unknown>;
 }
@@ -379,12 +430,14 @@ const LAYOUT_CSS = `html, body {
 
 /**
  * Compile an EDL into a HyperFrames composition.
- * Throws EngineError(invalid_input) for an EDL, kit or props the compiler cannot render exactly.
+ * Throws EngineError(invalid_input) for an EDL, kit or props the compiler cannot render exactly, including a
+ * sourceBound component whose clip has no source list or a media URI outside it.
  */
 export function compile(
   edlInput: unknown,
   styleKitInput: unknown,
   components: ComponentLibrary = COMPONENT_LIBRARY,
+  options: CompileOptions = {},
 ): CompileResult {
   const edl = parseEdl(edlInput);
   const kit = parseStyleKit(styleKitInput);
@@ -402,7 +455,7 @@ export function compile(
           throw invalid(`clip ${clip.clipId} uses component ${clip.component}, which is not in the library`);
         }
         usedComponents.set(definition.name, definition);
-        const values = componentValues(clip, definition, clip.endMs - start, assets);
+        const values = componentValues(clip, definition, clip.endMs - start, assets, options);
         picture.push(componentElement(clip, layer, definition, values));
       } else {
         const src = clip.srcUri as string;

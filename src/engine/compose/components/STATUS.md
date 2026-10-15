@@ -1,6 +1,24 @@
-# STATUS: component library (Bible 9.2), E1, E2 and E5 sets
+# STATUS: component library (Bible 9.2), E1, E2, E5 and chain sets
 
 Full status is in `../STATUS.md`. E5 is on branch `eng-e5-visual-types`.
+
+## Chain work: `stopmotion.player` (Bible 7.1 `stop_motion`, 9.2)
+
+- **`stopmotion.player`** (`stopmotion.player/props.ts`): `fps` (a whole number, 8 to 12, required) and `frameUris` (an
+  ordered list of 2 to 36 image URIs: png, jpg, jpeg or webp). `durationMs` is the reserved clip span.
+- It is `sourceBound`: every frame must be one of the clip's own shot sources. `compile(edl, kit, library, { clipSourceUris })`
+  takes the list per clip id. Without a list, or with a frame outside it, the clip is refused, and the reason names the frame.
+- Timing is fixed by fps: frame i shows from `round(i * 1000 / fps)` to the next frame's start, and the last one ends at the
+  clip end. Times are whole milliseconds (12 fps gives 83.33 ms per frame, so the rounding keeps the frames contiguous).
+  A frame that starts at or after the clip end is not shown. `frameWindows` and `framesNeeded` in `props.ts` give the same numbers.
+- Refusals with a reason: fewer than 2 frames; more than 36 frames (the count is in the message); fps outside 8 to 12 or not whole;
+  a frame list that runs to less than the clip length (the end would be blank; the message gives the frame count needed); a
+  frame that is not an image.
+- Fixtures: `eight-fps-three-seconds` (24 frames, 8 fps, 3000 ms; frames 60, 1060, 2940), `twelve-fps-max-frames-clipped`
+  (36 frames, 12 fps, 2000 ms, so frames 24 to 35 are clamped away; frames 40, 955, 1960), `ten-fps-two-seconds` (20 frames,
+  10 fps; frames 50, 1050, 1950). Nine golden PNGs in `stopmotion.player/golden/`.
+- The golden harness draws each `frame-NN` placeholder in its own colour (a golden-angle hue walk, 36 distinct colours),
+  so the golden check shows which frame is on screen. The harness passes each fixture's `sourceUris` to the compiler.
 
 ## E5 components (`kinetic.type`, `screen.mock`, `character.rig`)
 

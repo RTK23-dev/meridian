@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import type { EditDecisionList } from "../../../contracts/index.ts";
 import { fixtureId, styleKitFixture } from "../../../contracts/fixtures/index.ts";
-import { compile } from "../../compiler.ts";
+import { compile, type CompileOptions } from "../../compiler.ts";
 import type { ComponentDefinition, ComponentFixture } from "../../library.ts";
 import { parseStyleKit } from "../../styleKit.ts";
 
@@ -85,7 +85,37 @@ export function placeholderName(uri: string): string {
   return dot === -1 ? file : file.slice(0, dot);
 }
 
+/**
+ * A distinct colour for each frame of a sequence (stop motion: frame-01 is index 0). Hues step by the golden angle, so
+ * neighbouring frames differ by far more than the 16-level channel tolerance, and a frame shown a window early or late
+ * shows as a different colour in the golden check.
+ */
+function frameColour(index: number): readonly [number, number, number] {
+  const hue = (index * 137.508) % 360;
+  const saturation = 0.6;
+  const lightness = 0.5;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const match = lightness - chroma / 2;
+  const sectors: Array<readonly [number, number, number]> = [
+    [chroma, x, 0],
+    [x, chroma, 0],
+    [0, chroma, x],
+    [0, x, chroma],
+    [x, 0, chroma],
+    [chroma, 0, x],
+  ];
+  const [r, g, b] = sectors[Math.floor(hue / 60) % 6];
+  return [Math.round((r + match) * 255), Math.round((g + match) * 255), Math.round((b + match) * 255)];
+}
+
+const FRAME_NAME = /^frame-(\d+)$/;
+
 function paletteFor(name: string): readonly [number, number, number] {
+  const frame = FRAME_NAME.exec(name);
+  if (frame) {
+    return frameColour(Math.max(Number(frame[1]) - 1, 0));
+  }
   return Object.prototype.hasOwnProperty.call(PLACEHOLDER_PALETTE, name) ? PLACEHOLDER_PALETTE[name] : DEFAULT_PALETTE;
 }
 
@@ -150,6 +180,9 @@ export function writePlaceholderVideo(target: string, name: string): void {
   }
 }
 
+/** The clip id of the one-clip golden composition. */
+const GOLDEN_CLIP_ID = "golden_clip";
+
 /** The one-clip EDL that holds a component fixture for its whole duration. */
 export function fixtureEdl(component: ComponentDefinition, fixture: ComponentFixture): EditDecisionList {
   return {
@@ -165,7 +198,7 @@ export function fixtureEdl(component: ComponentDefinition, fixture: ComponentFix
         layer: "graphics",
         clips: [
           {
-            clipId: "golden_clip",
+            clipId: GOLDEN_CLIP_ID,
             startMs: 0,
             endMs: fixture.durationMs,
             component: component.name,
@@ -197,7 +230,12 @@ export function buildHarness(
   mode: "render" | "lint" = "render",
 ): BuiltHarness {
   const dir = mkdtempSync(join(tmpdir(), `meridian-golden-${component.name}-${fixture.name}-`));
-  const result = compile(fixtureEdl(component, fixture), goldenKit, { [component.name]: component });
+  // A sourceBound fixture passes its shot's own media list for the golden clip, as the pipeline does per clip.
+  const options: CompileOptions = {};
+  if (fixture.sourceUris !== undefined) {
+    options.clipSourceUris = new Map([[GOLDEN_CLIP_ID, fixture.sourceUris]]);
+  }
+  const result = compile(fixtureEdl(component, fixture), goldenKit, { [component.name]: component }, options);
   for (const file of result.files) {
     const target = join(dir, file.path);
     mkdirSync(dirname(target), { recursive: true });
