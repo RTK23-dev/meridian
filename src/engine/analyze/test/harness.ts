@@ -24,7 +24,8 @@ import {
   timelineResultSchema,
 } from "../../../../functions/ffmpeg/types.ts";
 import { pngBytes } from "../../assets/test/recorded.ts";
-import type { MediaFunctions, MediaSource } from "../../media/index.ts";
+import type { MediaFunctions, MediaSource, PictureClient } from "../../media/index.ts";
+import { analysisReadings } from "../frameReader.ts";
 import { recordedSpeechToText, type RecordedSttFixture } from "../../media/stt.ts";
 import type { ProductionRequest } from "../../contracts/index.ts";
 import type { GrammarReadings, ReferencePorts, ReferenceRun } from "../reference.ts";
@@ -85,6 +86,12 @@ export const genomeBody = read<Record<string, unknown>>("openrouter-genome.json"
 export const copiesGenomeBody = read<Record<string, unknown>>("openrouter-genome-copies.json");
 export const readings = read<GrammarReadings>("readings.json");
 export const sttFixture = read<RecordedSttFixture>("speech-recorded.json");
+/** frame_reader's recorded answer for the 15 frames of the reel (synthetic: see fixtures/README.md). */
+export const frameReaderBody = read<Record<string, unknown>>("openrouter-frame-reader.json");
+/** frame_reader's answer that puts words in a text key: refused by the contract, so the retry takes the next answer. */
+export const frameReaderTextBody = read<Record<string, unknown>>(
+  "openrouter-frame-reader-text.json",
+);
 
 /** A copy of the recorded segmenter answer with the first segment's base layer replaced: a recorded answer changed by a test. */
 export function segmenterWithLayer(base: string): Record<string, unknown> {
@@ -117,9 +124,14 @@ export function referenceRun(overrides: Partial<ReferenceRun> = {}): ReferenceRu
  * pictureReadings the production wiring uses. The picture function is not called.
  */
 export function recordedPictureReadings(kind: "punch" | "loop"): ReferencePorts["readings"] {
+  return pictureReadings(recordedPictureClient(kind));
+}
+
+/** The picture client on one clip's recorded answer (picture-captured.json). It is not called on the function. */
+export function recordedPictureClient(kind: "punch" | "loop"): PictureClient {
   const captured = read<{ results: Record<string, unknown> }>("picture-captured.json");
   const result = pictureResultSchema.parse(captured.results[kind]);
-  return pictureReadings(async () => result);
+  return async () => result;
 }
 
 /**
@@ -132,6 +144,8 @@ export async function referencePorts(options: {
   media?: MediaFunctions;
   readings?: GrammarReadings | null;
   readingsPort?: ReferencePorts["readings"];
+  /** The production readings composition: the picture client and frame_reader, on the same recorded gateway as the roles. */
+  analysisReadings?: { picture: PictureClient };
   speechConnected?: boolean;
   reservedUsd?: number;
 }) {
@@ -140,6 +154,7 @@ export async function referencePorts(options: {
   const stt = recordedSpeechToText(sttFixture);
   const released: string[] = [];
   const resolved: string[] = [];
+  const roles = deps(gateway.gateway, ledger);
   const ports: ReferencePorts = {
     media: options.media ?? recordedMedia(),
     speech:
@@ -147,7 +162,7 @@ export async function referencePorts(options: {
         ? { status: "not_connected", reason: "NOT_CONNECTED: no speech-to-text vendor (test)" }
         : { status: "ready", stt },
     sttPricePerMinuteUsd: 0.006,
-    roles: deps(gateway.gateway, ledger),
+    roles,
     source: {
       async resolve(referenceVideo) {
         resolved.push(referenceVideo);
@@ -157,11 +172,13 @@ export async function referencePorts(options: {
         released.push(referenceVideo);
       },
     },
-    ...(options.readingsPort !== undefined
-      ? { readings: options.readingsPort }
-      : options.readings === null
-        ? {}
-        : { readings: async () => options.readings ?? readings }),
+    ...(options.analysisReadings !== undefined
+      ? { readings: analysisReadings({ picture: options.analysisReadings.picture, roles }) }
+      : options.readingsPort !== undefined
+        ? { readings: options.readingsPort }
+        : options.readings === null
+          ? {}
+          : { readings: async () => options.readings ?? readings }),
     newDnaId: () => DNA_ID,
   };
   return { ports, requests: gateway.requests, stt, released, resolved, ledger };

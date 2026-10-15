@@ -69,6 +69,11 @@ OCR, flicker metrics, the embedding wrapper, audio extraction for speech-to-text
 and upscaling wrappers. Each belongs to a later phase (E2 to E4) and to an owner decision in Bible 20.2.
 
 Added in E3: the timeline (`timeline.ts`: brightness, motion, momentary loudness and the envelope in one call) and the
-speech-to-text connection check (`stt-connection.ts`). Zoom detection and the loop frame comparison are still not built.
+speech-to-text connection check (`stt-connection.ts`). Zoom detection and the loop frame comparison are built in `picture.ts`.
+
+Added on branch `eng-detectors` (Bible 6.7 step 1, 12.2, 12.3): the detectors (`detectors.ts`, the `MediaDetectors` interface in
+`interface.ts`, a sibling of `MediaFunctions`) for black and frozen frames, flicker, motion energy and silence. `measures.ts` turns
+them into the take's code values and the post-render black-frame reading. Overlays and on-screen text are read by `frame_reader`
+in `src/engine/analyze/`, not here (no OCR: principle 8).
 
 See `STATUS.md` for the owner's live steps and the blockers.

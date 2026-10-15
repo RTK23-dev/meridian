@@ -9,6 +9,70 @@ now measured (see "Zoom and loop" below). Captions are NOT measured: the `frame_
 `contracts/ledger.ts` does not have. Per the lead's instruction, no contract was edited and no role or prompt was written. The
 captions reading stays null, so the grammar's `captions` field stays unknown and the DNA gate fails on purpose.
 
+**Follow-up, branch `eng-detectors` (from `origin/code/beautiful-cori-1zfk11`, d5a62c1): frame_reader.** The captions, shake and
+speed ramps are now read by the `frame_reader` role (contracts@4), so the grammar's `captions` and `motion` fields are filled on
+honest inputs, or unknown with their reason. Blockers 2 and 3 below are answered by this follow-up, with the decisions it needs.
+
+## frame_reader (eng-detectors)
+
+- `claude/roles/frame_reader.ts` (+ `frame_reader.test.ts`) and `prompts/frame_reader@1.md`. Haiku with vision, `llm.check`, stage
+  `analyze_reference`. Input: the duration, the cut list and up to 24 frames (768 px). Answer: one reading per frame, in order, with
+  `index`, `confidence`, up to 3 caption boxes (box, `words` 1 to 12, `style` class, `highlight` one_word / none / unclear), up to 4
+  overlay boxes (box, `kind`), `textWords` (a count), `shake` and `speedRamp` (none / present / unclear). The answer is strict and has
+  no string field except fixed enums; a test walks its JSON schema to prove it. No text can come back, so none reaches the DNA.
+  Estimate 12k in and 2k out, $0.022 at Haiku's $1 / $5 rate (Bible 11.1 lists 12k / 1k; the output is raised, see decisions).
+- `analyze/frameReader.ts`: `readFrames` (one `runRole` call; a refused answer is `refused`, a duplicate with no stored answer is a
+  conflict, a twice-invalid answer throws `RoleAnswerError`), `selectFrames` (evenly spaced, first and last kept, when there are
+  more than 24), `captionsOf`, `judgementOf` and `summariseFrameReadings` (pure aggregation), and `analysisReadings({ picture, roles })`,
+  the production readings port. It combines the picture measures (zoom jumps and loop, `readings.ts`) with the frame_reader readings
+  (captions, shake, speed ramps).
+- Grammar: `captions` comes from the readings; `motion.shakeOnImpact` and `motion.speedRamps` from the judgements. A field with too few
+  confident frames is null with its reason, and `edit/grammar.ts` puts that reason in its unknown note (`reasons`). The grammar no
+  longer says "OCR".
+- `ReadingsScope` carries `requestId`, `reservationId` and `attempt` (the role call's ledger key). `GrammarReadings.reasons` is optional.
+- `analyze/renderReadings.ts` (post-render, Bible 6.12 and 12.3): `readRenderedFrames` (the same call on the frames the review sends),
+  `overlayMeasures` (one `present` per graphics clip: an overlay whose box overlaps the EDL box by `overlayMinIou`, or any overlay
+  when the clip has no box), `captionWordsAt` and `textWordsAt` (counts). A frame not read, or read with too little confidence, is
+  null. No text of the screen is read.
+- Thresholds (`analyze/config.ts`, `frameReader`, all initial): `minConfidence` 0.5, `minCaptionFrames` 3, `minJudgedShare` 0.5,
+  `shakeShareMin` 0.25, `speedRampShareMin` 0.1, the caption band at thirds, `overlayMinIou` 0.2.
+- Fixtures: `test/fixtures/openrouter-frame-reader.json` (synthetic: the 15 frames of the reel's plan, with captions on every frame,
+  two or three words, lower band, one word highlighted, and no shake or speed ramp) and `openrouter-frame-reader-text.json` (words in
+  a text key: refused, then retried). Synthetic because the reel is four flat colour shots.
+
+## Decisions for the lead (frame_reader)
+
+1. **Highlight is read per frame.** Bible 8.1 measures the highlight as a colour change between frames 100 ms apart. Sampling is
+   2 frames per second, so frames 100 ms apart are not available. The reader says whether one word of a caption is set apart in that
+   frame. That is a single-frame proxy, and the gold labels should check it.
+2. **Shake and speed ramps are judgements on sampled stills, not measurements.** shakeOnImpact here means "shake in the sampled
+   frames". It is not tied to the impacts (the sound hits), because the frames are not placed on them. Speed ramps across half-second
+   samples are weak evidence. The owner's labels decide whether to trust them. The alternative is a code measure: a translation series
+   at 10 to 25 fps from a small grey copy (not built, not in the contracts). Lead: choose, or drop the two fields (contracts).
+3. **Output tokens: 2k, not the 1k of Bible 11.1.** 24 frames with a caption and an overlay each run past 1k of JSON. Bible 11.1 needs
+   the new row value (eng-contracts, owner confirm).
+4. **Frame cap 24.** A reference has up to 60 frames. The reader gets an even spread of 24 for captions and motion (the reel has 15).
+5. **Post-render: counts and presence only.** `OcrMeasurement.onScreenText` in `review/gates/postRender.ts` needs words, and the
+   frame_reader never returns them. So `forbidden_terms_absent` cannot be evaluated from frame_reader, and stays not evaluated (fail
+   closed). `captionWordsAt` gives counts, so `captions_ocr_match_script` can check counts but not the identity of the words. The lead
+   decides: count-only check, or no text check until a text source exists.
+6. **Thresholds sit in `analyze/config.ts` and `media/config.ts`.** They should move to `engine/config` (eng-contracts), with
+   the other initial values listed in blocker 8.
+
+## Wiring (not edited here: jobs and review are not this branch's folders)
+
+- `jobs/handlers/analyze-reference.ts` (the worker's ports): pass `readings: analysisReadings({ picture: <the picture client>,
+  roles: <the Claude client's deps> })` in place of `pictureReadings(...)` alone. The handler's test keeps the default readings and
+  is unchanged.
+- The render review (`jobs/handlers/post-render-review.ts`, `review/gates/postRender.ts`): `blackFrames` from
+  `blackFrameMeasures(await media.blackFrames(...), requiredFrameTimes(edl))`; `silence` from `await media.silence(...)` (its
+  `longestMs`); `overlays` from `overlayMeasures(graphicsClips, readings)` with `readings` from `readRenderedFrames` on the frames
+  at each graphics clip's midpoint, requested at `thresholds.claude.visionMaxLongSidePx` (chunked to 24 frames); `ocr` stays
+  `undefined` until decision 5. The review's port types take `Pick<MediaDetectors, ...>`.
+- The take check (`jobs/handlers/check-take.ts`, `review/takeCheck.ts`): `takeCodeMeasures({ black, flicker, motion })` gives the
+  `measurements` that `review/take/code.ts` `codeRows` reads (its three fields match by name). The port is
+  `Pick<MediaDetectors, "blackFrames" | "flicker" | "motion">`.
+
 ## Done (fixture-tested)
 
 - **Timeline (new media function, W4).** `functions/ffmpeg/timeline.ts`, route `POST /timeline`, and the client
@@ -98,22 +162,21 @@ Results on this branch are in the report to the lead.
 5. **Live analyze run (Bible 19 E3).** One reference reel, with the real segmenter and genome calls (Sonnet). Attach the
    artifact ids, the ledger lines per role, the timeline and STT numbers, and the grammar against the reference's hand labels
    (within 15% on shot length and caption size, once captions are measured).
+6. **frame_reader live run (eng-detectors).** One reference with 15 to 24 sampled frames through `analysisReadings` on the Haiku route
+   (`llm.check`, `verified: false`). Record the answer, its model and generation id, the usage cost against the ledger estimate, and
+   whether the answer parsed with no retry. Then compare the captions (words per caption, band, highlight), the shake and the speed
+   ramps with the owner's hand labels on the same frames. Label 100 shake and 100 speed-ramp examples before either flag may gate.
+   For the render review: one rendered video, the overlay and caption-count readings against its EDL.
 
 ## Blockers and decisions for the lead
 
 1. **Speech-to-text vendor (Bible 20.2): owner decision.** Blocks analyze and voice. Both stop with NOT_CONNECTED before any spend.
-2. **Captions are not measured (lead decision needed: add `frame_reader` to `CLAUDE_ROLES`).** Bible 6.2 step 6 and 8.1 name
-   OCR of the frames. The lead's follow-up decided captions are read by a vision role on the sampled frames, not by local OCR
-   (principle 8). That role is `frame_reader`, and it is not in `CLAUDE_ROLES` (`contracts/ledger.ts`). Per the lead's
-   instruction, this branch stops there: no contract edit, no `claude/roles/frame_reader.ts`, no `prompts/frame_reader@1.md`.
-   The role also needs its Bible 11.1 row, a prompt, and an answer contract. Once the value is added (eng-contracts, version
-   bump, lead approval), the role follows the `tightener` pattern: `captionReadingSchema` per frame (words per caption, band,
-   size, style, highlight), aggregated by code into `EditGrammar.captions`. Visible text is used as measurements only (size,
-   position, count), never copied, as the `onScreenText` decision above.
-3. **Shake and speed ramps are not measured.** Bible 8.1 defines `motion.shakeOnImpact` (high-frequency global motion) and
-   `speedRamps` (motion-speed discontinuities inside a shot). The picture function measures scale and fit per pair but not
-   global translation over time, so both readings are null and the motion fields stay unknown. Decision needed: a method (a
-   10 fps translation series, or a vision read), or drop the two fields from the contract (eng-contracts).
+2. **Captions: answered by `frame_reader` (eng-detectors).** `frame_reader` is in `CLAUDE_ROLES` (contracts@4). The role and its
+   aggregation are built (see "frame_reader" above). Open: the jobs wiring (`analysisReadings`), and the owner's live run that checks
+   the captions against hand labels. The highlight is a single-frame proxy (decision 1 above).
+3. **Shake and speed ramps: answered by `frame_reader` as judgements on sampled stills (eng-detectors).** Decision 2 above: the
+   readings are not on impacts, and a code measure at 10 to 25 fps is the alternative. Lead to choose, or drop the two fields
+   (contracts). Until then the flags come from the judgements, with their reasons when they are null.
 4. **endsOnLoop: measured, one open point.** The loop reading is the first frame against the true last frame of the picture
    (`/picture`), not two extra frames in the Bible 6.2 frame plan, so the cap of 60 is unchanged. Open: the threshold 0.04 is
    initial, measured on generated clips only (a still with its brightness returning gives 0.022, a zoom drift gives 0.24).
@@ -174,6 +237,11 @@ readings are synthetic and labelled so in their fixtures.
   (`picture.ts`, its test, `test/picture-clips.ts`, `http.ts`, `index.ts`, `config.ts`, and the handler list in
   `boundaries.test.ts`). `edit/grammar.ts` and its test. `analyze/test/harness.ts` and `reference.test.ts`. No contract, no
   `claude/` file and no prompt is changed. `media/STATUS.md` and `functions/ffmpeg/STATUS.md` describe the picture route.
+
+- Follow-up (eng-detectors, granted by the lead): `claude/roles/frame_reader.ts` and its test, `prompts/frame_reader@1.md`,
+  `edit/grammar.ts` (the `reasons` input and the note wording, no change to the fields). The detectors are in `src/engine/media/`
+  and `functions/ffmpeg/` (see `media/STATUS.md`). `claude/roles/STATUS.md` and `prompts/STATUS.md` each carry one short note
+  for frame_reader. `edit/` has no STATUS file of its own; the grammar change is described here.
 
 Ports the worker must wire for these two handlers (none is wired in this branch): `ReferenceSource` (resolve and release),
 `speech` (from `speechToTextConnection`), `sttPricePerMinuteUsd`, `roles` (the Claude client's dependencies), the media functions,

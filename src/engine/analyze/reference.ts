@@ -65,15 +65,23 @@ export type ReferenceSource = {
   release(referenceVideo: string, organizationId: string): Promise<void>;
 };
 
-/** The three readings that need frames and an OCR or vision reader. Each is null until its reader is wired. */
+/**
+ * The readings that need frames: captions, zoom and loop (Bible 8.1). Each is null until its reader answers. reasons says why a
+ * null reading is null, for the gate's detail (Bible 1: a reason, never a guess).
+ */
 export type GrammarReadings = {
   captions: MeasuredCaptions | null;
   zoom: MeasuredZoom | null;
   loop: boolean | null;
+  reasons?: { captions?: string; zoom?: string; loop?: string; motion?: string };
 };
 
 export type ReadingsScope = {
   organizationId: string;
+  /** The run's identity: a reader that calls a role needs it for the ledger and the idempotency key (Bible 14.1). */
+  requestId: string;
+  reservationId: string;
+  attempt: number;
   source: MediaSource;
   durationMs: number;
   cutsMs: number[];
@@ -312,6 +320,9 @@ export async function analyzeReference(
   const readings: GrammarReadings = ports.readings
     ? await ports.readings({
         organizationId: run.organizationId,
+        requestId: run.requestId,
+        reservationId: run.reservationId,
+        attempt,
         source,
         durationMs,
         cutsMs,
@@ -345,6 +356,7 @@ export async function analyzeReference(
     captions: readings.captions,
     zoom: readings.zoom,
     loop: readings.loop,
+    reasons: readings.reasons ?? {},
   });
   unknown.push(...grammar.unknown);
   checks.push(

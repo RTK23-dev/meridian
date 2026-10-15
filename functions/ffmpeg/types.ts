@@ -149,8 +149,14 @@ export const LOUDNESS_GATE_LUFS = -70;
 export const timelineRequestSchema = z.strictObject({ source: mediaSourceSchema });
 export type TimelineRequest = z.infer<typeof timelineRequestSchema>;
 
-const timelineSampleSchema = z.strictObject({ atMs: z.int().nonnegative(), value: z.number().min(0).max(1).finite() });
-const loudnessSampleSchema = z.strictObject({ atMs: z.int().nonnegative(), lufs: z.number().finite().nullable() });
+const timelineSampleSchema = z.strictObject({
+  atMs: z.int().nonnegative(),
+  value: z.number().min(0).max(1).finite(),
+});
+const loudnessSampleSchema = z.strictObject({
+  atMs: z.int().nonnegative(),
+  lufs: z.number().finite().nullable(),
+});
 
 /** One call's measures. Series are empty when the stream is absent (videoPresent or audioPresent false). */
 export const timelineResultSchema = z.strictObject({
@@ -227,9 +233,139 @@ export const pictureResultSchema = z.strictObject({
   pairs: z
     .array(picturePairSchema)
     .max(MAX_PICTURE_PAIRS)
-    .refine((pairs) => pairs.every((pair, index) => index === 0 || pair.atMs > pairs[index - 1]!.atMs), {
-      message: "pairs must run forward in time",
-    }),
+    .refine(
+      (pairs) => pairs.every((pair, index) => index === 0 || pair.atMs > pairs[index - 1]!.atMs),
+      {
+        message: "pairs must run forward in time",
+      },
+    ),
   loopDistance: z.number().finite().min(0).max(1).nullable(),
 });
 export type PictureResult = z.infer<typeof pictureResultSchema>;
+
+/**
+ * The detectors (Bible 6.7 step 1, 12.2, 12.3): black and frozen frames, flicker, motion and silence. Each is one stateless
+ * ffmpeg pass over the media. Initial values; the consumers' limits are read from configuration, not here.
+ */
+export const DETECT_STEPS = {
+  /** blackdetect (pix_th): a pixel is black at or below this luma share (0 to 1). */
+  blackPixelThreshold: 0.1,
+  /** blackdetect (pic_th): a frame is black when this share of its pixels is black. */
+  blackPictureThreshold: 0.98,
+  /** freezedetect (noise): two frames are the same when their difference is at most this (0 to 1). */
+  freezeNoise: 0.001,
+  /** silencedetect (noise): audio at or below this level is silent, in dBFS. The analyze stage uses the same floor (Bible 8.1). */
+  silenceNoiseDb: -50,
+  /** silencedetect (d): silences shorter than this are not reported. */
+  minSilenceMs: 100,
+  /** flicker: the largest share of reversals dropped before the mean (a cut or a flash is not flicker). */
+  flickerTrimShare: 0.1,
+  /** flicker: a mean reversal of this much luma per frame (0 to 1) scores 1. */
+  flickerFullScaleLuma: 0.05,
+} as const;
+
+/** At most this many runs per call. A 240 s reel with a run every frame would exceed it, which is refused. */
+export const MAX_DETECT_RUNS = 2000;
+
+export const detectRequestSchema = z.strictObject({ source: mediaSourceSchema });
+export type DetectRequest = z.infer<typeof detectRequestSchema>;
+
+/** A time span in whole milliseconds: from startMs to endMs, with durationMs the difference. */
+export const detectRunSchema = z
+  .strictObject({
+    startMs: z.int().nonnegative(),
+    endMs: z.int().nonnegative(),
+    durationMs: z.int().nonnegative(),
+  })
+  .refine((run) => run.endMs >= run.startMs && run.durationMs === run.endMs - run.startMs, {
+    message: "a run ends at or after its start, and its duration is the difference of the two",
+  });
+export type DetectRun = z.infer<typeof detectRunSchema>;
+
+const detectRunsSchema = z
+  .array(detectRunSchema)
+  .max(MAX_DETECT_RUNS)
+  .refine(
+    (runs) => runs.every((run, index) => index === 0 || run.startMs >= runs[index - 1]!.endMs),
+    {
+      message: "runs must be in time order and must not overlap",
+    },
+  );
+
+/**
+ * Black and frozen runs. A run is a span whose frames are black (blackdetect) or identical (freezedetect). The runs are the
+ * ffmpeg report, so a single black frame is a run of one frame's duration. fps is the probed frame rate, so a consumer can
+ * count frames. A video with no video stream reports no runs and says so.
+ */
+export const blackFramesResultSchema = z
+  .strictObject({
+    videoPresent: z.boolean(),
+    durationMs: z.int().nonnegative().nullable(),
+    fps: z.number().positive().finite().nullable(),
+    blackRuns: detectRunsSchema,
+    frozenRuns: detectRunsSchema,
+  })
+  .refine(
+    (result) =>
+      result.videoPresent || (result.blackRuns.length === 0 && result.frozenRuns.length === 0),
+    {
+      message: "a media with no video has no black or frozen runs",
+    },
+  );
+export type BlackFramesResult = z.infer<typeof blackFramesResultSchema>;
+
+/**
+ * Flicker (Bible 12.2, normalised): the mean reversal of frame-to-frame brightness, after dropping the largest reversals, over
+ * DETECT_STEPS.flickerFullScaleLuma, capped at 1. Brightness only, not motion-compensated. frames is the number of luma values
+ * measured. A score is null when there is no video or too few frames to see a reversal.
+ */
+export const flickerResultSchema = z
+  .strictObject({
+    videoPresent: z.boolean(),
+    frames: z.int().nonnegative(),
+    flickerScore: z.number().min(0).max(1).finite().nullable(),
+  })
+  .refine(
+    (result) => result.videoPresent || (result.flickerScore === null && result.frames === 0),
+    {
+      message: "a media with no video has no flicker score",
+    },
+  );
+export type FlickerResult = z.infer<typeof flickerResultSchema>;
+
+/**
+ * Motion energy: the mean absolute luma change between consecutive frames, on a 0 to 1 scale. It is a frame difference, not
+ * optical flow, so its scale differs from the Bible's flow value and its limit is a calibrated initial value (config).
+ */
+export const motionResultSchema = z
+  .strictObject({
+    videoPresent: z.boolean(),
+    frames: z.int().nonnegative(),
+    meanMotion: z.number().min(0).max(1).finite().nullable(),
+  })
+  .refine((result) => result.videoPresent || (result.meanMotion === null && result.frames === 0), {
+    message: "a media with no video has no motion",
+  });
+export type MotionResult = z.infer<typeof motionResultSchema>;
+
+/**
+ * Silence (Bible 8.1, 12.3): the silent spans of the first audio stream, each at least minSilenceMs long. longestMs is the
+ * longest of them, or 0 when the audio has none that long. With no audio stream, nothing is measured: longestMs is null.
+ */
+export const silenceResultSchema = z
+  .strictObject({
+    audioPresent: z.boolean(),
+    durationMs: z.int().nonnegative().nullable(),
+    minSilenceMs: z.literal(DETECT_STEPS.minSilenceMs),
+    silences: detectRunsSchema,
+    longestMs: z.int().nonnegative().nullable(),
+  })
+  .refine(
+    (result) => {
+      if (!result.audioPresent) return result.silences.length === 0 && result.longestMs === null;
+      const longest = result.silences.reduce((most, run) => Math.max(most, run.durationMs), 0);
+      return result.longestMs === longest;
+    },
+    { message: "longestMs is the longest silence, 0 when none, and null with no audio stream" },
+  );
+export type SilenceResult = z.infer<typeof silenceResultSchema>;

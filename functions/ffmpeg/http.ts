@@ -1,9 +1,10 @@
 // The serverless entry point: a Web-standard Request in, a Response out. Routes: POST /probe, /frames, /loudness, /cuts, /timeline,
-// /picture and GET /health (tool versions). Errors are typed: the body carries kind, retryable and message, and the status
-// follows from the kind. Unexpected errors return a generic message, never a stack trace.
+// /picture, /black, /flicker, /motion, /silence and GET /health (tool versions). Errors are typed: the body carries kind,
+// retryable and message, and the status follows from the kind. Unexpected errors return a generic message, never a stack trace.
 
 import { EngineError } from "../../src/engine/contracts/errors.ts";
 import * as cuts from "./cuts.ts";
+import * as detectors from "./detectors.ts";
 import { runTool, type ToolPaths } from "./exec.ts";
 import { FFMPEG_LIMITS } from "./limits.ts";
 import * as frames from "./frames.ts";
@@ -24,10 +25,14 @@ import {
 } from "./wire.ts";
 import {
   parseInput,
+  type BlackFramesResult,
   type CutsResult,
+  type FlickerResult,
   type LoudnessResult,
+  type MotionResult,
   type PictureResult,
   type ProbeResult,
+  type SilenceResult,
   type TimelineResult,
 } from "./types.ts";
 
@@ -136,7 +141,10 @@ const ROUTES: Record<string, Route> = {
   },
   "/timeline": async (body, options) => {
     const input = parseInput(wireTimelineRequestSchema, body, "media.http");
-    const result: TimelineResult = await timeline.run({ source: sourceFromWire(input.source) }, options);
+    const result: TimelineResult = await timeline.run(
+      { source: sourceFromWire(input.source) },
+      options,
+    );
     return result;
   },
   "/picture": async (body, options) => {
@@ -151,6 +159,38 @@ const ROUTES: Record<string, Route> = {
     const input = parseInput(wireCutsRequestSchema, body, "media.http");
     const result: CutsResult = await cuts.run(
       { source: sourceFromWire(input.source), sceneScore: input.sceneScore },
+      options,
+    );
+    return result;
+  },
+  "/black": async (body, options) => {
+    const input = parseInput(wireProbeRequestSchema, body, "media.http");
+    const result: BlackFramesResult = await detectors.blackFramesRun(
+      { source: sourceFromWire(input.source) },
+      options,
+    );
+    return result;
+  },
+  "/flicker": async (body, options) => {
+    const input = parseInput(wireProbeRequestSchema, body, "media.http");
+    const result: FlickerResult = await detectors.flickerRun(
+      { source: sourceFromWire(input.source) },
+      options,
+    );
+    return result;
+  },
+  "/motion": async (body, options) => {
+    const input = parseInput(wireProbeRequestSchema, body, "media.http");
+    const result: MotionResult = await detectors.motionRun(
+      { source: sourceFromWire(input.source) },
+      options,
+    );
+    return result;
+  },
+  "/silence": async (body, options) => {
+    const input = parseInput(wireProbeRequestSchema, body, "media.http");
+    const result: SilenceResult = await detectors.silenceRun(
+      { source: sourceFromWire(input.source) },
       options,
     );
     return result;

@@ -105,3 +105,16 @@ by a module under `src/engine/media/`, so `tsc --noEmit` type-checks all of it. 
   temporary directory, not to stdout, so the 4 MB stdout limit does not apply. Three ffmpeg passes: the probe, the thumbnail
   grid and the tail.
 - Not deployed. The owner deploys this route with the others and records one `/picture` answer as `captured`.
+
+## Follow-up: the detectors (`detectors.ts`, routes `POST /black`, `/flicker`, `/motion`, `/silence`)
+
+- Each route takes the same body as `/probe` (one source) and answers its own result schema (`types.ts`). Each runs one or two
+  ffmpeg passes in a temporary directory that is removed on every path. `/black` runs blackdetect and freezedetect in one pass.
+  `/flicker` and `/motion` read the luma of every frame on a 160 px copy (`signalstats`, and `tblend` for motion). `/silence` runs
+  `silencedetect` on the first audio stream. Pure argument builders and parsers are exported, and tested on the lines of ffmpeg 6.1.1.
+- Limits: media up to 240 s (`FFMPEG_LIMITS.maxDetectMs`), 90 s per pass (60 s for silence), and at most 2000 runs in one report.
+  A span still open at the end is closed at the probed duration. With no duration, the report is a provider error.
+- Parsers refuse a report whose spans are not start-then-end, or that overlap, rather than repair it.
+- `/health` is unchanged. `GET` on these routes answers 405, as the others do.
+- Not deployed. The owner deploys these four routes with the others, and records one answer per route on one real take and one real
+  reference (the same live steps as `/timeline` and `/picture`). Measure the cold start again with the larger bundle.

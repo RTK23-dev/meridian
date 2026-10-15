@@ -4,11 +4,13 @@
 export type {
   CutsCallRequest,
   CutsResult,
+  DetectorRequest,
   Frame,
   FramesRequest,
   FramesResult,
   LoudnessRequest,
   LoudnessResult,
+  MediaDetectors,
   MediaFunctions,
   MediaSource,
   ProbeRequest,
@@ -17,14 +19,22 @@ export type {
   TimelineResult,
   TimelineSample,
   LoudnessSample,
+  BlackFramesResult,
+  DetectRun,
+  FlickerResult,
+  MotionResult,
+  SilenceResult,
 } from "./interface.ts";
-export { timelineInProcess, timelineOverWire, type TimelineClient } from "./timeline.ts";
+export { DETECTOR_PATHS, detectorsOverWire } from "./detectors.ts";
 export {
-  pictureInProcess,
-  pictureOverWire,
-  PICTURE_PATH,
-  type PictureClient,
-} from "./picture.ts";
+  blackAt,
+  blackFrameMeasures,
+  longestRunFrames,
+  takeCodeMeasures,
+  type TakeCodeMeasures,
+} from "./measures.ts";
+export { timelineInProcess, timelineOverWire, type TimelineClient } from "./timeline.ts";
+export { pictureInProcess, pictureOverWire, PICTURE_PATH, type PictureClient } from "./picture.ts";
 export type {
   PicturePair,
   PictureRequest,

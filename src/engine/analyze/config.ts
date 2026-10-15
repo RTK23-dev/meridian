@@ -56,4 +56,23 @@ export const analyzeConfig = {
 
   /** Loudness of a silent measure: the BS.1770 absolute gate (Bible 8.1). Silence is at or below it. */
   silentLufs: -70,
+
+  /**
+   * The frame_reader readings (Bible 6.2 step 6, 8.1; analyze/frameReader.ts). Initial values, to be measured on gold sets.
+   * A frame's reading counts only when the reader is at least minConfidence sure of it.
+   */
+  frameReader: {
+    minConfidence: 0.5,
+    /** Captions need at least this many confident frames that show a caption (initial). */
+    minCaptionFrames: 3,
+    /** Shake and speed ramps need at least this share of the sampled frames judged clearly (not unclear) (initial). */
+    minJudgedShare: 0.5,
+    /** A flag is set when at least this share of the judged frames shows it. Shake is seen in a few frames of a handheld shot. */
+    shakeShareMin: 0.25,
+    speedRampShareMin: 0.1,
+    /** A caption's centre above upperBelow is an upper caption, below lowerAbove a lower one, and the middle between (initial). */
+    captionBand: { upperBelow: 1 / 3, lowerAbove: 2 / 3 },
+    /** An overlay drawn in a frame is the expected graphic when its box overlaps the EDL box by at least this much (IoU). */
+    overlayMinIou: 0.2,
+  },
 } as const;

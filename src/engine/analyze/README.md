@@ -14,8 +14,12 @@ Implements Video Engine Bible **6.2** (analyze_reference, steps 1 to 7), **8.1**
 - `measure.ts`: the per-segment motion, brightness and loudness, and the loudness per tenth. Pure.
 - `zoom.ts`: the zoom jumps (scale change above 8%, fitted, same-direction pairs joined) and the loop verdict, from the picture
   measures (Bible 8.1 motion and endsOnLoop). Pure.
-- `readings.ts`: `pictureReadings(picture)`, the stage's `readings` port built from the picture client. Captions are not read here
-  (the vision reader is not built, STATUS.md blocker 2).
+- `readings.ts`: `pictureReadings(picture)`, the picture part of the stage's `readings` port (zoom jumps and the loop).
+- `frameReader.ts` (Bible 6.2 step 6, 8.1, v4 note): the `frame_reader` role's call (`readFrames`, at most 24 frames) and its
+  aggregation (`captionsOf`, `judgementOf`, `summariseFrameReadings`). `analysisReadings({ picture, roles })` is the production
+  readings port: the picture measures plus the frame_reader readings (captions, shake, speed ramps).
+- `renderReadings.ts` (Bible 6.12, 12.3): the same role on the rendered frames. `overlayMeasures`, `captionWordsAt`, `textWordsAt`:
+  counts and presence only.
 - `copy.ts`: the copy rule. A label or layer that repeats three transcript words in order is copied content.
 - `angle-bible.ts`: the Angle Bible entries the genome names genes by (read from `src/lib/meridian/study/bible.ts`).
 - `config.ts`: the analysis constants (Bible values and initial values). Move to `engine/config` (see STATUS.md).
@@ -33,4 +37,4 @@ Implements Video Engine Bible **6.2** (analyze_reference, steps 1 to 7), **8.1**
 
 ## Tests
 
-    NODE_ENV=development node --experimental-strip-types --test "src/engine/analyze/**/*.test.ts" "src/engine/edit/**/*.test.ts" "src/engine/claude/roles/genome.test.ts" "src/engine/claude/roles/tightener.test.ts"
+    NODE_ENV=development node --experimental-strip-types --test "src/engine/analyze/**/*.test.ts" "src/engine/edit/**/*.test.ts" "src/engine/claude/roles/genome.test.ts" "src/engine/claude/roles/tightener.test.ts" "src/engine/claude/roles/frame_reader.test.ts"

@@ -155,3 +155,40 @@ apply (choose the vendor, record one transcription, price it). Nothing here choo
 - `test/picture-clips.ts` generates the clips the picture tests use (a centred and an off-centre 1.2x zoom-in at 1000 ms, a
   looping still, a drifting zoom), with ffmpeg in the fixture directory. `picture.test.ts` skips them without ffmpeg.
 - `boundaries.test.ts`: the handler list now names `timeline` and `picture`, so no production file outside this folder runs them.
+
+## Follow-up: the detectors (branch `eng-detectors`)
+
+Bible 6.7 step 1, 12.2 and 12.3. Four stateless functions over one source: black and frozen runs, flicker, motion and silence. The
+handlers are `functions/ffmpeg/detectors.ts`, routes `POST /black`, `/flicker`, `/motion` and `/silence`. The schemas, `DETECT_STEPS`
+and the limits are in `functions/ffmpeg/types.ts` and `limits.ts`.
+
+- **Client.** `detectors.ts`: `detectorsInProcess()` and `detectorsOverWire(post)`. Each answer is checked against its own schema, and
+  a mismatch is a provider error. Each call validates the source first; inline bytes above 4 MB are refused before any request.
+- **The interface.** `MediaDetectors` (in `interface.ts`) is a sibling of `MediaFunctions`, not a member of it. Adding four required
+  members to `MediaFunctions` breaks the object literal in `jobs/handlers/voice.test.ts`, which is not this branch's. `httpMediaFunctions`
+  and `localMediaFunctions` implement both. Consumers take `Pick<MediaDetectors, ...>`, as they take `Pick<MediaFunctions, ...>` today.
+- **Measures (`measures.ts`).** `takeCodeMeasures` gives the take's three code values (`blackOrFrozenRunFrames`, `flickerScore`,
+  `meanMotion`) for `review/take/code.ts`. `blackFrameMeasures` and `blackAt` give the post-render black-frame reading. `longestRunFrames`
+  counts a run in frames at the probed rate, and a black run that reaches the end includes its last frame. Each null means the detector
+  saw no video, or the frame rate is unknown.
+- **What each measure is.** Black: `blackdetect` (pixel share 0.10, frame share 0.98) on a 160 px copy. Frozen: `freezedetect` (noise
+  0.001). A flat picture is frozen, so a still take fails the frozen check (Bible 12.2 says so). Flicker: the mean reversal of the
+  frame-to-frame brightness step, halved, after dropping the largest 10 per cent, over 0.05 luma, capped at 1. It is brightness only,
+  not motion-compensated, so a flash can score. Motion: the mean absolute luma change between consecutive frames, 0 to 1. It is a
+  frame difference, not optical flow. Silence: `silencedetect` at -50 dBFS, runs of at least 100 ms. With no audio, it says so and the
+  longest silence is null (never 0).
+- **Measured here (ffmpeg 6.1.1, generated clips).** Black block at 1000 to 1500 ms, found to the frame. Alternating brightness scores
+  1.0; a steady picture 0. A panning picture has motion 0.093; a still picture 0; a 2-D test pattern with a small moving part 0.008,
+  so a mostly still shot fails the motion check at the initial 0.05. Silence at 1000 to 2000 ms, with a 1 kHz tone either side.
+- **Limits and interpretations (for the lead).** The motion scale is not the Bible's optical flow, so `take.motionMin` (0.05) must be
+  calibrated on gold labels before the check may block. Flicker is brightness-only (Bible 12.2 says motion-compensated); the
+  calibration covers it too. A run open at the end of a report is closed at the probed duration, and with no duration it is a
+  provider error.
+- **Tests.** `detectors.test.ts` (the parsers on recorded ffmpeg 6.1.1 lines, the scores on exact series, the client contract, and the
+  real functions on generated clips: black-gap, steady, flicker, pan, tone-gap and no-audio), `detectors-http.test.ts` (the routes, the
+  refusals, and the round trip through `httpMediaFunctions`), `measures.test.ts` (the null and end-of-media cases). The clips are made by
+  `test/detector-clips.ts` in the fixture directory. They are never committed. The real-ffmpeg tests skip with a visible reason when
+  ffmpeg is missing.
+- **Owner live steps.** Deploy the four routes with the others (see `functions/ffmpeg/STATUS.md`). Then record one answer per route on
+  one real take and one real reference, and check the calibration against the owner's labelled takes before the take gate may block on
+  flicker or motion.

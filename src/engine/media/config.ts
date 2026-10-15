@@ -24,6 +24,10 @@ export const mediaConfig = {
     cuts: 140_000,
     timeline: 300_000,
     picture: 200_000,
+    black: 200_000,
+    flicker: 200_000,
+    motion: 200_000,
+    silence: 140_000,
   },
 
   /** Validation limits for speech-to-text output (untrusted, Bible 2 and 6.3). */

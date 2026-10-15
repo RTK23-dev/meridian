@@ -19,6 +19,7 @@ inside a temporary directory, then always removes that directory).
 | `cuts.ts`     | ffmpeg `select='gt(scene,T)',showinfo` | scene-change times in ms, ascending. `T` is an input (the client supplies the configured default).                                                                   |
 | `loudness.ts` | ffmpeg `ebur128=peak=true`             | integrated LUFS, true peak dBTP, loudness range LU. Silence or a value at the absolute gate (-70 LUFS) is `null`.                                                    |
 | `picture.ts`  | ffmpeg, raw grayscale thumbnails to files | per 100 ms pair: scale and shift fit (scale, fit ratio), a cut-straddling pair unmeasured; loop distance of the first and last frame (Bible 8.1, zoom and loop). Route `POST /picture`. |
+| `detectors.ts` | ffmpeg `blackdetect`, `freezedetect`, `signalstats` (luma, frame difference), `silencedetect` | black and frozen runs in ms (Bible 12.2); flicker score, normalised 0 to 1 (12.2); mean motion energy, 0 to 1 (12.2); silent runs of at least 100 ms at -50 dBFS (8.1, 12.3). Routes `POST /black`, `/flicker`, `/motion`, `/silence`. |
 
 The frame plan of section 6.2 (a frame at every cut, then 2 per second, capped at 60, cuts first) is applied by the
 client, `src/engine/media/frames.ts`, so the handler receives explicit times.

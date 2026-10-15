@@ -18,6 +18,11 @@ export const FFMPEG_LIMITS = {
   maxTimelineMs: 240_000,
   /** Longest media the picture measures. The thumbnails of a longer picture would not fit the response. */
   maxPictureMs: 240_000,
+  /**
+   * Longest media the detectors measure (black and frozen frames, flicker, motion, silence). Per-frame series are one
+   * value per frame, so the cap bounds the stderr that one pass returns (about 80 bytes a frame, under the stdout limit).
+   */
+  maxDetectMs: 240_000,
   /** Time allowed to fetch the input from a URL. */
   urlFetchTimeoutMs: 60_000,
   /** Time allowed for one tool run. The caller's transport timeout must be longer (see src/engine/media/config.ts). */
@@ -28,6 +33,10 @@ export const FFMPEG_LIMITS = {
     cuts: 120_000,
     timeline: 90_000,
     picture: 90_000,
+    black: 90_000,
+    flicker: 90_000,
+    motion: 90_000,
+    silence: 60_000,
     version: 10_000,
   },
   /** Characters of tool stderr kept in an error message. */
