@@ -10,8 +10,22 @@ import type { ArtifactDrive } from "../storage/artifact-drive.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import { completeProductionJob } from "../production/materialization.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
+import type { EngineReadinessPorts } from "../../../engine/api/index.ts";
+import type { EngineOnlyFields } from "./engine-request.ts";
 import { capStopReason } from "./stage-decision.ts";
 import { meteredSpendOf } from "./spend.ts";
+
+/**
+ * What the video engine takes from the Factory beyond the plan: the engine's readiness ports and the fields a request needs that a plan
+ * does not carry (engine-request.ts). Production passes neither, so a run that names the engine reports what it lacks and sends nothing.
+ * Tests pass fixtures. Nothing here is a default value.
+ */
+export type FactoryEngineSeams = {
+  /** The engine's readiness ports. Absent: the production ports (the engine's runtime and Meridian's credentials and budget). */
+  readiness?: EngineReadinessPorts;
+  /** The engine-only fields of one video. Absent: none, so the request names every field it lacks. */
+  fields?: (input: { plan: CreativePlan; deliverableId: string; variantId: string }) => EngineOnlyFields;
+};
 
 export type ProduceInput = {
   organizationId: string;
@@ -30,6 +44,8 @@ export type ProduceInput = {
   /** Decision engines the judgments may call. Absent means the engines the deployment selects. */
   engines?: DecisionEngineRegistry;
   driveClient?: ArtifactDrive;
+  /** The video engine's seams (FactoryEngineSeams). Used only by a video whose provider is the engine. */
+  engine?: FactoryEngineSeams;
 };
 
 export type Scope = { organizationId: string; brandId: string };

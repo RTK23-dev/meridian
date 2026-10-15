@@ -54,6 +54,11 @@ export type EngineVideoInput = {
   /** The plan's video deliverable for this variant. */
   deliverableId: string;
   engine?: EngineOnlyFields;
+  /**
+   * The budget of this master in USD: the run's cost per master (RunSettings.costPerMasterUsd), which the Factory passes. Null means
+   * the run has none, and no budget is set. Absent (undefined), the plan's own estimate for the deliverable is used.
+   */
+  budgetUsd?: number | null;
 };
 
 /**
@@ -100,7 +105,9 @@ export function mapVideoToEngineRequest(input: EngineVideoInput): EngineMapping 
   const engine = input.engine ?? {};
   const deliverable = input.plan.deliverables.find((item) => item.id === input.deliverableId && item.kind === "video");
   const seconds = deliverable?.targetDurationSeconds;
-  const budget = budgetPerMaster(input.plan, input.deliverableId);
+  const given = input.budgetUsd;
+  const budget =
+    given === undefined ? budgetPerMaster(input.plan, input.deliverableId) : typeof given === "number" && Number.isFinite(given) && given >= 0 ? given : null;
 
   const candidate = present({
     schema: "meridian.production_request/v1",

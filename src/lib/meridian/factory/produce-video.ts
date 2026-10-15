@@ -32,8 +32,8 @@ import type { CreativeSpec, ProductionJob } from "../production/types.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
-import { engineRequestIdFor, mapVideoToEngineRequest } from "./engine-request.ts";
-import { meteredSpendOf } from "./spend.ts";
+import { produceEngineVideo } from "./produce-engine.ts";
+import { engineHeldOf, meteredSpendOf } from "./spend.ts";
 import { ENGINE_VIDEO_PROVIDER_ID } from "./run-settings.ts";
 import {
   IN_FLIGHT_STATUSES,
@@ -72,9 +72,6 @@ export type VideoRequest = {
   sequenceIndex: number;
 };
 
-/** The reason a run that names the Meridian video engine stops. The engine is not connected; phase E3 connects it. */
-export const ENGINE_NOT_READY_REASON = "The video engine cannot deliver videos yet (phase E3)";
-
 /** The reason the run waits for a video that is still at the provider. It names the provider and the job's status. */
 export function waitingReasonOf(label: string, providerId: string, status: string): string {
   return `The ${providerId} video for ${label} is still ${status.toLowerCase().replace(/_/g, " ")} at the provider. Nothing is marked produced until it completes, and the run checks again.`;
@@ -87,6 +84,8 @@ export function waitingReasonOf(label: string, providerId: string, status: strin
  */
 export async function produceVideo(sql: Sql, input: ProduceInput, req: VideoRequest): Promise<Step> {
   const scope: Scope = { organizationId: input.organizationId, brandId: input.brandId };
+  // The Meridian video engine makes its own request. It writes no production job, and nothing a provider call would write.
+  if ((input.providers.video ?? "auto") === ENGINE_VIDEO_PROVIDER_ID) return produceEngineVideo(sql, input, scope, req);
   const existing = await sql<{ status: string; provider: string; materialized_creative_id: string | null }>`
     select status, provider, materialized_creative_id from production_jobs
     where id = ${req.jobId} and organization_id = ${scope.organizationId} and brand_id = ${scope.brandId}
@@ -139,25 +138,9 @@ async function resumeVideo(
   return { kind: "skipped" };
 }
 
-/**
- * The Meridian video engine is named, and it is not connected. The plan is mapped to the engine's request, so a plan the engine could not
- * take is found here as well. Nothing is sent: no job, reservation, provider call, creative, media id, receipt or cost row is written, and
- * the run stops with the reason. The mapping's result is not shown on the run; the reason is the one phase E3 is named by.
- */
-function engineNotConnected(scope: Scope, req: VideoRequest): Step {
-  mapVideoToEngineRequest({
-    organizationId: scope.organizationId,
-    requestId: engineRequestIdFor(req.jobId, req.plan.createdAt),
-    plan: req.plan,
-    deliverableId: req.planDeliverableId,
-  });
-  return { kind: "stop", reason: ENGINE_NOT_READY_REASON };
-}
-
 async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: VideoRequest): Promise<Step> {
-  // The provider is the run's choice for video. The engine stops here, before the cap check, a job or a reservation exists.
+  // The provider is the run's choice for video. A named provider is checked before the cap check, a job or a reservation exists.
   const requested = input.providers.video ?? "auto";
-  if (requested === ENGINE_VIDEO_PROVIDER_ID) return engineNotConnected(scope, req);
 
   // The metered spend is checked before any provider call, as it is for an image.
   const reached = await capStopOf(sql, input, scope);
@@ -374,8 +357,10 @@ async function videoCapStop(sql: Sql, input: ProduceInput, scope: Scope, estimat
     where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and modality = 'video'
       and input->>'runId' = ${input.runId} and status not in ('FAILED', 'CANCELLED', 'PREFLIGHT_FAILED', 'NOT_CONFIGURED', 'POSTFLIGHT_FAILED')
   `;
-  const held = Number(committed[0]?.total ?? 0);
-  const heldToday = Number(committed[0]?.daily ?? 0);
+  // The unspent budgets of the run's engine requests are held against the same caps (one ledger, one cap).
+  const engineHold = await engineHeldOf(sql, scope.organizationId, scope.brandId, input.runId);
+  const held = Number(committed[0]?.total ?? 0) + engineHold.totalCents;
+  const heldToday = Number(committed[0]?.daily ?? 0) + engineHold.dailyCents;
   if (input.caps.totalCents !== null && metered.totalCents + held + estimateCents > input.caps.totalCents) {
     return `The video's estimated cost of $${(estimateCents / 100).toFixed(2)} would pass the total spend cap with the spend this run already holds, so no provider was called.`;
   }

@@ -34,8 +34,20 @@ export type StartRequestInput = {
   gateMetrics?: Record<string, GoldMetrics>;
 };
 
+export type StartRequestOptions = {
+  /**
+   * Runs in the start's transaction, after the request row exists and before intake is queued. The engine API writes the
+   * production_request artifact here (src/engine/api), so intake is never queued for a request whose artifact is missing.
+   */
+  beforeQueue?: (tx: Sql) => Promise<void>;
+};
+
 /** Creates the request row and queues intake. Refused if the request id already exists. */
-export async function startEngineRequest(sql: Sql, input: StartRequestInput): Promise<{ status: RequestStatus; queued: number }> {
+export async function startEngineRequest(
+  sql: Sql,
+  input: StartRequestInput,
+  options: StartRequestOptions = {},
+): Promise<{ status: RequestStatus; queued: number }> {
   return transaction(sql, async (tx) => {
     const existing = await tx<{ id: string }>`
       select id from engine_requests where id = ${input.requestId} and organization_id = ${input.organizationId} limit 1
@@ -57,6 +69,7 @@ export async function startEngineRequest(sql: Sql, input: StartRequestInput): Pr
       values (${input.requestId}, ${input.organizationId}, ${input.brandId}, ${input.formatId}, ${input.priority},
         ${started.state.status}, ${started.jobs.at(-1)?.stage ?? ""}, ${JSON.stringify(started.state)})
     `;
+    if (options.beforeQueue) await options.beforeQueue(tx);
     await queueJobs(tx, input.brandId, started.jobs, null);
     await recordEvent(tx, { organizationId: input.organizationId, requestId: input.requestId, kind: "start", stage: "", subjectId: input.requestId, jobId: "", dedupeKey: null, body: { queued: started.jobs.length } });
     return { status: started.state.status, queued: started.jobs.length };

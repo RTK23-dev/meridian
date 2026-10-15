@@ -179,7 +179,7 @@ export function RunBuilder({
                   ))}
                 </SelectInput>
                 {draft.providers.video === ENGINE_VIDEO_PROVIDER_ID ? (
-                  <p className="text-sm text-muted">The Meridian video engine is not connected yet. A run that names it stops before any spend, with the reason.</p>
+                  <p className="text-sm text-muted">The Meridian video engine makes the video from the plan. A run that names it stops with the engine's reason when it cannot run, such as no connected key, no cost per master, or a field the plan does not carry.</p>
                 ) : null}
               </Field>
             ) : (
