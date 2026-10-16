@@ -58,7 +58,7 @@ Oct 12, 2026 · @Victor
 5. **Typed artifacts, resumable stages.** Every stage writes one validated artifact; a failure resumes from the last good artifact.
 6. **Fail closed.** Unknown values stay null; nothing is delivered that failed a gate; no fake success.
 7. **Everything costs on the ledger.** Every paid call is estimated, reserved and reconciled.
-8. **All compute is API.** No local models or renderers; ffmpeg runs only in stateless serverless functions.
+8. **All compute that makes the video is API.** No local models and no local renderers. ffmpeg runs on the worker for decoding and measurement only (probe, cuts, frames, loudness, normalising); a stateless serverless deployment of the same handlers stays an option (owner decision 2026-10-16).
 
 **Locked decisions (don't reopen without new evidence):**
 
@@ -826,12 +826,22 @@ The highest score wins unless its concurrency bucket is full, in which case the 
 | `image.keyframe` | Seedream 5.0 Flash; Seedream 4.5 | $0.018 / $0.04 per image |
 | `image.edit` | Nano Banana 2; GPT Image 2 | token-priced |
 | `tts` | Eleven v4; Gemini 3.8 Flash TTS | $40 per M characters; $9 per M output tokens |
-| Speech-to-text | Hosted model with word timestamps (vendor chosen in E1) | per minute |
+| Speech-to-text | Deepgram pre-recorded `/v1/listen` with word timestamps (owner decision 2026-10-16) | per minute |
 | Stock | Pexels; Pixabay | free with key (licence check in E2) |
 | Background removal, upscaling, lip-sync | API vendors chosen in E2 | per call |
 | Render | HeyGen HyperFrames cloud; Shotstack (Remotion Lambda dropped 2026-10-14) | \~$0.10 per min at 1080p (verify); $0.20 per min |
 
 Prices live in `engine/config/prices.ts` and are overwritten by reconciled actuals: the ledger's rolling average replaces the list price after 50 calls.
+
+### 10.5 Orchestrator model choice (owner decision 2026-10-16)
+
+For the production model classes (video, avatar, image, speech), the orchestrator chooses the model for each shot from OpenRouter's live catalog, not from a fixed table. The table in 10.3 and `config/routes.ts` keep the platform and the fallback targets.
+
+1. **Candidates.** The gateway reads OpenRouter's catalog (`GET /api/v1/videos/models` for video, `GET /api/v1/models?output_modalities=...` for image and speech), cached with its read time. A candidate must fit the shot (duration, aspect ratio 9:16, first or last frame when the shot needs one) and must have a price the engine can estimate from (for video, a per-second SKU). A model with no usable price is not a candidate, because its call could not be reserved.
+2. **Choice.** The director role receives the shot and the candidates (id, capabilities, price) and returns one model id with its reason. Its answer is untrusted: code accepts it only if the id is one of the candidates, and otherwise the shot uses the first eligible fallback target from the route table, recorded as such.
+3. **Record.** The shot spec carries the chosen model, the reason and the catalog read time, and every choice is a `Decision` on the shot, so the user sees why each model was used.
+4. **Preferences (later).** `config/model-preferences.ts` will rank candidates per model class from the gold sets and the scoring in 10.2. It starts empty, so for now the director picks from the whole eligible catalog.
+5. **Cost.** The estimate comes from the catalog price; the bill is OpenRouter's `usage.cost` on the completed job. The ledger rules of 14.1 apply unchanged.
 
 ### 10.4 Concurrency, caching and failures
 
@@ -1286,7 +1296,7 @@ Six phases. A phase is complete only when every acceptance test passes in a **re
 
 ### 20.2 Open questions (owner to decide; agents must not guess)
 
-- [ ] Speech-to-text vendor (word timestamps, music robustness, price).
+- [x] Speech-to-text vendor: Deepgram (owner decision 2026-10-16).
 - [ ] Background removal, upscaling and lip-sync vendors.
 - [x] Renderer fallback: Shotstack only; Remotion Lambda dropped because it needs S3 (decided 2026-10-14).
 - [x] Workspace monthly budget: a "Monthly video budget (USD)" field per workspace in Settings, with no default; the engine refuses to reserve until it is set (decided 2026-10-14).
