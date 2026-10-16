@@ -148,6 +148,15 @@ async function ledger(): Promise<LedgerStore> {
   return store;
 }
 
+/** Records the bill of every open narration call of the reservation, at its list estimate (the bill its recorded speech answer stands for). */
+async function billOpenVoiceCalls(store: LedgerStore): Promise<void> {
+  for (const row of await store.listEntries(RESERVATION_ID)) {
+    if (row.stage === "voice" && row.settlement === undefined) {
+      await reconcileCall(store, { idempotencyKey: row.idempotencyKey, billedUsd: row.estimateUsd });
+    }
+  }
+}
+
 type Harness = {
   ports: VoicePorts;
   readonly speech: { requests: Array<{ body: string }> };
@@ -168,6 +177,8 @@ async function harness(options: {
   stt?: RecordedSttFixture | null;
   speechModel?: string | null;
   loudness?: number | null;
+  /** False: the speech answers report no bill, so each narration call stays held (contract v6). Default true. */
+  speechBilled?: boolean;
 }): Promise<Harness> {
   const store = memoryMediaStore();
   const speechReplies = options.takes.map((durationMs, position) =>
@@ -188,8 +199,18 @@ async function harness(options: {
     ],
     routes.table,
   );
-  const gateway = gatewayFor(script.transport, { routes: table });
   const store2 = await ledger();
+  // The speech route answers with raw bytes and no bill (assets/providers/openrouterSpeech.ts), so the gateway cannot read one from it.
+  // After each recorded speech answer the harness records the bill the provider's invoice gives, which is the call's list estimate. With
+  // speechBilled false, the call stays held: the router and the stage must then refuse to go on.
+  const transport: HttpTransport = async (request) => {
+    const response = await script.transport(request);
+    if (request.url.endsWith("/audio/speech") && response.status === 200 && options.speechBilled !== false) {
+      await billOpenVoiceCalls(store2);
+    }
+    return response;
+  };
+  const gateway = gatewayFor(transport, { routes: table });
   const router: AssetRouter = createAssetRouter({
     gateway,
     ledger: store2,
@@ -443,5 +464,17 @@ describe("the voice stage on recorded answers (Bible 6.3)", () => {
     if (outcome.status !== "done") return;
     assert.equal(outcome.track, null);
     assert.ok(outcome.gate.checks.some((check) => check.rule === "lufs_measured" && !check.pass));
+  });
+
+  it("a narration whose provider reports no bill stays held: the stage stops with a conflict, and nothing is transcribed or stored", async () => {
+    const h = await harness({ takes: [2900], stt: sttWith([spokenWords(ORIGINAL_TEXT)]), speechBilled: false });
+    await assert.rejects(runVoice(runFor(), h.ports), (error: unknown) => {
+      return error instanceof EngineError && error.kind === "conflict" && error.retryable === false && /unsettled/.test(error.message);
+    });
+    const rows = await h.ledger.listEntries(RESERVATION_ID);
+    assert.equal(rows.filter((row) => row.stage === "voice" && row.settlement === undefined).length, 1, "the narration's hold stays on the ledger");
+    assert.equal(rows.filter((row) => row.settlement !== undefined).length, 0, "no call is settled without a bill");
+    assert.equal(h.stt.calls.length, 0, "no take is transcribed before the narration is settled");
+    assert.equal(h.speech.requests.length, 1, "the narration is sent once; no retry follows an unsettled call");
   });
 });

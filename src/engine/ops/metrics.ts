@@ -196,7 +196,7 @@ export function providerHealth(rows: readonly AttemptRow[], minAttempts: number)
 export type VideoCostRow = { requestId: string; videoId: string; variantOf: string | null; totalUsd: number | null };
 
 /** The settled ledger of one request: its actual sum (null while any call is unsettled) and its estimate-flagged rows. */
-export type LedgerRequestRow = { requestId: string; actualUsd: number | null; rows: number; estimateRows: number };
+export type LedgerRequestRow = { requestId: string; actualUsd: number | null; rows: number; unsettledRows: number };
 
 export type CostSummary = {
   masters: CostDistribution;
@@ -204,7 +204,8 @@ export type CostSummary = {
   /** Delivered masters whose cost is unknown (no video.delivered, or an unreadable one). Counted, never priced at 0. */
   unknownMasters: number;
   /** Ledger rows whose actual is a list-price fallback or held estimate (Bible 14.1 step 4), not a provider bill. */
-  estimateFlaggedRows: number;
+  /** Ledger rows with no bill: their cost is unknown, and no estimate stands in for it (contract v6). */
+  unsettledRows: number;
   /** Requests whose ledger total equals the sum of their delivered videos. */
   reconciledRequests: number;
   mismatchedRequests: number;
@@ -228,7 +229,7 @@ function costDistributionOf(values: readonly number[]): CostDistribution {
  * The cost of masters and of variants from the delivered videos, plus a reconciliation of each request's settled ledger against the sum of
  * its delivered videos. deliver attributes every ledger row to a video, so the two must agree for a delivered request.
  */
-export function costSummary(videos: readonly VideoCostRow[], ledger: readonly LedgerRequestRow[], estimateFlaggedRows: number): CostSummary {
+export function costSummary(videos: readonly VideoCostRow[], ledger: readonly LedgerRequestRow[], unsettledRows: number): CostSummary {
   const masterCosts: number[] = [];
   const variantCosts: number[] = [];
   let unknownMasters = 0;
@@ -273,7 +274,7 @@ export function costSummary(videos: readonly VideoCostRow[], ledger: readonly Le
     masters: costDistributionOf(masterCosts),
     variants: costDistributionOf(variantCosts),
     unknownMasters,
-    estimateFlaggedRows,
+    unsettledRows,
     reconciledRequests: reconciled,
     mismatchedRequests: mismatched,
     unreconciledRequests: unreconciled,

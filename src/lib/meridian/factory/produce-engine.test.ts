@@ -171,9 +171,9 @@ async function reserveRecorded(sql: Sql, organizationId: string, requestId: stri
 async function recordActual(sql: Sql, organizationId: string, requestId: string, reservationId: string, usd: number): Promise<void> {
   await sql`
     insert into engine_ledger (id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd,
-      actual_usd, actual_is_estimate, idempotency_key, at)
+      actual_usd, settlement, idempotency_key, at)
     values (${randomUUID()}, ${organizationId}, ${requestId}, ${reservationId}, 'produce_shot', 'fixture', 'fixture', ${usd}, ${usd},
-      ${usd}, false, ${`ledger-${randomUUID()}`}, now())
+      ${usd}, 'billed', ${`ledger-${randomUUID()}`}, now())
   `;
 }
 

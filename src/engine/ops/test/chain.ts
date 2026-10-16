@@ -39,6 +39,7 @@ import { notConnectedWorkspaceBudget } from "../../jobs/handlers/estimate-reserv
 import { applyEngineEvent, startEngineRequest } from "../../jobs/orchestrator-sql.ts";
 import { listRoleCalls } from "../../jobs/role-call-store.ts";
 import { createEngineRuntime } from "../../jobs/runtime.ts";
+import { withRenderBills } from "../../jobs/test/harness.ts";
 import { sqlLedgerStore, withReservationLedger } from "../../jobs/sql-ledger-store.ts";
 import type { EngineRuntime, ShotSummary, StageOutput } from "../../jobs/types.ts";
 import { fakeObjects, gatewayWith, json, PNG_1X1, recordedTransport } from "../../jobs/test/harness.ts";
@@ -260,7 +261,7 @@ export async function chainWorld(sql: Sql, organizationId: string): Promise<Chai
     return entry;
   };
   const render = cleanRenderOnce();
-  const runtime = createEngineRuntime({
+  const runtime = withRenderBills(sql, createEngineRuntime({
     sql,
     gateway: gatewayWith(recordedTransport({}).transport),
     workspaceBudget: notConnectedWorkspaceBudget,
@@ -335,7 +336,7 @@ export async function chainWorld(sql: Sql, organizationId: string): Promise<Chai
       events: sqlEventStore(sql),
       now,
     },
-  });
+  }));
   return { sql, organizationId, runtime, deliverFaults, objects, requests };
 }
 

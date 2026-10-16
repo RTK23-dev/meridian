@@ -67,7 +67,7 @@ type JobSqlRow = { id: string; job_type: string; status: string; created_at: unk
 type GateSqlRow = { gate: string; format_id: string; passed: boolean };
 type AttemptSqlRow = { provider_id: string; outcome: AttemptRow["outcome"]; error_kind: string | null; latency_ms: unknown };
 type DeliveredSqlRow = { request_id: string; body: string };
-type LedgerSqlRow = { request_id: string; actual_usd: unknown; actual_is_estimate: boolean | null };
+type LedgerSqlRow = { request_id: string; actual_usd: unknown };
 
 /** The time of a database value (a Date from the driver, or a string), in milliseconds. */
 export function msOf(value: unknown): number {
@@ -120,7 +120,7 @@ export async function readStageMetrics(sql: Sql, scope: OpsScope, options: Metri
       and kind = 'video.delivered' and created_at >= ${since}::timestamptz
   `;
   const ledger = await sql<LedgerSqlRow>`
-    select request_id, actual_usd, actual_is_estimate from engine_ledger
+    select request_id, actual_usd from engine_ledger
     where organization_id in (select value from json_array_elements_text(${json}::json)) and at >= ${since}::timestamptz
   `;
 
@@ -174,24 +174,26 @@ export async function readStageMetrics(sql: Sql, scope: OpsScope, options: Metri
       totalUsd: parsedBody ? parsedBody.cost.total : null,
     });
   }
-  const ledgerByRequest = new Map<string, { actual: number; unsettled: boolean; rows: number; estimateRows: number }>();
-  let estimateFlaggedRows = 0;
+  // A ledger row with no bill is unsettled: its cost is unknown, and it is never counted as an estimate (contract v6).
+  const ledgerByRequest = new Map<string, { actual: number; unsettled: boolean; rows: number; unsettledRows: number }>();
+  let unsettledRows = 0;
   for (const row of ledger) {
-    const entry = ledgerByRequest.get(row.request_id) ?? { actual: 0, unsettled: false, rows: 0, estimateRows: 0 };
+    const entry = ledgerByRequest.get(row.request_id) ?? { actual: 0, unsettled: false, rows: 0, unsettledRows: 0 };
     entry.rows += 1;
-    if (row.actual_is_estimate === true) {
-      entry.estimateRows += 1;
-      estimateFlaggedRows += 1;
+    if (row.actual_usd === null) {
+      entry.unsettled = true;
+      entry.unsettledRows += 1;
+      unsettledRows += 1;
+    } else {
+      entry.actual += Number(row.actual_usd);
     }
-    if (row.actual_usd === null) entry.unsettled = true;
-    else entry.actual += Number(row.actual_usd);
     ledgerByRequest.set(row.request_id, entry);
   }
   const ledgerRows: LedgerRequestRow[] = [...ledgerByRequest.entries()].map(([requestId, entry]) => ({
     requestId,
     actualUsd: entry.unsettled ? null : entry.actual,
     rows: entry.rows,
-    estimateRows: entry.estimateRows,
+    unsettledRows: entry.unsettledRows,
   }));
 
   const gateRows = gatePassRates(gates.map((row) => ({ gate: row.gate, formatId: row.format_id, passed: row.passed })));
@@ -221,7 +223,7 @@ export async function readStageMetrics(sql: Sql, scope: OpsScope, options: Metri
     stages: summarizeStages(samples),
     negativeStageSamples: negative,
     queue,
-    cost: costSummary(videos, ledgerRows, estimateFlaggedRows),
+    cost: costSummary(videos, ledgerRows, unsettledRows),
     gates: gateRows,
     providers,
   };

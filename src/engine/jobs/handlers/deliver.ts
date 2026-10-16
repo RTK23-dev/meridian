@@ -3,8 +3,9 @@
 //
 // 1. Chooses the delivered videos: the master, and each variant whose newest render has a passing post-render review (deliver/videos.ts).
 //    The master must deliver, or the request does not.
-// 2. Settles the ledger: reconciles every open call (flagged as an estimate when no bill is known), then releases the reservation to what
-//    is committed (deliver/ledger.ts, budget/reconcile.ts). Both run under the reservation's lock.
+// 2. Checks the ledger: every paid call must be settled from its bill or a confirmed absence, or the request is not delivered (the open
+//    calls are named). Then releases the reservation to what is committed (deliver/ledger.ts, budget/reconcile.ts). Both run under the
+//    reservation's lock. No estimate is booked as a cost (contract v6).
 // 3. Writes one manifest per delivered video (deliver/manifest.ts): the shots its EDL plays, its gates, its decisions, its cost (the
 //    rows attributed to it, deliver/cost.ts), its role calls and prompt versions (the master only, deliver/calls.ts), its timings and
 //    its disclosure flags. Each manifest is an artifact under a stable id, so a retried job writes nothing twice.

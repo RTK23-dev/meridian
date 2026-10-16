@@ -68,7 +68,7 @@ function parseReport(result) {
 describe("E1 acceptance dry run", () => {
   it("passes every wiring check on the recorded replay; the render cost stays unknown, so the run does not pass", async () => {
     const result = await runNode(["--dry-run"]);
-    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.code, 1, "the dry run exits 1: its render cost is unsettled, so the run does not pass");
     const report = parseReport(result);
     assert.equal(report.schema, "meridian.e1_acceptance/v1");
     assert.equal(report.mode, "dry-run");
@@ -116,7 +116,7 @@ describe("E1 acceptance dry run", () => {
 
   it("runs three masters one after another, each with its own composition, key and ledger entry", async () => {
     const result = await runNode(["--dry-run", "--count", "3"]);
-    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.code, 1, result.stderr);
     const report = parseReport(result);
     assert.equal(report.masters.length, 3);
     assert.equal(report.totals.passed, 0, "no master passes while its render cost is unknown");
@@ -129,7 +129,7 @@ describe("E1 acceptance dry run", () => {
 
   it("keeps the ledger and the artifacts in the test helper's Postgres when asked", async () => {
     const result = await runNode(["--dry-run", "--with-database"]);
-    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.code, 1, result.stderr);
     const report = parseReport(result);
     assert.match(report.backend, /^postgres \(pglite/);
     assert.equal(report.pass, false);

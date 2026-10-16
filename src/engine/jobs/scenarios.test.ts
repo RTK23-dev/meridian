@@ -45,9 +45,8 @@ import type { PostRenderPorts } from "./handlers/post-render-review.ts";
 import { notConnectedWorkspaceBudget } from "./handlers/estimate-reserve.ts";
 import { billOpenRenders, fakeObjects, gatewayWith, json, PNG_1X1, recordedTransport, type Reply } from "./test/harness.ts";
 import type { EnginePayload, EngineRuntime, StageContext, StageOutput } from "./types.ts";
-import { DOWNLOAD_URL, scriptedGateway, submitExchange, pollExchange, downloadExchange, shotstackDepsFor } from "../render/test/shotstackHarness.ts";
+import { scriptedGateway, shotstackDepsFor } from "../render/test/shotstackHarness.ts";
 import type { RenderAdapter, RenderSubmitInput } from "../render/hyperframesCloud.ts";
-import { shotstackRenderKey } from "../render/shotstack.ts";
 
 const WS = "ws_scenarios";
 const BRAND = "brand_scenarios";

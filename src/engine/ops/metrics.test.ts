@@ -141,17 +141,17 @@ describe("cost per master and per variant (Bible 14.2, 14.3, 15.3)", () => {
       { requestId: "r6", videoId: "v5", variantOf: null, totalUsd: 0.3 },
     ];
     const ledger: LedgerRequestRow[] = [
-      { requestId: "r1", actualUsd: 0.6, rows: 2, estimateRows: 0 },
-      { requestId: "r2", actualUsd: 0.2, rows: 1, estimateRows: 0 },
-      { requestId: "r3", actualUsd: 0.9, rows: 3, estimateRows: 0 },
-      { requestId: "r4", actualUsd: 0.4, rows: 1, estimateRows: 0 },
-      { requestId: "r5", actualUsd: null, rows: 1, estimateRows: 0 },
+      { requestId: "r1", actualUsd: 0.6, rows: 2, unsettledRows: 0 },
+      { requestId: "r2", actualUsd: 0.2, rows: 1, unsettledRows: 0 },
+      { requestId: "r3", actualUsd: 0.9, rows: 3, unsettledRows: 0 },
+      { requestId: "r4", actualUsd: 0.4, rows: 1, unsettledRows: 0 },
+      { requestId: "r5", actualUsd: null, rows: 1, unsettledRows: 1 },
     ];
     const summary = costSummary(videos, ledger, 3);
     assert.deepEqual(summary.masters, { count: 3, meanUsd: 0.5, p50Usd: 0.5, p95Usd: 0.7 });
     assert.deepEqual(summary.variants, { count: 1, meanUsd: 0.1, p50Usd: 0.1, p95Usd: 0.1 });
     assert.equal(summary.unknownMasters, 1, "a master with an unreadable cost is counted, not priced at 0");
-    assert.equal(summary.estimateFlaggedRows, 3);
+    assert.equal(summary.unsettledRows, 3, "three ledger rows have no bill: their cost is unknown");
     assert.equal(summary.reconciledRequests, 1, "r1: the ledger equals its two videos");
     assert.equal(summary.mismatchedRequests, 1, "r3: the ledger and its video differ");
     assert.equal(summary.unreconciledRequests, 4, "r2 (unknown cost), r4 (no video), r5 (unsettled), r6 (no ledger)");
