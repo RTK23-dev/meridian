@@ -17,14 +17,14 @@ import { loadAppliedPolicies } from "../jev/policy.ts";
 import { CREATIVE_EVIDENCE_SCOPES, CREATIVE_QUESTIONS } from "../jev/questions/creative.ts";
 import { judgeMedia, rollupDecision, ENGINE_REPLACED_MEDIA_QUESTIONS, type MediaFacts } from "./features.ts";
 import type { AccountSnapshot } from "../publishing/readiness.ts";
-import { measureLogo, measurePalette } from "../vision/measure.ts";
-import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateImage, type GateQuestion } from "../decisions/gate.ts";
+import { measureLogo, measurePalette, combineLogoFrames, combinePaletteFrames, type LogoMeasurement, type PaletteMeasurement } from "../vision/measure.ts";
+import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateEvidenceSelection, type GateImage, type GateQuestion } from "../decisions/gate.ts";
 import { selectPerceptionProvider, type PerceptionInputMedia, type PerceptionRunOutcome } from "../perception/run.ts";
 import type { MediaObservation, MultimodalPerceptionProvider, PerceptionMediaKind } from "../perception/types.ts";
 import { readVisualMedia } from "../providers/vision.server.ts";
 import { EVIDENCE_CONTRACTS, PERCEPTION_EVIDENCE_NAME, checkQuestionContract, satisfiedContractLines } from "../perception/contracts.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
-import { selectRepresentativeFrames, sha256Hex } from "../decisions/frames.ts";
+import { FRAME_SELECTION_VERSION, selectRepresentativeFrames, sha256Hex, type FrameSelection } from "../decisions/frames.ts";
 import { sampleVideoFrames, type FrameExtractor } from "../video/sample-frames.ts";
 import { resolveActiveEngine, type EngineSelection } from "../decisions/selection.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
@@ -135,6 +135,8 @@ export type VisualEvidence = {
   kind: PerceptionMediaKind;
   media: VisualMedia[];
   coverage: VisualCoverage;
+  /** For sampled frames: the selection that chose them, recorded with the evidence and never sent as content. */
+  selection?: GateEvidenceSelection;
 };
 
 export const NO_VISUAL_EVIDENCE: VisualEvidence = {
@@ -348,7 +350,7 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     // How much of the creative was analysed is evidence for the visual questions only, under either engine.
     evidence: [
       ...creativeTextEvidence(input.facts),
-      { kind: "text", name: VISUAL_COVERAGE_NAME, source: "visual_evidence", content: visual.coverage },
+      { kind: "text", name: VISUAL_COVERAGE_NAME, source: "visual_evidence", content: visual.coverage, selection: visual.selection },
       ...visualEvidence,
       ...perceptionEvidence,
     ],
@@ -409,45 +411,58 @@ export function generatedImageVisual(bytes: Uint8Array, sha256: string): VisualE
   };
 }
 
-/** The sql LIKE pattern for the frames stored beside a video container. */
-export function frameLike(storageKey: string): string {
-  return `${storageKey.replace(/[\\%_]/g, (char) => `\\${char}`)}.frame.%`;
-}
+/** Why a video has no frame a judgment can use. The reason is recorded. It is never replaced by a guess. */
+export type VideoFrameUnavailable = "no_stored_container" | "no_duration" | "ffmpeg_unavailable" | "container_too_large" | "no_eligible_frame";
+
+const UNAVAILABLE_TEXT: Record<VideoFrameUnavailable, string> = {
+  no_stored_container: "the video has no stored container",
+  no_duration: "the video's duration is unknown, so no frame has a real time",
+  ffmpeg_unavailable: "ffmpeg is not installed, so no frame could be decoded at a real time",
+  container_too_large: "the stored container is too large to sample",
+  no_eligible_frame: "no sampled frame could be decoded at its real timestamp",
+};
 
 /**
- * The frames of a stored video that a judgment may use: up to four, chosen from frames sampled at real timestamps. Frames are
- * sampled only when the caller says so. The caller does that for OpenAI Decisions, and for JEV only when a perception provider
- * is ready to read them. A video with no container, no known duration, or no ffmpeg yields no frame, and the reason is kept.
+ * The representative frames of one stored video, as every production judgment of its visuals takes them. The sample is taken
+ * once per video, from the stored container, at real timestamps (video/sample-frames.ts), and the selection is made once
+ * (decisions/frames.ts). The logo and palette measurements and the visual questions both read this sample, so they judge the
+ * same frames. The embedded stills stored beside a container have no timestamp, so they are never a judged frame.
  */
-export async function videoVisualEvidence(
+export type VideoFrameSample = {
+  storageKey: string;
+  durationMs: number | null;
+  /** Frames decoded at their real timestamps. Zero when sampling could not run, or when no frame decoded. */
+  offered: number;
+  /** The representative selection over the decoded frames. Null only when sampling could not run at all. */
+  selection: FrameSelection | null;
+  /** Set when no frame can be judged, with the reason. Null when at least one selected frame can be judged. */
+  unavailable: VideoFrameUnavailable | null;
+};
+
+export async function sampleVideoForJudgment(
   sql: Sql,
   organizationId: string,
   brandId: string,
   storageKey: string,
   durationMs: number | null,
-  options: { sample: boolean; extractor?: FrameExtractor },
-): Promise<VisualEvidence> {
-  const none = (unavailable: string, note: string): VisualEvidence => ({
-    kind: "video_frames",
-    media: [],
-    coverage: { scope: "sampled_frames", offered: 0, analysed: 0, durationMs, note, unavailable },
-  });
-  if (!options.sample) return none("sampling_not_needed", "No frame was sampled: the judgment does not take frames from this video.");
-  if (!storageKey || storageKey.startsWith("pending/")) return none("no_stored_container", "The video has no stored container, so no frame was sampled.");
+  options: { extractor?: FrameExtractor } = {},
+): Promise<VideoFrameSample> {
+  const unavailable = (reason: VideoFrameUnavailable): VideoFrameSample => ({ storageKey, durationMs, offered: 0, selection: null, unavailable: reason });
+  if (!storageKey || storageKey.startsWith("pending/")) return unavailable("no_stored_container");
   const rows = await sql<{ body: string }>`
     select body from asset_blobs
     where organization_id = ${organizationId} and brand_id = ${brandId} and storage_key = ${storageKey}
     limit 1
   `;
   const container = rows[0]?.body;
-  if (!container) return none("no_stored_container", "The video has no stored container, so no frame was sampled.");
+  if (!container) return unavailable("no_stored_container");
 
   const sample = await sampleVideoFrames({
     bytes: new Uint8Array(Buffer.from(container, "base64")),
     durationMs,
     extractor: options.extractor,
   });
-  if (sample.unavailable) return none(sample.unavailable, `No frame could be sampled: ${sample.unavailable}.`);
+  if (sample.unavailable) return unavailable(sample.unavailable);
   const selection = selectRepresentativeFrames(
     sample.frames.map((frame) => ({
       id: `${storageKey}@${frame.timestampMs}ms`,
@@ -456,7 +471,88 @@ export async function videoVisualEvidence(
       durationMs,
     })),
   );
-  const offered = sample.frames.length;
+  return {
+    storageKey,
+    durationMs,
+    offered: sample.frames.length,
+    selection,
+    unavailable: selection.frames.length === 0 ? "no_eligible_frame" : null,
+  };
+}
+
+function selectionRecordOf(selection: FrameSelection | null): GateEvidenceSelection | undefined {
+  if (!selection) return undefined;
+  return {
+    version: selection.version,
+    frames: selection.frames.map((frame) => ({ id: frame.id, role: frame.role, timestampMs: frame.timestampMs })),
+    omitted: selection.omitted.length,
+  };
+}
+
+/**
+ * The logo and palette measurements of a video, made on the same representative frames the visual questions see. When no frame
+ * is eligible, both are ABSENT with the reason: the check could not judge, and a missing measurement is never a match. The
+ * evidence names the selection version and each measured frame with its real timestamp, so the local decision record shows them.
+ */
+export async function measureVideoFrames(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  sample: VideoFrameSample,
+): Promise<{ measuredLogo: LogoMeasurement; measuredPalette: PaletteMeasurement }> {
+  const frames = sample.selection?.frames ?? [];
+  if (frames.length === 0) {
+    const why = sample.unavailable ? UNAVAILABLE_TEXT[sample.unavailable] : UNAVAILABLE_TEXT.no_eligible_frame;
+    const evidence = `Not measured: ${why} (${FRAME_SELECTION_VERSION}). Vision was not run and nothing was treated as a match.`;
+    return {
+      measuredLogo: { similarity: null, confidence: null, outcome: "ABSENT", evidence },
+      measuredPalette: { distance: null, confidence: null, outcome: "ABSENT", extracted: [], evidence },
+    };
+  }
+  const logos: LogoMeasurement[] = [];
+  const palettes: PaletteMeasurement[] = [];
+  for (const frame of frames) {
+    const visual = await visualFacts(sql, organizationId, brandId, frame.bytes);
+    logos.push(visual.measuredLogo);
+    palettes.push(visual.measuredPalette);
+  }
+  const measured = `Frames measured (${FRAME_SELECTION_VERSION}): ${frames.map((frame) => `${frame.role} ${frame.id} at ${frame.timestampMs}ms`).join("; ")}.`;
+  const logo = combineLogoFrames(logos);
+  const palette = combinePaletteFrames(palettes);
+  return {
+    measuredLogo: { ...logo, evidence: `${logo.evidence} ${measured}` },
+    measuredPalette: { ...palette, evidence: `${palette.evidence} ${measured}` },
+  };
+}
+
+/**
+ * The frames of a stored video that a visual judgment may use: the selected representative frames, of which there are up to four.
+ * Frames are offered only when the caller says so. The caller does that for OpenAI Decisions, and for JEV only when a perception
+ * provider is ready to read them. Pass `sampled` to reuse the sample the measurements were made on. A video with no frame that
+ * can be judged yields no media, and the reason is kept in the coverage and the selection record.
+ */
+export async function videoVisualEvidence(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  storageKey: string,
+  durationMs: number | null,
+  options: { sample: boolean; extractor?: FrameExtractor; sampled?: VideoFrameSample },
+): Promise<VisualEvidence> {
+  const none = (unavailable: string, note: string, selection?: GateEvidenceSelection): VisualEvidence => ({
+    kind: "video_frames",
+    media: [],
+    coverage: { scope: "sampled_frames", offered: 0, analysed: 0, durationMs, note, unavailable },
+    selection,
+  });
+  if (!options.sample) return none("sampling_not_needed", "No frame was sampled: the judgment does not take frames from this video.");
+  const sample = options.sampled ?? (await sampleVideoForJudgment(sql, organizationId, brandId, storageKey, durationMs, { extractor: options.extractor }));
+  const selection = sample.selection;
+  if (!selection || selection.frames.length === 0) {
+    const reason = sample.unavailable ?? "no_eligible_frame";
+    return none(reason, `No frame could be judged: ${UNAVAILABLE_TEXT[reason]}.`, selectionRecordOf(selection));
+  }
+  const offered = sample.offered;
   const analysed = selection.frames.length;
   const note = analysed < offered
     ? `Analysed ${analysed} of ${offered} sampled frames of a ${durationMs ?? "unknown"} ms video. The video was not inspected in full.`
@@ -471,5 +567,6 @@ export async function videoVisualEvidence(
       source: "ffmpeg_sample",
     })),
     coverage: { scope: "sampled_frames", offered, analysed, durationMs, note },
+    selection: selectionRecordOf(selection),
   };
 }

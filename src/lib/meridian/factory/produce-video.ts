@@ -15,14 +15,13 @@ import {
   accountSnapshots,
   competitorCopy,
   factsFor,
-  frameLike,
+  measureVideoFrames,
+  sampleVideoForJudgment,
   videoVisualEvidence,
-  visualFacts,
   writeJudgment,
 } from "../studio/image-qc.server.ts";
 import { resolveActiveEngine } from "../decisions/selection.ts";
 import { perceptionReadiness, selectPerceptionProvider } from "../perception/run.ts";
-import { combineLogoFrames, combinePaletteFrames } from "../vision/measure.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 import { productionRouter } from "../production/router.ts";
 import { productionCostMode } from "../production/cost-mode.ts";
@@ -370,43 +369,6 @@ async function videoCapStop(sql: Sql, input: ProduceInput, scope: Scope, estimat
   return null;
 }
 
-/** The measured frames of a stored video, as the Studio judgment reads them. Nothing is measured when no frame was stored. */
-async function measuredVideoFrames(sql: Sql, organizationId: string, brandId: string, storageKey: string) {
-  const missingLogo = {
-    similarity: null,
-    confidence: null,
-    outcome: "ABSENT" as const,
-    evidence: storageKey && !storageKey.startsWith("pending/")
-      ? "The stored container had no extractable frame. Vision was not run and nothing was treated as a match."
-      : "Video bytes are not stored yet. Vision was not run.",
-  };
-  const missingPalette = {
-    distance: null,
-    confidence: null,
-    outcome: "ABSENT" as const,
-    extracted: [] as string[],
-    evidence: missingLogo.evidence,
-  };
-  if (!storageKey || storageKey.startsWith("pending/")) {
-    return { measuredLogo: missingLogo, measuredPalette: missingPalette };
-  }
-  const rows = await sql<{ body: string }>`
-    select body from asset_blobs
-    where organization_id = ${organizationId} and brand_id = ${brandId}
-      and storage_key like ${frameLike(storageKey)} escape '\\'
-    order by storage_key asc
-  `;
-  const logos = [];
-  const palettes = [];
-  for (const row of rows) {
-    const visual = await visualFacts(sql, organizationId, brandId, new Uint8Array(Buffer.from(row.body, "base64")));
-    logos.push(visual.measuredLogo);
-    palettes.push(visual.measuredPalette);
-  }
-  if (logos.length === 0) return { measuredLogo: missingLogo, measuredPalette: missingPalette };
-  return { measuredLogo: combineLogoFrames(logos), measuredPalette: combinePaletteFrames(palettes) };
-}
-
 /**
  * The creative_qa check of one stored video, once. The judgment reads the stored video's copy, its container facts and its frames, and
  * the engine answers through the same gate an image uses. A creative already judged is not judged again, so the engine is asked once.
@@ -461,7 +423,9 @@ async function judgeFactoryVideo(
     byteSize,
     destinationUrl: "",
   });
-  const visual = await measuredVideoFrames(sql, organizationId, brandId, video.storage_key);
+  // One sample and one selection per video: the logo and palette measurements and the visual questions read the same frames.
+  const videoFrames = await sampleVideoForJudgment(sql, organizationId, brandId, video.storage_key, durationMs);
+  const visual = await measureVideoFrames(sql, organizationId, brandId, videoFrames);
   const selection = await resolveActiveEngine(sql, organizationId);
   // Perception is used only when the engine cannot see frames. It is checked here, before any frame is sampled for it.
   const perceptionCandidate = selectPerceptionProvider().provider;
@@ -500,6 +464,7 @@ async function judgeFactoryVideo(
     perception: perceptionForJudgment,
     visual: await videoVisualEvidence(sql, organizationId, brandId, video.storage_key, durationMs, {
       sample: selection.engineId === "openai-decisions" || perceptionForJudgment !== null,
+      sampled: videoFrames,
     }),
     engines: input.engines,
   });

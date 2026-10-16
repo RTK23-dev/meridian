@@ -14,7 +14,8 @@ import { abstainAll, type DecisionEngine, type DecisionEngineId, type DecisionRe
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import { PNG, studioTenant } from "../testing/durable-image-fixtures.ts";
 import { generatedImageVisual, videoVisualEvidence, writeJudgment, type VisualEvidence } from "./image-qc.server.ts";
-import { sampleTimestamps } from "../video/sample-frames.ts";
+import { sampleTimestamps, type FrameExtractor } from "../video/sample-frames.ts";
+import { FRAME_SELECTION_VERSION } from "../decisions/frames.ts";
 import { solidFrame } from "../video/inspect.ts";
 import type { MediaObservation, MultimodalPerceptionProvider, PerceptionMedia, PerceptionResult } from "../perception/types.ts";
 import { spawnSync } from "node:child_process";
@@ -531,4 +532,71 @@ test("real ffmpeg, under OpenAI: up to four sampled frames reach the engine with
   assert.equal(judged.gateEngineCalled, true);
   const [record] = await sql<{ evidence: unknown }>`select evidence from decision_gate_records where id = ${judged.gateRecordId}`;
   assert.match(JSON.stringify(record?.evidence), /ffmpeg_sample/, "the record names where each frame came from");
+});
+
+/** Stores a container for a video whose frames are read from recorded fixtures, so no ffmpeg runs. */
+async function fixtureVideo(sql: Awaited<ReturnType<typeof getSql>>, tenant: { organizationId: string; brandId: string }): Promise<string> {
+  const storageKey = `video-${randomUUID()}.mp4`;
+  const body = Buffer.from("fixture container bytes").toString("base64");
+  await sql`
+    insert into asset_blobs (storage_key, organization_id, brand_id, body, mime_type, checksum, byte_size, lifecycle)
+    values (${storageKey}, ${tenant.organizationId}, ${tenant.brandId}, ${body}, 'video/mp4', 'fixture', 23, 'stored')
+  `;
+  return storageKey;
+}
+
+const recordedFrame: FrameExtractor = async (_path, timestampMs) => solidFrame(16, 16, [Math.round(timestampMs / 12) % 256, 40, 200]);
+const undecodableFrame: FrameExtractor = async () => {
+  throw new Error("no decodable frame at this time");
+};
+
+/** The evidence items of a gate record, as stored. The jsonb column may come back parsed or as text. */
+function evidenceItemsOf(evidence: unknown): Array<{ name: string; selection?: { version: string; frames: Array<{ id: string; role: string; timestampMs: number }>; omitted: number } }> {
+  return typeof evidence === "string" ? JSON.parse(evidence) : (evidence as never[]);
+}
+
+test("the creative_qa record names the representative frames, their real timestamps and the selection version", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-selection-record");
+  const storageKey = await fixtureVideo(sql, tenant);
+  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, storageKey, 3000, { sample: true, extractor: recordedFrame });
+  assert.ok(visual.media.length >= 1, "frames were selected from the fixture");
+  const openai = stubEngine("openai-decisions", { respond: textApproves });
+  const judged = await judge({
+    tenant,
+    creativeId: `creative-${randomUUID()}`,
+    facts: { ...facts, kind: "video", transcript: "", durationMs: 3000, sceneCount: 1 },
+    visual,
+    engines: registryWith(stubEngine("jev"), openai),
+    selectedEngine: "openai-decisions",
+  });
+  const [record] = await sql<{ evidence: unknown }>`select evidence from decision_gate_records where id = ${judged.gateRecordId}`;
+  const coverage = evidenceItemsOf(record?.evidence).find((item) => item.name === "visual_coverage");
+  assert.equal(coverage?.selection?.version, FRAME_SELECTION_VERSION, "the record names the selection version");
+  assert.deepEqual(coverage?.selection?.frames, visual.selection?.frames, "the record names each chosen frame, its role and its real timestamp");
+  assert.deepEqual(coverage?.selection?.frames.map((frame) => frame.timestampMs), visual.media.map((item) => item.timestampMs));
+});
+
+test("a video with no frame that decodes at a real time is held for review, sends no frame, and its record says the selection chose nothing", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "creative-selection-none");
+  const storageKey = await fixtureVideo(sql, tenant);
+  const visual = await videoVisualEvidence(sql, tenant.organizationId, tenant.brandId, storageKey, 3000, { sample: true, extractor: undecodableFrame });
+  assert.deepEqual(visual.media, []);
+  const openai = stubEngine("openai-decisions", { respond: textApproves });
+  const judged = await judge({
+    tenant,
+    creativeId: `creative-${randomUUID()}`,
+    facts: { ...facts, kind: "video", transcript: "", durationMs: 3000, sceneCount: 1 },
+    visual,
+    engines: registryWith(stubEngine("jev"), openai),
+    selectedEngine: "openai-decisions",
+  });
+  assert.ok(openai.requests.every((request) => (request.images?.length ?? 0) === 0), "no frame reaches the engine");
+  assert.equal(judged.gateAction, "HUMAN_REVIEW", "the visual questions cannot be judged without a frame, so the creative is reviewed");
+  assert.notEqual(judged.rollup, "AUTO_APPROVE");
+  const [record] = await sql<{ evidence: unknown }>`select evidence from decision_gate_records where id = ${judged.gateRecordId}`;
+  const coverage = evidenceItemsOf(record?.evidence).find((item) => item.name === "visual_coverage");
+  assert.equal(coverage?.selection?.version, FRAME_SELECTION_VERSION);
+  assert.deepEqual(coverage?.selection?.frames, []);
 });

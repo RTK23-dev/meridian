@@ -75,7 +75,7 @@ export function videoFactsFromInspection(inspected: VideoInspection, byteSize: n
   scene: string;
 } {
   const scene = inspected.frames.length
-    ? `Container ${inspected.container}. ${inspected.frames.length} embedded frame(s) stored for vision${inspected.width && inspected.height ? `, ${inspected.width}×${inspected.height}` : ""}. No speech track was read.`
+    ? `Container ${inspected.container}. ${inspected.frames.length} embedded frame(s) stored as untimed stills, which no judgment uses${inspected.width && inspected.height ? `, ${inspected.width}×${inspected.height}` : ""}. No speech track was read.`
     : byteSize > 0
       ? `Container ${inspected.container}. ${byteSize} bytes stored. No sampled frame could be extracted, so vision was not run.`
       : "No video bytes were stored.";

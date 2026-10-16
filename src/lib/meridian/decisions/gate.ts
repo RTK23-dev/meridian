@@ -72,6 +72,17 @@ export type GateQuestion = {
   evidenceScope?: readonly string[];
 };
 
+/**
+ * The frame selection behind a video's visual evidence (decisions/frames.ts): the version that chose the frames, and each frame
+ * chosen with its role and its real timestamp. Recorded with the evidence. It is never sent to an engine as content.
+ */
+export type GateEvidenceSelection = {
+  version: string;
+  frames: Array<{ id: string; role: string; timestampMs: number }>;
+  /** How many candidate frames the selection did not choose. */
+  omitted: number;
+};
+
 /** One piece of evidence the caller actually provided. Recorded so a reviewer can see exactly what was judged. */
 export type GateEvidence = {
   kind: "text" | "image";
@@ -82,6 +93,8 @@ export type GateEvidence = {
   /** For frames: the timestamp in the source media, as observed. Absent for still images. */
   timestampMs?: number;
   source?: string;
+  /** For a video's visual evidence: the representative frame selection that produced it. Absent for other evidence. */
+  selection?: GateEvidenceSelection;
 };
 
 /**
@@ -570,6 +583,7 @@ function recordOf(item: GateEvidenceInput): GateEvidence {
   if (item.sha256 !== undefined) record.sha256 = item.sha256;
   if (item.timestampMs !== undefined) record.timestampMs = item.timestampMs;
   if (item.source !== undefined) record.source = item.source;
+  if (item.selection !== undefined) record.selection = item.selection;
   return record;
 }
 

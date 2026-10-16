@@ -22,7 +22,6 @@ import { productionRouter, type ImageProviderSelection } from "../production/rou
 import { productionCostMode } from "../production/cost-mode.ts";
 import { ensureLocalSemantic, semanticNearest } from "../embeddings/store.ts";
 import { assessPublishing } from "../publishing/readiness.ts";
-import { combineLogoFrames, combinePaletteFrames } from "../vision/measure.ts";
 import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { CreationScope, AutonomyMode, CreativePlan } from "../creative/plan.ts";
@@ -44,7 +43,7 @@ import { resolveProductionTarget } from "../production/target.ts";
 import { submitWithPreflight, type SubmitWithPreflightResult } from "../production/submit.ts";
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
-import { accountSnapshots, competitorCopy, factsFor, frameLike, qcBrandOf, videoVisualEvidence, visualFacts, writeJudgment } from "./image-qc.server.ts";
+import { accountSnapshots, competitorCopy, factsFor, measureVideoFrames, qcBrandOf, sampleVideoForJudgment, videoVisualEvidence, writeJudgment } from "./image-qc.server.ts";
 import { resolveActiveEngine } from "../decisions/selection.ts";
 import { perceptionReadiness, selectPerceptionProvider } from "../perception/run.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
@@ -348,42 +347,6 @@ export async function getStudioSession(userId: string, data: { brandId: string }
   const context = { userId };
     const sql = await getSql();
     return (await sessionFor(sql, context.userId, data.brandId, "viewer")).session;
-}
-
-async function measuredVideoFrames(sql: Sql, organizationId: string, brandId: string, storageKey: string) {
-  const missingLogo = {
-    similarity: null,
-    confidence: null,
-    outcome: "ABSENT" as const,
-    evidence: storageKey && !storageKey.startsWith("pending/")
-      ? "The stored container had no extractable frame. Vision was not run and nothing was treated as a match."
-      : "Video bytes are not stored yet. Vision was not run.",
-  };
-  const missingPalette = {
-    distance: null,
-    confidence: null,
-    outcome: "ABSENT" as const,
-    extracted: [] as string[],
-    evidence: missingLogo.evidence,
-  };
-  if (!storageKey || storageKey.startsWith("pending/")) {
-    return { measuredLogo: missingLogo, measuredPalette: missingPalette };
-  }
-  const rows = await sql<{ body: string }>`
-    select body from asset_blobs
-    where organization_id = ${organizationId} and brand_id = ${brandId}
-      and storage_key like ${frameLike(storageKey)} escape '\\'
-    order by storage_key asc
-  `;
-  const logos = [];
-  const palettes = [];
-  for (const row of rows) {
-    const visual = await visualFacts(sql, organizationId, brandId, new Uint8Array(Buffer.from(row.body, "base64")));
-    logos.push(visual.measuredLogo);
-    palettes.push(visual.measuredPalette);
-  }
-  if (logos.length === 0) return { measuredLogo: missingLogo, measuredPalette: missingPalette };
-  return { measuredLogo: combineLogoFrames(logos), measuredPalette: combinePaletteFrames(palettes) };
 }
 
 export { writeJudgment } from "./image-qc.server.ts";
@@ -1364,7 +1327,10 @@ export async function executeApprovedCreativePlan(
         byteSize: asNumber(video.byte_size),
         destinationUrl: "",
       });
-      const visual = await measuredVideoFrames(sql, access.organizationId, brandId, asText(video.storage_key));
+      const videoDurationMs = video.duration_ms == null ? null : asNumber(video.duration_ms);
+      // One sample and one selection per video: the logo and palette measurements and the visual questions read the same frames.
+      const videoFrames = await sampleVideoForJudgment(sql, access.organizationId, brandId, asText(video.storage_key), videoDurationMs);
+      const visual = await measureVideoFrames(sql, access.organizationId, brandId, videoFrames);
       const selection = await resolveActiveEngine(sql, access.organizationId);
       // Perception is used only when the engine cannot see frames. It is checked here, before any frame is sampled for it.
       const perceptionCandidate = selectPerceptionProvider().provider;
@@ -1401,8 +1367,9 @@ export async function executeApprovedCreativePlan(
         facts,
         selection,
         perception: perceptionForJudgment,
-        visual: await videoVisualEvidence(sql, access.organizationId, brandId, asText(video.storage_key), video.duration_ms == null ? null : asNumber(video.duration_ms), {
+        visual: await videoVisualEvidence(sql, access.organizationId, brandId, asText(video.storage_key), videoDurationMs, {
           sample: selection.engineId === "openai-decisions" || perceptionForJudgment !== null,
+          sampled: videoFrames,
         }),
       });
       const status = judged.rollup === "REJECT" ? "rejected" : "in_review";
