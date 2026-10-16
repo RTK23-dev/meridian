@@ -1,0 +1,29 @@
+# Meridian is an application, not an npm library. Releases are GitHub Releases, and this workflow checks the tagged commit.
+# It runs the same gates as CI (ci.yml): the media tests need ffmpeg, and a missing ffmpeg fails the run instead of skipping them.
+name: Release check
+
+on:
+  release:
+    types: [published]
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      MERIDIAN_REQUIRE_FFMPEG: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build

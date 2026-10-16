@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440270-director0004",
+  "model": "anthropic/claude-opus-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"ok\":true,\"swaps\":[{\"shotId\":\"shot_7WNRE941244J54X29NQ1PTHHW0\",\"toType\":\"ugc_presenter\",\"reason\":\"the presenter reads better\"}],\"promptEdits\":[]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 7960,
+    "completion_tokens": 60,
+    "total_tokens": 8020,
+    "cost": 0.0413
+  }
+}

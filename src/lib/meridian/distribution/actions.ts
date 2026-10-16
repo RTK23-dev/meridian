@@ -8,6 +8,7 @@ import {
   recordOrganicTelemetryAndLearn,
   requireBrandAccess,
 } from "./service.ts";
+import { parseTrialRequest, type TrialRequest } from "./trial.ts";
 
 function clip(value: unknown): string {
   return typeof value === "string" ? value.trim().slice(0, 120) : "";
@@ -40,8 +41,11 @@ export const publishMultiChannelVariant = createServerFn({ method: "POST" })
 
     if (!brandId || !creativeId) throw new Error("Choose a creative variant to publish.");
     if (channelIds.length === 0) throw new Error("Select at least one destination channel.");
+    // A per-post choice to post the Instagram Reel as a trial first. Absent means an ordinary publish.
+    const trial = parseTrialRequest(body.trial);
+    if (!trial.ok) throw new Error(trial.error);
 
-    return { brandId, creativeId, channelIds, caption, title, scheduledFor };
+    return { brandId, creativeId, channelIds, caption, title, scheduledFor, trial: trial.value as TrialRequest | null };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -56,6 +60,7 @@ export const publishMultiChannelVariant = createServerFn({ method: "POST" })
       title: data.title,
       scheduledFor: data.scheduledFor,
       userId: context.userId,
+      trial: data.trial,
     });
   });
 

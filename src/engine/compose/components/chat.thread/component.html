@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"header","type":"string","label":"Header (account name)","default":""},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="chat.thread" data-width="1080" data-height="1920">
+  <div class="ct-root">
+    <div class="ct-header"></div>
+    <div class="ct-list"></div>
+  </div>
+  <style>
+    .ct-root {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--kit-background);
+    }
+    /* The header starts 10% down and the list ends 20% up, so the text stays clear of the top and bottom bands. */
+    .ct-header {
+      display: none;
+      position: absolute;
+      left: 6%;
+      width: 82%;
+      top: 10%;
+      font-family: var(--kit-font-body), sans-serif;
+      font-weight: 700;
+      font-size: 56px;
+      line-height: 1.2;
+      color: var(--kit-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ct-header-on { display: block; }
+    /* Newest messages sit at the bottom. Older ones clip off the top, as a chat does when it scrolls. */
+    .ct-list {
+      position: absolute;
+      left: 6%;
+      width: 82%;
+      top: 20%;
+      bottom: 20%;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 22px;
+      overflow: hidden;
+    }
+    .ct-row {
+      display: none;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .ct-left { justify-content: flex-start; }
+    .ct-right { justify-content: flex-end; }
+    .ct-bubble {
+      max-width: 74%;
+      box-sizing: border-box;
+      padding: 22px 30px;
+      border-radius: 44px;
+      font-family: var(--kit-font-body), sans-serif;
+      font-weight: 500;
+      font-size: 50px;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+    .ct-left .ct-bubble { background: var(--kit-secondary); color: var(--kit-text); }
+    .ct-right .ct-bubble { background: var(--kit-accent); color: var(--kit-background); }
+    .ct-typing {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .ct-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.6;
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var header = document.querySelector(".ct-header");
+      var list = document.querySelector(".ct-list");
+      var messages = Array.isArray(vars.messages) ? vars.messages : [];
+
+      if (typeof vars.header === "string" && vars.header.length > 0) {
+        header.textContent = vars.header;
+        header.className = "ct-header ct-header-on";
+      }
+
+      function rowFor(side) {
+        var row = document.createElement("div");
+        row.className = "ct-row " + (side === "right" ? "ct-right" : "ct-left");
+        list.appendChild(row);
+        return row;
+      }
+
+      var tl = gsap.timeline({ paused: true });
+      messages.forEach(function (message) {
+        var atSeconds = message.atMs / 1000;
+        if (message.typingMs > 0) {
+          // Three dots while the sender types: shown from atMs - typingMs, removed when the bubble appears.
+          var typingRow = rowFor(message.side);
+          var typing = document.createElement("div");
+          typing.className = "ct-bubble ct-typing";
+          for (var i = 0; i < 3; i++) {
+            typing.appendChild(document.createElement("span")).className = "ct-dot";
+          }
+          typingRow.appendChild(typing);
+          tl.set(typingRow, { display: "flex" }, (message.atMs - message.typingMs) / 1000);
+          tl.set(typingRow, { display: "none" }, atSeconds);
+        }
+        var row = rowFor(message.side);
+        var bubble = document.createElement("div");
+        bubble.className = "ct-bubble";
+        bubble.textContent = String(message.text);
+        row.appendChild(bubble);
+        tl.set(row, { display: "flex" }, atSeconds);
+        tl.fromTo(bubble, { y: 24 * motion, opacity: 0 }, { y: 0, opacity: 1, duration: 0.25, ease: "power2.out" }, atSeconds);
+      });
+      tl.set({}, {}, vars.durationMs / 1000);
+      window.__timelines["chat.thread"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

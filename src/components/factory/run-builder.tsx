@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, Checkbox, DisabledReason, Field, Input, SelectInput } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { submitOnShortcut } from "@/components/forms/shortcut";
-import { AUTOMATION_MODES, DECISION_ENGINE_CHOICES, FORMATS, INTENTS, type AutomationMode, type DecisionEngineChoice, type Format, type Intent, type RunSettings } from "@/lib/meridian/factory/run-settings";
+import { AUTOMATION_MODES, DECISION_ENGINE_CHOICES, ENGINE_VIDEO_PROVIDER_ID, FORMATS, INTENTS, MASTER_COST_FLOOR_SENTENCE, MASTER_COST_FLOOR_TEXT, type AutomationMode, type DecisionEngineChoice, type Format, type Intent, type RunSettings } from "@/lib/meridian/factory/run-settings";
 import {
   AUTOMATION_DESCRIPTIONS,
   ENGINE_LABELS,
@@ -10,10 +10,12 @@ import {
   INTENT_DESCRIPTIONS,
   checkedDefaults,
   checkedSettings,
+  costPerMasterFromText,
   countriesFromText,
   draftFromDefaults,
   draftProblems,
   paidCountryNote,
+  videoProviderOptions,
   type BuilderDraft,
 } from "@/lib/meridian/factory/run-builder-model";
 
@@ -37,9 +39,12 @@ export function RunBuilder({
   onStart,
   onSaveDefaults,
   onDirtyChange,
+  pages,
 }: {
   defaults: RunSettings;
   channels: RunChannel[];
+  /** The brand's theme pages that are not archived. The run uses the one a person picks, or none. */
+  pages: ReadonlyArray<{ id: string; name: string; status: string }>;
   channelsState: "loading" | "ready" | "error";
   canEdit: boolean;
   /** Admins and owners save the brand's run defaults. Other roles see the draft and cannot save it. */
@@ -59,6 +64,8 @@ export function RunBuilder({
   const reason = busy ? "Queueing the run." : !canEdit ? "Viewers cannot start runs. Ask a member to start one." : problems[0] ?? "";
   const countryNote = paidCountryNote(draft.intent, draft.countries);
   const countriesCheck = countriesFromText(draft.countries);
+  const costCheck = costPerMasterFromText(draft.costPerMasterDollars);
+  const needsCost = draft.formats.includes("video");
   const defaultsCheck = checkedDefaults(draft);
   const defaultsReason = savingDefaults
     ? "Saving the brand's defaults."
@@ -162,17 +169,34 @@ export function RunBuilder({
       {draft.formats.length > 0 ? (
         <fieldset className="grid gap-4 md:grid-cols-3">
           <legend className="text-sm font-semibold">Provider per format</legend>
-          {draft.formats.map((format) => (
-            <Field key={format} label={`${FORMAT_LABELS[format]} provider`}>
-              <Input
-                value={draft.providers[format] ?? ""}
-                placeholder="auto"
-                disabled={!canEdit}
-                onChange={(event) => update("providers", { ...draft.providers, [format]: event.target.value })}
-              />
-            </Field>
-          ))}
-          <p className="text-sm text-muted md:col-span-3">Leave a provider blank or type auto to let the capability matrix choose. A named provider that is not ready stops the run with its reason.</p>
+          {draft.formats.map((format) =>
+            format === "video" ? (
+              <Field key={format} label={`${FORMAT_LABELS[format]} provider`}>
+                <SelectInput
+                  value={(draft.providers.video ?? "").trim() || "auto"}
+                  disabled={!canEdit}
+                  onChange={(event) => update("providers", { ...draft.providers, video: event.target.value })}
+                >
+                  {videoProviderOptions(draft.providers.video).map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </SelectInput>
+                {draft.providers.video === ENGINE_VIDEO_PROVIDER_ID ? (
+                  <p className="text-sm text-muted">The Meridian video engine makes the video from the plan. A run that names it stops with the engine's reason when it cannot run, such as no connected key, no cost per master, or a field the plan does not carry.</p>
+                ) : null}
+              </Field>
+            ) : (
+              <Field key={format} label={`${FORMAT_LABELS[format]} provider`}>
+                <Input
+                  value={draft.providers[format] ?? ""}
+                  placeholder="auto"
+                  disabled={!canEdit}
+                  onChange={(event) => update("providers", { ...draft.providers, [format]: event.target.value })}
+                />
+              </Field>
+            ),
+          )}
+          <p className="text-sm text-muted md:col-span-3">Choose auto to let the capability matrix choose, or name a provider. A named provider that is not ready stops the run with its reason.</p>
         </fieldset>
       ) : null}
 
@@ -187,6 +211,31 @@ export function RunBuilder({
         </Field>
         {countryNote ? <p className="text-sm text-muted">{countryNote}</p> : null}
       </fieldset>
+
+      <Field label="Theme page" hint="The page's kits, schedule and Instagram trial default apply to this run. No page keeps the run's own settings.">
+        <SelectInput value={draft.pageId} onChange={(event) => update("pageId", event.target.value)} disabled={!canEdit}>
+          <option value="">No page</option>
+          {pages.map((page) => (
+            <option key={page.id} value={page.id}>{page.name} ({page.status})</option>
+          ))}
+        </SelectInput>
+      </Field>
+
+      <Field
+        label="Cost per master (USD)"
+        required={needsCost}
+        hint={`${MASTER_COST_FLOOR_SENTENCE} The exact minimum for each video is checked before it is made.`}
+        error={costCheck.ok ? undefined : costCheck.error}
+      >
+        <Input
+          value={draft.costPerMasterDollars}
+          onChange={(event) => update("costPerMasterDollars", event.target.value)}
+          type="number"
+          min={MASTER_COST_FLOOR_TEXT}
+          step="0.01"
+          disabled={!canEdit}
+        />
+      </Field>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Field label="Daily spend cap (USD)">

@@ -6,6 +6,8 @@ import { publishThrough } from "../providers/boundaries.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { isOrganicPlatform, resolveOrganicConnection, resolveOrganicConnections } from "./connection.ts";
 import type { OrganicPlatform } from "./types.ts";
+import type { TrialRequest } from "./trial.ts";
+import { recordTrialStep } from "./trial-check.ts";
 import { mediaDeliveryFor, signMediaLink, signedMediaUrl } from "../storage/media-link.ts";
 
 export async function requireBrandAccess(
@@ -50,6 +52,11 @@ export type PublishMultiChannelInput = {
   title?: string;
   scheduledFor?: string;
   userId: string;
+  /**
+   * Post the Instagram Reel as a trial first (trial.ts). Null or absent is an ordinary publish. A Factory run passes its page's default here,
+   * and a person may pass a choice for one post. Other channels ignore it.
+   */
+  trial?: TrialRequest | null;
 };
 
 /**
@@ -446,6 +453,7 @@ export async function publishCreativeToChannels(
         connection,
         mediaUrl,
         verifiedMediaDomains,
+        trial: organicChannel.platform === "instagram" ? (input.trial ?? null) : null,
       });
 
       // A channel that reports NOT_CONNECTED sent nothing, for example Instagram without a public media URL. That is a not_connected
@@ -466,6 +474,23 @@ export async function publishCreativeToChannels(
         )
       `;
 
+      // A published trial step is recorded with its media id, so the scheduled check can read the same reel later. A failure to record it
+      // is reported on the result: the post is already live, and nothing is hidden.
+      let trialNote = "";
+      if (publishReceipt.trial && receiptStatus === "published" && publishReceipt.externalId) {
+        try {
+          await recordTrialStep(sql, {
+            organizationId: access.organizationId,
+            brandId: input.brandId,
+            organicPostId: postId,
+            mediaId: publishReceipt.externalId,
+            graduationStrategy: publishReceipt.trial.graduationStrategy,
+          });
+        } catch (trialError) {
+          trialNote = `The trial reel was published, but its feed check could not be scheduled: ${trialError instanceof Error ? trialError.message : String(trialError)}`;
+        }
+      }
+
       results.push({
         channelId,
         platform: publishReceipt.platform,
@@ -474,7 +499,7 @@ export async function publishCreativeToChannels(
         status: receiptStatus,
         externalId: publishReceipt.externalId,
         url: publishReceipt.postUrl,
-        error: publishReceipt.error,
+        error: publishReceipt.error || trialNote || undefined,
       });
     } catch (err) {
       results.push({

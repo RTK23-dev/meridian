@@ -1,6 +1,6 @@
 {
   "name": "meridian",
-  "version": "0.1.0-beta.11",
+  "version": "0.1.0-beta.12",
   "private": true,
   "description": "Meridian is a multi-tenant advertising operating system.",
   "sideEffects": false,
@@ -23,12 +23,15 @@
     "test": "NODE_ENV=development node --test \"scripts/**/*.test.mjs\" && NODE_ENV=development node --experimental-strip-types --test \"src/**/*.test.ts\"",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "ui:baseline": "node scripts/ui-baseline.mjs",
-    "ui:design-smoke": "node scripts/design-system-smoke.mjs",
+    "ui:baseline": "node scripts/with-dotenv.mjs node scripts/ui-baseline.mjs",
+    "ui:design-smoke": "node scripts/with-dotenv.mjs node scripts/design-system-smoke.mjs",
     "agent-reach": "node scripts/agent-reach.mjs",
     "sourcing-sidecar": "python3 sidecar/sourcing/server.py",
-    "ui:button-audit": "node scripts/button-audit.mjs",
-    "e2e": "node scripts/product-loop.mjs"
+    "ui:button-audit": "node scripts/with-dotenv.mjs node scripts/button-audit.mjs",
+    "e2e": "node scripts/with-dotenv.mjs node scripts/product-loop.mjs",
+    "engine:golden": "NODE_ENV=development node --experimental-strip-types --test src/engine/compose/test/golden/golden.run.ts",
+    "engine:golden:update": "NODE_ENV=development node --experimental-strip-types --test src/engine/compose/test/golden/golden.update.ts",
+    "engine:e1": "node scripts/with-dotenv.mjs node --experimental-strip-types scripts/engine/e1-acceptance.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.13.0",
@@ -93,6 +96,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.20.0",
+    "@hyperframes/core": "0.8.154",
     "@types/node": "^22.16.5",
     "@types/pg": "^8.11.10",
     "@types/react": "^19.2.0",
@@ -103,6 +107,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
+    "hyperframes": "0.8.154",
     "playwright": "^1.62.0",
     "prettier": "^3.4.0",
     "typescript-eslint": "^8.56.1"

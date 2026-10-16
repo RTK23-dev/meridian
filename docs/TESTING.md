@@ -12,6 +12,34 @@ npm run build     # production build, then migrations
 `npm test` runs `scripts/**/*.test.mjs` and `src/**/*.test.ts` with the Node test runner. Any new test file in those folders runs in
 `npm test`. Some tests run twice, once on the embedded database and once on PostgreSQL, and are labelled `[embedded]` and `[postgres]`.
 
+The video engine has two more commands, outside `npm test`:
+
+```bash
+npm run engine:golden          # golden frames of the components (renders locally)
+npm run engine:golden:update   # writes the golden PNGs again; review each one before committing it
+npm run engine:e1 -- --dry-run # the E1 acceptance on the recorded replay: no network, no keys
+```
+
+`npm run engine:e1 -- --dry-run` replays the recorded responses through the gateway, so routing and authentication run as they do live.
+It proves the wiring, not a provider. The replay is also a test in `scripts/engine/e1-acceptance.test.mjs`, so `npm test` runs it. The live
+run is the owner's, and its steps are in [scripts/engine/README.md](../scripts/engine/README.md).
+
+The golden command needs ffmpeg and a Chrome headless shell (`HYPERFRAMES_BROWSER_PATH`). CI installs ffmpeg and sets
+`MERIDIAN_REQUIRE_FFMPEG=1`, so a missing ffmpeg fails the run rather than skipping the media tests.
+
+## Counts at this checkpoint
+
+Measured on 2026-10-15 at `d364d84` (the checkpoint head), with `npm test` as the script runs it, no extra variable:
+
+| Run | Tests | Passing | Failing | Skipped |
+| --- | --- | --- | --- | --- |
+| `scripts/**/*.test.mjs` | 153 | 153 | 0 | 0 |
+| `src/**/*.test.ts` | 5,101 | 5,060 | 0 | 41 |
+
+These match the PHASE_LOG totals. The 41 skipped tests are the PostgreSQL-gated and credential-gated ones; they run when
+`MERIDIAN_PG_TEST_URL` or a key is set. A later run with `MERIDIAN_REQUIRE_FFMPEG=1` reported one more passing test (5,102 and 5,061);
+that run is not reproduced here, and the extra test is not identified.
+
 ## The PostgreSQL test database
 
 Create an empty database, migrate it, and point the tests at it:

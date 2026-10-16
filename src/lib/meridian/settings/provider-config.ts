@@ -24,7 +24,14 @@ import { storeVaultCredential, retrieveVaultCredential, deleteVaultCredential, t
 import { resolveJevConfig } from "../jev/config.ts";
 import { resolveCredential } from "../credentials/resolve.ts";
 import { isCostMode, resolveCostMode } from "../production/cost-mode.ts";
-import { CREDENTIAL_VAULT_TYPE, credentialStateOf, type CredentialCategory, type CredentialState } from "../credentials/contract.ts";
+import {
+  CREDENTIAL_VAULT_TYPE,
+  VIDEO_ENGINE_CREDENTIAL_CATEGORIES,
+  credentialStateOf,
+  type CredentialCategory,
+  type CredentialState,
+  type VideoEngineCredentialCategory,
+} from "../credentials/contract.ts";
 import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
@@ -50,6 +57,13 @@ function isKeyedCategory(category: ProviderCategory): category is CredentialCate
   return (KEYED_PROVIDER_CATEGORIES as readonly string[]).includes(category);
 }
 
+function isVideoEngineCategory(category: ProviderCategory): category is VideoEngineCredentialCategory {
+  return (VIDEO_ENGINE_CREDENTIAL_CATEGORIES as readonly string[]).includes(category);
+}
+
+/** A connection test's answer. NOT_TESTABLE means the key was read, and no live provider check is made from this screen. */
+export type ConnectionTestStatus = "READY" | "ERROR" | "NOT_CONFIGURED" | "NOT_TESTABLE";
+
 /** The name a reviewer sees in a message. It contains no secret. */
 const KEY_LABEL: Record<CredentialCategory, string> = {
   jev: "TypeSafe JEV",
@@ -57,6 +71,10 @@ const KEY_LABEL: Record<CredentialCategory, string> = {
   perception: "Gemini",
   production: "Gemini production",
   hypit: "Hypit",
+  shopify: "Shopify",
+  openrouter: "OpenRouter",
+  heygen: "HeyGen",
+  anthropic: "Anthropic",
   meta_ad_library: "Meta Ad Library",
   meta_graph: "Meta Graph",
   instagram: "Instagram",
@@ -67,6 +85,7 @@ const KEY_LABEL: Record<CredentialCategory, string> = {
   pinterest: "Pinterest",
   tiktok: "TikTok",
   licensed: "licensed data",
+  apify: "Apify",
 };
 
 /** Readiness as the resolver reports it. "usable" means a call would use the credential shown. */
@@ -488,7 +507,7 @@ async function testSourcesConnection(
   sql: Sql,
   organizationId: string,
   started: number,
-): Promise<{ status: "READY" | "ERROR" | "NOT_CONFIGURED"; message: string; latencyMs: number }> {
+): Promise<{ status: ConnectionTestStatus; message: string; latencyMs: number }> {
   const latencyMs = () => Date.now() - started;
   const live = "The live Meta Ad Library was not called by this check.";
   const resolution = await resolveCredential(sql, organizationId, "meta_ad_library");
@@ -515,10 +534,27 @@ export async function testWorkspaceProviderConnection(
     organizationId: string;
     category: ProviderCategory;
   }
-): Promise<{ status: "READY" | "ERROR" | "NOT_CONFIGURED"; message: string; latencyMs: number }> {
+): Promise<{ status: ConnectionTestStatus; message: string; latencyMs: number }> {
   const started = Date.now();
 
   try {
+    // The video engine's keys are not tested from here. The state of the saved key is reported, and never as a pass: the
+    // live check of OpenRouter, HeyGen or Anthropic is the owner's recorded run, through the engine's gateway.
+    if (isVideoEngineCategory(input.category)) {
+      const state = await credentialStateFor(sql, input.organizationId, input.category);
+      const latencyMs = Date.now() - started;
+      const label = KEY_LABEL[input.category];
+      if (state.state === "usable") {
+        const source = state.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
+        return {
+          status: "NOT_TESTABLE",
+          message: `${label} is not testable here. The key can be read (${source}), but ${label} was not called, so this is not a pass.`,
+          latencyMs,
+        };
+      }
+      return { status: "ERROR", message: state.reason ?? `No ${label} key is available for this workspace.`, latencyMs };
+    }
+
     if (isKeyedCategory(input.category)) {
       const state = input.category === "perception"
         ? await perceptionStateFor(sql, input.organizationId)

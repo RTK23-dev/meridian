@@ -4,15 +4,75 @@
  * counted. A decision whose model has no price is recorded in tokens and is not counted. FACTORY.md says so.
  */
 import type { Sql } from "../learning/store.ts";
+import { engineSpendOf, pauseEngineSpend } from "../../../engine/api/index.ts";
+import { capStopReason } from "./stage-decision.ts";
 
 /** One micro-dollar is a millionth of a dollar. One cent is 10,000 micro-dollars. */
 const MICROS_PER_CENT = 10_000;
+const MICROS_PER_USD = 1_000_000;
+
+/** The engine requests a run started (factory_engine_requests), in this brand. */
+export async function engineRequestIdsOfRun(sql: Sql, organizationId: string, brandId: string, runId: string): Promise<string[]> {
+  const rows = await sql<{ request_id: string }>`
+    select request_id from factory_engine_requests
+    where organization_id = ${organizationId} and brand_id = ${brandId} and run_id = ${runId}
+    order by request_id
+  `;
+  return rows.map((row) => row.request_id);
+}
 
 /**
- * The metered spend of one run, in whole cents: the priced cost of its factory_costs rows, and the part of it in the last 24 hours.
- * A provider-reported row counts its cents. A token row counts its priced micro-dollars, and a token row with no price (micros null)
- * counts nothing: unpriced spend is not counted by caps. The total is rounded up to a whole cent, so a cap is never under-counted.
- * A stage that made no metered call adds nothing.
+ * The part of the budget of the run's live engine requests that is not yet recorded as spent, in cents, rounded up. A request that has
+ * delivered or been rejected holds nothing. A request that is running or paused holds its unspent budget, because it may still spend it.
+ * A hold is never counted as spent: it is checked before a new request starts (produce-engine.ts) and before a video is sent (produce-video.ts).
+ * The hold is the same for the total and the daily cap, which is the stricter reading, so a cap is never overrun by a request still open.
+ */
+export async function engineHeldOf(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  runId: string,
+): Promise<{ totalCents: number; dailyCents: number }> {
+  const rows = await sql<{ request_id: string; budget_usd: string | number }>`
+    select f.request_id, f.budget_usd from factory_engine_requests f
+    join engine_requests r on r.id = f.request_id and r.organization_id = f.organization_id
+    where f.organization_id = ${organizationId} and f.brand_id = ${brandId} and f.run_id = ${runId}
+      and r.status not in ('delivered', 'rejected')
+    order by f.request_id
+  `;
+  let heldMicros = 0;
+  for (const row of rows) {
+    const budgetMicros = Math.round(Number(row.budget_usd) * MICROS_PER_USD);
+    const spent = await engineSpendOf(sql, organizationId, [row.request_id]);
+    heldMicros += Math.max(0, budgetMicros - spent.totalMicros);
+  }
+  const cents = Math.ceil(heldMicros / MICROS_PER_CENT);
+  return { totalCents: cents, dailyCents: cents };
+}
+
+/**
+ * Pauses every live reservation of the run's engine requests, with the reason the run stopped. It is called when the run stops at a cap or
+ * the kill switch (worker.ts), and when the run's own stage decision stops it. The engine's jobs run in Meridian's queue whether or not the
+ * run is running, so a run stopped at a cap is stopped in the engine too: a paused reservation refuses every paid call, and the request
+ * pauses with the reason when a stage is refused. A stop for any other reason leaves each request inside its own budget. Returns how many
+ * reservations were paused.
+ */
+export async function pauseRunEngineSpend(sql: Sql, organizationId: string, brandId: string, runId: string, reason: string): Promise<number> {
+  const text = reason.trim() === "" ? "The Factory run stopped." : reason;
+  let paused = 0;
+  for (const requestId of await engineRequestIdsOfRun(sql, organizationId, brandId, runId)) {
+    paused += await pauseEngineSpend(sql, organizationId, requestId, text);
+  }
+  return paused;
+}
+
+/**
+ * The metered spend of one run, in whole cents: the priced cost of its factory_costs rows and the actual cost on the ledger of the
+ * video engine requests the run started (one ledger, one cap), and the part of it in the last 24 hours. A provider-reported row counts
+ * its cents. A token row counts its priced micro-dollars, and a token row with no price (micros null) counts nothing: unpriced spend
+ * is not counted by caps. An engine call whose actual is not recorded yet adds nothing here; the produce stage holds the unspent
+ * part of the request's budget against the cap instead (produce-engine.ts). The total is rounded up to a whole cent, so a cap is
+ * never under-counted. A stage that made no metered call adds nothing.
  */
 export async function meteredSpendOf(
   sql: Sql,
@@ -27,10 +87,81 @@ export async function meteredSpendOf(
     from factory_costs
     where organization_id = ${organizationId} and brand_id = ${brandId} and run_id = ${runId}
   `;
+  const engine = await engineSpendOf(sql, organizationId, await engineRequestIdsOfRun(sql, organizationId, brandId, runId));
   return {
-    totalCents: Math.ceil(Number(rows[0]?.total ?? 0) / MICROS_PER_CENT),
-    dailyCents: Math.ceil(Number(rows[0]?.daily ?? 0) / MICROS_PER_CENT),
+    totalCents: Math.ceil((Number(rows[0]?.total ?? 0) + engine.totalMicros) / MICROS_PER_CENT),
+    dailyCents: Math.ceil((Number(rows[0]?.daily ?? 0) + engine.dailyMicros) / MICROS_PER_CENT),
   };
+}
+
+/**
+ * The brand's metered spend across all of its runs, in cents: meteredSpendOf without the run filter. The brand's caps are held
+ * against this figure, so a second run, a sleep night or a new run cannot start a fresh cap for the brand.
+ */
+export async function brandMeteredSpendOf(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+): Promise<{ totalCents: number; dailyCents: number }> {
+  const rows = await sql<{ total: number; daily: number }>`
+    select
+      coalesce(sum(coalesce(micros, cents::bigint * 10000)), 0)::float8 as total,
+      coalesce(sum(coalesce(micros, cents::bigint * 10000)) filter (where created_at >= now() - interval '1 day'), 0)::float8 as daily
+    from factory_costs
+    where organization_id = ${organizationId} and brand_id = ${brandId}
+  `;
+  const requests = await sql<{ request_id: string }>`
+    select request_id from factory_engine_requests
+    where organization_id = ${organizationId} and brand_id = ${brandId}
+  `;
+  const engine = await engineSpendOf(sql, organizationId, requests.map((row) => row.request_id));
+  return {
+    totalCents: Math.ceil((Number(rows[0]?.total ?? 0) + engine.totalMicros) / MICROS_PER_CENT),
+    dailyCents: Math.ceil((Number(rows[0]?.daily ?? 0) + engine.dailyMicros) / MICROS_PER_CENT),
+  };
+}
+
+/** A cap in cents as the produce and grade stages read it: null when it is not set (absent or zero), the cents otherwise. */
+export function capOrNull(cents: number | null | undefined): number | null {
+  return (cents ?? 0) > 0 ? (cents as number) : null;
+}
+
+/** The brand's own caps and its spend across all of its runs, for the cap checks of any one run (capStopReason's brand fields). */
+export async function brandCapFiguresOf(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+): Promise<{ brandCapCents: number; brandSpentCents: number; brandDailyCapCents: number; brandDailySpentCents: number }> {
+  const caps = await spendCapsOf(sql, organizationId, brandId);
+  const spend = await brandMeteredSpendOf(sql, organizationId, brandId);
+  return {
+    brandCapCents: caps.totalCents,
+    brandSpentCents: spend.totalCents,
+    brandDailyCapCents: caps.dailyCents,
+    brandDailySpentCents: spend.dailyCents,
+  };
+}
+
+/**
+ * The reason the caps stop a spend in this run, or null. The run's own caps are held against the run's spend, and the brand's caps
+ * against the brand's spend across all its runs. Every check that stops a run's spend reads these caps, so a brand cap is never
+ * checked against one run's spend alone.
+ */
+export async function capStopForRun(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  runId: string,
+  runCaps: { totalCents: number | null; dailyCents: number | null },
+): Promise<string | null> {
+  const run = await meteredSpendOf(sql, organizationId, brandId, runId);
+  return capStopReason({
+    capCents: runCaps.totalCents,
+    spentCents: run.totalCents,
+    dailyCapCents: runCaps.dailyCents,
+    dailySpentCents: run.dailyCents,
+    ...(await brandCapFiguresOf(sql, organizationId, brandId)),
+  });
 }
 
 /** One run's spend as the run view states it: what was priced, what was only metered in tokens, and what provider calls reported. */
@@ -45,6 +176,10 @@ export type RunSpend = {
   tokens: number;
   /** Cents the provider calls reported. */
   providerCents: number;
+  /** The actual cost on the video engine's ledger for the run's engine requests, in micro-dollars. Absent when the run started none. */
+  engineMicros?: number;
+  /** Engine ledger calls with no actual recorded yet. Their cost is unknown, not zero. Absent when the run started no engine request. */
+  enginePendingCalls?: number;
 };
 
 /**
@@ -78,6 +213,16 @@ export async function runSpendFor(sql: Sql, organizationId: string, brandId: str
       current.providerCents += row.cents ?? 0;
     }
     result.set(row.run_id, current);
+  }
+  // The engine's ledger is the same spend: each run that started engine requests shows their actuals, read through the engine API.
+  for (const runId of runIds) {
+    const requestIds = await engineRequestIdsOfRun(sql, organizationId, brandId, runId);
+    if (requestIds.length === 0) continue;
+    const engine = await engineSpendOf(sql, organizationId, requestIds);
+    const current = result.get(runId) ?? { pricedMicros: 0, pricedDecisions: 0, tokenOnlyDecisions: 0, tokens: 0, providerCents: 0 };
+    current.engineMicros = engine.totalMicros;
+    current.enginePendingCalls = engine.pendingCalls;
+    result.set(runId, current);
   }
   return result;
 }

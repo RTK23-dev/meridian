@@ -1,0 +1,12 @@
+{
+  "clean": {
+    "product_vs_hero": 0.93,
+    "face_vs_persona": 0.88,
+    "palette_vs_style_kit": 0.82
+  },
+  "warped_product": {
+    "product_vs_hero": 0.41,
+    "face_vs_persona": 0.88,
+    "palette_vs_style_kit": 0.82
+  }
+}

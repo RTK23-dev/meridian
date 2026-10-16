@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440260-director0003",
+  "model": "anthropic/claude-opus-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"ok\":false,\"swaps\":[{\"shotId\":\"shot_01UNKNOWNSHOTNOTINTHEPLAN\",\"toType\":\"stock_footage\"},{\"shotId\":\"shot_0976TJT1BZZG39MGQ7ZZYF7H9Y\",\"toType\":\"cinematic\"},{\"shotId\":\"shot_7WNRE941244J54X29NQ1PTHHW0\",\"toType\":\"react_clip\"},{\"shotId\":\"shot_0976TJT1BZZG39MGQ7ZZYF7H9Y\",\"toType\":\"storyboard_slideshow\"},{\"shotId\":\"shot_7WNRE941244J54X29NQ1PTHHW0\",\"toType\":\"ugc_presenter\"}],\"promptEdits\":[{\"shotId\":\"shot_7WNRE941244J54X29NQ1PTHHW0\",\"prompt\":\"Home cook in a bright kitchen, relaxed, soft morning light, a slow push-in, no text in frame.\"},{\"shotId\":\"shot_0976TJT1BZZG39MGQ7ZZYF7H9Y\",\"prompt\":\"A close-up of a counter, no text in frame.\"}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 7960,
+    "completion_tokens": 152,
+    "total_tokens": 8112,
+    "cost": 0.0536
+  }
+}

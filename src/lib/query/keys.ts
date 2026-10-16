@@ -27,6 +27,8 @@ export const qk = {
   organic: (brandId: string) => ["organic", brandId] as const,
   /** Brand-level accounts, or one platform within the brand. Invalidating the brand key refreshes every platform. */
   accounts: (brandId: string, platform?: string) => platform ? ["accounts", brandId, platform] as const : ["accounts", brandId] as const,
+  /** The theme pages of a brand, which runs and the run builder read. */
+  pages: (brandId: string) => ["pages", brandId] as const,
   accountIntelligence: (brandId: string, platform?: string) => platform ? ["account-intelligence", brandId, platform] as const : ["account-intelligence", brandId] as const,
   publishingQueue: (brandId: string, status?: string) => status ? ["publishing-queue", brandId, status] as const : ["publishing-queue", brandId] as const,
   telemetry: (brandId: string, platform?: string) => platform ? ["telemetry", brandId, platform] as const : ["telemetry", brandId] as const,
@@ -36,6 +38,7 @@ export const qk = {
   alerts: (organizationId: string) => ["alerts", organizationId] as const,
   providerSettings: (organizationId: string) => ["provider-settings", organizationId] as const,
   decisionEngines: (organizationId: string) => ["decision-engines", organizationId] as const,
+  videoBudget: (organizationId: string) => ["video-budget", organizationId] as const,
 };
 
 /**

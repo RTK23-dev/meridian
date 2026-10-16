@@ -22,6 +22,9 @@ function summaries(overrides: Record<string, unknown> = {}) {
     perception: summary("not_configured"),
     production: summary("not_configured"),
     hypit: summary("not_configured"),
+    openrouter: summary("not_configured"),
+    heygen: summary("not_configured"),
+    anthropic: summary("not_configured"),
     meta_ad_library: summary("not_configured"),
     meta_graph: summary("not_configured"),
     instagram: summary("not_configured"),
@@ -32,6 +35,8 @@ function summaries(overrides: Record<string, unknown> = {}) {
     pinterest: summary("not_configured"),
     tiktok: summary("not_configured"),
     licensed: summary("not_configured"),
+    shopify: summary("not_configured"),
+    apify: summary("not_configured"),
     storage: { configured: false, settings: {} },
     ...overrides,
   };

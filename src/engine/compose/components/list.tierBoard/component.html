@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"title","type":"string","label":"Board title","default":""},{"id":"durationMs","type":"number","label":"Duration (ms)","default":1000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="list.tierBoard" data-width="1080" data-height="1920">
+  <div class="tb-root">
+    <div class="tb-title"></div>
+    <div class="tb-rows"></div>
+  </div>
+  <style>
+    /* The board spans 6% to 88% of the width and sits between the top 10% and the bottom 20% (Bible 8.3). */
+    .tb-root {
+      position: absolute;
+      left: 6%;
+      top: 10%;
+      width: 82%;
+      height: 70%;
+      display: flex;
+      flex-direction: column;
+    }
+    .tb-title {
+      display: none;
+      flex: 0 0 auto;
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 96px;
+      line-height: 1.05;
+      text-align: center;
+      color: var(--kit-text);
+      margin-bottom: 4%;
+    }
+    .tb-title-on { display: block; }
+    .tb-rows {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5%;
+    }
+    .tb-row {
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      align-items: stretch;
+      gap: 2.5%;
+    }
+    .tb-label {
+      flex: 0 0 14%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 32px;
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 96px;
+      line-height: 1;
+      color: var(--kit-background);
+    }
+    .tb-tone-accent { background: var(--kit-accent); color: var(--kit-background); }
+    .tb-tone-primary { background: var(--kit-primary); color: var(--kit-background); }
+    .tb-tone-secondary { background: var(--kit-secondary); color: var(--kit-text); }
+    .tb-tone-text { background: var(--kit-text); color: var(--kit-background); }
+    .tb-tiles {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 2%;
+      align-items: center;
+      align-content: center;
+    }
+    .tb-tile {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      overflow: hidden;
+      border-radius: 32px;
+      background: var(--kit-secondary);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+      opacity: 0;
+    }
+    .tb-tile img {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 8%;
+      box-sizing: border-box;
+      display: block;
+    }
+    .tb-name {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 8%;
+      box-sizing: border-box;
+      font-family: var(--kit-font-body), sans-serif;
+      font-weight: 700;
+      font-size: 32px;
+      line-height: 1.15;
+      color: var(--kit-background);
+      background: rgba(0, 0, 0, 0.55);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    /* A text-only card centres its name vertically and wraps it inside the card, breaking a long word if it must. */
+    .tb-tile-text .tb-name {
+      top: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      overflow-wrap: anywhere;
+      background: transparent;
+      color: var(--kit-text);
+      font-size: 30px;
+      overflow: hidden;
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var tones = ["accent", "primary", "secondary", "text"];
+      var title = document.querySelector(".tb-title");
+      var rows = document.querySelector(".tb-rows");
+      var tiers = Array.isArray(vars.tiers) ? vars.tiers : [];
+      var items = Array.isArray(vars.items) ? vars.items : [];
+
+      if (typeof vars.title === "string" && vars.title.length > 0) {
+        title.textContent = vars.title;
+        title.className = "tb-title tb-title-on";
+      }
+
+      // One row per tier: a label box, then a grid of up to four item cards.
+      var grids = tiers.map(function (tier) {
+        var row = document.createElement("div");
+        row.className = "tb-row";
+        var label = document.createElement("div");
+        label.className = "tb-label tb-tone-" + (tones.indexOf(tier.tone) === -1 ? "primary" : tier.tone);
+        label.textContent = String(tier.label);
+        var grid = document.createElement("div");
+        grid.className = "tb-tiles";
+        row.appendChild(label);
+        row.appendChild(grid);
+        rows.appendChild(row);
+        return grid;
+      });
+
+      // Each card drops into place at its own time on the composition clock. Before its drop it stays hidden.
+      var tl = gsap.timeline({ paused: true });
+      items.forEach(function (item) {
+        var grid = grids[item.tier];
+        if (!grid) {
+          return;
+        }
+        var tile = document.createElement("div");
+        tile.className = "tb-tile";
+        if (typeof item.imageUri === "string") {
+          var img = document.createElement("img");
+          img.setAttribute("src", item.imageUri);
+          img.setAttribute("alt", "");
+          tile.appendChild(img);
+        } else {
+          tile.className += " tb-tile-text";
+        }
+        var name = document.createElement("div");
+        name.className = "tb-name";
+        name.textContent = String(item.name);
+        tile.appendChild(name);
+        grid.appendChild(tile);
+        tl.fromTo(tile, { y: -48 * motion, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, item.dropMs / 1000);
+      });
+      tl.set({}, {}, vars.durationMs / 1000);
+      window.__timelines["list.tierBoard"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

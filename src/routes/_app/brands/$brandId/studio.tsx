@@ -203,7 +203,7 @@ function Studio({ brandId }: { brandId: string }) {
             recordingTest={actions.recordTestPerformance.isPending}
             recordingOrganic={actions.recordOrganic.isPending}
             onReviewSubmit={submitReview}
-            onPublishConfirm={(target, channelIds, caption) => actions.confirmPublish(target, channelIds, caption)}
+            onPublishConfirm={(target, channelIds, caption, trial) => actions.confirmPublish(target, channelIds, caption, trial)}
             onPublishClose={() => actions.setPublishResults(null)}
             onRetry={retryVariant}
             onRecordTest={() => { void actions.recordTestPerformance.mutateAsync().catch(() => undefined); }}

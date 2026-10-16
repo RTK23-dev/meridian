@@ -1,0 +1,65 @@
+{
+  "data": [
+    {
+      "id": "kwaivgi/kling-v3.0-std",
+      "canonical_slug": "kwaivgi/kling-v3.0-std",
+      "name": "Kling v3.0 Standard",
+      "generate_audio": true,
+      "supported_durations": [5, 10],
+      "supported_resolutions": ["720p", "1080p"],
+      "supported_aspect_ratios": ["9:16", "16:9"],
+      "supported_frame_images": ["first_frame", "last_frame"],
+      "supported_sizes": [],
+      "pricing_skus": { "video_seconds": "0.126" },
+      "seed": true,
+      "allowed_passthrough_parameters": []
+    },
+    {
+      "id": "google/veo-3.1",
+      "canonical_slug": "google/veo-3.1",
+      "name": "Veo 3.1",
+      "generate_audio": true,
+      "supported_durations": [5, 8],
+      "supported_resolutions": ["720p", "1080p"],
+      "supported_aspect_ratios": ["9:16", "16:9"],
+      "supported_frame_images": ["first_frame", "last_frame"],
+      "supported_sizes": [],
+      "pricing_skus": { "video_seconds": "0.10" },
+      "seed": true,
+      "allowed_passthrough_parameters": []
+    },
+    {
+      "id": "bytedance/seedance-2.0",
+      "canonical_slug": "bytedance/seedance-2.0",
+      "name": "Seedance 2.0",
+      "generate_audio": false,
+      "supported_durations": [5, 10],
+      "supported_resolutions": ["1080p"],
+      "supported_aspect_ratios": ["9:16", "16:9"],
+      "supported_frame_images": [],
+      "supported_sizes": [],
+      "pricing_skus": { "video_seconds": "0.1028" },
+      "seed": true,
+      "allowed_passthrough_parameters": []
+    },
+    {
+      "id": "alibaba/wan-2.6",
+      "canonical_slug": "alibaba/wan-2.6",
+      "name": "Wan 2.6",
+      "generate_audio": false,
+      "supported_durations": [5],
+      "supported_resolutions": ["1080p"],
+      "supported_aspect_ratios": ["9:16"],
+      "supported_frame_images": ["first_frame"],
+      "supported_sizes": [],
+      "pricing_skus": { "video_seconds": "0.0425" },
+      "seed": true,
+      "allowed_passthrough_parameters": []
+    },
+    {
+      "id": "broken/entry",
+      "name": "An entry that does not match the listing shape",
+      "supported_durations": "five"
+    }
+  ]
+}

@@ -3,18 +3,36 @@
 Meridian is a multi-tenant advertising operating system. It holds a brand's own facts, turns evidence into creatives, decides which
 creatives may go out, exports them for posting, and records what happened afterwards.
 
-**Status: prerelease.** The package and the tag are `0.1.0-beta.11`. Read the upgrade notes in [docs/OPERATIONS.md](docs/OPERATIONS.md) before
-deploying. See [CHANGELOG.md](CHANGELOG.md).
+**Status: prerelease.** The package version and the tag are `0.1.0-beta.12`. Read the upgrade notes in [docs/OPERATIONS.md](docs/OPERATIONS.md)
+before deploying. Migrations 0077 to 0096 are new in this line. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What works in this release
 
-- **Brand brain.** 26 fields in five sections. Four are required for generation. Saves change only the fields the person changed.
+- **Brand brain.** 26 fields in six sections. Four are required for generation.
 - **Products, market and opportunities.** Public web pages are read end to end, with provenance and deduplication. Each source shows its own state.
 - **Studio.** A brief passes a gate before it can generate. Variants carry their evidence, decision and review. Video uses Gemini Omni by default.
 - **Decisions.** One engine per workspace, TypeSafe JEV or OpenAI Decisions. A versioned policy turns answers into approve, review or reject.
-- **Content Factory (partial).** One run settings object with brand defaults. `manual`, `semi` and `full` automation stop at the steps that
-  spend or publish, and a person approves a stop. Ads are graded from their observed stop time and, with a decision engine, by JEV, both
-  stored side by side. Each run's picks, their grades and their variants are on the Factory screen. See [docs/FACTORY.md](docs/FACTORY.md).
+- **Video engine (`src/engine/`).** Phases E1 to E6 are code complete on recorded fixtures. They cover the scene plan and edit decision list,
+  the composition compiler and components, the budget engine (reserve, extend, cap mode), the asset router, the Claude roles, the take,
+  pre-render and post-render gates, variants, the Shotstack fallback, chains for cartoon shots (stop motion is refused until `image.edit`
+  has a price), and the operations layer. Every model, API and render call goes through one gateway, with OpenRouter as the default
+  platform. No live run is recorded for any phase. See [docs/engine/PHASE_LOG.md](docs/engine/PHASE_LOG.md).
+- **Content Factory.** One run settings object with brand defaults. `manual`, `semi` and `full` automation stop at the steps that spend or
+  publish, and a person approves a stop. Before each engine call in the grade stage, the kill switch and the run's daily and total caps are
+  checked; a refused call leaves that ad graded on observed signal only, with the reason. Ads are graded from their observed stop time and,
+  with a decision engine, by JEV, both stored side by side. A run can name the Meridian video engine as its video provider. See
+  [docs/FACTORY.md](docs/FACTORY.md).
+- **Discovery at volume (Factory Gather).** Instagram reels are gathered per niche through Apify, each with its creator's baseline and a
+  tier from S to C, or "not rated" with the reason. Snapshots are scheduled at 24 and 72 hours after discovery. Tested on fixtures.
+- **Theme pages.** An account-level object that a Factory run can target: its linked platform account, persona, voice and style kits, posting
+  schedule (with a time zone), and whether its Instagram posts start as trial reels. Screen: `/brands/<brand>/pages`.
+- **Instagram trial reels.** A trial post names its graduation strategy, MANUAL or SS_PERFORMANCE. A scheduled check reads the reel's
+  documented fields once a day, for up to seven checks.
+- **Sales attribution (Shopify).** A Shopify shop connects to one workspace by its `myshopify.com` domain. The `orders/create` webhook stores
+  each order and links it to a reel by `utm_content`, or by a DM keyword in a discount code or note attribute. A tie links nothing.
+- **Sleep mode.** Off until a person turns it on and sets a niche. Each night gathers, grades and plans through the Factory's own stages, then
+  waits at produce for a person's approval. A 10% holdout is assigned and recorded. Any tuned-value change a night is given is held to 15%,
+  and each refusal is in the morning summary. Production gives a night no tuned values yet.
 - **Publishing.** Paid ads are created paused, and Meridian never switches them on. Regular posts go to a Facebook Page, Instagram, YouTube
   or TikTok account that is connected per brand.
 - **Library and exports.** Creatives, their lineage, and an export package for manual posting.
@@ -23,12 +41,30 @@ deploying. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What is not connected or not verified
 
-- Instagram Reels and TikTok regular videos publish through a connected account and a signed media link (`MEDIA_LINK_SECRET`, `APP_URL`,
-  and for TikTok `TIKTOK_VERIFIED_MEDIA_DOMAINS`), and show not connected until those are set. Facebook Page and YouTube Shorts go through a
-  connected account too. No live call was made to any of them in this release. The export package is the delivery path for everything else.
+- **Live spend is not ready.** Do not connect a live provider key to the video engine yet. Open in this pre-release: the render's cost is
+  a fixed estimate recorded as an actual (`src/engine/budget/reconcile.ts`); a server error on a submit can start a second paid job
+  (`src/engine/assets/router.ts`); failed calls are held as spend; a reconciled bill can raise a reservation past its caps without a pause;
+  and holds are not released when a request stops short of delivery. The Factory's own caps are now checked per run and per brand, and
+  unpriced image providers are refused. See the pre-release entry in [docs/engine/PHASE_LOG.md](docs/engine/PHASE_LOG.md).
+- **No live run of the video engine.** Agents hold no keys, so each phase's live acceptance (Bible section 19) is the owner's run. Production
+  shots stay NOT_CONNECTED until `MEDIA_FUNCTIONS_BASE_URL` is set, the workspace has a Google Drive connection and an OpenRouter key. Some
+  models stay NOT_CONNECTED even then, and so do speech and non-PNG images. The engine's owner items are listed in
+  [docs/ROADMAP.md](docs/ROADMAP.md), including the speech-to-text vendor, the HyperFrames price and the platform file-size limit.
+- **Factory discovery.** The Apify key and plan price are not set, and the cost per 1,000 results is unknown, so no discovery cost is
+  estimated. Without a key the source reports not connected.
+- **Trial reel feed step.** Meta documents no field that reports graduation, so the feed step is recorded only when Meridian observes a
+  graduation. The live reader observes none, so a trial stays "manual action required". A MANUAL trial graduates when a person does it in
+  the Instagram app; an SS_PERFORMANCE trial graduates when Instagram decides.
+- **Shopify.** The webhook answers 200 for a stored order and for a repeat delivery, refuses a bad signature, and answers 503 when no usable
+  secret is set. No live shop has sent an order, so the attribution has not been seen with real orders.
+- **Sleep mode.** The holdout is recorded, but production does not read it yet. Production gives a night no tuned values, so the 15% cap
+  has nothing to hold yet. Sleep mode writes no engine configuration, so an accepted change would only be recorded.
+- **Factory caps.** Caps count priced, metered spend only. A video's estimate is held against the caps but is not metered spend, and a
+  provider call that reports no cost is not counted. Without a decision engine, a Factory ad is graded on its observed signal only.
 - Live source APIs are built and tested against fixtures. No live key was used, so their live responses are unverified.
-- Factory spend caps are declared, not enforced: no stage writes metered spend yet. Without a decision engine, a Factory ad is graded on its
-  observed signal only, and no engine grade is calibrated. Live organic metrics are not pulled from any platform.
+- Live organic metrics are not pulled from any platform. Instagram Reels and TikTok regular videos publish through a connected account and a
+  signed media link (`MEDIA_LINK_SECRET`, `APP_URL`, and for TikTok `TIKTOK_VERIFIED_MEDIA_DOMAINS`), and show not connected until those are
+  set. No live call was made to any of them in this release.
 - Calibration. Every probability and score is uncalibrated, so none approves or rejects on its own.
 
 [ROADMAP.md](docs/ROADMAP.md) lists what is open, with the reason for each item.
@@ -60,17 +96,20 @@ inside `npm run dev` as well, so you do not need a second terminal. Set `DATABAS
 | `npm run setup` | Creates `.env` and generates the secrets, safe to repeat. Runs migrations when `DATABASE_URL` is set |
 | `npm run worker` | Runs queued jobs when `DATABASE_URL` is set (production) |
 | `npm run scheduler` | Runs periodic work when `DATABASE_URL` is set (production) |
-| `docker compose up --build` | The web app, worker, scheduler and PostgreSQL 16 (see [docs/SETUP.md](docs/SETUP.md)) |
+| `docker compose up --build` | The web app, worker, scheduler and PostgreSQL 16 (see [docs/SETUP.md](docs/SETUP.md)). Not yet built or run in the repository's checks |
 | `npm run db:migrate` | Applies migrations |
 | `npm test` | Unit and integration tests |
 | `npm run typecheck`, `npm run lint` | Type and lint checks |
 | `npm run build` | Production build, then migrations |
 | `npm run e2e`, `npm run ui:button-audit`, `npm run ui:baseline` | Browser checks against the running app |
+| `npm run engine:golden` | Video engine golden frames. Renders locally, so it needs ffmpeg and a Chrome headless shell (`HYPERFRAMES_BROWSER_PATH`). Not part of `npm test` |
+| `npm run engine:e1 -- --dry-run` | Video engine E1 acceptance on the recorded replay (no network, no keys). The live run is in [scripts/engine/README.md](scripts/engine/README.md) |
 
 ## Documentation
 
 Start with [docs/README.md](docs/README.md). It indexes the setup guide, the architecture, the numbered contracts the code follows,
-the provider and key reference, the decision engine, the product workflow, operations, testing and the roadmap.
+the provider and key reference, the decision engine, the product workflow, operations, testing and the roadmap. The video engine's
+specification, handoff and phase log are in [docs/engine/](docs/engine/).
 
 ## Verification
 

@@ -14,6 +14,8 @@ section 1, for the rules.
 | Gemini production | Omni video and image generation | Production | `MERIDIAN_GEMINI_API_KEY` or the Google aliases, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured. Nothing is generated |
 | Higgsfield | Video generation | Production | `HIGGSFIELD_API_KEY`, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured |
 | Hypit | Video runtime | Hypit | `HYPIT_API_TOKEN` or `HYPIT_API_KEY`, with `HYPIT_SHARED_DEFAULT=deployment` | Not connected. Set `HYPIT_BASE_URL` for the runtime itself |
+| Shopify | Order webhooks, for sales attribution (see below) | Shopify | `SHOPIFY_WEBHOOK_SECRET`, with `SHOPIFY_SHARED_DEFAULT=deployment` | Not configured. Orders are refused with `NOT_CONNECTED` (503) and nothing is stored |
+| Apify | Instagram volume discovery for Factory Gather (see below) | Apify | `APIFY_TOKEN`, with `APIFY_SHARED_DEFAULT=deployment` | Not configured. No Apify request is sent |
 
 Sources keep one key per connector. Each has its own opt-in, named `<CATEGORY>_SHARED_DEFAULT`:
 
@@ -35,6 +37,46 @@ Reddit's API is not connected in this release; direct post URLs are still read f
 
 OpenRouter is used only for copy generation, and only from the deployment: `OPENROUTER_API_KEY`, with
 `OPENROUTER_SHARED_DEFAULT=deployment`. It is never a decision engine.
+
+## Shopify orders (sales attribution)
+
+What the Shopify documentation says, checked on 2026-10-15:
+
+- Each HTTPS delivery is signed. `X-Shopify-Hmac-Sha256` holds the base64 of HMAC-SHA256 over the raw request body, keyed with the
+  app's client secret. Compute it over the raw body before any parser runs, and compare it in constant time. Source:
+  https://shopify.dev/docs/apps/build/webhooks/subscribe/https and https://shopify.dev/docs/apps/build/webhooks/verify-deliveries
+- Headers: `X-Shopify-Topic` (for example `orders/create`), `X-Shopify-Shop-Domain` (the `myshopify.com` domain of the store),
+  `X-Shopify-Hmac-Sha256`, `X-Shopify-Webhook-Id` (unique per delivery) and `X-Shopify-Event-Id` (shared by one merchant action).
+  Source: https://shopify.dev/docs/apps/build/webhooks/delivery-structure
+- The receiver must answer `200` within five seconds. Any other response, including 3xx, is an error, and Shopify retries eight
+  times over four hours. Source: https://shopify.dev/docs/apps/build/webhooks/subscribe/https
+- The `orders/create` sample payload is an Order object at the top level: `id`, `name`, `currency`, `total_price`,
+  `subtotal_price`, `total_tax`, `created_at`, `landing_site`, `referring_site`, `source_name`, `note_attributes` (a list of
+  `{name, value}`) and `discount_codes` (a list of `{code, amount, type}`). Sources: https://shopify.dev/docs/api/webhooks/2026-01
+  (topic list and sample payloads) and https://shopify.dev/docs/api/admin-rest/2026-01/resources/order (sample payload). The
+  reference pages do not describe `landing_site`, `referring_site`, `note_attributes` or `source_name` in words, so the reader
+  relies on those sample shapes only.
+
+Status, 2026-10-15. Verified: the signature, the headers, the `orders/create` topic and the `myshopify.com` shop domain.
+Partly verified: `landing_site`, `referring_site`, `source_name` and `note_attributes` are named, with example values, in the
+`orders/create` sample, but no page says what they hold. The UTM values read from `landing_site` therefore have no documented
+meaning, and the first live order confirms them. `discount_codes` is described as "a list of discounts applied to the order", with
+`code`, `amount` and `type`. No code changed.
+
+How Meridian uses them:
+
+- The endpoint is `POST /api/webhooks/shopify`. The shop is routed by its `myshopify.com` domain, which a brand connects in the
+  Factory's sales panel. A shop that is not connected gets `401` with the same answer as a bad signature.
+- A connected shop with no usable secret gets `503 NOT_CONNECTED` and nothing is stored. The secret is the workspace's own
+  `shopify` credential, saved in Settings. `SHOPIFY_WEBHOOK_SECRET` is read only with `SHOPIFY_SHARED_DEFAULT=deployment`.
+- A bad signature gets `401 HMAC validation failed.` A topic other than `orders/create` is acknowledged and not stored.
+- An order is matched to a reel by `utm_content` in its landing site first, then by its DM keyword as a discount code or as a
+  note attribute named `dm_keyword` or `meridian_keyword`. A tie or no match is stored unmatched. The rule that matched is stored.
+- An order is stored once per shop and Shopify order id. Its totals are stored as the decimal text Shopify sends, and a total that
+  is missing or malformed is stored as unknown. No customer details are stored.
+- A stored order is answered `200` with `recorded`, and a repeat with `200` with `already received`. Shopify's page says "Only a 200
+  response confirms receipt", so any other status would make Shopify retry a stored order. This was a `202` before the fix on
+  2026-10-15 (`src/lib/meridian/shopify/handler.ts`), and the tests now assert 200.
 
 ## Infrastructure (environment only)
 
@@ -70,6 +112,73 @@ Regular posts go through a connected account, saved per brand on Connected accou
 - **TikTok (regular video)**: a token that grants `video.publish`. A token that declares scopes without it is not connected. TikTok
   posts are sent as private (`SELF_ONLY`) until TikTok approves the app for public posting. The publish is reported as done only when
   TikTok reports `PUBLISH_COMPLETE`. Scheduling is refused. This is not run against TikTok's live service in this release.
+
+## Instagram trial reels
+
+Checked 2026-10-15 against Meta's developer documentation. Nothing here was run against a live account. Verified: `trial_params`,
+its two strategy values, the publish response and the read-back fields. Partly verified: the request host (below).
+
+- **Trial parameter.** The IG User Media reference lists `trial_params` for `media_type=REELS`. Its `graduation_strategy` is `MANUAL` (the
+  reel is graduated by hand in the native app) or `SS_PERFORMANCE` (the reel graduates automatically if it performs well).
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
+- **Request shape.** The Trial Reels section of the content publishing guide says trial reels are "only shared to non-followers". Its
+  example sends a JSON body with `trial_params` as a nested object. It posts to graph.instagram.com/v25.0, while this build uses
+  graph.facebook.com. The IG User Media reference's image sample posts to graph.facebook.com, and the pages read do not say which
+  host a token type must use. Partly verified. https://developers.facebook.com/docs/instagram-platform/content-publishing
+- **Container status.** The IG Container reference documents `status_code` as `FINISHED` (ready to publish), `ERROR` (failed to complete
+  publishing), `EXPIRED` (not published within 24 hours), `IN_PROGRESS` and `PUBLISHED`. It has no trial field.
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-container
+- **Read-back.** The IG Media reference has no field that reports trial state or graduation. `is_shared_to_feed` (Reels only) says a
+  reel "can appear in both the Feed and Reels tabs" when true, and Meta warns that neither value determines whether it appears there.
+  It is stored as observed and is never read as graduation. https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-media
+- **Media type.** `media_product_type` (`AD`, `FEED`, `STORY` or `REELS`) is available for the Instagram API with Facebook Login only.
+  With another kind of token it may be absent, and the build keeps it unknown. Same page.
+- **Graduation by API.** Not documented. The docs say a MANUAL trial is graduated "in the native app". Meridian does not graduate a
+  reel, and it does not record a feed step unless an observation says so. Today no observation exists.
+- **Publish response.** `media_publish` returns `{"id": "<IG_MEDIA_ID>"}` and nothing about trial state.
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media_publish
+- **Strategy note, fixed 2026-10-15.** The docs say a `SS_PERFORMANCE` reel graduates by itself if it performs well, and a `MANUAL`
+  reel is graduated by hand in the native app. The note in `trial.ts` (`GRADUATION_NOT_DOCUMENTED`) and the publish dialog hint now say
+  so for each strategy. Meridian still records the feed step only when it observes a graduation.
+- **Not verified.** Eligibility (a third-party guide cites about 1,000 followers; Meta publishes no threshold). Whether a trial's media
+  id stays the same after graduation. Whether the trial parameter is accepted on v21.0. Trial calls use v25.0, and the rest of the
+  Instagram flow stays on v21.0 (`TRIAL_GRAPH_BASE` in `src/lib/meridian/distribution/graph.ts`). A third-party summary says Meta does not
+  expose graduation through the API. That is not Meta's statement, and it was not checked against Meta.
+
+How the build uses this (`src/lib/meridian/distribution/trial.ts`, `instagram.ts`, `trial-check.ts`):
+
+1. The trial step publishes a Reel with `trial_params`, and its receipt is an `organic_posts` row with the media id that `media_publish`
+   returned. A refused or unconfirmed step is recorded as such, and no trial row is written.
+2. A row in `organic_trial_reels` links the receipt to the media id. A `distribution.trial_check` job runs one day later, and then daily,
+   for at most 7 checks. Each check reads `id`, `media_type`, `media_product_type`, `is_shared_to_feed` and `permalink` from the media.
+3. The feed step is `graduated` only when an observed graduation is recorded. The live reader observes none, so each check leaves the
+   feed step as `manual_action_required`, with the reason, until a person graduates the reel in the Instagram app. A failed read is
+   recorded as the last error, and nothing is read as a state.
+
+Owner live run (not done by an agent): on an Instagram account that is connected for a brand, publish one trial reel with
+`MANUAL` and record the container id, the media id, Meta's response, and what the Instagram app shows after the first check. Then
+graduate it by hand and record whether any later check observes it. Record both receipts in the run's Library.
+
+## Apify: Instagram volume (Factory Gather)
+
+Checked 2026-10-15 against the Apify pages. The request and output tables, with their statuses, are in
+`docs/engine/PROVIDER_APIS.md` (Apify). Nothing was run against a live account.
+
+- Request: `POST https://api.apify.com/v2/actors/{actorId}/run-sync-get-dataset-items`, with `actorId` as `owner~name`, and the header
+  `Authorization: Bearer <token>`. Verified: https://docs.apify.com/api/v2/act-run-sync-get-dataset-items-post and
+  https://docs.apify.com/api/v2/getting-started. A 201 response holds the item array. A 408 means the run passed 300 seconds.
+- Actors: `apify~instagram-hashtag-scraper` for niche search and `apify~instagram-reel-scraper` for creator baselines. Their input
+  names (`hashtags`, `resultsLimit`, `username`, `skipPinnedPosts`) are verified on https://apify.com/apify/instagram-hashtag-scraper
+  and https://apify.com/apify/instagram-reel-scraper.
+- Fields read and documented: `url`, `ownerUsername`, `timestamp`, `caption`, `hashtags`, `id` and `commentsCount`. A `likesCount`
+  of `-1` means the count is hidden, and it is read as unknown.
+- Partly verified: `videoPlayCount`, the view count used for ratings. It is named in the samples of both actors, and the docs describe
+  views in words, but they do not say how it differs from `videoViewCount`. `type` and `shortCode` appear only in the samples. The
+  accepted `resultsType` values are not listed.
+- Not verified: the price. The pages give conflicting figures, so no cost is estimated.
+
+No code changed. The owner confirms the partly verified fields at the first live run. Nulling `videoPlayCount` would stop every
+rating, and nulling `type` would drop every hashtag result, so the fields are kept and flagged.
 
 ## Engine choice
 

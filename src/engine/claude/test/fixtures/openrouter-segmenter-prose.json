@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440280-segmenterprose",
+  "model": "anthropic/claude-sonnet-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Here is the segmentation you asked for: the hook runs first, then the product."
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 25873,
+    "completion_tokens": 22,
+    "total_tokens": 25895,
+    "cost": 0.051792
+  }
+}

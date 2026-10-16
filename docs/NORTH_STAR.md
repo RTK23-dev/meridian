@@ -160,6 +160,9 @@ Target behaviour:
 
 Each item is one PR. Acceptance criteria are what the reviewer checks.
 
+_Status notes below were added on 2026-10-15 from [engine/PHASE_LOG.md](engine/PHASE_LOG.md) and the code. "Done on fixtures" means
+merged and tested on recorded fixtures. No criterion has been checked against a live provider. The notes change no criterion._
+
 1. **Honesty and retirement.**
    Remove `storage/s3.ts`, the `S3_*` variables in `.env.example` and the S3 lines in `docs/PROVIDERS.md`.
    Replace the made-up Factory costs with costs read from the budget ledger, or none.
@@ -167,32 +170,60 @@ Each item is one PR. Acceptance criteria are what the reviewer checks.
    create an `organic_posts` row marked `published` without a receipt.
    _Accept:_ no `S3` references outside the changelog; no fixed cost figures in `factory/worker.ts`; tests cover the null
    and no-receipt cases.
+   _Status: partly done. `storage/s3.ts` is gone and `.env.example` has no `S3_` variable. Factory cost estimates were removed
+   (CHANGELOG 0.1.0-beta.11), and telemetry stores an unknown impression count as null. Open: S3 is still named in text in `src/engine`
+   and `src/lib/meridian/storage`, and `src/engine/render/hyperframesCloud.ts` (line 42) describes a direct upload to S3 presigned URLs.
+   The no-receipt rule was not re-checked in this pass._
 2. **Run settings.** One settings model (section 4) with brand defaults and per-run overrides, a migration, server-side
    validation, and the old three vocabularies mapped onto it.
    _Accept:_ Factory and Studio both read it; changing `automation` changes which stages run, proven by tests.
+   _Status: done on fixtures. Nothing here waits on a live run or an owner decision._
 3. **Factory Gather.** The discover and ingest stages call the real sourcing stack and record per-source states on the run.
    _Accept:_ in `TestingRuntime` a run gathers fixture items from at least the crawler, the scraper and the Ad Library
    collector; a source without a key shows `not_connected` and the run continues.
+   _Status: done on fixtures. Each source records its state, and a source without a key is `not_connected` while the run goes on.
+   Instagram volume through Apify is built on fixtures too. Waits for: the owner's Apify key and plan price (ROADMAP, owner items)._
 4. **Factory Grade with JEV.** Observed signal and JEV grade stored side by side; fixed values removed.
    _Accept:_ with a fixture engine, grades are stored with engine, model and question versions; with no engine, items
    are graded on observed signal only and say so.
+   _Status: done on fixtures. The grade stage checks the kill switch and both caps before each engine call. Waits for: a live decision
+   engine, and measured outcomes before the thresholds of the first two grading questions can be calibrated._
 5. **Pick and Plan.** Pick uses grades, patterns and Thompson allocation; Plan writes `CreativePlan`s with one-attribute
    variants against a control.
    _Accept:_ the fixed hook and CTA list is gone; each variant records the attribute it tests.
+   _Status: done on fixtures. The Factory plan takes its hooks and CTAs only from the brand's brain (`factory/plan.ts`), and each variant
+   records its attribute in `tests_attribute`. Waits for: nothing outside the code._
 6. **Produce through the router.** Factory plans materialize through `production/materialization.ts` with the run's
    provider choice, into the shared creative tables.
    _Accept:_ Factory creatives appear in Library and Reviews; a named provider that is not ready stops the run with its reason.
+   _Status: done on fixtures. Factory images, carousels and videos go through `production/materialization.ts`, and their creatives appear
+   in Library and Reviews. A run can name the Meridian video engine (`engine`). Waits for: live providers and the owner's keys._
 7. **Gate and Approve by mode.** JEV QA added to the gate stage; approval follows `automation`.
    _Accept:_ tests for each of manual, semi and full, including the kill switch and caps.
+   _Status: done on fixtures. Tests: `stage-decision.test.ts`, `approval.test.ts` and `grade-cap.test.ts`. Waits for: nothing outside
+   the code._
 8. **Publish both paths.** Organic and paid publishing from the Factory and Studio, with separate receipts.
    _Accept:_ in `TestingRuntime`, `intent: both` produces one organic receipt and one paused-ad receipt per creative.
+   _Status: done on fixtures (`publish.test.ts`). Waits for: live publishing. A live paid publish from a run is refused until the run has
+   a Facebook Page id and a destination link, which is an open gap (FACTORY, Not built yet)._
 9. **Measure both paths.** Scheduled organic and paid metric pulls, linked through `measurement/creative-linkage.ts`.
    _Accept:_ every metric row has a creative id and a surface; unknown values are `null`.
+   _Status: done on fixtures. Each metric row is linked to its creative and surface (`recordLinkedMetric`), and an unknown value is
+   null. Waits for: live metrics. Organic channels return null from `fetchMetrics`, and paid metrics need a stored token._
 10. **Learn from both.** Patterns per surface; JEV predictions stored next to outcomes.
     _Accept:_ a test shows an organic win and a paid win each producing a pattern, and both feeding the next run's Pick.
+    _Status: done on fixtures (`pick-surfaces.test.ts`). Waits for: live outcomes. A grading question's calibration needs 100 measured
+    outcomes per brand (FACTORY, Calibration)._
 11. **Factory screen.** A run builder that exposes every choice in section 4, and a run view showing each stage, each
     source's state, grades, variants, receipts and metrics.
     _Accept:_ every control acts or says why it cannot (`npm run ui:button-audit`).
+    _Status: built, with before and after screenshots in `docs/feature-screens/`. Open: the PHASE_LOG records no run of the button audit
+    for these changes, and the studio publish dialog and the B2 tier counts were not captured._
+
+Items the code cites as B1 to B6 and I1 to I3 are not listed above. They are B1 and B2, discovery at volume and the outlier rater; B3, theme
+pages; B4, Instagram trial reels; B5, sales attribution; B6, sleep mode; and I1 to I3, the Factory's engine integration (PHASE_LOG,
+2026-10-15). All are built on fixtures, and their live gaps are in [FACTORY.md](FACTORY.md) and [ROADMAP.md](ROADMAP.md). The video engine's
+phases E1 to E6 are in [engine/VIDEO_ENGINE_BIBLE.md](engine/VIDEO_ENGINE_BIBLE.md) section 19; each awaits its live run.
 
 ## 9. Owner decisions
 

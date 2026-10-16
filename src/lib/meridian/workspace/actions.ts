@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
-import { isRole, nextOwnerCount, type Role } from "@/lib/meridian/access";
+import { assertRole, isRole, nextOwnerCount, type Role } from "@/lib/meridian/access";
 import { slugify } from "@/lib/meridian/brain";
 import { WEIGHT_KEYS } from "@/lib/meridian/scoring";
 import { loadWorkspaceBrands } from "./brands-listing";
@@ -384,55 +384,39 @@ export const addMember = createServerFn({ method: "POST" })
       select id from "user" where lower(email) = ${data.email} limit 1
     `;
     const existingUser = users[0]?.id;
-    if (!existingUser) {
-      const inviteId = id();
-      const orgs = await sql<{ name: string }>`select name from organizations where id = ${data.organizationId} limit 1`;
-      const { createInvitation, selectEmailProvider } = await import("@/lib/meridian/notifications/invite");
-      const origin = process.env.BETTER_AUTH_URL?.trim() || "http://127.0.0.1:8080";
-      const result = await createInvitation(sql, {
-        id: inviteId,
-        organizationId: data.organizationId,
-        email: data.email,
-        role: data.role,
-        createdBy: context.userId,
-        workspaceName: orgs[0]?.name ?? "",
-        origin,
-        provider: selectEmailProvider(),
-      });
-      await writeAudit(sql, {
-        organizationId: data.organizationId,
-        actorId: context.userId,
-        action: "invite.created",
-        objectType: "invite",
-        objectId: inviteId,
-        metadata: { email: data.email, role: data.role, delivery: result.status },
-      });
-      return { status: result.status, message: result.message };
+    if (existingUser) {
+      const already = await sql<{ role: string }>`
+        select role from memberships
+        where organization_id = ${data.organizationId} and user_id = ${existingUser}
+        limit 1
+      `;
+      if (already.length > 0) throw new Error("That person is already in this workspace.");
     }
-    const already = await sql<{ role: string }>`
-      select role from memberships
-      where organization_id = ${data.organizationId} and user_id = ${existingUser}
-      limit 1
-    `;
-    if (already.length > 0) throw new Error("That person is already in this workspace.");
-    const memberId = id();
-    await sql`
-      insert into memberships (id, organization_id, user_id, role)
-      values (${memberId}, ${data.organizationId}, ${existingUser}, ${data.role})
-    `;
-    await sql`
-      update invites set status = 'accepted'
-      where organization_id = ${data.organizationId} and lower(email) = ${data.email} and status = 'recorded'
-    `;
+    // Everyone joins by accepting an invitation, whether or not they have an account. Nobody is added without consent, and the
+    // answer is the same for every email, so it does not reveal which emails have accounts.
+    const inviteId = id();
+    const orgs = await sql<{ name: string }>`select name from organizations where id = ${data.organizationId} limit 1`;
+    const { createInvitation, selectEmailProvider } = await import("@/lib/meridian/notifications/invite");
+    const origin = process.env.BETTER_AUTH_URL?.trim() || "http://127.0.0.1:8080";
+    const result = await createInvitation(sql, {
+      id: inviteId,
+      organizationId: data.organizationId,
+      email: data.email,
+      role: data.role,
+      createdBy: context.userId,
+      workspaceName: orgs[0]?.name ?? "",
+      origin,
+      provider: selectEmailProvider(),
+    });
     await writeAudit(sql, {
       organizationId: data.organizationId,
       actorId: context.userId,
-      action: "member.added",
-      objectType: "membership",
-      objectId: memberId,
-      metadata: { email: data.email, role: data.role },
+      action: "invite.created",
+      objectType: "invite",
+      objectId: inviteId,
+      metadata: { email: data.email, role: data.role, delivery: result.status },
     });
-    return { status: "added" as const, message: "Added to the workspace." };
+    return { status: result.status, message: result.message };
   });
 
 export const acceptInvite = createServerFn({ method: "POST" })
@@ -473,7 +457,8 @@ export const changeMemberRole = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    const actor = await requireMembership(sql, context.userId, data.organizationId, "admin");
+    if (data.userId === context.userId) throw new Error("You cannot change your own membership.");
     const current = await sql<{ role: string }>`
       select role from memberships
       where organization_id = ${data.organizationId} and user_id = ${data.userId}
@@ -488,6 +473,8 @@ export const changeMemberRole = createServerFn({ method: "POST" })
     const ownerCount = Number(owners[0]?.count ?? 0);
     if (data.role !== "remove" && !isRole(data.role)) throw new Error("Unknown role.");
     const next: Role | null = data.role === "remove" ? null : data.role;
+    // Only an owner can make an owner or change one. An admin cannot promote themselves or demote an owner.
+    if (from === "owner" || next === "owner") assertRole(actor.role, "owner");
     if (nextOwnerCount(ownerCount, from, next) < 1) {
       throw new Error("A workspace needs at least one owner.");
     }

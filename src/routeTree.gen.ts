@@ -25,6 +25,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppSetupRouteImport } from './routes/_app/setup'
 import { Route as AppUsageRouteImport } from './routes/_app/usage'
 import { Route as AppWebhooksRouteImport } from './routes/_app/webhooks'
+import { Route as ApiEngineMediaRouteImport } from './routes/api/engine-media'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as AppBrandsNewRouteImport } from './routes/_app/brands/new'
 import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$assetId'
@@ -34,6 +35,7 @@ import { Route as ApiDriveConnectRouteImport } from './routes/api/drive/connect'
 import { Route as ApiMediaLinksCreativeIdRouteImport } from './routes/api/media-links/$creativeId'
 import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
 import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
+import { Route as ApiWebhooksShopifyRouteImport } from './routes/api/webhooks/shopify'
 import { Route as AppBrandsBrandIdIndexRouteImport } from './routes/_app/brands/$brandId/index'
 import { Route as AppBrandsBrandIdAccountsRouteImport } from './routes/_app/brands/$brandId/accounts'
 import { Route as AppBrandsBrandIdBrainRouteImport } from './routes/_app/brands/$brandId/brain'
@@ -44,6 +46,7 @@ import { Route as AppBrandsBrandIdLearningRouteImport } from './routes/_app/bran
 import { Route as AppBrandsBrandIdLibraryRouteImport } from './routes/_app/brands/$brandId/library'
 import { Route as AppBrandsBrandIdMarketRouteImport } from './routes/_app/brands/$brandId/market'
 import { Route as AppBrandsBrandIdOpportunitiesRouteImport } from './routes/_app/brands/$brandId/opportunities'
+import { Route as AppBrandsBrandIdPagesRouteImport } from './routes/_app/brands/$brandId/pages'
 import { Route as AppBrandsBrandIdProductsRouteImport } from './routes/_app/brands/$brandId/products'
 import { Route as AppBrandsBrandIdReviewsRouteImport } from './routes/_app/brands/$brandId/reviews'
 import { Route as AppBrandsBrandIdStudioRouteImport } from './routes/_app/brands/$brandId/studio'
@@ -127,6 +130,11 @@ const AppWebhooksRoute = AppWebhooksRouteImport.update({
   path: '/webhooks',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiEngineMediaRoute = ApiEngineMediaRouteImport.update({
+  id: '/api/engine-media',
+  path: '/api/engine-media',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
@@ -170,6 +178,11 @@ const ApiOauthCallbackRoute = ApiOauthCallbackRouteImport.update({
 const ApiWebhooksReceiveRoute = ApiWebhooksReceiveRouteImport.update({
   id: '/api/webhooks/receive',
   path: '/api/webhooks/receive',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWebhooksShopifyRoute = ApiWebhooksShopifyRouteImport.update({
+  id: '/api/webhooks/shopify',
+  path: '/api/webhooks/shopify',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppBrandsBrandIdIndexRoute = AppBrandsBrandIdIndexRouteImport.update({
@@ -227,6 +240,11 @@ const AppBrandsBrandIdOpportunitiesRoute =
     path: '/brands/$brandId/opportunities',
     getParentRoute: () => AppRoute,
   } as any)
+const AppBrandsBrandIdPagesRoute = AppBrandsBrandIdPagesRouteImport.update({
+  id: '/brands/$brandId/pages',
+  path: '/brands/$brandId/pages',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBrandsBrandIdProductsRoute =
   AppBrandsBrandIdProductsRouteImport.update({
     id: '/brands/$brandId/products',
@@ -260,6 +278,7 @@ export interface FileRoutesByFullPath {
   '/setup': typeof AppSetupRoute
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
+  '/api/engine-media': typeof ApiEngineMediaRoute
   '/api/health': typeof ApiHealthRoute
   '/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -269,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
+  '/api/webhooks/shopify': typeof ApiWebhooksShopifyRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
@@ -278,6 +298,7 @@ export interface FileRoutesByFullPath {
   '/brands/$brandId/library': typeof AppBrandsBrandIdLibraryRoute
   '/brands/$brandId/market': typeof AppBrandsBrandIdMarketRoute
   '/brands/$brandId/opportunities': typeof AppBrandsBrandIdOpportunitiesRoute
+  '/brands/$brandId/pages': typeof AppBrandsBrandIdPagesRoute
   '/brands/$brandId/products': typeof AppBrandsBrandIdProductsRoute
   '/brands/$brandId/reviews': typeof AppBrandsBrandIdReviewsRoute
   '/brands/$brandId/studio': typeof AppBrandsBrandIdStudioRoute
@@ -298,6 +319,7 @@ export interface FileRoutesByTo {
   '/setup': typeof AppSetupRoute
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
+  '/api/engine-media': typeof ApiEngineMediaRoute
   '/api/health': typeof ApiHealthRoute
   '/': typeof AppIndexRoute
   '/brands/new': typeof AppBrandsNewRoute
@@ -308,6 +330,7 @@ export interface FileRoutesByTo {
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
+  '/api/webhooks/shopify': typeof ApiWebhooksShopifyRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
@@ -317,6 +340,7 @@ export interface FileRoutesByTo {
   '/brands/$brandId/library': typeof AppBrandsBrandIdLibraryRoute
   '/brands/$brandId/market': typeof AppBrandsBrandIdMarketRoute
   '/brands/$brandId/opportunities': typeof AppBrandsBrandIdOpportunitiesRoute
+  '/brands/$brandId/pages': typeof AppBrandsBrandIdPagesRoute
   '/brands/$brandId/products': typeof AppBrandsBrandIdProductsRoute
   '/brands/$brandId/reviews': typeof AppBrandsBrandIdReviewsRoute
   '/brands/$brandId/studio': typeof AppBrandsBrandIdStudioRoute
@@ -339,6 +363,7 @@ export interface FileRoutesById {
   '/_app/setup': typeof AppSetupRoute
   '/_app/usage': typeof AppUsageRoute
   '/_app/webhooks': typeof AppWebhooksRoute
+  '/api/engine-media': typeof ApiEngineMediaRoute
   '/api/health': typeof ApiHealthRoute
   '/_app/': typeof AppIndexRoute
   '/_app/brands/new': typeof AppBrandsNewRoute
@@ -349,6 +374,7 @@ export interface FileRoutesById {
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
+  '/api/webhooks/shopify': typeof ApiWebhooksShopifyRoute
   '/_app/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/_app/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/_app/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
@@ -358,6 +384,7 @@ export interface FileRoutesById {
   '/_app/brands/$brandId/library': typeof AppBrandsBrandIdLibraryRoute
   '/_app/brands/$brandId/market': typeof AppBrandsBrandIdMarketRoute
   '/_app/brands/$brandId/opportunities': typeof AppBrandsBrandIdOpportunitiesRoute
+  '/_app/brands/$brandId/pages': typeof AppBrandsBrandIdPagesRoute
   '/_app/brands/$brandId/products': typeof AppBrandsBrandIdProductsRoute
   '/_app/brands/$brandId/reviews': typeof AppBrandsBrandIdReviewsRoute
   '/_app/brands/$brandId/studio': typeof AppBrandsBrandIdStudioRoute
@@ -381,6 +408,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/usage'
     | '/webhooks'
+    | '/api/engine-media'
     | '/api/health'
     | '/brands/new'
     | '/api/assets/$assetId'
@@ -390,6 +418,7 @@ export interface FileRouteTypes {
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
+    | '/api/webhooks/shopify'
     | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
@@ -399,6 +428,7 @@ export interface FileRouteTypes {
     | '/brands/$brandId/library'
     | '/brands/$brandId/market'
     | '/brands/$brandId/opportunities'
+    | '/brands/$brandId/pages'
     | '/brands/$brandId/products'
     | '/brands/$brandId/reviews'
     | '/brands/$brandId/studio'
@@ -419,6 +449,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/usage'
     | '/webhooks'
+    | '/api/engine-media'
     | '/api/health'
     | '/'
     | '/brands/new'
@@ -429,6 +460,7 @@ export interface FileRouteTypes {
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
+    | '/api/webhooks/shopify'
     | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
@@ -438,6 +470,7 @@ export interface FileRouteTypes {
     | '/brands/$brandId/library'
     | '/brands/$brandId/market'
     | '/brands/$brandId/opportunities'
+    | '/brands/$brandId/pages'
     | '/brands/$brandId/products'
     | '/brands/$brandId/reviews'
     | '/brands/$brandId/studio'
@@ -459,6 +492,7 @@ export interface FileRouteTypes {
     | '/_app/setup'
     | '/_app/usage'
     | '/_app/webhooks'
+    | '/api/engine-media'
     | '/api/health'
     | '/_app/'
     | '/_app/brands/new'
@@ -469,6 +503,7 @@ export interface FileRouteTypes {
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
+    | '/api/webhooks/shopify'
     | '/_app/brands/$brandId/accounts'
     | '/_app/brands/$brandId/brain'
     | '/_app/brands/$brandId/calibration'
@@ -478,6 +513,7 @@ export interface FileRouteTypes {
     | '/_app/brands/$brandId/library'
     | '/_app/brands/$brandId/market'
     | '/_app/brands/$brandId/opportunities'
+    | '/_app/brands/$brandId/pages'
     | '/_app/brands/$brandId/products'
     | '/_app/brands/$brandId/reviews'
     | '/_app/brands/$brandId/studio'
@@ -488,6 +524,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   Char91_designChar93Route: typeof Char91_designChar93Route
   LoginRoute: typeof LoginRoute
+  ApiEngineMediaRoute: typeof ApiEngineMediaRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiAssetsAssetIdRoute: typeof ApiAssetsAssetIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -496,6 +533,7 @@ export interface RootRouteChildren {
   ApiMediaLinksCreativeIdRoute: typeof ApiMediaLinksCreativeIdRoute
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
+  ApiWebhooksShopifyRoute: typeof ApiWebhooksShopifyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -612,6 +650,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWebhooksRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/engine-media': {
+      id: '/api/engine-media'
+      path: '/api/engine-media'
+      fullPath: '/api/engine-media'
+      preLoaderRoute: typeof ApiEngineMediaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/health': {
       id: '/api/health'
       path: '/api/health'
@@ -673,6 +718,13 @@ declare module '@tanstack/react-router' {
       path: '/api/webhooks/receive'
       fullPath: '/api/webhooks/receive'
       preLoaderRoute: typeof ApiWebhooksReceiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/webhooks/shopify': {
+      id: '/api/webhooks/shopify'
+      path: '/api/webhooks/shopify'
+      fullPath: '/api/webhooks/shopify'
+      preLoaderRoute: typeof ApiWebhooksShopifyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/brands/$brandId/': {
@@ -745,6 +797,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBrandsBrandIdOpportunitiesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/brands/$brandId/pages': {
+      id: '/_app/brands/$brandId/pages'
+      path: '/brands/$brandId/pages'
+      fullPath: '/brands/$brandId/pages'
+      preLoaderRoute: typeof AppBrandsBrandIdPagesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/brands/$brandId/products': {
       id: '/_app/brands/$brandId/products'
       path: '/brands/$brandId/products'
@@ -793,6 +852,7 @@ interface AppRouteChildren {
   AppBrandsBrandIdLibraryRoute: typeof AppBrandsBrandIdLibraryRoute
   AppBrandsBrandIdMarketRoute: typeof AppBrandsBrandIdMarketRoute
   AppBrandsBrandIdOpportunitiesRoute: typeof AppBrandsBrandIdOpportunitiesRoute
+  AppBrandsBrandIdPagesRoute: typeof AppBrandsBrandIdPagesRoute
   AppBrandsBrandIdProductsRoute: typeof AppBrandsBrandIdProductsRoute
   AppBrandsBrandIdReviewsRoute: typeof AppBrandsBrandIdReviewsRoute
   AppBrandsBrandIdStudioRoute: typeof AppBrandsBrandIdStudioRoute
@@ -823,6 +883,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppBrandsBrandIdLibraryRoute: AppBrandsBrandIdLibraryRoute,
   AppBrandsBrandIdMarketRoute: AppBrandsBrandIdMarketRoute,
   AppBrandsBrandIdOpportunitiesRoute: AppBrandsBrandIdOpportunitiesRoute,
+  AppBrandsBrandIdPagesRoute: AppBrandsBrandIdPagesRoute,
   AppBrandsBrandIdProductsRoute: AppBrandsBrandIdProductsRoute,
   AppBrandsBrandIdReviewsRoute: AppBrandsBrandIdReviewsRoute,
   AppBrandsBrandIdStudioRoute: AppBrandsBrandIdStudioRoute,
@@ -835,6 +896,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   Char91_designChar93Route: Char91_designChar93Route,
   LoginRoute: LoginRoute,
+  ApiEngineMediaRoute: ApiEngineMediaRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiAssetsAssetIdRoute: ApiAssetsAssetIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
@@ -843,6 +905,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMediaLinksCreativeIdRoute: ApiMediaLinksCreativeIdRoute,
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,
+  ApiWebhooksShopifyRoute: ApiWebhooksShopifyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440200-criticok00001",
+  "model": "anthropic/claude-haiku-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"rubric\":{\"hands\":0.92,\"faces\":0.95,\"anatomy\":0.9,\"physics\":0.88,\"plastic_skin\":0.8,\"morphing_objects\":0.93,\"background_warping\":0.9},\"confidence\":0.91}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 7900,
+    "completion_tokens": 60,
+    "total_tokens": 7960,
+    "cost": 0.0118
+  }
+}

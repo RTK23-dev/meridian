@@ -9,7 +9,23 @@
  * only when its shared-default variable is opted in. `openai` is the OpenAI Decisions engine. `hypit` is the Hypit
  * production runtime.
  */
-export type CredentialCategory = "perception" | "jev" | "production" | "openai" | "hypit" | SourceCredentialCategory;
+export type CredentialCategory =
+  | "perception"
+  | "jev"
+  | "production"
+  | "openai"
+  | "hypit"
+  | "shopify"
+  | VideoEngineCredentialCategory
+  | SourceCredentialCategory;
+
+/**
+ * The video engine's provider keys (read by src/engine/gateway/meridian.ts). `openrouter` is the workspace's own OpenRouter
+ * key, `heygen` its HeyGen key and `anthropic` its Anthropic key. Each follows the same rules as every other category.
+ */
+export const VIDEO_ENGINE_CREDENTIAL_CATEGORIES = ["openrouter", "heygen", "anthropic"] as const;
+
+export type VideoEngineCredentialCategory = (typeof VIDEO_ENGINE_CREDENTIAL_CATEGORIES)[number];
 
 /**
  * The source connectors that hold a saved key. Each is its own vault entry, so a workspace connects one source without
@@ -27,6 +43,7 @@ export const SOURCE_CREDENTIAL_CATEGORIES = [
   "pinterest",
   "tiktok",
   "licensed",
+  "apify",
 ] as const;
 
 export type SourceCredentialCategory = (typeof SOURCE_CREDENTIAL_CATEGORIES)[number];
@@ -43,6 +60,8 @@ export const SOURCE_KEY_ENV: Record<SourceCredentialCategory, readonly string[]>
   pinterest: ["PINTEREST_ACCESS_TOKEN"],
   tiktok: ["TIKTOK_ACCESS_TOKEN"],
   licensed: ["LICENSED_DATA_API_KEY", "SENSOR_TOWER_API_KEY"],
+  // Apify runs the Instagram volume actors (Factory Gather). The deployment key is used only with APIFY_SHARED_DEFAULT=deployment.
+  apify: ["APIFY_TOKEN"],
 };
 
 /** Where a usable key came from. */
@@ -72,6 +91,10 @@ export const CREDENTIAL_VAULT_TYPE: Record<CredentialCategory, string> = {
   production: "provider_config:production",
   openai: "provider_config:openai",
   hypit: "provider_config:hypit",
+  shopify: "provider_config:shopify",
+  openrouter: "provider_config:openrouter",
+  heygen: "provider_config:heygen",
+  anthropic: "provider_config:anthropic",
   meta_ad_library: "provider_config:source:meta_ad_library",
   meta_graph: "provider_config:source:meta_graph",
   instagram: "provider_config:source:instagram",
@@ -82,6 +105,7 @@ export const CREDENTIAL_VAULT_TYPE: Record<CredentialCategory, string> = {
   pinterest: "provider_config:source:pinterest",
   tiktok: "provider_config:source:tiktok",
   licensed: "provider_config:source:licensed",
+  apify: "provider_config:source:apify",
 };
 
 /**
@@ -94,6 +118,12 @@ export const SHARED_DEFAULT_ENV: Record<CredentialCategory, { variable: string; 
   production: { variable: "PRODUCTION_SHARED_DEFAULT", accepts: "deployment" },
   openai: { variable: "OPENAI_SHARED_DEFAULT", accepts: "deployment" },
   hypit: { variable: "HYPIT_SHARED_DEFAULT", accepts: "deployment" },
+  shopify: { variable: "SHOPIFY_SHARED_DEFAULT", accepts: "deployment" },
+  // The same opt-in as the deployment-only OpenRouter chat key below: one variable decides whether the deployment's
+  // OPENROUTER_API_KEY is shared, for the chat path and for a workspace with no OpenRouter key of its own.
+  openrouter: { variable: "OPENROUTER_SHARED_DEFAULT", accepts: "deployment" },
+  heygen: { variable: "HEYGEN_SHARED_DEFAULT", accepts: "deployment" },
+  anthropic: { variable: "ANTHROPIC_SHARED_DEFAULT", accepts: "deployment" },
   meta_ad_library: { variable: "META_AD_LIBRARY_SHARED_DEFAULT", accepts: "deployment" },
   meta_graph: { variable: "META_GRAPH_SHARED_DEFAULT", accepts: "deployment" },
   instagram: { variable: "INSTAGRAM_SHARED_DEFAULT", accepts: "deployment" },
@@ -104,12 +134,14 @@ export const SHARED_DEFAULT_ENV: Record<CredentialCategory, { variable: string; 
   pinterest: { variable: "PINTEREST_SHARED_DEFAULT", accepts: "deployment" },
   tiktok: { variable: "TIKTOK_SHARED_DEFAULT", accepts: "deployment" },
   licensed: { variable: "LICENSED_SHARED_DEFAULT", accepts: "deployment" },
+  apify: { variable: "APIFY_SHARED_DEFAULT", accepts: "deployment" },
 };
 
 /**
  * A deployment key with no workspace entry. Its callers run for the whole deployment, with no workspace in scope, so the
  * key is used only when its opt-in variable is set to `accepts`. It is read by the same resolver, and it is not a saved
- * category. The OpenRouter chat path (providers/chat.server.ts) is the one such key.
+ * category. The OpenRouter chat path (providers/chat.server.ts) is the one such key. A workspace's own OpenRouter key is the
+ * separate `openrouter` category, read through resolveCredential.
  */
 export const DEPLOYMENT_ONLY_KEY_ENV = {
   openrouter_chat: { keyVariable: "OPENROUTER_API_KEY", variable: "OPENROUTER_SHARED_DEFAULT", accepts: "deployment" },

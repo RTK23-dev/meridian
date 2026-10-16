@@ -54,10 +54,10 @@ test("discover gathers the crawler, the social scraper and the Ad Library from f
   await seedJobRow(sql, DISCOVER_JOB, "factory.discover");
 
   const result = await runDiscover(sql, { metaToken: "fixture-token" });
-  assert.equal(result, "gathered:ok=4;not_connected=10;failed=1");
+  assert.equal(result, "gathered:ok=4;not_connected=11;failed=1");
 
   const rows = await sourceRows(sql);
-  assert.equal(rows.size, 15, "every source the run covers has one recorded state");
+  assert.equal(rows.size, 16, "every source the run covers has one recorded state, the Instagram volume source included");
 
   // The crawler read the brand page and its product card from the fixture page.
   assert.equal(rows.get("crawler")?.state, "ok");
@@ -137,7 +137,7 @@ test("a source without a key is not connected, and the run continues with what i
   await seedJobRow(sql, DISCOVER_JOB, "factory.discover");
 
   const result = await runDiscover(sql, { metaToken: null });
-  assert.equal(result, "gathered:ok=3;not_connected=11;failed=1");
+  assert.equal(result, "gathered:ok=3;not_connected=12;failed=1");
 
   const rows = await sourceRows(sql);
   assert.equal(rows.get("meta_ad_library")?.state, "not_connected");
@@ -201,7 +201,7 @@ test("the Factory board reads each recent run's source states", async () => {
 
   const byRun = await factoryRunSourcesFor(sql, FACTORY_TEST_ORG, FACTORY_TEST_BRAND);
   const sources = byRun.get(FACTORY_TEST_RUN) ?? [];
-  assert.equal(sources.length, 15);
+  assert.equal(sources.length, 16);
   assert.ok(sources.some((row) => row.source === "meta_ad_library" && row.state === "ok" && row.items === 2));
   assert.ok(sources.every((row) => ["ok", "not_connected", "failed"].includes(row.state)));
 });

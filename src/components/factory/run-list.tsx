@@ -5,6 +5,8 @@ import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { FORMAT_LABELS, INTENT_DESCRIPTIONS } from "@/lib/meridian/factory/run-builder-model";
 import { ATTESTATION_WORDING, LICENCE_KINDS, LICENCE_LABELS, type LicenceKind } from "@/lib/meridian/factory/rights-wording";
 import { spendLinesOf, type SpendFigures } from "@/lib/meridian/factory/spend-lines";
+import { NO_CANDIDATES, type RunCandidateSummary } from "@/lib/meridian/factory/candidate-types";
+import { safeHttpUrl } from "@/components/market/research-model";
 
 /** The licences attested for one creative of a variant. Each is the attestation id, or null where that licence is not attested. */
 export type RunCreativeLicence = { creativeId: string; music: string | null; footage: string | null };
@@ -43,6 +45,8 @@ export type RunListItem = {
   /** The run's spend, from its cost rows: priced cost, tokens only, and provider-reported cents. */
   spend: SpendFigures;
   runSources: Array<{ source: string; state: string; reason: string; items: number }>;
+  /** The run's Instagram candidates and their tiers (B2). Absent on a run built before this field existed: shown as none. */
+  runCandidates?: RunCandidateSummary;
   picks: RunPickLine[];
   receiptLines: string[];
   measurementLines: string[];
@@ -192,6 +196,43 @@ function sourceLine(source: RunListItem["runSources"][number]): string {
   return `${source.source}: not connected. ${source.reason}`;
 }
 
+/** The Instagram candidates of one run: the counts by tier, then the newest, each with its tier or the reason it is not rated. */
+function CandidateSection({ summary }: { summary: RunCandidateSummary }) {
+  if (summary.total === 0) return <p className="text-muted">No Instagram candidates are stored for this run.</p>;
+  const hidden = summary.total - summary.shown.length;
+  return (
+    <>
+      <p className="text-xs text-muted">
+        {summary.total} candidates: S {summary.tiers.S}, A {summary.tiers.A}, B {summary.tiers.B}, C {summary.tiers.C}, not rated{" "}
+        {summary.tiers.notRated}. A tier needs the creator&apos;s median and observed counts, so a candidate can be not rated for a stated reason.
+      </p>
+      <ul className="space-y-1">
+        {summary.shown.map((candidate) => (
+          <li key={candidate.id} className="text-sm">
+            {/* A scraped permalink opens only when it is http or https; anything else is shown as text. */}
+            {safeHttpUrl(candidate.permalink) ? (
+              <a href={safeHttpUrl(candidate.permalink) ?? undefined} target="_blank" rel="noopener noreferrer" className="underline">
+                @{candidate.creatorHandle}
+              </a>
+            ) : (
+              <span>@{candidate.creatorHandle}</span>
+            )}{" "}
+            <span className="font-medium">{candidate.tier ? `Tier ${candidate.tier}` : "Not rated"}</span>{" "}
+            <span className="text-muted">
+              {candidate.tier
+                ? `${candidate.views === null ? "views not reported" : `${candidate.views.toLocaleString()} views`}, creator median ${
+                    candidate.creatorMedianViews === null ? "unknown" : candidate.creatorMedianViews.toLocaleString()
+                  }`
+                : candidate.reason}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 ? <p className="text-xs text-muted">{hidden} more are counted above and not listed.</p> : null}
+    </>
+  );
+}
+
 /**
  * The runs of the brand, each with its settings, its stage progress, each source's state, its receipts and its measurements, and the
  * controls that act on it. A control is shown only where the run is in the state it acts on; where a person cannot act, the reason is
@@ -237,6 +278,10 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                   {run.runSources.length === 0 ? <p className="text-muted">This run has not gathered yet, so no source state is stored.</p> : (
                     <ul className="space-y-0.5">{run.runSources.map((source) => <li key={source.source}>{sourceLine(source)}</li>)}</ul>
                   )}
+                </section>
+                <section className="space-y-1">
+                  <h3 className="font-semibold">Instagram candidates</h3>
+                  <CandidateSection summary={run.runCandidates ?? NO_CANDIDATES} />
                 </section>
                 <section className="space-y-2">
                   <h3 className="font-semibold">Grades and variants</h3>

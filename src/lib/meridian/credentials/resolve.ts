@@ -47,6 +47,10 @@ const CATEGORY_LABEL: Record<CredentialCategory, string> = {
   production: "Gemini",
   openai: "OpenAI",
   hypit: "Hypit",
+  shopify: "Shopify",
+  openrouter: "OpenRouter",
+  heygen: "HeyGen",
+  anthropic: "Anthropic",
   meta_ad_library: "Meta Ad Library",
   meta_graph: "Meta",
   instagram: "Instagram",
@@ -57,12 +61,14 @@ const CATEGORY_LABEL: Record<CredentialCategory, string> = {
   pinterest: "Pinterest",
   tiktok: "TikTok",
   licensed: "licensed data",
+  apify: "Apify",
 };
 
 /**
  * The deployment's own key for a category. It is read here, and it is used only when the category's shared default is
  * opted in. The Google key follows the documented aliases in config/resolver.ts. The TypeSafe key follows the canonical and
  * legacy names used by jev/config.ts. The OpenAI and Hypit keys each have one name, and Hypit also accepts its legacy name.
+ * OpenRouter (OPENROUTER_API_KEY), HeyGen (HEYGEN_API_KEY) and Anthropic (ANTHROPIC_API_KEY) each read one name.
  * Every category has an explicit branch, so no category can fall through to another provider's key.
  */
 function deploymentKeyFor(category: CredentialCategory, env: CredentialEnv): string {
@@ -71,6 +77,10 @@ function deploymentKeyFor(category: CredentialCategory, env: CredentialEnv): str
   }
   if (category === "openai") return env.OPENAI_API_KEY?.trim() ?? "";
   if (category === "hypit") return env.HYPIT_API_TOKEN?.trim() || env.HYPIT_API_KEY?.trim() || "";
+  if (category === "shopify") return env.SHOPIFY_WEBHOOK_SECRET?.trim() ?? "";
+  if (category === "openrouter") return env.OPENROUTER_API_KEY?.trim() ?? "";
+  if (category === "heygen") return env.HEYGEN_API_KEY?.trim() ?? "";
+  if (category === "anthropic") return env.ANTHROPIC_API_KEY?.trim() ?? "";
   if (isSourceCategory(category)) {
     for (const name of SOURCE_KEY_ENV[category]) {
       const value = env[name]?.trim();
@@ -78,7 +88,11 @@ function deploymentKeyFor(category: CredentialCategory, env: CredentialEnv): str
     }
     return "";
   }
-  return ProviderConfigResolver.resolveGoogle({ env }).apiKey?.trim() ?? "";
+  if (category === "perception" || category === "production") {
+    return ProviderConfigResolver.resolveGoogle({ env }).apiKey?.trim() ?? "";
+  }
+  // Unreachable while every category has a branch above. A category without one gets no key, never another provider's.
+  return "";
 }
 
 function isSourceCategory(category: CredentialCategory): category is SourceCredentialCategory {

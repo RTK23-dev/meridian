@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760440100-segmenterok0001",
+  "model": "anthropic/claude-sonnet-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"segments\":[{\"segId\":\"s1\",\"startMs\":0,\"endMs\":3000,\"wordIds\":[\"w1\",\"w2\",\"w3\"],\"shotType\":\"talking_head\",\"layers\":{\"base\":\"person at a kitchen counter, facing the camera\",\"captions\":\"word-by-word captions, lower third\"},\"beatRole\":\"hook\"},{\"segId\":\"s2\",\"startMs\":3000,\"endMs\":7500,\"wordIds\":[\"w4\",\"w5\",\"w6\"],\"shotType\":\"product_closeup\",\"layers\":{\"base\":\"a mug on a table\",\"graphics\":\"price card\"},\"onScreenText\":\"Ceramic mug\"},{\"segId\":\"s3\",\"startMs\":7500,\"endMs\":12000,\"wordIds\":[],\"shotType\":\"broll_montage\",\"layers\":{\"broll\":\"hands pouring coffee\"}}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 25873,
+    "completion_tokens": 612,
+    "total_tokens": 26485,
+    "cost": 0.057866
+  }
+}

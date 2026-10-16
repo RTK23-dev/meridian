@@ -12,6 +12,7 @@ import {
   mergeRunSettings,
   parseRunSettings,
   parseStoredSettings,
+  runCostProblem,
   runSettingsFromStorage,
 } from "./run-settings.ts";
 import {
@@ -22,9 +23,12 @@ import {
   type FactoryLevel,
 } from "./autopilot.ts";
 import { assertBrandInWorkspace, killSwitchCommand } from "./kill-switch.ts";
+import { runPageProblem } from "../pages/store.ts";
 import { FACTORY_SOURCES, snapshotMediaAllowed } from "./sources.ts";
 import { NO_RUN_SPEND, runSpendFor } from "./spend.ts";
 import { factoryRunSourcesFor, RECENT_RUNS_LIMIT } from "./gather.ts";
+import { factoryRunCandidatesFor } from "./candidates.ts";
+import { NO_CANDIDATES } from "./candidate-types.ts";
 import { factoryRunViewsFor } from "./run-view.ts";
 import { isApprovableStage } from "./approval.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
@@ -95,6 +99,8 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
     `;
     // Each listed run's source states. A run that has not gathered yet has none, and the board says so rather than showing a guess.
     const runSourcesById = await factoryRunSourcesFor(sql, organizationId, data.brandId);
+    // Each listed run's Instagram candidates, with the tier each one has (B2). A run with none has no entry.
+    const runCandidatesById = await factoryRunCandidatesFor(sql, organizationId, data.brandId);
     // Each listed run's picks, with the grade each was made under and the variants each pick produced (run-view.ts).
     const runViews = await factoryRunViewsFor(sql, { organizationId, brandId: data.brandId }, runs.map((row) => row.id));
     const settings = await sql<{ level: number; ceiling: number }>`
@@ -304,6 +310,8 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
         settings: runSettingsFromStorage(row.settings, row.level),
         /** Each source's state for this run: ok, not_connected or failed with its reason. Empty until the run gathers. */
         runSources: runSourcesById.get(row.id) ?? [],
+        /** The run's Instagram candidates: counts by tier and the newest few, each with its tier or the reason it is not rated. */
+        runCandidates: runCandidatesById.get(row.id) ?? NO_CANDIDATES,
         /** The run's picks: each concept with the JEV prediction it was made under, its status, and its variants. */
         picks: runViews.get(row.id)?.picks ?? [],
         /** The run's spend: what was priced, what was metered in tokens only, and what provider calls reported. */
@@ -382,6 +390,14 @@ export const startFactoryRun = createServerFn({ method: "POST" })
       : parseRunSettings(data.settings, mergeRunSettings(brandDefaults, null));
     if (!parsed.ok) throw new Error(parsed.error);
     const effective = parsed.value;
+    // A run that makes video needs the user's cost per master, at or above the floor. The run screen checks it too; the server does not trust that.
+    const costProblem = runCostProblem(effective);
+    if (costProblem) throw new Error(costProblem);
+    // A run that names a page needs that page to be active and in this brand. The settings parser cannot check it without the database.
+    if (effective.pageId) {
+      const pageProblem = await runPageProblem(sql, { organizationId, brandId: data.brandId }, effective.pageId);
+      if (pageProblem) throw new Error(pageProblem);
+    }
     // The owner ceiling and the verified round trip apply to the mode through the level it is held to.
     const level = factoryLevelOfAutomation(effective.automation);
     const ceilingRows = await sql<{ ceiling: number }>`
@@ -462,14 +478,18 @@ export const approveFactoryStage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "member");
-    const runs = await sql<{ niche: string; status: string }>`
-      select niche, status from factory_runs
+    const runs = await sql<{ niche: string; status: string; current_stage: string }>`
+      select niche, status, current_stage from factory_runs
       where id = ${data.runId} and organization_id = ${organizationId} and brand_id = ${data.brandId}
       limit 1
     `;
     if (!runs[0]) throw new Error("That factory run is not in this brand.");
     if (runs[0].status === "succeeded" || runs[0].status === "failed") {
       throw new Error("This run has finished. Start a new run to approve more work.");
+    }
+    // An approval is for the stage the run is waiting at now. One recorded early would let the worker skip that later stop.
+    if (runs[0].status !== "awaiting_approval" || runs[0].current_stage !== data.stage) {
+      throw new Error("This run is not waiting for that stage.");
     }
     const approvalId = crypto.randomUUID();
     const recorded = await sql<{ id: string }>`

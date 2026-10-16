@@ -32,7 +32,9 @@ import type { CreativeSpec, ProductionJob } from "../production/types.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
-import { meteredSpendOf } from "./spend.ts";
+import { produceEngineVideo } from "./produce-engine.ts";
+import { engineHeldOf, meteredSpendOf } from "./spend.ts";
+import { ENGINE_VIDEO_PROVIDER_ID } from "./run-settings.ts";
 import {
   IN_FLIGHT_STATUSES,
   NOT_A_SLIDE,
@@ -82,6 +84,8 @@ export function waitingReasonOf(label: string, providerId: string, status: strin
  */
 export async function produceVideo(sql: Sql, input: ProduceInput, req: VideoRequest): Promise<Step> {
   const scope: Scope = { organizationId: input.organizationId, brandId: input.brandId };
+  // The Meridian video engine makes its own request. It writes no production job, and nothing a provider call would write.
+  if ((input.providers.video ?? "auto") === ENGINE_VIDEO_PROVIDER_ID) return produceEngineVideo(sql, input, scope, req);
   const existing = await sql<{ status: string; provider: string; materialized_creative_id: string | null }>`
     select status, provider, materialized_creative_id from production_jobs
     where id = ${req.jobId} and organization_id = ${scope.organizationId} and brand_id = ${scope.brandId}
@@ -135,12 +139,14 @@ async function resumeVideo(
 }
 
 async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: VideoRequest): Promise<Step> {
+  // The provider is the run's choice for video. A named provider is checked before the cap check, a job or a reservation exists.
+  const requested = input.providers.video ?? "auto";
+
   // The metered spend is checked before any provider call, as it is for an image.
   const reached = await capStopOf(sql, input, scope);
   if (reached) return { kind: "stop", reason: reached };
 
-  // The provider is the run's choice for video. A named provider that is not ready is refused here, before a job or a reservation exists.
-  const requested = input.providers.video ?? "auto";
+  // A named provider that is not ready is refused here, before a job or a reservation exists.
   const spec: CreativeSpec = {
     id: req.jobId,
     organizationId: scope.organizationId,
@@ -351,8 +357,10 @@ async function videoCapStop(sql: Sql, input: ProduceInput, scope: Scope, estimat
     where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and modality = 'video'
       and input->>'runId' = ${input.runId} and status not in ('FAILED', 'CANCELLED', 'PREFLIGHT_FAILED', 'NOT_CONFIGURED', 'POSTFLIGHT_FAILED')
   `;
-  const held = Number(committed[0]?.total ?? 0);
-  const heldToday = Number(committed[0]?.daily ?? 0);
+  // The unspent budgets of the run's engine requests are held against the same caps (one ledger, one cap).
+  const engineHold = await engineHeldOf(sql, scope.organizationId, scope.brandId, input.runId);
+  const held = Number(committed[0]?.total ?? 0) + engineHold.totalCents;
+  const heldToday = Number(committed[0]?.daily ?? 0) + engineHold.dailyCents;
   if (input.caps.totalCents !== null && metered.totalCents + held + estimateCents > input.caps.totalCents) {
     return `The video's estimated cost of $${(estimateCents / 100).toFixed(2)} would pass the total spend cap with the spend this run already holds, so no provider was called.`;
   }

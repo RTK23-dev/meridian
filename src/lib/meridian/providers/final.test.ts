@@ -303,6 +303,10 @@ test("oauth refresh stores nothing when the provider omits the access token", as
 test("alerts do not page an unapproved url and dead-letter after repeated failure", () => {
   assert.equal(deliveryUrlAllowed("http://169.254.169.254/latest"), false);
   assert.equal(deliveryUrlAllowed("https://alerts.example.com/hook"), true);
+  // An https alert to a private or metadata address is refused, so the delivery status cannot probe the network.
+  assert.equal(deliveryUrlAllowed("https://169.254.169.254/latest"), false);
+  assert.equal(deliveryUrlAllowed("https://10.0.0.5/hook"), false);
+  assert.equal(deliveryUrlAllowed("https://localhost/hook"), false);
   const dead = deliveryPlan([{ status: "failed" }, { status: "failed" }, { status: "failed" }], { kind: "webhook", url: "https://alerts.example.com/hook" });
   assert.equal(dead.action, "dead");
   const none = deliveryPlan([], { kind: "none" });

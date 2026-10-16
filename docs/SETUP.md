@@ -48,7 +48,7 @@ Keys are not set in `.env` for normal use. Open **Settings → General**:
   encrypted and is never shown again; the screen shows its last four characters.
 - **Google Drive** shows whether Drive is connected, and what is missing if it is not.
 
-The decision engine is chosen on the **Settings → JEV** tab. Every provider and its deployment opt-in are listed in PROVIDERS.md.
+The decision engine is chosen on the **Setup** page (`/setup`), where the engine choice offers TypeSafe JEV or OpenAI Decisions. Only one engine receives decisions per workspace. Every provider and its deployment opt-in are listed in PROVIDERS.md.
 
 ## Google Drive
 
@@ -62,6 +62,22 @@ Set `MERIDIAN_DRIVE_FOLDER_ID` to the folder the artifacts go into. The Drive pa
 To connect with OAuth from the app instead, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, enable the Drive API, and register
 `<your origin>/api/drive/callback` as the redirect URI. An admin then connects from Settings → General. Uploads over 5 MB need
 `TOKEN_ENCRYPTION_KEY`, which `npm run setup` generates.
+
+## Variables for the video engine, the Factory and media links
+
+The full list, with each variable's kind and what reads it, is in [OPERATIONS.md](OPERATIONS.md#environment-variables). The variables this
+release reads are:
+
+| Variable | Kind | Purpose |
+| --- | --- | --- |
+| `APIFY_TOKEN`, `APIFY_SHARED_DEFAULT` | per-workspace key, with a deployment opt-in | Instagram volume discovery (Factory Gather). Save the key in Settings, or set the deployment key and `APIFY_SHARED_DEFAULT=deployment`. |
+| `SHOPIFY_WEBHOOK_SECRET`, `SHOPIFY_SHARED_DEFAULT` | per-workspace secret, with a deployment opt-in | Verifies the Shopify `orders/create` deliveries to `/api/webhooks/shopify`. |
+| `OPENROUTER_API_KEY`, `HEYGEN_API_KEY`, `ANTHROPIC_API_KEY`, each with its `*_SHARED_DEFAULT` | per-workspace key, with a deployment opt-in | The video engine's keys. Save them in Settings for each workspace. |
+| `MEDIA_FUNCTIONS_BASE_URL` | deployment configuration | The HTTPS base URL of the ffmpeg media functions. Restrict its host before setting it, because the functions carry no credential. |
+| `MEDIA_LINK_SECRET` | infrastructure (secret) | Signs the 15-minute media links for Instagram and TikTok. At least 32 characters. |
+| `APP_URL`, `PUBLIC_APP_URL` | deployment configuration | The public `https` origin the platforms fetch from. No path. |
+
+Until a variable is set, the feature that needs it stays NOT_CONNECTED and says so. Nothing is sent in its place.
 
 ## Publishing and approving work
 

@@ -10,8 +10,21 @@ import type { ArtifactDrive } from "../storage/artifact-drive.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import { completeProductionJob } from "../production/materialization.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
-import { capStopReason } from "./stage-decision.ts";
-import { meteredSpendOf } from "./spend.ts";
+import type { EngineReadinessPorts } from "../../../engine/api/index.ts";
+import type { EngineOnlyFields } from "./engine-request.ts";
+import { capStopForRun } from "./spend.ts";
+
+/**
+ * What the video engine takes from the Factory beyond the plan: the engine's readiness ports and the fields a request needs that a plan
+ * does not carry (engine-request.ts). Production passes neither, so a run that names the engine reports what it lacks and sends nothing.
+ * Tests pass fixtures. Nothing here is a default value.
+ */
+export type FactoryEngineSeams = {
+  /** The engine's readiness ports. Absent: the production ports (the engine's runtime and Meridian's credentials and budget). */
+  readiness?: EngineReadinessPorts;
+  /** The engine-only fields of one video. Absent: none, so the request names every field it lacks. */
+  fields?: (input: { plan: CreativePlan; deliverableId: string; variantId: string }) => EngineOnlyFields;
+};
 
 export type ProduceInput = {
   organizationId: string;
@@ -22,9 +35,16 @@ export type ProduceInput = {
   providers: Partial<Record<string, string>>;
   /** The caps the run is held to, in cents, after the run and the brand are combined. Null for a cap that is not set. */
   caps: { totalCents: number | null; dailyCents: number | null };
+  /**
+   * The budget the user set for every master, in USD (RunSettings.costPerMasterUsd). Null when it is not set. A video request takes it
+   * as its budget (ProductionRequest.constraints.budgetUsd); the engine refuses one below the video's own minimum at intake.
+   */
+  costPerMasterUsd: number | null;
   /** Decision engines the judgments may call. Absent means the engines the deployment selects. */
   engines?: DecisionEngineRegistry;
   driveClient?: ArtifactDrive;
+  /** The video engine's seams (FactoryEngineSeams). Used only by a video whose provider is the engine. */
+  engine?: FactoryEngineSeams;
 };
 
 export type Scope = { organizationId: string; brandId: string };
@@ -179,13 +199,7 @@ export async function materialize(
  * every call, so the call that would pass a cap is never made.
  */
 export async function capStopOf(sql: Sql, input: ProduceInput, scope: Scope): Promise<string | null> {
-  const spend = await meteredSpendOf(sql, scope.organizationId, scope.brandId, input.runId);
-  return capStopReason({
-    capCents: input.caps.totalCents,
-    spentCents: spend.totalCents,
-    dailyCapCents: input.caps.dailyCents,
-    dailySpentCents: spend.dailyCents,
-  });
+  return capStopForRun(sql, scope.organizationId, scope.brandId, input.runId, input.caps);
 }
 
 /** The provider job statuses that mean a job is still running at the provider, so the run waits. */

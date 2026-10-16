@@ -37,13 +37,28 @@ function readPayload(job: ExecutableJob): Record<string, unknown> {
 /** Runs one claimed job. A string result means the work finished. It does not invent provider data. */
 export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> {
   const payload = readPayload(job);
+  if (job.job_type.startsWith("engine.")) {
+    const { executeEngineJob } = await import("../../../engine/jobs/dispatch.ts");
+    const { productionEngineRuntime } = await import("../../../engine/jobs/runtime.ts");
+    return executeEngineJob(sql, job, productionEngineRuntime(sql));
+  }
   if (job.job_type === "research.collect") {
     const { executeResearchCollection } = await import("../research/worker.ts");
     return executeResearchCollection(sql, job, payload);
   }
+  // Sleep mode's nightly job. It must sit before the factory prefix, which routes only the stages of a run.
+  if (job.job_type === "factory.sleep") {
+    const { runSleepNight } = await import("../factory/sleep.ts");
+    return runSleepNight(sql, job);
+  }
   if (job.job_type.startsWith("factory.")) {
     const { executeFactoryJob } = await import("../factory/worker.ts");
     return executeFactoryJob(sql, job, payload);
+  }
+  if (job.job_type === "organic.reel_snapshot") {
+    // The +24 h and +72 h checkpoint of a gathered Instagram reel (B2). It is scheduled by the Factory gather run.
+    const { executeReelSnapshot } = await import("../organic/reel-snapshot.ts");
+    return executeReelSnapshot(sql, job, payload);
   }
   if (job.job_type === "learning.update") {
     if (!job.brand_id) throw new Error("Learning needs a brand.");
@@ -176,6 +191,11 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     const { pullRunMeasurements } = await import("../measurement/pull.ts");
     const pulled = await pullRunMeasurements(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
     return pulled.summary;
+  }
+  if (job.job_type === "distribution.trial_check") {
+    // The scheduled check for an Instagram trial reel. It reads the reel's documented fields and records the feed step (distribution/trial-check.ts).
+    const { runTrialCheckJob } = await import("../distribution/trial-check.ts");
+    return runTrialCheckJob(sql, job, payload);
   }
   if (job.job_type === "experiment.process") {
     const variants = Array.isArray(payload.variants) ? (payload.variants as TrafficVariant[]) : [];

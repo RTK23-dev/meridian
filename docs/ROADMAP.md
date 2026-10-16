@@ -2,6 +2,75 @@
 
 What is still open in this release. Each item says whether it is built and verified, built but unverified, or not built. Nothing here is listed as finished unless it is verified.
 
+## Video engine and Factory: open now (2026-10-15)
+
+Sources: the newest entries of [engine/PHASE_LOG.md](engine/PHASE_LOG.md) (the 2026-10-15 completion and final passes), the open items in
+[engine/VIDEO_ENGINE_BIBLE.md](engine/VIDEO_ENGINE_BIBLE.md) section 20, and [FACTORY.md](FACTORY.md#not-built-yet). Engine phases E1 to E6
+are code complete on recorded fixtures. No phase is done until its live acceptance test (Bible section 19) is recorded. Agents hold no
+keys (NORTH_STAR decision 1), so every live step is the owner's.
+
+### Live runs (owner)
+
+- **Video engine acceptance, E1 to E6.** Each phase needs a recorded live run with its artifact ids, costs and output. None is recorded.
+  The reason is the keys: agents hold none. The E1 run is in [scripts/engine/README.md](../scripts/engine/README.md).
+- **Production shots.** Cartoon and other generated shots stay NOT_CONNECTED until `MEDIA_FUNCTIONS_BASE_URL` is set, the workspace has a
+  Google Drive connection and it has an OpenRouter key. Some video models stay NOT_CONNECTED even then, and so do speech and images that
+  are not PNG. The reason is recorded in the PHASE_LOG (2026-10-15, final pass).
+- **Factory live paths.** Discovery through Apify, the Shopify webhook, Instagram trial reels and sleep mode are tested on fixtures only.
+  They need an Apify key, a connected Shopify shop, a live Instagram account, and a running scheduler for sleep mode. None has a recorded
+  live result.
+
+### Owner items
+
+- **Keys and database URLs.** OpenRouter, HeyGen, Anthropic and Apify keys, the Shopify secret, `DATABASE_URL`, and `MERIDIAN_PG_TEST_URL`
+  for the PostgreSQL tests. Reason: agents hold no keys, and the database tests run on PGlite until a server is given.
+- **Media functions URL and host.** `MEDIA_FUNCTIONS_BASE_URL`. Reason: the detectors (captions, zoom, loop, shake, speed ramps) stay
+  NOT_CONNECTED until it is set. The functions carry no credential, so the host must be restricted before the URL is set.
+- **Platform file-size limit.** `thresholds.render.platformMaxBytes` is still null. Reason: the render integrity gate fails closed on a null
+  limit, so no render passes it until the owner sets one.
+- **HyperFrames price.** Reason: the render stays fail-closed until its price per minute is known. The sources disagree (Bible 20.3, item 1).
+- **Apify plan price.** Reason: the cost per 1,000 results is null, so no discovery cost is estimated.
+- **`image.edit` price.** Reason: stop-motion shots are token-priced, so stop motion is refused until the price is set.
+- **Stop-motion length.** The frame floor is 24 (the Bible's number), and a shot longer than the frame limit needs a lower frame rate. Reason:
+  that rate is the owner's decision. Planned stop-motion shots are about 1.9 to 3.0 seconds today.
+- **`stopmotion.player` confirmation.** Reason: the owner-facing confirmation of the component is still open.
+- **Shotstack credential.** The gateway has a Shotstack route, but Meridian's credential resolver has no Shotstack category, so the fallback
+  renderer is not connected. The PHASE_LOG (2026-10-15) lists the credential slot as an owner item.
+- **Speech-to-text vendor (Bible 20.2).** Reason: word timestamps, music robustness and price are the owner's choice. Only the interface and a
+  recorded adapter exist.
+- **Background removal, upscaling and lip-sync vendors (Bible 20.2).** Reason: not chosen.
+- **Music source (Bible 20.2).** Reason: the licensed library and its terms for social use are not chosen.
+- **Disclosure wording and placement (Bible 20.2).** Reason: the standard for AI presenters is not decided. Until it is, the
+  `paidPartnership` disclosure defaults to on.
+- **Stock licence for commercial social use (E2).** Reason: the Pexels and Pixabay terms (Bible 20.3, item 5) are the owner's to confirm.
+- **Two `critic_final` craft items.** Reason: proposed in the 2026-10-15 wave, awaiting the owner's confirmation.
+- **Product naming in variant copy.** Reason: the variant writer names the product, but the planner's "No names" rule points the other way.
+  The owner decides which rule holds.
+- **EDL audio contract step.** Reason: a changed-lines-only voice needs `audio.voice` as an ordered list in the EDL and a `spliceAudio` media
+  function, which the owner must approve. Until then a variant's voice is a full re-speak, which is a recorded deviation.
+- **Instagram trial graduation signal.** Reason: Meta documents no field that reports graduation. The feed step stays a person's action until a
+  graduation is observed.
+- **Merging PR #71.** Reason: the PHASE_LOG lists the merge as the owner's.
+
+### Engineering work still open
+
+- **Image references and frames.** The `input_references` shape matches OpenRouter's documented shape (read 2026-10-15), but the reference
+  limit (`IMAGE_REFERENCES_MAX`) is unverified until a live call is made.
+- **Chain end-to-end test.** It uses stand-ins, which are listed in `src/engine/jobs/handlers/STATUS.md`.
+- **Engine checklist artifact.** Not ticked in the 2026-10-15 completion pass (session limit, as the PHASE_LOG records).
+- **Bible 20.3 verification, first two weeks.** Still open: the HyperFrames price, speed and component fidelity (item 1); which OpenRouter video
+  models accept a first and a last frame (item 2, the harness exists, the live step does not); Avatar IV through OpenRouter, which is
+  NOT_CONNECTED because no verified API exists (item 3); speech-to-text word timestamps (item 4); Pexels and Pixabay licence terms (item 5);
+  Haiku pricing and whether OpenRouter passes through prompt caching and batch (item 6).
+
+### Factory items
+
+The Factory's open items are listed in [FACTORY.md](FACTORY.md#not-built-yet). They are: video cost is not metered spend; Factory images run
+no preflight or claim check; learning is not re-run on a schedule; no cross-surface proposals; a re-grade overwrites the stored grade; organic
+outcomes are one per post; perception reads are not metered; the Factory Line editor is saved but read by no job; a live paid publish needs a
+Facebook Page id and a destination link; uploads are not connected to Gather; a stored grade keeps its old threshold until its ad is graded
+again; and live outcomes are missing, because organic channels return no metrics.
+
 ## Built, not verified against the live service
 
 - **Live posting through connected accounts.** Facebook Page posts, YouTube Shorts uploads, Instagram Reels and TikTok regular videos go out through a connected account. Instagram and TikTok fetch the video through a signed link to the approved creative, valid for 15 minutes (`/api/media-links/:creativeId`). A receipt is stored only when the platform returns an id: TikTok reports published only with the post id it returns, which a private post does not carry. TikTok posts are private until TikTok approves the app. No request was made to any of these live APIs in this release. Tests use a scripted transport.
@@ -25,8 +94,17 @@ What is still open in this release. Each item says whether it is built and verif
 - **JEV/provider transport hardening (implemented on this branch, pending CI verification).** The shared TypeSafe transport now aborts requests after 30 seconds, refuses redirects, and caps response bodies at 2 MiB. OAuth redirects are checked against `MERIDIAN_ALLOWED_OAUTH_ORIGINS` (or `APP_URL`/`PUBLIC_APP_URL`), and OAuth state is atomically claimed before exchanging the code. Drive folder listing and manual-cloud scans now distinguish API failures from an empty folder. Held-reservation reconciliation now asks the authoritative plan settlement path to settle its associated plan. Rate limiting no longer trusts forwarding headers unless `MERIDIAN_TRUST_PROXY_HEADERS=true`; deployments behind a trusted proxy must set this explicitly and restrict direct origin access.
 - **Calibration threshold.** `calibration/propose.ts` needs 30 rows, while the report uses 200. Pick one.
 - **Fixed defaults in scoring.** The Winner Score no longer fills an unknown survival, track record, quality, country or platform count with a fixed value, and the Factory grade reads delivery from the source (`factory/winner-score.ts`, `factory/worker.ts`). Still open: `opportunity/engine.ts` uses fixed reproducibility values (0.9, 0.62, 0.35); `grading/engine.ts` defaults brand fit, historical evidence, market signal, novelty and reproducibility to 0.5 and saturation to 0.2; and `calibration/report.ts` returns 0 for a missing score.
-- **Content Factory v2 is partly built.** Run settings, the stop points, approvals and observed-signal grading are built and described in [FACTORY.md](FACTORY.md). Gather is built: discover calls the sourcing stack and records each source's state (NORTH_STAR section 8, item 3). Publish both paths (item 8) and measure both paths (item 9) are built, with the live gaps in [FACTORY.md](FACTORY.md). Learning per surface (item 10) is built but not verified: Pick reads organic patterns for organic arms and paid patterns for paid arms, so a run with intent `both` learns from both surfaces, and each pick stores the JEV grade fingerprint its ad carried, shown beside its measured outcome. The Factory screen (item 11: the run builder, the run view with each run's picks, grades and variants, and the Approve, Start again and Check learning controls) is built but not verified. Their tests are written for CI and have not been run from the branch that added them. The screen was checked in a development server with the button audit and one run through the builder before the run view changed; the run view has not been checked in a browser. Video and carousel produce are built, with fixture tests and no live provider call (item 3): a carousel is its slides, and a video waits at its provider with its reason until the poller finishes it. Not built: cross-surface proposals, and a grade history (a re-grade replaces the stored grade). Uploads are not connected to Gather yet.
-- **JEV grade for the Factory.** It needs the owner's grading questions and thresholds (NORTH_STAR section 9, question 3). The engine has no question specs for `competitive_strength` or `reproducibility` yet. The per-brand calibration path is built (see above). Its method and constants are accepted for now and will be reviewed once real measured outcomes exist. A calibrated threshold applies only when it is at least the registry's approve threshold, so it can only raise the bar; see FACTORY.md.
+- **Content Factory v2 (NORTH_STAR section 8, items 1 to 11) is built on recorded fixtures.** Run settings, the stop points, approvals, grading
+  with the caps and kill switch checked before each engine call, Gather (including Instagram volume through Apify), the video engine as a
+  video producer, publishing and measurement on both surfaces, learning per surface, theme pages, trial reels, Shopify attribution and sleep
+  mode are described in [FACTORY.md](FACTORY.md). The live gaps are listed there under "Not built yet". Screenshots of the changed screens
+  are in [feature-screens](feature-screens/README.md). The PHASE_LOG records no run of the button audit for these changes.
+- **JEV grade for the Factory.** The five grading questions have specs in the registry (`market.competitive_strength.v1`,
+  `production.reproducibility.v1`, `creative.brand_fit.v1`, `brand.positioning_fit.v1` and `safety.policy_risk_level.v1`). The thresholds of
+  the first two are marked uncalibrated, so their grades go to review until the brand has its own calibrated report. The per-brand
+  calibration path is built (see above). The owner accepted its method and constants for now (NORTH_STAR section 9), and they are reviewed
+  once real measured outcomes exist. A calibrated threshold applies only when it is at least the registry's approve threshold, so it can only
+  raise the bar; see FACTORY.md.
 - **Spend caps count priced metered spend only.** A decision whose engine reports tokens writes a row to `factory_costs`, with its tokens. Its dollar cost is written only for a model in the price table (`gpt-6-luna`, the OpenAI Decisions default); any other model is tokens only and is not counted by caps. A provider call that reports no cost is not counted either. See [FACTORY.md](FACTORY.md).
 - **Organic live metrics.** The Instagram, Facebook, YouTube and TikTok channels return no metrics (`fetchMetrics` returns null). No organic metric is pulled from a platform yet.
 - **Audit log error.** The baseline fixture shows a generic error on the audit log. The cause is not reproduced; the Details text from a running workspace is needed.

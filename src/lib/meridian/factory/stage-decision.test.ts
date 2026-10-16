@@ -10,8 +10,8 @@ test("capStopReason refuses spend at or over a set cap, and is null while spend 
   assert.equal(capStopReason({ capCents: 0, spentCents: 10_000 }), null, "a zero cap is not set");
   assert.equal(
     capStopReason({ capCents: null, spentCents: 0, dailyCapCents: 30, dailySpentCents: 30 }),
-    "The daily spend cap for this brand is reached.",
-    "at the daily cap",
+    "The daily spend cap for this run is reached.",
+    "at the run's daily cap",
   );
   assert.equal(
     capStopReason({ capCents: 100, spentCents: 10, dailyCapCents: 30, dailySpentCents: 29 }),

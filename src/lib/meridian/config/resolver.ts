@@ -26,8 +26,9 @@ export interface ProviderSecretMask {
   configured: boolean;
 }
 
+/** Shows the last four characters only, and only for a key long enough that four characters reveal little of it. */
 export function maskSecret(secret?: string): string | undefined {
-  if (!secret || secret.trim().length < 4) return undefined;
+  if (!secret || secret.trim().length < 8) return undefined;
   const clean = secret.trim();
   return `...${clean.slice(-4)}`;
 }

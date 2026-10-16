@@ -1,0 +1,33 @@
+{
+  "total": 2,
+  "totalHits": 2,
+  "hits": [
+    {
+      "id": 7781001,
+      "pageURL": "https://pixabay.com/videos/hands-making-coffee-7781001/",
+      "type": "film",
+      "tags": "coffee, hands, kitchen",
+      "duration": 9,
+      "user_id": 90210,
+      "user": "Mara Voss",
+      "videos": {
+        "large": { "url": "https://cdn.pixabay.com/video/2026/07/7781001_large.mp4", "width": 1080, "height": 1920, "size": 9123456, "thumbnail": "https://cdn.pixabay.com/video/2026/07/7781001_thumb.jpg" },
+        "medium": { "url": "https://cdn.pixabay.com/video/2026/07/7781001_medium.mp4", "width": 720, "height": 1280, "size": 4123456, "thumbnail": "https://cdn.pixabay.com/video/2026/07/7781001_thumb.jpg" },
+        "small": { "url": "https://cdn.pixabay.com/video/2026/07/7781001_small.mp4", "width": 540, "height": 960, "size": 1123456, "thumbnail": "https://cdn.pixabay.com/video/2026/07/7781001_thumb.jpg" },
+        "tiny": { "url": "https://cdn.pixabay.com/video/2026/07/7781001_tiny.mp4", "width": 320, "height": 568, "size": 423456, "thumbnail": "https://cdn.pixabay.com/video/2026/07/7781001_thumb.jpg" }
+      }
+    },
+    {
+      "id": 7781002,
+      "pageURL": "https://pixabay.com/videos/landscape-coffee-7781002/",
+      "type": "film",
+      "tags": "coffee, landscape",
+      "duration": 11,
+      "user_id": 90211,
+      "user": "Joon Park",
+      "videos": {
+        "large": { "url": "https://cdn.pixabay.com/video/2026/07/7781002_large.mp4", "width": 1920, "height": 1080, "size": 8123456, "thumbnail": "https://cdn.pixabay.com/video/2026/07/7781002_thumb.jpg" }
+      }
+    }
+  ]
+}

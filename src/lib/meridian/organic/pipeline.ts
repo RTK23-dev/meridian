@@ -10,7 +10,6 @@ import type { Sql } from "./creators.ts";
 import { upsertCreatorProfile } from "./creators.ts";
 import { scrapeSocialUrl, type ScrapedSocialPost } from "../sources/scraper/social-scraper.ts";
 import { ingestOrganicContentForLearning } from "./learning-bridge.ts";
-import { recordCreatorSnapshot } from "./creator-snapshots.ts";
 
 export type ScrapeAndLearnInput = {
   organizationId: string;
@@ -91,19 +90,14 @@ export async function scrapeAndLearnOrganicContent(
   // 3. Optional creator snapshot recording
   if (scraped.authorHandle) {
     try {
-      const creator = await upsertCreatorProfile(sql, {
+      // The creator row only. This post's views, likes and comments are one observation, not a creator median, so no creator
+      // snapshot is written from them. The creator baseline is measured from the creator's recent reels (B2, Factory Gather).
+      await upsertCreatorProfile(sql, {
         organizationId: input.organizationId,
         platform: scraped.platform,
         handle: scraped.authorHandle,
         displayName: scraped.authorName,
         engagementRate: scraped.likes && views !== null && views > 0 ? scraped.likes / views : undefined,
-      });
-      await recordCreatorSnapshot(sql, {
-        creatorId: creator.id,
-        organizationId: input.organizationId,
-        viewsMedian: views ?? undefined,
-        likesMedian: scraped.likes,
-        commentsMedian: scraped.comments,
       });
     } catch {
       // Best-effort creator snapshot

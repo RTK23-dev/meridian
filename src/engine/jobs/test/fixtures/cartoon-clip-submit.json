@@ -1,0 +1,7 @@
+{
+  "_provenance": "Recorded shape of POST /videos (docs/engine/PROVIDER_APIS.md, Video), with the ids of the cartoon chain's clip. Recorded by hand for the chain test; the owner's live run records the real answer.",
+  "id": "job-cartoon-clip-1",
+  "generation_id": "gen-cartoon-clip-1",
+  "polling_url": "/api/v1/videos/job-cartoon-clip-1",
+  "status": "pending"
+}

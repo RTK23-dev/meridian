@@ -10,7 +10,7 @@ import { factoryControlsPayload, factoryControlsSchema, type FactoryControlsInpu
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
-import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
+import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation, useThemePagesQuery } from "@/lib/query/hooks";
 import { approveFactoryStage, attestFactoryLicence, checkFactoryLearning, confirmFactoryAiLabel, resumeFactoryRun, revokeFactoryAiLabel, revokeFactoryLicence, saveFactoryRunDefaults, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import type { LicenceKind } from "@/lib/meridian/factory/rights-wording";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
@@ -22,6 +22,8 @@ import { usdOfMicros } from "@/lib/meridian/factory/spend-lines";
 import { PipelineEditor } from "@/components/factory/pipeline-editor";
 import { RunBuilder } from "@/components/factory/run-builder";
 import { RunList, type RunListItem, type RunPickLine } from "@/components/factory/run-list";
+import { SleepModePanel } from "@/components/factory/sleep-mode-panel";
+import { SalesByReelPanel } from "@/components/factory/sales-by-reel";
 import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { qk } from "@/lib/query/keys";
 
@@ -91,6 +93,7 @@ function runListItems(board: FactoryBoard): RunListItem[] {
       settings: run.settings,
       spend: run.spend,
       runSources: run.runSources,
+      runCandidates: run.runCandidates,
       picks: picksOf(board, run.picks),
       receiptLines: creatives.flatMap((item) => item.receipts.map((receipt) => `${item.format} creative: ${receiptLine(receipt)}`)),
       measurementLines: creatives.flatMap((item) => item.measurements.map((row) => `${row.surface} ${row.platform}: ${metricLine(row.surface, row.metrics)}`)),
@@ -107,6 +110,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
   const query = useFactoryQuery(brandId);
   const board = query.data ?? null;
   const channelsQuery = useDistributionChannelsQuery(brandId);
+  const pagesQuery = useThemePagesQuery(brandId);
   const organicQuery = useOrganicDistributionQuery(brandId);
   const pipelineQuery = usePipelineConfigQuery(brandId);
   // Workspace provider summary: the Gemini production key and the Google Drive setting, for the engine states.
@@ -278,6 +282,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
               canAdmin={canAdmin}
               busy={startRun.isPending}
               savingDefaults={saveRunDefaults.isPending}
+              pages={(pagesQuery.data ?? []).map((page) => ({ id: page.id, name: page.name, status: page.status }))}
               onStart={({ niche, settings }) => { void startRun.mutateAsync({ niche, settings }).catch(() => undefined); }}
               onSaveDefaults={(settings) => { void saveRunDefaults.mutateAsync(settings).catch(() => undefined); }}
               onDirtyChange={setBuilderDirty}
@@ -534,6 +539,8 @@ function FactoryPage({ brandId }: { brandId: string }) {
         </TabsContent>
 
         <TabsContent value="learnings" className="space-y-4">
+          <SalesByReelPanel brandId={brandId} canAdmin={canAdmin} />
+          <SleepModePanel brandId={brandId} canAdmin={canAdmin} />
           <section className="space-y-3">
             <h2 className="text-section font-semibold">Weekly strategist report</h2>
             <p className="text-muted">{board.report.note}</p>

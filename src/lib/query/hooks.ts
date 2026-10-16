@@ -9,6 +9,7 @@ import { getFactoryBoard } from "@/lib/meridian/factory/actions";
 import { getStudioBriefReview, getStudioSession, listHeldBudgetReservations, listWindowReleasedBudget } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
+import { listThemePagesAction } from "@/lib/meridian/pages/actions";
 import { getJevAccountIntelligenceFn, updateWhitespaceStatusFn, runAccountIntelligenceAnalysisFn } from "@/lib/meridian/jev/actions";
 import {
   listPublishingQueueAction,
@@ -24,7 +25,7 @@ import {
 import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
-import { getDecisionEngines, getProviderSettings } from "@/lib/meridian/settings/server-actions";
+import { getDecisionEngines, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";
@@ -111,6 +112,10 @@ export const accountsQueryOptions = (userId: string | null | undefined, brandId:
   queryKey: userScopedQueryKey(userId, qk.accounts(brandId, platform)),
   queryFn: () => getPlatformAccountsAction({ data: { brandId, platform } }),
 });
+export const themePagesQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.pages(brandId)),
+  queryFn: () => listThemePagesAction({ data: { brandId } }),
+});
 export const accountIntelligenceQueryOptions = (userId: string | null | undefined, brandId: string, platform: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.accountIntelligence(brandId, platform)),
   queryFn: () => getJevAccountIntelligenceFn({ data: { brandId, platform } }),
@@ -146,6 +151,10 @@ export const providerSettingsQueryOptions = (userId: string | null | undefined, 
 export const decisionEnginesQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.decisionEngines(organizationId)),
   queryFn: () => getDecisionEngines({ data: { organizationId } }),
+});
+export const videoBudgetQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.videoBudget(organizationId)),
+  queryFn: () => getVideoBudget({ data: { organizationId } }),
 });
 /** Filters for the jobs list. The default is the first, unfiltered page, which is what route prefetch loads. */
 export type JobQueryFilters = { status: string; type: string; brandId: string; page: number };
@@ -302,6 +311,11 @@ export const usePlatformAccountsQuery = (brandId: string, platform?: string, ena
   return useQuery({ ...accountsQueryOptions(userId, brandId, platform), enabled: ready && enabled && !!brandId });
 };
 
+export const useThemePagesQuery = (brandId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...themePagesQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
+};
+
 export const useAccountIntelligenceQuery = (brandId: string, platform = "instagram", enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...accountIntelligenceQueryOptions(userId, brandId, platform), enabled: ready && enabled && !!brandId });
@@ -352,6 +366,11 @@ export const useProviderSettingsQuery = (organizationId: string, enabled = true)
 export const useDecisionEnginesQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...decisionEnginesQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+export const useVideoBudgetQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...videoBudgetQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
 };
 
 /** The jobs list polls only while a job is queued, retrying, or running. Otherwise it waits for focus or navigation. */

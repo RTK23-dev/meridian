@@ -56,6 +56,9 @@ review, and post it by hand.
 A workspace has a budget ledger. Generation reserves its estimated cost before the provider call, and releases the reservation when the
 call fails. The Usage screen shows what has been spent. A budget that is exhausted stops new generation; it does not stop reading.
 
+The video engine has its own budget per workspace, the monthly video budget, set in Settings. It has no default. Until it is set, the engine
+refuses to reserve (`estimate_reserve` refuses with that reason). A run's cost per master is a separate, per-request budget.
+
 A reservation whose provider call did not return is held. Owner decision (NORTH_STAR section 2, decision D): once its submission window
 (30 minutes from the reservation) has passed with no outcome from the provider, the worker asks the provider's own lookup whether it holds a
 job for the submission. The hold is released only when the provider confirms it holds none, with the reason `window_expired` and the actor
@@ -105,6 +108,51 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
   (https), and for TikTok the deployment's host in `TIKTOK_VERIFIED_MEDIA_DOMAINS`. Nothing was sent.
 - **A TikTok or YouTube post reports not connected.** The saved token does not grant the scope the publish needs (`video.publish` for
   TikTok, the upload scope for YouTube). Save a token that grants it on Connected accounts.
+- **Shopify answers 503 NOT_CONNECTED.** The shop's secret is not usable. Save the Shopify app's client secret for the workspace in Settings,
+  or set `SHOPIFY_WEBHOOK_SECRET` with `SHOPIFY_SHARED_DEFAULT=deployment`. Shopify retries until it gets a 200.
+- **Shopify answers 401.** The shop domain is not connected to a workspace, or the signature does not match the secret.
+- **Instagram volume says not connected.** The workspace has no usable Apify key. Save one in Settings, or set `APIFY_SHARED_DEFAULT=deployment`
+  with `APIFY_TOKEN`.
+- **A trial reel says manual action required.** Meridian observed no graduation, and Meta documents no field that reports one. A MANUAL trial
+  graduates in the Instagram app; an SS_PERFORMANCE trial graduates when Instagram decides.
+- **A video engine shot says NOT_CONNECTED.** The reason names the missing piece: `MEDIA_FUNCTIONS_BASE_URL`, the workspace's Google Drive
+  connection, or its OpenRouter key. The Factory run view and the engine's report show the reason.
+- **Sleep mode did not run a night.** Sleep mode must be on, with a niche, and the scheduler (`npm run scheduler`) must run. The night's
+  result is in the morning summary on the Factory's Learnings tab.
+
+## Environment variables
+
+The variables below are read by the code added in this release. Each row gives its kind, as `.env.example` does. A **per-workspace key**
+is saved in Settings for each workspace, and its deployment value is used only when the opt-in variable is set to `deployment`.
+**Deployment configuration** is set once for the deployment. **Infrastructure** is a secret the deployment must hold. Keep every value in
+`.env` or the host's environment, never in git. Keys are never written to logs or responses.
+
+| Variable | Kind | Read by | What it does |
+| --- | --- | --- | --- |
+| `APIFY_TOKEN` | per-workspace key, with a deployment fallback | the credential resolver, for the Apify category (`credentials/contract.ts`) | The Apify token that runs the Instagram volume actors (Factory Gather). The workspace's saved key is used first. The deployment value is used only with `APIFY_SHARED_DEFAULT=deployment`. |
+| `APIFY_SHARED_DEFAULT` | deployment configuration (opt-in) | `credentials/contract.ts` | Set to `deployment` to let workspaces with no Apify key use `APIFY_TOKEN`. |
+| `SHOPIFY_WEBHOOK_SECRET` | per-workspace key, with a deployment fallback | `credentials/resolve.ts` (Shopify category) | The Shopify app's client secret, which verifies each `orders/create` delivery (`X-Shopify-Hmac-Sha256`). The workspace's secret, saved in Settings, is used first. |
+| `SHOPIFY_SHARED_DEFAULT` | deployment configuration (opt-in) | `credentials/contract.ts` | Set to `deployment` to let workspaces with no Shopify secret use `SHOPIFY_WEBHOOK_SECRET`. |
+| `MEDIA_FUNCTIONS_BASE_URL` | deployment configuration | `storage/engine-media-functions.ts`, read by the engine's production ports | The HTTPS base URL of the ffmpeg media functions. Unset, the probe, frames, loudness and cut checks stay NOT_CONNECTED. The functions carry no credential, so restrict the host before setting it. |
+| `MEDIA_LINK_SECRET` | infrastructure (secret) | `storage/media-link.ts`, `storage/engine-media-link.ts` | Signs the 15-minute links that Instagram, TikTok and the engine's render providers fetch media through. At least 32 characters. Blank: no link is signed, and the channel shows not connected. |
+| `APP_URL` | deployment configuration | `storage/media-link.ts` (the public origin), `oauth/flow.server.ts` | The public origin of the deployment: `https`, with no path, query or credentials. A value that is set but not usable means no origin, so no link is signed. |
+| `PUBLIC_APP_URL` | deployment configuration (optional) | the same | A second public origin, used when `APP_URL` is blank. |
+| `OPENROUTER_API_KEY`, `OPENROUTER_SHARED_DEFAULT` | deployment fallback, with an opt-in | `credentials/resolve.ts`, `credentials/contract.ts` | The deployment's OpenRouter key, used for a workspace with no key of its own only when the opt-in is `deployment`. The video engine reads each workspace's key through the resolver. |
+| `HEYGEN_API_KEY`, `HEYGEN_SHARED_DEFAULT` | deployment fallback, with an opt-in | the same | The same rule for the HeyGen key that the engine's cloud render uses. |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_SHARED_DEFAULT` | deployment fallback, with an opt-in | the same | The same rule for the Anthropic key. |
+
+The test-only variables (`MERIDIAN_PG_TEST_URL`, `MERIDIAN_REQUIRE_FFMPEG` and `HYPERFRAMES_BROWSER_PATH`) are listed in
+[TESTING.md](TESTING.md).
+
+## Shopify webhook
+
+In the Shopify app, add an `orders/create` webhook in JSON format, with the address `https://<your public origin>/api/webhooks/shopify`.
+The origin is the one in `APP_URL`. Before the first delivery, connect the shop in the Factory's **Sales by reel** panel, because a shop
+is matched to a workspace by its `myshopify.com` domain. The webhook needs a usable secret: save the Shopify app's client secret for the
+workspace in Settings, or set `SHOPIFY_WEBHOOK_SECRET` with `SHOPIFY_SHARED_DEFAULT=deployment`.
+
+The answers are listed in [FACTORY.md](FACTORY.md#sales-attribution-shopify). Without a usable secret the webhook answers 503 and stores
+nothing. Shopify retries any delivery that does not get a 200, so the 503 is retried until the secret is set.
 
 ## Upgrading
 
@@ -129,3 +177,28 @@ grading questions (see [FACTORY.md](FACTORY.md#calibration-per-brand-and-questio
 `calibration_reports`, which migration `0045` already uses. No report is calibrated until a brand has the minimum measured outcomes.
 
 The telemetry sync now writes one paid observation per measured row, keyed in `performance_observations.external_id` as `telemetry:<row id>`. A paid observation written before this release has no key. The next sync adopts it by its creative, day and values, so the first measurement is not counted twice. Nothing has to be run by hand.
+
+### Migrations 0077 to 0094 (video engine, Factory and business layer)
+
+This release adds migrations `0077` to `0094`. They run in filename order, with `npm run db:migrate` or `npm run build`. No file exists in
+this repository for `0083` to `0089`, so the sequence goes from `0082` to `0090`. Each file's header states what it changes.
+
+- `0077_engine_core.sql`: the video engine's core tables (`engine_requests`, `engine_reservations`, `engine_artifacts`, `engine_gate_results`,
+  `engine_decisions`, `engine_ledger`, `engine_manifests`, `engine_review_items`, `engine_kits`, `engine_cache_index`, `engine_events`). Each is
+  scoped by `organization_id`. A trigger refuses updates to `engine_artifacts`.
+- `0078_engine_role_calls.sql`: `engine_role_calls`, one row per paid Claude role call, written in steps.
+- `0079_monthly_video_budget.sql`: `organizations.monthly_video_budget_usd`, nullable, with no default. Null means no budget.
+- `0080_engine_asset_stores.sql`: the asset router's stores: provider attempts, circuit breakers, concurrency buckets and leases, and the
+  asset cache with its hits.
+- `0081_engine_orchestration.sql`: `engine_decisions` may be made by the editor, and `engine_role_calls` may name the frame reader role.
+- `0082_factory_engine_requests.sql`: `factory_engine_requests`, which links each Factory video made by the engine to its run, variant and request.
+- `0090_discovery_volume.sql`: `instagram_volume_requests` for the Apify volume requests. Unknown values are NULL: the defaults that wrote
+  guesses into creators, creator snapshots, discovered reels, their ratings and snapshots are removed.
+- `0091_theme_pages.sql`: `theme_pages` and `organic_trial_reels`.
+- `0092_attribution_sleep.sql`: `shopify_shops`, `reel_attributions`, `shopify_orders` (attribution fields and totals, no customer data),
+  `sleep_mode_settings`, `sleep_mode_nights` and `factory_holdouts`.
+- `0093_creator_niche_nullable.sql`: `creators.niche` may be NULL, and its default is dropped. Existing values stay.
+- `0094_engine_chain_calls.sql`: `engine_chain_calls`, one row per call of a chain shot (contract v5), written before and after each call.
+
+Sleep mode is off until a member turns it on. A paused Factory run keeps its reason. **Start again** queues it again, and a cap that is still
+reached stops it at the same stage.

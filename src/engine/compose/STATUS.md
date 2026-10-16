@@ -1,0 +1,254 @@
+# STATUS: engine compose (W9): compiler, style kit, fourteen components, golden frames
+
+## Decision (lead, 2026-10-15): stop-motion frame floor is 24, and overshoot is refused, not clamped
+
+This supersedes decisions 1 and 3 of the chain work below (floor 2; overshoot clamped). Decisions 2, 4, 5 and 6 still stand.
+
+- **Floor 24, ceiling 36** (Bible 7.1: 24 to 36 image.edit calls). A list shorter than 24 is refused with its count, never padded. A
+  list longer than 36 is refused with its count, never truncated.
+- **Accepted only when the list is the count its clip needs**: `framesNeeded(durationMs, fps)`, the first n whose start reaches the
+  clip end. Undershoot (a blank end) is refused, as before. **Overshoot** (frames that start at or after the clip end and would never
+  show) is refused with how many frames are extra. This is the case the old component clamped.
+- **Timing** is unchanged: frame i shows from `round(i * 1000 / fps)` to the next start; the last frame ends with the clip. The page no
+  longer skips frames past the clip, because the props refuse such a list before compile.
+- **Fixtures**. `eight-fps-three-seconds` is unchanged (24 frames, 3000 ms). `ten-fps-two-seconds` (20 frames, below the floor) is now
+  `ten-fps-two-and-a-half-seconds` (25 frames, 2500 ms). `twelve-fps-max-frames-clipped` (36 frames on 2000 ms, an overshoot) is now
+  `twelve-fps-max-frames-three-seconds` (36 frames, 3000 ms). Six golden PNGs are new and six old ones are removed; the eight-fps PNGs are
+  unchanged.
+- **Golden frames.** The six new PNGs come from a scratch render of only these two fixtures through the harness, because the full
+  update rewrites every component's PNGs. Checked: the centre colour of each new frame matches its frame index (9 of 9 frames across the
+  three fixtures). Compare run for all three fixtures: 9 of 9 pass at 0.000% differing pixels. **Not checked by eye**: the colour check
+  stands in for viewing.
+- **Planner.** `plan/chains.ts` takes its frame count from this component's `framesNeeded` at 12 per second, so the calls and the clip agree
+  (see `plan/STATUS.md`, same date).
+- **Tests.** `components/stopmotion.player.test.ts`: floor and ceiling refusals with their counts; overshoot refused with "refused, not
+  clamped"; an exhaustive check over 8 to 12 fps, 1 to 5 s clips and 24 to 36 frames (accepted exactly when the count is `framesNeeded`); every
+  fixture accepted; compile refuses an overshooting list.
+- **Run here**: `compose`, `plan` and `assets` test folders, 620 pass, 0 fail. `npx tsc --noEmit` exit 0. `npx eslint` on the changed files exit 0.
+
+## Chain work: `stopmotion.player` (Bible 7.1 `stop_motion`, contract `engine-contracts@5`)
+
+Branch `worktree-agent-a70192d499308ef8a`. The worktree had no commits of its own, so it was fast-forwarded from d0e8f63 to
+cef526c (the engine tree and the v5 chain contract) before this work. Details of the component are in `components/STATUS.md`.
+
+**The component.** `stopmotion.player` plays an ordered list of frame images at a frame rate, inside the composition.
+Props: `fps` (a whole number, 8 to 12, required) and `frameUris` (2 to 36 image URIs, png, jpg, jpeg or webp, in order).
+`durationMs` is the reserved clip span. Limits: 2 frames at least, 36 at most (the refusal gives the count), fps 8 to 12.
+The frame count must run to the clip end; a shorter list is refused with the frame count it needs.
+
+**The timing.** Frame i shows from `round(i * 1000 / fps)` to the next frame's start, clamped to the clip. A frame that starts
+at or after the clip end is not drawn. Times are whole milliseconds.
+
+**The source rule (the compiler change).** The component is `sourceBound`: each frame must be one of the clip's own shot
+sources. `compile(edl, kit, components, options)` takes `options.clipSourceUris`, a map from clip id to the media URIs that
+clip's shot produced (its takes). A sourceBound clip with no entry, or with a frame outside its entry, is refused, and the
+reason names the frame. Other components and every existing caller are unchanged. Existing callers that pass no options:
+`jobs/handlers/compose.ts` and `jobs/handlers/render.ts`. They refuse a stop-motion EDL with the reason until they pass
+`clipSourceUris`. Those files are eng-pipeline's and were not changed.
+
+**Where the component is registered.** `components/index.ts` holds `COMPONENT_LIBRARY`. `library.ts` holds only the types, so
+it gained the `sourceBound` flag and the fixture's `sourceUris`.
+
+**Decisions for the lead to confirm.**
+
+1. The floor is 2 frames, not the Bible's 24. Bible 7.1 plans 24 to 36 frames. The task set the ceiling at 36, and a floor of
+   24 would refuse a short shot at 12 fps (2 s needs 24 frames). The planner should keep to 24 to 36; the component allows 2.
+2. Undershoot is refused, not held. The task's rule clamps frames past the shot; it does not say what shows after the last
+   frame. A blank end would be a silent defect, so the clip is refused with the frame count that covers it (`framesNeeded`).
+3. Overshoot is clamped, as the task says: frames 24 to 35 of a 36-frame list on a 2 s clip are never drawn.
+4. Frame times are rounded to whole milliseconds (12 fps is 83.33 ms per frame). The rounding is the same in the template and
+   in `props.ts`, and the golden frames check the boundaries by colour.
+5. No holds in this version. Bible 9.2 lists holds; the task's timing has none, and each frame is held for 1000 / fps.
+6. The plan-side check (`plan/sources.ts`, `checkComponentProps`) validates the props schema only. The source rule is enforced
+   at compile, because only the compiler sees the takes. Plan cannot prove it.
+
+**Golden harness.** `test/golden/harness.ts` draws each `frame-NN` placeholder in its own colour (36 distinct colours, a
+golden-angle hue walk), so a frame shown a window early or late is a different colour in the golden check. It passes each
+fixture's `sourceUris` to the compiler. Existing placeholders and PNGs are unchanged (the other components' PNGs were not rewritten).
+
+**Tests and golden frames (run in this worktree).**
+
+- New: `components/stopmotion.player.test.ts` (prop limits with reasons, timing over every legal fps and clip length, the source
+  rule through `compile`, determinism, registration and the template's timing expression).
+- Changed: `components/components.test.ts` (the library holds fourteen components); `components/e2.test.ts` (its all-components
+  composition now passes the source list for the sourceBound clip; the test was also renamed, since "ten" was out of date).
+- Golden frames: 9 PNGs for 3 fixtures, in `components/stopmotion.player/golden/`, written with `golden.update.ts` filtered to this
+  component, viewed (one full frame by eye), and checked by reading each frame's centre colour against the colour of the expected
+  frame index (9 of 9 match). The compare run (`golden.run.ts`, filtered) passes 3 of 3.
+- `hyperframes lint` (filtered to this component) passes the 3 fixtures with zero errors and zero warnings.
+
+**Owner's live run for stop motion (agents hold no keys).**
+
+1. Price first. Bible 7.1 and the v5 note: `image.edit` is token-priced, so a stop-motion chain has no known price, and the
+   estimate refuses it, naming the shot. The owner sets the price before any live spend.
+2. One stop-motion shot end to end: 24 `image.edit` calls from the hero image (each frame the input of the next), each take
+   recorded. Compile with `clipSourceUris` set to the final take URIs of that clip. Render through the HyperFrames cloud.
+3. Check the cloud frames against the local golden frames for the same composition: for an 8 fps, 3 s clip, the frames at
+   60, 1060 and 2940 ms show frames 1, 9 and 24 of the list. Also check the 36-frame clamp case at 12 fps.
+4. Check that the cloud waits for each frame image to load before it captures. The frames are `<img>` elements set from
+   the script; a capture before decode would show a blank frame.
+5. Record the take ids, the asset ids, the composition hash (the idempotency key), the render id, the video id, the ledger
+   entries (estimate and actual) and the artifact ids.
+
+**Blockers.** None in this code. Needed elsewhere: the chain stage must pass the takes of each clip's calls as
+`clipSourceUris` (eng-pipeline), the image.edit price (owner), and an EDL that places the component (eng-plan-review / the editor).
+
+## E5: three visual-type components (`kinetic.type`, `screen.mock`, `character.rig`) on branch `eng-e5-visual-types`
+
+Cut from `code/beautiful-cori-1zfk11` (d5a62c1). The compiler, the style kit and `html.ts` are unchanged (no contract change).
+
+- **`kinetic.type`**: full kinetic typography beyond kinetic.punchline. Lines of script text, one on screen at a time, each
+  until the next starts. Words arrive in sequence (`stagger`) or the line pops in (`pop`). Emphasis words take the kit accent
+  and a punch. Up to six lines, 24 words in all, 40 characters a line, four emphasis words. Text is drawn with `textContent`.
+- **`screen.mock`**: a phone or desktop UI mock. A discriminated union on `screen`: `notification` (app, headline, body, time
+  label, optional icon), `app` (title, up to four labelled rows, optional picture) or `chat` (up to six messages on either
+  side). Pictures are image URIs only, and the compiler maps them to local assets.
+- **`character.rig`**: one SVG rig (`bean.v1`) drawn by its template from named parts: head, brows, eyes with lids, two arms,
+  torso, legs, five mouth shapes (`closed`, `open`, `wide`, `round`, `teeth`). Six poses (`idle`, `point`, `shrug`, `cheer`,
+  `think`, `surprise`) and four expressions (`neutral`, `happy`, `surprised`, `annoyed`) from fixed libraries in the template.
+  Props give a pose timeline and a mouth timeline on the clip clock, with fixed blinks every 2.6 s. Colours come from the kit
+  only. No pixels are generated or fetched. The character sheet's `rigUri` (an SVG file) is not drawn: the compiler does not
+  read SVG and components may not fetch. The rig's names are the contract between the sheet and the component.
+- Golden frames: 16 PNGs (`kinetic.type` 5, `screen.mock` 5, `character.rig` 6) written with the golden harness and viewed
+  by eye (not every frame; see `components/STATUS.md`). `npm run engine:golden`, with the local headless shell from
+  `/opt/pw-browsers`: **39 fixtures pass, 0 fail** (30 existing, 9 new). The lint tests (`hyperframes lint`) pass for all 39
+  fixtures and the EDL fixture. `npm run typecheck` exits 0. `npm run lint` exits 0 with 0 errors and the same four warnings
+  in `src/components/` that were there before E5.
+- Tests: `components/e5.test.ts` (prop limits, escaping through the compiler, media mapping, a three-component composition
+  that compiles to the same hash twice), and the contract checks in `components/components.test.ts` now cover all thirteen.
+- Fixes found by viewing the frames: the rig's `fromTo` and `set` calls use `immediateRender: false` (GSAP would otherwise
+  apply the last state at build time, so the first frames showed the wrong pose and mouth); the `think` arm and the surprised
+  brow height were corrected; the emphasis punch was reduced so a scaled word no longer covers its neighbour's space.
+
+### Owner's live run for E5 (agents hold no keys)
+
+No component has a provider cost; the ledger records only the cloud render. The owner runs one composition holding one clip of
+each new component through the HeyGen HyperFrames cloud, and checks, against the golden frames for the same composition:
+
+1. `kinetic.type`: the stagger and the pop entrance, and the emphasis colour and punch, in the cloud frames.
+2. `screen.mock`: a notification on a phone with a real product icon, an app screen with a product picture, a desktop chat.
+   The markup message shows as text.
+3. `character.rig`: the arms, the brows, the blinks and the five mouth shapes move on the clock. The cloud frames match the
+   local golden frames within the 1% pixel rule (Bible 17.3), for the same composition (Bible 6.9).
+4. Record the render id, the video id, the ledger entries (estimate and actual) and the artifact ids. Font check as E1: the kit's
+   fonts are bundled, and the golden fixtures use Inter only.
+
+## E2: five more components (`react.layout`, `list.tierBoard`, `compare.split`, `price.reveal`, `chat.thread`)
+
+Phase E2 (W9, the second component set) on branch `eng-e2-components`, cut from `code/beautiful-cori-1zfk11` (a4b04c7).
+Phase E1 history below. Covers `src/engine/compose/` (and the `components/`, `golden/` and `snapshots/` folders inside
+it). Details: `README.md` in this folder.
+
+## E2: five more components (`react.layout`, `list.tierBoard`, `compare.split`, `price.reveal`, `chat.thread`)
+
+- Each follows the E1 pattern: `component.html`, `props.ts` (zod), `fixtures/` (3 prop sets), `index.ts`, golden PNGs.
+  The library now holds ten components (`components/index.ts`). Per-component decisions are in `components/STATUS.md`.
+- Compiler change (`compiler.ts`): every `*Uri` and `*Uris` prop is mapped to a local asset at any depth, so a list
+  item's image cannot leak its EDL URI into the HTML. Compositions with no nested URIs compile to the same bytes as E1
+  (the EDL snapshot test is unchanged and passes).
+- Price text is formatted by code from integer minor units (`price.reveal/props.ts`, `formatPrice`, tested). Chat text
+  and every other value reaches the HTML escaped (tested with markup in a message, an item name and a label).
+- Golden harness (`test/golden/harness.ts`): placeholder images are coloured gradients chosen by name; video slots get a
+  generated VP8 placeholder (ffmpeg), so the components' own `<video>` path is rendered. `mode "lint"` writes empty
+  files for video, so `npm test` needs no ffmpeg. The product hero frame is unchanged.
+- Tests run here (`NODE_ENV=development node --experimental-strip-types --test 'src/engine/compose/**/*.test.ts'`):
+  **163 pass, 0 fail, 0 skipped.** That includes `components/e2.test.ts` (new), `components/components.test.ts`,
+  `compiler.test.ts`, `styleKit.test.ts`, and `lint.test.ts` (`hyperframes lint` on the EDL fixture and all 30 component
+  fixtures: 31 of 31 with zero errors and zero warnings; the CLI runs here, so nothing was skipped).
+- `npm run typecheck`: exit 0. `npm run lint`: exit 0, 0 errors, 4 warnings, all in existing `src/components/` files
+  (the same four as before this change). `npx eslint src/engine/compose`: exit 0.
+- Golden frames: `npm run engine:golden:update` wrote 35 PNGs (15 from E1, unchanged byte for byte, and 20 new), then
+  `npm run engine:golden` (with `HYPERFRAMES_BROWSER_PATH` set to the local headless shell): **30 pass, 0 fail** across
+  the ten components. The `list.tierBoard` frames were regenerated once after a fix to the text-only card names (a
+  scratch run for that one component; its three fixtures were rerun and checked by eye).
+- Full `npm test` is the lead's to run after merging (not run in this worktree, per the brief).
+
+### Owner's live run for E2
+
+Agents hold no keys. The owner renders one composition with a clip of each new component through the HeyGen cloud, and
+checks: the `react.layout` video plays in sync inside the sub-composition; `compare.split` wipes in with its video; the
+`list.tierBoard` item images are real product imagery (L8); and the cloud frames match the local golden frames for the
+same composition (Bible 6.9). Record the render id, the video id, the ledger entries and the artifact ids. The list is in
+`components/STATUS.md`.
+
+## E1 (history)
+
+Phase E1, wave B. Branch `engine/e1-w9-w10`, cut from `code/beautiful-cori-1zfk11` (7fd32ae).
+
+## Done
+
+- `compile(edl, styleKit, components)` → `{ files, composition, assets }`. Pure. Byte-identical on repeat. The
+  composition's `contentHash` (over the file hashes) is the render idempotency key. Validates the EDL, the kit and every
+  component's props at the boundary. Refuses what it cannot draw exactly (overlaps, unknown components or transitions,
+  `speed_ramp`, bad gains, unsafe font names). Escapes every text value.
+- `styleKit.ts`: kit → `:root` custom properties (`--kit-*`), fixed order, plain font names only.
+- Five components in `components/<name>/`: `captions.karaoke`, `title.hook`, `kinetic.punchline`, `product.card`,
+  `cta.card`. Each has `component.html`, `props.ts` (zod), `fixtures/` (3 prop sets), `index.ts`, and golden PNGs
+  (15 frames in total, in `components/<name>/golden/`).
+- Probes confirmed the template contract used here: two instances of one template with different values render
+  correctly, arrays pass through `data-variable-values`, and a host's EDL `box` places a component's content.
+- Contract tests for every component: schemas, fixtures, declared variables, forbidden APIs, kit colours only, safe-zone
+  geometry for the text components.
+- `hyperframes lint` is run on the compiled EDL fixture and on each of the 15 component fixtures: 0 errors, 0 warnings.
+- Snapshot of the compiled EDL fixture (`snapshots/edl-fixture/`).
+- `npm run engine:golden` (added to package.json): renders each fixture locally, compares frames with the stored PNGs
+  (pass under 1% of pixels). Not run by `npm test`.
+
+## Tests run in this worktree
+
+- `NODE_ENV=development node --experimental-strip-types --test 'src/engine/compose/**/*.test.ts' 'src/engine/render/**/*.test.ts'`:
+  **109 pass, 0 fail, 0 skipped.** The lint tests ran (not skipped): the HyperFrames CLI works here.
+- `npm run engine:golden` (with `HYPERFRAMES_BROWSER_PATH=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell`):
+  **15 pass, 0 fail**, run twice (once to write PNGs, once to compare). Chrome headless shell 141.0.7390.37, ffmpeg 6.1.1.
+- A scratch render (not committed): the contracts EDL fixture compiled with synthetic media (colour video, sine audio)
+  rendered locally: 1080 × 1920, 30 fps, 720 frames, duration 24.000 s, AAC stereo. Frames at 1, 5, 12, 16 and 22 s
+  show the expected clips and components.
+- `npm run typecheck`: exit 0. `npm run lint`: exit 0, 0 errors, 4 warnings, all in existing `src/components/` files.
+- Full `npm test` on the final state: exit 0. `scripts/` 146 pass; `src/` 2544 pass, 0 fail, 41 skipped (existing
+  database-gated tests). The `env-example` test caught an env read in `golden.run.ts`; that read moved to `golden.update.ts`.
+
+## Owner's live run (E1 acceptance, Bible 19)
+
+Agents hold no keys. The owner runs:
+
+1. Wire the cloud adapter with the real transport, a HeyGen key from Meridian's credential resolver, `resolveAsset`
+   (storage), `storeVideo`, and the integrity hook from eng-media-assets. Needs a HeyGen credential category in
+   `credentials/contract.ts` (not in this folder).
+2. A hand-written EDL with one stock clip, one TTS voice track and three components (for example `captions.karaoke`,
+   `title.hook`, `cta.card`). Render through the cloud. Check the MP4 is 1080 × 1920, 30 fps, duration within 100 ms,
+   with audio. Record the render id, the video id, the ledger entries (estimate and actual) and the artifact ids.
+3. Ten test renders. Record the real bill for each. Replace `budgets.fixedPerMasterUsd.render` (0.05) with the measured
+   figure, and set `render_hyperframes_cloud` in `prices.ts` to a verified price.
+4. Confirm `Idempotency-Key` behaviour: submit the same composition twice and check one render and one charge.
+5. Check the endpoint shapes, `resolution` and `aspect_ratio` against the real responses (see `render/STATUS.md`).
+6. Compare a local golden frame with the cloud output for the same composition (Bible 6.9: same output as the cloud).
+7. Check font determinism. A kit that names a font outside the bundled set (for example Fraunces) is fetched from Google
+   Fonts at render time.
+
+## Decisions and interpretations (lead to confirm)
+
+- Pinned `hyperframes@0.8.154` and `@hyperframes/core@0.8.154` exactly, as the brief said. npm's latest is 0.8.155; not
+  adopted.
+- The compiler writes sub-composition templates as full HTML documents (the CLI docs and the linter), not `<template>`
+  wrappers (core.md). The linter accepts this with zero findings.
+- `data-track-index` is set and so is `z-index` (the 0.8.154 CLI docs say track index is display only).
+- `data-duration` on sub-composition hosts (linter treats it as the slot window). Not set on templates.
+- GSAP is loaded from jsdelivr at 3.15.0, the version HyperFrames uses by default.
+- Reserved prop `durationMs` is set by the compiler from the clip span. Components never receive a duration from Claude.
+- Props named `*Uri` are media. The compiler maps them to local asset paths, so no EDL URI reaches the HTML.
+- Caption highlight, weight and case come from the style kit (`--kit-caption-*`), not from props. The Bible's table lists
+  a highlight prop; the brief's rule ("read only the style kit variables") wins.
+- `speed_ramp`, and the `zoom` and `flash` transitions, are refused rather than dropped. W8 must not emit them until the
+  compiler draws them.
+- Music ducking is pre-rendered upstream. The compiler records nothing about `duckDb` in the HTML.
+- `package-lock.json`: `npm install` rewrote the file's ordering. 170 packages were added (HyperFrames and its
+  dependencies, including esbuild 0.28.2 at the top level). I compared the old and new lockfiles: no existing package
+  version changed, and none was removed.
+
+## Blockers
+
+- No code blocker in this folder.
+- Needs other workstreams before delivery: the render-integrity probe and rule (eng-media-assets, W4/W11), storage for
+  `resolveAsset` and `storeVideo` (eng-pipeline, W2), and the HeyGen credential category (credentials, E2).
+- Product beats need real imagery (L8). `product.card` without `heroUri` renders text only. The pre-render gate should
+  refuse a product beat that has no hero image. That is W11's gate, not the compiler's.

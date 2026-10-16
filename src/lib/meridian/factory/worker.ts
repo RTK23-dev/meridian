@@ -12,9 +12,10 @@ import { learnForRun } from "./learn.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
-import { stageDecision } from "./stage-decision.ts";
-import { effectiveCap, meteredSpendOf, spendCapsOf } from "./spend.ts";
+import { KILL_SWITCH_STOP_REASON, stageDecision } from "./stage-decision.ts";
+import { brandCapFiguresOf, capOrNull, capStopForRun, meteredSpendOf, pauseRunEngineSpend } from "./spend.ts";
 import { produceFactoryCreatives, scheduleProduceRecheck } from "./produce.ts";
+import type { FactoryEngineSeams } from "./produce-shared.ts";
 import { launchFactoryRun, recordTestPlan, scheduleRunMeasurement } from "./publish.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
 import { recordedClaimsOf, templateFromDna } from "./template.ts";
@@ -37,6 +38,7 @@ import type { PolicyOutcome } from "../decisions/policy.ts";
 import { loadFactoryBrain } from "./brain-facts.ts";
 import { learningScopesOf, pickConceptsForRun } from "./pick.ts";
 import {
+  cappedGradeReason,
   gradeColumnsOf,
   gradeItemWithEngine,
   NO_DNA_GRADE,
@@ -64,9 +66,9 @@ function parseList(value: string): string[] {
 
 /**
  * The decision engines a stage may call. Production passes nothing and the stage builds the live engines; a test passes fixture
- * engines, so no engine is reached over the network.
+ * engines, so no engine is reached over the network. The video engine's seams (readiness and the fields a request needs) are passed the same way.
  */
-export type FactorySeams = { decisionEngines?: DecisionEngineRegistry };
+export type FactorySeams = { decisionEngines?: DecisionEngineRegistry; engine?: FactoryEngineSeams };
 
 /**
  * Runs one Factory stage. `deps` are the sourcing seams the discover stage uses; production passes nothing and gets the live
@@ -105,22 +107,25 @@ export async function executeFactoryJob(
     select count(*)::int as n from factory_approvals
     where run_id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and stage = ${job.job_type}
   `;
-  const caps = await spendCapsOf(sql, job.organization_id, job.brand_id);
   const spend = await meteredSpendOf(sql, job.organization_id, job.brand_id, runId);
   const decision = stageDecision({
     automation: settings.automation,
     stage: job.job_type,
     approved: (approvals[0]?.n ?? 0) > 0,
     killSwitchEngaged: await killSwitchPaused(sql, job.organization_id, job.brand_id),
-    capCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
+    capCents: settings.caps.totalCents,
     spentCents: spend.totalCents,
-    dailyCapCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
+    dailyCapCents: settings.caps.dailyCents,
     dailySpentCents: spend.dailyCents,
+    // The brand's caps are held against the brand's spend across all its runs, not this run's spend alone.
+    ...(await brandCapFiguresOf(sql, job.organization_id, job.brand_id)),
   });
   if (decision.action === "stop" || decision.action === "await_approval") {
     // A stage that waits or is stopped is recorded on the run with its reason. It is not a failure. The stages after it hold until
     // a person approves the stage it waits at, or the stop is cleared and that stage runs again.
     const status = decision.action === "stop" ? "paused" : "awaiting_approval";
+    // A stopped run stops its video engine requests too: the engine's jobs run in the queue whether or not the run does (spend.ts).
+    if (decision.action === "stop") await pauseRunEngineSpend(sql, job.organization_id, job.brand_id, runId, decision.reason);
     await sql`
       update factory_runs set status = ${status}, current_stage = ${job.job_type}, error = ${decision.reason}, updated_at = now()
       where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
@@ -168,8 +173,19 @@ export async function executeFactoryJob(
       runId,
       decisionEngine: settings.decisionEngine,
       engines: seams.decisionEngines,
+      // The run's own caps. The brand's caps are checked inside each engine call (capStopForRun).
+      caps: { totalCents: capOrNull(settings.caps.totalCents), dailyCents: capOrNull(settings.caps.dailyCents) },
     });
-    return `graded:${graded}`;
+    if (graded.stop) {
+      // A cap or the kill switch refused an engine call inside this stage. A refused ad keeps its stored engine grade, or records the reason
+      // it has none. The run stops here with the reason on the run row, as produce stops (produce-shared.ts), and the stages after grade hold.
+      await sql`
+        update factory_runs set status = 'paused', current_stage = ${job.job_type}, waiting_on = '', error = ${graded.stop}, updated_at = now()
+        where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
+      `;
+      return `stopped:${job.job_type}`;
+    }
+    return `graded:${graded.count}`;
   }
   if (job.job_type === "factory.trend") {
     const { clusterStoredCreativeDna } = await import("./trends.ts");
@@ -213,13 +229,18 @@ export async function executeFactoryJob(
       runId,
       formats: settings.formats,
       providers: settings.providers,
-      caps: {
-        totalCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
-        dailyCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
-      },
+      caps: { totalCents: capOrNull(settings.caps.totalCents), dailyCents: capOrNull(settings.caps.dailyCents) },
+      costPerMasterUsd: settings.costPerMasterUsd,
       engines: seams.decisionEngines,
+      engine: seams.engine,
     });
     if (produced.stop) {
+      // A run that stops at a cap also stops its engine requests. A stop for any other reason leaves each request inside its own budget.
+      const capReached = await capStopForRun(sql, job.organization_id, job.brand_id, runId, {
+        totalCents: capOrNull(settings.caps.totalCents),
+        dailyCents: capOrNull(settings.caps.dailyCents),
+      });
+      if (capReached) await pauseRunEngineSpend(sql, job.organization_id, job.brand_id, runId, capReached);
       await sql`
         update factory_runs set status = 'paused', current_stage = ${job.job_type}, waiting_on = '', error = ${produced.stop}, updated_at = now()
         where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
@@ -396,8 +417,11 @@ function deliveryOf(sourceMetrics: string): Delivery {
   return { stillRunning: stoppedAt === null, countries };
 }
 
+/** The caps a grade's engine calls are held to, in cents: the run's effective caps, null where none is set. */
+type GradeCaps = { totalCents: number | null; dailyCents: number | null };
+
 /** The engine choice and run a grade is written under. */
-type GradeOptions = GradeEngineChoice & { runId: string };
+type GradeOptions = GradeEngineChoice & { runId: string; caps: GradeCaps };
 
 /** A grade as stored on an ad's timeline, with the run that wrote it. */
 type StoredGrade = GradeColumns & { gradedBy: string | null };
@@ -424,7 +448,12 @@ function storedGradeOf(row: Record<string, unknown>): StoredGrade | null {
   };
 }
 
-async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string, options: GradeOptions): Promise<number> {
+async function gradeStoredAds(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  options: GradeOptions,
+): Promise<{ count: number; stop: string | null }> {
   const ads = await sql<{
     id: string;
     page_id: string;
@@ -496,6 +525,8 @@ async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string,
   const previousGrades = new Map(priorRows.map((row) => [String(row.research_ad_id), storedGradeOf(row)]));
 
   let count = 0;
+  // The first reason an engine call was refused in this stage, or null. Every ad is still written, so a refused ad is never left unrecorded.
+  let stop: string | null = null;
   for (const ad of ads) {
     const facts = delivered.get(ad.id) ?? { stillRunning: null, countries: [] };
     const known = knownByPage.get(ad.page_id) ?? 0;
@@ -541,36 +572,48 @@ async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string,
     ) {
       stored = previous;
     } else {
-      const sameAngle = marketRows.filter((row) => angle !== "" && row.angle === angle);
-      const grade: GradeItem = {
-        researchAdId: ad.id,
-        copy: ad.copy,
-        dna,
-        market: {
-          storedCreatives: marketRows.length,
-          sameAngle: sameAngle.length,
-          sameAngleAdvertisers: new Set(sameAngle.map((row) => row.advertiser).filter(Boolean)).size,
-        },
-        brand: { creatives: brandCreatives, sameAngle: brandAngles.get(angle) ?? 0 },
-        brain: brain.values,
-      };
-      const judged = await gradeItemWithEngine(sql, { organizationId, brandId, item: grade }, engine);
-      stored = { ...gradeColumnsOf(judged), gradedBy: options.runId };
-      // The decision's tokens are metered for this run. A grade the engine answered from its own record never reaches this line, so a
-      // rerun writes no row for it.
-      if (judged.status === "engine") {
-        await recordDecisionSpend(sql, {
-          organizationId,
-          brandId,
-          runId: options.runId,
-          stage: "factory.grade",
-          gateRecordId: judged.gateRecordId,
-          engineCalled: judged.engineCalled,
-          engineId: judged.engineId,
-          requestedModel: judged.requestedModel,
-          returnedModel: judged.returnedModel,
-          usage: judged.usage ?? undefined,
-        });
+      // This ad needs a provider call. The kill switch and the caps are read before it, so a cap reached earlier in the stage refuses
+      // the call: the ad is written observed-only with the reason, and no provider call is made.
+      const refused = await gradeCallStop(sql, { organizationId, brandId, runId: options.runId, caps: options.caps });
+      if (refused) {
+        // A grade the engine already stored is kept: a cap does not discard it. An ad with none records the reason it has no grade.
+        stored =
+          previous?.status === "engine"
+            ? previous
+            : { ...gradeColumnsOf(observedOnlyGrade(cappedGradeReason(refused))), gradedBy: options.runId };
+        stop = stop ?? refused;
+      } else {
+        const sameAngle = marketRows.filter((row) => angle !== "" && row.angle === angle);
+        const grade: GradeItem = {
+          researchAdId: ad.id,
+          copy: ad.copy,
+          dna,
+          market: {
+            storedCreatives: marketRows.length,
+            sameAngle: sameAngle.length,
+            sameAngleAdvertisers: new Set(sameAngle.map((row) => row.advertiser).filter(Boolean)).size,
+          },
+          brand: { creatives: brandCreatives, sameAngle: brandAngles.get(angle) ?? 0 },
+          brain: brain.values,
+        };
+        const judged = await gradeItemWithEngine(sql, { organizationId, brandId, item: grade }, engine);
+        stored = { ...gradeColumnsOf(judged), gradedBy: options.runId };
+        // The decision's tokens are metered for this run. A grade the engine answered from its own record never reaches this line, so a
+        // rerun writes no row for it.
+        if (judged.status === "engine") {
+          await recordDecisionSpend(sql, {
+            organizationId,
+            brandId,
+            runId: options.runId,
+            stage: "factory.grade",
+            gateRecordId: judged.gateRecordId,
+            engineCalled: judged.engineCalled,
+            engineId: judged.engineId,
+            requestedModel: judged.requestedModel,
+            returnedModel: judged.returnedModel,
+            usage: judged.usage ?? undefined,
+          });
+        }
       }
     }
     const id = `tl:${brandId}:${ad.id}`;
@@ -599,7 +642,17 @@ async function gradeStoredAds(sql: Sql, organizationId: string, brandId: string,
     `;
     count += 1;
   }
-  return count;
+  return { count, stop };
+}
+
+/**
+ * The reason a grade's engine call is refused now, or null. The kill switch and the run's caps are read before each call, against the
+ * spend recorded so far, so a cap reached earlier in the stage refuses the next call and the call that would pass it is not made. The
+ * caps and the rule are the stage check's own (capStopReason), as produce reads them before each call.
+ */
+async function gradeCallStop(sql: Sql, input: { organizationId: string; brandId: string; runId: string; caps: GradeCaps }): Promise<string | null> {
+  if (await killSwitchPaused(sql, input.organizationId, input.brandId)) return KILL_SWITCH_STOP_REASON;
+  return capStopForRun(sql, input.organizationId, input.brandId, input.runId, input.caps);
 }
 
 /** The run's settings the plan reads. The plan takes its formats, automation, intent and spend cap from the run, and nothing else. */

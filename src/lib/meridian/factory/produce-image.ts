@@ -123,13 +123,12 @@ export async function produceImage(sql: Sql, input: ProduceInput, req: ImageRequ
     idempotencyKey: jobId,
   };
   // A named provider is checked first. A provider that is not configured, or not connected, is refused with its reason, and no
-  // reservation or call follows. An automatic choice may use a provider with no declared price only against a cap, and the cap is the
-  // reservation's bound.
+  // reservation or call follows. A provider whose cost is unknown is never used: its spend cannot be counted against a cap, so a capped
+  // run could overrun it, and an uncapped run has no bound at all. The run stops with the reason until the provider has a price.
   const requested = input.providers[req.format] ?? "auto";
-  const hasCap = input.caps.totalCents !== null || input.caps.dailyCents !== null;
   let selected: Awaited<ReturnType<typeof productionRouter.selectImageForSpec>>;
   try {
-    selected = await productionRouter.selectImageForSpec(baseSpec, { requestedProvider: requested, allowUnknownCost: hasCap });
+    selected = await productionRouter.selectImageForSpec(baseSpec, { requestedProvider: requested, allowUnknownCost: false });
   } catch (error) {
     return { kind: "stop", reason: errorText(error) };
   }

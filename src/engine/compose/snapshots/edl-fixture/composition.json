@@ -1,0 +1,67 @@
+{
+  "contentHash": "sha256:8e1fb555d2a7d6eca3587475ab9f6c5bb96761a9797a19791347ba078befea14",
+  "files": [
+    {
+      "path": "assets.json",
+      "contentHash": "sha256:e2b46f20a22ae4c023841ce9c9d07dbee03b3048185af1d1da066a95fd6c9d84",
+      "bytes": 676
+    },
+    {
+      "path": "components/captions.karaoke.html",
+      "contentHash": "sha256:60aff0fbcda685499354ea2ca10c3af6df76d2094525a3cdba38a235bf7f47ff",
+      "bytes": 2715
+    },
+    {
+      "path": "components/cta.card.html",
+      "contentHash": "sha256:a824864aa8097367a3ca9ce9cb79382f4e5ec42285e7c52fc3e9c90c000ec116",
+      "bytes": 4008
+    },
+    {
+      "path": "components/product.card.html",
+      "contentHash": "sha256:b08ea3424349a301be032c97df50bde8af27bd1ffa01100022feeffa17df4cd2",
+      "bytes": 4577
+    },
+    {
+      "path": "index.html",
+      "contentHash": "sha256:21c80c4fb71692b305b3a34e9f9fc1049dbb9b32664d3ebd3943d57ca3a9ad0e",
+      "bytes": 3097
+    },
+    {
+      "path": "style.css",
+      "contentHash": "sha256:ae2446be97f638aa4ea606be25fde208f34d765b91aefbe97612eea623b1eb52",
+      "bytes": 1066
+    }
+  ],
+  "assets": [
+    {
+      "path": "assets/2c497b325b4ad31d.mp4",
+      "uri": "store://takes/take1.mp4",
+      "kind": "video"
+    },
+    {
+      "path": "assets/3d157b7d0d32c316.mp4",
+      "uri": "store://takes/take3b.mp4",
+      "kind": "video"
+    },
+    {
+      "path": "assets/6b4f1b42561d263f.wav",
+      "uri": "store://sfx/whoosh.wav",
+      "kind": "audio"
+    },
+    {
+      "path": "assets/87768e11a288e3b8.mp4",
+      "uri": "store://takes/take2.mp4",
+      "kind": "video"
+    },
+    {
+      "path": "assets/9b9d71af48212968.wav",
+      "uri": "store://music/fixture-bed.wav",
+      "kind": "audio"
+    },
+    {
+      "path": "assets/c11b992997d25bc2.wav",
+      "uri": "store://voice/vt_fixture_1.wav",
+      "kind": "audio"
+    }
+  ]
+}

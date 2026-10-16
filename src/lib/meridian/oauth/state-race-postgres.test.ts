@@ -70,12 +70,16 @@ test("concurrent callbacks presenting one state: exactly one claims it", { skip:
   await withFreshMigratedDatabase(async (sql) => {
     const orgId = `org-race-${randomUUID().slice(0, 8)}`;
     await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, ${orgId}, ${orgId}, 'creator')`;
+    const userId = `user-race-${randomUUID().slice(0, 8)}`;
     await sql`
-      insert into oauth_states (state_hash, organization_id, provider, expires_at, redirect_origin)
-      values ('race-hash', ${orgId}, 'meta', now() + interval '10 minutes', ${origin})
+      insert into "user" (id, name, email, "emailVerified") values (${userId}, ${userId}, ${`${userId}@example.test`}, true)
+    `;
+    await sql`
+      insert into oauth_states (state_hash, organization_id, provider, expires_at, redirect_origin, user_id)
+      values ('race-hash', ${orgId}, 'meta', now() + interval '10 minutes', ${origin}, ${userId})
     `;
     const attempts = await Promise.all(
-      Array.from({ length: 24 }, () => claimOauthState(sql, { stateHash: "race-hash", provider: "meta", origin })),
+      Array.from({ length: 24 }, () => claimOauthState(sql, { stateHash: "race-hash", userId, provider: "meta", origin })),
     );
     const winners = attempts.filter((claim) => claim !== null);
     assert.equal(winners.length, 1, "one callback wins; the rest see the state as used");
