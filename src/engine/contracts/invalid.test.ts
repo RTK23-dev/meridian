@@ -14,6 +14,9 @@ import {
   ledgerEntrySchema,
   manifestRoleCallSchema,
   manifestSchema,
+  MODEL_CHOICE_REASON_MAX,
+  modelCatalogEntrySchema,
+  modelChoiceSchema,
   personaSchema,
   productKitSchema,
   productionRequestSchema,
@@ -34,6 +37,9 @@ import {
   FIXTURE_IDS as ID,
   fixtureId,
   assetSpecFixture,
+  assetSpecV6Fixture,
+  modelCatalogEntryFixture,
+  modelChoiceFixture,
   budgetReservationFixture,
   characterSheetFixture,
   compositionFixture,
@@ -137,6 +143,38 @@ const cases: Case[] = [
   { name: "asset spec: width 1280", schema: assetSpecSchema, value: edit(assetSpecFixture, (d) => (d.width = 1280)) },
   { name: "asset spec: three takes", schema: assetSpecSchema, value: edit(assetSpecFixture, (d) => (d.takes = 3)) },
   { name: "asset spec: negative seed", schema: assetSpecSchema, value: edit(assetSpecFixture, (d) => (d.seed = -1)) },
+
+  // Model choice (contract v7, Bible 10.5): unknown source, empty model id, provider, reason bound, catalog read time.
+  { name: "model choice: unknown source", schema: modelChoiceSchema, value: edit(modelChoiceFixture, (d) => (d.source = "human")) },
+  { name: "model choice: empty modelId", schema: modelChoiceSchema, value: edit(modelChoiceFixture, (d) => (d.modelId = "")) },
+  { name: "model choice: a provider other than openrouter", schema: modelChoiceSchema, value: edit(modelChoiceFixture, (d) => (d.provider = "anthropic")) },
+  { name: "model choice: empty reason", schema: modelChoiceSchema, value: edit(modelChoiceFixture, (d) => (d.reason = "")) },
+  {
+    name: "model choice: reason over the 500-character bound",
+    schema: modelChoiceSchema,
+    value: edit(modelChoiceFixture, (d) => (d.reason = "x".repeat(MODEL_CHOICE_REASON_MAX + 1))),
+  },
+  { name: "model choice: catalogReadAt is not an ISO time", schema: modelChoiceSchema, value: edit(modelChoiceFixture, (d) => (d.catalogReadAt = "16/10/2026")) },
+  { name: "model choice: no source", schema: modelChoiceSchema, value: without(modelChoiceFixture, "source") },
+  { name: "asset spec: a choice with an unknown source", schema: assetSpecSchema, value: edit(assetSpecFixture, (d) => (d.modelChoice.source = "director")) },
+  { name: "asset spec: a choice with an empty modelId", schema: assetSpecSchema, value: edit(assetSpecFixture, (d) => (d.modelChoice.modelId = "")) },
+  { name: "asset spec: modelChoice is a string, not an object", schema: assetSpecSchema, value: edit(assetSpecFixture, (d) => (d.modelChoice = "seedance")) },
+
+  // Model catalog entry (contract v7, Bible 10.5 step 1): a price is required and positive, and the classes are contract classes.
+  { name: "catalog entry: missing price", schema: modelCatalogEntrySchema, value: without(modelCatalogEntryFixture, "price") },
+  { name: "catalog entry: null price", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.price = null)) },
+  { name: "catalog entry: a zero price", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.price.usd = 0)) },
+  { name: "catalog entry: a negative price", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.price.usd = -0.01)) },
+  { name: "catalog entry: a price with no usd", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => delete d.price.usd) },
+  { name: "catalog entry: an unknown price unit", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.price.unit = "per_minute")) },
+  { name: "catalog entry: an empty sku", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.price.sku = "")) },
+  { name: "catalog entry: no model class", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.modelClasses = [])) },
+  { name: "catalog entry: a model class the contract does not have", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.modelClasses = ["video.banana"])) },
+  { name: "catalog entry: maxSeconds below minSeconds", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.capabilities.minSeconds = 12)) },
+  { name: "catalog entry: an empty id", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.id = "")) },
+  { name: "catalog entry: readAt is not an ISO time", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.readAt = "yesterday")) },
+  { name: "catalog entry: a capability left out instead of null", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => delete d.capabilities.audio) },
+  { name: "catalog entry: no capabilities block", schema: modelCatalogEntrySchema, value: without(modelCatalogEntryFixture, "capabilities") },
 
   // Take and verdict.
   { name: "take: attempt zero", schema: takeSchema, value: edit(take1Fixture, (d) => (d.attempt = 0)) },
@@ -329,4 +367,35 @@ test("manifest v2: an unknown cost and an unknown token count stay null, and are
   const director = parsed.roleCalls?.find((call) => call.role === "director_check");
   assert.equal(director?.costUsd, 0.031, "an invalid answer the provider billed is held at its bill");
   assert.equal(director?.tokens.prompt, null);
+});
+
+test("contract v7 is additive: a v6 asset spec with no modelChoice key reads as null (no choice, the route table applies)", () => {
+  assert.equal("modelChoice" in assetSpecV6Fixture, false, "the v6 fixture has no modelChoice key");
+  const parsed = assetSpecSchema.parse(assetSpecV6Fixture);
+  assert.equal(parsed.modelChoice, null);
+  assert.equal(assetSpecSchema.safeParse(edit(assetSpecFixture, (d) => (d.modelChoice = null))).success, true, "an explicit null parses too");
+});
+
+test("contract v7: a model choice at exactly the reason bound parses, and the fixture round-trips with its source", () => {
+  const atBound = edit(modelChoiceFixture, (d) => (d.reason = "x".repeat(MODEL_CHOICE_REASON_MAX)));
+  assert.equal(modelChoiceSchema.safeParse(atBound).success, true);
+  const parsed = assetSpecSchema.parse(assetSpecFixture);
+  assert.deepEqual(parsed.modelChoice, modelChoiceFixture);
+  assert.equal(parsed.modelChoice?.source, "orchestrator");
+});
+
+test("contract v7: a catalog capability the catalog does not say stays null, and is never read as 0 or yes", () => {
+  const parsed = modelCatalogEntrySchema.parse(
+    edit(modelCatalogEntryFixture, (d) => {
+      d.capabilities.resolutions = null;
+      d.capabilities.lastFrame = null;
+      d.capabilities.refsMax = null;
+      d.capabilities.maxSeconds = null;
+    }),
+  );
+  assert.equal(parsed.capabilities.resolutions, null);
+  assert.equal(parsed.capabilities.lastFrame, null);
+  assert.equal(parsed.capabilities.refsMax, null);
+  assert.equal(parsed.capabilities.maxSeconds, null);
+  assert.equal(modelCatalogEntrySchema.safeParse(modelCatalogEntryFixture).success, true);
 });

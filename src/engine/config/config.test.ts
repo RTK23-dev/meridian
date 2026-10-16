@@ -4,6 +4,7 @@ import { EFFECT_KINDS, EngineError, MODEL_CLASSES, sumUsd, VISUAL_TYPES } from "
 import { adapters } from "./adapters.ts";
 import { budgets } from "./budgets.ts";
 import { CONTRACTS_VERSION } from "../contracts/version.ts";
+import { modelPreferences, PREFERENCE_MODEL_CLASSES } from "./model-preferences.ts";
 import { prices, priceFor, type PriceKey } from "./prices.ts";
 import { routes, type Capability } from "./routes.ts";
 import { thresholds } from "./thresholds.ts";
@@ -46,8 +47,23 @@ test("each config file carries its version string", () => {
   assert.equal(adapters.version, "adapters@1");
 });
 
-test("the contract set is at version 4 (frame_reader role and the editor's decisions)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@6");
+test("the contract set is at version 7 (the model choice on the asset spec, Bible section 4 v7 note)", () => {
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@7");
+});
+
+test("the model preference table is versioned, covers the production classes and starts empty (Bible 10.5 step 4)", () => {
+  assert.equal(modelPreferences.version, "model-preferences@1");
+  assert.deepEqual([...PREFERENCE_MODEL_CLASSES], ["video.cinematic", "video.budget", "video.i2v_pinned", "avatar", "image.keyframe", "image.edit", "tts"]);
+  assert.deepEqual(Object.keys(modelPreferences.ranked).sort(), [...PREFERENCE_MODEL_CLASSES].sort(), "one row per production class, and no other");
+  for (const modelClass of PREFERENCE_MODEL_CLASSES) {
+    assert.ok(MODEL_CLASSES.includes(modelClass), `${modelClass} is a model class of the contract`);
+    assert.deepEqual(modelPreferences.ranked[modelClass], [], `${modelClass} starts with no preference (owner decision 2026-10-16)`);
+  }
+});
+
+test("the lip-sync class has no preference row: it is not a production class until E2 (Bible 10.5)", () => {
+  assert.equal((PREFERENCE_MODEL_CLASSES as readonly string[]).includes("lipsync"), false);
+  assert.equal("lipsync" in modelPreferences.ranked, false);
 });
 
 test("the assets constants moved to config keep the values assets/STATUS.md recorded", () => {

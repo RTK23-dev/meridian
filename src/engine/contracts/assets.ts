@@ -7,6 +7,27 @@ import { EngineError } from "./errors.ts";
 import { modelClassSchema, type ModelClass } from "./plan.ts";
 import { positiveMsSchema } from "./primitives.ts";
 
+/** The sources of a model choice (Bible 10.5 step 2): the orchestrator's pick, or the route table's first eligible fallback. */
+export const MODEL_CHOICE_SOURCES = ["orchestrator", "fallback"] as const;
+export const modelChoiceSourceSchema = z.enum(MODEL_CHOICE_SOURCES);
+export type ModelChoiceSource = z.infer<typeof modelChoiceSourceSchema>;
+
+/** The longest reason a model choice carries, in characters (contract v7). */
+export const MODEL_CHOICE_REASON_MAX = 500;
+
+/**
+ * The model the orchestrator chose for one paid call (Bible 10.5, contract v7). The provider is always OpenRouter. `modelId`
+ * is an id of the catalog candidates the director was given; code checks that, the schema only checks its shape.
+ */
+export const modelChoiceSchema = z.object({
+  provider: z.literal("openrouter"),
+  modelId: z.string().min(1),
+  source: modelChoiceSourceSchema,
+  reason: z.string().min(1).max(MODEL_CHOICE_REASON_MAX),
+  catalogReadAt: z.iso.datetime(),
+});
+export type ModelChoice = z.infer<typeof modelChoiceSchema>;
+
 export const assetSpecSchema = z.object({
   schema: z.literal("meridian.asset_spec/v1"),
   specId: idSchema("asp_"),
@@ -22,6 +43,11 @@ export const assetSpecSchema = z.object({
   height: z.literal(1920),
   seed: z.int().nonnegative().max(0xffffffff),
   takes: z.union([z.literal(1), z.literal(2)]),
+  /**
+   * The orchestrator's model choice for this call (contract v7). A spec written under v6 has no such key and reads as null:
+   * no choice was made, and the route table applies.
+   */
+  modelChoice: modelChoiceSchema.nullable().default(null),
 });
 export type AssetSpec = z.infer<typeof assetSpecSchema>;
 

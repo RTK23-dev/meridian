@@ -462,6 +462,38 @@ estimate flags and adds the `exceeded` state and the budget columns. Existing da
 confirmation. A retry that follows a server error must wait for the provider's own confirmation, which no adapter yet gives; until then
 the call waits for the operator.
 
+### v7 changes and migration (model choice, contract version `engine-contracts@7`)
+
+Approved by the lead, 2026-10-16, for the owner's orchestrator model choice (section 10.5). The set version is `CONTRACTS_VERSION` in
+`src/engine/contracts/version.ts`. The change is additive: no field is removed and no existing field changes meaning.
+
+**Why.** Section 10.5 lets the orchestrator pick each production shot's model from OpenRouter's catalog. The asset router needs the
+pick on the spec it receives, and the record of the pick (its reason and the catalog read time) travels with that call.
+
+**What changed.**
+- `AssetSpec` (`meridian.asset_spec/v1`; the literal is unchanged) takes `modelChoice`: `{ provider: 'openrouter', modelId, source:
+  'orchestrator' | 'fallback', reason (1 to 500 characters), catalogReadAt (ISO time) }`, or null. It is on the asset spec, not on the
+  `ShotSpec`, for three reasons: the choice is made at produce time from a catalog read made then, the `ScenePlan` is an immutable
+  artifact written before it, and a chain shot (v5) has several paid calls, each of which can use a different model. Section 10.5
+  step 3 says "the shot spec"; the lead is to reconcile that text with this note.
+- New `ModelCatalogEntry` (`catalog.ts`, `modelCatalogEntrySchema`): one OpenRouter candidate with `id`, `modelClasses` (at least
+  one), `capabilities` (`minSeconds`, `maxSeconds`, `aspectRatios`, `resolutions`, `firstFrame`, `lastFrame`, `refsMax`, `audio`,
+  each nullable when the catalog does not say), `price` (`unit`: `per_second`, `per_image`, `per_request` or `per_token`; `usd`, which
+  must be positive; `sku`, nullable) and `readAt`. `price` is required: a candidate with no usable price is not representable. It has
+  no schema literal because it is not an artifact (as `LedgerEntry` and `VoiceKit` have none).
+- The set version is `engine-contracts@7`. `config/model-preferences.ts` (`model-preferences@1`) holds the ranked preference lists
+  of 10.5 step 4. They start empty, by owner decision.
+
+**How a v6 artifact reads.** An asset spec written under v6 has no `modelChoice` key and reads as `modelChoice: null`: no choice was
+made, and the route table (`config/routes.ts`) applies. Stored rows are not rewritten. Readers at v6 drop the field silently (the
+schema strips unknown keys), so the route table would apply without a sign. Deploy the v7 readers before the orchestrator writes a
+choice, as with v4 and v5.
+
+**Not in this change.** The asset cache key (`assetCacheKey`, section 10.4) is still computed from the provider id and does not read
+`modelChoice`. The router must therefore pass the chosen model's own id as the provider id, so that two models never share an entry.
+Adding the model id to the key only when a choice is present would leave every v6 key unchanged; that is left to the lead. The shot's `Decision` of section 10.5 step 3 is a planner
+or director record, not a schema change here; the choice's reason is on `modelChoice`.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.

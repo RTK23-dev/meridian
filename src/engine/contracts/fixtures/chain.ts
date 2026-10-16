@@ -19,6 +19,8 @@ import {
   type LedgerEntry,
   type Manifest,
   type ManifestRoleCall,
+  type ModelCatalogEntry,
+  type ModelChoice,
   type ProductionRequest,
   type RenderedVideo,
   type ReviewResult,
@@ -459,7 +461,58 @@ export const editorDecisionFixture: Decision = {
   by: "editor",
 };
 
+/**
+ * A candidate of the OpenRouter catalog as the gateway would record it (contract v7). The fields are the shape of one read, not a
+ * live read: the owner's live run records the real catalog. Its price is the 10.3 list price for the model.
+ */
+export const modelCatalogEntryFixture: ModelCatalogEntry = {
+  id: "seedance-2.0-mini",
+  modelClasses: ["video.budget"],
+  capabilities: {
+    minSeconds: 2,
+    maxSeconds: 10,
+    aspectRatios: ["9:16", "16:9"],
+    resolutions: ["1080p"],
+    firstFrame: true,
+    lastFrame: false,
+    refsMax: 4,
+    audio: false,
+  },
+  price: { unit: "per_second", usd: 0.0336, sku: null },
+  readAt: "2026-10-13T09:00:04.000Z",
+};
+
+/** The orchestrator's choice for shot 3 (contract v7, Bible 10.5): the first-frame shot picked from the eligible catalog. */
+export const modelChoiceFixture: ModelChoice = {
+  provider: "openrouter",
+  modelId: "seedance-2.0-mini",
+  source: "orchestrator",
+  reason: "The hero image is pinned as the first frame; this candidate takes a first frame for 6 s at the lowest eligible per-second price.",
+  catalogReadAt: "2026-10-13T09:00:04.000Z",
+};
+
 export const assetSpecFixture: AssetSpec = {
+  schema: "meridian.asset_spec/v1",
+  specId: ID.asset,
+  shotId: ID.shot3,
+  modelClass: "video.budget",
+  prompt: PROMPT_SHOT3,
+  refs: [BLENDER_FRONT_URI],
+  firstFrame: BLENDER_FRONT_URI,
+  durationMs: 6000,
+  aspect: "9:16",
+  width: 1080,
+  height: 1920,
+  seed: 421337,
+  takes: 1,
+  modelChoice: modelChoiceFixture,
+};
+
+/**
+ * The same spec as a contract v6 writer produced it: no modelChoice key at all. It must read with modelChoice null, which is
+ * "no choice was made; the route table applies" (Bible section 4, v7 note).
+ */
+export const assetSpecV6Fixture: Omit<AssetSpec, "modelChoice"> = {
   schema: "meridian.asset_spec/v1",
   specId: ID.asset,
   shotId: ID.shot3,

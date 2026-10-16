@@ -34,6 +34,17 @@ version bump, a note in Bible section 4 and the lead's approval.
 - A manifest's role calls (v2, optional `roleCalls`) name a Bible 11.1 role. Each call's prompt version is the one `promptVersions`
   records for its role. An unknown cost, and an invalid answer, are held as the estimate (`actualIsEstimate: true`).
 
+## Contract v7 (`CONTRACTS_VERSION`, see Bible section 4 "v7 changes and migration")
+
+- `AssetSpec` takes `modelChoice`: `{ provider: 'openrouter', modelId, source: 'orchestrator' | 'fallback', reason (1 to 500
+  characters), catalogReadAt }`, or null. A spec written under v6 has no key and reads as null (no choice; the route table applies).
+  The schema literal stays `meridian.asset_spec/v1`: the change is additive.
+- `catalog.ts`: `ModelCatalogEntry` (`modelCatalogEntrySchema`), one OpenRouter candidate. `price` is required and its `usd` is
+  positive, so a candidate with no usable price is not representable. Capabilities are null when the catalog does not say. It has no
+  schema literal, because it is not an artifact.
+- Fixtures: `assetSpecFixture` carries a choice, `assetSpecV6Fixture` is the v6 shape with no key, and `modelChoiceFixture` and
+  `modelCatalogEntryFixture` are the valid candidates.
+
 ## Contract v5 (`CONTRACTS_VERSION`, see Bible section 4 "v5 changes and migration")
 
 - `ShotSpec.source` takes a fifth kind, `chain`: `{ kind: 'chain', calls }`, at least two calls. Each `ChainCall` names its

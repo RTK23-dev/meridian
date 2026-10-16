@@ -1,6 +1,78 @@
 # STATUS: engine contracts (W1, with config)
 
-## Chains: contract version `engine-contracts@5` (current)
+## Model choice: contract version `engine-contracts@7` (current)
+
+Branch `worktree-agent-ace5eed12ff323956`, fast-forwarded to `main` (6bf831f) before the change, so it carries Bible 10.5 and
+the CLAUDE.md rule 3 change. Bible section 4 has the "v7 changes and migration" note. Not pushed; the lead merges.
+
+### Changes (the lead's four items)
+
+1. **Model choice on the asset spec (`assets.ts`).** `AssetSpec.modelChoice` is `modelChoiceSchema.nullable().default(null)`:
+   `{ provider: 'openrouter', modelId (non-empty), source: 'orchestrator' | 'fallback', reason (1 to 500 characters), catalogReadAt
+   (ISO time) }`, or null. A v6 spec with no key reads as null. Exports: `modelChoiceSchema`, `ModelChoice`,
+   `modelChoiceSourceSchema`, `ModelChoiceSource`, `MODEL_CHOICE_SOURCES`, `MODEL_CHOICE_REASON_MAX`.
+2. **Catalog candidate (`catalog.ts`).** `modelCatalogEntrySchema` and `ModelCatalogEntry`: `{ id, modelClasses (at least one),
+   capabilities { minSeconds, maxSeconds, aspectRatios, resolutions, firstFrame, lastFrame, refsMax, audio }, price { unit, usd,
+   sku }, readAt }`. Each capability is nullable. `price` is required; `usd` must be positive. A refinement refuses `maxSeconds`
+   below `minSeconds`. Exports `catalogPriceSchema`, `catalogCapabilitiesSchema`, `CATALOG_PRICE_UNITS`, `catalogPriceUnitSchema`.
+3. **Preference table (`config/model-preferences.ts`).** `modelPreferences` (`model-preferences@1`) with `ranked` per production
+   class, all empty by owner decision (2026-10-16). `PREFERENCE_MODEL_CLASSES` lists the seven production classes.
+4. **Version.** `CONTRACTS_VERSION = "engine-contracts@7"`. `config.test.ts` pins it and checks the preference table.
+
+### Decisions for the lead
+
+1. **The choice is carried by the asset spec, not the shot spec.** Bible 10.5 step 3 says "the shot spec carries the chosen model".
+   The asset spec is the one the router consumes. The choice is made at produce time from a catalog read made then, the scene plan
+   is written earlier and is immutable, and a chain shot (v5) has several paid calls, each with its own model. Say if the Bible text
+   should read "the asset spec" (the Bible section 4 note asks the lead to reconcile).
+2. **The literal stays `meridian.asset_spec/v1`.** The change is additive (the v5 chain change kept its literal too).
+3. **The price rule.** `usd` must be positive, so a zero or missing rate is refused. It has no four-decimal limit: a per-token rate
+   can be below a cent, and the USD money rule applies to amounts, not to rates. `sku` is nullable as specified; the catalog
+   names it, so the owner's live run records whether it is present for video.
+4. **Lip-sync has no preference row.** Bible 10.5 names the production classes as video, avatar, image and speech; lip-sync is
+   chosen in E2. Add it when it is a production class.
+5. **No schema literal on `ModelCatalogEntry`.** It is not an artifact. It is versioned by `CONTRACTS_VERSION` like `LedgerEntry`.
+6. **The cache key is not changed (open).** `assetCacheKey` (10.4) reads the provider id, not `modelChoice`. The router must pass
+   the chosen model's own id as the provider id (for example `openrouter:<modelId>`), so two models never share an entry. If the
+   lead wants the key to read the choice, add `modelId` to the hashed object only when a choice is present: every v6 key stays the
+   same. This is not done here, because it is a change to a function with a stored result.
+
+### Typecheck follow-up (outside this folder, NOT edited here)
+
+`npx tsc --noEmit` exits 2 with four errors. All four are the new required output key (`z.infer` makes `modelChoice` required),
+and each is a one-line fix in a file this worktree may not write. The lead applies them:
+
+- `src/engine/assets/firstLastFrame.ts:160`: add `modelChoice: null` to the `AssetSpec` literal.
+- `src/engine/assets/firstLastFrame.test.ts:139`: add `modelChoice: null` to the `AssetSpec` literal.
+- `src/engine/assets/test/recorded.ts:109`: add `modelChoice: null,` in the `assetSpec()` return, before `...overrides`.
+- `src/engine/voice/voice.ts:120`: add `modelChoice: null` to the narration spec literal.
+
+Runtime is not affected: the eleven test files that touch asset specs pass (see Tests).
+
+### Tests (this worktree)
+
+- `NODE_ENV=development node --experimental-strip-types --test` over every test file under `contracts/` and `config/`
+  (`routes.test.ts`, `assets.test.ts`, `hash.test.ts`, `ids.test.ts`, `config.test.ts`, `invalid.test.ts`, `schemas.test.ts`):
+  252 tests, 252 pass, 0 fail.
+- The new cases: 7 model-choice rejections (unknown source, empty modelId, a provider other than openrouter, empty reason, reason
+  over 500, a bad `catalogReadAt`, no source), 3 asset-spec rejections with a bad choice, 14 catalog rejections (missing or null
+  price, zero and negative price, unknown unit, empty sku, no class, a class the contract lacks, `maxSeconds` below `minSeconds`, empty
+  id, bad `readAt`, a capability left out, no capabilities block). Additive: a v6 spec reads as null; a catalog capability that is
+  null stays null. The fixtures `assetSpecV6`, `modelChoice` and `modelCatalogEntry` join the round-trip test.
+- Rejection reasons checked by hand: `price: expected object`, `price.usd: must be >0`, `source: expected one of orchestrator|fallback`.
+- Consumers run in this worktree (not part of the required set): `assets/firstLastFrame`, `assets/providers/*` (avatarIv,
+  openrouterImage, openrouterSpeech, openrouterVideo), `assets/router`, `assets/submit-settle`, `jobs/chain-store`,
+  `jobs/handlers/produce-shot`, `jobs/handlers/variants-generation`, `jobs/runtime`: 157 tests, 157 pass.
+- `npx eslint` on the ten changed TypeScript files: exit 0, no output.
+- The full `npm test` was not run here; the lead runs it after merging.
+
+### Live run: owner (no keys held by agents)
+
+Nothing here calls a provider. The first live check is one catalog read of OpenRouter's video models: parse each entry into a
+`ModelCatalogEntry`, and record how many rows the schema refuses (a row with no price must be refused, not guessed). Then one
+choice on one shot, recorded with its catalog read time, and its bill set against its estimate.
+
+## Chains: contract version `engine-contracts@5`
 
 Branch `worktree-agent-a347022c3cbcf198e`, fast-forwarded to `code/beautiful-cori-1zfk11` (b4ee734) before the change, which is
 where the engine's latest work sits (eng-plan-gaps-2 is an ancestor). Not pushed; the lead merges. Bible section 4 has the

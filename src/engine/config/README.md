@@ -21,6 +21,8 @@ Bible marks initial, in one versioned place. Logic elsewhere reads these; it nev
   $1 / $5 until Haiku 5.5's rate is confirmed (an owner check). `claude/rates.ts` still holds its own copy until the lead
   points it at `prices.tokenRates`. The config tests check that the token-rate keys are exactly the Claude models the
   route table names.
+- `model-preferences.ts` (`model-preferences@1`, contract v7): the ranked OpenRouter model ids per production class (Bible 10.5
+  step 4). Every list starts empty by owner decision (2026-10-16); they are filled later from the gold sets. Lip-sync has no row.
 - `budgets.ts` (`budgets@1`): the redo allowance (14.1), the fixed per-master cost (14.2), variant costs (14.3), the
   overrun alert share (14.4) and the production mode (`cap`). There is no default budget by format: the user sets it.
 - `adapters.ts` (`adapters@1`): the provider adapter and router settings that the assets code held as constants: polling and
