@@ -10,7 +10,9 @@ import type { MediaFunctions, ProbeResult } from "../../media/interface.ts";
 import type { MediaStorePort } from "../artifact-store.ts";
 import type { Sql } from "../../../lib/meridian/learning/store.ts";
 import { executeEngineJob } from "../dispatch.ts";
-import type { EngineRuntime } from "../types.ts";
+import type { EngineRuntime, StageHandler } from "../types.ts";
+import { withReservationLedger } from "../sql-ledger-store.ts";
+import { reconcileCall } from "../../budget/reconcile.ts";
 import type { SimilarityScorer } from "../../review/take/similarity.ts";
 import type { ExecutableJob } from "../../../lib/meridian/jobs/execute.ts";
 
@@ -161,4 +163,39 @@ export function scorerFrom(scores: Partial<Record<"product_vs_hero" | "face_vs_p
       return { status: "scored", score, scorer: "similarity:recorded" };
     },
   };
+}
+
+/**
+ * Records the bill of every open render of a reservation, at the list price the render quoted (its ledger estimate). HyperFrames
+ * reports no bill from its provider (render/hyperframesCloud.ts), so the bill here stands for the owner's invoice, recorded before the
+ * request is delivered (contract v6). Returns how many renders it billed. A render already settled is left as it is.
+ */
+export async function billOpenRenders(sql: Sql, organizationId: string, reservationId: string): Promise<number> {
+  return withReservationLedger(sql, organizationId, reservationId, async (ledger) => {
+    let billed = 0;
+    for (const row of await ledger.listEntries(reservationId)) {
+      if (row.stage !== "render" || row.settlement !== undefined) continue;
+      await reconcileCall(ledger, { idempotencyKey: row.idempotencyKey, billedUsd: row.estimateUsd });
+      billed += 1;
+    }
+    return billed;
+  });
+}
+
+/**
+ * The runtime with its deliver stage preceded by billOpenRenders, so a drained request is delivered once its renders are billed. The
+ * deliver stage refuses while any paid call is open (deliver/ledger.ts), so the queue cannot deliver without this. Nothing else of the
+ * runtime changes, and the runtime passed in is not mutated.
+ */
+export function withRenderBills(sql: Sql, runtime: EngineRuntime): EngineRuntime {
+  const deliver = runtime.handlers.deliver;
+  if (deliver === undefined) return runtime;
+  const billing: StageHandler = {
+    async run(ctx) {
+      const reservationId = ctx.payload.budgetReservationId;
+      if (reservationId !== null) await billOpenRenders(sql, ctx.organizationId, reservationId);
+      return deliver.run(ctx);
+    },
+  };
+  return { ...runtime, handlers: { ...runtime.handlers, deliver: billing } };
 }

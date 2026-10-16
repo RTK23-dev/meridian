@@ -1,6 +1,7 @@
 // OpenRouter speech (Bible 10.3 tts; PROVIDER_APIS.md "Speech"). POST /audio/speech returns raw MP3 bytes with the generation
-// id in a header and no cost. The cost is therefore the price table's estimate, flagged as an estimate by the ledger (the
-// router passes no actual). The bytes are validated and stored through the MediaStore.
+// id in a header and no bill. Under contract v6 no list price is booked as the cost: the call stays unsettled until a verified bill
+// is recorded (the owner's decision: a bill source for speech, or a per-call settlement). The bytes are validated and stored through
+// the MediaStore.
 //
 // The voice is a per-page setting (the voice kit), so the adapter takes it at construction. No voice means not connected:
 // a request without a voice is never sent. Voice cloning (input_references) is not used without the owner's approval.

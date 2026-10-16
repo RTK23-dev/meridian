@@ -242,19 +242,19 @@ describe("routing and fallback", () => {
     const spec = assetSpec();
     const clock = fakeClock();
     const settlementAtBackoff: Array<string | undefined> = [];
-    let probed: Awaited<ReturnType<typeof harness>> | undefined;
+    const probe: { harness?: Awaited<ReturnType<typeof harness>> } = {};
     const h = await harness({
       clock: {
         ...clock,
         sleep: async (ms: number) => {
           // The backoff sits between the refused submit's settlement and its retry, so the settlement is visible here.
-          settlementAtBackoff.push((await probed?.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID)))?.settlement);
+          settlementAtBackoff.push((await probe.harness?.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID)))?.settlement);
           await clock.sleep(ms);
         },
       },
       script: { "POST /api/v1/videos": submitFor({ [KLING]: [json(429, {}), accepted("job-kling")] }) },
     });
-    probed = h;
+    probe.harness = h;
     const submitted = await h.router.submit(h.input(spec));
     assert.equal(submitted.step.status, "submitted");
     assert.deepEqual(settlementAtBackoff, ["confirmed_absent"], "the refused submit is settled absent before the retry");

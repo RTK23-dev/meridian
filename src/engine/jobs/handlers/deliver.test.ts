@@ -151,15 +151,20 @@ const journal: JournalEntry[] = [
 ];
 
 /**
- * The ledger of the request: four settled calls, and three holds that never reconciled. The variant's render is keyed by the variant's
- * composition hash, which is how the ledger row is attributed to the variant (Bible 6.11).
+ * The provider's bill for a call that reported one: the list price the call was estimated at, which the recorded answer quotes. A call
+ * in `unbilled` reports none, so it stays held at its reservation and its cost is unknown (contract v6).
  */
-function ledgerEntries(): LedgerEntry[] {
-  return [
-    ledgerClaudeFixture,
-    ledgerSttFixture,
-    ledgerShot3Fixture,
-    ledgerRenderFixture,
+function billed(entry: LedgerEntry, unbilled: ReadonlySet<string>): LedgerEntry {
+  return unbilled.has(entry.idempotencyKey) ? entry : { ...entry, actualUsd: entry.estimateUsd, settlement: "billed" };
+}
+
+/**
+ * The ledger of the request: seven paid calls. The planner, the stt, shot 3 and the master's render carry their bills. The segmenter, the
+ * director check and the variant's render are billed at their list prices here, unless a test leaves one of them unbilled. The variant's
+ * render is keyed by the variant's composition hash, which is how the ledger row is attributed to the variant (Bible 6.11).
+ */
+function ledgerEntries(unbilled: ReadonlySet<string> = new Set()): LedgerEntry[] {
+  const later: LedgerEntry[] = [
     {
       entryId: fixtureId("led_", 42),
       requestId: REQ,
@@ -198,6 +203,7 @@ function ledgerEntries(): LedgerEntry[] {
       at: "2026-10-13T09:25:00.000Z",
     },
   ];
+  return [ledgerClaudeFixture, ledgerSttFixture, ledgerShot3Fixture, ledgerRenderFixture, ...later.map((entry) => billed(entry, unbilled))];
 }
 
 /** One request's database, with the request row. Each test has its own, because manifest ids are stable and immutable. */
@@ -257,11 +263,14 @@ async function storeArtifacts(database: TestDatabase, options: { variantPasses?:
 
 type Harness = { ports: DeliverPorts; events: EventStore; ledger: LedgerStore };
 
-/** Ports over one reservation with its ledger. The paid-partnership answer is given, or left unknown. */
-async function harnessFor(options: { paidPartnership?: boolean } = {}): Promise<Harness> {
+/**
+ * Ports over one reservation with its ledger. The paid-partnership answer is given, or left unknown. The calls named in `unbilled` (their
+ * ledger keys) report no bill, so they stay open.
+ */
+async function harnessFor(options: { paidPartnership?: boolean; unbilled?: string[] } = {}): Promise<Harness> {
   const ledger = memoryLedgerStore();
   await ledger.createReservation({ ...budgetReservationFixture, workspaceId: WS });
-  for (const entry of ledgerEntries()) {
+  for (const entry of ledgerEntries(new Set(options.unbilled ?? []))) {
     await ledger.appendEntry({ ...entry, workspaceId: WS, reservationId: RES });
   }
   const events = memoryEventStore();
@@ -329,7 +338,7 @@ test("delivers the master and the variant: writes both manifests, settles and re
     assert.deepEqual(master.roleCalls, manifestRoleCallsFixture.filter((call) => call.role === "planner" || call.role === "director_check"));
     assert.deepEqual(master.promptVersions, { planner: "planner@1", director_check: "director_check@1", segmenter: "segmenter@1" });
     assert.deepEqual(master.disclosures, { aiGeneratedPeople: true, paidPartnership: true }, "no paid-partnership answer is unknown, so it is disclosed");
-    assert.equal(master.cost.brain, 0.272, "the planner 0.142, the held segmenter 0.08 and the held director check 0.05");
+    assert.equal(master.cost.brain, 0.272, "the planner 0.142, the segmenter 0.08 and the director check 0.05, each billed");
     assert.equal(master.cost.generation, 0.2016);
     assert.equal(master.cost.render, 0.047);
     assert.equal(master.cost.other, 0.02);
@@ -458,6 +467,39 @@ test("refuses to deliver without the request's reservation, which it must settle
     await assert.rejects(
       createDeliverHandler(ports).run(contextFor(database, inputs, null)),
       (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+    );
+  } finally {
+    await database.close();
+  }
+});
+
+test("a request with an unsettled paid call is not delivered: the deliver job fails with a non-retryable conflict, and no manifest is stored", async () => {
+  const database = await freshRequest();
+  try {
+    const inputs = await storeArtifacts(database);
+    // The segmenter's call reports no bill, so its cost is unknown and the request stays open (contract v6).
+    const { ports, events, ledger } = await harnessFor({ unbilled: [SEGMENT_KEY] });
+    await assert.rejects(createDeliverHandler(ports).run(contextFor(database, inputs)), (error: unknown) => {
+      return (
+        error instanceof EngineError &&
+        error.kind === "conflict" &&
+        error.retryable === false &&
+        /no settled cost/.test(error.message) &&
+        error.message.includes(SEGMENT_KEY)
+      );
+    });
+
+    const manifestRows = await database.sql<{ n: number }>`select count(*)::int as n from engine_manifests where organization_id = ${WS} and request_id = ${REQ}`;
+    assert.equal(manifestRows[0]?.n, 0, "no manifest row is written");
+    const manifestArtifacts = await database.sql<{ n: number }>`select count(*)::int as n from engine_artifacts where organization_id = ${WS} and request_id = ${REQ} and type = 'manifest'`;
+    assert.equal(manifestArtifacts[0]?.n, 0, "no manifest artifact is stored");
+    assert.equal((await events.list({ organizationId: WS, requestId: REQ })).length, 0, "no delivery event is emitted");
+    assert.equal((await ledger.getReservation(RES))?.state, "reserved", "the reservation is not released while a call is open");
+    const open = (await ledger.listEntries(RES)).filter((row) => row.settlement === undefined);
+    assert.deepEqual(
+      open.map((row) => row.idempotencyKey),
+      [SEGMENT_KEY],
+      "the open call keeps its hold, and no other call is touched",
     );
   } finally {
     await database.close();

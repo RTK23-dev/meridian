@@ -9,15 +9,17 @@
 //                           target, or the next target). Settling a job twice returns the first result and changes nothing.
 //   produce(input)          submit, then poll until each job is finished and settle it, for synchronous callers and tests.
 //
-// Retries (Bible 10.4). rate_limit, server and a retryable unknown error retry on the same target with backoff, up to
-// thresholds.jobs.maxAttempts submits in total (the backoff waits inside submit, and before the first poll after settle). timeout
-// does not retry: the next target runs. content_policy and invalid_input do not retry and do not fall back: they return `failed`
-// for the planner. Any other error moves to the next target.
+// Retries and ambiguity (Bible 10.4, contract v6). A refusal the provider gave before any job id existed (rate_limit, invalid_input,
+// content_policy) creates no job: it is settled as absent, and only a rate_limit retries on the same target, with backoff, up to
+// thresholds.jobs.maxAttempts submits in total. content_policy and invalid_input return `failed` for the planner and never fall back.
+// Every other submit failure (server, timeout, unknown, or an answer with no job id) is AMBIGUOUS: the provider may have accepted and
+// billed a job, so the submit stays unsettled and the asset returns `unsettled`. Nothing else is submitted for the asset, on this target
+// or another, until an operator settles the submit (resolveAmbiguousSubmit).
 //
-// Ledger (Bible 14.1). Every submit is authorized before it is sent, under its own key: the first submit of a target uses the
-// target's cache key, and a retry uses that key with an attempt suffix. Each submit is reconciled to its bill, or to its list
-// estimate when the provider reported none (a refused or failed submit is held at its estimate, since the router cannot know
-// whether it was billed). The asset's cost is the sum over the submits of its winning target.
+// Ledger (Bible 14.1, contract v6). Every submit is authorized before it is sent, under its own key: the first submit of a target uses
+// the target's cache key, and a retry uses that key with an attempt suffix. A submit is settled only to the provider's verified bill, or
+// as absent when the provider refused it before any job existed. With no bill the submit stays held at its reservation and its cost is
+// unknown: no list price is booked. The asset's cost is the sum of the bills over the submits of its winning target.
 //
 // The router never sends a request itself: every call is an adapter's, and every adapter calls only the gateway.
 
