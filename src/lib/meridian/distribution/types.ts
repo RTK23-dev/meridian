@@ -82,8 +82,7 @@ export type OrganicPublishReceipt = {
 export type ConnectionCheck = { connected: boolean; accountName?: string; reason?: string; code?: ReceiptCode };
 
 /**
- * The metrics a platform reported for one post. A metric the platform did not report is null, never zero. The channels that
- * have no live metric client return null for the whole object, so nothing is stored for them.
+ * The metrics a platform reported for one post. A metric the platform did not report is null, never zero.
  */
 export type OrganicTelemetryMetrics = {
   views: number | null;
@@ -97,6 +96,20 @@ export type OrganicTelemetryMetrics = {
   saves: number | null;
 };
 
+/**
+ * The outcome of one organic metric read. Only `observed` carries numbers, and they are the values the platform returned, read at
+ * `observedAt`. Every other state stores nothing:
+ * - `not_connected`: no stored token of the workspace's own account was used, and no request was sent.
+ * - `not_implemented`: this channel has no metric read for its platform in this build.
+ * - `failed`: the platform refused the read or did not answer, or its answer named no such post.
+ * Each reason names the channel, so it can be shown as it is.
+ */
+export type OrganicMetricsReading =
+  | { status: "observed"; metrics: OrganicTelemetryMetrics; observedAt: string }
+  | { status: "not_connected"; reason: string }
+  | { status: "not_implemented"; reason: string }
+  | { status: "failed"; reason: string };
+
 export interface DistributionChannel {
   readonly id: string;
   readonly platform: PlatformId;
@@ -106,6 +119,9 @@ export interface DistributionChannel {
   /** Pure: reports the state of the connection the service resolved. It never reads the environment. */
   checkConnection(connection: OrganicConnection | undefined): ConnectionCheck;
   publish(request: OrganicPublishRequest): Promise<OrganicPublishReceipt>;
-  /** Null when the metrics are not observed. A channel never returns invented numbers. */
-  fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null>;
+  /**
+   * Reads the metrics of one post through the connection the caller resolved for the workspace and brand. A channel never reads the
+   * database or the environment for a token, and with no connection it sends no request.
+   */
+  fetchMetrics(externalId: string, connection: OrganicConnection | undefined): Promise<OrganicMetricsReading>;
 }

@@ -157,6 +157,26 @@ test("a TikTok token that declares video.publish is connected, and its scopes ar
   assert.deepEqual(state.scopes, ["user.info.basic", "video.publish"]);
 }));
 
+test("a read connection needs no publish scope, so a read-only YouTube token resolves; a publish connection still refuses it", withKey(async () => {
+  const payload = { accessToken: "yt-read", customFields: { scopes: "https://www.googleapis.com/auth/youtube.readonly" } };
+  const { sql } = fakeSql({ accounts: [account()], vault: [vaultRow(payload)] });
+  const read = await resolveOrganicConnection(sql, { ...input, platform: "youtube", purpose: "read" });
+  assert.equal(read.connected, true, "a read token is not refused for lacking the upload scope");
+  if (read.connected) assert.deepEqual(read.scopes, ["https://www.googleapis.com/auth/youtube.readonly"]);
+
+  const publish = await resolveOrganicConnection(sql, { ...input, platform: "youtube" });
+  assert.equal(publish.connected, false, "publishing still needs the upload scope");
+}));
+
+test("a read connection for TikTok resolves with video.list and no video.publish", withKey(async () => {
+  const payload = { accessToken: "tt-read", customFields: { scopes: "video.list" } };
+  const { sql } = fakeSql({ accounts: [account({ external_account_id: "open-id-2" })], vault: [vaultRow(payload)] });
+  const read = await resolveOrganicConnection(sql, { ...input, platform: "tiktok", purpose: "read" });
+  assert.equal(read.connected, true);
+  const publish = await resolveOrganicConnection(sql, { ...input, platform: "tiktok" });
+  assert.equal(publish.connected, false, "publishing still needs video.publish");
+}));
+
 test("resolveOrganicConnections returns every organic platform, each with its own state", withKey(async () => {
   const { sql } = fakeSql({ accounts: [] });
   const states = await resolveOrganicConnections(sql, input);

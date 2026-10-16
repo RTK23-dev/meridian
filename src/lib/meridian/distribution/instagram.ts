@@ -2,14 +2,15 @@ import { createHash } from "node:crypto";
 import { liveTransport, type Transport, type TransportRequest } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { GRAPH_BASE, TRIAL_GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
+import { readInstagramMetrics } from "./metric-reads.ts";
 import type { TrialReading, TrialRequest } from "./trial.ts";
 import type {
   ConnectionCheck,
   DistributionChannel,
   OrganicConnection,
+  OrganicMetricsReading,
   OrganicPublishRequest,
   OrganicPublishReceipt,
-  OrganicTelemetryMetrics,
 } from "./types.ts";
 
 const LABEL = "Instagram";
@@ -103,11 +104,12 @@ export class InstagramReelsChannel implements DistributionChannel {
     });
   }
 
-  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {
-    // Live metrics are not implemented in this build. Nothing is observed, so nothing is returned: no fixed
-    // numbers stand in for engagement.
-    void externalId;
-    return null;
+  /** Reads the media insights of a Reel through the connected account's token. With no connection, no request is sent. */
+  async fetchMetrics(externalId: string, connection: OrganicConnection | undefined): Promise<OrganicMetricsReading> {
+    if (!connection?.connected) {
+      return { status: "not_connected", reason: this.checkConnection(connection).reason ?? NOT_CONNECTED_REASON };
+    }
+    return readInstagramMetrics(this.options.transport, { externalId, accessToken: connection.accessToken }, new Date());
   }
 }
 

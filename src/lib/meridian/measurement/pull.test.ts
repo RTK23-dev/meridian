@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import type { Transport } from "../providers/http.ts";
-import type { OrganicTelemetryMetrics } from "../distribution/types.ts";
+import type { OrganicMetricsReading, OrganicTelemetryMetrics } from "../distribution/types.ts";
 import { factoryRunFor, studioTenant, type FactoryTenant } from "../testing/produce-fixtures.ts";
 import { MetricLinkError, listLinkedMetrics, recordLinkedMetric, type LinkedMetricRow } from "./creative-linkage.ts";
 import { paidInsightsWithTransport, pullRunMeasurements, type MeasurementScope } from "./pull.ts";
@@ -116,7 +116,10 @@ async function measuredRun(sql: Sql, label: string) {
 
 function fixtureSources(both: string) {
   return {
-    organicMetrics: async (target: { creativeId: string }) => (target.creativeId === both ? youtubeAnalyticsFixture() : null),
+    organicMetrics: async (target: { creativeId: string }): Promise<OrganicMetricsReading> =>
+      target.creativeId === both
+        ? { status: "observed", metrics: youtubeAnalyticsFixture(), observedAt: "2026-10-13T09:00:00.000Z" }
+        : { status: "not_connected", reason: "YouTube: no connected account in this fixture. Nothing was stored." },
     paidInsights: paidInsightsWithTransport({
       accessToken: "fixture-meta-token",
       transport: metaInsightsFixture(),
@@ -182,7 +185,10 @@ test("with no live metric client, an organic pull stores nothing and says so", a
   assert.equal(outcome.organicRows, 0);
   assert.equal(outcome.paidRows, 0);
   assert.equal(outcome.notReported, 3, "two organic posts and one paid ad are reported as not reported");
-  assert.ok(outcome.reasons.some((reason) => /Live organic metrics are not connected/.test(reason)), "the organic reason is named");
+  assert.ok(
+    outcome.reasons.some((reason) => /No YouTube account is connected for this brand/.test(reason)),
+    "the organic reason is the workspace's not-connected state, and no token is read from the environment",
+  );
   assert.ok(outcome.reasons.some((reason) => /connected|token|Nothing was/.test(reason)), "the paid reason is named");
   const rows = await sql<{ n: number }>`
     select count(*)::int as n from unified_performance_telemetry where organization_id = ${tenant.organizationId}

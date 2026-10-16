@@ -6,13 +6,15 @@ import type {
   ConnectionCheck,
   DistributionChannel,
   OrganicConnection,
+  OrganicMetricsReading,
   OrganicPublishRequest,
   OrganicPublishReceipt,
-  OrganicTelemetryMetrics,
 } from "./types.ts";
 
 const LABEL = "Facebook Page";
 const NOT_CONNECTED_REASON = "No Facebook Page is connected for this brand. Add the Page ID and a Page access token in Accounts.";
+const FACEBOOK_METRICS_NOT_IMPLEMENTED =
+  "Facebook Page video metrics are not implemented in this build, so no request was sent and nothing was stored.";
 const MIN_SCHEDULE_AHEAD_MS = 10 * 60 * 1000;
 const MAX_SCHEDULE_AHEAD_MS = 75 * 24 * 60 * 60 * 1000;
 
@@ -60,11 +62,16 @@ export class FacebookPagesChannel implements DistributionChannel {
     });
   }
 
-  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {
-    // Live metrics are not implemented in this build. Nothing is observed, so nothing is returned: no fixed
-    // numbers stand in for engagement.
+  /**
+   * Not implemented. The Page video insights reference names post_video_* metrics that were not confirmed for a Page video, and the
+   * Video node carries no view or like counts, so no request is built. A connected Page still gets this reason, not a success.
+   */
+  async fetchMetrics(externalId: string, connection: OrganicConnection | undefined): Promise<OrganicMetricsReading> {
     void externalId;
-    return null;
+    if (!connection?.connected) {
+      return { status: "not_connected", reason: this.checkConnection(connection).reason ?? NOT_CONNECTED_REASON };
+    }
+    return { status: "not_implemented", reason: FACEBOOK_METRICS_NOT_IMPLEMENTED };
   }
 }
 

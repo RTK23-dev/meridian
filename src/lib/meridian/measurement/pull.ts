@@ -2,8 +2,9 @@
  * The measurement pull for one Factory run (NORTH_STAR section 8, item 9). The scheduler enqueues `measurement.pull` for a run that
  * has receipts to measure, and this reads them:
  *
- * - organic: each published post of the run is read through its channel's `fetchMetrics`. The live channels return null, so nothing
- *   is stored for them, and the outcome says so. A test passes the metrics a platform reported, shaped as its documentation describes.
+ * - organic: each published post of the run is read through its channel's `fetchMetrics`, with the workspace's own stored token for that
+ *   platform. Without a connected account the post is not read and the reason is kept. A channel with no read for its platform
+ *   reports that as not implemented. A test passes the reading a platform returned, shaped as the channel returns it.
  * - paid: each paused ad of the run is read through the workspace's stored token and the insights reader. Without a stored token the
  *   ad is not measured. A test passes the insights it reported. The test publisher has no insights source.
  *
@@ -11,8 +12,9 @@
  * metric the source did not report is stored as null, never as zero. A repeated pull of the same observation stores nothing twice.
  */
 import type { Sql } from "../learning/store.ts";
+import { resolveOrganicConnection, isOrganicPlatform } from "../distribution/connection.ts";
 import { listDistributionChannels } from "../distribution/registry.ts";
-import type { DistributionChannel, OrganicTelemetryMetrics } from "../distribution/types.ts";
+import type { DistributionChannel, OrganicConnection, OrganicMetricsReading, OrganicTelemetryMetrics } from "../distribution/types.ts";
 import { loadProviderInsights } from "../performance/fetch.ts";
 import type { PerformanceEvent } from "../performance/normalize.ts";
 import { loadTenantProviderToken } from "../performance/ownership.ts";
@@ -29,7 +31,8 @@ export type PaidInsightsResult = { events: PerformanceEvent[] } | { notReported:
 
 /** Where the metrics come from. A test passes fixtures; production passes nothing and uses the live readers. */
 export type MeasurementSources = {
-  organicMetrics?: (target: OrganicTarget) => Promise<OrganicTelemetryMetrics | null>;
+  /** A fixture reading of an organic post, shaped as the channel's `fetchMetrics` returns it. */
+  organicMetrics?: (target: OrganicTarget) => Promise<OrganicMetricsReading>;
   paidInsights?: (target: PaidTarget) => Promise<PaidInsightsResult>;
   now?: Date;
 };
@@ -44,7 +47,14 @@ export type MeasurementPullOutcome = {
   summary: string;
 };
 
-const NO_LIVE_ORGANIC = "Live organic metrics are not connected in this build. Nothing was stored.";
+/**
+ * The workspace's own connected account for an organic platform, read from its stored token. A pull never uses an environment token,
+ * so a platform with no connected account gets a not-connected connection, and its channel sends no request.
+ */
+async function organicConnectionOf(sql: Sql, scope: MeasurementScope, platform: string): Promise<OrganicConnection | undefined> {
+  if (!isOrganicPlatform(platform)) return undefined;
+  return resolveOrganicConnection(sql, { organizationId: scope.organizationId, brandId: scope.brandId, platform, purpose: "read" });
+}
 
 /** The published organic posts and paused paid ads of one run, the receipts a pull reads. */
 async function targetsOf(sql: Sql, scope: MeasurementScope) {
@@ -189,28 +199,29 @@ export async function pullRunMeasurements(
       outcome.reasons.push(`No organic channel reads ${target.platform} metrics. Nothing was stored.`);
       continue;
     }
-    let metrics: OrganicTelemetryMetrics | null;
+    let reading: OrganicMetricsReading;
     try {
-      metrics = sources.organicMetrics ? await sources.organicMetrics(target) : await channel.fetchMetrics(target.externalId);
+      reading = sources.organicMetrics
+        ? await sources.organicMetrics(target)
+        : await channel.fetchMetrics(target.externalId, await organicConnectionOf(sql, scope, target.platform));
     } catch {
+      reading = { status: "failed", reason: `${channel.displayName} did not return metrics for this post. Nothing was stored.` };
+    }
+    // Only an observed reading is stored. Every other state is counted and its reason is kept, and no number is written for it.
+    if (reading.status !== "observed") {
       outcome.notReported += 1;
-      outcome.reasons.push(`${channel.displayName} did not return metrics for this post. Nothing was stored.`);
+      outcome.reasons.push(reading.reason);
       continue;
     }
-    if (!metrics) {
-      outcome.notReported += 1;
-      outcome.reasons.push(`${channel.displayName}: ${NO_LIVE_ORGANIC}`);
-      continue;
-    }
-    const row = organicMetricsRow(metrics);
+    const row = organicMetricsRow(reading.metrics);
     const stored = await recordLinkedMetric(sql, {
       organizationId: scope.organizationId,
       brandId: scope.brandId,
       creativeId: target.creativeId,
       surface: "organic",
       externalId: target.externalId,
-      observationKey: `organic:${target.externalId}:${dayOf(now)}`,
-      recordedAt: now.toISOString(),
+      observationKey: `organic:${target.externalId}:${dayOf(new Date(reading.observedAt))}`,
+      recordedAt: reading.observedAt,
       metrics: row.metrics,
       extra: row.extra,
     });

@@ -318,11 +318,12 @@ export function createOrganicTelemetryNode(
       for (const target of targets) {
         const channel = getDistributionChannel(target.channelId);
         if (!channel) continue;
-        const metrics = await channel.fetchMetrics(target.externalId);
+        // This node has no workspace, so it resolves no stored account: every read is not connected, and no metric is observed.
+        const reading = await channel.fetchMetrics(target.externalId, undefined);
         results.push({
           channelId: target.channelId,
           externalId: target.externalId,
-          metrics,
+          metrics: reading.status === "observed" ? { ...reading.metrics } : null,
         });
       }
 

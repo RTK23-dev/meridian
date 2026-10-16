@@ -247,9 +247,10 @@ test("TikTok with no publish id in the init response is unconfirmed, and checks 
   assert.equal(requests.length, 1);
 });
 
-test("TikTok does not invent live metrics", async () => {
+test("TikTok does not invent live metrics without a stored connection", async () => {
   const { channel: tiktok } = channel([]);
-  assert.equal(await tiktok.fetchMetrics("7001"), null);
+  const reading = await tiktok.fetchMetrics("7001", undefined);
+  assert.equal(reading.status, "not_connected", "no connection is not a zero or a success");
 });
 
 test("TikTok is registered as an organic channel for the publish service", () => {

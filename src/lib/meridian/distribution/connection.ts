@@ -9,6 +9,16 @@ export const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upl
 /** The TikTok scope the Content Posting API needs to upload a video. */
 export const TIKTOK_POSTING_SCOPE = "video.publish";
 
+/** The TikTok scope the video query needs to read a video's counts. */
+export const TIKTOK_VIDEO_LIST_SCOPE = "video.list";
+
+/** The Google scopes that let the YouTube Data API read a video's statistics. A token with none of them cannot read them. */
+export const YOUTUBE_READ_SCOPES: readonly string[] = [
+  "https://www.googleapis.com/auth/youtube.readonly",
+  "https://www.googleapis.com/auth/youtube",
+  "https://www.googleapis.com/auth/youtube.force-ssl",
+];
+
 export const ORGANIC_PLATFORMS: readonly OrganicPlatform[] = ["instagram", "facebook", "youtube", "tiktok"];
 
 export function isOrganicPlatform(value: string): value is OrganicPlatform {
@@ -60,10 +70,13 @@ function recordOf(value: unknown): Record<string, unknown> {
  * Resolves the connected account a brand publishes an organic platform from. The account is a `platform_accounts` row in this
  * workspace and brand with status connected. Its token is the encrypted `credential_vault` entry it points to. No environment
  * variable is read here. Every missing piece returns not connected with the reason, so nothing is sent without a stored token.
+ *
+ * `purpose` is `publish` by default, and its publish scope checks (YouTube upload, TikTok posting) apply. A `read` connection skips
+ * those checks, because a read token needs no upload or posting scope. A read checks its own scope in the channel that reads.
  */
 export async function resolveOrganicConnection(
   sql: Sql,
-  input: { organizationId: string; brandId: string; platform: OrganicPlatform },
+  input: { organizationId: string; brandId: string; platform: OrganicPlatform; purpose?: "publish" | "read" },
   now: Date = new Date(),
 ): Promise<OrganicConnection> {
   const label = LABEL[input.platform];
@@ -109,11 +122,13 @@ export async function resolveOrganicConnection(
   }
 
   const scopes = parseScopes(payload?.customFields?.scopes) ?? parseScopes(recordOf(account.metadata).scopes);
-  if (input.platform === "youtube" && scopes && !scopes.includes(YOUTUBE_UPLOAD_SCOPE)) {
-    return notConnected(input.platform, `The saved YouTube token does not include the upload scope (${YOUTUBE_UPLOAD_SCOPE}). Save a token that grants it.`);
-  }
-  if (input.platform === "tiktok" && scopes && !scopes.includes(TIKTOK_POSTING_SCOPE)) {
-    return notConnected(input.platform, `The saved TikTok token does not include the posting scope (${TIKTOK_POSTING_SCOPE}). Save a token that grants it.`);
+  if (input.purpose !== "read") {
+    if (input.platform === "youtube" && scopes && !scopes.includes(YOUTUBE_UPLOAD_SCOPE)) {
+      return notConnected(input.platform, `The saved YouTube token does not include the upload scope (${YOUTUBE_UPLOAD_SCOPE}). Save a token that grants it.`);
+    }
+    if (input.platform === "tiktok" && scopes && !scopes.includes(TIKTOK_POSTING_SCOPE)) {
+      return notConnected(input.platform, `The saved TikTok token does not include the posting scope (${TIKTOK_POSTING_SCOPE}). Save a token that grants it.`);
+    }
   }
 
   return {

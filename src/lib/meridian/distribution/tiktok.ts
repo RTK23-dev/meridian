@@ -23,15 +23,16 @@ import { createHash } from "node:crypto";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { hostIsVerified } from "../storage/media-host.ts";
-import { TIKTOK_POSTING_SCOPE } from "./connection.ts";
+import { TIKTOK_POSTING_SCOPE, TIKTOK_VIDEO_LIST_SCOPE } from "./connection.ts";
 import { classifyFailure, failure, parseJsonBody, unconfirmed } from "./graph.ts";
+import { readTikTokMetrics } from "./metric-reads.ts";
 import type {
   ConnectionCheck,
   DistributionChannel,
   OrganicConnection,
+  OrganicMetricsReading,
   OrganicPublishRequest,
   OrganicPublishReceipt,
-  OrganicTelemetryMetrics,
 } from "./types.ts";
 
 const LABEL = "TikTok";
@@ -240,9 +241,17 @@ export class TikTokOrganicChannel implements DistributionChannel {
     });
   }
 
-  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {
-    // Live metrics are not implemented for TikTok in this build, so nothing is returned.
-    void externalId;
-    return null;
+  /** Reads the counts of a post through the video query. A token that declares no video.list scope is not connected for reads. */
+  async fetchMetrics(externalId: string, connection: OrganicConnection | undefined): Promise<OrganicMetricsReading> {
+    if (!connection?.connected) {
+      return { status: "not_connected", reason: this.checkConnection(connection).reason ?? NOT_CONNECTED_REASON };
+    }
+    if (connection.scopes && !connection.scopes.includes(TIKTOK_VIDEO_LIST_SCOPE)) {
+      return {
+        status: "not_connected",
+        reason: `The saved TikTok token does not grant ${TIKTOK_VIDEO_LIST_SCOPE}, so no metric was requested. Save a token that grants it in Accounts.`,
+      };
+    }
+    return readTikTokMetrics(this.deps.transport, { externalId, accessToken: connection.accessToken }, new Date());
   }
 }

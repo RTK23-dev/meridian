@@ -1,15 +1,16 @@
 import { createHash } from "node:crypto";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
-import { YOUTUBE_UPLOAD_SCOPE } from "./connection.ts";
+import { YOUTUBE_READ_SCOPES, YOUTUBE_UPLOAD_SCOPE } from "./connection.ts";
 import { classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
+import { readYouTubeMetrics } from "./metric-reads.ts";
 import type {
   ConnectionCheck,
   DistributionChannel,
   OrganicConnection,
+  OrganicMetricsReading,
   OrganicPublishRequest,
   OrganicPublishReceipt,
-  OrganicTelemetryMetrics,
 } from "./types.ts";
 
 const LABEL = "YouTube";
@@ -75,11 +76,18 @@ export class YouTubeShortsChannel implements DistributionChannel {
     });
   }
 
-  async fetchMetrics(externalId: string): Promise<OrganicTelemetryMetrics | null> {
-    // Live metrics are not implemented in this build. Nothing is observed, so nothing is returned: no fixed
-    // numbers stand in for engagement.
-    void externalId;
-    return null;
+  /** Reads the public statistics of a Short. A token that declares no read scope is not connected for reads, so no request is sent. */
+  async fetchMetrics(externalId: string, connection: OrganicConnection | undefined): Promise<OrganicMetricsReading> {
+    if (!connection?.connected) {
+      return { status: "not_connected", reason: this.checkConnection(connection).reason ?? NOT_CONNECTED_REASON };
+    }
+    if (connection.scopes && !connection.scopes.some((scope) => YOUTUBE_READ_SCOPES.includes(scope))) {
+      return {
+        status: "not_connected",
+        reason: `The saved YouTube token does not grant a read scope (${YOUTUBE_READ_SCOPES[0]}), so no metric was requested. Save a token that grants one in Accounts.`,
+      };
+    }
+    return readYouTubeMetrics(this.transport, { externalId, accessToken: connection.accessToken }, new Date());
   }
 }
 
