@@ -5,6 +5,11 @@
 // connection (guardTransport makes that a provider error). Anything else (a budget refusal, a missing key, an invalid
 // composition or EDL, a bug) is not a render failure. It is thrown at once, so no other renderer spends money on it.
 //
+// Contract v6 (owner decision required). A HyperFrames render that reached the provider has an unsettled cost, because the provider
+// reports no bill for it. The second HyperFrames attempt is therefore refused (the same key is never submitted again while unsettled),
+// and no Shotstack fallback runs until that cost is settled: a second paid renderer must not start while the first may have billed.
+// The 2026-10-14 fallback policy above is kept for the code path, but it cannot run until the owner settles the HyperFrames cost.
+//
 // The decision is pure (nextRenderStep). renderWithFallback runs the attempts the caller injects; the caller compiles
 // the EDL and calls renderComposition or renderEdlWithShotstack. No model calls, and the same inputs give the same route.
 

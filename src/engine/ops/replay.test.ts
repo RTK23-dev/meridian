@@ -9,6 +9,7 @@ import { readEngineRequest } from "../jobs/orchestrator-sql.ts";
 import { listDeadJobs } from "./deadletter.ts";
 import { REPLAY_MINIMUM_ROLE, replayDeadJob, type ReplayOutcome } from "./replay.ts";
 import { chainWorld, drain, setDeliverFault, startChainRequest } from "./test/chain.ts";
+import { withRenderBills } from "../jobs/test/harness.ts";
 
 const WS = "ws_ops_replay";
 const BRAND = "brand_ops_replay";
@@ -41,10 +42,12 @@ describe("dead letters and replay (Video Engine Bible 5.2, 15.5)", () => {
     databases.push(db);
     await seedWorkspace(db.sql, WS, BRAND);
     const world = await chainWorld(db.sql, WS);
+    // The renders are billed before each deliver attempt, as the owner's invoices are recorded (contract v6); see withRenderBills.
+    const runtime = withRenderBills(db.sql, world.runtime);
     const request = await startChainRequest(world, { slot: 1, brandId: BRAND, formatId: FORMAT, priority: "normal", variantCount: 0 });
 
     setDeliverFault(world, request.requestId, true);
-    const first = await drain(db.sql, world.runtime, WS);
+    const first = await drain(db.sql, runtime, WS);
     assert.equal(first.dead, 1, "the deliver job is dead after its last attempt");
     assert.equal(first.retried, 2, "it was retried twice before that: three attempts in all");
 
@@ -82,7 +85,7 @@ describe("dead letters and replay (Video Engine Bible 5.2, 15.5)", () => {
     assert.equal(again.status, "duplicate", "a second replay of the same dead job changes nothing");
     assert.equal(await countOf(db, "audits"), 1, "one audit row for the replayed job; the refused member call wrote none");
 
-    const second = await drain(db.sql, world.runtime, WS);
+    const second = await drain(db.sql, runtime, WS);
     assert.equal(second.dead, 0);
     assert.equal((await readEngineRequest(db.sql, WS, request.requestId))?.status, "delivered");
     assert.equal(await countOf(db, "deliver_jobs"), 2, "the replay queued a new attempt; the dead one stays on record");
@@ -98,8 +101,9 @@ describe("dead letters and replay (Video Engine Bible 5.2, 15.5)", () => {
     databases.push(db);
     await seedWorkspace(db.sql, WS, BRAND);
     const world = await chainWorld(db.sql, WS);
+    const runtime = withRenderBills(db.sql, world.runtime);
     const request = await startChainRequest(world, { slot: 2, brandId: BRAND, formatId: FORMAT, priority: "normal", variantCount: 0 });
-    await drain(db.sql, world.runtime, WS);
+    await drain(db.sql, runtime, WS);
     assert.equal((await readEngineRequest(db.sql, WS, request.requestId))?.status, "delivered");
 
     const succeeded = await db.sql<{ id: string }>`

@@ -43,7 +43,7 @@ import { withReservationLedger } from "./sql-ledger-store.ts";
 import { createRenderHandler, type RenderPorts, type RenderScope } from "./handlers/render.ts";
 import type { PostRenderPorts } from "./handlers/post-render-review.ts";
 import { notConnectedWorkspaceBudget } from "./handlers/estimate-reserve.ts";
-import { fakeObjects, gatewayWith, json, PNG_1X1, recordedTransport, type Reply } from "./test/harness.ts";
+import { billOpenRenders, fakeObjects, gatewayWith, json, PNG_1X1, recordedTransport, type Reply } from "./test/harness.ts";
 import type { EnginePayload, EngineRuntime, StageContext, StageOutput } from "./types.ts";
 import { DOWNLOAD_URL, scriptedGateway, submitExchange, pollExchange, downloadExchange, shotstackDepsFor } from "../render/test/shotstackHarness.ts";
 import type { RenderAdapter, RenderSubmitInput } from "../render/hyperframesCloud.ts";
@@ -143,18 +143,21 @@ type World = {
   kit: StyleKit;
   dedupe: number;
   renderMode: "ok" | "fail";
+  /** The HyperFrames submits the adapter has received, so a test can see whether an attempt reached the provider. */
+  hyperframesSubmits: { count: number };
   overlayDrop: boolean;
   critic: ReturnType<typeof recordedTransport>;
   edlArtifactId: string;
 };
 
-function hyperframesAdapter(mode: "ok" | "fail"): RenderAdapter<RenderSubmitInput> {
+function hyperframesAdapter(mode: "ok" | "fail", submits: { count: number }): RenderAdapter<RenderSubmitInput> {
   return {
     renderer: "hyperframes-cloud",
     async ready() {
       return undefined;
     },
     async submit() {
+      submits.count += 1;
       if (mode === "fail") throw new EngineError("provider", "HyperFrames refused the render", { retryable: true, stage: "render" });
       return { renderId: "hfr_scenario_0001", status: "queued" };
     },
@@ -173,7 +176,7 @@ function renderPortsFor(state: World, shotstack?: (scope: RenderScope) => Return
     loadStyleKit: async () => state.kit,
     renderEstimateUsd: async () => 0.05,
     hyperframes: () => ({
-      adapter: hyperframesAdapter(state.renderMode),
+      adapter: hyperframesAdapter(state.renderMode, state.hyperframesSubmits),
       ledger: scopedLedgerStore(state.db.sql, WS, RES),
       verifyIntegrity: async (input) => integrityPassed(input.videoId) as GateResult,
       storeVideo: async ({ videoId, bytes }) => {
@@ -268,6 +271,7 @@ async function world(options: { variantCount?: number; request?: ProductionReque
     kit: fx.styleKitFixture,
     dedupe: 0,
     renderMode: options.renderMode ?? "ok",
+    hyperframesSubmits: { count: 0 },
     overlayDrop: options.overlayDrop === true,
     critic: recordedTransport({ "POST /api/v1/chat/completions": criticReply("openrouter-critic-final-ok") }),
     edlArtifactId: edl.artifactId,
@@ -419,6 +423,15 @@ async function realChain(state: World): Promise<void> {
   await runReal(state, "post_render_review");
 }
 
+/**
+ * Records the render's bill, then runs the deliver stage. HyperFrames reports no bill from its provider, so the owner's invoice is
+ * recorded here at the list price the render quoted. Delivery refuses while any paid call is open (contract v6).
+ */
+async function deliverBilled(state: World): Promise<void> {
+  await billOpenRenders(state.db.sql, WS, RES);
+  await runReal(state, "deliver");
+}
+
 async function manifestRows(state: World): Promise<Array<{ id: string; body: string }>> {
   return state.db.sql<{ id: string; body: string }>`select id, body from engine_manifests where organization_id = ${WS} and request_id = ${REQ}`;
 }
@@ -430,7 +443,7 @@ describe("E4: the four scenarios end to end, each with a manifest", () => {
     await produceClean(state);
     await answerEdit(state);
     await realChain(state);
-    await runReal(state, "deliver");
+    await deliverBilled(state);
 
     assert.equal((await readEngineRequest(state.db.sql, WS, REQ))?.status, "delivered");
     const manifests = await manifestRows(state);
@@ -461,7 +474,7 @@ describe("E4: the four scenarios end to end, each with a manifest", () => {
     await produceAndCheck(state, SHOT_1, redoTake, { ...fx.take1Fixture, takeId: redoTake }, true);
     await answerEdit(state);
     await realChain(state);
-    await runReal(state, "deliver");
+    await deliverBilled(state);
     assert.equal((await readEngineRequest(state.db.sql, WS, REQ))?.status, "delivered");
     assert.equal((await manifestRows(state)).length, 1);
   });
@@ -487,7 +500,7 @@ describe("E4: the four scenarios end to end, each with a manifest", () => {
     await answer(state, { stage: "pre_render_gate", subjectId: EDL, edlId: EDL, gate: gate("pre_render", true), artifacts: {} });
     await runReal(state, "render");
     await runReal(state, "post_render_review");
-    await runReal(state, "deliver");
+    await deliverBilled(state);
     assert.equal((await readEngineRequest(state.db.sql, WS, REQ))?.status, "delivered");
     const manifest = JSON.parse((await manifestRows(state))[0]?.body ?? "{}") as { decisions: Array<{ chose: string }> };
     assert.ok(manifest.decisions.some((decision) => decision.chose === "kinetic_type"), "the manifest records the downgrade");
@@ -509,7 +522,7 @@ describe("E4: the four scenarios end to end, each with a manifest", () => {
     assert.equal((await readEngineRequest(state.db.sql, WS, REQ))?.status, "running", "the human choice resumes the request");
     await answerEdit(state);
     await realChain(state);
-    await runReal(state, "deliver");
+    await deliverBilled(state);
     assert.equal((await readEngineRequest(state.db.sql, WS, REQ))?.status, "delivered");
     const gold = await state.db.sql<{ n: number }>`select count(*)::int as n from engine_events where request_id = ${REQ} and kind = 'gold_label'`;
     assert.equal(gold[0]?.n, 1, "the human choice is stored as a gold label");
@@ -562,27 +575,34 @@ describe("E5: variants and the render fallback", () => {
     assert.ok((planned[0]?.n ?? 0) >= 1, "the variant plan is on record");
   });
 
-  test("a forced HyperFrames failure on a component-free EDL falls back to Shotstack and renders the video", async () => {
+  // The policy (render/fallback.ts) tries HyperFrames twice, then Shotstack. Under contract v6 that cannot happen: a failed submit is
+  // ambiguous, so its hold stays unsettled, and a render whose key is on the ledger is never submitted again (hyperframesCloud.ts). The
+  // second HyperFrames attempt is refused as a conflict, which is not a render failure, so the stage stops before Shotstack. The owner
+  // decides the policy (see the report); this test pins the behaviour the contract gives today.
+  test("a forced HyperFrames failure leaves its render unsettled: the second attempt is refused under the same key, and no Shotstack request is made", async () => {
     const state = await world({ renderMode: "fail" });
     const render = cleanRender();
     const edl: EditDecisionList = { ...render.edl, tracks: render.edl.tracks.map((track) => ({ ...track, clips: track.clips.filter((clip) => clip.component === undefined) })) };
     const compiled = compile(edl, state.kit);
-    const shotstack = scriptedGateway([submitExchange({ key: shotstackRenderKey(edl) }), pollExchange("done", { url: DOWNLOAD_URL }), downloadExchange()]);
+    const shotstack = scriptedGateway([]);
     const handler = createRenderHandler(renderPortsFor(state, () => shotstackDepsFor(shotstack.gateway, sqlLedgerStore(state.db.sql, WS))));
     const inputs = [
       (await writeArtifact(state.db.sql, { organizationId: WS, requestId: REQ, stage: "compose", type: "composition", body: compiled.composition, createdAt: CREATED })).artifactId,
       (await writeArtifact(state.db.sql, { organizationId: WS, requestId: REQ, stage: "edit", type: "edl", body: edl, createdAt: CREATED })).artifactId,
       await store(state, "validated_request", fx.validatedRequestFixture),
     ];
-    const result = await handler.run(renderContext(state, inputs, edl.edlId));
-    if (result.kind !== "done" || result.output.stage !== "render") assert.fail("render did not finish");
-    assert.equal(result.output.gate.pass, true, "the Shotstack video passes the integrity check");
-    assert.ok(result.output.decisions?.some((decision) => decision.chose === "shotstack"), "the fallback is a decision");
-    assert.ok(result.output.artifacts[`render:${edl.edlId}`], "a rendered video is stored");
-    assert.deepEqual(shotstack.problems, [], "the Shotstack requests match the script");
+    await assert.rejects(handler.run(renderContext(state, inputs, edl.edlId)), (error: unknown) => {
+      return error instanceof EngineError && error.kind === "conflict" && error.retryable === false && /not submitted again/.test(error.message);
+    });
+    assert.equal(state.hyperframesSubmits.count, 1, "HyperFrames is submitted once: the same key is never sent again while it is unsettled");
+    assert.equal(shotstack.seen.length, 0, "no Shotstack request is made while the HyperFrames render is unsettled");
+    assert.equal(await openRenderCount(state), 1, "the HyperFrames hold stays on the ledger, unsettled");
+    assert.equal(await renderedVideoCount(state), 0, "no video is stored");
   });
 
-  test("a forced HyperFrames failure on an EDL with a custom component goes to review, with no Shotstack request", async () => {
+  // The same stop as above, on an EDL the policy would send to review (a custom component Shotstack cannot draw): the second HyperFrames
+  // attempt is refused under its key, so the render never reaches the review outcome either (see the note above).
+  test("a forced HyperFrames failure on an EDL with a custom component: the second attempt is refused, so no review and no Shotstack request", async () => {
     const state = await world({ renderMode: "fail" });
     const render = cleanRender();
     const compiled = compile(render.edl, state.kit);
@@ -593,14 +613,26 @@ describe("E5: variants and the render fallback", () => {
       state.edlArtifactId,
       await store(state, "validated_request", fx.validatedRequestFixture),
     ];
-    const result = await handler.run(renderContext(state, inputs, render.edl.edlId));
-    if (result.kind !== "done" || result.output.stage !== "render") assert.fail("render did not finish");
-    assert.equal(result.output.gate.pass, false);
-    assert.equal(result.output.gate.checks[0]?.rule, "render_completed");
+    await assert.rejects(handler.run(renderContext(state, inputs, render.edl.edlId)), (error: unknown) => {
+      return error instanceof EngineError && error.kind === "conflict" && error.retryable === false && /not submitted again/.test(error.message);
+    });
+    assert.equal(state.hyperframesSubmits.count, 1, "HyperFrames is submitted once: the same key is never sent again while it is unsettled");
     assert.equal(shotstack.seen.length, 0, "no Shotstack request is made for a custom component");
-    assert.equal(result.output.artifacts[`render:${render.edl.edlId}`], undefined, "no video is stored");
+    assert.equal(await renderedVideoCount(state), 0, "no video is stored");
   });
 });
+
+/** How many rendered videos the request has stored. */
+async function renderedVideoCount(state: World): Promise<number> {
+  const rows = await state.db.sql<{ n: number }>`select count(*)::int as n from engine_artifacts where organization_id = ${WS} and request_id = ${REQ} and type = 'rendered_video'`;
+  return rows[0]?.n ?? -1;
+}
+
+/** How many render ledger rows of the workspace have no settlement yet. */
+async function openRenderCount(state: World): Promise<number> {
+  const rows = await state.db.sql<{ n: number }>`select count(*)::int as n from engine_ledger where organization_id = ${WS} and stage = 'render' and settlement is null`;
+  return rows[0]?.n ?? -1;
+}
 
 /** The stage context of one render job, with the artifacts the job reads. */
 function renderContext(state: World, inputArtifactIds: string[], edlId: string): StageContext {

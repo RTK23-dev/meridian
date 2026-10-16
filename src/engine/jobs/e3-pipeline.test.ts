@@ -292,8 +292,8 @@ test("one request from plan through estimate, produce and check: a stock shot an
 
   // The ledger: the generated call is billed at OpenRouter's reported cost, the stock search is free and has no row, and the two
   // Critic calls are billed and journaled.
-  const ledger = await db.sql<{ provider: string; model: string; stage: string; actual_usd: unknown; actual_is_estimate: boolean | null; idempotency_key: string }>`
-    select provider, model, stage, actual_usd, actual_is_estimate, idempotency_key from engine_ledger
+  const ledger = await db.sql<{ provider: string; model: string; stage: string; actual_usd: unknown; settlement: string | null; idempotency_key: string }>`
+    select provider, model, stage, actual_usd, settlement, idempotency_key from engine_ledger
     where organization_id = ${ORG} order by stage, provider
   `;
   const generated = ledger.find((row) => row.stage === "produce_shot");
@@ -301,9 +301,11 @@ test("one request from plan through estimate, produce and check: a stock shot an
   assert.equal(generated.provider, "openrouter");
   assert.equal(generated.model, KLING);
   assert.equal(Number(generated.actual_usd), 0.6125, "the actual is the bill OpenRouter reported");
-  assert.equal(generated.actual_is_estimate, false);
+  assert.equal(generated.settlement, "billed", "the actual is a verified bill, never an estimate (contract v6)");
   assert.equal(ledger.filter((row) => row.stage === "produce_shot").length, 1, "stock is free and writes no ledger row");
-  assert.equal(ledger.filter((row) => row.stage === "claude_roles").length, 2, "one Critic call for each take, on the Claude roles line");
+  const critics = ledger.filter((row) => row.stage === "claude_roles");
+  assert.equal(critics.length, 2, "one Critic call for each take, on the Claude roles line");
+  assert.ok(critics.every((row) => row.settlement === "billed"), "each Critic call is billed from the usage cost in its answer");
 
   const roleCalls = await db.sql<{ status: string }>`select status from engine_role_calls where organization_id = ${ORG}`;
   assert.equal(roleCalls.length, 2, "one journaled Critic call per take");

@@ -55,6 +55,8 @@ const VARIANT_VIDEO = fixtureId("vid_", 100);
 const VARIANT_CMP = fixtureId("cmp_", 101);
 const SEGMENT_KEY = "segment:req:1";
 const DIRECTOR_KEY = "director:req:1";
+/** The director check's bill: its list price, which the ledger line and the journal entry both carry. */
+const DIRECTOR_USD = 0.05;
 
 /** The master with its captions split, as the editor writes them: a caption over the presenter and one after it. */
 function masterEdl(): EditDecisionList {
@@ -130,7 +132,7 @@ const journal: JournalEntry[] = [
       generationId: "gen-fixture-director-1",
       promptTokens: null,
       completionTokens: null,
-      costUsd: null,
+      costUsd: DIRECTOR_USD,
       verdict: "invalid_answer",
       issues: ["swaps: expected an array"],
     },
@@ -335,7 +337,13 @@ test("delivers the master and the variant: writes both manifests, settles and re
     assert.equal(master.videoId, FIXTURE_IDS.video);
     assert.equal("variantOf" in master, false);
     assert.deepEqual(master.shots, manifestFixture.shots, "the master plays the takes of the chain fixture");
-    assert.deepEqual(master.roleCalls, manifestRoleCallsFixture.filter((call) => call.role === "planner" || call.role === "director_check"));
+    // The fixture's director check has no bill; here its bill is recorded (DIRECTOR_USD), so the manifest carries that cost.
+    assert.deepEqual(
+      master.roleCalls,
+      manifestRoleCallsFixture
+        .filter((call) => call.role === "planner" || call.role === "director_check")
+        .map((call) => (call.role === "director_check" ? { ...call, costUsd: DIRECTOR_USD } : call)),
+    );
     assert.deepEqual(master.promptVersions, { planner: "planner@1", director_check: "director_check@1", segmenter: "segmenter@1" });
     assert.deepEqual(master.disclosures, { aiGeneratedPeople: true, paidPartnership: true }, "no paid-partnership answer is unknown, so it is disclosed");
     assert.equal(master.cost.brain, 0.272, "the planner 0.142, the segmenter 0.08 and the director check 0.05, each billed");

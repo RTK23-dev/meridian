@@ -20,6 +20,7 @@ import { replayDeadJob } from "./replay.ts";
 import { readStageMetrics } from "./metrics-sql.ts";
 import { proposedOpsThresholds } from "./thresholds.ts";
 import { chainWorld, drain, musicVariantRequest, setDeliverFault, startChainRequest, type ChainRequest } from "./test/chain.ts";
+import { withRenderBills } from "../jobs/test/harness.ts";
 
 const WS = "ws_ops_load";
 const BRANDS = ["brand_load_a", "brand_load_b", "brand_load_c"];
@@ -62,6 +63,8 @@ describe("E6 batch scale: 100 requests across 10 formats and 3 brand pages", () 
       await db.sql`insert into brands (id, organization_id, name, created_by) values (${brand}, ${WS}, ${brand}, 'test') on conflict (id) do nothing`;
     }
     const world = await chainWorld(db.sql, WS);
+    // The renders are billed before each deliver attempt, as the owner's invoices are recorded (contract v6); see withRenderBills.
+    const runtime = withRenderBills(db.sql, world.runtime);
 
     // Phase 1: every request is started and its upstream stages are answered, so each one is queued at compose.
     const started: Array<{ slot: number; priority: RequestPriority; variant: boolean; request: ChainRequest }> = [];
@@ -83,7 +86,7 @@ describe("E6 batch scale: 100 requests across 10 formats and 3 brand pages", () 
     assert.equal(await statusCount(db, "running"), REQUESTS, "every request is running after its upstream stages");
 
     // Phase 2: the queue drains with every request in flight together.
-    const firstDrain = await drain(db.sql, world.runtime, WS, { maxPasses: 500 });
+    const firstDrain = await drain(db.sql, runtime, WS, { maxPasses: 500 });
     t.diagnostic(`first drain: ${JSON.stringify(firstDrain)}`);
     assert.equal(await statusCount(db, "delivered"), REQUESTS - FAULTED.size, "the requests with no fault are delivered");
     assert.equal(await statusCount(db, "paused"), FAULTED.size, "the faulted requests pause on their dead letters");
@@ -107,7 +110,7 @@ describe("E6 batch scale: 100 requests across 10 formats and 3 brand pages", () 
     const again = await replayDeadJob(db.sql, { organizationId: WS, requestId: firstReplay.requestId, jobId: firstReplay.jobId, actor: ADMIN });
     assert.equal(again.status, "duplicate", "a second replay of the same dead job is a duplicate");
 
-    const secondDrain = await drain(db.sql, world.runtime, WS, { maxPasses: 500 });
+    const secondDrain = await drain(db.sql, runtime, WS, { maxPasses: 500 });
     t.diagnostic(`second drain: ${JSON.stringify(secondDrain)}`);
 
     // Nothing is lost: each request is delivered, or paused on a recorded dead letter, and no engine job is left in flight.
