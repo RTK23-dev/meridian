@@ -48,7 +48,7 @@ Keys are not set in `.env` for normal use. Open **Settings → General**:
   encrypted and is never shown again; the screen shows its last four characters.
 - **Google Drive** shows whether Drive is connected, and what is missing if it is not.
 
-The decision engine is chosen on the **Settings → JEV** tab. Every provider and its deployment opt-in are listed in PROVIDERS.md.
+The decision engine is chosen on the **Setup** page (`/setup`), where the engine choice offers TypeSafe JEV or OpenAI Decisions. Only one engine receives decisions per workspace. Every provider and its deployment opt-in are listed in PROVIDERS.md.
 
 ## Google Drive
 
