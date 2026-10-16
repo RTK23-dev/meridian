@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+## 0.1.0-beta.12 — prerelease
+
+This pre-release is the checkpoint of the video engine (E1 to E6), the Factory integration (I1 to I3) and the business layer (B1 to B6),
+after a review of the whole branch. Everything is tested on recorded fixtures. No live provider call has been made.
+
+**Upgrade notes.** Migrations `0095_oauth_state_user` and `0096_engine_chain_calls_request_key` are new. An OAuth connection that was
+started before the upgrade must be started again. Connecting a platform account is now an admin action, as disconnecting already was. The
+Factory's brand caps are checked against the brand's spend across all its runs. A Factory image provider whose cost is unknown is refused.
+An https alert webhook must point at a public host.
+
+**Fixed in the review.**
+- Role changes: only an owner can make or change an owner, and nobody can change their own membership. An admin could make themselves owner.
+- OAuth: a connection is bound to the person who started it, so another signed-in person cannot bind their own account to a workspace.
+- Platform accounts: connecting needs admin, so a member cannot replace an account's credential.
+- Invitations: every email, including one that already has an account, is sent an invitation to accept. Nobody is added without consent, and
+  the answer does not reveal which emails have accounts.
+- Factory approvals: an approval is refused unless the run is waiting at that stage. An early approval would have skipped a later stop.
+- Factory caps: a run's own caps are checked against that run's spend, and the brand's caps against the brand's spend across all its runs.
+  A new run no longer resets a brand's cap.
+- Factory images: a provider whose cost is unknown is never used, so its spend cannot overrun a cap.
+- Engine assets: the cache key includes the take count, so a two-take request is not answered from a one-take entry.
+- Engine chain calls: a call must belong to a request of its own workspace (migration 0096).
+- Alerts: an https webhook to a private or metadata address is refused.
+- Keys: the masked form shows four characters only for a key of eight characters or more.
+- Factory reels: a scraped link opens only over http or https.
+- Release check: the release workflow (renamed `release-check.yml`) runs the same gates as CI, including ffmpeg.
+- CI: the sidecar tests gate the `check` job.
+- Developer scripts (`ui:baseline`, `ui:design-smoke`, `ui:button-audit`, `e2e`) read `.env`.
+- Documentation: the decision engine is chosen on the Setup page; `.env.example` comments match the code.
+
+**Known open in this pre-release, not fixed here.** Each is listed in [docs/engine/PHASE_LOG.md](docs/engine/PHASE_LOG.md).
+- Live spend. The render's cost is a fixed estimate recorded as an actual. A server error on a submit can start a second paid job. Failed
+  calls are held as spend. A reconciled bill can raise a reservation past its caps without a pause. Holds are not released when a request
+  stops short of delivery. Keys must not be connected for the engine until these are fixed.
+- Factory. The Apify weekly cap counts candidates but not baseline or snapshot calls. A sleep night that fails never closes its run. A metric
+  row can be stored twice. A stuck image job reports as skipped. The learning bridge can write a `published` row with no external id, which
+  is latent because nothing in production calls it.
+- The migration runner takes no lock, so two overlapping builds can race.
+
 - **A sidebar for the core loop.** Brand brain, Products and Connected accounts sit under Brand; Market and Intelligence under
   Research; Studio, Factory and Library under Create; Opportunities and Reviews under Review; Learning and Calibration under
   Results. Usage & cost, Alerts center, Audit log, Webhook events, Exports and Notification preferences are listed on the Settings
@@ -155,7 +194,7 @@ Operators should read these before deploying. Migration `0060_webhook_tenant_sco
   downloaded only from public https hosts, with a 200 MB cap and a 30-second deadline. Polling stops at once on permanent errors
   (401, 403, 404) and after 240 polls or 24 hours, moving the job to `SUBMISSION_UNKNOWN`. Its reservation stays held.
 
-## 0.1.0-beta.11 — not yet tagged
+## Earlier work in 0.1.0-beta.11 — never tagged
 
 Verified on a freshly migrated PostgreSQL database: the full test suite, typecheck, lint, build, and the browser checks (UI baseline,
 browser smoke, design-system smoke, product loop, button audit). Migrations 0055 to 0059 are new.

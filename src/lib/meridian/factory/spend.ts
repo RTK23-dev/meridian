@@ -5,6 +5,7 @@
  */
 import type { Sql } from "../learning/store.ts";
 import { engineSpendOf, pauseEngineSpend } from "../../../engine/api/index.ts";
+import { capStopReason } from "./stage-decision.ts";
 
 /** One micro-dollar is a millionth of a dollar. One cent is 10,000 micro-dollars. */
 const MICROS_PER_CENT = 10_000;
@@ -91,6 +92,76 @@ export async function meteredSpendOf(
     totalCents: Math.ceil((Number(rows[0]?.total ?? 0) + engine.totalMicros) / MICROS_PER_CENT),
     dailyCents: Math.ceil((Number(rows[0]?.daily ?? 0) + engine.dailyMicros) / MICROS_PER_CENT),
   };
+}
+
+/**
+ * The brand's metered spend across all of its runs, in cents: meteredSpendOf without the run filter. The brand's caps are held
+ * against this figure, so a second run, a sleep night or a new run cannot start a fresh cap for the brand.
+ */
+export async function brandMeteredSpendOf(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+): Promise<{ totalCents: number; dailyCents: number }> {
+  const rows = await sql<{ total: number; daily: number }>`
+    select
+      coalesce(sum(coalesce(micros, cents::bigint * 10000)), 0)::float8 as total,
+      coalesce(sum(coalesce(micros, cents::bigint * 10000)) filter (where created_at >= now() - interval '1 day'), 0)::float8 as daily
+    from factory_costs
+    where organization_id = ${organizationId} and brand_id = ${brandId}
+  `;
+  const requests = await sql<{ request_id: string }>`
+    select request_id from factory_engine_requests
+    where organization_id = ${organizationId} and brand_id = ${brandId}
+  `;
+  const engine = await engineSpendOf(sql, organizationId, requests.map((row) => row.request_id));
+  return {
+    totalCents: Math.ceil((Number(rows[0]?.total ?? 0) + engine.totalMicros) / MICROS_PER_CENT),
+    dailyCents: Math.ceil((Number(rows[0]?.daily ?? 0) + engine.dailyMicros) / MICROS_PER_CENT),
+  };
+}
+
+/** A cap in cents as the produce and grade stages read it: null when it is not set (absent or zero), the cents otherwise. */
+export function capOrNull(cents: number | null | undefined): number | null {
+  return (cents ?? 0) > 0 ? (cents as number) : null;
+}
+
+/** The brand's own caps and its spend across all of its runs, for the cap checks of any one run (capStopReason's brand fields). */
+export async function brandCapFiguresOf(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+): Promise<{ brandCapCents: number; brandSpentCents: number; brandDailyCapCents: number; brandDailySpentCents: number }> {
+  const caps = await spendCapsOf(sql, organizationId, brandId);
+  const spend = await brandMeteredSpendOf(sql, organizationId, brandId);
+  return {
+    brandCapCents: caps.totalCents,
+    brandSpentCents: spend.totalCents,
+    brandDailyCapCents: caps.dailyCents,
+    brandDailySpentCents: spend.dailyCents,
+  };
+}
+
+/**
+ * The reason the caps stop a spend in this run, or null. The run's own caps are held against the run's spend, and the brand's caps
+ * against the brand's spend across all its runs. Every check that stops a run's spend reads these caps, so a brand cap is never
+ * checked against one run's spend alone.
+ */
+export async function capStopForRun(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  runId: string,
+  runCaps: { totalCents: number | null; dailyCents: number | null },
+): Promise<string | null> {
+  const run = await meteredSpendOf(sql, organizationId, brandId, runId);
+  return capStopReason({
+    capCents: runCaps.totalCents,
+    spentCents: run.totalCents,
+    dailyCapCents: runCaps.dailyCents,
+    dailySpentCents: run.dailyCents,
+    ...(await brandCapFiguresOf(sql, organizationId, brandId)),
+  });
 }
 
 /** One run's spend as the run view states it: what was priced, what was only metered in tokens, and what provider calls reported. */

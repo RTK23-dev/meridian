@@ -26,22 +26,40 @@ export type StageDecisionInput = {
   dailyCapCents?: number | null;
   /** Metered spend for this run in the last 24 hours, in cents. */
   dailySpentCents?: number;
+  /** The brand's total spend cap, in cents, or null when none is set. It is held against the brand's spend across all its runs. */
+  brandCapCents?: number | null;
+  /** The brand's metered spend across all of its runs, in cents. */
+  brandSpentCents?: number;
+  /** The brand's daily spend cap, in cents, or null when none is set. */
+  brandDailyCapCents?: number | null;
+  /** The brand's metered spend across all of its runs in the last 24 hours, in cents. */
+  brandDailySpentCents?: number;
 };
 
 /**
  * The reason a spend is refused because a cap is reached, or null while spend is inside every cap that is set. A zero or absent cap
- * is not set. The produce stage checks this before each provider call, and the stage check uses it before the stage runs.
+ * is not set. The run's caps are held against the run's spend, and the brand's caps against the brand's spend across all its runs,
+ * so starting another run does not reset the brand's caps. The produce stage checks this before each provider call, and the stage
+ * check uses it before the stage runs.
  */
 export function capStopReason(input: {
   capCents: number | null;
   spentCents: number;
   dailyCapCents?: number | null;
   dailySpentCents?: number;
+  brandCapCents?: number | null;
+  brandSpentCents?: number;
+  brandDailyCapCents?: number | null;
+  brandDailySpentCents?: number;
 }): string | null {
   const totalCap = input.capCents ?? 0;
   const dailyCap = input.dailyCapCents ?? 0;
+  const brandTotalCap = input.brandCapCents ?? 0;
+  const brandDailyCap = input.brandDailyCapCents ?? 0;
   if (totalCap > 0 && input.spentCents >= totalCap) return "The spend cap for this run is reached.";
-  if (dailyCap > 0 && (input.dailySpentCents ?? 0) >= dailyCap) return "The daily spend cap for this brand is reached.";
+  if (dailyCap > 0 && (input.dailySpentCents ?? 0) >= dailyCap) return "The daily spend cap for this run is reached.";
+  if (brandTotalCap > 0 && (input.brandSpentCents ?? 0) >= brandTotalCap) return "The spend cap for this brand is reached.";
+  if (brandDailyCap > 0 && (input.brandDailySpentCents ?? 0) >= brandDailyCap) return "The daily spend cap for this brand is reached.";
   return null;
 }
 
@@ -64,15 +82,18 @@ export function stageDecision(input: StageDecisionInput): StageDecision {
   }
   const spends = SPEND_OR_PUBLISH.has(input.stage);
   const review = input.stage === "factory.review";
-  const totalCap = input.capCents ?? 0;
-  const dailyCap = input.dailyCapCents ?? 0;
+  const anyCapSet =
+    (input.capCents ?? 0) > 0 ||
+    (input.dailyCapCents ?? 0) > 0 ||
+    (input.brandCapCents ?? 0) > 0 ||
+    (input.brandDailyCapCents ?? 0) > 0;
   if (spends) {
     const reached = capStopReason(input);
     if (reached) return { action: "stop", reason: reached };
   }
   if (input.automation === "full") {
     if (!spends) return { action: "run" };
-    if (totalCap <= 0 && dailyCap <= 0) {
+    if (!anyCapSet) {
       return { action: "stop", reason: "Full automation needs a spend cap before it spends or publishes. Set one, then start again." };
     }
     return { action: "run" };

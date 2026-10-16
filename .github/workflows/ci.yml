@@ -116,18 +116,20 @@ jobs:
   # The gate that e2e waits on. It passes only when every test shard and the static checks pass. It keeps the name `check`,
   # which docs/TESTING.md names as the job that decides whether code can merge.
   check:
-    needs: [tests, static]
+    needs: [tests, static, sidecar]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Require every test shard and the static checks to pass
+      - name: Require every test shard, the static checks and the sidecar tests to pass
         env:
           TESTS_RESULT: ${{ needs.tests.result }}
           STATIC_RESULT: ${{ needs.static.result }}
+          SIDECAR_RESULT: ${{ needs.sidecar.result }}
         run: |
-          echo "tests: $TESTS_RESULT; typecheck, lint and build: $STATIC_RESULT"
+          echo "tests: $TESTS_RESULT; typecheck, lint and build: $STATIC_RESULT; sidecar: $SIDECAR_RESULT"
           test "$TESTS_RESULT" = success
           test "$STATIC_RESULT" = success
+          test "$SIDECAR_RESULT" = success
 
   sidecar:
     runs-on: ubuntu-latest

@@ -369,3 +369,86 @@ Contradictions left for the owner or lead. None is resolved in code:
   presigned S3 uploads. This is the known storage conflict.
 - **NORTH_STAR section 8.** The no-receipt rule (item 1) was not re-checked in the status notes. No button-audit run is recorded for the
   item 11 screens.
+
+## Pre-release 0.1.0-beta.12: review of the whole branch (2026-10-16)
+
+Four read-only reviews covered security and tenancy, the engine's money and fail-closed rules, the Factory and business layer, and
+repository hygiene (migrations, configuration, scripts, CI and documentation). Each finding was checked against the code before a change.
+The reviews found more than the fixes below. Items not fixed are listed under "Open" with the decision each one needs.
+
+**Fixed.**
+- Role changes (`workspace/actions.ts`): only an owner can make or change an owner, and nobody can change their own membership. An admin
+  could make themselves owner.
+- OAuth (`oauth/begin.ts`, `oauth/state.ts`, `routes/api/oauth/callback.ts`, migration `0095_oauth_state_user`): a connection is bound to
+  the person who started it, as the Drive connection already was.
+- Platform accounts (`accounts/actions.ts`, `routes/_app/brands/$brandId/accounts.tsx`): connecting is an admin action, matching disconnect.
+  A member could replace an account's credential through the upsert.
+- Invitations (`workspace/actions.ts`): an existing user is invited like any other email, so nobody is added without consent, and the answer
+  is the same for every email. The admin-only "already in this workspace" answer stays for members of that workspace.
+- Factory approvals (`factory/actions.ts`): an approval is refused unless the run is `awaiting_approval` at that stage. An early approval
+  would be stored and the later stop skipped.
+- Factory caps (`factory/spend.ts`, `stage-decision.ts`, `worker.ts`, `produce-shared.ts`): a run's own caps are checked against that run's
+  spend, and the brand's caps against the brand's spend across all its runs. Before, a brand cap was compared with one run's spend, so each
+  new run got a fresh cap. An unset run cap is passed as `null`, which keeps the produce budget check as it was.
+- Factory images (`factory/produce-image.ts`): a provider whose cost is unknown is never chosen, capped or not. It cannot be counted against
+  a cap, so a capped run could overrun it. The run stops with the reason. FACTORY.md says so.
+- Engine assets (`contracts/assets.ts`): the cache key includes the take count. A two-take request was answered from a one-take entry.
+  The test that asserted the opposite is corrected.
+- Engine chain calls (migration `0096_engine_chain_calls_request_key`): a call must reference a request of its own workspace, with the
+  composite key the other engine tables use. The chain-store test seeds its request.
+- Alerts (`alerts/lifecycle.ts`): an https alert must be a public host, by the page fetcher's rules. A private or metadata address would
+  have let an admin probe the network through the delivery status.
+- Key masks (`config/resolver.ts`): four characters are shown only for a key of eight or more characters.
+- Reel links (`components/factory/run-list.tsx`): a scraped permalink is a link only over http or https.
+- Release check: `npm-publish-github-packages.yml` became `release-check.yml`. It runs the same gates as CI, with ffmpeg and
+  `MERIDIAN_REQUIRE_FFMPEG=1`.
+- CI (`ci.yml`): the `check` job also requires the sidecar tests.
+- Developer scripts (`package.json`): `ui:baseline`, `ui:design-smoke`, `ui:button-audit` and `e2e` read `.env`.
+- Documentation: SETUP.md and DECISIONS.md say the decision engine is chosen on the Setup page. `.env.example` comments for
+  `DATABASE_URL`, `GOOGLE_API_KEY` and `PERCEPTION_PROVIDER` match the code. FACTORY.md describes the image refusal. README and CHANGELOG
+  say the pre-release is 0.1.0-beta.12 and list the open items.
+
+**Verified by reading, not changed.** The Cyclone gateway URL (`settings/provider-config.ts`) can reach a private address, and its status
+code is returned to the admin. That is the intended use: a device gateway on the operator's network. The status code is the only oracle,
+and only an admin can set the URL. Accepted.
+
+**Open.** Each needs an owner decision or a live run before the live path is trusted.
+- Engine render cost. With no bill and no list price, `budget/reconcile.ts` records the fixed render hold as the actual, flagged
+  `actualIsEstimate`. `render/hyperframesCloud.ts` writes that value as `costUsd` in the rendered video record, which has no estimate flag
+  (`contracts/render.ts`). A live invoice that differs from $0.05 would not show in the artifacts. Fix: the render actual stays null until a
+  bill exists, and the contract gains an estimate flag. That is an engine-contracts change, so it needs a version bump, a Bible section 4
+  note and lead approval.
+- Engine retries. `assets/router.ts` resubmits a server error with a new idempotency key, so a job the provider accepted before the error
+  can be submitted and billed twice. The owner has recorded this risk (`assets/STATUS.md`) and has an open test for it. The test "a server
+  error is retried on the same provider" pins the current behaviour and stays until that test is recorded.
+- Engine failed calls. `assets/router.ts` holds the estimate of a refused or failed submit, and `api/index.ts` adds it to the spend total.
+  Alerts average those holds as actuals (`ops/alerts.ts`). An unbilled overrun does not alert.
+- Engine cap mode. `budget/reconcile.ts` raises a reservation to a reconciled bill in cap mode without pausing and without checking the
+  request or month cap. `sql-ledger-store.ts` takes no workspace lock for the raise, so a concurrent `reserve()` can pass the monthly check.
+- Engine holds. A request that fails or goes to review keeps its full hold in the monthly total (`sql-ledger-store.ts`). Only a rejection
+  and a delivery release it.
+- Engine rounding. Bills are rounded to four decimals before they are recorded (`budget/reconcile.ts`), which can lose up to $0.00005 per
+  call.
+- Factory Apify cap. `factory/instagram-volume.ts` counts candidates against the weekly cap, not the baseline and snapshot calls. The
+  total is read before the request is sent, so concurrent gathers can pass together.
+- Factory sleep. A night that fails is marked failed, but its run stays `running`, so the retry returns `already-ran` and the night never
+  runs again (`factory/sleep.ts`).
+- Factory metrics. `measurement/creative-linkage.ts` checks for an existing row and then inserts. There is no unique key on the observation,
+  so an ad-day can be stored twice.
+- Factory stuck image job. `produce-image.ts` returns `skipped` for a job left in `SUBMITTING`, and the run reports success.
+- Factory trial reads. `distribution/trial-check.ts` reads the count, calls Instagram and then increments, with no compare-and-set, so a
+  duplicate run can read an eighth time.
+- Factory learning bridge. `organic/learning-bridge.ts` can write an `organic_posts` row with status `published` and no external id, and
+  its errors are swallowed. Nothing in production calls it. It is still a breach of AGENTS.md rule 1 if wired up, so it should be removed or
+  gated before the bridge is used.
+- Factory sleep cap. `sleep.ts` checks its night against the stricter of the default run cap and the brand cap, not each scope.
+- Migration runner. `scripts/migrate.mjs` takes no advisory lock. Two overlapping builds can race, and the loser fails and rolls back.
+- Environment scanner. `env-example.test.ts` misses names read through constants and tables (`providers/boundaries.ts`,
+  `oauth/client-readiness.ts`, `storage/google-auth.ts`). Every current name is listed, so this is latent.
+- Auth flag. `VITE_AUTH_ENABLED` is read by the client from `.env` through Vite, and by the server from `process.env`. `build` and `preview`
+  go through `with-app-env.mjs`, which does not load `.env`. This was inferred from the code and not run.
+- Migration gaps. `0027` appears twice, and `0083` to `0089` are absent. Each file applies once, and nothing tests the gap.
+
+**Checks on this pre-release.** The targeted test files for every changed area pass (OAuth, Factory caps and approvals, the asset router and
+its cache key, the chain store and the migration tests, accounts, workspace, configuration). `npm run typecheck` is clean. The full
+`npm test`, lint and build are run on the release commit, and their results are recorded in the release notes.

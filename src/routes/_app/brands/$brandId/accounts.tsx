@@ -43,7 +43,6 @@ const PLATFORMS = [
 function BrandAccounts({ brandId }: { brandId: string }) {
   const { data: workspace } = useWorkspace();
   const role = workspace?.active?.role || "viewer";
-  const canEdit = hasRole(role, "member");
   const canAdmin = hasRole(role, "admin");
 
   const query = usePlatformAccountsQuery(brandId);
@@ -147,7 +146,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
             All tokens are encrypted in the database with AES-256-GCM.
           </p>
         </div>
-        {canEdit ? (
+        {canAdmin ? (
           <Button type="button" variant={accounts.length === 0 ? "secondary" : "primary"} onClick={() => setAddModalOpen(true)}>
             Connect Account
           </Button>
@@ -160,7 +159,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
         <EmptyState
           title="No accounts connected yet"
           reason="Connect an Instagram page, YouTube channel, TikTok account, or ad account to enable multi-channel publishing and automated performance telemetry."
-          action={canEdit ? (
+          action={canAdmin ? (
             <Button type="button" onClick={() => setAddModalOpen(true)}>
               Connect First Account
             </Button>

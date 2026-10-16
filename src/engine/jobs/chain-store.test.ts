@@ -14,6 +14,7 @@ const BRAND = "brand_chain_store";
 const OTHER_ORG = "org_chain_store_other";
 const OTHER_BRAND = "brand_chain_store_other";
 const REQUEST = fixtureId("req_", 950);
+const OTHER_REQUEST = fixtureId("req_", 951);
 const SHOT = fixtureId("shot_", 950);
 const AT = "2026-10-14T10:00:00.000Z";
 
@@ -23,6 +24,12 @@ before(async () => {
   db = await createTestDatabase();
   await seedWorkspace(db.sql, ORG, BRAND);
   await seedWorkspace(db.sql, OTHER_ORG, OTHER_BRAND);
+  // A chain call belongs to a request of its own workspace (migration 0096), so the request exists before any call is written.
+  await db.sql`
+    insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, state)
+    values (${REQUEST}, ${ORG}, ${BRAND}, 'fmt_fixture_rank', 'normal', 'running', '{}'),
+           (${OTHER_REQUEST}, ${OTHER_ORG}, ${OTHER_BRAND}, 'fmt_fixture_rank', 'normal', 'running', '{}')
+  `;
 });
 
 after(async () => {
@@ -88,9 +95,22 @@ describe("chain call records (Bible 5.1)", () => {
   test("a record is read only in its own workspace: another workspace sees none of it", async () => {
     await recordChainSpec(db.sql, { ...keyOf("keyframe", ORG, 3), callIndex: 0, spec: specWith("mine"), at: AT });
     assert.equal(await readChainCall(db.sql, keyOf("keyframe", OTHER_ORG, 3)), null);
-    const other = await recordChainSpec(db.sql, { ...keyOf("keyframe", OTHER_ORG, 3), callIndex: 0, spec: specWith("theirs"), at: AT });
+    const other = await recordChainSpec(db.sql, {
+      ...keyOf("keyframe", OTHER_ORG, 3),
+      requestId: OTHER_REQUEST,
+      callIndex: 0,
+      spec: specWith("theirs"),
+      at: AT,
+    });
     assert.equal(other.prompt, "theirs", "the other workspace writes its own record, not the first one's");
     assert.equal((await readChainCall(db.sql, keyOf("keyframe", ORG, 3)))?.spec.prompt, "mine");
+  });
+
+  test("a chain call cannot point at another workspace's request (migration 0096)", async () => {
+    await assert.rejects(
+      recordChainSpec(db.sql, { ...keyOf("keyframe", OTHER_ORG, 5), callIndex: 0, spec: specWith("x"), at: AT }),
+      /engine_chain_calls_request_fk/,
+    );
   });
 
   test("a stored row that no longer matches its contract is an internal error, never returned as data", async () => {

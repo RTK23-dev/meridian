@@ -3,6 +3,7 @@ import { getSql } from "@/lib/db";
 import { exchangeOauthCode, hashOauthState, isAllowedOauthOrigin, sealSecret } from "@/lib/meridian/oauth/flow.server";
 import { claimOauthState } from "@/lib/meridian/oauth/state";
 import { liveTransport } from "@/lib/meridian/providers/http";
+import { signedInUserId } from "@/lib/meridian/storage/drive-route-auth.server";
 
 export const Route = createFileRoute("/api/oauth/callback")({
   server: {
@@ -16,10 +17,15 @@ export const Route = createFileRoute("/api/oauth/callback")({
         if (provider !== "meta" && provider !== "tiktok" && provider !== "google") {
           return new Response("Unknown provider.", { status: 400 });
         }
+        // The connection is bound to the person who started it. Any other signed-in person, or nobody, is refused.
+        const userId = await signedInUserId(request);
+        if (!userId) return new Response("Sign in as the person who started the connection.", { status: 401 });
         const sql = await getSql();
         // The state is consumed before the exchange, so a failed exchange cannot be retried with the same state.
-        const match = await claimOauthState(sql, { stateHash: hashOauthState(state), provider, origin: url.origin });
-        if (!match) return new Response("The OAuth state is missing, used, expired, or came from another origin.", { status: 400 });
+        const match = await claimOauthState(sql, { stateHash: hashOauthState(state), userId, provider, origin: url.origin });
+        if (!match) {
+          return new Response("The OAuth state is missing, used, expired, came from another origin, or belongs to another person.", { status: 400 });
+        }
         // The exchange must send the redirect URI the authorization was started with, so it comes from the stored state.
         const redirectUri = `${match.redirectOrigin}/api/oauth/callback?provider=${provider}`;
         const exchanged = await exchangeOauthCode(provider, { code, redirectUri, env: process.env }, liveTransport());

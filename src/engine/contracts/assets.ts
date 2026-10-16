@@ -32,7 +32,8 @@ export function normalisePrompt(prompt: string): string {
 
 /**
  * Cache key of an asset request (Bible 10.4): sha256 of the canonical JSON of the model class, the normalised
- * prompt, references, first and last frame, duration, seed and provider. Absent frames count as null.
+ * prompt, references, first and last frame, duration, seed, number of takes and provider. Absent frames count as null.
+ * The take count is part of the key: a two-take request must not be answered from a one-take entry, or the other way round.
  */
 export function assetCacheKey(spec: AssetSpec, providerId: string): string {
   if (providerId.length === 0) {
@@ -46,6 +47,7 @@ export function assetCacheKey(spec: AssetSpec, providerId: string): string {
     lastFrame: spec.lastFrame ?? null,
     durationMs: spec.durationMs,
     seed: spec.seed,
+    takes: spec.takes,
     providerId,
   });
 }

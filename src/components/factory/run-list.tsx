@@ -6,6 +6,7 @@ import { FORMAT_LABELS, INTENT_DESCRIPTIONS } from "@/lib/meridian/factory/run-b
 import { ATTESTATION_WORDING, LICENCE_KINDS, LICENCE_LABELS, type LicenceKind } from "@/lib/meridian/factory/rights-wording";
 import { spendLinesOf, type SpendFigures } from "@/lib/meridian/factory/spend-lines";
 import { NO_CANDIDATES, type RunCandidateSummary } from "@/lib/meridian/factory/candidate-types";
+import { safeHttpUrl } from "@/components/market/research-model";
 
 /** The licences attested for one creative of a variant. Each is the attestation id, or null where that licence is not attested. */
 export type RunCreativeLicence = { creativeId: string; music: string | null; footage: string | null };
@@ -208,9 +209,14 @@ function CandidateSection({ summary }: { summary: RunCandidateSummary }) {
       <ul className="space-y-1">
         {summary.shown.map((candidate) => (
           <li key={candidate.id} className="text-sm">
-            <a href={candidate.permalink} target="_blank" rel="noopener noreferrer" className="underline">
-              @{candidate.creatorHandle}
-            </a>{" "}
+            {/* A scraped permalink opens only when it is http or https; anything else is shown as text. */}
+            {safeHttpUrl(candidate.permalink) ? (
+              <a href={safeHttpUrl(candidate.permalink) ?? undefined} target="_blank" rel="noopener noreferrer" className="underline">
+                @{candidate.creatorHandle}
+              </a>
+            ) : (
+              <span>@{candidate.creatorHandle}</span>
+            )}{" "}
             <span className="font-medium">{candidate.tier ? `Tier ${candidate.tier}` : "Not rated"}</span>{" "}
             <span className="text-muted">
               {candidate.tier

@@ -100,8 +100,9 @@ Caps count only priced cost. Unpriced spend is not counted. The priced cost is r
 so a cap is never under-counted. The run view states this rule.
 
 A provider call that reports no cost writes no row, and the caps cannot see its spend. The Google image provider reports no cost today, so
-a Factory run that uses it is not counted against its caps. Its reservation is still held in the budget ledger, at the per-image ceiling of
-$1 (`FACTORY_IMAGE_CEILING_USD`), and settles at that ceiling. That ceiling is a guard, not a price.
+no Factory image uses it: a provider whose cost is unknown is refused, with the reason, in every run, capped or not. The run stops there
+until the provider has a declared price. The per-image ceiling (`FACTORY_IMAGE_CEILING_USD`, $1) remains a guard for providers that do have a
+price, not a price.
 
 The price table does not cover cache writes. The engine reports none, so a request that wrote to the prompt cache is priced only for its
 input, cached input and output, and its cost can be lower than the invoice.

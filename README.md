@@ -3,8 +3,8 @@
 Meridian is a multi-tenant advertising operating system. It holds a brand's own facts, turns evidence into creatives, decides which
 creatives may go out, exports them for posting, and records what happened afterwards.
 
-**Status: prerelease.** The package and the tag are `0.1.0-beta.11`. Read the upgrade notes in [docs/OPERATIONS.md](docs/OPERATIONS.md) before
-deploying. See [CHANGELOG.md](CHANGELOG.md).
+**Status: prerelease.** The package version and the tag are `0.1.0-beta.12`. Read the upgrade notes in [docs/OPERATIONS.md](docs/OPERATIONS.md)
+before deploying. Migrations 0077 to 0096 are new in this line. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What works in this release
 
@@ -41,6 +41,11 @@ deploying. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What is not connected or not verified
 
+- **Live spend is not ready.** Do not connect a live provider key to the video engine yet. Open in this pre-release: the render's cost is
+  a fixed estimate recorded as an actual (`src/engine/budget/reconcile.ts`); a server error on a submit can start a second paid job
+  (`src/engine/assets/router.ts`); failed calls are held as spend; a reconciled bill can raise a reservation past its caps without a pause;
+  and holds are not released when a request stops short of delivery. The Factory's own caps are now checked per run and per brand, and
+  unpriced image providers are refused. See the pre-release entry in [docs/engine/PHASE_LOG.md](docs/engine/PHASE_LOG.md).
 - **No live run of the video engine.** Agents hold no keys, so each phase's live acceptance (Bible section 19) is the owner's run. Production
   shots stay NOT_CONNECTED until `MEDIA_FUNCTIONS_BASE_URL` is set, the workspace has a Google Drive connection and an OpenRouter key. Some
   models stay NOT_CONNECTED even then, and so do speech and non-PNG images. The engine's owner items are listed in
@@ -91,7 +96,7 @@ inside `npm run dev` as well, so you do not need a second terminal. Set `DATABAS
 | `npm run setup` | Creates `.env` and generates the secrets, safe to repeat. Runs migrations when `DATABASE_URL` is set |
 | `npm run worker` | Runs queued jobs when `DATABASE_URL` is set (production) |
 | `npm run scheduler` | Runs periodic work when `DATABASE_URL` is set (production) |
-| `docker compose up --build` | The web app, worker, scheduler and PostgreSQL 16 (see [docs/SETUP.md](docs/SETUP.md)) |
+| `docker compose up --build` | The web app, worker, scheduler and PostgreSQL 16 (see [docs/SETUP.md](docs/SETUP.md)). Not yet built or run in the repository's checks |
 | `npm run db:migrate` | Applies migrations |
 | `npm test` | Unit and integration tests |
 | `npm run typecheck`, `npm run lint` | Type and lint checks |

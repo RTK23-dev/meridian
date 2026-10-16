@@ -478,14 +478,18 @@ export const approveFactoryStage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "member");
-    const runs = await sql<{ niche: string; status: string }>`
-      select niche, status from factory_runs
+    const runs = await sql<{ niche: string; status: string; current_stage: string }>`
+      select niche, status, current_stage from factory_runs
       where id = ${data.runId} and organization_id = ${organizationId} and brand_id = ${data.brandId}
       limit 1
     `;
     if (!runs[0]) throw new Error("That factory run is not in this brand.");
     if (runs[0].status === "succeeded" || runs[0].status === "failed") {
       throw new Error("This run has finished. Start a new run to approve more work.");
+    }
+    // An approval is for the stage the run is waiting at now. One recorded early would let the worker skip that later stop.
+    if (runs[0].status !== "awaiting_approval" || runs[0].current_stage !== data.stage) {
+      throw new Error("This run is not waiting for that stage.");
     }
     const approvalId = crypto.randomUUID();
     const recorded = await sql<{ id: string }>`

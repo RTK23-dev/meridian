@@ -62,7 +62,9 @@ export const connectPlatformAccountAction = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const access = await requireBrandAccess(sql, context.userId, data.brandId, "member");
+    // Connecting stores a publishing credential and can replace an existing account's credential, so it is an admin action,
+    // the same as disconnecting.
+    const access = await requireBrandAccess(sql, context.userId, data.brandId, "admin");
     return connectPlatformAccount(sql, access.organizationId, data.brandId, data.account);
   });
 

@@ -12,8 +12,7 @@ import { completeProductionJob } from "../production/materialization.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
 import type { EngineReadinessPorts } from "../../../engine/api/index.ts";
 import type { EngineOnlyFields } from "./engine-request.ts";
-import { capStopReason } from "./stage-decision.ts";
-import { meteredSpendOf } from "./spend.ts";
+import { capStopForRun } from "./spend.ts";
 
 /**
  * What the video engine takes from the Factory beyond the plan: the engine's readiness ports and the fields a request needs that a plan
@@ -200,13 +199,7 @@ export async function materialize(
  * every call, so the call that would pass a cap is never made.
  */
 export async function capStopOf(sql: Sql, input: ProduceInput, scope: Scope): Promise<string | null> {
-  const spend = await meteredSpendOf(sql, scope.organizationId, scope.brandId, input.runId);
-  return capStopReason({
-    capCents: input.caps.totalCents,
-    spentCents: spend.totalCents,
-    dailyCapCents: input.caps.dailyCents,
-    dailySpentCents: spend.dailyCents,
-  });
+  return capStopForRun(sql, scope.organizationId, scope.brandId, input.runId, input.caps);
 }
 
 /** The provider job statuses that mean a job is still running at the provider, so the run waits. */

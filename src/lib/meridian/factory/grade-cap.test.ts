@@ -27,7 +27,7 @@ const NOT_CONFIGURED = { status: "NOT_CONFIGURED" as const, message: "No key is 
 // tokens, so one million input tokens cost 10 cents. Each call reports this usage.
 const PRICED_MODEL = TOKEN_PRICES.find((entry) => entry.engineId === "openai-decisions")?.model ?? "";
 const TEN_CENTS_PER_CALL: DecisionUsage = { inputTokens: 1_000_000, outputTokens: 0, cachedInputTokens: 0 };
-const TOTAL_CAP_REASON = "The spend cap for this run is reached.";
+const TOTAL_CAP_REASON = "The spend cap for this brand is reached.";
 const DAILY_CAP_REASON = "The daily spend cap for this brand is reached.";
 
 /** Ads with stored creative DNA, one concept each, so every ad is asked the same questions. The ids are given in order. */

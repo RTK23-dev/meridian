@@ -1,4 +1,5 @@
 import type { AlertEvent, DeliveryTarget } from "./deliver.ts";
+import { publicUrlIssue } from "../sources/public-url.ts";
 
 export const MAX_DELIVERY_ATTEMPTS = 3;
 
@@ -15,7 +16,9 @@ export function deliveryUrlAllowed(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.username || parsed.password) return false;
-    if (parsed.protocol === "https:") return true;
+    // An https alert goes to a public host only. A private or metadata address would let an admin probe the network through the
+    // delivery status, so the same host rules that govern page reads apply here.
+    if (parsed.protocol === "https:") return publicUrlIssue(url) === null;
     if (parsed.protocol === "http:" && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")) return true;
     return false;
   } catch {

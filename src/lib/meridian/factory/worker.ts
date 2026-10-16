@@ -12,8 +12,8 @@ import { learnForRun } from "./learn.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
-import { capStopReason, KILL_SWITCH_STOP_REASON, stageDecision } from "./stage-decision.ts";
-import { effectiveCap, meteredSpendOf, pauseRunEngineSpend, spendCapsOf } from "./spend.ts";
+import { KILL_SWITCH_STOP_REASON, stageDecision } from "./stage-decision.ts";
+import { brandCapFiguresOf, capOrNull, capStopForRun, meteredSpendOf, pauseRunEngineSpend } from "./spend.ts";
 import { produceFactoryCreatives, scheduleProduceRecheck } from "./produce.ts";
 import type { FactoryEngineSeams } from "./produce-shared.ts";
 import { launchFactoryRun, recordTestPlan, scheduleRunMeasurement } from "./publish.ts";
@@ -107,17 +107,18 @@ export async function executeFactoryJob(
     select count(*)::int as n from factory_approvals
     where run_id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and stage = ${job.job_type}
   `;
-  const caps = await spendCapsOf(sql, job.organization_id, job.brand_id);
   const spend = await meteredSpendOf(sql, job.organization_id, job.brand_id, runId);
   const decision = stageDecision({
     automation: settings.automation,
     stage: job.job_type,
     approved: (approvals[0]?.n ?? 0) > 0,
     killSwitchEngaged: await killSwitchPaused(sql, job.organization_id, job.brand_id),
-    capCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
+    capCents: settings.caps.totalCents,
     spentCents: spend.totalCents,
-    dailyCapCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
+    dailyCapCents: settings.caps.dailyCents,
     dailySpentCents: spend.dailyCents,
+    // The brand's caps are held against the brand's spend across all its runs, not this run's spend alone.
+    ...(await brandCapFiguresOf(sql, job.organization_id, job.brand_id)),
   });
   if (decision.action === "stop" || decision.action === "await_approval") {
     // A stage that waits or is stopped is recorded on the run with its reason. It is not a failure. The stages after it hold until
@@ -172,10 +173,8 @@ export async function executeFactoryJob(
       runId,
       decisionEngine: settings.decisionEngine,
       engines: seams.decisionEngines,
-      caps: {
-        totalCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
-        dailyCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
-      },
+      // The run's own caps. The brand's caps are checked inside each engine call (capStopForRun).
+      caps: { totalCents: capOrNull(settings.caps.totalCents), dailyCents: capOrNull(settings.caps.dailyCents) },
     });
     if (graded.stop) {
       // A cap or the kill switch refused an engine call inside this stage. A refused ad keeps its stored engine grade, or records the reason
@@ -230,22 +229,16 @@ export async function executeFactoryJob(
       runId,
       formats: settings.formats,
       providers: settings.providers,
-      caps: {
-        totalCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
-        dailyCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
-      },
+      caps: { totalCents: capOrNull(settings.caps.totalCents), dailyCents: capOrNull(settings.caps.dailyCents) },
       costPerMasterUsd: settings.costPerMasterUsd,
       engines: seams.decisionEngines,
       engine: seams.engine,
     });
     if (produced.stop) {
       // A run that stops at a cap also stops its engine requests. A stop for any other reason leaves each request inside its own budget.
-      const spentNow = await meteredSpendOf(sql, job.organization_id, job.brand_id, runId);
-      const capReached = capStopReason({
-        capCents: effectiveCap(settings.caps.totalCents, caps.totalCents),
-        spentCents: spentNow.totalCents,
-        dailyCapCents: effectiveCap(settings.caps.dailyCents, caps.dailyCents),
-        dailySpentCents: spentNow.dailyCents,
+      const capReached = await capStopForRun(sql, job.organization_id, job.brand_id, runId, {
+        totalCents: capOrNull(settings.caps.totalCents),
+        dailyCents: capOrNull(settings.caps.dailyCents),
       });
       if (capReached) await pauseRunEngineSpend(sql, job.organization_id, job.brand_id, runId, capReached);
       await sql`
@@ -659,13 +652,7 @@ async function gradeStoredAds(
  */
 async function gradeCallStop(sql: Sql, input: { organizationId: string; brandId: string; runId: string; caps: GradeCaps }): Promise<string | null> {
   if (await killSwitchPaused(sql, input.organizationId, input.brandId)) return KILL_SWITCH_STOP_REASON;
-  const spent = await meteredSpendOf(sql, input.organizationId, input.brandId, input.runId);
-  return capStopReason({
-    capCents: input.caps.totalCents,
-    spentCents: spent.totalCents,
-    dailyCapCents: input.caps.dailyCents,
-    dailySpentCents: spent.dailyCents,
-  });
+  return capStopForRun(sql, input.organizationId, input.brandId, input.runId, input.caps);
 }
 
 /** The run's settings the plan reads. The plan takes its formats, automation, intent and spend cap from the run, and nothing else. */

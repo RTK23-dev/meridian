@@ -43,9 +43,12 @@ test("assetCacheKey changes when any input of the cache key changes", () => {
   }
 });
 
-test("assetCacheKey ignores fields that are not part of the cache key", () => {
+test("assetCacheKey ignores fields that are not part of the cache key, and counts the takes", () => {
   const key = assetCacheKey(base, KEY);
-  assert.equal(assetCacheKey({ ...base, specId: "asp_01J9ZK3M4N5P6Q7R8S9T0V1W2X", shotId: base.shotId, takes: 2 }, KEY), key);
+  assert.equal(assetCacheKey({ ...base, specId: "asp_01J9ZK3M4N5P6Q7R8S9T0V1W2X", shotId: base.shotId }, KEY), key);
+  // A request for another take count is a different request: it must not be answered from the other count's entry.
+  const otherTakes = base.takes === 1 ? 2 : 1;
+  assert.notEqual(assetCacheKey({ ...base, takes: otherTakes }, KEY), key, "a different take count has its own cache key");
 });
 
 test("assetCacheKey refuses an empty provider id", () => {
