@@ -266,8 +266,10 @@ there for every creative. This build writes the listing only. It copies no files
 The launch stage schedules `measurement.pull` for the run, every six hours, when it has a receipt to measure. The pull reads the run's
 published organic posts and its paused paid ads (`measurement/pull.ts`):
 
-- **Organic metrics** come from the channel's `fetchMetrics`. Every live channel returns null, so an organic pull with no fixture stores
-  nothing and reports that the metrics are not connected.
+- **Organic metrics** come from the channel's `fetchMetrics`, through the workspace's stored token. A read returns observed values with
+  the time they were read, `not_connected` (no stored token, no request sent), `not_implemented`, or `failed` with its reason. Only
+  observed readings are stored. Instagram Reels, YouTube Shorts and TikTok are read through their own read scopes; Instagram and TikTok
+  are not verified live. Facebook Page is not implemented: no request is built until its metric set is confirmed from the current docs.
 - **Paid metrics** come from the workspace's stored token through the insights reader. Without a stored token, nothing is measured. The
   test publisher has no insights source.
 
