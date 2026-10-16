@@ -109,6 +109,8 @@ export async function scrapeAndLearnOrganicContent(
     organizationId: input.organizationId,
     brandId: input.brandId,
     platform: scraped.platform,
+    // The platform's own id of the scraped post. Without one the ingest refuses to write a published row (learning-bridge.ts).
+    externalPostId: scraped.externalId,
     sourceUrl: scraped.url,
     title: scraped.title,
     rawText: scraped.caption,

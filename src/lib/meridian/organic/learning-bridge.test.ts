@@ -43,6 +43,7 @@ function createMockSql() {
         creative_id: values[3],
         platform: values[4],
         caption: values[5],
+        external_id: values[6],
       });
       return [];
     }
@@ -120,6 +121,7 @@ test("ingestOrganicContentForLearning creates creative record, organic observati
     organizationId: orgId,
     brandId,
     platform: "tiktok",
+    externalPostId: "7123456789012345678",
     sourceUrl: "https://www.tiktok.com/@creator/video/123456789",
     title: "Viral Skincare Routine Hack",
     rawText: "Stop making this huge mistake in your night routine! #skincare",
@@ -183,6 +185,7 @@ test("an organic metric the platform did not report is stored as unknown, never 
     organizationId: "org_test",
     brandId: "brand_test",
     platform: "tiktok",
+    externalPostId: "7987654321098765432",
     sourceUrl: "https://www.tiktok.com/@creator/video/987654321",
     title: "Unmeasured post",
     rawText: "A post whose view and like counts were never returned",
@@ -196,4 +199,107 @@ test("an organic metric the platform did not report is stored as unknown, never 
   assert.equal(observation.views, null, "views stays unknown");
   assert.equal(observation.likes, null, "likes stays unknown");
   assert.equal(observation.shares, null, "shares stays unknown");
+});
+
+test("a published organic row is refused without the platform's own post id, and nothing is written", async () => {
+  for (const externalPostId of [undefined, "", "   "]) {
+    const { sql, store } = createMockSql();
+    await assert.rejects(
+      ingestOrganicContentForLearning(sql, {
+        organizationId: "org_test",
+        brandId: "brand_test",
+        platform: "tiktok",
+        externalPostId,
+        angle: "pain_point",
+        hookType: "bold_claim",
+        format: "demo",
+        metrics: { views: 100 },
+      }),
+      /platform's own post id/,
+    );
+    assert.equal(store.creative_records.length, 0, "no creative is written");
+    assert.equal(store.organic_posts.length, 0, "no published row is written");
+    assert.equal(store.organic_observations.length, 0, "no observation is written");
+  }
+});
+
+test("the published organic row carries the platform's own post id", async () => {
+  const { sql, store } = createMockSql();
+  await ingestOrganicContentForLearning(sql, {
+    organizationId: "org_test",
+    brandId: "brand_test",
+    platform: "youtube",
+    externalPostId: "dQw4w9WgXcQ",
+    angle: "pain_point",
+    hookType: "bold_claim",
+    format: "demo",
+    metrics: { views: 10 },
+  });
+  assert.equal(store.organic_posts.length, 1);
+  assert.equal(store.organic_posts[0]?.external_id, "dQw4w9WgXcQ");
+  assert.equal(store.organic_observations[0]?.creative_id, store.organic_posts[0]?.creative_id);
+});
+
+test("a failed organic post write is not swallowed: the ingest throws and writes no observation", async () => {
+  const { sql, store } = createMockSql();
+  const refusingTx = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+    if (strings.join("?").includes("insert into organic_posts")) {
+      return Promise.reject(new Error("organic_posts write refused"));
+    }
+    return sql(strings, ...values);
+  }) as unknown as Sql;
+  refusingTx.begin = <T>(fn: (tx: Sql) => Promise<T>): Promise<T> => fn(refusingTx);
+
+  await assert.rejects(
+    ingestOrganicContentForLearning(refusingTx, {
+      organizationId: "org_test",
+      brandId: "brand_test",
+      platform: "tiktok",
+      externalPostId: "7111111111111111111",
+      angle: "pain_point",
+      hookType: "bold_claim",
+      format: "demo",
+      metrics: { views: 10 },
+    }),
+    /organic_posts write refused/,
+  );
+  assert.equal(store.organic_observations.length, 0, "no observation is written without its post row");
+});
+
+test("the creative, post and observation writes run in one transaction", async () => {
+  const { sql: base } = createMockSql();
+  const events: string[] = [];
+  const statement = (inner: Sql, scope: string): Sql => {
+    const run = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      events.push(`${scope}:${strings.join("?").trim().split(/\s+/).slice(0, 3).join(" ")}`);
+      return inner(strings, ...values);
+    }) as unknown as Sql;
+    return run;
+  };
+  const tx = statement(base, "tx");
+  const top = statement(base, "top");
+  top.begin = <T>(fn: (t: Sql) => Promise<T>): Promise<T> => {
+    events.push("begin");
+    return fn(tx);
+  };
+
+  await ingestOrganicContentForLearning(top, {
+    organizationId: "org_test",
+    brandId: "brand_test",
+    platform: "instagram",
+    externalPostId: "17900000000000001",
+    angle: "pain_point",
+    hookType: "bold_claim",
+    format: "demo",
+    metrics: { views: 10 },
+  });
+
+  const writes = ["tx:insert into creative_records", "tx:insert into organic_posts", "tx:insert into organic_observations"];
+  const indexes = writes.map((write) => events.indexOf(write));
+  assert.ok(indexes.every((index) => index >= 0), "each of the three writes is issued through the transaction");
+  const begin = events.indexOf("begin");
+  assert.ok(begin >= 0 && begin < indexes[0], "the transaction opens before the first write");
+  const between = events.slice(indexes[0], indexes[2] + 1);
+  assert.ok(!between.includes("begin"), "no second transaction opens between the three writes");
+  assert.ok(between.every((event) => event.startsWith("tx:")), "no statement outside the transaction runs between the three writes");
 });
