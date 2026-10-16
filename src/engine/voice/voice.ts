@@ -120,6 +120,7 @@ async function speak(
     spec: {
       schema: "meridian.asset_spec/v1",
       specId: newId("asp_"),
+      modelChoice: null,
       shotId: narrationShotId(run.requestId),
       modelClass: "tts",
       prompt: text,

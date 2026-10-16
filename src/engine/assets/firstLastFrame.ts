@@ -160,6 +160,7 @@ export async function runFirstLastFrameTest(input: FrameTestInput): Promise<Fram
     const spec: AssetSpec = {
       schema: "meridian.asset_spec/v1",
       specId: newId("asp_"),
+      modelChoice: null,
       shotId: newId("shot_"),
       modelClass: route.capability,
       prompt: FRAME_TEST_PROMPT,

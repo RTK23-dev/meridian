@@ -139,6 +139,7 @@ describe("first-and-last-frame live run", () => {
     const spec: AssetSpec = {
       schema: "meridian.asset_spec/v1",
       specId: "asp_01JABCDEFGHJKMNPQRSTVWXYZ0",
+      modelChoice: null,
       shotId: "shot_01JABCDEFGHJKMNPQRSTVWXYZ0",
       modelClass: "video.cinematic",
       prompt: FRAME_TEST_PROMPT,

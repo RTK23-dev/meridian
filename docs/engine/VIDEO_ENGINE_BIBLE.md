@@ -871,7 +871,7 @@ For the production model classes (video, avatar, image, speech), the orchestrato
 
 1. **Candidates.** The gateway reads OpenRouter's catalog (`GET /api/v1/videos/models` for video, `GET /api/v1/models?output_modalities=...` for image and speech), cached with its read time. A candidate must fit the shot (duration, aspect ratio 9:16, first or last frame when the shot needs one) and must have a price the engine can estimate from (for video, a per-second SKU). A model with no usable price is not a candidate, because its call could not be reserved.
 2. **Choice.** The director role receives the shot and the candidates (id, capabilities, price) and returns one model id with its reason. Its answer is untrusted: code accepts it only if the id is one of the candidates, and otherwise the shot uses the first eligible fallback target from the route table, recorded as such.
-3. **Record.** The shot spec carries the chosen model, the reason and the catalog read time, and every choice is a `Decision` on the shot, so the user sees why each model was used.
+3. **Record.** The asset spec of each call carries the chosen model, the reason and the catalog read time, and every choice is a `Decision` on the shot, so the user sees why each model was used.
 4. **Preferences (later).** `config/model-preferences.ts` will rank candidates per model class from the gold sets and the scoring in 10.2. It starts empty, so for now the director picks from the whole eligible catalog.
 5. **Cost.** The estimate comes from the catalog price; the bill is OpenRouter's `usage.cost` on the completed job. The ledger rules of 14.1 apply unchanged.
 

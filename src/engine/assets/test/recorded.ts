@@ -109,6 +109,7 @@ export function assetSpec(overrides: Partial<AssetSpec> = {}): AssetSpec {
   return {
     schema: "meridian.asset_spec/v1",
     specId: newId("asp_"),
+    modelChoice: null,
     shotId: newId("shot_"),
     modelClass: "video.cinematic",
     prompt: "A ceramic mug on a wooden table, steam rising, slow push-in.",
