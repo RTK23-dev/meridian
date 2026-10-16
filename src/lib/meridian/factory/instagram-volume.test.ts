@@ -15,11 +15,17 @@ import {
 } from "../sources/apify/fixtures.ts";
 import { FACTORY_TEST_BRAND, FACTORY_TEST_ORG, FACTORY_TEST_RUN, makeFactoryTestSql, seedFactoryRun } from "../testing/factory-fixtures.ts";
 import { gatherInstagramVolume } from "./instagram-volume.ts";
+import type { ApifyClient, ApifyRunCall } from "../sources/apify/client.ts";
 import type { Sql } from "../learning/store.ts";
 
 const GATHERED_AT = new Date("2026-10-15T09:00:00.000Z");
 /** Twelve reels of one creator: the median of the view counts is 6,500. */
 const TWELVE_VIEWS = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000];
+/**
+ * A weekly cap large enough for the candidates and a creator baseline in one test. The production cap (1,000) would leave no room
+ * for the baseline once the candidates have used it, so the scenarios that need a baseline or a snapshot pass this one.
+ */
+const TEST_CAP = 10_000;
 
 function answersFor(creatorViews: Array<number | null> = TWELVE_VIEWS) {
   return {
@@ -28,12 +34,33 @@ function answersFor(creatorViews: Array<number | null> = TWELVE_VIEWS) {
   };
 }
 
-function gather(sql: Sql, client: ReturnType<typeof recordedApifyClient>, at: Date = GATHERED_AT) {
+function gather(sql: Sql, client: ApifyClient, at: Date = GATHERED_AT, weeklyCap: number = TEST_CAP) {
   return gatherInstagramVolume(
     sql,
-    { organizationId: FACTORY_TEST_ORG, brandId: FACTORY_TEST_BRAND, runId: FACTORY_TEST_RUN, niche: "skincare", now: () => at },
+    { organizationId: FACTORY_TEST_ORG, brandId: FACTORY_TEST_BRAND, runId: FACTORY_TEST_RUN, niche: "skincare", now: () => at, weeklyCap },
     client,
   );
+}
+
+/** A gather with the production cap: the value in INSTAGRAM_VOLUME_CONFIG, which the run uses when no cap is passed. */
+function gatherWithConfigCap(sql: Sql, client: ApifyClient) {
+  return gatherInstagramVolume(
+    sql,
+    { organizationId: FACTORY_TEST_ORG, brandId: FACTORY_TEST_BRAND, runId: FACTORY_TEST_RUN, niche: "skincare", now: () => GATHERED_AT },
+    client,
+  );
+}
+
+/** Each Apify answer takes a few milliseconds, so concurrent gathers overlap as they do in the worker. */
+function slowClient(client: ReturnType<typeof recordedApifyClient>): ApifyClient & { calls: ApifyRunCall[] } {
+  return {
+    calls: client.calls,
+    connection: client.connection,
+    async runSync(call) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return client.runSync(call);
+    },
+  };
 }
 
 test("with no Apify key the source is not connected, and no request is written or sent", async () => {
@@ -126,14 +153,117 @@ test("a gather run stores the video candidates with their baseline, their rating
 test("the weekly cap stops a second gather before any request is sent", async () => {
   const sql = await makeFactoryTestSql();
   await seedFactoryRun(sql, { settings: {}, level: 0, niche: "skincare", website: "", country: "us" });
-  await gather(sql, recordedApifyClient(answersFor()));
+  await gatherWithConfigCap(sql, recordedApifyClient(answersFor()));
 
   const second = recordedApifyClient(answersFor());
-  const result = await gather(sql, second);
+  const result = await gatherWithConfigCap(sql, second);
   assert.equal(result.state, "ok");
   assert.equal(result.items, 0);
-  assert.match(result.reason, /weekly limit of 1000 candidates/);
+  assert.match(result.reason, /weekly limit of 1000 Apify results/);
   assert.equal(second.calls.length, 0, "the cap is checked before the request is written or sent");
+});
+
+test("the weekly cap counts a creator baseline: a baseline that would pass the limit is not written or sent", async () => {
+  const sql = await makeFactoryTestSql();
+  await seedFactoryRun(sql, { settings: {}, level: 0, niche: "skincare", website: "", country: "us" });
+  // The candidates use 1,000 of the 1,010 results allowed, so a 30-reel baseline would pass the limit.
+  const client = recordedApifyClient(answersFor());
+  const result = await gather(sql, client, GATHERED_AT, 1010);
+  assert.equal(result.state, "ok");
+  assert.equal(result.items, 2, "the candidates are still stored");
+  assert.equal(client.calls.length, 1, "only the hashtag request is sent");
+
+  const reels = await sql<{ creator_median_views: number | null; creator_baseline_reason: string }>`
+    select creator_median_views::int as creator_median_views, creator_baseline_reason
+    from discovered_organic_reels where organization_id = ${FACTORY_TEST_ORG}
+  `;
+  assert.equal(reels.length, 2);
+  for (const reel of reels) {
+    assert.equal(reel.creator_median_views, null, "no baseline was measured");
+    assert.match(reel.creator_baseline_reason, /weekly limit of 1010 Apify results/);
+  }
+
+  const requests = await sql<{ purpose: string; requested: number }>`
+    select purpose, requested_results::int as requested from instagram_volume_requests where organization_id = ${FACTORY_TEST_ORG}
+  `;
+  assert.deepEqual(requests, [{ purpose: "candidates", requested: 1000 }], "the refused baseline has no request row");
+});
+
+test("a creator baseline that fits the weekly limit is sent, and its results count against the limit", async () => {
+  const sql = await makeFactoryTestSql();
+  await seedFactoryRun(sql, { settings: {}, level: 0, niche: "skincare", website: "", country: "us" });
+  const client = recordedApifyClient(answersFor());
+  await gather(sql, client, GATHERED_AT, 1030);
+  assert.equal(client.calls.length, 2, "the hashtag request and the creator request");
+
+  const requests = await sql<{ purpose: string; requested: number }>`
+    select purpose, requested_results::int as requested from instagram_volume_requests
+    where organization_id = ${FACTORY_TEST_ORG} order by purpose
+  `;
+  assert.deepEqual(requests, [
+    { purpose: "baseline", requested: INSTAGRAM_VOLUME_CONFIG.creatorBaselineReels },
+    { purpose: "candidates", requested: 1000 },
+  ]);
+});
+
+test("a +24 h snapshot counts against the weekly limit, and is not sent when it would pass it", async () => {
+  const sql = await makeFactoryTestSql();
+  await seedFactoryRun(sql, { settings: {}, level: 0, niche: "skincare", website: "", country: "us" });
+  // The candidates use the whole production limit, so the snapshot's one result would pass it.
+  await gatherWithConfigCap(sql, recordedApifyClient(answersFor()));
+  const reel = await sql<{ id: string }>`
+    select id from discovered_organic_reels where organization_id = ${FACTORY_TEST_ORG} and permalink like '%FIXTURE_H1%'
+  `;
+  const later = recordedApifyClient({ [ACTORS.creator]: { items: [{ ...hashtagReelItem(1), videoPlayCount: 20000 }] } });
+  await assert.rejects(
+    executeReelSnapshot(
+      sql,
+      { id: "job-snapshot-cap", organization_id: FACTORY_TEST_ORG, brand_id: FACTORY_TEST_BRAND },
+      { reelId: reel[0]?.id ?? "", checkpointHours: 24 },
+      later,
+      () => new Date(GATHERED_AT.getTime() + 24 * 3600 * 1000),
+      INSTAGRAM_VOLUME_CONFIG.candidatesPerWeek,
+    ),
+    /weekly limit of 1000 Apify results/,
+  );
+  assert.equal(later.calls.length, 0, "no snapshot request is sent at the limit");
+  const snapshots = await sql<{ n: number }>`
+    select count(*)::int as n from instagram_volume_requests where organization_id = ${FACTORY_TEST_ORG} and purpose = 'snapshot'
+  `;
+  assert.equal(snapshots[0]?.n, 0, "and none is written");
+});
+
+test("concurrent gathers for one niche cannot both pass the weekly limit: only one sends its candidate request", async () => {
+  const sql = await makeFactoryTestSql();
+  await seedFactoryRun(sql, { settings: {}, level: 0, niche: "skincare", website: "", country: "us" });
+  const client = slowClient(recordedApifyClient(answersFor()));
+
+  const results = await Promise.all([gatherWithConfigCap(sql, client), gatherWithConfigCap(sql, client)]);
+  assert.equal(client.calls.length, 1, "one hashtag request is sent, however the two gathers interleave");
+  assert.equal(results.filter((result) => result.items > 0).length, 1, "one gather stores its candidates");
+  for (const result of results.filter((item) => item.items === 0)) {
+    assert.match(result.reason, /weekly limit of 1000 Apify results/);
+  }
+
+  const total = await sql<{ total: number }>`
+    select coalesce(sum(requested_results), 0)::int as total from instagram_volume_requests
+    where organization_id = ${FACTORY_TEST_ORG} and niche = 'skincare'
+  `;
+  assert.equal(total[0]?.total, 1000, "the week's results asked of Apify are the cap, not more");
+});
+
+test("concurrent gathers under a cap of 2,500 never ask Apify for more than the cap, and every sent call has its own request row", async () => {
+  const sql = await makeFactoryTestSql();
+  await seedFactoryRun(sql, { settings: {}, level: 0, niche: "skincare", website: "", country: "us" });
+  const client = slowClient(recordedApifyClient(answersFor()));
+
+  await Promise.all([1, 2, 3, 4].map(() => gather(sql, client, GATHERED_AT, 2500)));
+  const totals = await sql<{ total: number; n: number }>`
+    select coalesce(sum(requested_results), 0)::int as total, count(*)::int as n from instagram_volume_requests
+    where organization_id = ${FACTORY_TEST_ORG} and niche = 'skincare'
+  `;
+  assert.ok((totals[0]?.total ?? Infinity) <= 2500, `the results asked of Apify (${totals[0]?.total}) stay within the cap`);
+  assert.equal(client.calls.length, totals[0]?.n, "each call sent has one request row, and a refused call has none");
 });
 
 test("a failed hashtag request is failed, keeps its place in the weekly cap, and stores no candidate", async () => {
@@ -199,6 +329,7 @@ test("a +24 h checkpoint records the reel's views and re-rates it with the store
     { reelId, checkpointHours: 24 },
     later,
     () => new Date(GATHERED_AT.getTime() + 24 * 3600 * 1000),
+    TEST_CAP,
   );
   assert.equal(summary.startsWith("snapshot:24h:views:20000:tier:"), true, summary);
 
@@ -229,6 +360,8 @@ test("a checkpoint whose reel is not returned by Apify throws, so the job shows 
       { id: "job-snapshot-2", organization_id: FACTORY_TEST_ORG, brand_id: FACTORY_TEST_BRAND },
       { reelId: reel[0]?.id ?? "", checkpointHours: 72 },
       other,
+      () => new Date(),
+      TEST_CAP,
     ),
     /no item for this reel/,
   );

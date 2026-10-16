@@ -8,17 +8,20 @@
  * Every planned item is assigned to the holdout or to the treated arm by a hash of its id, and each assignment is stored
  * (factory_holdouts). The night's morning summary (sleep_mode_nights) says what ran, the counts, the holdout ids, the failures and
  * why the night stopped, if it did, and each tuned-value change it refused under the nightly change cap (sleep-tuning.ts). A night with no budget, no connected source or the kill switch engaged records why and stops.
+ *
+ * A night that fails is retried by its job. The retry continues the night's run and does not run the stages an earlier attempt
+ * finished. A night that reached its end (planned or stopped) is never run again.
  */
 import { thresholds } from "../../../engine/config/thresholds.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
-import type { Sql } from "../learning/store.ts";
+import { withTransaction, type Sql } from "../learning/store.ts";
 import { adsMustPause } from "./kill-switch.ts";
 import type { FactoryStage } from "./pipeline.ts";
 import { effectiveCap, spendCapsOf } from "./spend.ts";
 import { capStopReason } from "./stage-decision.ts";
 import { runSettingsFromStorage, type RunSettings } from "./run-settings.ts";
 import { challengerArmOf, holdoutArmOf } from "./sleep-holdout.ts";
-import { localDateKey, nextNightAt, sleepScheduleIdOf } from "./sleep-time.ts";
+import { localDateKey, nextNightAt, SLEEP_JOB_TYPE, sleepScheduleIdOf } from "./sleep-time.ts";
 import { nightlyTuningOf, tuningSummaryOf, type TunedProposal } from "./sleep-tuning.ts";
 import { executeFactoryJob } from "./worker.ts";
 
@@ -86,6 +89,78 @@ async function sourcesOfRun(sql: Sql, organizationId: string, brandId: string, r
   return rows.map((row) => ({ source: row.source, state: row.state, reason: row.reason, items: Number(row.items) }));
 }
 
+/** A night an earlier attempt began and did not finish. This attempt continues its run and keeps the stages it finished. */
+type ResumedNight = { nightId: string; runId: string; finished: StageRecord[] };
+
+/** The stages an earlier attempt finished, read from the night's record. A stage that failed is not finished, so it runs again. */
+function finishedStagesOf(text: string): StageRecord[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const finished: StageRecord[] = [];
+  for (const entry of parsed) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { stage, result } = entry as { stage?: unknown; result?: unknown };
+    if (typeof stage !== "string" || typeof result !== "string") continue;
+    if (!SLEEP_STAGES.includes(stage as FactoryStage) || result.startsWith("failed:")) continue;
+    finished.push({ stage, result });
+  }
+  return finished;
+}
+
+/** Whether another sleep job of the workspace holds a live lease, so it may be running a night now. */
+async function otherSleepJobLive(sql: Sql, organizationId: string, jobId: string): Promise<boolean> {
+  const rows = await sql<{ n: number }>`
+    select count(*)::int as n from jobs
+    where organization_id = ${organizationId} and job_type = ${SLEEP_JOB_TYPE} and status = 'running'
+      and lease_until > now() and id <> ${jobId}
+  `;
+  return Number(rows[0]?.n ?? 0) > 0;
+}
+
+/**
+ * Claims a night an earlier attempt began, so this attempt can finish it. A failed night is claimed. A night still marked running is
+ * claimed only when no other sleep job of the workspace holds a live lease: the queue runs one attempt of a job at a time, so that
+ * night was left by a worker that died. Returns null when the night reached its end, or another attempt is running it.
+ *
+ * The check and the claim run in one transaction under a lock on the night's row, so two attempts cannot both claim one night.
+ */
+async function claimEarlierNight(sql: Sql, organizationId: string, nightKey: string, jobId: string): Promise<ResumedNight | null> {
+  const earlier = await sql<{ status: string }>`
+    select status from sleep_mode_nights where organization_id = ${organizationId} and night_key = ${nightKey} limit 1
+  `;
+  if (earlier[0]?.status !== "failed" && earlier[0]?.status !== "running") return null;
+
+  return withTransaction(sql, async (tx) => {
+    const rows = await tx<{ id: string; status: string; run_id: string; stages: string }>`
+      select id, status, run_id, stages from sleep_mode_nights
+      where organization_id = ${organizationId} and night_key = ${nightKey}
+      for update
+    `;
+    const night = rows[0];
+    if (!night) return null;
+    if (night.status === "running" && (await otherSleepJobLive(tx, organizationId, jobId))) return null;
+    if (night.status !== "failed" && night.status !== "running") return null;
+    await tx`
+      update sleep_mode_nights set status = 'running', reason = '', finished_at = null
+      where id = ${night.id} and organization_id = ${organizationId}
+    `;
+    return { nightId: night.id, runId: night.run_id, finished: finishedStagesOf(night.stages) };
+  });
+}
+
+/** Records the stages finished so far, so an attempt that fails before the night ends does not run them again. */
+async function saveStageProgress(sql: Sql, organizationId: string, nightId: string, stages: StageRecord[]): Promise<void> {
+  await sql`
+    update sleep_mode_nights set stages = ${JSON.stringify(stages)}
+    where id = ${nightId} and organization_id = ${organizationId}
+  `;
+}
+
 /**
  * One stage, run through the factory's own stage function with a job built for it. A stage that throws is recorded as a failure,
  * and the night stops there. Returns the stage's result, or null when it failed.
@@ -96,6 +171,7 @@ async function runStage(
   stage: FactoryStage,
   stages: StageRecord[],
   failures: string[],
+  execute: StageRunner = executeFactoryJob,
 ): Promise<string | null> {
   const payload = { organizationId: input.organizationId, brandId: input.brandId, runId: input.runId, niche: input.niche, stage };
   const job: ExecutableJob = {
@@ -108,7 +184,7 @@ async function runStage(
     max_attempts: 1,
   };
   try {
-    const result = await executeFactoryJob(sql, job, payload);
+    const result = await execute(sql, job, payload);
     stages.push({ stage, result: result.slice(0, RESULT_CHARS) });
     return result;
   } catch (error) {
@@ -124,7 +200,13 @@ async function runStage(
  * bounds. Every proposal is held to the nightly change cap (sleep-tuning.ts), and the morning summary records each refusal. Production
  * passes none: sleep mode proposes no tuned value in this build, so the night records that the cap was not used.
  */
-export type SleepSeams = { tuning?: readonly TunedProposal[] };
+export type SleepSeams = {
+  tuning?: readonly TunedProposal[];
+  /** Runs one factory stage. Unset, the night runs the factory's own stage function. Tests pass a stand-in. */
+  stage?: StageRunner;
+};
+
+type StageRunner = (sql: Sql, job: ExecutableJob, payload: Record<string, unknown>) => Promise<string>;
 
 /**
  * Runs one night for the workspace. The job returns a short result ("sleep:planned", "sleep:stopped", "sleep:failed", or
@@ -148,23 +230,19 @@ export async function runSleepNight(sql: Sql, job: ExecutableJob, now: Date = ne
     where id = ${sleepScheduleIdOf(organizationId)} and organization_id = ${organizationId} and enabled = true
   `;
 
-  // A night is keyed by its local date, so it runs once. A night left running by an earlier attempt is marked failed.
+  // A night is keyed by its local date, so it runs once: a night that reached its end is not run again. A night an earlier attempt
+  // failed to finish is claimed and resumed here (claimEarlierNight), so the retry of a failed night runs it.
   const nightKey = localDateKey(now, settings.time_zone);
-  const nightId = crypto.randomUUID();
+  const newNightId = crypto.randomUUID();
   const created = await sql<{ id: string }>`
     insert into sleep_mode_nights (id, organization_id, brand_id, night_key, status, started_at)
-    values (${nightId}, ${organizationId}, ${brandId}, ${nightKey}, 'running', now())
+    values (${newNightId}, ${organizationId}, ${brandId}, ${nightKey}, 'running', now())
     on conflict (organization_id, night_key) do nothing
     returning id
   `;
-  if (!created[0]) {
-    await sql`
-      update sleep_mode_nights
-      set status = 'failed', reason = ${"The night stopped before it finished, and it was not run again."}, finished_at = now()
-      where organization_id = ${organizationId} and night_key = ${nightKey} and status = 'running'
-    `;
-    return `sleep:already-ran:${nightKey}`;
-  }
+  const resumed = created[0] ? null : await claimEarlierNight(sql, organizationId, nightKey, job.id);
+  if (!created[0] && !resumed) return `sleep:already-ran:${nightKey}`;
+  const nightId = resumed?.nightId ?? newNightId;
 
   try {
     const end = await runNight(sql, {
@@ -176,13 +254,25 @@ export async function runSleepNight(sql: Sql, job: ExecutableJob, now: Date = ne
       updatedBy: settings.updated_by,
       timeZone: settings.time_zone,
       tuningProposals: seams.tuning ?? [],
+      stageRunner: seams.stage,
+      resumed,
     });
     return `sleep:${end}`;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // The night and its run both record the failure, so neither shows as running. The job queue retries the job, and the retry resumes
+    // this night from the stages it did not finish.
     await sql`
       update sleep_mode_nights set status = 'failed', reason = ${message.slice(0, 400)}, finished_at = now()
       where id = ${nightId} and organization_id = ${organizationId}
+    `;
+    await sql`
+      update factory_runs set status = 'failed', error = ${`Sleep mode stopped: ${message}`.slice(0, 500)}, updated_at = now()
+      where organization_id = ${organizationId} and status in ('queued', 'running')
+        and id in (
+          select run_id from sleep_mode_nights
+          where id = ${nightId} and organization_id = ${organizationId} and run_id <> ''
+        )
     `;
     throw error;
   }
@@ -199,10 +289,14 @@ async function runNight(
     updatedBy: string;
     timeZone: string;
     tuningProposals: readonly TunedProposal[];
+    stageRunner?: StageRunner;
+    resumed: ResumedNight | null;
   },
 ): Promise<NightEnd> {
   const { organizationId, brandId, nightId, nightKey, niche } = input;
-  const stages: StageRecord[] = [];
+  // The stages an earlier attempt finished stand as they were. The stages after them run now.
+  const stages: StageRecord[] = [...(input.resumed?.finished ?? [])];
+  const finished = new Map(stages.map((record): [string, string] => [record.stage, record.result]));
   const failures: string[] = [];
   const sources: NightSource[] = [];
   const holdoutIds: string[] = [];
@@ -289,24 +383,49 @@ async function runNight(
     });
   }
 
-  // The run the night works in. It starts with the brand's run defaults, and it is the same kind of run the Factory starts.
-  const levelRows = await sql<{ level: number }>`
-    select level from factory_settings where organization_id = ${organizationId} and brand_id = ${brandId} limit 1
-  `;
-  runId = crypto.randomUUID();
-  await sql`
-    insert into factory_runs (id, organization_id, brand_id, niche, level, status, current_stage, created_by, settings)
-    values (${runId}, ${organizationId}, ${brandId}, ${niche}, ${Number(levelRows[0]?.level ?? 0)}, 'running', 'factory.discover',
-      ${input.updatedBy}, ${JSON.stringify(defaults)})
-  `;
+  // The run the night works in. A resumed night continues the run an earlier attempt began, so the candidates that run stored are kept.
+  // A new run starts with the brand's run defaults, and it is the same kind of run the Factory starts.
+  if (input.resumed?.runId) {
+    runId = input.resumed.runId;
+    const continued = await sql<{ id: string }>`
+      update factory_runs set status = 'running', error = '', updated_at = now()
+      where id = ${runId} and organization_id = ${organizationId} and brand_id = ${brandId}
+        and status in ('failed', 'paused', 'running')
+      returning id
+    `;
+    if (!continued[0]) {
+      return conclude({
+        end: "stopped",
+        reason: "The run this night began cannot be continued, so the night did not run again. The run shows its status.",
+        summary: "Stopped: the run this night began cannot be continued.",
+        runStatus: null,
+        runError: "",
+        runStage: "",
+      });
+    }
+  } else {
+    const levelRows = await sql<{ level: number }>`
+      select level from factory_settings where organization_id = ${organizationId} and brand_id = ${brandId} limit 1
+    `;
+    runId = crypto.randomUUID();
+    await sql`
+      insert into factory_runs (id, organization_id, brand_id, niche, level, status, current_stage, created_by, settings)
+      values (${runId}, ${organizationId}, ${brandId}, ${niche}, ${Number(levelRows[0]?.level ?? 0)}, 'running', 'factory.discover',
+        ${input.updatedBy}, ${JSON.stringify(defaults)})
+    `;
+    await sql`update sleep_mode_nights set run_id = ${runId} where id = ${nightId} and organization_id = ${organizationId}`;
+  }
 
   const stageInput = { organizationId, brandId, runId, niche, nightId };
   let haltReason = "";
   let lastStage: FactoryStage = "factory.discover";
   for (const stage of SLEEP_STAGES) {
     lastStage = stage;
-    const result = await runStage(sql, stageInput, stage, stages, failures);
+    // A stage an earlier attempt finished is not run again. Its result stands, and the checks below still apply to it.
+    const earlier = finished.get(stage);
+    const result = earlier ?? (await runStage(sql, stageInput, stage, stages, failures, input.stageRunner));
     if (result === null) break;
+    if (earlier === undefined) await saveStageProgress(sql, organizationId, nightId, stages);
     // A stage that the run's own rules stopped (the kill switch, a cap, a waiting approval) ends the night at that stage.
     if (result.startsWith("stopped:") || result.startsWith("awaiting-approval:")) {
       haltReason = `The run stopped at ${stage}, so the night stopped with it. The run shows the reason.`;

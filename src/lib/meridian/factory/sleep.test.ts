@@ -58,13 +58,11 @@ function fakeSleepDb(options: {
       });
       return [{ id }];
     }
-    if (text.includes("set status = 'failed'")) {
-      // The already-ran path: a night still running is marked failed. Values: reason, organization, night key.
-      const [, organizationId, nightKey] = values as string[];
-      for (const night of nights) {
-        if (night.organization_id === organizationId && night.night_key === nightKey && night.status === "running") night.status = "failed";
-      }
-      return [];
+    if (text.includes("select status from sleep_mode_nights")) {
+      // The night an insert found already there. Values: organization, night key.
+      const [organizationId, nightKey] = values as string[];
+      const night = nights.find((item) => item.organization_id === organizationId && item.night_key === nightKey);
+      return night ? [{ status: night.status }] : [];
     }
     if (text.includes("update sleep_mode_nights set status")) {
       // The night's final record. Values follow the statement: 0 status, 2 reason, 3 summary, 6 counts, 8 failures, 10 change budget, 11 night id.

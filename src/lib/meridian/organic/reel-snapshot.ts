@@ -12,9 +12,9 @@ import { parseReelItem, reelKey, reelUrlInput, type ReelCandidate } from "../sou
 import {
   hoursSincePosted,
   loadReel,
-  newVolumeRequest,
   observedPoints,
   recordReelRating,
+  reserveVolumeRequest,
   settleVolumeRequest,
   upsertReelSnapshot,
   type StoredReel,
@@ -28,13 +28,17 @@ function isSameReel(candidate: ReelCandidate, reel: StoredReel): boolean {
   return candidate.externalId !== null && reel.externalPostId !== null && candidate.externalId === reel.externalPostId;
 }
 
-/** Runs one checkpoint job. Returns a summary of what was stored; throws when nothing could be observed. */
+/**
+ * Runs one checkpoint job. Returns a summary of what was stored; throws when nothing could be observed. The call's one result is
+ * reserved under the niche's weekly cap before it is sent. At the cap, the checkpoint is not taken and the job throws.
+ */
 export async function executeReelSnapshot(
   sql: Sql,
   job: ReelSnapshotJob,
   payload: Record<string, unknown>,
   client: ApifyClient = liveApifyClient(),
   now: () => Date = () => new Date(),
+  weeklyCap: number = INSTAGRAM_VOLUME_CONFIG.candidatesPerWeek,
 ): Promise<string> {
   const reelId = typeof payload.reelId === "string" ? payload.reelId : "";
   const checkpoint = payload.checkpointHours === 24 || payload.checkpointHours === 72 ? payload.checkpointHours : null;
@@ -49,7 +53,7 @@ export async function executeReelSnapshot(
     throw new Error(connection.reason ?? "Apify is not connected, so this checkpoint was not taken.");
   }
 
-  const requestId = await newVolumeRequest(sql, {
+  const requestId = await reserveVolumeRequest(sql, {
     organizationId: job.organization_id,
     brandId: reel.brandId,
     runId: null,
@@ -57,7 +61,11 @@ export async function executeReelSnapshot(
     purpose: "snapshot",
     actorId: INSTAGRAM_VOLUME_CONFIG.actors.creator,
     requestedResults: 1,
+    weeklyCap,
   });
+  if (requestId === null) {
+    throw new Error(`The weekly limit of ${weeklyCap} Apify results for this niche is used, so this checkpoint was not taken. No Apify call was made.`);
+  }
   const answer = await client.runSync({
     organizationId: job.organization_id,
     actorId: INSTAGRAM_VOLUME_CONFIG.actors.creator,

@@ -6,7 +6,7 @@
 // latest is the current one), instagram_volume_requests (every Apify request, written before it is sent).
 
 import { randomUUID } from "node:crypto";
-import type { Sql } from "../learning/store.ts";
+import { withTransaction, type Sql } from "../learning/store.ts";
 import { INSTAGRAM_VOLUME_CONFIG, type InstagramVolumeCheckpoint } from "../sources/apify/config.ts";
 import { VIEWS_METRIC, type ReelCandidate } from "../sources/apify/instagram-volume.ts";
 import type { RatingSnapshot } from "../discovery/snapshot-scheduler.ts";
@@ -14,8 +14,15 @@ import type { ReelRatingOutcome } from "../grading/reel-rating.ts";
 
 export type VolumePurpose = "candidates" | "baseline" | "snapshot";
 
-/** Writes a request row before the request is sent. Its requested_results is what counts against the caps. */
-export async function newVolumeRequest(
+/**
+ * Reserves the Apify results one call will ask for, and writes its request row, before the call is sent. Returns the request id when
+ * the call may be sent, or null when it would pass the weekly cap: then nothing is written and nothing may be sent.
+ *
+ * The check and the write run in one transaction under a lock on the workspace row, the lock the engine ledger's reserve takes, so
+ * two calls cannot both read the same total and both pass. The total counts every call of the niche in the last seven days, whatever
+ * its purpose. A call's whole request is reserved or none is: a partial baseline would change the median it is rated against.
+ */
+export async function reserveVolumeRequest(
   sql: Sql,
   input: {
     organizationId: string;
@@ -25,18 +32,26 @@ export async function newVolumeRequest(
     purpose: VolumePurpose;
     actorId: string;
     requestedResults: number;
+    weeklyCap: number;
   },
-): Promise<string> {
-  const id = `ivr_${randomUUID()}`;
-  await sql`
-    insert into instagram_volume_requests (
-      id, organization_id, brand_id, run_id, niche, purpose, actor_id, requested_results, status, reason
-    ) values (
-      ${id}, ${input.organizationId}, ${input.brandId}, ${input.runId}, ${input.niche}, ${input.purpose},
-      ${input.actorId}, ${input.requestedResults}, 'requested', ''
-    )
-  `;
-  return id;
+): Promise<string | null> {
+  return withTransaction(sql, async (tx) => {
+    const locked = await tx<{ id: string }>`select id from organizations where id = ${input.organizationId} for update`;
+    if (!locked[0]) throw new Error("The workspace does not exist, so no Apify call was made.");
+    const used = await volumeResultsThisWeek(tx, input.organizationId, input.niche);
+    if (used + input.requestedResults > input.weeklyCap) return null;
+
+    const id = `ivr_${randomUUID()}`;
+    await tx`
+      insert into instagram_volume_requests (
+        id, organization_id, brand_id, run_id, niche, purpose, actor_id, requested_results, status, reason
+      ) values (
+        ${id}, ${input.organizationId}, ${input.brandId}, ${input.runId}, ${input.niche}, ${input.purpose},
+        ${input.actorId}, ${input.requestedResults}, 'requested', ''
+      )
+    `;
+    return id;
+  });
 }
 
 /** Records how a request ended. A failed request keeps its requested_results: Apify may still have charged for it. */
@@ -51,12 +66,15 @@ export async function settleVolumeRequest(
   `;
 }
 
-/** The candidate results this niche has asked for in the last seven days, across every run and every failed request. */
-export async function candidateResultsThisWeek(sql: Sql, organizationId: string, niche: string): Promise<number> {
+/**
+ * The results this niche has asked Apify for in the last seven days: candidates, creator baselines and snapshots, across every run and
+ * every failed request. Each one counts against the weekly cap.
+ */
+export async function volumeResultsThisWeek(sql: Sql, organizationId: string, niche: string): Promise<number> {
   const rows = await sql<{ total: number }>`
     select coalesce(sum(requested_results), 0)::int as total
     from instagram_volume_requests
-    where organization_id = ${organizationId} and niche = ${niche} and purpose = 'candidates'
+    where organization_id = ${organizationId} and niche = ${niche}
       and created_at >= now() - interval '7 days'
   `;
   return Number(rows[0]?.total ?? 0);

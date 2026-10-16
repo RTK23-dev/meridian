@@ -11,16 +11,16 @@ import type { Sql } from "../learning/store.ts";
 import { upsertCreatorProfile } from "../organic/creators.ts";
 import { recordCreatorSnapshot, reusableBaseline, type CreatorBaselineStatus } from "../organic/creator-snapshots.ts";
 import {
-  candidateResultsThisWeek,
   hoursSincePosted,
   insertReelCandidate,
-  newVolumeRequest,
   observedPoints,
   recordReelRating,
+  reserveVolumeRequest,
   scheduleReelSnapshots,
   setReelBaseline,
   settleVolumeRequest,
   upsertReelSnapshot,
+  volumeResultsThisWeek,
 } from "../organic/reel-store.ts";
 import { rateReel } from "../grading/reel-rating.ts";
 import type { ApifyClient } from "../sources/apify/client.ts";
@@ -47,9 +47,18 @@ export type InstagramVolumeInput = {
   niche: string;
   /** The clock. Tests pass a fixed one. */
   now?: () => Date;
+  /**
+   * The weekly cap, in results asked of Apify. Unset, the run uses INSTAGRAM_VOLUME_CONFIG.candidatesPerWeek. Only tests pass another
+   * value; the factory run does not.
+   */
+  weeklyCap?: number;
 };
 
 type Baseline = { median: number | null; reason: string };
+
+function capReason(weeklyCap: number): string {
+  return `The weekly limit of ${weeklyCap} Apify results for this niche is used.`;
+}
 
 /** Splits a total into parts that add up to it exactly; the first parts take any remainder. */
 export function splitEvenly(total: number, parts: number): number[] {
@@ -72,6 +81,7 @@ async function baselinesFor(
   input: InstagramVolumeInput,
   client: ApifyClient,
   handles: readonly string[],
+  weeklyCap: number,
 ): Promise<Map<string, Baseline>> {
   const config = INSTAGRAM_VOLUME_CONFIG;
   const result = new Map<string, Baseline>();
@@ -93,9 +103,9 @@ async function baselinesFor(
       });
       continue;
     }
-    fetched += 1;
 
-    const requestId = await newVolumeRequest(sql, {
+    // The baseline's results are reserved under the weekly cap before the call is sent. A refused baseline is not sent.
+    const requestId = await reserveVolumeRequest(sql, {
       organizationId: input.organizationId,
       brandId: input.brandId,
       runId: input.runId,
@@ -103,7 +113,14 @@ async function baselinesFor(
       purpose: "baseline",
       actorId: config.actors.creator,
       requestedResults: config.creatorBaselineReels,
+      weeklyCap,
     });
+    if (requestId === null) {
+      result.set(key, { median: null, reason: `${capReason(weeklyCap)} This creator's baseline was not fetched, and no Apify call was made.` });
+      continue;
+    }
+    fetched += 1;
+
     const answer = await client.runSync({
       organizationId: input.organizationId,
       actorId: config.actors.creator,
@@ -166,25 +183,28 @@ export async function gatherInstagramVolume(sql: Sql, input: InstagramVolumeInpu
     return { state: "not_connected", reason: connection.reason ?? "Apify is not connected, so no Instagram candidates were gathered.", items: 0 };
   }
 
-  const used = await candidateResultsThisWeek(sql, input.organizationId, input.niche);
-  const remaining = config.candidatesPerWeek - used;
+  // The limit is read here only to size this run. Each call below reserves its own results under the cap before it is sent, so the
+  // cap holds even when another gather runs at the same time.
+  const weeklyCap = input.weeklyCap ?? config.candidatesPerWeek;
+  const used = await volumeResultsThisWeek(sql, input.organizationId, input.niche);
+  const remaining = weeklyCap - used;
   if (remaining <= 0) {
     return {
       state: "ok",
-      reason: `The weekly limit of ${config.candidatesPerWeek} candidates for this niche is used (${used} asked for in the last seven days). No Apify call was made.`,
+      reason: `${capReason(weeklyCap)} ${used} results were asked for in the last seven days. No Apify call was made.`,
       items: 0,
     };
   }
   const runLimit = Math.min(config.candidatesPerRun, remaining);
 
-  // Each request is written before it is sent, so a request that fails still counts against the weekly cap.
   const found: ReelCandidate[] = [];
   const failures: string[] = [];
+  const capped: string[] = [];
   const shares = splitEvenly(runLimit, terms.length);
   for (let index = 0; index < terms.length; index += 1) {
     const share = shares[index] ?? 0;
     if (share <= 0) continue;
-    const requestId = await newVolumeRequest(sql, {
+    const requestId = await reserveVolumeRequest(sql, {
       organizationId: input.organizationId,
       brandId: input.brandId,
       runId: input.runId,
@@ -192,7 +212,12 @@ export async function gatherInstagramVolume(sql: Sql, input: InstagramVolumeInpu
       purpose: "candidates",
       actorId: config.actors.niche,
       requestedResults: share,
+      weeklyCap,
     });
+    if (requestId === null) {
+      capped.push(`#${terms[index]}: ${capReason(weeklyCap)} No Apify call was made.`);
+      continue;
+    }
     const answer = await client.runSync({
       organizationId: input.organizationId,
       actorId: config.actors.niche,
@@ -254,6 +279,7 @@ export async function gatherInstagramVolume(sql: Sql, input: InstagramVolumeInpu
     input,
     client,
     fresh.map((entry) => entry.candidate.creatorHandle),
+    weeklyCap,
   );
   for (const { id, candidate } of fresh) {
     const baseline = baselines.get(handleKey(candidate.creatorHandle)) ?? {
@@ -299,7 +325,10 @@ export async function gatherInstagramVolume(sql: Sql, input: InstagramVolumeInpu
 
   const reasons: string[] = [];
   if (failures.length > 0) reasons.push(failures.join(" "));
-  if (candidates.length === 0 && failures.length === 0) reasons.push("Instagram returned no video candidates for this niche.");
+  if (capped.length > 0) reasons.push(capped.join(" "));
+  if (candidates.length === 0 && failures.length === 0 && capped.length === 0) {
+    reasons.push("Instagram returned no video candidates for this niche.");
+  }
   return {
     state: failures.length > 0 ? "failed" : "ok",
     reason: reasons.join(" "),

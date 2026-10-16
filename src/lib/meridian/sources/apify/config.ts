@@ -14,7 +14,11 @@ export const INSTAGRAM_VOLUME_CONFIG = {
   },
   /** Candidates one gather run may ask for, across all of the niche's hashtags. */
   candidatesPerRun: 1000,
-  /** Candidates asked for per niche in any rolling seven days, across every run. Initial value. */
+  /**
+   * Results asked of Apify per niche in any rolling seven days, across every run: candidates, creator baselines and snapshots alike.
+   * Initial value. A run of this many candidates uses the whole cap, so the baselines and snapshots that follow it are refused until its
+   * requests are seven days old, unless the owner sets a higher cap.
+   */
   candidatesPerWeek: 1000,
   /** Hashtags one run searches. A niche with more terms uses only the first five. */
   maxHashtagsPerRun: 5,
