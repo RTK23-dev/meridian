@@ -19,7 +19,7 @@
  * or measured by default. A receipt with no external id (not connected, or failed) is not a publish receipt.
  */
 import type { Sql } from "../learning/store.ts";
-import { recordTelemetry } from "../learning/telemetry-engine.ts";
+import { recordTelemetryObservation } from "../learning/telemetry-engine.ts";
 import { reconstructCreativeLineage, type CreativeLineage } from "../production/lineage.ts";
 
 export type MeasurementSurface = "organic" | "paid";
@@ -184,16 +184,9 @@ export async function recordLinkedMetric(sql: Sql, input: LinkedMetricInput): Pr
     throw new MetricLinkError(`No ${input.surface} publish receipt for this creative has that external id. Nothing was stored.`);
   }
 
-  const seen = await sql<{ id: string }>`
-    select id from unified_performance_telemetry
-    where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and creative_id = ${input.creativeId}
-      and source_type = ${input.surface} and metadata->>'observationKey' = ${input.observationKey}
-    limit 1
-  `;
-  if (seen[0]) return { status: "duplicate" };
-
+  // The observation's unique key makes the insert the check: a second writer of the same observation stores nothing, however the two race.
   const m = input.metrics;
-  await recordTelemetry(sql, {
+  const outcome = await recordTelemetryObservation(sql, {
     organizationId: input.organizationId,
     brandId: input.brandId,
     platform: receipt.platform,
@@ -214,9 +207,10 @@ export async function recordLinkedMetric(sql: Sql, input: LinkedMetricInput): Pr
     hookRetention3s: m.hookRetention3s,
     completionRate: m.completionRate,
     recordedAt: input.recordedAt,
-    metadata: { observationKey: input.observationKey, surface: input.surface, ...(input.extra ?? {}) },
+    // The identity keys are written last, so no extra value can replace the observation key or the surface the unique key names.
+    metadata: { ...(input.extra ?? {}), observationKey: input.observationKey, surface: input.surface },
   });
-  return { status: "recorded" };
+  return { status: outcome };
 }
 
 /** The receipt of the given surface that this creative and external id name in this tenant, or null. */

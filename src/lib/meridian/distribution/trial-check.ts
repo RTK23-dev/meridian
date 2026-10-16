@@ -121,15 +121,46 @@ export async function runTrialCheckJob(
   `;
   const row = rows[0];
   if (!row) return "missing";
-  const checks = Number(row.checks);
   if (row.feed_status === "graduated") return "graduated:no-further-checks";
-  if (checks >= TRIAL_CHECK_MAX_CHECKS) return `${row.feed_status}:stopped-at-check-limit`;
+  if (Number(row.checks) >= TRIAL_CHECK_MAX_CHECKS) return `${row.feed_status}:stopped-at-check-limit`;
+
+  // The read slot is claimed before the connection is resolved, so no Instagram call is made without one. A claim that finds no slot left
+  // reads nothing, and it reports the reel's state as it is now.
+  const scope = { organizationId, brandId, trialId };
+  const claimed = await claimTrialRead(sql, scope);
+  if (claimed === null) {
+    const current = await sql<{ feed_status: TrialFeedStatus }>`
+      select feed_status from organic_trial_reels where id = ${trialId} and organization_id = ${organizationId} and brand_id = ${brandId} limit 1
+    `;
+    const status = current[0]?.feed_status ?? row.feed_status;
+    return status === "graduated" ? "graduated:no-further-checks" : `${status}:stopped-at-check-limit`;
+  }
 
   const now = deps.now ?? new Date();
-  const connection = await resolveOrganicConnection(sql, { organizationId, brandId, platform: "instagram" }, now);
-  const reading: TrialReading = connection.connected
-    ? await readInstagramTrial(deps.transport ?? liveTransport(), { mediaId: row.media_id, accessToken: connection.accessToken })
-    : { ok: false, error: connection.reason };
+  const answers = answerTracker(deps.transport ?? liveTransport());
+  let reading: TrialReading;
+  try {
+    const connection = await resolveOrganicConnection(sql, { organizationId, brandId, platform: "instagram" }, now);
+    if (connection.connected) {
+      reading = await readInstagramTrial(answers.transport, { mediaId: row.media_id, accessToken: connection.accessToken });
+      // A read that Instagram never answered was not made, so its slot is given back and the check is tried again by the job queue.
+      if (!answers.answered()) throw new Error(reading.ok ? "Instagram did not answer the trial read." : reading.error);
+    } else {
+      // No account is connected, so no request is made. The check is recorded with its reason, as it always has been.
+      reading = { ok: false, error: connection.reason };
+    }
+  } catch (error) {
+    if (!answers.answered()) {
+      await releaseTrialRead(sql, scope);
+      const message = error instanceof Error ? error.message : "The trial read failed.";
+      await sql`
+        update organic_trial_reels set last_error = ${message}, updated_at = now()
+        where id = ${trialId} and organization_id = ${organizationId} and brand_id = ${brandId}
+      `;
+    }
+    throw error;
+  }
+
   const graduation = reading.ok ? (deps.reader ?? documentedGraduationReader)(reading) : null;
   const outcome = trialCheckOutcome({
     prior: {
@@ -137,7 +168,8 @@ export async function runTrialCheckJob(
       feedNote: row.feed_note,
       feedObservedAt: isoOrNull(row.feed_observed_at),
       observedIsSharedToFeed: row.observed_is_shared_to_feed,
-      checks,
+      // The claim already counted this check, so the outcome sees the count before it.
+      checks: claimed - 1,
     },
     reading,
     graduation,
@@ -150,13 +182,50 @@ export async function runTrialCheckJob(
       feed_observed_at = ${outcome.feedObservedAt},
       observed_is_shared_to_feed = ${outcome.observedIsSharedToFeed},
       last_error = ${outcome.lastError},
-      checks = checks + 1,
       last_checked_at = ${now.toISOString()},
       updated_at = now()
     where id = ${trialId} and organization_id = ${organizationId} and brand_id = ${brandId}
   `;
   if (outcome.reschedule) {
-    await scheduleTrialCheck(sql, { organizationId, brandId, trialId, checks: checks + 1 });
+    await scheduleTrialCheck(sql, { organizationId, brandId, trialId, checks: claimed });
   }
-  return `${outcome.feedStatus}:checks=${checks + 1}`;
+  return `${outcome.feedStatus}:checks=${claimed}`;
+}
+
+type TrialScope = { organizationId: string; brandId: string; trialId: string };
+
+/**
+ * Claims one read of a trial reel. The count goes up by one only while it is under the limit and the reel has not graduated, and one
+ * conditional update decides it: two runs that check the same reel at once cannot both take the last slot. Returns the count after the
+ * claim, or null when no slot is left.
+ */
+async function claimTrialRead(sql: Sql, scope: TrialScope): Promise<number | null> {
+  const rows = await sql<{ checks: number }>`
+    update organic_trial_reels set checks = checks + 1
+    where id = ${scope.trialId} and organization_id = ${scope.organizationId} and brand_id = ${scope.brandId}
+      and checks < ${TRIAL_CHECK_MAX_CHECKS} and feed_status <> 'graduated'
+    returning checks
+  `;
+  return rows[0] ? Number(rows[0].checks) : null;
+}
+
+/** Gives back a claimed read that was never made. Only a claim whose read got no answer from Instagram is given back. */
+async function releaseTrialRead(sql: Sql, scope: TrialScope): Promise<void> {
+  await sql`
+    update organic_trial_reels set checks = checks - 1
+    where id = ${scope.trialId} and organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and checks > 0
+  `;
+}
+
+/** Wraps the transport so the check knows whether Instagram answered at all. An answer of any status is a read that was made. */
+function answerTracker(transport: Transport): { transport: Transport; answered: () => boolean } {
+  let answered = false;
+  return {
+    transport: async (request) => {
+      const response = await transport(request);
+      answered = true;
+      return response;
+    },
+    answered: () => answered,
+  };
 }

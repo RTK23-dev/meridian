@@ -133,13 +133,10 @@ export type TelemetrySyncResult = {
 // ---------------------------------------------------------------------------
 
 /**
- * Persists a single unified telemetry record, automatically computing its recency-decay weight.
+ * The record one telemetry row stores: the synthetic guard, the clamped values and the recency-decay weight. Every writer below uses it, so a
+ * row is the same whichever path stores it.
  */
-export async function recordTelemetry(
-  sql: Sql,
-  input: TelemetryRecordInput,
-  halfLifeDays = 14,
-): Promise<TelemetryRecord> {
+function telemetryRecordOf(input: TelemetryRecordInput, halfLifeDays: number): TelemetryRecord {
   if (!input.organizationId || !input.brandId) {
     throw new Error("Telemetry record requires organizationId and brandId.");
   }
@@ -175,27 +172,6 @@ export async function recordTelemetry(
   const safeHookRetention = input.hookRetention3s != null ? Math.min(1, Math.max(0, Number(input.hookRetention3s))) : null;
   const safeCompletionRate = input.completionRate != null ? Math.min(1, Math.max(0, Number(input.completionRate))) : null;
 
-  const metadataJson = JSON.stringify(input.metadata || {});
-
-  await sql`
-    insert into unified_performance_telemetry (
-      id, organization_id, brand_id, publish_job_id, account_id, platform, source_type,
-      creative_id, variant_id, external_post_id, hook_type, angle, format,
-      views, impressions, reach, clicks, engagements, shares, saves, conversions,
-      spend_cents, revenue_cents, watch_time_seconds, hook_retention_3s, completion_rate,
-      decay_weight, recorded_at, metadata
-    ) values (
-      ${id}, ${input.organizationId}, ${input.brandId}, ${input.publishJobId ?? null},
-      ${input.accountId ?? null}, ${input.platform}, ${input.sourceType ?? "organic"},
-      ${input.creativeId ?? ""}, ${input.variantId ?? ""}, ${input.externalPostId ?? ""},
-      ${input.hookType ?? ""}, ${input.angle ?? ""}, ${input.format ?? ""},
-      ${safeViews}, ${safeImpressions}, ${safeReach}, ${safeClicks}, ${safeEngagements},
-      ${safeShares}, ${safeSaves}, ${safeConversions}, ${safeSpendCents}, ${safeRevenueCents},
-      ${safeWatchTime}, ${safeHookRetention}, ${safeCompletionRate},
-      ${decayWeight}, ${recordedAtDate.toISOString()}, ${metadataJson}
-    )
-  `;
-
   return {
     id,
     organizationId: input.organizationId,
@@ -228,6 +204,74 @@ export async function recordTelemetry(
     createdAt: new Date().toISOString(),
     metadata: input.metadata || {},
   };
+}
+
+/**
+ * Persists a single unified telemetry record, automatically computing its recency-decay weight.
+ */
+export async function recordTelemetry(
+  sql: Sql,
+  input: TelemetryRecordInput,
+  halfLifeDays = 14,
+): Promise<TelemetryRecord> {
+  const record = telemetryRecordOf(input, halfLifeDays);
+  await sql`
+    insert into unified_performance_telemetry (
+      id, organization_id, brand_id, publish_job_id, account_id, platform, source_type,
+      creative_id, variant_id, external_post_id, hook_type, angle, format,
+      views, impressions, reach, clicks, engagements, shares, saves, conversions,
+      spend_cents, revenue_cents, watch_time_seconds, hook_retention_3s, completion_rate,
+      decay_weight, recorded_at, metadata
+    ) values (
+      ${record.id}, ${record.organizationId}, ${record.brandId}, ${record.publishJobId},
+      ${record.accountId}, ${record.platform}, ${record.sourceType},
+      ${record.creativeId}, ${record.variantId}, ${record.externalPostId},
+      ${record.hookType}, ${record.angle}, ${record.format},
+      ${record.views}, ${record.impressions}, ${record.reach}, ${record.clicks}, ${record.engagements},
+      ${record.shares}, ${record.saves}, ${record.conversions}, ${record.spendCents}, ${record.revenueCents},
+      ${record.watchTimeSeconds}, ${record.hookRetention3s}, ${record.completionRate},
+      ${record.decayWeight}, ${record.recordedAt}, ${JSON.stringify(record.metadata)}
+    )
+  `;
+  return record;
+}
+
+/**
+ * Persists the telemetry row of one observation, unless that observation is already stored. An observation is named by
+ * `metadata.observationKey` within its creative and surface: that is the unique key of migration 0098. The insert names the key as its
+ * conflict target, so two writers that race for one observation store one row. The first gets "recorded", the other "duplicate".
+ */
+export async function recordTelemetryObservation(
+  sql: Sql,
+  input: TelemetryRecordInput,
+  halfLifeDays = 14,
+): Promise<"recorded" | "duplicate"> {
+  const observationKey = input.metadata?.observationKey;
+  if (typeof observationKey !== "string" || !observationKey.trim()) {
+    throw new Error("A telemetry observation needs an observation key in its metadata. Nothing was stored.");
+  }
+  const record = telemetryRecordOf(input, halfLifeDays);
+  const stored = await sql<{ id: string }>`
+    insert into unified_performance_telemetry (
+      id, organization_id, brand_id, publish_job_id, account_id, platform, source_type,
+      creative_id, variant_id, external_post_id, hook_type, angle, format,
+      views, impressions, reach, clicks, engagements, shares, saves, conversions,
+      spend_cents, revenue_cents, watch_time_seconds, hook_retention_3s, completion_rate,
+      decay_weight, recorded_at, metadata
+    ) values (
+      ${record.id}, ${record.organizationId}, ${record.brandId}, ${record.publishJobId},
+      ${record.accountId}, ${record.platform}, ${record.sourceType},
+      ${record.creativeId}, ${record.variantId}, ${record.externalPostId},
+      ${record.hookType}, ${record.angle}, ${record.format},
+      ${record.views}, ${record.impressions}, ${record.reach}, ${record.clicks}, ${record.engagements},
+      ${record.shares}, ${record.saves}, ${record.conversions}, ${record.spendCents}, ${record.revenueCents},
+      ${record.watchTimeSeconds}, ${record.hookRetention3s}, ${record.completionRate},
+      ${record.decayWeight}, ${record.recordedAt}, ${JSON.stringify(record.metadata)}
+    )
+    on conflict (organization_id, brand_id, creative_id, source_type, (metadata->>'observationKey')) do nothing
+    returning id
+  `;
+  return stored.length > 0 ? "recorded" : "duplicate";
 }
 
 /**

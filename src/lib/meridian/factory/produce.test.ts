@@ -228,3 +228,43 @@ test("the JEV creative check has no evidence for a variant with no creative, so 
   assert.equal(verdict.result, "review");
   assert.equal(verdict.gate, "jev");
 });
+
+// An image job left at the provider's submission step, or marked after the poller found it with no outcome, has an unknown provider
+// outcome. The run stops with that reason, and nothing is sent again. A run that skipped it reported success.
+for (const status of ["SUBMITTING", "SUBMISSION_UNKNOWN"] as const) {
+  test(`an image job left in ${status} stops the run with its reason, is never sent again, and produces no creative`, async () => {
+    const sql = await getSql();
+    const tenant = await studioTenant(sql, `factory-stuck-${status.toLowerCase()}-${Math.random().toString(36).slice(2, 8)}`);
+    const runId = await factoryRunFor(sql, tenant, { automation: "full", formats: ["image"], providers: { image: "google_nano_banana" }, caps: { totalCents: 500 } });
+    const [variantId] = await planRowsFor(sql, tenant, runId, ["image"]);
+    const jobId = `factory-${variantId}-image`;
+    await sql`
+      insert into production_jobs (
+        id, organization_id, brand_id, provider, provider_job_id, request_id, status_url, cancel_url,
+        status, cost_mode, estimated_cost_cents, input, created_at, submitted_at, updated_at, next_poll_at, modality, cost_status
+      ) values (
+        ${jobId}, ${tenant.organizationId}, ${tenant.brandId}, 'google_nano_banana', null, null, null, null,
+        ${status}, 'BALANCED', null, '{}', now(), null, now(), now() + interval '5 minutes', 'image', 'unknown'
+      )
+    `;
+
+    const stub = stubImageProvider();
+    try {
+      assert.equal(await produce(sql, tenant, runId), "stopped:factory.produce", "the run stops, and does not report success");
+      assert.equal(await produce(sql, tenant, runId), "stopped:factory.produce", "a retry stops the same way");
+    } finally {
+      stub.restore();
+    }
+    assert.equal(stub.state.calls, 0, "the provider is not called again for the job");
+
+    const [run] = await sql<{ status: string; error: string }>`select status, error from factory_runs where id = ${runId}`;
+    assert.equal(run?.status, "paused");
+    assert.match(run?.error ?? "", new RegExp(`no confirmed provider outcome \\(${status}\\)`));
+    assert.match(run?.error ?? "", /nothing was resubmitted/);
+
+    const creatives = await sql<{ n: number }>`select count(*)::int as n from factory_creatives where run_id = ${runId}`;
+    assert.equal(Number(creatives[0]?.n), 0, "no creative is recorded for the stuck job");
+    const [job] = await sql<{ status: string }>`select status from production_jobs where id = ${jobId}`;
+    assert.equal(job?.status, status, "the job keeps its status: it is not marked as resolved by the stage");
+  });
+}

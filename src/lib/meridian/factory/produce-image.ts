@@ -17,6 +17,7 @@ import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import { qcBrandOf } from "../studio/image-qc.server.ts";
 import {
+  UNKNOWN_OUTCOME_STATUSES,
   capStopOf,
   errorText,
   insertJobWithReservation,
@@ -89,7 +90,9 @@ export async function produceImage(sql: Sql, input: ProduceInput, req: ImageRequ
   `;
   if (existing[0]) {
     // The job exists from an earlier run of this stage. A job whose creative is recorded is linked. A job that completed and was not
-    // recorded is finished. Any other job is held or failed, and is left for a person to see on the Factory screen.
+    // recorded is finished. A job whose provider call may have been made (SUBMITTING, or SUBMISSION_UNKNOWN once the poller has marked
+    // it) is never sent again, and it stops the run with its reason: a run that skipped it would report success. Any other job is held
+    // or failed, and is left for a person to see on the Factory screen.
     if (existing[0].materialized_creative_id) {
       await link(existing[0].materialized_creative_id, existing[0].provider);
       return { kind: "linked" };
@@ -99,6 +102,13 @@ export async function produceImage(sql: Sql, input: ProduceInput, req: ImageRequ
       if ("reason" in made) return { kind: "stop", reason: made.reason };
       await link(made.creativeId, existing[0].provider);
       return { kind: "linked" };
+    }
+    if (UNKNOWN_OUTCOME_STATUSES.has(existing[0].status)) {
+      const amount = `$${FACTORY_IMAGE_CEILING_USD.toFixed(2)}`;
+      return {
+        kind: "stop",
+        reason: `The image for ${req.label} has no confirmed provider outcome (${existing[0].status}). Its ${amount} reservation is held until the provider confirms it holds no job for the submission, or an admin resolves it, and nothing was resubmitted.`,
+      };
     }
     return { kind: "skipped" };
   }
