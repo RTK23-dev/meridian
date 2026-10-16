@@ -227,7 +227,8 @@ describe("ShotstackAdapter and renderEdlWithShotstack (recorded responses, throu
     assert.equal(outcome.video.renderer, "shotstack");
     assert.equal(outcome.video.edlId, componentFreeEdl.edlId);
     assert.equal(outcome.video.idempotencyKey, EXPECTED_KEY);
-    assert.equal(outcome.video.costUsd, 0.1, "no bill came back, so the cost is the hold, flagged as an estimate");
+    assert.equal(outcome.video.costUsd, null, "no bill came back, so no cost is booked (contract v6)");
+    assert.equal(outcome.video.estimateUsd, 0.1, "the render line is kept beside the null cost");
     assert.equal(outcome.dropped.length, 3);
     assert.deepEqual(deps.stored, [outcome.video.videoId]);
     renderedVideoSchema.parse(outcome.video);
@@ -236,7 +237,8 @@ describe("ShotstackAdapter and renderEdlWithShotstack (recorded responses, throu
     assert.equal(entry?.provider, "shotstack");
     assert.equal(entry?.model, "edit-v1");
     assert.equal(entry?.stage, "render");
-    assert.equal(entry?.actualUsd, 0.1);
+    assert.equal(entry?.reservedUsd, 0.1);
+    assert.equal(entry?.actualUsd, undefined, "the estimate is never written as the actual");
     assert.equal(entry?.settlement, undefined);
   });
 
@@ -252,23 +254,27 @@ describe("ShotstackAdapter and renderEdlWithShotstack (recorded responses, throu
     assert.equal(download?.url, DOWNLOAD_URL);
   });
 
-  it("a resubmit of the same EDL with new signed URLs keeps the key, and the ledger reports a duplicate", async () => {
+  it("a resubmit of the same EDL under its key, with new signed URLs, while the first is unsettled, is a conflict and sends nothing (contract v6)", async () => {
     const { ledger, reservationId } = await reservedLedger();
     const first = scriptedGateway([submitExchange({ body: expectedBody() }), pollExchange("done", { url: DOWNLOAD_URL }), downloadExchange()]);
     await renderEdlWithShotstack({ reservationId, edl: componentFreeEdl, estimateUsd: 0.1, now: NOW }, shotstackDepsFor(first.gateway, ledger));
 
     const resigned = (uri: string) => `https://resigned.example.test/${uri.replace(/[^a-z0-9.]+/gi, "-")}?X-Amz-Signature=second`;
     const second = scriptedGateway([submitExchange({ body: expectedBody(resigned) }), pollExchange("done", { url: DOWNLOAD_URL }), downloadExchange()]);
-    const outcome = await renderEdlWithShotstack(
-      { reservationId, edl: componentFreeEdl, estimateUsd: 0.1, now: NOW },
-      shotstackDepsFor(second.gateway, ledger, { resolveSourceUrl: async (uri) => resigned(uri) }),
+    await assert.rejects(
+      renderEdlWithShotstack(
+        { reservationId, edl: componentFreeEdl, estimateUsd: 0.1, now: NOW },
+        shotstackDepsFor(second.gateway, ledger, { resolveSourceUrl: async (uri) => resigned(uri) }),
+      ),
+      (error: unknown) =>
+        error instanceof EngineError && error.kind === "conflict" && error.retryable === false && /not submitted again/.test(error.message),
     );
     assert.deepEqual(first.problems, []);
-    assert.deepEqual(second.problems, []);
-    assert.equal(outcome.video.idempotencyKey, EXPECTED_KEY);
+    assert.equal(second.seen.length, 0, "the same key is not sent again");
+    assert.equal((await ledger.listEntries(reservationId)).length, 1, "the ledger keeps one entry for the key");
   });
 
-  it("maps a failed render to a retryable provider error, keeps the hold as its estimate, and stores nothing", async () => {
+  it("maps a failed render to a non-retryable provider error, does not reconcile it, and stores nothing (contract v6)", async () => {
     const scripted = scriptedGateway([
       submitExchange({ body: expectedBody() }),
       pollExchange("failed", { error: "Source media could not be fetched" }),
@@ -280,13 +286,13 @@ describe("ShotstackAdapter and renderEdlWithShotstack (recorded responses, throu
       (error) =>
         error instanceof EngineError &&
         error.kind === "provider" &&
-        error.retryable === true &&
+        error.retryable === false &&
         error.stage === "render" &&
         /could not be fetched/.test(error.message),
     );
     assert.deepEqual(scripted.problems, []);
     assert.deepEqual(deps.stored, []);
-    assert.equal((await ledger.getEntryByKey(EXPECTED_KEY))?.actualUsd, 0.1);
+    assert.equal((await ledger.getEntryByKey(EXPECTED_KEY))?.actualUsd, undefined, "a failed render is not reconciled");
   });
 
   it("refuses to run when Shotstack is not connected: a config error, and no request or ledger entry", async () => {

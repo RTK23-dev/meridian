@@ -196,7 +196,7 @@ describe("submit returns a job and settle finishes it", () => {
     assert.equal((await h.stats.since(KLING_ID, 0)).length, statsBefore, "no second stats record");
   });
 
-  it("a failed job settles to the next target: the failed submit is held at its estimate, and the next target is submitted", async () => {
+  it("a failed job with a bill settles to the next target: the failed submit is settled at its bill, and the next target is submitted", async () => {
     const h = await harness({
       script: {
         "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [VEO]: [accepted("job-veo")] }),
@@ -209,7 +209,8 @@ describe("submit returns a job and settle finishes it", () => {
     assert.equal(first.step.status, "submitted");
     if (first.step.status !== "submitted") return;
 
-    const failed: ProviderPoll = { state: "failed", error: { kind: "unknown", retryable: false, message: "the model stopped" } };
+    // The provider billed the failed job (0.25, not the 0.63 estimate). A poll with no bill would leave the submit unsettled instead.
+    const failed: ProviderPoll = { state: "failed", error: { kind: "unknown", retryable: false, message: "the model stopped" }, actualUsd: 0.25 };
     const next = await h.router.settle(first.step.job, failed, input);
     assert.equal(next.step.status, "submitted");
     if (next.step.status !== "submitted") return;
@@ -229,8 +230,8 @@ describe("submit returns a job and settle finishes it", () => {
     assert.match(fallback?.reason ?? "", /fell back from openrouter:kwaivgi\/kling-v3\.0-std after/);
 
     const kling = await h.ledger.getEntryByKey(first.step.job.idempotencyKey);
-    assert.equal(kling?.actualUsd, 0.63, "the failed submit is reconciled to its estimate");
-    assert.equal(kling?.settlement, undefined);
+    assert.equal(kling?.actualUsd, 0.25, "the failed submit is settled at the provider's bill");
+    assert.equal(kling?.settlement, "billed");
     assert.equal(await h.buckets.inFlight(KLING_ID), 0, "the failed target gives its slot back");
     assert.equal(await h.buckets.inFlight(VEO_ID), 1, "the next target holds one");
 
@@ -242,7 +243,7 @@ describe("submit returns a job and settle finishes it", () => {
     }
   });
 
-  it("a rate-limited job retries on the same target with a new key, and its cost is the sum of its submits", async () => {
+  it("a rate-limited job is billed for its first submit, retries on the same target with a new key, and its cost is the sum of its bills", async () => {
     const h = await harness({
       script: {
         "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling"), accepted("job-kling-2")] }),
@@ -255,7 +256,8 @@ describe("submit returns a job and settle finishes it", () => {
     if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
     const job1 = first.step.job;
 
-    const limited: ProviderPoll = { state: "failed", error: { kind: "rate_limit", retryable: true, message: "slow down" } };
+    // The first job was billed 0.63 before the poll reported the rate limit. A poll with no bill would leave it unsettled.
+    const limited: ProviderPoll = { state: "failed", error: { kind: "rate_limit", retryable: true, message: "slow down" }, actualUsd: 0.63 };
     const retry = await h.router.settle(job1, limited, input);
     assert.equal(retry.step.status, "submitted");
     if (retry.step.status !== "submitted") return;
@@ -288,7 +290,7 @@ describe("settling is idempotent and single-flight", () => {
     const input = h.input(assetSpec());
     const first = await h.router.submit(input);
     if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
-    const limited: ProviderPoll = { state: "failed", error: { kind: "rate_limit", retryable: true, message: "slow down" } };
+    const limited: ProviderPoll = { state: "failed", error: { kind: "rate_limit", retryable: true, message: "slow down" }, actualUsd: 0.63 };
     const once = await h.router.settle(first.step.job, limited, input);
     const twice = await h.router.settle(first.step.job, limited, input);
     assert.deepEqual(twice, once);
@@ -302,7 +304,7 @@ describe("settling is idempotent and single-flight", () => {
     const input = h.input(assetSpec());
     const first = await h.router.submit(input);
     if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
-    const limited: ProviderPoll = { state: "failed", error: { kind: "rate_limit", retryable: true, message: "slow down" } };
+    const limited: ProviderPoll = { state: "failed", error: { kind: "rate_limit", retryable: true, message: "slow down" }, actualUsd: 0.63 };
     const results = await Promise.allSettled([h.router.settle(first.step.job, limited, input), h.router.settle(first.step.job, limited, input)]);
     const fulfilled = results.filter((result) => result.status === "fulfilled");
     const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
@@ -314,29 +316,34 @@ describe("settling is idempotent and single-flight", () => {
     assert.equal(posts(h.requests, KLING), 2, "the retry is sent once");
   });
 
-  it("a timed-out submit is not retried: the next target runs (Bible 10.4)", async () => {
+  it("a timed-out job with no bill is unsettled: it is not retried and the next target does not run", async () => {
     const h = await harness({
       script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [VEO]: [accepted("job-veo")] }) },
     });
-    const input = h.input(assetSpec());
+    const spec = assetSpec();
+    const input = h.input(spec);
     const first = await h.router.submit(input);
     if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
     const timedOut: ProviderPoll = { state: "failed", error: { kind: "timeout", retryable: true, message: "no result within 600000 ms" } };
     const next = await h.router.settle(first.step.job, timedOut, input);
-    assert.equal(next.step.status, "submitted");
-    if (next.step.status !== "submitted") return;
-    assert.equal(next.step.job.providerId, VEO_ID, "the next target runs");
+    assert.equal(next.step.status, "unsettled", "a polled job with no bill stays unsettled: the provider may have billed it");
+    if (next.step.status === "unsettled") assert.equal(next.step.providerId, KLING_ID);
     assert.equal(posts(h.requests, KLING), 1, "no retry on the timed-out target");
+    assert.equal(posts(h.requests, VEO), 0, "no submit to the next target");
     assert.deepEqual(
       next.attempts.map((attempt) => [attempt.providerId, attempt.errorKind]),
       [[KLING_ID, "timeout"]],
     );
+    const held = await h.ledger.getEntryByKey(first.step.job.idempotencyKey);
+    assert.equal(held?.settlement, undefined);
+    assert.equal(held?.actualUsd, undefined, "no estimate is booked as the actual");
+    assert.equal(await h.cache.get(WORKSPACE, assetCacheKey(spec, KLING_ID)), null, "nothing is cached");
     assert.equal(await h.buckets.inFlight(KLING_ID), 0);
   });
 });
 
 describe("a submit answer with no job id is a failed submit", () => {
-  it("the target is failed, its slot is released, and the next target is submitted", async () => {
+  it("an answer with no job id is ambiguous: the submit stays unsettled, and no next target is submitted", async () => {
     const h = await harness({
       script: {
         "POST /api/v1/videos": submitFor({ [KLING]: [json(200, { status: "pending" })], [VEO]: [accepted("job-veo")] }),
@@ -344,31 +351,34 @@ describe("a submit answer with no job id is a failed submit", () => {
     });
     const spec = assetSpec();
     const submitted = await h.router.submit(h.input(spec));
-    assert.equal(submitted.step.status, "submitted");
-    if (submitted.step.status !== "submitted") return;
-    assert.equal(submitted.step.job.providerId, VEO_ID, "the answer had no job, so the next target was submitted");
+    assert.equal(submitted.step.status, "unsettled", "the provider may have billed a job it did not name");
+    if (submitted.step.status === "unsettled") assert.equal(submitted.step.providerId, KLING_ID);
     assert.equal(submitted.attempts[0]?.errorKind, "unknown");
-    assert.equal(await h.buckets.inFlight(KLING_ID), 0, "the failed target gives its slot back");
-    assert.equal(await h.buckets.inFlight(VEO_ID), 1);
+    assert.equal(posts(h.requests, VEO), 0, "no submit to the next target");
+    assert.equal(await h.buckets.inFlight(KLING_ID), 0, "the target gives its slot back");
+    assert.equal(await h.buckets.inFlight(VEO_ID), 0);
     const kling = await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID));
-    assert.equal(kling?.actualUsd, 0.63, "the failed submit is reconciled to its estimate");
+    assert.equal(kling?.actualUsd, undefined, "no estimate is booked as the actual");
     assert.equal(kling?.settlement, undefined);
   });
 });
 
 describe("settle refuses what it must not settle", () => {
-  it("a planner refusal settles to failed with no next target, and the submit is held at its estimate", async () => {
+  it("a planner refusal with its bill settles to failed with no next target, and the submit is settled at that bill", async () => {
     const h = await harness({
       script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [VEO]: [accepted("job-veo")] }) },
     });
     const input = h.input(assetSpec());
     const first = await h.router.submit(input);
     if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
-    const refused: ProviderPoll = { state: "failed", error: { kind: "content_policy", retryable: false, message: "refused by policy" } };
+    const refused: ProviderPoll = { state: "failed", error: { kind: "content_policy", retryable: false, message: "refused by policy" }, actualUsd: 0.25 };
     const settled = await h.router.settle(first.step.job, refused, input);
     assert.equal(settled.step.status, "failed");
     if (settled.step.status === "failed") assert.equal(settled.step.error.kind, "content_policy");
     assert.equal(posts(h.requests), 1, "no next target is submitted");
+    const billed = await h.ledger.getEntryByKey(first.step.job.idempotencyKey);
+    assert.equal(billed?.actualUsd, 0.25);
+    assert.equal(billed?.settlement, "billed");
   });
 
   it("a pending answer is refused, and it leaves no claim behind", async () => {

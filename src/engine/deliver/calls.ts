@@ -36,6 +36,14 @@ export function requestCallsOf(entries: readonly JournalEntry[]): RequestCalls {
     const role = claudeRoleSchema.safeParse(entry.role);
     if (!role.success) throw new EngineError("internal", `the journal holds an unknown role for call ${entry.idempotencyKey}`, { stage: "deliver" });
     const call = entry.call;
+    // A role call with no provider bill has an unknown cost (contract v6). Its request is not delivered until the bill is recorded.
+    if (call.costUsd === null) {
+      throw new EngineError(
+        "conflict",
+        `the role call ${entry.idempotencyKey} has no settled cost, so the request is not delivered until its bill is recorded`,
+        { stage: "deliver", retryable: false },
+      );
+    }
     const parsed = manifestRoleCallSchema.safeParse({
       role: role.data,
       promptVersion: call.promptVersion,

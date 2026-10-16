@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { assetCacheKey, type AssetSpec } from "../contracts/assets.ts";
-import { sumUsd } from "../contracts/money.ts";
 import { newId } from "../contracts/ids.ts";
 import { routes, type RouteTable } from "../config/routes.ts";
 import type { HttpResponse } from "../gateway/types.ts";
@@ -15,6 +14,7 @@ import { memoryMediaStore } from "./adapter.ts";
 import { videoProfilesFromListing } from "./providers/openrouterVideo.ts";
 import { assetSpec, base64, fakeClock, fixture, gatewayFor, json, ledgerWithReservation, mp3Bytes, pngBytes, raw, routesWith, scripted, WORKSPACE, type Reply } from "./test/recorded.ts";
 import { routeCacheKey } from "./cache.ts";
+import { authorizeSubmit } from "./ledger-steps.ts";
 
 const KLING = "kwaivgi/kling-v3.0-std";
 const VEO = "google/veo-3.1";
@@ -146,32 +146,40 @@ describe("routing and fallback", () => {
     // Each submit is its own ledger entry (Bible 14.1). The first is keyed by the cache key; the retries carry an attempt suffix.
     const klingRows = (await h.ledger.listEntries(h.reservationId)).filter((row) => row.provider === "openrouter" && row.model === KLING);
     assert.equal(klingRows.length, 3, "one ledger entry per submit");
-    assert.equal(
-      sumUsd(klingRows.map((row) => row.actualUsd ?? 0)),
-      1.89,
-      "each refused submit holds its list estimate (3 x 0.63), never under-counted",
+    assert.deepEqual(
+      klingRows.map((row) => [row.actualUsd, row.settlement]),
+      [
+        [0, "confirmed_absent"],
+        [0, "confirmed_absent"],
+        [0, "confirmed_absent"],
+      ],
+      "each rate-limited submit is confirmed absent: the provider refused it before any job id, so it costs nothing",
     );
     const klingEntry = await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID));
-    assert.equal(klingEntry?.actualUsd, 0.63, "the first submit's entry is keyed by the cache key");
+    assert.equal(klingEntry?.actualUsd, 0, "the first submit's entry is keyed by the cache key");
+    assert.equal(klingEntry?.settlement, "confirmed_absent");
     const veoEntry = await h.ledger.getEntryByKey(assetCacheKey(spec, VEO_ID));
     assert.equal(veoEntry?.actualUsd, 0.4);
     assert.equal(veoEntry?.idempotencyKey, assetCacheKey(spec, VEO_ID), "the cache key is the idempotency key");
   });
 
-  it("a timeout moves to the next provider without a retry", async () => {
+  it("a timed-out job with no bill is unsettled: no retry, and no fallback to the next provider", async () => {
     const h = await harness({
       script: {
         "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [VEO]: [accepted("job-veo")] }),
         "GET /api/v1/videos/job-kling": pending("job-kling"),
-        "GET /api/v1/videos/job-veo": completed("job-veo", 0.5),
       },
     });
-    const report = await h.router.produce(h.input(assetSpec()));
-    assert.equal(report.outcome.status, "done");
-    assert.equal(h.requests.filter((request) => request.method === "POST").length, 2, "one submit per provider");
+    const spec = assetSpec();
+    const report = await h.router.produce(h.input(spec));
+    assert.equal(report.outcome.status, "unsettled");
+    if (report.outcome.status === "unsettled") assert.equal(report.outcome.providerId, KLING_ID);
+    assert.equal(h.requests.filter((request) => request.method === "POST").length, 1, "one submit: no retry and no submit to the next provider");
     const timeout = report.attempts.find((attempt) => attempt.providerId === KLING_ID);
     assert.equal(timeout?.errorKind, "timeout");
     assert.ok(h.clock.sleeps.length >= 100, "the poll waited until the poll deadline (the generation lease)");
+    assert.equal((await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID)))?.settlement, undefined, "the job stays unsettled");
+    assert.equal(await h.cache.get(WORKSPACE, assetCacheKey(spec, KLING_ID)), null, "nothing is cached");
   });
 
   it("a content refusal goes back to the planner: no retry and no fallback", async () => {
@@ -199,27 +207,65 @@ describe("routing and fallback", () => {
     assert.equal(h.requests.length, 1);
   });
 
-  it("an unrecognised credential refusal moves on without a retry", async () => {
+  it("an unrecognised refusal (403) is ambiguous: the submit stays unsettled, with no retry and no fallback", async () => {
     const h = await harness({
       script: { "POST /api/v1/videos": submitFor({ [KLING]: [json(403, {})], [VEO]: [accepted("job-veo")] }), "GET /api/v1/videos/job-veo": completed("job-veo", 0.5) },
     });
     const report = await h.router.produce(h.input(assetSpec()));
-    assert.equal(report.outcome.status, "done");
+    assert.equal(report.outcome.status, "unsettled", "only rate_limit, invalid_input and content_policy are definitive refusals");
     assert.equal(report.attempts.filter((attempt) => attempt.providerId === KLING_ID).length, 1, "one submit, no retry");
+    assert.equal(h.requests.filter((request) => request.method === "POST" && String(request.body).includes(VEO)).length, 0, "no fallback");
   });
 
-  it("a server error is retried on the same provider and then succeeds", async () => {
+  it("an ambiguous server error is not retried and not fallen back from: the submit stays unsettled and its entry is held", async () => {
     const h = await harness({
       script: {
-        "POST /api/v1/videos": submitFor({ [KLING]: [json(503, {}), accepted("job-kling")] }),
-        "GET /api/v1/videos/job-kling": completed("job-kling", 0.6125),
+        "POST /api/v1/videos": submitFor({ [KLING]: [json(503, {}), accepted("job-kling")], [VEO]: [accepted("job-veo")] }),
       },
     });
-    const report = await h.router.produce(h.input(assetSpec()));
-    assert.equal(report.outcome.status, "done");
-    if (report.outcome.status === "done") assert.equal(report.outcome.asset.providerId, KLING_ID);
-    assert.equal(h.requests.filter((request) => request.method === "POST").length, 2);
-    assert.deepEqual(h.clock.sleeps, [1000]);
+    const spec = assetSpec();
+    const report = await h.router.produce(h.input(spec));
+    assert.equal(report.outcome.status, "unsettled");
+    if (report.outcome.status === "unsettled") {
+      assert.equal(report.outcome.providerId, KLING_ID);
+      assert.equal(report.outcome.idempotencyKey, assetCacheKey(spec, KLING_ID));
+    }
+    assert.equal(h.requests.filter((request) => request.method === "POST").length, 1, "one submit: no retry, and no submit to the next provider");
+    assert.deepEqual(h.clock.sleeps, [], "no backoff, because nothing was retried");
+    const held = await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID));
+    assert.equal(held?.settlement, undefined, "the submit may have been billed, so it is not settled");
+    assert.equal(held?.actualUsd, undefined, "no estimate is booked as the actual");
+    assert.equal(held?.reservedUsd, 0.63);
+  });
+
+  it("a rate-limited submit is settled absent before its retry, and the retry is sent under a new attempt key", async () => {
+    const spec = assetSpec();
+    const clock = fakeClock();
+    const settlementAtBackoff: Array<string | undefined> = [];
+    let probed: Awaited<ReturnType<typeof harness>> | undefined;
+    const h = await harness({
+      clock: {
+        ...clock,
+        sleep: async (ms: number) => {
+          // The backoff sits between the refused submit's settlement and its retry, so the settlement is visible here.
+          settlementAtBackoff.push((await probed?.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID)))?.settlement);
+          await clock.sleep(ms);
+        },
+      },
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: [json(429, {}), accepted("job-kling")] }) },
+    });
+    probed = h;
+    const submitted = await h.router.submit(h.input(spec));
+    assert.equal(submitted.step.status, "submitted");
+    assert.deepEqual(settlementAtBackoff, ["confirmed_absent"], "the refused submit is settled absent before the retry");
+    assert.deepEqual(clock.sleeps, [1000], "the backoff waits inside submit, before the retry");
+    const refused = await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID));
+    assert.equal(refused?.actualUsd, 0);
+    assert.equal(refused?.settlement, "confirmed_absent");
+    if (submitted.step.status !== "submitted") return;
+    assert.equal(submitted.step.job.attemptOnTarget, 2);
+    assert.equal(submitted.step.job.idempotencyKey, `${assetCacheKey(spec, KLING_ID)}|attempt2`, "the retry is a new key on the ledger");
+    assert.equal(h.requests.filter((request) => request.method === "POST" && String(request.body).includes(KLING)).length, 2);
   });
 });
 
@@ -342,6 +388,31 @@ describe("budget and connection", () => {
     assert.equal(again.outcome.status, "duplicate");
     assert.equal(idle.requests.length, 0, "the duplicate is never sent");
   });
+
+  it("a duplicate key whose entry is still unsettled is unsettled, and no provider call is made", async () => {
+    const single = routesWith("video.cinematic", [KLING_TARGET], routes.table);
+    const h = await harness({ table: single, script: {} });
+    const spec = assetSpec();
+    const key = assetCacheKey(spec, KLING_ID);
+    const earlier = await authorizeSubmit(h.ledger, {
+      reservationId: h.reservationId,
+      stage: "produce_shot",
+      provider: "openrouter",
+      model: KLING,
+      estimateUsd: 0.63,
+      idempotencyKey: key,
+      at: new Date(h.clock.now()).toISOString(),
+    });
+    if (earlier.status !== "authorized") assert.fail("the earlier submit should be authorized");
+    const report = await h.router.produce(h.input(spec));
+    assert.equal(report.outcome.status, "unsettled", "the earlier submit may have been billed, so it is not sent again");
+    if (report.outcome.status === "unsettled") {
+      assert.equal(report.outcome.providerId, KLING_ID);
+      assert.equal(report.outcome.idempotencyKey, key);
+      assert.equal(report.outcome.ledgerEntryId, earlier.entry.entryId);
+    }
+    assert.equal(h.requests.length, 0, "no provider call is made");
+  });
 });
 
 describe("concurrency buckets and the breaker", () => {
@@ -370,14 +441,15 @@ describe("concurrency buckets and the breaker", () => {
 
   it("trips after the failure share is over the limit, skips the provider while open, and recovers after the skip", async () => {
     let healthy = false;
-    // Three failed submits make the window; the minimum sample is lowered to 3 so this one request can trip it.
+    // Three failed submits make the window; the minimum sample is lowered to 3 so this one request can trip it. The failures are
+    // rate limits: they retry and then fall back, where a server error would stop the stage as ambiguous (Bible 10.4).
     const breaker = { ...defaultRouterSettings().breaker, minSample: 3 };
     const h = await harness({
       settings: { breaker },
       script: {
         "POST /api/v1/videos": (request) => {
           const model = (JSON.parse(String(request.body)) as { model: string }).model;
-          if (model === KLING) return healthy ? accepted("job-kling") : json(500, {});
+          if (model === KLING) return healthy ? accepted("job-kling") : json(429, {});
           return accepted("job-veo");
         },
         "GET /api/v1/videos/job-kling": completed("job-kling", 0.63),
@@ -449,32 +521,36 @@ describe("image routes", () => {
 describe("speech voices (Bible 10.4): the voice is part of the cache key", () => {
   const SPEECH_PATH = "POST /api/v1/audio/speech";
   const SPEECH_MODEL = "test/eleven-v4";
+  const SPEECH_ID = `openrouter:${SPEECH_MODEL}`;
   const speechTable = () => routesWith("tts", [{ provider: "openrouter", model: SPEECH_MODEL, priceKey: "eleven_v4", verified: false }], routes.table);
   const answer = () => raw(200, mp3Bytes(), { "content-type": "audio/mpeg" });
 
-  it("two voices speaking the same text do not share a cached take: each voice is a call, and the same voice again is a hit", async () => {
-    const h = await harness({ table: speechTable(), script: { [SPEECH_PATH]: [answer(), answer(), answer()] } });
+  it("the voice is part of the cache key: a take cached for one voice is a hit for that voice only, and another voice is a call", async () => {
+    const h = await harness({ table: speechTable(), script: { [SPEECH_PATH]: [answer()] } });
     const spec = assetSpec({ modelClass: "tts", prompt: "Two scoops, one sentence.", durationMs: 1000 });
     const speak = (voiceId: string) => ({ ...h.input(spec), stage: "voice", voiceId });
     const calls = () => h.requests.filter((request) => request.url.endsWith("/audio/speech")).length;
+    // A take already cached for voice_a (the first write wins, Bible 5.2).
+    await h.cache.put({
+      workspaceId: WORKSPACE,
+      cacheKey: routeCacheKey(spec, SPEECH_ID, { voiceId: "voice_a" }),
+      providerId: SPEECH_ID,
+      modelClass: "tts",
+      uri: "memory://org_1/take-voice-a",
+      costUsd: 0.01,
+      mediaType: "audio/mpeg",
+      storedAt: "2026-10-14T10:00:00.000Z",
+    });
 
-    const first = await h.router.produce(speak("voice_a"));
-    assert.equal(first.outcome.status, "done");
-    assert.equal(calls(), 1, "the first voice is called");
+    const same = await h.router.produce(speak("voice_a"));
+    assert.equal(same.outcome.status, "done");
+    if (same.outcome.status === "done") assert.equal(same.outcome.asset.cacheHit, true);
+    assert.equal(calls(), 0, "the cached voice is a hit at $0: nothing is sent");
 
-    const second = await h.router.produce(speak("voice_b"));
-    assert.equal(second.outcome.status, "done");
-    assert.equal(calls(), 2, "the second voice is called: the same text in another voice is not a cache hit");
-    assert.equal((await h.cache.hits(WORKSPACE)).length, 0, "no hit was recorded for the other voice");
-
-    const third = await h.router.produce(speak("voice_a"));
-    assert.equal(third.outcome.status, "done");
-    assert.equal(calls(), 2, "the first voice again is a cache hit at $0");
-    assert.equal((await h.cache.hits(WORKSPACE)).length, 1);
-
-    const rows = await h.ledger.listEntries(h.reservationId);
-    assert.equal(rows.length, 2, "one ledger row for each voice's call, and none for the hit");
-    assert.notEqual(rows[0]?.idempotencyKey, rows[1]?.idempotencyKey, "the two calls have two ledger keys");
+    await h.router.produce(speak("voice_b"));
+    assert.equal(calls(), 1, "the same text in another voice is a call, not a cache hit");
+    assert.equal((await h.cache.hits(WORKSPACE)).length, 1, "only voice_a's hit is recorded");
+    assert.equal((await h.ledger.listEntries(h.reservationId)).length, 1, "one ledger row for voice_b's call, and none for the hit");
   });
 
   it("the key names the voice for a speech spec only, and is unchanged for every other spec", () => {

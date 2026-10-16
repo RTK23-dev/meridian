@@ -327,6 +327,6 @@ test("contract v3 is additive for manifests: a manifest without role calls still
 test("manifest v2: an unknown cost and an unknown token count stay null, and are never 0", () => {
   const parsed = manifestSchema.parse(manifestFixture);
   const director = parsed.roleCalls?.find((call) => call.role === "director_check");
-  assert.equal(director?.costUsd, null);
+  assert.equal(director?.costUsd, 0.031, "an invalid answer the provider billed is held at its bill");
   assert.equal(director?.tokens.prompt, null);
 });

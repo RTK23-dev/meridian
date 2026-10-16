@@ -132,6 +132,15 @@ describe("the role call journal", () => {
     assert.equal(await journal(ORG, fixtureId("req_", 702)).find(KEY_A), null);
   });
 
+  it("stores an answered call with no provider bill at a null cost, and never writes an estimate as the cost (contract v6)", async () => {
+    const key = `sha256:${"0".repeat(64)}`;
+    await journal().record(entryFor(key, { status: "pending" }));
+    await journal().record(entryFor(key, { status: "answered", call: { ...callFor(key, "answered"), costUsd: null }, answer: { segments: [] } }));
+    const found = await journal().find(key);
+    assert.equal(found?.status, "answered");
+    assert.equal(found?.call?.costUsd, null, "no bill came back, so the cost stays unknown");
+  });
+
   it("refuses an entry that does not fit its status, before anything is written", async () => {
     const key = `sha256:${"e".repeat(64)}`;
     const refuses = (entry: JournalEntry) =>

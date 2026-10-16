@@ -106,7 +106,7 @@ test("a call on a paused reservation is refused, and no entry is written", async
   assert.equal((await withReservationLedger(db.sql, organizationId, id, (store) => store.listEntries(id))).length, 0);
 });
 
-test("reconciling a call twice keeps the first actual, and releasing returns the unused part once", async () => {
+test("reconciling a call twice keeps the first bill: the same bill changes nothing, a different one is a conflict; releasing returns the unused part once", async () => {
   const { organizationId, requestId } = await workspace(5);
   const reserved = await withWorkspaceLedger(db.sql, organizationId, (store) => reserve(store, reserveInput(organizationId, requestId)));
   const id = reserved.reservation.reservationId;
@@ -114,8 +114,15 @@ test("reconciling a call twice keeps the first actual, and releasing returns the
 
   const one = await withReservationLedger(db.sql, organizationId, id, (store) => reconcileCall(store, { idempotencyKey: "reconcile-me", billedUsd: 0.19 }));
   assert.equal(one.entry.actualUsd, 0.19);
-  const two = await withReservationLedger(db.sql, organizationId, id, (store) => reconcileCall(store, { idempotencyKey: "reconcile-me", billedUsd: 0.5 }));
-  assert.equal(two.entry.actualUsd, 0.19, "the first actual stands");
+  const same = await withReservationLedger(db.sql, organizationId, id, (store) => reconcileCall(store, { idempotencyKey: "reconcile-me", billedUsd: 0.19 }));
+  assert.equal(same.entry.actualUsd, 0.19, "the same bill again changes nothing");
+  await assert.rejects(
+    withReservationLedger(db.sql, organizationId, id, (store) => reconcileCall(store, { idempotencyKey: "reconcile-me", billedUsd: 0.5 })),
+    (error: unknown) => error instanceof EngineError && error.kind === "conflict",
+    "a different bill for a settled call is a conflict",
+  );
+  const [stored] = await withReservationLedger(db.sql, organizationId, id, (store) => store.listEntries(id));
+  assert.equal(stored?.actualUsd, 0.19, "the first bill stands");
 
   const released = await withReservationLedger(db.sql, organizationId, id, (store) => releaseReservation(store, id));
   assert.equal(released.reservation.state, "released");

@@ -16,8 +16,10 @@ import {
   DIRECT_UPLOAD_LIMIT_BYTES,
   HYPERFRAMES_LEDGER_PROVIDER,
   renderComposition,
+  type RenderAdapter,
   type RenderDeps,
   type RenderRequest,
+  type RenderSubmitInput,
   type RenderTransport,
   type TransportRequest,
 } from "./hyperframesCloud.ts";
@@ -42,6 +44,24 @@ const text = (value: string) => new TextEncoder().encode(value);
 const noSleep = async () => undefined;
 
 type Scripted = { transport: RenderTransport; seen: TransportRequest[] };
+
+/** Wraps an adapter so the tests can count how many times a render is submitted to the provider. */
+function countingAdapter(inner: RenderAdapter<RenderSubmitInput>): { adapter: RenderAdapter<RenderSubmitInput>; submits: () => number } {
+  let count = 0;
+  return {
+    adapter: {
+      renderer: inner.renderer,
+      ready: () => inner.ready(),
+      submit: async (input) => {
+        count += 1;
+        return inner.submit(input);
+      },
+      poll: (renderId) => inner.poll(renderId),
+      fetchResult: (status) => inner.fetchResult(status),
+    },
+    submits: () => count,
+  };
+}
 
 /** A transport that plays the exchanges in order and checks each request against them. */
 function scripted(exchanges: ScriptedExchange[]): Scripted {
@@ -330,7 +350,7 @@ describe("renderComposition: budget, idempotency, integrity", () => {
     const video = renderedVideoSchema.parse(outcome.video);
     assert.equal(video.idempotencyKey, compiled.composition.contentHash);
     assert.equal(video.renderer, "hyperframes-cloud");
-    assert.equal(video.costUsd, 0.05);
+    assert.equal(video.costUsd, null, "no bill came back, so no cost is booked (contract v6)");
     assert.equal(video.bytes, VIDEO_BYTES.byteLength);
     assert.equal(video.uri, `store://renders/${FIXTURE_IDS.video}.mp4`);
 
@@ -349,9 +369,42 @@ describe("renderComposition: budget, idempotency, integrity", () => {
     assert.equal(entries[0].stage, "render");
     assert.equal(entries[0].provider, HYPERFRAMES_LEDGER_PROVIDER);
     assert.equal(entries[0].idempotencyKey, compiled.composition.contentHash);
-    assert.equal(entries[0].actualUsd, 0.05);
-    assert.equal(entries[0].settlement, undefined, "no provider bill is known, so the cost is the hold, flagged");
+    assert.equal(entries[0].reservedUsd, 0.05);
+    assert.equal(entries[0].actualUsd, undefined, "no provider bill is known: the actual stays unset, never the estimate");
+    assert.equal(entries[0].settlement, undefined);
     assert.equal((await ledger.getReservation(reservationId))?.state, "reserved");
+  });
+
+  it("a successful render with no bill has costUsd null, and estimateUsd equal to the render line (contract v6)", async () => {
+    const { ledger, reservationId } = await reservedLedger();
+    const { transport } = scripted(successfulRender());
+    const outcome = await renderComposition(renderRequest(reservationId, { estimateUsd: 0.05 }), deps(transport, ledger));
+    assert.equal(outcome.video.costUsd, null);
+    assert.equal(outcome.video.estimateUsd, 0.05);
+    const [entry] = await ledger.listEntries(reservationId);
+    assert.equal(entry?.reservedUsd, 0.05, "the render line is held");
+    assert.equal(entry?.settlement, undefined, "the render stays unsettled until a bill or a confirmation");
+  });
+
+  it("a second render under the same key, while the first is unsettled, throws conflict and makes no second submit (contract v6)", async () => {
+    const { ledger, reservationId } = await reservedLedger();
+    const first = scripted(successfulRender());
+    const spy = countingAdapter(createHyperframesCloudAdapter({ transport: first.transport, credential: async () => FAKE_KEY, sleep: noSleep }));
+    await renderComposition(renderRequest(reservationId), { ...deps(first.transport, ledger), adapter: spy.adapter });
+    assert.equal(spy.submits(), 1);
+
+    const second = scripted([]);
+    await assert.rejects(
+      renderComposition(renderRequest(reservationId), { ...deps(second.transport, ledger), adapter: spy.adapter }),
+      (error: unknown) =>
+        error instanceof EngineError &&
+        error.kind === "conflict" &&
+        error.retryable === false &&
+        /not submitted again/.test(error.message),
+    );
+    assert.equal(spy.submits(), 1, "the adapter is not asked to submit the same key again");
+    assert.equal(second.seen.length, 0, "no request reaches the provider");
+    assert.equal((await ledger.listEntries(reservationId)).length, 1, "the ledger keeps one entry for the key");
   });
 
   it("makes no request and writes no entry when the budget refuses the render", async () => {
@@ -377,7 +430,7 @@ describe("renderComposition: budget, idempotency, integrity", () => {
     assert.equal((await ledger.listEntries(reservationId)).length, 0, "no hold is taken for a call that cannot be made");
   });
 
-  it("re-sends the same key after a failed render and keeps one ledger entry", async () => {
+  it("does not re-submit a failed render under its key: the failure is non-retryable, is not reconciled, and keeps one ledger entry (contract v6)", async () => {
     const { ledger, reservationId } = await reservedLedger();
     const failing = scripted([
       uploadStart(),
@@ -389,24 +442,25 @@ describe("renderComposition: budget, idempotency, integrity", () => {
     await assert.rejects(
       renderComposition(renderRequest(reservationId), deps(failing.transport, ledger)),
       (error: unknown) =>
-        error instanceof EngineError && error.retryable === true && /composition could not load its audio/.test(error.message),
+        error instanceof EngineError &&
+        error.kind === "provider" &&
+        error.retryable === false &&
+        /composition could not load its audio/.test(error.message) &&
+        /cost is unsettled/.test(error.message),
     );
     const afterFailure = await ledger.listEntries(reservationId);
     assert.equal(afterFailure.length, 1);
-    assert.equal(afterFailure[0].settlement, undefined, "the held amount is recorded as an estimate");
+    assert.equal(afterFailure[0].actualUsd, undefined, "a failed render is not reconciled: no cost is booked");
+    assert.equal(afterFailure[0].settlement, undefined, "the held amount stays unsettled");
 
-    const retry = scripted([
-      uploadStart(),
-      uploadPut(),
-      uploadComplete(),
-      renderCreate(),
-      renderPoll("completed", { video_url: VIDEO_URL }),
-      { method: "GET", url: VIDEO_URL, status: 200, bytes: VIDEO_BYTES, requireHeaders: ["!x-api-key"] },
-    ]);
-    const outcome = await renderComposition(renderRequest(reservationId), deps(retry.transport, ledger));
-    assert.equal(header(retry.seen[3], "Idempotency-Key"), compiled.composition.contentHash);
+    const retry = scripted([]);
+    await assert.rejects(
+      renderComposition(renderRequest(reservationId), deps(retry.transport, ledger)),
+      (error: unknown) =>
+        error instanceof EngineError && error.kind === "conflict" && error.retryable === false && /not submitted again/.test(error.message),
+    );
+    assert.equal(retry.seen.length, 0, "no request reaches the provider under the same key");
     assert.equal((await ledger.listEntries(reservationId)).length, 1, "the ledger never bills the same key twice");
-    assert.equal(outcome.video.costUsd, 0.05);
   });
 
   it("fails closed when the render-integrity check does not pass, and stores nothing", async () => {

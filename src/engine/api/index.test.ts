@@ -118,24 +118,28 @@ test("a request is read only in its own workspace", async () => {
   assert.equal(await engineRequestStatus(sql, OTHER_ORG, request.requestId), null, "another workspace sees no such request");
 });
 
-test("engine spend is the actual cost on the ledger, and a call with no actual yet is counted as pending, not as zero dollars", async () => {
+test("engine spend is the billed actual on the ledger, and a held call with no bill yet is pending, not zero dollars", async () => {
   const { sql } = await db();
   const request = requestFor(ORG);
   await startIn(sql, ORG, BRAND, request);
   const reservationId = await reserve(sql, ORG, request.requestId, 1);
   await sql`
-    insert into engine_ledger (id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, actual_is_estimate, idempotency_key, at)
-    values (${newId("res_")}, ${ORG}, ${request.requestId}, ${reservationId}, 'produce_shot', 'fixture', 'fixture', 0.4, 0.4, 0.4, false, ${`k-${request.requestId}-a`}, now())
+    insert into engine_ledger (id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at)
+    values (${newId("res_")}, ${ORG}, ${request.requestId}, ${reservationId}, 'produce_shot', 'fixture', 'fixture', 0.4, 0.4, 0.4, 'billed', ${`k-${request.requestId}-a`}, now())
   `;
   await sql`
-    insert into engine_ledger (id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, actual_is_estimate, idempotency_key, at)
+    insert into engine_ledger (id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at)
     values (${newId("res_")}, ${ORG}, ${request.requestId}, ${reservationId}, 'produce_shot', 'fixture', 'fixture', 0.2, 0.2, null, null, ${`k-${request.requestId}-b`}, now())
+  `;
+  await sql`
+    insert into engine_ledger (id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at)
+    values (${newId("res_")}, ${ORG}, ${request.requestId}, ${reservationId}, 'produce_shot', 'fixture', 'fixture', 0.1, 0.1, 0, 'confirmed_absent', ${`k-${request.requestId}-c`}, now())
   `;
 
   const spend = await engineSpendOf(sql, ORG, [request.requestId]);
-  assert.equal(spend.totalMicros, 400_000, "only the recorded actual is spend");
+  assert.equal(spend.totalMicros, 400_000, "only the billed actual is spend; a confirmed absence costs 0");
   assert.equal(spend.dailyMicros, 400_000);
-  assert.equal(spend.pendingCalls, 1, "the call with no actual is pending");
+  assert.equal(spend.pendingCalls, 1, "the held call with no bill is pending; a confirmed absence is settled, not pending");
   assert.deepEqual(await engineSpendOf(sql, ORG, []), { totalMicros: 0, dailyMicros: 0, pendingCalls: 0 });
 });
 

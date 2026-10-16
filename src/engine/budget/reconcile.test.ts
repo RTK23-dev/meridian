@@ -3,7 +3,7 @@ import test from "node:test";
 import { EngineError } from "../contracts/index.ts";
 import { FIXTURE_IDS as ID, scenePlanFixture } from "../contracts/fixtures/index.ts";
 import { authorizeCall, reserve, type CallInput, type ReserveInput } from "./reserve.ts";
-import { releaseReservation, reconcileCall } from "./reconcile.ts";
+import { confirmAbsentCall, releaseReservation, reconcileCall } from "./reconcile.ts";
 import { memoryLedgerStore, type LedgerStore } from "./store.ts";
 
 function reserveInput(overrides: Partial<ReserveInput> = {}): ReserveInput {
@@ -49,25 +49,47 @@ test("a bill from the provider is recorded as the actual, and is not flagged as 
   assert.deepEqual(result.alerts, []);
 });
 
-test("with no bill, the adapter's list price is the actual and is flagged as an estimate", async () => {
+test("with no bill, a call stays held at its reservation: no actual and no settlement, and it is not settled", async () => {
   const store = await reservedWithOneCall();
-  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1",});
-  assert.equal(result.entry.actualUsd, 0.2016);
+  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1" });
+  assert.equal(result.settled, false);
+  assert.equal(result.entry.actualUsd, undefined, "the list price is never booked as an actual");
   assert.equal(result.entry.settlement, undefined);
+  assert.equal(result.entry.reservedUsd, 0.2016);
+  assert.equal(result.reservation.reservedUsd, 0.9595, "the hold stands and the reservation is unchanged");
 });
 
-test("with no bill and no list price, the held amount is recorded and flagged, never 0", async () => {
+test("a confirmed absence settles the call at 0, as confirmed_absent", async () => {
   const store = await reservedWithOneCall();
-  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1",});
-  assert.equal(result.entry.actualUsd, 0.2016);
-  assert.equal(result.entry.settlement, undefined);
+  const result = await confirmAbsentCall(store, {
+    idempotencyKey: "produce:shot_3:1",
+    evidence: "the provider refused before any job id existed: rate_limit",
+  });
+  assert.equal(result.settled, true);
+  assert.equal(result.entry.actualUsd, 0);
+  assert.equal(result.entry.settlement, "confirmed_absent");
 });
 
-test("reconciling a call twice keeps the first actual", async () => {
+test("a confirmed absence needs its evidence: empty evidence is refused and the call stays held", async () => {
+  const store = await reservedWithOneCall();
+  await assert.rejects(
+    confirmAbsentCall(store, { idempotencyKey: "produce:shot_3:1", evidence: "   " }),
+    (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+  );
+  const held = await store.getEntryByKey("produce:shot_3:1");
+  assert.equal(held?.actualUsd, undefined);
+  assert.equal(held?.settlement, undefined);
+});
+
+test("a settled call keeps its first bill: the same bill changes nothing, and a different bill is a conflict", async () => {
   const store = await reservedWithOneCall();
   await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 0.19 });
-  const again = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 0.5 });
-  assert.equal(again.entry.actualUsd, 0.19);
+  const again = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 0.19 });
+  assert.equal(again.settled, true);
+  await assert.rejects(
+    reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 0.5 }),
+    (error: unknown) => error instanceof EngineError && error.kind === "conflict",
+  );
   assert.equal((await store.listEntries(ID.reservation))[0].actualUsd, 0.19);
 });
 
@@ -86,6 +108,19 @@ test("a cost above the hold raises the reservation to the committed amount and a
   assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, 1.2);
   assert.equal(result.alerts.length, 1);
   assert.equal(result.alerts[0].scope, "call");
+});
+
+test("cap mode: a verified bill above the reservation makes it exceeded, keeps the bill in the month, and refuses the next call", async () => {
+  const store = await reservedWithOneCall("cap");
+  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 1.2 });
+  assert.equal(result.reservation.state, "exceeded");
+  assert.match(result.reservation.pausedReason ?? "", /no further paid call is authorized/);
+  assert.equal((await store.getReservation(ID.reservation))?.state, "exceeded");
+  assert.equal((await store.sumForMonth("ws_fixture", "2026-10")).reservedUsd, 1.2, "an exceeded reservation counts toward the month");
+  const next = await authorizeCall(store, callInput({ idempotencyKey: "produce:shot_4:1" }));
+  assert.equal(next.status, "refused");
+  assert.match(next.status === "refused" ? next.reason : "", /exceeded/);
+  assert.equal((await store.listEntries(ID.reservation)).length, 1, "the refused call records nothing");
 });
 
 test("in observe mode a cost above the hold is recorded and the reservation raised, with no alert", async () => {
@@ -132,17 +167,17 @@ test("releasing an unknown reservation is a not_found error", async () => {
   );
 });
 
-test("the whole flow reserves, authorizes, reconciles and releases, and the monthly total follows the actuals", async () => {
+test("the whole flow reserves, authorizes, reconciles and releases; a held call is reserved and is never counted as an actual", async () => {
   const store = memoryLedgerStore();
   await reserve(store, reserveInput());
   await authorizeCall(store, callInput({ idempotencyKey: "voice:1", stage: "voice", estimateUsd: 0.02, provider: "fixture-stt", model: "word-timestamps" }));
   await authorizeCall(store, callInput({ idempotencyKey: "produce:shot_3:1" }));
   await reconcileCall(store, { idempotencyKey: "voice:1", billedUsd: 0.02 });
-  await reconcileCall(store, { idempotencyKey: "produce:shot_3:1",});
+  await reconcileCall(store, { idempotencyKey: "produce:shot_3:1" });
   const released = await releaseReservation(store, ID.reservation);
   assert.equal(released.reservation.reservedUsd, 0.2216);
   assert.equal(released.releasedUsd, 0.7379);
   const month = await store.sumForMonth("ws_fixture", "2026-10");
   assert.equal(month.reservedUsd, 0.2216);
-  assert.equal(month.actualUsd, 0.2216);
+  assert.equal(month.actualUsd, 0.02, "only the billed voice call is an actual; the held produce call is not");
 });

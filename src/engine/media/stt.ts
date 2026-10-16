@@ -261,9 +261,8 @@ export type MeteredSttResult = {
 /**
  * Runs one transcription with its budget: estimate, authorise against the reservation with an idempotency key, call the
  * vendor, then settle to the vendor's bill. With no bill the call stays held and its cost unknown; nothing is estimated (contract v6).
- * - A key that is already reconciled is refused: the stored transcript is reused, nothing is billed again.
- * - A key that was authorised but never reconciled (the last call failed) is sent again with the same key, so the
- *   vendor deduplicates it; the hold stays on the ledger until the call completes.
+ * - A key already on the ledger is never sent again. A settled one is refused and its stored transcript is reused; an unsettled one
+ *   (the last call failed or returned no bill) waits to be settled, because the vendor may have billed it (contract v6).
  * - A failed call leaves its hold in place. It is not released here, because the vendor may have billed the call.
  */
 export async function transcribeMetered(
@@ -287,14 +286,15 @@ export async function transcribeMetered(
       stage: meter.stage,
     });
   }
-  if (
-    authorised.status === "duplicate" &&
-    (!authorised.samePayload || authorised.entry.actualUsd !== undefined)
-  ) {
+  // A key already on the ledger is never sent again: the vendor may have billed it, and the key is not a confirmed guarantee against a
+  // second bill (contract v6). An unsettled call waits for its bill or confirmation; a settled one is reused from storage.
+  if (authorised.status === "duplicate") {
     throw new EngineError(
       "conflict",
-      `speech-to-text call ${idempotencyKey} was already made under a different or reconciled payload; reuse the stored transcript`,
-      { stage: meter.stage },
+      authorised.entry.settlement === undefined
+        ? `speech-to-text call ${idempotencyKey} was made and its cost is unsettled, so it is not sent again: settle it first`
+        : `speech-to-text call ${idempotencyKey} was already made and billed: reuse the stored transcript`,
+      { stage: meter.stage, retryable: false },
     );
   }
 

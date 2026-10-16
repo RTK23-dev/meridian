@@ -132,6 +132,17 @@ test("cap refuses a call that would take the reservation beyond its amount, and 
   assert.deepEqual(await store.listEntries(ID.reservation), []);
 });
 
+test("cap refuses a call that would take the request over its budget, names the request, and records nothing", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: RESERVED }));
+  const refused = await authorizeCall(store, call({ estimateUsd: 1 }));
+  assert.equal(refused.status, "refused");
+  if (refused.status !== "refused") return;
+  assert.match(refused.reason, /take the request to 1 USD, above its 0.9595 USD budget/);
+  assert.ok(refused.alerts.some((alert) => alert.scope === "request"), "the request budget is one of the refused scopes");
+  assert.deepEqual(await store.listEntries(ID.reservation), []);
+});
+
 test("an authorized call is recorded with its estimate and its hold, and the reservation is unchanged", async () => {
   const store = memoryLedgerStore();
   await reserve(store, input({ reservationId: ID.reservation }));

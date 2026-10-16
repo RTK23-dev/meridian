@@ -66,11 +66,13 @@ describe("the submit's two budget steps", () => {
     assert.equal(held?.actualUsd, undefined, "authorize holds the estimate until reconcile");
   });
 
-  it("reconciling with no bill and a list price records the list price as an estimate", async () => {
+  it("reconciling with no bill leaves the submit held at its reservation: no actual and no settlement", async () => {
     const { ledger, reservationId } = await ledgerWithOneReservation();
     await authorizeSubmit(ledger, call(reservationId, "sha256:key-c"));
-    const reconciled = await reconcileSubmit(ledger, { idempotencyKey: "sha256:key-c",});
-    assert.equal(reconciled.entry.actualUsd, 0.63);
+    const reconciled = await reconcileSubmit(ledger, { idempotencyKey: "sha256:key-c" });
+    assert.equal(reconciled.settled, false);
+    assert.equal(reconciled.entry.actualUsd, undefined, "the list price is never booked as an actual");
     assert.equal(reconciled.entry.settlement, undefined);
+    assert.equal(reconciled.entry.reservedUsd, 0.63);
   });
 });

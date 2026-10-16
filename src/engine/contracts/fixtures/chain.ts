@@ -936,7 +936,7 @@ export const manifestRoleCallsFixture: ManifestRoleCall[] = [
     answeredBy: null,
     generationId: "gen-fixture-director-1",
     tokens: { prompt: null, completion: null },
-    costUsd: null,
+    costUsd: 0.031,
     verdict: "invalid_answer",
   },
 ];

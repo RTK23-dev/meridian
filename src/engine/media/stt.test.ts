@@ -329,7 +329,7 @@ describe("transcribeMetered: reserve, authorise with a key, call, reconcile", ()
     assert.equal(entries[0]?.actualUsd, 0.0043);
   });
 
-  it("leaves the cost unknown when the vendor reports no bill, and books no estimate", async () => {
+  it("leaves the cost unknown when the vendor reports no bill: the ledger holds the estimate with no actual (contract v6)", async () => {
     const ledger = await store();
     const outcome = await transcribeMetered(
       recordedSpeechToText(sttNoBillRecording),
@@ -338,6 +338,10 @@ describe("transcribeMetered: reserve, authorise with a key, call, reconcile", ()
     );
     assert.equal(outcome.actualUsd, null);
     assert.equal(outcome.settled, false);
+    const [entry] = await ledger.listEntries(budgetReservationFixture.reservationId);
+    assert.equal(entry?.reservedUsd, outcome.estimateUsd, "the call holds its estimate");
+    assert.equal(entry?.actualUsd, undefined, "the estimate is never written as the actual (contract v6)");
+    assert.equal(entry?.settlement, undefined);
   });
 
   it("refuses a second transcription of the same input once it is reconciled, and does not call the vendor", async () => {
@@ -351,22 +355,16 @@ describe("transcribeMetered: reserve, authorise with a key, call, reconcile", ()
     assert.equal(stt.calls.length, 1, "the vendor was called once");
   });
 
-  it("resubmits a failed call with the same key, so the vendor deduplicates it, then reconciles", async () => {
+  it("does not send a failed call again under its key: it stays unsettled until the operator settles it (contract v6)", async () => {
     const ledger = await store();
     const stt = recordedSpeechToText(sttRateLimitThenSuccessRecording);
     const key = sttIdempotencyKey(stt, REQUEST);
     await rejects(transcribeMetered(stt, REQUEST, meter(ledger)), "provider");
     const entriesAfterFailure = await ledger.listEntries(budgetReservationFixture.reservationId);
-    assert.equal(
-      entriesAfterFailure[0]?.actualUsd,
-      undefined,
-      "the hold stays until the call completes",
-    );
+    assert.equal(entriesAfterFailure[0]?.settlement, undefined, "the hold stays until the call is settled");
 
-    const outcome = await transcribeMetered(stt, REQUEST, meter(ledger));
-    assert.equal(outcome.idempotencyKey, key);
-    assert.deepEqual(stt.calls, [key, key]);
-    assert.equal(outcome.actualUsd, 0.0043);
+    await rejects(transcribeMetered(stt, REQUEST, meter(ledger)), "conflict");
+    assert.deepEqual(stt.calls, [key], "the vendor was called once: the unsettled call is not sent again");
   });
 
   it("refuses the call when the price is unknown: nothing is held and the vendor is not called", async () => {
