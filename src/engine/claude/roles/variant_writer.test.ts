@@ -297,7 +297,6 @@ describe("the variant_writer role (Bible 11.1)", () => {
     assert.equal(outcome.calls.length, 1);
     assert.equal(outcome.calls[0]?.promptVersion, "variant_writer@2");
     assert.equal(outcome.calls[0]?.costUsd, 0.0019);
-    assert.equal(outcome.calls[0]?.actualIsEstimate, false);
 
     const sent = JSON.parse(String(requests[0]?.body)) as { model: string; max_tokens: number; response_format: { json_schema: { name: string } } };
     assert.equal(sent.model, CHECK_MODEL);

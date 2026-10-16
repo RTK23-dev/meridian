@@ -282,7 +282,7 @@ export function createDeliverHandler(ports: DeliverPorts): StageHandler {
             estimateUsd: row.estimateUsd,
             reservedUsd: row.reservedUsd,
             actualUsd: row.actualUsd,
-            actualIsEstimate: row.actualIsEstimate === true,
+            settlement: row.settlement ?? null,
             videoId: videoOfRow.get(row.entryId) ?? masterVideoId,
           },
         });

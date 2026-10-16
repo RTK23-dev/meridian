@@ -20,7 +20,6 @@ export const chainOutputSchema = z.object({
   providerId: z.string().min(1),
   promptHash: z.string().min(1),
   costUsd: z.number().nonnegative(),
-  costIsEstimate: z.boolean(),
   cacheHit: z.boolean(),
   ledgerEntryId: z.string().min(1).nullable(),
 });

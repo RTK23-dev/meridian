@@ -322,22 +322,22 @@ describe("transcribeMetered: reserve, authorise with a key, call, reconcile", ()
     assert.equal(outcome.result.words.length, 7);
     assert.equal(outcome.estimateUsd, 0.0043);
     assert.equal(outcome.actualUsd, 0.0043);
-    assert.equal(outcome.actualIsEstimate, false);
+    assert.equal(outcome.settled, true);
     const entries = await ledger.listEntries(budgetReservationFixture.reservationId);
     assert.equal(entries.length, 1);
     assert.equal(entries[0]?.idempotencyKey, outcome.idempotencyKey);
     assert.equal(entries[0]?.actualUsd, 0.0043);
   });
 
-  it("reconciles to the list price, flagged as an estimate, when the vendor reports no bill", async () => {
+  it("leaves the cost unknown when the vendor reports no bill, and books no estimate", async () => {
     const ledger = await store();
     const outcome = await transcribeMetered(
       recordedSpeechToText(sttNoBillRecording),
       REQUEST,
       meter(ledger),
     );
-    assert.equal(outcome.actualUsd, outcome.estimateUsd);
-    assert.equal(outcome.actualIsEstimate, true);
+    assert.equal(outcome.actualUsd, null);
+    assert.equal(outcome.settled, false);
   });
 
   it("refuses a second transcription of the same input once it is reconciled, and does not call the vendor", async () => {

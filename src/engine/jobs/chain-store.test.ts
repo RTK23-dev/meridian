@@ -53,7 +53,6 @@ function keyframeOutput(uri = "store://keyframes/kf-1.png"): ChainOutput {
     providerId: "openrouter:fixture/keyframe-image",
     promptHash: "sha256:" + "a".repeat(64),
     costUsd: 0.018,
-    costIsEstimate: false,
     cacheHit: false,
     ledgerEntryId: "led_keyframe",
   };

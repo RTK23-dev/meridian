@@ -10,6 +10,7 @@ import {
   decisionSchema,
   gateResultSchema,
   idSchema,
+  ledgerSettlementSchema,
   takeCheckSchema,
   usdSchema,
   visualTypeSchema,
@@ -91,9 +92,10 @@ const costReconciledBody = z.object({
   role: claudeRoleSchema.nullable(),
   estimateUsd: usdSchema,
   reservedUsd: usdSchema,
-  actualUsd: usdSchema,
-  /** True when the actual is a list-price fallback or the held amount, not the provider's bill (Bible 14.1 step 4). */
-  actualIsEstimate: z.boolean(),
+  /** The provider's verified bill, or null while none is known. Never an estimate (contract v6). */
+  actualUsd: usdSchema.nullable(),
+  /** How the actual was obtained: a bill, or a confirmation that the call created no job. Null while the call is unsettled. */
+  settlement: ledgerSettlementSchema.nullable(),
   /** The video the call is attributed to, or null when it belongs to the request as a whole. */
   videoId: idSchema("vid_").nullable(),
 });

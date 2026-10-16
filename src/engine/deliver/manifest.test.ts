@@ -90,11 +90,11 @@ describe("the manifest of a video (Bible 4.4, Manifest v2)", () => {
     assert.equal("variantOf" in manifest, false, "the master names no master");
   });
 
-  it("holds every role call of the request, each with its prompt version, its model and its cost or its estimate flag", () => {
+  it("holds every role call of the request, each with its prompt version, its model and its verified cost (contract v6: no estimate, no null cost)", () => {
     const manifest = buildManifest(input());
     for (const call of manifest.roleCalls ?? []) {
       assert.equal(manifest.promptVersions[call.role], call.promptVersion);
-      assert.ok(call.costUsd !== null || call.actualIsEstimate, "an unknown cost is held as the estimate");
+      assert.ok(call.costUsd !== null, "an unknown cost is not written into a manifest");
     }
   });
 

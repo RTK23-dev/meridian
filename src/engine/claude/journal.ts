@@ -19,8 +19,6 @@ export type RoleCall = {
   completionTokens: number | null;
   /** OpenRouter's usage.cost. Null when the provider reported none, or the answer was invalid with no usage. */
   costUsd: number | null;
-  /** True when the ledger holds the estimate instead of a bill (a null cost, or an invalid answer). */
-  actualIsEstimate: boolean;
   verdict: "answered" | "invalid_answer";
   /** Paths and codes of the checks an invalid answer failed. Never the model's text. */
   issues: string[];

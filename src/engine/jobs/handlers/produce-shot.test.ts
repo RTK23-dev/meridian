@@ -57,7 +57,6 @@ function assetJobOf(jobRef: string, submittedAt: string): AssetJob {
     targets: [{ adapterId: KLING, provider: "openrouter", model: "kwaivgi/kling-v3.0-std", cacheKey: `cache-${jobRef}`, estimateUsd: 0.63 }],
     targetIndex: 0,
     targetBilledUsd: 0,
-    targetAllBilled: true,
     targetSubmits: 1,
     targetFirstEntryId: null,
     carry: { excluded: [], exhausted: [], refused: [], queued: [], duplicate: null },
@@ -165,7 +164,6 @@ function doneProduction(overrides: Partial<Extract<ShotProduction, { status: "do
     uri: "https://openrouter.ai/api/v1/videos/job-abc123/content?index=0",
     mediaType: "video/mp4",
     costUsd: 0.6125,
-    costIsEstimate: false,
     cacheHit: false,
     ledgerEntryId: "led_fixture",
     decisions: [{ at: new Date(NOW).toISOString(), chose: KLING, alternatives: [], reason: "fixture", by: "scorer" }],
@@ -277,7 +275,6 @@ describe("prompt, spec and identity helpers", () => {
           uri: "https://openrouter.ai/x.mp4",
           cacheKey: `sha256:${"a".repeat(64)}`,
           costUsd: 0.6125,
-          costIsEstimate: false,
           cacheHit: false,
           savedUsd: 0,
           ledgerEntryId: "led_1",
@@ -832,7 +829,7 @@ describe("a chain of calls on the produce_shot stage (contract v5)", () => {
 
   test("the call's input is resolved from the outputs before it, and an output no earlier call made is refused", () => {
     const outputs = [
-      { output: "keyframe", modelClass: "image.keyframe" as const, uri: "store://keyframes/kf-1.png", mediaType: "image/png", providerId: KEYFRAME_PROVIDER, promptHash: "h", costUsd: 0.018, costIsEstimate: false, cacheHit: false, ledgerEntryId: "led_keyframe" },
+      { output: "keyframe", modelClass: "image.keyframe" as const, uri: "store://keyframes/kf-1.png", mediaType: "image/png", providerId: KEYFRAME_PROVIDER, promptHash: "h", costUsd: 0.018, cacheHit: false, ledgerEntryId: "led_keyframe" },
     ];
     const calls = cartoonChainShotFixture.source.kind === "chain" ? cartoonChainShotFixture.source.calls : [];
     const clip = chainCallSpecFor({ requestId: FIXTURE_IDS.request, shot: cartoonChainShotFixture, calls, index: 1, attempt: 1, hints: [], outputs });

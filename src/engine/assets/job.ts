@@ -61,10 +61,8 @@ export const assetJobSchema = z
     submittedAt: z.iso.datetime(),
     targets: z.array(assetTargetSchema).min(1).max(CARRY_LIMIT),
     targetIndex: z.int().nonnegative(),
-    /** The reconciled bills of this target's earlier submits (and of this one, once settled). */
+    /** The provider bills of this target's earlier submits (and of this one, once settled). Never an estimate (contract v6). */
     targetBilledUsd: usdSchema,
-    /** True while every submit on this target has a provider bill. A list estimate makes it false. */
-    targetAllBilled: z.boolean(),
     /** Submits made on this target, this one included. */
     targetSubmits: z.int().positive(),
     /** The ledger entry of the target's first submit, which the asset names as its ledger entry. */

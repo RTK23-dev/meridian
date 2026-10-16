@@ -28,7 +28,6 @@ function validJob(overrides: Partial<AssetJob> = {}): AssetJob {
     targets: [{ adapterId: KLING_ID, provider: "openrouter", model: KLING, cacheKey: CACHE_KEY, estimateUsd: 0.63 }],
     targetIndex: 0,
     targetBilledUsd: 0,
-    targetAllBilled: true,
     targetSubmits: 1,
     targetFirstEntryId: null,
     carry: { excluded: [], exhausted: [], refused: [], queued: [], duplicate: null },

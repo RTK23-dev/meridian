@@ -203,19 +203,6 @@ const cases: Case[] = [
     value: edit(manifestFixture, (d) => (d.promptVersions.planner = "planner@2")),
   },
   {
-    name: "manifest: unknown cost not flagged as an estimate",
-    schema: manifestSchema,
-    value: edit(manifestFixture, (d) => (d.roleCalls[2].actualIsEstimate = false)),
-  },
-  {
-    name: "manifest: invalid answer held as a bill",
-    schema: manifestSchema,
-    value: edit(manifestFixture, (d) => {
-      d.roleCalls[2].costUsd = 0.04;
-      d.roleCalls[2].actualIsEstimate = false;
-    }),
-  },
-  {
     name: "manifest: negative prompt token count",
     schema: manifestSchema,
     value: edit(manifestFixture, (d) => (d.roleCalls[0].tokens.prompt = -1)),
@@ -243,7 +230,8 @@ const cases: Case[] = [
   { name: "reservation: unknown mode", schema: budgetReservationSchema, value: edit(budgetReservationFixture, (d) => (d.mode = "turbo")) },
   { name: "reservation: led prefix on a reservation", schema: budgetReservationSchema, value: edit(budgetReservationFixture, (d) => (d.reservationId = ID.ledgerRender)) },
   { name: "ledger: entryId with the res prefix", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => (d.entryId = ID.reservation)) },
-  { name: "ledger: estimate flag without an actual", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => { delete d.actualUsd; d.actualIsEstimate = true; }) },
+  { name: "ledger: a settlement without an actual cost", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => { d.settlement = "billed"; delete d.actualUsd; }) },
+  { name: "ledger: an actual cost without a settlement", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => { d.actualUsd = 0.04; delete d.settlement; }) },
   { name: "ledger: negative estimate", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => (d.estimateUsd = -0.05)) },
   { name: "ledger: missing idempotency key", schema: ledgerEntrySchema, value: without(ledgerRenderFixture, "idempotencyKey") },
   { name: "ledger: role without a prompt version", schema: ledgerEntrySchema, value: without(ledgerClaudeFixture, "promptVersion") },
@@ -341,5 +329,4 @@ test("manifest v2: an unknown cost and an unknown token count stay null, and are
   const director = parsed.roleCalls?.find((call) => call.role === "director_check");
   assert.equal(director?.costUsd, null);
   assert.equal(director?.tokens.prompt, null);
-  assert.equal(director?.actualIsEstimate, true);
 });

@@ -60,6 +60,7 @@ export function cleanRender(): CleanRender {
     renderer: "hyperframes-cloud",
     durationMs: edl.durationMs,
     bytes: 6_400_000,
+    estimateUsd: 0.05,
     costUsd: 0.047,
     idempotencyKey: composition.contentHash,
   };

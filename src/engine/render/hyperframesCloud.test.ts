@@ -333,7 +333,6 @@ describe("renderComposition: budget, idempotency, integrity", () => {
     assert.equal(video.costUsd, 0.05);
     assert.equal(video.bytes, VIDEO_BYTES.byteLength);
     assert.equal(video.uri, `store://renders/${FIXTURE_IDS.video}.mp4`);
-    assert.equal(outcome.resubmitted, false);
 
     assert.deepEqual(integrityInput, {
       width: 1080,
@@ -351,7 +350,7 @@ describe("renderComposition: budget, idempotency, integrity", () => {
     assert.equal(entries[0].provider, HYPERFRAMES_LEDGER_PROVIDER);
     assert.equal(entries[0].idempotencyKey, compiled.composition.contentHash);
     assert.equal(entries[0].actualUsd, 0.05);
-    assert.equal(entries[0].actualIsEstimate, true, "no provider bill is known, so the cost is the hold, flagged");
+    assert.equal(entries[0].settlement, undefined, "no provider bill is known, so the cost is the hold, flagged");
     assert.equal((await ledger.getReservation(reservationId))?.state, "reserved");
   });
 
@@ -394,7 +393,7 @@ describe("renderComposition: budget, idempotency, integrity", () => {
     );
     const afterFailure = await ledger.listEntries(reservationId);
     assert.equal(afterFailure.length, 1);
-    assert.equal(afterFailure[0].actualIsEstimate, true, "the held amount is recorded as an estimate");
+    assert.equal(afterFailure[0].settlement, undefined, "the held amount is recorded as an estimate");
 
     const retry = scripted([
       uploadStart(),
@@ -405,7 +404,6 @@ describe("renderComposition: budget, idempotency, integrity", () => {
       { method: "GET", url: VIDEO_URL, status: 200, bytes: VIDEO_BYTES, requireHeaders: ["!x-api-key"] },
     ]);
     const outcome = await renderComposition(renderRequest(reservationId), deps(retry.transport, ledger));
-    assert.equal(outcome.resubmitted, true, "the second call found its key in the ledger");
     assert.equal(header(retry.seen[3], "Idempotency-Key"), compiled.composition.contentHash);
     assert.equal((await ledger.listEntries(reservationId)).length, 1, "the ledger never bills the same key twice");
     assert.equal(outcome.video.costUsd, 0.05);

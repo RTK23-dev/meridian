@@ -112,9 +112,9 @@ test("reconciling a call twice keeps the first actual, and releasing returns the
   const id = reserved.reservation.reservationId;
   await withReservationLedger(db.sql, organizationId, id, (store) => authorizeCall(store, callInput(id, { idempotencyKey: "reconcile-me" })));
 
-  const one = await withReservationLedger(db.sql, organizationId, id, (store) => reconcileCall(store, { idempotencyKey: "reconcile-me", actualUsd: 0.19 }));
+  const one = await withReservationLedger(db.sql, organizationId, id, (store) => reconcileCall(store, { idempotencyKey: "reconcile-me", billedUsd: 0.19 }));
   assert.equal(one.entry.actualUsd, 0.19);
-  const two = await withReservationLedger(db.sql, organizationId, id, (store) => reconcileCall(store, { idempotencyKey: "reconcile-me", actualUsd: 0.5 }));
+  const two = await withReservationLedger(db.sql, organizationId, id, (store) => reconcileCall(store, { idempotencyKey: "reconcile-me", billedUsd: 0.5 }));
   assert.equal(two.entry.actualUsd, 0.19, "the first actual stands");
 
   const released = await withReservationLedger(db.sql, organizationId, id, (store) => releaseReservation(store, id));

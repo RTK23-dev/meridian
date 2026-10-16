@@ -439,8 +439,6 @@ export type RenderOutcome = {
   renderId: string;
   /** Budget alerts raised while the hold was made (the cap mode refuses instead of alerting). */
   alerts: BudgetAlert[];
-  /** True when the ledger already held this key, so the call was re-sent with the same key and no new entry was made. */
-  resubmitted: boolean;
 };
 
 /** The composition's files and assets must be exactly what the hash covers, before a single byte is sent. */
@@ -541,6 +539,17 @@ export async function runRender<Input extends RenderSubmitBase>(deps: RenderFlow
   if (hold.status === "duplicate" && !hold.samePayload) {
     throw new EngineError("conflict", `idempotency key ${key} was already used for a different render`, { stage: "render" });
   }
+  // A render already on the ledger is never submitted again under its key. The provider may have billed it, and the key is not a confirmed
+  // guarantee against a second bill (contract v6). An unsettled render waits for its bill or confirmation; a settled one is not re-billed.
+  if (hold.status === "duplicate") {
+    throw new EngineError(
+      "conflict",
+      hold.entry.settlement === undefined
+        ? `render ${key} was submitted and its cost is unsettled, so it is not submitted again: settle it first`
+        : `render ${key} was already submitted and billed, so it is not submitted again: reuse its stored video`,
+      { stage: "render", retryable: false },
+    );
+  }
 
   const input = await flow.prepare();
   if (input.idempotencyKey !== key) {
@@ -552,20 +561,19 @@ export async function runRender<Input extends RenderSubmitBase>(deps: RenderFlow
   const status = await pollUntilDone(deps, submission.renderId);
 
   if (status.status === "failed") {
-    await reconcileCall(deps.ledger, { idempotencyKey: key });
+    // The provider may or may not have billed the failed render, and says nothing about which. The call stays unsettled, and it is not
+    // submitted again under its key (the duplicate check above).
     throw new EngineError(
       "provider",
-      `render ${submission.renderId} failed: ${status.failureMessage ?? "no failure message was returned"}`,
-      { retryable: true, stage: "render" },
+      `render ${submission.renderId} failed at the provider, and its cost is unsettled: ${status.failureMessage ?? "no failure message was returned"}`,
+      { retryable: false, stage: "render" },
     );
   }
 
   const fetched = await deps.adapter.fetchResult(status);
+  // The render has no bill from its provider (render/STATUS.md), so the call stays unsettled and its cost is unknown. No estimate is booked.
   const reconciled = await reconcileCall(deps.ledger, { idempotencyKey: key });
-  const actualUsd = reconciled.entry.actualUsd;
-  if (actualUsd === undefined) {
-    throw new EngineError("internal", "the ledger did not record the render's cost", { stage: "render" });
-  }
+  const costUsd = reconciled.entry.actualUsd ?? null;
 
   const videoId = deps.newVideoId?.() ?? newId("vid_");
   const gate = gateResultSchema.parse(
@@ -596,14 +604,14 @@ export async function runRender<Input extends RenderSubmitBase>(deps: RenderFlow
     renderer: deps.adapter.renderer,
     durationMs: flow.durationMs,
     bytes: fetched.bytes.byteLength,
-    costUsd: actualUsd,
+    estimateUsd: flow.estimateUsd,
+    costUsd,
     idempotencyKey: key,
   });
   return {
     video,
     renderId: submission.renderId,
     alerts: hold.status === "authorized" ? hold.alerts : [],
-    resubmitted: hold.status === "duplicate",
   };
 }
 

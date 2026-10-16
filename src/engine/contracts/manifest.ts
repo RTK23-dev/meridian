@@ -29,9 +29,9 @@ export const roleCallVerdictSchema = z.enum(ROLE_CALL_VERDICTS);
 export type RoleCallVerdict = z.infer<typeof roleCallVerdictSchema>;
 
 /**
- * One Claude role call, as the role-call journal records it (claude/journal.ts `RoleCall`, with the role added). Unknown
- * values stay null: a null cost is held as the estimate, so actualIsEstimate must be true. An invalid answer is also held as
- * the estimate (the journal's rule), so its actualIsEstimate must be true too.
+ * One Claude role call, as the role-call journal records it (claude/journal.ts `RoleCall`, with the role added). `costUsd` is the
+ * provider's bill, or null while no bill is known. It is never an estimate (contract v6). A manifest is written only when every paid
+ * call is settled, so a delivered manifest has no null cost.
  */
 export const manifestRoleCallSchema = z
   .object({
@@ -45,17 +45,10 @@ export const manifestRoleCallSchema = z
       completion: z.int().nonnegative().nullable(),
     }),
     costUsd: usdSchema.nullable(),
-    actualIsEstimate: z.boolean(),
     verdict: roleCallVerdictSchema,
   })
   .refine((call) => call.promptVersion.startsWith(`${call.role}@`), {
     message: "promptVersion must be a version of role",
-  })
-  .refine((call) => call.costUsd !== null || call.actualIsEstimate, {
-    message: "an unknown cost is held as the estimate, so actualIsEstimate must be true",
-  })
-  .refine((call) => call.verdict === "answered" || call.actualIsEstimate, {
-    message: "an invalid answer is held as the estimate, so actualIsEstimate must be true",
   });
 export type ManifestRoleCall = z.infer<typeof manifestRoleCallSchema>;
 

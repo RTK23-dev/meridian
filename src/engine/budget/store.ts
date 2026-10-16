@@ -1,7 +1,7 @@
 // The ledger's storage interface (Bible 5.4, 14) and an in-memory implementation for tests. The budget logic in
 // this folder is written against LedgerStore only. eng-pipeline implements it on the engine_ledger table.
 
-import { EngineError, sumUsd, type BudgetReservation, type LedgerEntry } from "../contracts/index.ts";
+import { EngineError, sumUsd, type BudgetReservation, type LedgerEntry, type LedgerSettlement } from "../contracts/index.ts";
 
 /** A ledger entry with the storage context the contract does not carry: the workspace and the reservation. */
 export type LedgerRow = LedgerEntry & {
@@ -27,8 +27,11 @@ export interface LedgerStore {
   appendEntry(row: LedgerRow): Promise<AppendResult>;
   getEntryByKey(idempotencyKey: string): Promise<LedgerRow | null>;
   listEntries(reservationId: string): Promise<LedgerRow[]>;
-  /** Record the actual cost of an entry. Throws not_found if the entry does not exist. */
-  setActual(entryId: string, actual: { actualUsd: number; actualIsEstimate: boolean }): Promise<LedgerRow>;
+  /**
+   * Settle an entry: record its actual cost and how it was obtained (a verified bill, or a confirmed absence, which is 0). An estimate
+   * is never passed here. Throws not_found if the entry does not exist, and conflict if it is already settled.
+   */
+  settle(entryId: string, settlement: { actualUsd: number; settlement: LedgerSettlement }): Promise<LedgerRow>;
   /**
    * Reserved total: the reservedUsd of the workspace's reservations created in the month, excluding paused ones.
    * Actual total: the actuals of the workspace's entries that happened in the month.
@@ -84,13 +87,16 @@ export function memoryLedgerStore(): LedgerStore {
       return rows.filter((row) => row.reservationId === reservationId).map(copy);
     },
 
-    async setActual(entryId, actual) {
+    async settle(entryId, settlement) {
       const row = rows.find((candidate) => candidate.entryId === entryId);
       if (!row) {
         throw new EngineError("not_found", `ledger entry ${entryId} does not exist`);
       }
-      row.actualUsd = actual.actualUsd;
-      row.actualIsEstimate = actual.actualIsEstimate;
+      if (row.settlement !== undefined) {
+        throw new EngineError("conflict", `ledger entry ${entryId} is already settled`);
+      }
+      row.actualUsd = settlement.actualUsd;
+      row.settlement = settlement.settlement;
       return copy(row);
     },
 

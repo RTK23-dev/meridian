@@ -124,7 +124,7 @@ async function pollFor(h: Harness, job: AssetJob): Promise<ProviderPoll> {
 
 async function rowsOf(h: Harness): Promise<string[]> {
   const rows: LedgerRow[] = await h.ledger.listEntries(h.reservationId);
-  return rows.map((row) => `${row.entryId}:${row.idempotencyKey}:${row.actualUsd ?? "held"}:${row.actualIsEstimate ?? "-"}`);
+  return rows.map((row) => `${row.entryId}:${row.idempotencyKey}:${row.actualUsd ?? "held"}:${row.settlement ?? "-"}`);
 }
 
 function posts(requests: HttpRequest[], model?: string): number {
@@ -170,14 +170,13 @@ describe("submit returns a job and settle finishes it", () => {
     if (settled.step.status !== "done") return;
     assert.equal(settled.step.asset.providerId, KLING_ID);
     assert.equal(settled.step.asset.costUsd, 0.6125, "the asset costs what the provider billed");
-    assert.equal(settled.step.asset.costIsEstimate, false);
     assert.equal(settled.step.asset.submits, 1);
     assert.equal(settled.step.asset.ledgerEntryId, held?.entryId);
     assert.equal(settled.step.asset.uri, "https://openrouter.ai/api/v1/videos/job-kling/content?index=0", "without takes, the provider's own uri");
 
     const billed = await h.ledger.getEntryByKey(job.idempotencyKey);
     assert.equal(billed?.actualUsd, 0.6125);
-    assert.equal(billed?.actualIsEstimate, false);
+    assert.equal(billed?.settlement, "billed");
     assert.equal(await h.buckets.inFlight(KLING_ID), 0, "settling releases the slot");
     assert.equal((await h.cache.get(WORKSPACE, assetCacheKey(spec, KLING_ID)))?.costUsd, 0.6125, "the finished asset is cached");
     assert.deepEqual(
@@ -231,7 +230,7 @@ describe("submit returns a job and settle finishes it", () => {
 
     const kling = await h.ledger.getEntryByKey(first.step.job.idempotencyKey);
     assert.equal(kling?.actualUsd, 0.63, "the failed submit is reconciled to its estimate");
-    assert.equal(kling?.actualIsEstimate, true);
+    assert.equal(kling?.settlement, undefined);
     assert.equal(await h.buckets.inFlight(KLING_ID), 0, "the failed target gives its slot back");
     assert.equal(await h.buckets.inFlight(VEO_ID), 1, "the next target holds one");
 
@@ -240,7 +239,6 @@ describe("submit returns a job and settle finishes it", () => {
     if (done.step.status === "done") {
       assert.equal(done.step.asset.providerId, VEO_ID);
       assert.equal(done.step.asset.costUsd, 0.4);
-      assert.equal(done.step.asset.costIsEstimate, false);
     }
   });
 
@@ -275,7 +273,6 @@ describe("submit returns a job and settle finishes it", () => {
     assert.equal(done.step.status, "done");
     if (done.step.status !== "done") return;
     assert.equal(done.step.asset.costUsd, 1.2425, "the first refused submit (0.63) and the billed retry (0.6125)");
-    assert.equal(done.step.asset.costIsEstimate, true, "one submit was held at its estimate");
     assert.equal(done.step.asset.submits, 2);
     assert.equal(done.step.asset.ledgerEntryId, (await h.ledger.getEntryByKey(job1.idempotencyKey))?.entryId, "the asset names its first entry");
   });
@@ -355,7 +352,7 @@ describe("a submit answer with no job id is a failed submit", () => {
     assert.equal(await h.buckets.inFlight(VEO_ID), 1);
     const kling = await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID));
     assert.equal(kling?.actualUsd, 0.63, "the failed submit is reconciled to its estimate");
-    assert.equal(kling?.actualIsEstimate, true);
+    assert.equal(kling?.settlement, undefined);
   });
 });
 

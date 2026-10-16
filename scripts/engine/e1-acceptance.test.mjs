@@ -23,7 +23,7 @@ const CHECK_NAMES = [
   "audio_present_aac",
   "integrity_gate_pass",
   "ledger_one_render_entry",
-  "ledger_actual_is_render_cost",
+  "ledger_bill_settles_render_cost",
   "ledger_key_is_composition_hash",
   "reservation_released",
   "artifacts_written",
@@ -66,20 +66,24 @@ function parseReport(result) {
 }
 
 describe("E1 acceptance dry run", () => {
-  it("passes every check on the recorded replay, with costs and probe results", async () => {
+  it("passes every wiring check on the recorded replay; the render cost stays unknown, so the run does not pass", async () => {
     const result = await runNode(["--dry-run"]);
     assert.equal(result.code, 0, result.stderr);
     const report = parseReport(result);
     assert.equal(report.schema, "meridian.e1_acceptance/v1");
     assert.equal(report.mode, "dry-run");
     assert.equal(report.backend, "memory");
-    assert.equal(report.pass, true);
+    assert.equal(report.pass, false, "the render has no bill in the recording, so the run does not claim a cost");
     assert.equal(report.billVerified, false, "the render adapter reads no bill, so the run never claims one");
     assert.equal(report.masters.length, 1);
 
     const master = report.masters[0];
     assert.deepEqual(Object.keys(master.checks).sort(), [...CHECK_NAMES].sort());
-    for (const name of CHECK_NAMES) assert.equal(master.checks[name], true, `check ${name}`);
+    for (const name of CHECK_NAMES) {
+      if (name === "ledger_bill_settles_render_cost") continue;
+      assert.equal(master.checks[name], true, `check ${name}`);
+    }
+    assert.equal(master.checks.ledger_bill_settles_render_cost, false, "the render cost is unsettled until its invoice is recorded");
     assert.equal(master.failure, null);
 
     assert.equal(master.renderId, "hfr_e1_recorded_0001");
@@ -93,8 +97,8 @@ describe("E1 acceptance dry run", () => {
     assert.equal(master.cost.estimateUsd, 0.52);
     assert.equal(master.cost.reservedUsd, 0.52);
     assert.equal(master.cost.renderEstimateUsd, 0.05);
-    assert.equal(master.cost.actualUsd, 0.05);
-    assert.equal(master.cost.actualIsEstimate, true);
+    assert.equal(master.cost.actualUsd, null, "no bill: the actual is unknown, not the estimate");
+    assert.equal(master.cost.settled, false);
     assert.equal(master.cost.releasedUsd, 0.47);
     assert.equal(master.cost.finalReservedUsd, 0.05);
 
@@ -115,11 +119,11 @@ describe("E1 acceptance dry run", () => {
     assert.equal(result.code, 0, result.stderr);
     const report = parseReport(result);
     assert.equal(report.masters.length, 3);
-    assert.equal(report.totals.passed, 3);
+    assert.equal(report.totals.passed, 0, "no master passes while its render cost is unknown");
     assert.equal(new Set(report.masters.map((master) => master.idempotencyKey)).size, 3, "each composition has its own key");
     assert.equal(new Set(report.masters.map((master) => master.requestId)).size, 3);
     assert.equal(report.totals.estimateUsd, 1.56);
-    assert.equal(report.totals.actualUsd, 0.15);
+    assert.equal(report.totals.actualUsd, null, "a total is known only when every entry is settled");
     assert.equal(report.totals.releasedUsd, 1.41);
   });
 
@@ -128,8 +132,8 @@ describe("E1 acceptance dry run", () => {
     assert.equal(result.code, 0, result.stderr);
     const report = parseReport(result);
     assert.match(report.backend, /^postgres \(pglite/);
-    assert.equal(report.pass, true);
-    assert.equal(report.masters[0].ledger[0].actualUsd, 0.05);
+    assert.equal(report.pass, false);
+    assert.equal(report.masters[0].ledger[0].actualUsd, null);
     assert.match(report.masters[0].artifactIds.renderedVideo, /^art_/);
   });
 });

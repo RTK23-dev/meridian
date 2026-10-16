@@ -47,7 +47,7 @@ describe("paid calls through the ledger", () => {
     assert.equal(entry?.provider, "openrouter");
     assert.equal(entry?.model, "anthropic/claude-opus-5.5");
     assert.equal(entry?.actualUsd, 0.1412);
-    assert.equal(entry?.actualIsEstimate, false);
+    assert.equal(entry?.settlement, "billed");
   });
 
   it("never runs a call the reservation cannot cover in cap mode", async () => {
@@ -81,12 +81,14 @@ describe("paid calls through the ledger", () => {
     assert.equal(runs, 1);
   });
 
-  it("records the held amount, flagged as an estimate, when the provider reports no cost", async () => {
+  it("leaves the call held at its reservation with no actual cost when the provider reports no bill (contract v6: an estimate is never an actual)", async () => {
     const ledger = await ledgerWith(1);
-    await paidCall(input(ledger, 0.16), async () => ({ value: "plan", actualUsd: null }));
+    const outcome = await paidCall(input(ledger, 0.16), async () => ({ value: "plan", actualUsd: null }));
+    assert.equal(outcome.status, "done");
     const entry = await ledger.getEntryByKey("sha256:call-1");
-    assert.equal(entry?.actualUsd, 0.16);
-    assert.equal(entry?.actualIsEstimate, true);
+    assert.equal(entry?.reservedUsd, 0.16);
+    assert.equal(entry?.actualUsd, undefined);
+    assert.equal(entry?.settlement, undefined);
   });
 
   it("keeps the hold when the call throws", async () => {

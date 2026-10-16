@@ -44,6 +44,10 @@ export const compositionSchema = z
   });
 export type Composition = z.infer<typeof compositionSchema>;
 
+/**
+ * A rendered video (contract v6). `costUsd` is the provider's verified bill, or null while no bill is known: it is never an estimate.
+ * `estimateUsd` is the list estimate the render was reserved at, kept beside it so a reader cannot take one for the other.
+ */
 export const renderedVideoSchema = z.object({
   videoId: idSchema("vid_"),
   edlId: idSchema("edl_"),
@@ -51,7 +55,8 @@ export const renderedVideoSchema = z.object({
   renderer: z.string().min(1),
   durationMs: positiveMsSchema,
   bytes: z.int().positive(),
-  costUsd: usdSchema,
+  estimateUsd: usdSchema,
+  costUsd: usdSchema.nullable(),
   idempotencyKey: contentHashSchema,
 });
 export type RenderedVideo = z.infer<typeof renderedVideoSchema>;

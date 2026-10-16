@@ -41,7 +41,7 @@ function reconciled(overrides: Partial<Record<string, unknown>> = {}): LearningE
       estimateUsd: 0.05,
       reservedUsd: 0.05,
       actualUsd: 0.047,
-      actualIsEstimate: false,
+      settlement: "billed",
       videoId: FIXTURE_IDS.video,
       ...overrides,
     },
@@ -158,6 +158,13 @@ describe("emitting learning events", () => {
       return error instanceof EngineError && error.kind === "invalid_input" && /actualUsd/.test(error.message);
     });
     assert.equal((await store.list(SCOPE)).length, 0);
+  });
+
+  it("accepts a cost event of a call with no bill yet: null actual and null settlement (contract v6)", () => {
+    const held = reconciled({ actualUsd: null, settlement: null });
+    assert.equal(learningEventSchema.safeParse(held).success, true);
+    const absent = reconciled({ actualUsd: 0, settlement: "confirmed_absent" });
+    assert.equal(learningEventSchema.safeParse(absent).success, true);
   });
 
   it("refuses an event with no valid time", async () => {

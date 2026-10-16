@@ -228,7 +228,6 @@ describe("ShotstackAdapter and renderEdlWithShotstack (recorded responses, throu
     assert.equal(outcome.video.edlId, componentFreeEdl.edlId);
     assert.equal(outcome.video.idempotencyKey, EXPECTED_KEY);
     assert.equal(outcome.video.costUsd, 0.1, "no bill came back, so the cost is the hold, flagged as an estimate");
-    assert.equal(outcome.resubmitted, false);
     assert.equal(outcome.dropped.length, 3);
     assert.deepEqual(deps.stored, [outcome.video.videoId]);
     renderedVideoSchema.parse(outcome.video);
@@ -238,7 +237,7 @@ describe("ShotstackAdapter and renderEdlWithShotstack (recorded responses, throu
     assert.equal(entry?.model, "edit-v1");
     assert.equal(entry?.stage, "render");
     assert.equal(entry?.actualUsd, 0.1);
-    assert.equal(entry?.actualIsEstimate, true);
+    assert.equal(entry?.settlement, undefined);
   });
 
   it("sends the key on the submit and the polls, and the gateway attaches the key only on the provider host", async () => {
@@ -266,7 +265,6 @@ describe("ShotstackAdapter and renderEdlWithShotstack (recorded responses, throu
     );
     assert.deepEqual(first.problems, []);
     assert.deepEqual(second.problems, []);
-    assert.equal(outcome.resubmitted, true);
     assert.equal(outcome.video.idempotencyKey, EXPECTED_KEY);
   });
 

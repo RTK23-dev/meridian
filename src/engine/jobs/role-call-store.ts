@@ -29,7 +29,6 @@ type RoleCallRow = {
   prompt_tokens: number | string | null;
   completion_tokens: number | string | null;
   cost_usd: number | string | null;
-  actual_is_estimate: boolean;
   issues: string;
   refused_reason: string | null;
 };
@@ -70,7 +69,6 @@ function rowToEntry(row: RoleCallRow, scope: RoleCallScope): JournalEntry {
           promptTokens: toNumber(row.prompt_tokens),
           completionTokens: toNumber(row.completion_tokens),
           costUsd: toNumber(row.cost_usd),
-          actualIsEstimate: row.actual_is_estimate,
           verdict: row.status === "answered" ? "answered" : "invalid_answer",
           issues: storedIssues(row.issues),
         }
@@ -124,7 +122,7 @@ export function sqlRoleCallJournal(sql: Sql, scope: RoleCallScope): RoleCallJour
     async find(idempotencyKey) {
       const rows = await sql<RoleCallRow>`
         select idempotency_key, retry_of_key, role, stage, prompt_version, model, reservation_id, status, ledger_entry_id, answer,
-          answered_by, generation_id, prompt_tokens, completion_tokens, cost_usd, actual_is_estimate, issues, refused_reason
+          answered_by, generation_id, prompt_tokens, completion_tokens, cost_usd, issues, refused_reason
         from engine_role_calls
         where organization_id = ${scope.organizationId} and request_id = ${scope.requestId} and idempotency_key = ${idempotencyKey}
         limit 1
@@ -139,12 +137,12 @@ export function sqlRoleCallJournal(sql: Sql, scope: RoleCallScope): RoleCallJour
       await sql`
         insert into engine_role_calls (id, organization_id, request_id, reservation_id, stage, role, prompt_version, model,
           idempotency_key, retry_of_key, status, ledger_entry_id, answer, answered_by, generation_id, prompt_tokens,
-          completion_tokens, cost_usd, actual_is_estimate, issues, refused_reason, updated_at)
+          completion_tokens, cost_usd, issues, refused_reason, updated_at)
         values (${randomUUID()}, ${scope.organizationId}, ${scope.requestId}, ${entry.reservationId}, ${entry.stage}, ${entry.role},
           ${entry.promptVersion}, ${entry.model}, ${entry.idempotencyKey}, ${entry.retryOfKey}, ${entry.status},
           ${call?.ledgerEntryId ?? null}, ${entry.status === "answered" ? JSON.stringify(entry.answer) : null},
           ${call?.answeredBy ?? null}, ${call?.generationId ?? null}, ${call?.promptTokens ?? null}, ${call?.completionTokens ?? null},
-          ${call?.costUsd ?? null}, ${call?.actualIsEstimate ?? false}, ${JSON.stringify(call?.issues ?? [])},
+          ${call?.costUsd ?? null}, ${JSON.stringify(call?.issues ?? [])},
           ${entry.refusedReason}, now())
         on conflict (organization_id, request_id, idempotency_key) do update set
           status = excluded.status,
@@ -155,7 +153,6 @@ export function sqlRoleCallJournal(sql: Sql, scope: RoleCallScope): RoleCallJour
           prompt_tokens = excluded.prompt_tokens,
           completion_tokens = excluded.completion_tokens,
           cost_usd = excluded.cost_usd,
-          actual_is_estimate = excluded.actual_is_estimate,
           issues = excluded.issues,
           refused_reason = excluded.refused_reason,
           updated_at = now()
@@ -169,7 +166,7 @@ export function sqlRoleCallJournal(sql: Sql, scope: RoleCallScope): RoleCallJour
 export async function listRoleCalls(sql: Sql, scope: RoleCallScope): Promise<JournalEntry[]> {
   const rows = await sql<RoleCallRow>`
     select idempotency_key, retry_of_key, role, stage, prompt_version, model, reservation_id, status, ledger_entry_id, answer,
-      answered_by, generation_id, prompt_tokens, completion_tokens, cost_usd, actual_is_estimate, issues, refused_reason
+      answered_by, generation_id, prompt_tokens, completion_tokens, cost_usd, issues, refused_reason
     from engine_role_calls
     where organization_id = ${scope.organizationId} and request_id = ${scope.requestId}
     order by seq asc

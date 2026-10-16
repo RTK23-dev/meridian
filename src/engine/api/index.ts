@@ -25,6 +25,7 @@ import { ENGINE_STAGES, type EngineStage } from "../jobs/registry.ts";
 import { sqlLedgerStore, withReservationLedger } from "../jobs/sql-ledger-store.ts";
 import type { EngineRuntime } from "../jobs/types.ts";
 import type { WorkspaceBudgetSource } from "../jobs/handlers/estimate-reserve.ts";
+import type { BudgetReservation } from "../contracts/index.ts";
 import type { CredentialSource } from "../gateway/types.ts";
 import type { GoldMetrics } from "../review/gold.ts";
 import { takeReviewItemSchema } from "../review/inbox.ts";
@@ -282,7 +283,7 @@ export async function pauseEngineSpend(sql: Sql, organizationId: string, request
 }
 
 /** Whether a reservation id is paused, for a caller that shows it. Null when the workspace has no such reservation. */
-export async function reservationState(sql: Sql, organizationId: string, reservationId: string): Promise<"reserved" | "paused" | "released" | null> {
+export async function reservationState(sql: Sql, organizationId: string, reservationId: string): Promise<BudgetReservation["state"] | null> {
   const reservation = await sqlLedgerStore(sql, organizationId).getReservation(reservationId);
   return reservation?.state ?? null;
 }

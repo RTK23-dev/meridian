@@ -53,7 +53,7 @@ import {
 } from "./score.ts";
 import { adapterFor as buildAdapter, type AdapterContext } from "./providers/index.ts";
 import type { VideoProfile } from "./providers/openrouterVideo.ts";
-import { authorizeSubmit, reconcileSubmit } from "./ledger-steps.ts";
+import { authorizeSubmit, confirmAbsentSubmit, reconcileSubmit } from "./ledger-steps.ts";
 import {
   ASSET_JOB_SCHEMA,
   CARRY_LIMIT,
@@ -173,10 +173,8 @@ export type ProducedAsset = {
   modelClass: ModelClass;
   uri: string;
   cacheKey: string;
-  /** What the asset cost: the sum over the submits of its winning target. Zero for a cache hit. */
+  /** What the asset cost: the provider bills of the submits of its winning target. Zero for a cache hit. Never an estimate (contract v6). */
   costUsd: number;
-  /** True when some submit had no reported bill, so its list estimate is in the cost. */
-  costIsEstimate: boolean;
   cacheHit: boolean;
   /** On a cache hit, the cost the hit saved. */
   savedUsd: number;
@@ -209,7 +207,13 @@ export type ProduceOutcome =
   /** The same call was already authorized. Nothing was sent again. */
   | { status: "duplicate"; providerId: string; ledgerEntryId: string }
   /** No target produced an asset. */
-  | { status: "unavailable"; reasons: string[] };
+  | { status: "unavailable"; reasons: string[] }
+  /**
+   * A paid submit has an unknown outcome: a server error, a timeout, or an answer with no job id, so the provider may have billed it.
+   * Nothing else is submitted for the asset, on this target or any other, until the submit is settled from its invoice or confirmed
+   * absent by the provider (resolveAmbiguousSubmit). The stage stops with this reason.
+   */
+  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string };
 
 export type ProduceReport = {
   outcome: ProduceOutcome;
@@ -252,7 +256,6 @@ type Candidate = {
 type TargetState = {
   submitNumber: number;
   targetBilledUsd: number;
-  targetAllBilled: boolean;
   targetSubmits: number;
   targetFirstEntryId: string | null;
 };
@@ -265,7 +268,8 @@ type TargetResult =
   | { kind: "duplicate"; providerId: string; ledgerEntryId: string }
   | { kind: "queued"; reason: string }
   | { kind: "planner"; providerId: string; error: ProviderError }
-  | { kind: "exhausted"; providerId: string; reason: string };
+  | { kind: "exhausted"; providerId: string; reason: string }
+  | { kind: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string };
 
 /** The target that failed and the reason, so that the next target's decision can name it (Bible 10.4). */
 type Fallback = { providerId: string; reason: string } | null;
@@ -285,8 +289,20 @@ export function capabilityGap(spec: AssetSpec, caps: { maxSeconds: number; minSe
   return null;
 }
 
+/**
+ * A refusal the provider gave before any job id existed: no job was created, so the submit is settled as absent and nothing is billed
+ * by it (contract v6). Every other failure of a submit (a server error, a timeout, an answer with no job id) is ambiguous: the provider
+ * may have accepted and billed a job, so it is left unsettled and never resubmitted.
+ */
+const DEFINITIVE_REFUSALS: ReadonlySet<ProviderError["kind"]> = new Set(["rate_limit", "invalid_input", "content_policy"]);
+
+function isDefinitiveRefusal(error: ProviderError): boolean {
+  return DEFINITIVE_REFUSALS.has(error.kind);
+}
+
+/** A definitive rate limit is retried with a new attempt key, because the refused submit is settled as absent first. */
 function shouldRetry(error: ProviderError): boolean {
-  return error.kind === "rate_limit" || error.kind === "server" || (error.kind === "unknown" && error.retryable);
+  return error.kind === "rate_limit";
 }
 
 function outcomeFor(error: ProviderError | null): AttemptOutcome {
@@ -307,7 +323,7 @@ function emptyCarry(): AssetJobCarry {
 }
 
 /** Records what a non-submitted target result leaves behind, and returns the fallback it names (if it failed). */
-function absorb(carry: AssetJobCarry, result: Exclude<TargetResult, { kind: "submitted" } | { kind: "planner" }>): Fallback {
+function absorb(carry: AssetJobCarry, result: Exclude<TargetResult, { kind: "submitted" } | { kind: "planner" } | { kind: "unsettled" }>): Fallback {
   switch (result.kind) {
     case "duplicate":
       carry.duplicate = { providerId: result.providerId, ledgerEntryId: result.ledgerEntryId };
@@ -440,6 +456,16 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
           return { kind: "refused", reason: `${target.adapterId}: ${authorized.reason}` };
         }
         if (authorized.status === "duplicate") {
+          // A key already on the ledger that is still unsettled may have been billed. Nothing else is submitted for the asset then.
+          if (authorized.entry.settlement === undefined) {
+            return {
+              kind: "unsettled",
+              providerId: target.adapterId,
+              idempotencyKey: authorized.entry.idempotencyKey,
+              ledgerEntryId: authorized.entry.entryId,
+              reason: `${target.adapterId}: a submit under ${authorized.entry.idempotencyKey} is unsettled and may have been billed`,
+            };
+          }
           return { kind: "duplicate", providerId: target.adapterId, ledgerEntryId: authorized.entry.entryId };
         }
         session.alerts.push(...authorized.alerts);
@@ -475,7 +501,6 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
             targets: [...targets],
             targetIndex: index,
             targetBilledUsd: state.targetBilledUsd,
-            targetAllBilled: state.targetAllBilled,
             targetSubmits: state.targetSubmits,
             targetFirstEntryId: state.targetFirstEntryId,
           };
@@ -485,12 +510,24 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         }
         error ??= { kind: "unknown", retryable: false, message: "the provider returned no usable job id" };
 
-        // The submit failed before a job existed. It is held at its estimate until the books say otherwise (Bible 14.1 step 4).
-        const held = await reconcileSubmit(deps.ledger, { idempotencyKey: key, listPriceUsd: target.estimateUsd });
-        session.alerts.push(...held.alerts);
-        state.targetBilledUsd = sumUsd([state.targetBilledUsd, held.entry.actualUsd ?? target.estimateUsd]);
-        state.targetAllBilled = false;
         await recordAttempt(session, target.adapterId, startedMs, error, null, attempt);
+        if (!isDefinitiveRefusal(error)) {
+          // The submit may have been accepted and billed, and nothing says which. Its hold stands, unsettled: no estimate is booked, and
+          // nothing else is submitted for this asset, on this target or another, until the submit is settled (resolveAmbiguousSubmit).
+          return {
+            kind: "unsettled",
+            providerId: target.adapterId,
+            idempotencyKey: key,
+            ledgerEntryId: authorized.entry.entryId,
+            reason: `${target.adapterId}: ${error.kind}: ${error.message}; the submit may have been billed`,
+          };
+        }
+        // The provider refused the submit before any job existed, so the refusal settles it as absent and nothing is billed by it.
+        const absent = await confirmAbsentSubmit(deps.ledger, {
+          idempotencyKey: key,
+          evidence: `the provider refused the submit before a job id existed: ${error.kind}: ${error.message}`,
+        });
+        session.alerts.push(...absent.alerts);
 
         if (error.kind === "content_policy" || error.kind === "invalid_input") {
           return { kind: "planner", providerId: target.adapterId, error };
@@ -537,11 +574,14 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         });
         fallback = null;
       }
-      const state: TargetState = { submitNumber, targetBilledUsd: 0, targetAllBilled: true, targetSubmits: 0, targetFirstEntryId: null };
+      const state: TargetState = { submitNumber, targetBilledUsd: 0, targetSubmits: 0, targetFirstEntryId: null };
       const result = await driveTarget(session, input, targets, index, state, { startAttempt: 1, slotHeld: false });
       submitNumber = state.submitNumber;
       if (result.kind === "submitted") {
         return { status: "submitted", job: parseAssetJob({ ...result.job, carry: next }), runAfterMs: 0 };
+      }
+      if (result.kind === "unsettled") {
+        return { status: "unsettled", providerId: result.providerId, idempotencyKey: result.idempotencyKey, ledgerEntryId: result.ledgerEntryId, reason: result.reason };
       }
       if (result.kind === "planner") return { status: "failed", providerId: result.providerId, error: result.error };
       fallback = absorb(next, result);
@@ -749,16 +789,26 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     const latencyMs = now() - startedMs;
     const outcome = await outcomeOf(job, polled, adapter);
 
-    // The ledger holds this submit at its bill. A bill is taken only when it is a finite, non-negative number.
+    // The ledger settles this submit to the provider's bill. A bill is taken only when it is a finite, non-negative number. With no bill
+    // the submit stays unsettled: no estimate is booked, the asset is not cached, and nothing is retried or fallen back from.
     const bill = typeof polled.actualUsd === "number" && Number.isFinite(polled.actualUsd) && polled.actualUsd >= 0 ? polled.actualUsd : undefined;
     const reconciled = await reconcileSubmit(deps.ledger, {
       idempotencyKey: job.idempotencyKey,
-      ...(bill === undefined ? {} : { actualUsd: bill }),
-      listPriceUsd: target.estimateUsd,
+      ...(bill === undefined ? {} : { billedUsd: bill }),
     });
     session.alerts.push(...reconciled.alerts);
-    const targetBilledUsd = sumUsd([job.targetBilledUsd, reconciled.entry.actualUsd ?? target.estimateUsd]);
-    const targetAllBilled = job.targetAllBilled && bill !== undefined;
+    if (!reconciled.settled || reconciled.entry.actualUsd === undefined) {
+      await recordAttempt(session, target.adapterId, startedMs, outcome.ok ? null : outcome.error, outcome.ok ? latencyMs : null, job.attemptOnTarget);
+      await freeSlot(slot, deps.buckets);
+      return report(session, {
+        status: "unsettled",
+        providerId: target.adapterId,
+        idempotencyKey: job.idempotencyKey,
+        ledgerEntryId: reconciled.entry.entryId,
+        reason: `${target.adapterId}: the provider reported no bill for ${job.idempotencyKey}, so the submit stays unsettled`,
+      });
+    }
+    const targetBilledUsd = sumUsd([job.targetBilledUsd, reconciled.entry.actualUsd]);
 
     if (outcome.ok) {
       await recordAttempt(session, target.adapterId, startedMs, null, latencyMs, job.attemptOnTarget);
@@ -781,7 +831,6 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
           uri: stored.uri,
           cacheKey: target.cacheKey,
           costUsd: targetBilledUsd,
-          costIsEstimate: !targetAllBilled,
           cacheHit: false,
           savedUsd: 0,
           ledgerEntryId: job.targetFirstEntryId ?? reconciled.entry.entryId,
@@ -809,7 +858,6 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
       const state: TargetState = {
         submitNumber: job.submitNumber,
         targetBilledUsd,
-        targetAllBilled,
         targetSubmits: job.targetSubmits,
         targetFirstEntryId: job.targetFirstEntryId,
       };
@@ -822,6 +870,15 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         });
       }
       if (retried.kind === "planner") return report(session, { status: "failed", providerId: retried.providerId, error: retried.error });
+      if (retried.kind === "unsettled") {
+        return report(session, {
+          status: "unsettled",
+          providerId: retried.providerId,
+          idempotencyKey: retried.idempotencyKey,
+          ledgerEntryId: retried.ledgerEntryId,
+          reason: retried.reason,
+        });
+      }
       submitNumber = state.submitNumber;
       pushCapped(carry.exhausted, failureReason);
       fallback = absorb(carry, retried) ?? fallback;
@@ -953,7 +1010,6 @@ function assetFromCache(hit: CachedAsset, modelClass: ModelClass): ProducedAsset
     uri: hit.uri,
     cacheKey: hit.cacheKey,
     costUsd: 0,
-    costIsEstimate: false,
     cacheHit: true,
     savedUsd: hit.costUsd,
     ledgerEntryId: null,

@@ -30,7 +30,6 @@ function answered(overrides: Partial<JournalEntry["call"] & object> = {}, entry:
       promptTokens: 19000,
       completionTokens: 3300,
       costUsd: 0.142,
-      actualIsEstimate: false,
       verdict: "answered",
       issues: [],
       ...overrides,
@@ -51,7 +50,6 @@ describe("the role calls of a request, as the manifest holds them", () => {
         generationId: "gen-1",
         tokens: { prompt: 19000, completion: 3300 },
         costUsd: 0.142,
-        actualIsEstimate: false,
         verdict: "answered",
       },
     ]);
@@ -84,24 +82,26 @@ describe("the role calls of a request, as the manifest holds them", () => {
     );
   });
 
-  it("refuses an invalid answer that the provider billed at a known cost, because the contract holds it as the estimate", () => {
+  it("lists an invalid answer that the provider billed, at its verified bill (contract v6: a billed failed answer is still a cost)", () => {
     const billedInvalid = answered(
-      { verdict: "invalid_answer", answeredBy: null, costUsd: 0.05, actualIsEstimate: false, promptTokens: 2000, completionTokens: 90 },
+      { verdict: "invalid_answer", answeredBy: null, costUsd: 0.05, promptTokens: 2000, completionTokens: 90 },
       { idempotencyKey: "director:1", role: "director_check", promptVersion: "director_check@1" },
     );
-    assert.throws(() => requestCallsOf([billedInvalid]), (error: unknown) => {
-      return error instanceof EngineError && error.kind === "internal" && /does not fit the manifest contract/.test(error.message);
-    });
+    const calls = requestCallsOf([billedInvalid]);
+    assert.equal(calls.roleCalls.length, 1);
+    assert.equal(calls.roleCalls[0]?.verdict, "invalid_answer");
+    assert.equal(calls.roleCalls[0]?.costUsd, 0.05);
+    assert.deepEqual(calls.roleCalls[0]?.tokens, { prompt: 2000, completion: 90 });
   });
 
-  it("lists an invalid answer whose cost is unknown, held as the estimate", () => {
+  it("refuses a role call with no cost, so no manifest is written with an unknown cost (contract v6: a delivered manifest has no null cost)", () => {
+    const unknownAnswered = answered({ costUsd: null }, { idempotencyKey: "planner:3" });
     const unknownInvalid = answered(
-      { verdict: "invalid_answer", answeredBy: null, costUsd: null, actualIsEstimate: true, promptTokens: null, completionTokens: null },
+      { verdict: "invalid_answer", answeredBy: null, costUsd: null, promptTokens: null, completionTokens: null },
       { idempotencyKey: "director:2", role: "director_check", promptVersion: "director_check@1" },
     );
-    const calls = requestCallsOf([unknownInvalid]);
-    assert.equal(calls.roleCalls[0]?.verdict, "invalid_answer");
-    assert.equal(calls.roleCalls[0]?.costUsd, null);
-    assert.equal(calls.roleCalls[0]?.actualIsEstimate, true);
+    for (const unknown of [unknownAnswered, unknownInvalid]) {
+      assert.throws(() => requestCallsOf([unknown]), (error: unknown) => error instanceof EngineError);
+    }
   });
 });

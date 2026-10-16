@@ -124,7 +124,6 @@ describe("routing and fallback", () => {
     if (report.outcome.status !== "done") return;
     assert.equal(report.outcome.asset.providerId, VEO_ID);
     assert.equal(report.outcome.asset.costUsd, 0.4);
-    assert.equal(report.outcome.asset.costIsEstimate, false);
 
     const klingSubmits = h.requests.filter((request) => request.method === "POST" && String(request.body).includes(KLING));
     assert.equal(klingSubmits.length, 3, "three submits on the first target, the threshold's maxAttempts");

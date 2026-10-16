@@ -252,13 +252,15 @@ export type MeteredSttResult = {
   idempotencyKey: string;
   entryId: string;
   estimateUsd: number;
-  actualUsd: number;
-  actualIsEstimate: boolean;
+  /** The vendor's bill, or null while none is known. Never the estimate (contract v6). */
+  actualUsd: number | null;
+  /** True when the call is settled (its bill is recorded). A transcript whose call is unsettled is still returned, and its cost stays unknown. */
+  settled: boolean;
 };
 
 /**
  * Runs one transcription with its budget: estimate, authorise against the reservation with an idempotency key, call the
- * vendor, then reconcile to the vendor's bill (or the list price, flagged as an estimate, when none is reported).
+ * vendor, then settle to the vendor's bill. With no bill the call stays held and its cost unknown; nothing is estimated (contract v6).
  * - A key that is already reconciled is refused: the stored transcript is reused, nothing is billed again.
  * - A key that was authorised but never reconciled (the last call failed) is sent again with the same key, so the
  *   vendor deduplicates it; the hold stays on the ledger until the call completes.
@@ -299,23 +301,15 @@ export async function transcribeMetered(
   const result = await stt.transcribe(request, idempotencyKey);
   const reconciled = await reconcileCall(meter.store, {
     idempotencyKey,
-    ...(result.billedUsd === null
-      ? { listPriceUsd: estimateUsd }
-      : { actualUsd: result.billedUsd }),
+    ...(result.billedUsd === null ? {} : { billedUsd: result.billedUsd }),
   });
-  const actualUsd = reconciled.entry.actualUsd;
-  if (actualUsd === undefined) {
-    throw new EngineError("internal", "the ledger entry was not reconciled", {
-      stage: meter.stage,
-    });
-  }
   return {
     result,
     idempotencyKey,
     entryId: reconciled.entry.entryId,
     estimateUsd,
-    actualUsd,
-    actualIsEstimate: reconciled.entry.actualIsEstimate === true,
+    actualUsd: reconciled.entry.actualUsd ?? null,
+    settled: reconciled.settled,
   };
 }
 

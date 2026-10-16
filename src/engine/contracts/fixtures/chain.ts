@@ -681,6 +681,7 @@ export const renderedVideoFixture: RenderedVideo = {
   renderer: "hyperframes-cloud",
   durationMs: VOICE_DURATION_MS,
   bytes: 6400000,
+  estimateUsd: 0.05,
   costUsd: 0.047,
   idempotencyKey: compositionFixture.contentHash,
 };
@@ -833,6 +834,7 @@ export const ledgerRenderFixture: LedgerEntry = {
   estimateUsd: 0.05,
   reservedUsd: 0.05,
   actualUsd: 0.047,
+  settlement: "billed",
   idempotencyKey: compositionFixture.contentHash,
   at: "2026-10-13T09:06:00.000Z",
 };
@@ -846,7 +848,7 @@ export const ledgerSttFixture: LedgerEntry = {
   estimateUsd: 0.02,
   reservedUsd: 0.02,
   actualUsd: 0.02,
-  actualIsEstimate: true,
+  settlement: "billed",
   idempotencyKey: `voice:${ID.request}`,
   at: "2026-10-13T09:00:40.000Z",
 };
@@ -860,6 +862,7 @@ export const ledgerShot3Fixture: LedgerEntry = {
   estimateUsd: 0.2016,
   reservedUsd: 0.2016,
   actualUsd: 0.2016,
+  settlement: "billed",
   idempotencyKey: `produce:${ID.shot3}:1`,
   at: "2026-10-13T09:02:10.000Z",
 };
@@ -875,6 +878,7 @@ export const ledgerClaudeFixture: LedgerEntry = {
   estimateUsd: 0.16,
   reservedUsd: 0.16,
   actualUsd: 0.142,
+  settlement: "billed",
   idempotencyKey: contentHash({ role: "planner", promptVersion: "planner@1", model: "anthropic/claude-opus-5.5", input: ID.request }),
   at: "2026-10-13T09:01:30.000Z",
   role: "planner",
@@ -893,6 +897,7 @@ export const ledgerFrameReaderFixture: LedgerEntry = {
   estimateUsd: 0.017,
   reservedUsd: 0.017,
   actualUsd: 0.0157,
+  settlement: "billed",
   idempotencyKey: contentHash({ role: "frame_reader", promptVersion: "frame_reader@1", model: "anthropic/claude-haiku-5.5", input: ID.request }),
   at: "2026-10-13T09:01:50.000Z",
   role: "frame_reader",
@@ -912,7 +917,6 @@ export const manifestRoleCallsFixture: ManifestRoleCall[] = [
     generationId: "gen-fixture-planner-1",
     tokens: { prompt: 19000, completion: 3300 },
     costUsd: 0.142,
-    actualIsEstimate: false,
     verdict: "answered",
   },
   {
@@ -923,7 +927,6 @@ export const manifestRoleCallsFixture: ManifestRoleCall[] = [
     generationId: "gen-fixture-critic-1",
     tokens: { prompt: 2100, completion: 180 },
     costUsd: 0.003,
-    actualIsEstimate: false,
     verdict: "answered",
   },
   {
@@ -934,7 +937,6 @@ export const manifestRoleCallsFixture: ManifestRoleCall[] = [
     generationId: "gen-fixture-director-1",
     tokens: { prompt: null, completion: null },
     costUsd: null,
-    actualIsEstimate: true,
     verdict: "invalid_answer",
   },
 ];

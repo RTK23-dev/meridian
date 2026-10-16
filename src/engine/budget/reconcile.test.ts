@@ -43,30 +43,30 @@ async function reservedWithOneCall(mode: "observe" | "warn" | "cap" = "cap"): Pr
 
 test("a bill from the provider is recorded as the actual, and is not flagged as an estimate", async () => {
   const store = await reservedWithOneCall();
-  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", actualUsd: 0.19 });
+  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 0.19 });
   assert.equal(result.entry.actualUsd, 0.19);
-  assert.equal(result.entry.actualIsEstimate, false);
+  assert.equal(result.entry.settlement, "billed");
   assert.deepEqual(result.alerts, []);
 });
 
 test("with no bill, the adapter's list price is the actual and is flagged as an estimate", async () => {
   const store = await reservedWithOneCall();
-  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", listPriceUsd: 0.2016 });
+  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1",});
   assert.equal(result.entry.actualUsd, 0.2016);
-  assert.equal(result.entry.actualIsEstimate, true);
+  assert.equal(result.entry.settlement, undefined);
 });
 
 test("with no bill and no list price, the held amount is recorded and flagged, never 0", async () => {
   const store = await reservedWithOneCall();
-  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", listPriceUsd: null });
+  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1",});
   assert.equal(result.entry.actualUsd, 0.2016);
-  assert.equal(result.entry.actualIsEstimate, true);
+  assert.equal(result.entry.settlement, undefined);
 });
 
 test("reconciling a call twice keeps the first actual", async () => {
   const store = await reservedWithOneCall();
-  await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", actualUsd: 0.19 });
-  const again = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", actualUsd: 0.5 });
+  await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 0.19 });
+  const again = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 0.5 });
   assert.equal(again.entry.actualUsd, 0.19);
   assert.equal((await store.listEntries(ID.reservation))[0].actualUsd, 0.19);
 });
@@ -81,7 +81,7 @@ test("an unknown idempotency key is a not_found error", async () => {
 
 test("a cost above the hold raises the reservation to the committed amount and alerts in cap mode", async () => {
   const store = await reservedWithOneCall("cap");
-  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", actualUsd: 1.2 });
+  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 1.2 });
   assert.equal(result.reservation.reservedUsd, 1.2);
   assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, 1.2);
   assert.equal(result.alerts.length, 1);
@@ -90,14 +90,14 @@ test("a cost above the hold raises the reservation to the committed amount and a
 
 test("in observe mode a cost above the hold is recorded and the reservation raised, with no alert", async () => {
   const store = await reservedWithOneCall("observe");
-  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", actualUsd: 1.2 });
+  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 1.2 });
   assert.equal(result.reservation.reservedUsd, 1.2);
   assert.deepEqual(result.alerts, []);
 });
 
 test("releasing a reservation returns the unused part and leaves the committed actuals", async () => {
   const store = await reservedWithOneCall();
-  await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", actualUsd: 0.19 });
+  await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 0.19 });
   const released = await releaseReservation(store, ID.reservation);
   assert.equal(released.releasedUsd, 0.7695);
   assert.equal(released.reservation.state, "released");
@@ -137,8 +137,8 @@ test("the whole flow reserves, authorizes, reconciles and releases, and the mont
   await reserve(store, reserveInput());
   await authorizeCall(store, callInput({ idempotencyKey: "voice:1", stage: "voice", estimateUsd: 0.02, provider: "fixture-stt", model: "word-timestamps" }));
   await authorizeCall(store, callInput({ idempotencyKey: "produce:shot_3:1" }));
-  await reconcileCall(store, { idempotencyKey: "voice:1", actualUsd: 0.02 });
-  await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", listPriceUsd: 0.2016 });
+  await reconcileCall(store, { idempotencyKey: "voice:1", billedUsd: 0.02 });
+  await reconcileCall(store, { idempotencyKey: "produce:shot_3:1",});
   const released = await releaseReservation(store, ID.reservation);
   assert.equal(released.reservation.reservedUsd, 0.2216);
   assert.equal(released.releasedUsd, 0.7379);

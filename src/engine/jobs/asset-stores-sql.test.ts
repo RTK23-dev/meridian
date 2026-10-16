@@ -158,7 +158,7 @@ test("a budget step for a reservation runs under its lock, and a paid call throu
   assert.equal(locks, 2, "authorize and reconcile each run under the reservation's lock");
   const entry = await ledger.getEntryByKey(`${CACHE_KEY}-locked`);
   assert.equal(entry?.actualUsd, 0.6125);
-  assert.equal(entry?.actualIsEstimate, false);
+  assert.equal(entry?.settlement, "billed");
 });
 
 test("a call that exceeds the reservation in cap mode is refused under the lock, and nothing is written", async () => {

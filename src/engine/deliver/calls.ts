@@ -44,12 +44,10 @@ export function requestCallsOf(entries: readonly JournalEntry[]): RequestCalls {
       generationId: call.generationId,
       tokens: { prompt: call.promptTokens, completion: call.completionTokens },
       costUsd: call.costUsd,
-      actualIsEstimate: call.actualIsEstimate,
       verdict: call.verdict,
     });
     if (!parsed.success) {
-      // An invalid answer the provider billed at a known cost reaches here: the contract holds such an answer as the estimate, and the
-      // ledger holds the bill. The two disagree, so the manifest is refused and the request pauses (Bible 17.2, no fake success).
+      // A role call that does not fit the manifest contract is refused, and the request pauses (Bible 17.2, no fake success).
       const issue = parsed.error.issues[0];
       throw new EngineError(
         "internal",

@@ -63,7 +63,7 @@ test("appending an entry whose key exists returns the existing entry and stores 
 test("setting an actual on an entry that does not exist is not_found", async () => {
   const store = memoryLedgerStore();
   await assert.rejects(
-    store.setActual(ID.ledgerRender, { actualUsd: 1, actualIsEstimate: false }),
+    store.settle(ID.ledgerRender, { actualUsd: 1, settlement: "billed" }),
     (error: unknown) => error instanceof EngineError && error.kind === "not_found",
   );
 });

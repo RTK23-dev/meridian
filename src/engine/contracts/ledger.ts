@@ -8,7 +8,12 @@ export const BUDGET_MODES = ["observe", "warn", "cap"] as const;
 export const budgetModeSchema = z.enum(BUDGET_MODES);
 export type BudgetMode = z.infer<typeof budgetModeSchema>;
 
-export const RESERVATION_STATES = ["reserved", "paused", "released"] as const;
+/**
+ * reserved: calls may be authorized. paused: no call was authorized, because a cap refused the reservation at creation or an operator
+ * paused it. exceeded (contract v6): a verified bill took the reservation above the amount it was authorized for, so no further paid
+ * call is authorized and the bill counts toward the month. released: the reservation is closed at what is committed.
+ */
+export const RESERVATION_STATES = ["reserved", "paused", "exceeded", "released"] as const;
 export const reservationStateSchema = z.enum(RESERVATION_STATES);
 export type ReservationState = z.infer<typeof reservationStateSchema>;
 
@@ -21,9 +26,11 @@ export const budgetLineSchema = z.object({
 export type BudgetLine = z.infer<typeof budgetLineSchema>;
 
 /**
- * v1 invariants: estimateUsd is the sum of the lines; a paused reservation names its reason;
+ * v1 invariants: estimateUsd is the sum of the lines; a paused or exceeded reservation names its reason;
  * reservedUsd is what the reservation holds (for a paused one, what it would hold once resumed;
  * for a released one, the amount actually committed).
+ * Contract v6 adds the budgets the reservation was authorized against: the request's budget and the workspace month's budget.
+ * A reservation written before v6 has neither, and is checked against its own reservedUsd only.
  */
 export const budgetReservationSchema = z
   .object({
@@ -36,12 +43,14 @@ export const budgetReservationSchema = z
     estimateUsd: usdSchema,
     redoAllowanceUsd: usdSchema,
     reservedUsd: usdSchema,
+    requestBudgetUsd: usdSchema.optional(),
+    workspaceMonthBudgetUsd: usdSchema.optional(),
     state: reservationStateSchema,
     pausedReason: z.string().min(1).optional(),
     createdAt: z.iso.datetime(),
   })
-  .refine((reservation) => reservation.state !== "paused" || reservation.pausedReason !== undefined, {
-    message: "a paused reservation needs pausedReason",
+  .refine((reservation) => (reservation.state !== "paused" && reservation.state !== "exceeded") || reservation.pausedReason !== undefined, {
+    message: "a paused or exceeded reservation needs pausedReason",
   })
   .refine((reservation) => reservation.estimateUsd === sumUsd(reservation.lines.map((line) => line.estimateUsd)), {
     message: "estimateUsd must equal the sum of the lines",
@@ -77,11 +86,19 @@ export const promptVersionSchema = z.string().regex(/^[a-z][a-z0-9_]*@[1-9][0-9]
 export type PromptVersion = z.infer<typeof promptVersionSchema>;
 
 /**
- * One paid call. Written before the call is submitted. An entry without actualUsd is still held.
- * actualIsEstimate is set when the actual is a list-price fallback, not the provider's bill (Bible 14.1 step 4).
+ * One paid call. Written before the call is submitted, with its estimate (the list price, Bible 14.1 step 2) and its hold (reservedUsd).
+ *
+ * The actual cost is only ever one of two things, and never an estimate (contract v6). `actualUsd` with settlement "billed" is the
+ * provider's verified bill. `actualUsd` 0 with settlement "confirmed_absent" is a call the provider confirmed created no job. With no
+ * settlement the actual is unknown: the entry stays held at reservedUsd until a bill or a confirmation settles it.
+ *
  * role and promptVersion (contract v2) trace a Claude call to its role and prompt version. They are set together, and the
  * prompt version must be a version of that role. Entries written before v2 have neither and stay valid.
  */
+export const LEDGER_SETTLEMENTS = ["billed", "confirmed_absent"] as const;
+export const ledgerSettlementSchema = z.enum(LEDGER_SETTLEMENTS);
+export type LedgerSettlement = z.infer<typeof ledgerSettlementSchema>;
+
 export const ledgerEntrySchema = z
   .object({
     entryId: idSchema("led_"),
@@ -92,14 +109,14 @@ export const ledgerEntrySchema = z
     estimateUsd: usdSchema,
     reservedUsd: usdSchema,
     actualUsd: usdSchema.optional(),
-    actualIsEstimate: z.boolean().optional(),
+    settlement: ledgerSettlementSchema.optional(),
     idempotencyKey: z.string().min(1),
     at: z.iso.datetime(),
     role: claudeRoleSchema.optional(),
     promptVersion: promptVersionSchema.optional(),
   })
-  .refine((entry) => entry.actualIsEstimate === undefined || entry.actualUsd !== undefined, {
-    message: "actualIsEstimate needs actualUsd",
+  .refine((entry) => (entry.actualUsd === undefined) === (entry.settlement === undefined), {
+    message: "an actual cost needs a settlement, and a settlement needs an actual cost",
   })
   .refine((entry) => (entry.role === undefined) === (entry.promptVersion === undefined), {
     message: "role and promptVersion are set together",

@@ -46,7 +46,6 @@ function callFor(key: string, verdict: RoleCall["verdict"], issues: string[] = [
     promptTokens: 25873,
     completionTokens: verdict === "answered" ? 612 : 190,
     costUsd: 0.057866,
-    actualIsEstimate: false,
     verdict,
     issues,
   };
@@ -93,7 +92,6 @@ describe("the role call journal", () => {
     assert.deepEqual(found?.answer, answer);
     assert.equal(found?.call?.generationId, `gen-${KEY_B.slice(7, 12)}`);
     assert.equal(found?.call?.costUsd, 0.0579, "money is stored at four decimals");
-    assert.equal(found?.call?.actualIsEstimate, false);
 
     await journal().record(entryFor(KEY_B, { status: "pending" }));
     await journal().record(entryFor(KEY_B, { status: "refused", refusedReason: "reservation is paused" }));

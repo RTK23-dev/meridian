@@ -4,7 +4,7 @@
 //   reservation for authorize and reconcile, the workspace for reserve, which sums the month before it stores a new one).
 // - the unique key (organization_id, idempotency_key) on engine_ledger makes a duplicate call return the stored entry.
 
-import { EngineError, roundUsd, type BudgetReservation } from "../contracts/index.ts";
+import { EngineError, roundUsd, type BudgetReservation, type LedgerSettlement } from "../contracts/index.ts";
 import type { AppendResult, LedgerRow, LedgerStore, MonthTotals } from "../budget/store.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { transaction } from "./orchestrator-sql.ts";
@@ -19,6 +19,8 @@ type ReservationRow = {
   estimate_usd: string | number;
   redo_allowance_usd: string | number;
   reserved_usd: string | number;
+  request_budget_usd: string | number | null;
+  month_budget_usd: string | number | null;
   paused_reason: string | null;
   created_at: unknown;
 };
@@ -34,10 +36,11 @@ type LedgerDbRow = {
   estimate_usd: string | number;
   reserved_usd: string | number;
   actual_usd: string | number | null;
-  actual_is_estimate: boolean | null;
+  settlement: LedgerSettlement | null;
   idempotency_key: string;
   at: unknown;
 };
+
 
 function toIso(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
@@ -58,6 +61,8 @@ function rowToReservation(row: ReservationRow): BudgetReservation {
     state: row.state,
     createdAt: toIso(row.created_at),
   };
+  if (row.request_budget_usd !== null) reservation.requestBudgetUsd = Number(row.request_budget_usd);
+  if (row.month_budget_usd !== null) reservation.workspaceMonthBudgetUsd = Number(row.month_budget_usd);
   if (row.paused_reason !== null) reservation.pausedReason = row.paused_reason;
   return reservation;
 }
@@ -77,7 +82,7 @@ function rowToLedger(row: LedgerDbRow): LedgerRow {
     reservationId: row.reservation_id,
   };
   if (row.actual_usd !== null) entry.actualUsd = Number(row.actual_usd);
-  if (row.actual_is_estimate !== null) entry.actualIsEstimate = row.actual_is_estimate;
+  if (row.settlement !== null) entry.settlement = row.settlement;
   return entry;
 }
 
@@ -96,17 +101,14 @@ function refuseOtherWorkspace(organizationId: string, workspaceId: string): void
 export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
   const getReservation = async (reservationId: string): Promise<BudgetReservation | null> => {
     const rows = await sql<ReservationRow>`
-      select id, organization_id, request_id, mode, state, lines, estimate_usd, redo_allowance_usd, reserved_usd, paused_reason, created_at
-      from engine_reservations where id = ${reservationId} and organization_id = ${organizationId} limit 1
+      select id, organization_id, request_id, mode, state, lines, estimate_usd, redo_allowance_usd, reserved_usd, request_budget_usd, month_budget_usd, paused_reason, created_at from engine_reservations where id = ${reservationId} and organization_id = ${organizationId} limit 1
     `;
     return rows[0] ? rowToReservation(rows[0]) : null;
   };
 
   const getEntryByKey = async (idempotencyKey: string): Promise<LedgerRow | null> => {
     const rows = await sql<LedgerDbRow>`
-      select id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd,
-        actual_usd, actual_is_estimate, idempotency_key, at
-      from engine_ledger where organization_id = ${organizationId} and idempotency_key = ${idempotencyKey} limit 1
+      select id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at from engine_ledger where organization_id = ${organizationId} and idempotency_key = ${idempotencyKey} limit 1
     `;
     return rows[0] ? rowToLedger(rows[0]) : null;
   };
@@ -117,9 +119,10 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
       try {
         const inserted = await sql<{ id: string }>`
           insert into engine_reservations (id, organization_id, request_id, mode, state, lines, estimate_usd, redo_allowance_usd,
-            reserved_usd, paused_reason, created_at)
+            reserved_usd, request_budget_usd, month_budget_usd, paused_reason, created_at)
           values (${reservation.reservationId}, ${organizationId}, ${reservation.requestId}, ${reservation.mode}, ${reservation.state},
             ${JSON.stringify(reservation.lines)}, ${reservation.estimateUsd}, ${reservation.redoAllowanceUsd}, ${reservation.reservedUsd},
+            ${reservation.requestBudgetUsd ?? null}, ${reservation.workspaceMonthBudgetUsd ?? null},
             ${reservation.pausedReason ?? null}, ${reservation.createdAt})
           on conflict (id) do nothing
           returning id
@@ -139,6 +142,7 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
         update engine_reservations
         set state = ${reservation.state}, lines = ${JSON.stringify(reservation.lines)}, estimate_usd = ${reservation.estimateUsd},
           redo_allowance_usd = ${reservation.redoAllowanceUsd}, reserved_usd = ${reservation.reservedUsd},
+          request_budget_usd = ${reservation.requestBudgetUsd ?? null}, month_budget_usd = ${reservation.workspaceMonthBudgetUsd ?? null},
           paused_reason = ${reservation.pausedReason ?? null}
         where id = ${reservation.reservationId} and organization_id = ${organizationId}
         returning id
@@ -151,9 +155,9 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
       try {
         const inserted = await sql<{ id: string }>`
           insert into engine_ledger (id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd,
-            actual_usd, actual_is_estimate, idempotency_key, at)
+            actual_usd, settlement, idempotency_key, at)
           values (${row.entryId}, ${organizationId}, ${row.requestId}, ${row.reservationId}, ${row.stage}, ${row.provider}, ${row.model},
-            ${row.estimateUsd}, ${row.reservedUsd}, ${row.actualUsd ?? null}, ${row.actualIsEstimate ?? null}, ${row.idempotencyKey}, ${row.at})
+            ${row.estimateUsd}, ${row.reservedUsd}, ${row.actualUsd ?? null}, ${row.settlement ?? null}, ${row.idempotencyKey}, ${row.at})
           on conflict (organization_id, idempotency_key) do nothing
           returning id
         `;
@@ -171,23 +175,23 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
 
     async listEntries(reservationId) {
       const rows = await sql<LedgerDbRow>`
-        select id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd,
-          actual_usd, actual_is_estimate, idempotency_key, at
-        from engine_ledger where organization_id = ${organizationId} and reservation_id = ${reservationId}
+        select id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at from engine_ledger where organization_id = ${organizationId} and reservation_id = ${reservationId}
         order by at asc, id asc
       `;
       return rows.map(rowToLedger);
     },
 
-    async setActual(entryId, actual) {
+    async settle(entryId, settlement) {
+      // Only an unsettled entry is settled, so a bill can never overwrite another one (the second settle finds no row).
       const rows = await sql<LedgerDbRow>`
-        update engine_ledger set actual_usd = ${actual.actualUsd}, actual_is_estimate = ${actual.actualIsEstimate}
-        where id = ${entryId} and organization_id = ${organizationId}
-        returning id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd,
-          actual_usd, actual_is_estimate, idempotency_key, at
+        update engine_ledger set actual_usd = ${settlement.actualUsd}, settlement = ${settlement.settlement}
+        where id = ${entryId} and organization_id = ${organizationId} and settlement is null
+        returning id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at
       `;
-      if (!rows[0]) throw new EngineError("not_found", `ledger entry ${entryId} does not exist`);
-      return rowToLedger(rows[0]);
+      if (rows[0]) return rowToLedger(rows[0]);
+      const existing = await sql<{ id: string }>`select id from engine_ledger where id = ${entryId} and organization_id = ${organizationId}`;
+      if (existing.length === 0) throw new EngineError("not_found", `ledger entry ${entryId} does not exist`);
+      throw new EngineError("conflict", `ledger entry ${entryId} is already settled`);
     },
 
     async sumForMonth(workspaceId, month): Promise<MonthTotals> {
@@ -206,7 +210,7 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
   };
 }
 
-/** Runs one budget call under a lock on its reservation: authorize, reconcile and release. */
+/** Runs one budget call under a lock on its reservation: authorize, settle and release. */
 export async function withReservationLedger<T>(sql: Sql, organizationId: string, reservationId: string, fn: (store: LedgerStore) => Promise<T>): Promise<T> {
   return transaction(sql, async (tx) => {
     const locked = await tx<{ id: string }>`

@@ -58,12 +58,12 @@ function placeholderOutcome(): RenderOutcome {
       renderer: "hyperframes-cloud",
       durationMs: 24000,
       bytes: 10,
-      costUsd: 0.05,
+      estimateUsd: 0.05,
+      costUsd: null,
       idempotencyKey: `sha256:${"a".repeat(64)}`,
     },
     renderId: "hfr_placeholder",
     alerts: [],
-    resubmitted: false,
   };
 }
 

@@ -368,7 +368,7 @@ test("the hold is never lowered below what it already holds, even when the plan 
     at: NOW,
   });
   // The call came in at $0.10, so committed is $0.10 and the hold stays at $0.60 (reconcile does not lower it).
-  await reconcileCall(store, { idempotencyKey: "analyze:req_fixture:1", actualUsd: 0.1 });
+  await reconcileCall(store, { idempotencyKey: "analyze:req_fixture:1", billedUsd: 0.1 });
   assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, 0.6);
 
   const result = await extendReservation(store, extendInput({ plan: componentsOnly() }));
@@ -490,8 +490,8 @@ test("the whole flow: pre-flight hold, a paid call, the plan's extension, the sh
   });
   assert.equal(shot.status, "authorized");
 
-  await reconcileCall(store, { idempotencyKey: "analyze:req_fixture:1", actualUsd: 0.08 });
-  await reconcileCall(store, { idempotencyKey: `produce:${ID.shot3}:1`, actualUsd: 0.2 });
+  await reconcileCall(store, { idempotencyKey: "analyze:req_fixture:1", billedUsd: 0.08 });
+  await reconcileCall(store, { idempotencyKey: `produce:${ID.shot3}:1`, billedUsd: 0.2 });
   const released = await releaseReservation(store, ID.reservation);
   assert.equal(released.reservation.reservedUsd, 0.28, "the hold shrinks to what was committed");
   assert.equal(released.releasedUsd, 0.6795);

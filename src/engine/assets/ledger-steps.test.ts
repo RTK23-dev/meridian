@@ -51,7 +51,7 @@ describe("the submit's two budget steps", () => {
     assert.equal(authorized.status, "authorized");
     assert.equal(locks, 1, "the authorize step takes the lock");
 
-    const reconciled = await reconcileSubmit(locked, { idempotencyKey: "sha256:key-a", actualUsd: 0.6125 });
+    const reconciled = await reconcileSubmit(locked, { idempotencyKey: "sha256:key-a", billedUsd: 0.6125 });
     assert.equal(reconciled.entry.actualUsd, 0.6125);
     assert.equal(locks, 2, "the reconcile step takes the lock too");
   });
@@ -69,8 +69,8 @@ describe("the submit's two budget steps", () => {
   it("reconciling with no bill and a list price records the list price as an estimate", async () => {
     const { ledger, reservationId } = await ledgerWithOneReservation();
     await authorizeSubmit(ledger, call(reservationId, "sha256:key-c"));
-    const reconciled = await reconcileSubmit(ledger, { idempotencyKey: "sha256:key-c", listPriceUsd: 0.63 });
+    const reconciled = await reconcileSubmit(ledger, { idempotencyKey: "sha256:key-c",});
     assert.equal(reconciled.entry.actualUsd, 0.63);
-    assert.equal(reconciled.entry.actualIsEstimate, true);
+    assert.equal(reconciled.entry.settlement, undefined);
   });
 });

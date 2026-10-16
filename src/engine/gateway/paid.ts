@@ -61,7 +61,7 @@ export async function paidCall<T>(input: PaidCallInput, run: () => Promise<PaidR
   const reconciled = await budgetStep((store) =>
     reconcileCall(store, {
       idempotencyKey: input.idempotencyKey,
-      ...(result.actualUsd === null ? {} : { actualUsd: result.actualUsd }),
+      ...(result.actualUsd === null ? {} : { billedUsd: result.actualUsd }),
     }),
   );
   return { status: "done", value: result.value, entry: reconciled.entry, alerts: [...authorized.alerts, ...reconciled.alerts] };

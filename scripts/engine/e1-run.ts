@@ -63,7 +63,8 @@ export type LedgerLine = {
   estimateUsd: number;
   reservedUsd: number;
   actualUsd: number | null;
-  actualIsEstimate: boolean | null;
+  /** How the actual was obtained: a bill, or a confirmed absence. Null while the call is unsettled. */
+  settlement: string | null;
   idempotencyKey: string;
 };
 
@@ -95,8 +96,8 @@ export type MasterReport = {
     renderEstimateUsd: number | null;
     /** Sum of the ledger's actuals. Null unless every entry has one. */
     actualUsd: number | null;
-    /** True when the actual is a list-price or held estimate, not a provider bill. */
-    actualIsEstimate: boolean | null;
+    /** True when every ledger entry is settled from a bill or a confirmation. The render has no bill from its provider, so it is false until the invoice is recorded. */
+    settled: boolean | null;
     /** What releaseReservation handed back (the unspent part of the hold). */
     releasedUsd: number | null;
     /** The reservation's amount after release: the committed part. */
@@ -164,7 +165,7 @@ function emptyMaster(index: number, requestId: string, edlId: string): MasterRep
     videoId: null,
     uri: null,
     artifactIds: { productionRequest: null, budgetReservation: null, edl: null, composition: null, gateResult: null, renderedVideo: null },
-    cost: { estimateUsd: null, reservedUsd: null, renderEstimateUsd: null, actualUsd: null, actualIsEstimate: null, releasedUsd: null, finalReservedUsd: null },
+    cost: { estimateUsd: null, reservedUsd: null, renderEstimateUsd: null, actualUsd: null, settled: null, releasedUsd: null, finalReservedUsd: null },
     ledger: [],
     probe: null,
     integrity: null,
@@ -216,7 +217,7 @@ function checksFor(master: MasterReport, context: CheckContext): Record<string, 
     audio_present_aac: probe?.audioPresent === true && probe.audioCodec === "aac",
     integrity_gate_pass: master.integrity?.pass === true,
     ledger_one_render_entry: sole !== null && sole.stage === "render",
-    ledger_actual_is_render_cost: sole !== null && video !== null && sole.actualUsd === video.costUsd,
+    ledger_bill_settles_render_cost: sole !== null && sole.settlement === "billed" && video !== null && sole.actualUsd !== null && sole.actualUsd === video.costUsd,
     ledger_key_is_composition_hash: sole !== null && master.idempotencyKey !== null && sole.idempotencyKey === master.idempotencyKey,
     reservation_released: context.reservationReleased,
     artifacts_written: Object.values(master.artifactIds).every((id) => id !== null),
@@ -410,11 +411,11 @@ async function runMaster(index: number, options: RunOptions, ports: RunPorts, me
       estimateUsd: entry.estimateUsd,
       reservedUsd: entry.reservedUsd,
       actualUsd: entry.actualUsd ?? null,
-      actualIsEstimate: entry.actualIsEstimate ?? null,
+      settlement: entry.settlement ?? null,
       idempotencyKey: entry.idempotencyKey,
     }));
     master.cost.actualUsd = sumOrNull(entries.map((entry) => entry.actualUsd));
-    master.cost.actualIsEstimate = entries.length === 0 ? null : entries.some((entry) => entry.actualIsEstimate === true);
+    master.cost.settled = entries.length === 0 ? null : entries.every((entry) => entry.settlement !== undefined);
     master.cost.releasedUsd = released.releasedUsd;
     master.cost.finalReservedUsd = released.reservation.reservedUsd;
   }
@@ -471,7 +472,7 @@ export async function runE1(options: RunOptions, ports: RunPorts): Promise<E1Rep
     },
     billVerified: false,
     notes: [
-      "The actual cost is the render line's list estimate. The HyperFrames adapter reads no bill from HeyGen (render/STATUS.md), so ledger actuals are flagged actualIsEstimate.",
+      "The render has no bill from its provider (render/STATUS.md). Its ledger entry stays unsettled and its cost unknown until the owner records the invoice line, so this run does not claim a cost.",
       "Claude, speech-to-text and generation lines of each reservation are released unspent: E1 makes no such call.",
       "Stock and component shots price at $0 (config/prices.ts), so the estimate is the fixed per-master lines.",
     ],

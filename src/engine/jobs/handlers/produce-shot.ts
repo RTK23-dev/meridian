@@ -80,7 +80,6 @@ export type ShotProduction =
       uri: string;
       mediaType: string | null;
       costUsd: number;
-      costIsEstimate: boolean;
       cacheHit: boolean;
       ledgerEntryId: string | null;
       decisions: Decision[];
@@ -92,7 +91,8 @@ export type ShotProduction =
   | { status: "queued"; reasons: string[] }
   | { status: "unavailable"; reasons: string[]; decisions: Decision[] }
   | { status: "not_connected"; reasons: string[] }
-  | { status: "duplicate"; providerId: string; ledgerEntryId: string };
+  | { status: "duplicate"; providerId: string; ledgerEntryId: string }
+  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string; decisions: Decision[] };
 
 export type GenerateInput = {
   sql: Sql;
@@ -146,7 +146,6 @@ export function productionFromReport(report: ProduceReport): ShotProduction {
         uri: outcome.asset.uri,
         mediaType: outcome.asset.mediaType,
         costUsd: outcome.asset.costUsd,
-        costIsEstimate: outcome.asset.costIsEstimate,
         cacheHit: outcome.asset.cacheHit,
         ledgerEntryId: outcome.asset.ledgerEntryId,
         decisions,
@@ -163,6 +162,8 @@ export function productionFromReport(report: ProduceReport): ShotProduction {
       return { status: "not_connected", reasons: outcome.reasons };
     case "unavailable":
       return { status: "unavailable", reasons: outcome.reasons, decisions };
+    case "unsettled":
+      return { status: "unsettled", providerId: outcome.providerId, idempotencyKey: outcome.idempotencyKey, ledgerEntryId: outcome.ledgerEntryId, reason: outcome.reason, decisions };
   }
 }
 
@@ -438,6 +439,11 @@ async function fromProduction(
       throw new EngineError("provider", `${shot.shotId} waits for a provider slot: ${joined(production.reasons)}`, { retryable: true, stage: "produce_shot" });
     case "not_connected":
       throw new EngineError("config", `${shot.shotId} has no connected provider: ${joined(production.reasons)}`, { retryable: false, stage: "produce_shot" });
+    case "unsettled":
+      throw new EngineError("conflict", `${shot.shotId} waits for a submit to be settled, so no further paid call is made: ${production.reason}`, {
+        retryable: false,
+        stage: "produce_shot",
+      });
     case "duplicate":
       throw new EngineError("conflict", `the call for ${shot.shotId} was already authorized and its asset is not held here`, {
         retryable: false,
@@ -737,7 +743,6 @@ async function driveChain(run: ChainRun, settled: ShotProduction | null): Promis
       providerId: production.providerId,
       promptHash: contentHash(spec.prompt),
       costUsd: production.costUsd,
-      costIsEstimate: production.costIsEstimate,
       cacheHit: production.cacheHit,
       ledgerEntryId: production.ledgerEntryId,
     };

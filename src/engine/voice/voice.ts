@@ -100,7 +100,6 @@ type Take = {
   uri: string;
   providerId: string;
   costUsd: number;
-  costIsEstimate: boolean;
   ledgerEntryId: string | null;
 };
 
@@ -152,7 +151,6 @@ function interpret(outcome: ProduceOutcome): Spoken {
           uri: outcome.asset.uri,
           providerId: outcome.asset.providerId,
           costUsd: outcome.asset.costUsd,
-          costIsEstimate: outcome.asset.costIsEstimate,
           ledgerEntryId: outcome.asset.ledgerEntryId,
         },
       };
@@ -171,6 +169,12 @@ function interpret(outcome: ProduceOutcome): Spoken {
         kind: "refused",
         detail: `the speech provider refused the narration (${outcome.error.kind}): ${outcome.error.message}`,
       };
+    case "unsettled":
+      throw new EngineError(
+        "conflict",
+        `the narration's paid submit is unsettled, so no further paid call is made until it is settled: ${outcome.reason}`,
+        { stage: "voice", retryable: false },
+      );
     case "refused":
       throw new EngineError(
         "conflict",

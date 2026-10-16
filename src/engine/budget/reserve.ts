@@ -127,6 +127,8 @@ export async function reserve(store: LedgerStore, input: ReserveInput): Promise<
     estimateUsd: estimate.estimateUsd,
     redoAllowanceUsd: estimate.redoAllowanceUsd,
     reservedUsd,
+    requestBudgetUsd: input.requestBudgetUsd,
+    workspaceMonthBudgetUsd: input.workspaceMonthBudgetUsd,
     state: paused ? "paused" : "reserved",
     ...(paused ? { pausedReason: reasons.join("; ") } : {}),
     createdAt: input.now,
@@ -234,8 +236,37 @@ export async function authorizeCall(store: LedgerStore, input: CallInput): Promi
     message,
   };
 
-  if (overrun && reservation.mode === "cap") {
-    return { status: "refused", reason: message, alerts: [alert] };
+  // The request budget and the month budget the reservation was authorized against (contract v6). The month's committed total is
+  // the reservations' amounts, and this call raises this reservation's amount only by what is above it.
+  const requestOver = reservation.requestBudgetUsd !== undefined && projectedUsd > reservation.requestBudgetUsd;
+  const monthBudget = reservation.workspaceMonthBudgetUsd;
+  const monthTotals = monthBudget === undefined ? null : await store.sumForMonth(reservation.workspaceId, reservation.createdAt.slice(0, 7));
+  const monthProjectedUsd =
+    monthTotals === null ? 0 : sumUsd([monthTotals.reservedUsd, Math.max(0, projectedUsd - reservation.reservedUsd)]);
+  const monthOver = monthBudget !== undefined && monthProjectedUsd > monthBudget;
+  const budgetAlerts: BudgetAlert[] = [];
+  if (requestOver) {
+    budgetAlerts.push({
+      kind: "overrun",
+      scope: "request",
+      limitUsd: reservation.requestBudgetUsd ?? 0,
+      committedUsd: projectedUsd,
+      message: `call ${input.stage} would take the request to ${projectedUsd} USD, above its ${reservation.requestBudgetUsd} USD budget`,
+    });
+  }
+  if (monthOver) {
+    budgetAlerts.push({
+      kind: "overrun",
+      scope: "workspace_month",
+      limitUsd: monthBudget ?? 0,
+      committedUsd: monthProjectedUsd,
+      message: `call ${input.stage} would take the workspace month to ${monthProjectedUsd} USD, above its ${monthBudget} USD budget`,
+    });
+  }
+
+  const reasons = [...(overrun ? [message] : []), ...budgetAlerts.map((item) => item.message)];
+  if (reasons.length > 0 && reservation.mode === "cap") {
+    return { status: "refused", reason: reasons.join("; "), alerts: [...(overrun ? [alert] : []), ...budgetAlerts] };
   }
 
   const row: LedgerRow = {
@@ -271,6 +302,6 @@ export async function authorizeCall(store: LedgerStore, input: CallInput): Promi
   return {
     status: "authorized",
     entry: appended.entry,
-    alerts: overrun && reservation.mode === "warn" ? [alert] : [],
+    alerts: reservation.mode === "warn" ? [...(overrun ? [alert] : []), ...budgetAlerts] : [],
   };
 }

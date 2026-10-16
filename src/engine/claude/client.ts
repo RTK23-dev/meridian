@@ -188,8 +188,8 @@ async function settle<Input, Answer>(
         return { value: { verdict: "answered", answer }, actualUsd: answer.usage.costUsd };
       } catch (error) {
         if (error instanceof StructuredOutputError) {
-          // The call was billed even though the answer failed its contract. Use OpenRouter's cost when it reported one; otherwise the
-          // hold stands, flagged as an estimate.
+          // The call was billed even though the answer failed its contract. Use OpenRouter's bill when it reported one; otherwise the
+          // hold stands, unsettled. No estimate is booked.
           return { value: { verdict: "invalid", issues: [...error.issues], usage: error.usage }, actualUsd: error.usage?.costUsd ?? null };
         }
         throw error;
@@ -217,7 +217,6 @@ async function settle<Input, Answer>(
     promptTokens: usage?.promptTokens ?? null,
     completionTokens: usage?.completionTokens ?? null,
     costUsd: usage?.costUsd ?? null,
-    actualIsEstimate: entry.actualIsEstimate === true,
     verdict: value.verdict === "answered" ? "answered" : "invalid_answer",
     issues: value.verdict === "invalid" ? [...value.issues] : [],
   };

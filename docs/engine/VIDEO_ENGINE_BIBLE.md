@@ -426,6 +426,42 @@ checked for text, and it needs a downgrade).
   `src/engine/contracts/STATUS.md`.
 - Readers at v4 reject a chain shot. Deploy the readers before the planner writes one.
 
+### v6 changes and migration (settlement, contract version `engine-contracts@6`)
+
+Requested by the owner on 2026-10-16 (critical billing review). The set version is `CONTRACTS_VERSION` in
+`src/engine/contracts/version.ts`. The change is not additive in one respect: it removes the list-price fallback that section 14.1
+step 4 described. Every rule below is the code's rule now, and the owner directed it.
+
+**Why.** An estimate was written as an actual cost when no provider bill arrived. A downstream reader could take it for a charge. A
+submit that failed after the provider had accepted it was resubmitted under a new key, so a second paid job could be created. A
+reconciled bill could raise a reservation past its cap without a pause.
+
+**What changed.**
+- `LedgerEntry.actualUsd` is only a verified bill, or 0 when the provider confirmed the call created no job. `settlement` says which:
+  `billed` or `confirmed_absent`. `actualIsEstimate` is removed. With no bill and no confirmation, the actual is unknown and the entry
+  stays held at `reservedUsd`, which counts toward the budget.
+- `RenderedVideo.costUsd` is the provider's bill, or null while none is known. `estimateUsd` carries the render line beside it. The
+  HyperFrames render has no bill from its provider, so its cost stays unknown until the owner records the invoice.
+- `RoleCall.costUsd` is the provider's usage cost, or null. The manifest role call has no estimate flag.
+- `cost.reconciled` events carry `actualUsd` (nullable) and `settlement`.
+- `BudgetReservation` carries `requestBudgetUsd` and `workspaceMonthBudgetUsd`, the budgets it was authorized against, and gains the
+  state `exceeded`: a verified bill took it above its authorized amount in cap mode. An exceeded reservation authorizes no further paid call.
+- A submit that the provider refused before any job id (rate limit, invalid input, content policy) is settled `confirmed_absent`. Only a
+  rate limit is retried, with a new attempt key.
+- Any other submit failure (server error, timeout, an answer without a job id) is ambiguous. Its hold stays unsettled, the asset returns
+  the outcome `unsettled`, and nothing else is submitted for the asset: no retry, no fallback, and no second submit under the same key.
+  The operator resolves it with `resolveAmbiguousSubmit`, from the provider's invoice (billed) or the provider's record that no job exists
+  (absent).
+- Delivery refuses while any paid call of the request is unsettled, and names the calls. Nothing is released until every call is settled.
+- A render whose key is already on the ledger is not submitted again.
+
+**Migration.** Migration `0097_engine_settlement` sets the settlement of every bill, returns estimate actuals to unknown, drops the
+estimate flags and adds the `exceeded` state and the budget columns. Existing data was never live, so no bill was lost.
+
+**Open.** Speech, render and Claude calls that the provider reports no bill for stay unsettled until the owner records the bill or the
+confirmation. A retry that follows a server error must wait for the provider's own confirmation, which no adapter yet gives; until then
+the call waits for the operator.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.
@@ -972,7 +1008,7 @@ No paid call happens without a reservation, and every call is reconciled to its 
 1. **Estimate** in `estimate_reserve`: price every shot from the price table (section 10.3), plus Claude, render and media-function costs, plus a redo allowance (initial 25% of generated-shot cost).
 2. **Reserve** the estimate against the request budget and the workspace's monthly budget. If either would be exceeded, the request pauses (not fails) with a reason.
 3. **Spend:** every adapter call writes a `LedgerEntry` with estimate and reservation before submitting.
-4. **Reconcile:** on completion the adapter writes `actualUsd` (from the provider's response or billing API; else the list price, flagged as estimated).
+4. **Reconcile:** on completion the adapter settles the call to the provider's verified bill (from the provider's response or billing API). With no bill, the call stays held at its reservation and its cost is unknown: no list price is booked as an actual (amended for contract v6, owner direction 2026-10-16; section 4, v6 changes).
 5. **Release** unused reservation at `deliver`.
 
 **Modes per workspace:** `observe` (record only), `warn` (record and alert on overrun), `cap` (refuse calls beyond the reservation). Production runs in `cap`.

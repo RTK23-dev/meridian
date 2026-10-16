@@ -71,7 +71,6 @@ describe("runRole: the golden answer", () => {
     assert.equal(call.promptTokens, 25873);
     assert.equal(call.completionTokens, 612);
     assert.equal(call.costUsd, 0.057866);
-    assert.equal(call.actualIsEstimate, false);
     assert.equal(call.verdict, "answered");
 
     const entry = await ledger.getEntryByKey(call.idempotencyKey);
@@ -81,7 +80,7 @@ describe("runRole: the golden answer", () => {
     assert.equal(entry?.model, SONNET);
     assert.equal(entry?.estimateUsd, 0.082);
     assert.equal(entry?.actualUsd, 0.0579);
-    assert.equal(entry?.actualIsEstimate, false);
+    assert.equal(entry?.settlement, "billed");
     assert.equal(entry?.role, "segmenter", "the ledger entry names the role");
     assert.equal(entry?.promptVersion, "segmenter@1");
   });
@@ -128,7 +127,6 @@ describe("runRole: one retry on a StructuredOutputError", () => {
     assert.ok(failed.issues.includes("segments.0.wordIds.1: custom"));
     assert.ok(failed.issues.includes("segments.1.startMs: custom"));
     assert.equal(failed.costUsd, 0.05775, "a failed answer was still billed, and OpenRouter reported its cost");
-    assert.equal(failed.actualIsEstimate, false);
     assert.equal(answered.verdict, "answered");
     assert.notEqual(failed.idempotencyKey, answered.idempotencyKey);
 
@@ -141,7 +139,7 @@ describe("runRole: one retry on a StructuredOutputError", () => {
 
     const failedEntry = await ledger.getEntryByKey(failed.idempotencyKey);
     assert.equal(failedEntry?.actualUsd, 0.0578, "the failed call is recorded at OpenRouter's reported cost");
-    assert.equal(failedEntry?.actualIsEstimate, false);
+    assert.equal(failedEntry?.settlement, "billed");
     const answeredEntry = await ledger.getEntryByKey(answered.idempotencyKey);
     assert.equal(answeredEntry?.actualUsd, 0.0579);
   });
@@ -171,7 +169,7 @@ describe("runRole: one retry on a StructuredOutputError", () => {
     assert.equal(requests.length, 2);
     const entries = await ledger.listEntries(RESERVATION_ID);
     assert.equal(entries.length, 2, "both calls are on the ledger");
-    assert.ok(entries.every((entry) => entry.actualIsEstimate === false), "both failed answers were billed at their reported cost");
+    assert.ok(entries.every((entry) => entry.settlement === "billed"), "both failed answers were billed at their reported cost");
   });
 });
 
@@ -280,17 +278,17 @@ describe("runRole: budget, keys and connection", () => {
     assert.notEqual(outcome.calls[0]?.idempotencyKey, held?.idempotencyKey);
   });
 
-  it("reconciles a call with no provider cost to the held amount, flagged as an estimate", async () => {
+  it("leaves a call with no provider bill held and unsettled, with no actual cost and a null role-call cost (contract v6: an estimate is never an actual)", async () => {
     const ledger = await ledgerWith(1);
     const { gateway } = gatewayFor([json(200, fixture("openrouter-segmenter-ok-no-cost"))]);
     const outcome = await runRole(deps(gateway, ledger), segmenter, request(segmenterInput()));
     assert.equal(outcome.status, "done");
     const [call] = outcome.calls;
     assert.equal(call?.costUsd, null);
-    assert.equal(call?.actualIsEstimate, true);
     const entry = await ledger.getEntryByKey(call?.idempotencyKey ?? "");
-    assert.equal(entry?.actualUsd, 0.082);
-    assert.equal(entry?.actualIsEstimate, true);
+    assert.equal(entry?.reservedUsd, 0.082, "the call holds its reserved estimate");
+    assert.equal(entry?.actualUsd, undefined, "no actual is booked from the estimate");
+    assert.equal(entry?.settlement, undefined);
   });
 
   it("rejects bad ids before any call", async () => {
