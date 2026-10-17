@@ -1,4 +1,9 @@
-# STATUS: engine budget and cost ledger (W12)
+# STATUS
+
+**Chosen call prices (Bible 10.5 step 5, 2026-10-17).** `estimatePlan(plan, chosen?)` and `extendReservation({ chosenPrices })` price a
+call whose model the orchestrator chose at its catalog estimate (`ChosenCallPrice`, keyed `callPriceKey(shotId, output)`), with the
+chosen model as the line's `provider`. A chosen price that is not positive throws `unknown_price`; no chosen price means the price table.
+Tests: `estimate.test.ts` is unchanged; the behaviour is covered in `jobs/handlers/estimate-chosen*.test.ts`.: engine budget and cost ledger (W12)
 
 ## Chains: contract version `engine-contracts@5` (current)
 

@@ -150,10 +150,17 @@ The full `npm test` is the lead's run. The plan/ and produce handlers are untouc
   `model-choice-pipeline.test.ts` (plan choice, estimate, produce, poll, check_take: the chosen model is submitted, ledgered at the catalog
   estimate, billed by OpenRouter, named on the take and in the decisions).
 
+**estimate_reserve prices the chosen calls (2026-10-17).** `handlers/estimate-reserve.ts` reads an optional `model_choices` input (slot
+`model_choices`, named by the orchestrator's estimate_reserve node). For each choice it applies the router's own check (`plan/model-choices.ts
+chosenCallPricesOf`: still listed, still fits the call) and prices the call at the router's per-call catalog estimate. `budget/estimate.ts`
+takes those prices; a call with no usable choice is priced from the price table, as before. With no catalog port, the same. In cap mode an
+over-budget chosen total pauses the hold as it does for any plan: the gate fails with the reason, no reservation id is returned, and the
+orchestrator pauses on budget, so no call runs. Tests: `handlers/estimate-chosen.test.ts` (5), `handlers/estimate-chosen-stage.test.ts` (3).
+
 **Open, for the lead.** (1) No DB constraint enforces one `model_choices` per request; the handler checks before writing. (2) The pipeline
-test runs the plan stage's choice step directly (the real handler is covered in plan.test.ts with the 13-shot fixture, whose 1.5 s clips no
-recorded model fits). (3) `estimate_reserve` still prices shots from the price table, not the chosen model; the router's catalog estimate
-is authorized against that reservation, so a dearer chosen model can be refused in cap mode (a budget hold).
+test (`model-choice-pipeline.test.ts`) still runs the plan stage's choice step directly, not the full plan handler: the handler's plan
+from the recorded planner answers has 13 shots, and driving every produce job of it needs recorded submits for each video call.
+The full-handler path is covered in `handlers/plan.test.ts` (one chooser call, artifact written once, retry reuses it).
 
 ## Production shot ports: produce_shot and check_take in production (this pass)
 
