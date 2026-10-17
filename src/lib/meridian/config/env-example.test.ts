@@ -3,9 +3,10 @@
  * comment that says what kind it is. The reverse holds too: a listed variable is read by something, so an obsolete name fails.
  *
  * The reads come from a scan of the non-test files under src/ and scripts/. The scan covers process.env.NAME, process.env["NAME"],
- * env.NAME and env?.NAME on an injected environment object, the env("NAME") and key("NAME") helpers, and import.meta.env.NAME.
- * A name that is chosen at run time (the *_SHARED_DEFAULT switches, the source connector keys, the deployment-only keys) is read
- * from the contract, so it is checked too.
+ * env.NAME and env?.NAME on an injected environment object, the env("NAME") and key("NAME") helpers, settingValue(env, "NAME"), and
+ * import.meta.env.NAME. Names read through a table or a list (providers/boundaries.ts, oauth/client-readiness.ts and the Drive
+ * deployment names in storage/google-auth.ts) are read from those declarations. A name that is chosen at run time (the *_SHARED_DEFAULT
+ * switches, the source connector keys, the deployment-only keys) is read from the contract, so it is checked too.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -68,7 +69,34 @@ const READ_PATTERNS: RegExp[] = [
   /\benv\??\.([A-Z][A-Z0-9_]+)\b/g,
   /\benv\(\s*["']([A-Z][A-Z0-9_]+)["']\s*\)/g,
   /\bkey\(\s*["']([A-Z][A-Z0-9_]+)["']\s*\)/g,
+  /\bsettingValue\(\s*\w+\s*,\s*["']([A-Z][A-Z0-9_]+)["']\s*\)/g,
 ];
+
+/**
+ * The declarations that hold names read through a table or a list. Each block is matched by its declaration, and the quoted names inside
+ * it are the reads. A block is matched whole, so a status word beside the names (NOT_CONNECTED, JWT) is not read as a name. If a
+ * declaration is renamed, tableNames() throws, so the scan cannot silently stop finding these names.
+ */
+const TABLE_BLOCKS: ReadonlyArray<{ file: string; block: RegExp }> = [
+  // accountProviderState reads env[key] through this table.
+  { file: "src/lib/meridian/providers/boundaries.ts", block: /const key = \{([\s\S]*?)\}\[provider\]/ },
+  // oauthClientReadiness reads env[name] through these lists.
+  { file: "src/lib/meridian/oauth/client-readiness.ts", block: /const REQUIRED[^=]*=\s*\{([\s\S]*?)\n\};/ },
+  // The Drive deployment names, read with env.NAME and settingValue.
+  { file: "src/lib/meridian/storage/google-auth.ts", block: /const DEPLOYMENT_NAMES = \[([^\]]*)\]/ },
+];
+
+/** Each name read through a table block, and the file it is in. */
+function tableNames(): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const { file, block } of TABLE_BLOCKS) {
+    const text = readFileSync(join(ROOT, file), "utf8");
+    const body = block.exec(text)?.[1];
+    if (body === undefined) throw new Error(`${file}: the table of env names was not found. Update TABLE_BLOCKS if it was renamed.`);
+    for (const match of body.matchAll(/["']([A-Z][A-Z0-9_]+)["']/g)) names.set(match[1]!, file);
+  }
+  return names;
+}
 
 /** Each variable the non-test source and scripts read, and the first file that reads it (for a readable failure). */
 function readNames(): Map<string, string> {
@@ -84,6 +112,7 @@ function readNames(): Map<string, string> {
       }
     }
   }
+  for (const [name, file] of tableNames()) if (!reads.has(name)) reads.set(name, `${file} (read through a table)`);
   for (const name of runtimeChosenNames()) if (!reads.has(name)) reads.set(name, "contract.ts (chosen at run time)");
   return reads;
 }
@@ -112,6 +141,16 @@ test("the scan finds the reads it must find, including the helper calls and the 
     assert.ok(reads.has(name), `${name} is found`);
   }
   assert.ok(reads.size > 100, `the scan covers the whole source (${reads.size} names)`);
+});
+
+test("the names read through a table or a list in the three files are found, and a status word beside them is not", () => {
+  const tables = tableNames();
+  for (const name of ["META_ACCESS_TOKEN", "GOOGLE_ADS_DEVELOPER_TOKEN", "GOOGLE_ADS_CLIENT_SECRET", "META_APP_SECRET", "GOOGLE_REFRESH_TOKEN", "GOOGLE_SERVICE_ACCOUNT_KEY"]) {
+    assert.ok(tables.has(name), `${name} is read through a table`);
+  }
+  for (const word of ["NOT_CONNECTED", "TEST_PUBLISHED", "SUPPORTED", "JWT"]) {
+    assert.equal(tables.has(word), false, `${word} is a status or format word, not an env name`);
+  }
 });
 
 test("every variable the non-test src and scripts read is listed in .env.example", () => {
