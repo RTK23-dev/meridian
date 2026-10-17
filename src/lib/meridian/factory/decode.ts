@@ -206,6 +206,11 @@ export async function detectScenes(
 
 /**
  * Call the vision model on a keyframe PNG for scene visual labeling.
+ *
+ * Owner decision (docs/engine/PHASE_LOG.md, open list). This call goes straight to OpenRouter through completeWithImage. It does not go
+ * through the perception provider (perception/run.ts: selectPerceptionProvider and runPerception). So PERCEPTION_PROVIDER=none does not
+ * turn it off, and no perception run is recorded. Routing it there needs decodeVideoDna to receive a sql handle, which the worker does
+ * not pass (factory/worker.ts), and a mapping from MediaObservation to SceneVisionLabels, because the two schemas do not share their fields.
  */
 async function defaultVisionLabeller(
   keyframeBytes: Uint8Array,
