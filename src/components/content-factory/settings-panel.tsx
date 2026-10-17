@@ -57,7 +57,7 @@ export function SettingsPanel({ session, brands, hasFiles, onSaved }: { session:
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label="Budget (USD)" type="number" min="0.01" max="1000" step="0.01" inputMode="decimal" value={budget} onChange={(event) => setBudget(event.target.value)} hint="The most the engine may spend on this video." />
           <Input label="Length (seconds)" type="number" min={MIN_SECONDS} max={MAX_SECONDS} step="1" inputMode="numeric" value={length} onChange={(event) => setLength(event.target.value)} hint={`From ${MIN_SECONDS} to ${MAX_SECONDS} seconds.`} />
-          <Input label="Script language" value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="en" hint="A language code, such as en or es-MX." />
+          <Input label="Language of your script lines" value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="en" hint="Only when you write script lines, as a code such as en or es-MX. Otherwise the engine chooses." />
           <div className="space-y-1.5">
             <label htmlFor="cf-priority" className="block text-sm font-semibold">Priority</label>
             <SelectInput id="cf-priority" value={priority} onChange={(event) => setPriority(event.target.value)}>

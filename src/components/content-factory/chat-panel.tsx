@@ -41,7 +41,7 @@ type FilesState = { status: "ready" } | { status: "not_connected"; reason: strin
 
 const ROLE_LABELS: Record<ScriptRole, string> = { hook: "Hook", setup: "Setup", item: "Item", proof: "Proof", twist: "Twist", payoff: "Payoff", cta: "Call to action" };
 /** The file input's accept list. The server checks the bytes again; this only narrows the picker. */
-const ACCEPT = "video/mp4,video/quicktime,video/webm,image/png,image/jpeg,image/webp,text/plain,.txt,.md";
+const ACCEPT = "video/mp4,video/quicktime,video/webm,image/png,image/jpeg,image/webp,text/plain,application/pdf,.txt,.md,.pdf";
 
 function fileBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -68,7 +68,7 @@ export function ChatPanel({ session, brands, files, onChanged }: { session: Sess
         <CardTitle>Chat</CardTitle>
         <CardDescription>
           {draft
-            ? "Type instructions, mark script lines with their role, attach files from your computer and records from other pages. Everything you add is kept with this session."
+            ? "Tell the engine what the video is for, attach files from your computer and records from other pages. The engine writes the script from this brief, unless you send script lines of your own. Everything you add is kept with this session."
             : "This session has made its video request. Revisions are not built yet, so start a new session for another version."}
         </CardDescription>
       </CardHeader>
@@ -202,7 +202,7 @@ function Composer({ session, brands, files, hasReference, onChanged }: { session
             {SCRIPT_ROLES.map((role) => <option key={role} value={role}>A script line: {ROLE_LABELS[role]}</option>)}
           </SelectInput>
         </div>
-        <p className="self-end text-xs text-fg-muted">The engine reads a script and does not write one. Script lines become the narration, in the order you send them.</p>
+        <p className="self-end text-xs text-fg-muted">Script lines are optional. Without them, the engine writes the script from your instructions. With them, your lines are the narration, in the order you send them.</p>
       </div>
 
       <div

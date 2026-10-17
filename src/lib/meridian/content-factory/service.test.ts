@@ -196,11 +196,13 @@ describe("Content Factory sessions", () => {
 
   test("a session with no reference video is refused at the start with the schema's reason, and nothing is started", async () => {
     const session = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "No reference" });
-    await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "Your smoothie is lying to you.", beatRole: "hook" });
+    await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "A reel for our blender, with the pacing of a saved reel.", beatRole: null });
     const view = await readRun(db.sql, ADMIN, { sessionId: session.id }, { readiness: readyPorts(), files: memoryStore() });
     assert.equal(view.stage, "draft");
     assert.ok(view.stage === "draft" && view.problems.includes(problemWords("format.referenceVideo")));
     assert.ok(view.stage === "draft" && view.hasReference === false);
+    assert.ok(view.stage === "draft" && !view.problems.includes(problemWords("brief.text")), "the instruction is the brief's text");
+    assert.ok(view.stage === "draft" && !view.problems.includes(problemWords("script.language")), "a brief needs no language");
 
     const outcome = await startRun(db.sql, ADMIN, { sessionId: session.id }, { readiness: readyPorts() });
     assert.equal(outcome.status, "refused");

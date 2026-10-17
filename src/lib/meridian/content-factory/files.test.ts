@@ -24,7 +24,10 @@ test("the media type is read from the bytes", () => {
   assert.equal(sniffMediaType(WEBP), "image/webp");
   assert.equal(sniffMediaType(TEXT), "text/plain");
   assert.equal(sniffMediaType(EXE), null, "a Windows program is not accepted");
-  assert.equal(sniffMediaType(PDF), null, "text with control characters is not plain text");
+  assert.equal(sniffMediaType(PDF), "application/pdf");
+  assert.equal(sniffMediaType(new TextEncoder().encode("note\u0001\u0002")), null, "text with control characters is not plain text");
+  assert.equal(checkFile(PDF, "reference_video").ok, false, "a PDF is never the reference");
+  assert.ok(checkFile(PDF, "material").ok);
   assert.equal(sniffMediaType(new Uint8Array([0xc3, 0x28])), null, "invalid UTF-8 is not plain text");
 });
 

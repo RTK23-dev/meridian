@@ -51,14 +51,13 @@ The Studio publish dialog and two Factory details could not be captured (see Not
 - **Before:** `6bf831f` (main), exported with `git archive` and run with `npm run dev` on port 8092 and a fresh PGlite database.
 - **After:** this branch, `npm run dev` on port 8091 with its own fresh PGlite database. No provider key and no Drive credential were set.
 - A fixture account, workspace and brand were created through the app's sign-up flow ("Feature screens fixture"). For the session
-  capture, one session ("Fixture session (screenshot only)") with one instruction and one hook line was created through the screen.
+  capture, one session ("Fixture session (screenshot only)") with two instructions (a brief, contract v8) was created through the screen. Recaptured on main 899aa33.
   Playwright with `/opt/pw-browsers/chromium-1194`. 1280x800 and 390x844 viewport captures; `-full` is a full-page capture.
 
 | Screen id | Before (`6bf831f`) | After |
 | --- | --- | --- |
 | `content-factory` | "Page not found": the route does not exist at the base. | Content Factory in the workspace sidebar, the empty state and the new-session form (title, optional brand). |
-| `content-factory-session` | Not available. | Chat on the left (messages with their role, composer, file attach and drop zone, "Attach from Meridian", the Drive not-connected line), video settings below it, and the Decisions panel: what the engine's schema still needs, the engine's NOT_CONNECTED reasons, and "Make the video" disabled with its reason. Stacked on phone width. |
+| `content-factory-session` | Not available. | Chat on the left (messages with their role, composer, file attach and drop zone, "Attach from Meridian", the Drive not-connected line), video settings below it, and the Decisions panel: what the brief request still needs (reference video, theme page, length, budget, priority; no script or language), the engine's NOT_CONNECTED reasons, and "Make the video" disabled with its reason. Stacked on phone width. |
 
-Not captured: a started run's decision feed. The engine is not connected here (no budget, no OpenRouter or render key, no
-analyze_reference or voice handler), so no request can start, and a feed would have to be invented. The feed is covered by
+Not captured: a started run's decision feed. The engine is not connected here (no monthly budget, no OpenRouter or render key), so no request can start, and a feed would have to be invented. The feed is covered by
 `src/lib/meridian/content-factory/feed.test.ts` on a recorded engine run.

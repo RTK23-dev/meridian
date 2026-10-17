@@ -52,7 +52,7 @@ export const SOURCE_PAGE_LABELS: Record<SourcePage, string> = {
 export const FILE_PURPOSES = ["reference_video", "material"] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 
-export type FileKind = "video" | "image" | "text";
+export type FileKind = "video" | "image" | "text" | "document";
 
 export type MediaTypeRule = { mediaType: string; kind: FileKind; extension: string; maxBytes: number };
 
@@ -65,6 +65,7 @@ export const FILE_RULES: readonly MediaTypeRule[] = [
   { mediaType: "image/jpeg", kind: "image", extension: "jpg", maxBytes: 10_000_000 },
   { mediaType: "image/webp", kind: "image", extension: "webp", maxBytes: 10_000_000 },
   { mediaType: "text/plain", kind: "text", extension: "txt", maxBytes: 1_000_000 },
+  { mediaType: "application/pdf", kind: "document", extension: "pdf", maxBytes: 10_000_000 },
 ];
 
 /** The largest file of any type. The server refuses a larger upload before it decodes it. */
@@ -72,7 +73,7 @@ export const MAX_FILE_BYTES = Math.max(...FILE_RULES.map((rule) => rule.maxBytes
 /** The base64 length of the largest file, with its padding. */
 export const MAX_BASE64_CHARS = Math.ceil(MAX_FILE_BYTES / 3) * 4;
 
-export const ACCEPTED_FILE_LABEL = "MP4, MOV or WEBM video up to 40 MB, PNG, JPEG or WEBP images up to 10 MB, and plain text up to 1 MB";
+export const ACCEPTED_FILE_LABEL = "MP4, MOV or WEBM video up to 40 MB, PNG, JPEG or WEBP images and PDFs up to 10 MB, and plain text up to 1 MB";
 
 export const MAX_MESSAGE_CHARS = 4000;
 export const MAX_TITLE_CHARS = 120;

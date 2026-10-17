@@ -76,7 +76,7 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: st
     <Card>
       <CardHeader>
         <CardTitle>Decisions</CardTitle>
-        <CardDescription>When you ask for the video, the engine analyses the reference, plans the shots, picks the models, makes the voice and visuals, edits and renders. Each step appears here with its reason and its cost.</CardDescription>
+        <CardDescription>When you ask for the video, the engine analyses the reference, writes the script (unless you sent script lines), plans the shots, picks the models, makes the voice and visuals, edits and renders. Each step appears here with its reason and its cost.</CardDescription>
       </CardHeader>
       <p className="mb-4 text-sm text-fg-muted">{view.referenceNote}</p>
       {view.problems.length > 0 ? (
