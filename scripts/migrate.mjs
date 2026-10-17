@@ -18,8 +18,18 @@ import { dirname, join } from "node:path";
 import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
 
+/**
+ * One Postgres advisory lock for the whole migration run. Overlapping builds run this file at once, and without a lock both read the
+ * applied list and both try the same pending file: the loser fails and rolls back. A session lock on this key makes the second run wait;
+ * once the first has finished, the second finds nothing pending. The key is an arbitrary fixed bigint for this app. Do not reuse it for
+ * another lock. The lock is released in the finally below, and a connection that dies releases it when it closes.
+ */
+const MIGRATION_LOCK_KEY = 7270114311;
+
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
+  // The PGLite fallback (src/lib/db.ts) applies the same files in its own process at startup. It takes no advisory lock: PGlite is
+  // single-process, so two runs cannot race on it.
   console.log(
     "[migrate] DATABASE_URL not set — skipping (the PGLite fallback migrates itself).",
   );
@@ -44,7 +54,11 @@ async function main() {
 
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   const client = await pool.connect();
+  let locked = false;
   try {
+    // The lock comes before the table and the applied list are read, so the applied list is read under it.
+    await client.query("SELECT pg_advisory_lock($1::bigint)", [MIGRATION_LOCK_KEY]);
+    locked = true;
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
@@ -75,6 +89,13 @@ async function main() {
     }
     console.log(count ? `[migrate] done — ${count} migration(s) applied.` : "[migrate] up to date.");
   } finally {
+    if (locked) {
+      try {
+        await client.query("SELECT pg_advisory_unlock($1::bigint)", [MIGRATION_LOCK_KEY]);
+      } catch {
+        // The connection is gone, so the session lock went with it when it closed. pool.end() below closes it.
+      }
+    }
     client.release();
     await pool.end();
   }
