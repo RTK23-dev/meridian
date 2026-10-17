@@ -17,6 +17,7 @@ const VARIANT_KEY = "sha256:" + "a".repeat(64);
 const VARIANT_RENDER: SettledRow = {
   ...settled({
     entryId: fixtureId("led_", 51),
+    providerRef: null,
     requestId: FIXTURE_IDS.request,
     stage: "render",
     provider: "hyperframes-cloud",

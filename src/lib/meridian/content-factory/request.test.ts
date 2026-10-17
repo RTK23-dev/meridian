@@ -6,11 +6,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { requestProblems } from "../../../engine/api/index.ts";
 import { BRIEF_SOURCE_TEXT_MAX, BRIEF_TEXT_MAX } from "../../../engine/contracts/request.ts";
-import type { Attachment, Message, SessionSettings } from "./model.ts";
+import type { Attachment, FileAttachment, Message, SessionSettings } from "./model.ts";
 import { TEXT_FILE_MAX_CHARS } from "./model.ts";
 import { buildProductionRequest, inputNotes, problemWords, type SessionForRequest } from "./request.ts";
 
-const REFERENCE: Attachment = {
+const REFERENCE: FileAttachment = {
   id: "att-ref",
   kind: "file",
   messageId: "m1",

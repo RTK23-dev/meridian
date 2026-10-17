@@ -8,7 +8,8 @@ import { budgetReservationSchema, EngineError, newId } from "../contracts/index.
 import { authorizeCall } from "../budget/reserve.ts";
 import { reconcileCall } from "../budget/reconcile.ts";
 import { withReservationLedger, withWorkspaceLedger } from "./sql-ledger-store.ts";
-import { executeEngineJob, type ExecutableJob } from "./dispatch.ts";
+import { executeEngineJob } from "./dispatch.ts";
+import type { ExecutableJob } from "../../lib/meridian/jobs/execute.ts";
 import { ENGINE_MAINTENANCE_JOBS, maintenanceJobOf } from "./registry.ts";
 import { createEngineRuntime } from "./runtime.ts";
 import { notConnectedWorkspaceBudget } from "./handlers/estimate-reserve.ts";

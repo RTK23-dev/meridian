@@ -169,6 +169,7 @@ function ledgerEntries(unbilled: ReadonlySet<string> = new Set()): LedgerEntry[]
   const later: LedgerEntry[] = [
     {
       entryId: fixtureId("led_", 42),
+      providerRef: null,
       requestId: REQ,
       stage: "claude_roles",
       provider: "openrouter",
@@ -182,6 +183,7 @@ function ledgerEntries(unbilled: ReadonlySet<string> = new Set()): LedgerEntry[]
     },
     {
       entryId: fixtureId("led_", 41),
+      providerRef: null,
       requestId: REQ,
       stage: "claude_roles",
       provider: "openrouter",
@@ -195,6 +197,7 @@ function ledgerEntries(unbilled: ReadonlySet<string> = new Set()): LedgerEntry[]
     },
     {
       entryId: fixtureId("led_", 43),
+      providerRef: null,
       requestId: REQ,
       stage: "render",
       provider: "hyperframes-cloud",
