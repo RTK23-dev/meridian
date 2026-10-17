@@ -629,9 +629,8 @@ export const resumeFactoryRun = createServerFn({ method: "POST" })
   });
 
 /**
- * Queues the learn stage again for a run that waits for a measured outcome of its own creatives. Learning runs once in the queue,
- * before the measurement pull has stored anything, so this is how a waiting run is checked again. It acts only on a running run at
- * its learn step.
+ * Queues the learn stage again for a run that waits for a measured outcome of its own creatives. The scheduler also queues this on the
+ * measurement cadence. This button checks now. It acts only on a running run at its learn step.
  */
 export const checkFactoryLearning = createServerFn({ method: "POST" })
   .validator((input: unknown) => {

@@ -210,6 +210,12 @@ export function RunBuilder({
           <Input value={draft.countries} onChange={(event) => update("countries", event.target.value)} placeholder="US, GB" disabled={!canEdit} />
         </Field>
         {countryNote ? <p className="text-sm text-muted">{countryNote}</p> : null}
+        <Field label="Facebook Page id" hint="The numeric id of the Page a paid ad is created for. Leave it blank for an organic run.">
+          <Input value={draft.facebookPageId} onChange={(event) => update("facebookPageId", event.target.value)} placeholder="1234567890" disabled={!canEdit} inputMode="numeric" />
+        </Field>
+        <Field label="Destination link" hint="The https page a paid ad sends people to.">
+          <Input value={draft.destinationLink} onChange={(event) => update("destinationLink", event.target.value)} placeholder="https://example.com/offer" disabled={!canEdit} />
+        </Field>
       </fieldset>
 
       <Field label="Theme page" hint="The page's kits, schedule and Instagram trial default apply to this run. No page keeps the run's own settings.">

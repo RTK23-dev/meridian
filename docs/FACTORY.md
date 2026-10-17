@@ -495,8 +495,7 @@ Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is st
   `factory_costs`. Its estimate is held against the run's caps, but it does not appear as priced spend.
 - A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.
 - Preflight on Factory images checks that the still has a hook or a script, and does not apply the video duration rule. A deterministic prohibited or unsupported claim rejects the image before a provider is called. The engine claim question is still not asked on this path: an uncalibrated answer cannot approve, and the creative's later review is where that question belongs. Images still have no duration, so they are not sent through the video preflight.
-- Learning is not re-run on a schedule. The learn stage runs once in the queue, and a waiting run is checked again only with its Check learning
-  button.
+- Learning is rechecked on the measurement cadence while a run is waiting at its learn step. The Check learning button still checks immediately.
 - Cross-surface proposals: an organic winner proposed as an ad test, or the reverse. A run with intent `both` learns each surface for its
   own arm, but no pattern on one surface is proposed as a test on the other.
 - A re-grade overwrites the grade of record on `ad_timelines`. A pick made under the earlier grade can no longer show that grade, only that
@@ -508,8 +507,7 @@ Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is st
   and the B2 tier counts were not captured. The PHASE_LOG records no run of the button audit (`npm run ui:button-audit`) for these changes.
 - The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
 - The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
-- A live paid publish from a run is refused until the run carries a Facebook Page id and a destination link. A run has a targeting country
-  now; the Page and link are the next gap.
+- A live paid publish from a run uses the run's Facebook Page id and destination link. It is refused, and nothing is sent, when either is missing.
 - Uploads are not connected to Gather.
 - Re-grading stored grades when a brand's calibrated report changes. A stored grade keeps the threshold it was made under until its ad is
   graded again by a new run.

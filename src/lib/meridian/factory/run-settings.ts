@@ -64,6 +64,12 @@ export type RunSettings = {
    * applies to the run's Instagram posts. The page is checked against the brand when the run starts.
    */
   pageId: string | null;
+  /**
+   * The Facebook Page a live paid ad is created for, or null when none is set. A live paid publish needs this and a destination link.
+   */
+  facebookPageId: string | null;
+  /** The https link a live paid ad sends people to, or null when none is set. */
+  destinationLink: string | null;
 };
 
 export const DEFAULT_RUN_SETTINGS: RunSettings = {
@@ -77,6 +83,8 @@ export const DEFAULT_RUN_SETTINGS: RunSettings = {
   targetingCountries: [],
   costPerMasterUsd: null,
   pageId: null,
+  facebookPageId: null,
+  destinationLink: null,
 };
 
 /**
@@ -141,6 +149,7 @@ const MAX_VARIANTS = 40;
 const MAX_TARGETING_COUNTRIES = 25;
 const PLATFORM_ID = /^[a-z][a-z_]{1,19}$/;
 const PAGE_REFERENCE = /^[A-Za-z0-9_-]{1,64}$/;
+const FACEBOOK_PAGE_ID = /^[0-9]{1,32}$/;
 const PROVIDER_ID = /^[a-z0-9][a-z0-9_:.-]{1,59}$/;
 
 /**
@@ -169,6 +178,30 @@ export function parseTargetingCountries(input: unknown): { ok: true; value: stri
 }
 
 export type SettingsResult = { ok: true; value: RunSettings } | { ok: false; error: string };
+
+function optionalText(value: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (value === null) return { ok: true, value: null };
+  if (typeof value !== "string") return { ok: false, error: "The Facebook Page id must be the numeric id of the Page, or empty." };
+  const trimmed = value.trim();
+  return { ok: true, value: trimmed === "" ? null : trimmed };
+}
+
+/** An https link, or null when the field is empty. Anything else is refused. */
+export function destinationLinkOf(value: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (value === null) return { ok: true, value: null };
+  if (typeof value !== "string") return { ok: false, error: "The destination link must be an https link, or empty." };
+  const trimmed = value.trim();
+  if (trimmed === "") return { ok: true, value: null };
+  if (trimmed.length > 2000) return { ok: false, error: "The destination link is too long." };
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return { ok: false, error: "The destination link must be an https link." };
+  }
+  if (url.protocol !== "https:") return { ok: false, error: "The destination link must be an https link." };
+  return { ok: true, value: url.toString() };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -270,6 +303,19 @@ export function parseRunSettings(input: unknown, base: RunSettings = DEFAULT_RUN
       return { ok: false, error: "The page must be one of this brand's pages, or none." };
     }
     next.pageId = input.pageId as string | null;
+  }
+  if (input.facebookPageId !== undefined) {
+    const page = optionalText(input.facebookPageId);
+    if (!page.ok) return page;
+    if (page.value !== null && !FACEBOOK_PAGE_ID.test(page.value)) {
+      return { ok: false, error: "The Facebook Page id is the numeric id of the Page." };
+    }
+    next.facebookPageId = page.value;
+  }
+  if (input.destinationLink !== undefined) {
+    const link = destinationLinkOf(input.destinationLink);
+    if (!link.ok) return link;
+    next.destinationLink = link.value;
   }
   return { ok: true, value: next };
 }

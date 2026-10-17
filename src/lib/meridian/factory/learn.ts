@@ -9,6 +9,42 @@ import type { Sql } from "../learning/store.ts";
 import { applyLearnedPatternsBySurface, type LearningSummary } from "../learning/store.ts";
 import { recalibrateForJob } from "../calibration/question-recalibrate.ts";
 import { LEARN_WAITING } from "./pipeline.ts";
+export const LEARN_RECHECK_SECONDS = 6 * 60 * 60;
+
+/** The payload the scheduler puts on a later learn job. It is the same shape the learn stage already reads. */
+export function learnRecheckPayload(input: { organizationId: string; brandId: string; runId: string; niche: string }) {
+  return {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    runId: input.runId,
+    niche: input.niche,
+    stage: "factory.learn",
+  };
+}
+
+/** Asks the scheduler to run learn again while the run is still waiting for a measured outcome. */
+export async function scheduleLearnRecheck(
+  sql: Sql,
+  input: { organizationId: string; brandId: string; runId: string; niche: string },
+): Promise<void> {
+  await sql`
+    insert into job_schedules (id, organization_id, brand_id, job_type, every_seconds, next_run, enabled, payload)
+    values (
+      ${`learn:${input.runId}`}, ${input.organizationId}, ${input.brandId}, 'factory.learn', ${LEARN_RECHECK_SECONDS},
+      now() + (${LEARN_RECHECK_SECONDS} * interval '1 second'), true, ${JSON.stringify(learnRecheckPayload(input))}
+    )
+    on conflict (id) do update set
+      enabled = true,
+      payload = excluded.payload,
+      every_seconds = excluded.every_seconds,
+      next_run = case when job_schedules.enabled then job_schedules.next_run else excluded.next_run end
+  `;
+}
+
+/** Stops the scheduled recheck once the run has learned from its own outcomes. */
+export async function clearLearnRecheck(sql: Sql, runId: string): Promise<void> {
+  await sql`update job_schedules set enabled = false where id = ${`learn:${runId}`}`;
+}
 
 export type RunOutcomes = { organic: number; paid: number };
 

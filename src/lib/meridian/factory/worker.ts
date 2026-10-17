@@ -8,7 +8,7 @@ import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, bran
 import { creativeIdsOfVariant, licencesForCreatives, variantLicenceFlags } from "./rights.ts";
 import { adsMustPause } from "./kill-switch.ts";
 import { isFactoryStage } from "./pipeline.ts";
-import { learnForRun } from "./learn.ts";
+import { clearLearnRecheck, learnForRun, scheduleLearnRecheck } from "./learn.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
@@ -325,8 +325,19 @@ export async function executeFactoryJob(
   }
   if (job.job_type === "factory.learn") {
     // Learning recomputes the brand's patterns per surface. The run finishes here only when its own creatives have a measured outcome;
-    // otherwise it stays running, and the run row says what it waits for (learn.ts).
-    return learnForRun(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
+    // otherwise it stays running, and the scheduler checks it again on the measurement cadence.
+    const result = await learnForRun(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
+    if (result.startsWith("learn:waiting") && job.brand_id) {
+      await scheduleLearnRecheck(sql, {
+        organizationId: job.organization_id,
+        brandId: job.brand_id,
+        runId,
+        niche: text(payload.niche),
+      });
+    } else if (result.startsWith("learned:")) {
+      await clearLearnRecheck(sql, runId);
+    }
+    return result;
   }
   return `queued:${job.job_type}`;
 }
