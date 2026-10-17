@@ -550,6 +550,11 @@ export function paidObservationKey(telemetryRowId: string): string {
   return `telemetry:${telemetryRowId}`;
 }
 
+/** The key an organic observation carries in raw_metrics. One telemetry row is one key, so a later day is a new row. */
+export function organicObservationKey(telemetryRowId: string): string {
+  return `telemetry:${telemetryRowId}`;
+}
+
 /**
  * The calendar day of a measurement, as YYYY-MM-DD. A value that starts with its ISO date keeps that date; a Date is read in UTC; any
  * other text is parsed. Telemetry rows are written in UTC, so the day is the UTC day.
@@ -622,6 +627,91 @@ async function bridgePaidObservation(sql: Sql, organizationId: string, brandId: 
 }
 
 /**
+ * Writes the organic observation of one measured telemetry row. The observation is keyed by that row, so a later day of the same
+ * post is a new observation, and running the sync again adds nothing. A row written before keys existed is adopted when its values
+ * match. Its stored day may be the day it was synced rather than the measurement day, so a single matching row is adopted even
+ * when that day differs, and the measurement day is written onto it. Two different unkeyed rows with the same counts are left
+ * alone, because it is not known which measurement they are.
+ */
+async function bridgeOrganicObservation(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  record: TelemetryRecord,
+  externalPostId: string,
+): Promise<void> {
+  const key = organicObservationKey(record.id);
+  const posts = await sql<{ id: string }>`
+    select id from organic_posts
+    where organization_id = ${organizationId} and platform = ${record.platform} and external_id = ${externalPostId}
+    limit 1
+  `;
+  let postId = posts[0]?.id;
+  if (!postId) {
+    postId = randomUUID();
+    await sql`
+      insert into organic_posts (
+        id, organization_id, brand_id, creative_id, platform, external_id, caption, status
+      ) values (
+        ${postId}, ${organizationId}, ${brandId}, ${record.creativeId}, ${record.platform}, ${externalPostId}, '', 'published'
+      )
+    `;
+  }
+
+  const keyed = await sql<{ id: string }>`
+    select id from organic_observations
+    where organization_id = ${organizationId} and brand_id = ${brandId} and organic_post_id = ${postId}
+      and raw_metrics->>'observationKey' = ${key}
+    limit 1
+  `;
+  if (keyed.length > 0) return;
+
+  const day = dayOf(record.recordedAt);
+  const threeSecViews = record.views != null && record.hookRetention3s != null ? Math.round(record.views * record.hookRetention3s) : null;
+  const earlier = await sql<{
+    id: string;
+    observed_on: unknown;
+    views: unknown;
+    shares: unknown;
+    likes: unknown;
+    saves: unknown;
+  }>`
+    select id, observed_on, views, shares, likes, saves from organic_observations
+    where organization_id = ${organizationId} and brand_id = ${brandId} and organic_post_id = ${postId}
+      and (raw_metrics->>'observationKey' is null or raw_metrics->>'observationKey' = '')
+  `;
+  const countMatches = earlier.filter((row) =>
+    sameCount(row.views, record.views)
+    && sameCount(row.shares, record.shares)
+    && sameCount(row.likes, record.engagements)
+    && sameCount(row.saves, record.saves));
+  const adopted = countMatches.find((row) => dayOf(row.observed_on) === day) ?? (countMatches.length === 1 ? countMatches[0] : undefined);
+  if (adopted) {
+    await sql`
+      update organic_observations
+      set observed_on = ${day},
+          raw_metrics = coalesce(raw_metrics, '{}'::jsonb) || ${JSON.stringify({ observationKey: key })}::jsonb
+      where id = ${adopted.id}
+        and (raw_metrics->>'observationKey' is null or raw_metrics->>'observationKey' = '')
+    `;
+    return;
+  }
+
+  await sql`
+    insert into organic_observations (
+      id, organization_id, brand_id, organic_post_id, creative_id, platform,
+      views, reach, three_second_views, completion_rate, shares, likes, comments, saves,
+      observed_on, raw_metrics, created_at
+    ) values (
+      ${randomUUID()}, ${organizationId}, ${brandId}, ${postId}, ${record.creativeId}, ${record.platform},
+      ${record.views ?? null}, ${record.reach ?? null}, ${threeSecViews}, ${record.completionRate ?? null},
+      ${record.shares ?? null}, ${record.engagements ?? null}, null, ${record.saves ?? null},
+      ${day}, ${JSON.stringify({ observationKey: key })}::jsonb, now()
+    )
+  `;
+}
+
+/**
  * Synchronizes unified telemetry into standard learning pattern stores
  * and dynamically updates JEV account profiles with learned priors.
  */
@@ -662,43 +752,7 @@ export async function syncTelemetryToLearning(
     const organicMeasured = r.views != null || r.engagements != null || r.shares != null || r.saves != null;
     if (r.sourceType === "organic" && externalPostId && organicMeasured) {
       try {
-        const posts = await sql<{ id: string }>`
-          select id from organic_posts
-          where organization_id = ${organizationId} and platform = ${r.platform} and external_id = ${externalPostId}
-          limit 1
-        `;
-        let postId = posts[0]?.id;
-        if (!postId) {
-          postId = randomUUID();
-          await sql`
-            insert into organic_posts (
-              id, organization_id, brand_id, creative_id, platform, external_id, caption, status
-            ) values (
-              ${postId}, ${organizationId}, ${brandId}, ${r.creativeId}, ${r.platform}, ${externalPostId}, '', 'published'
-            )
-          `;
-        }
-
-        const observed = await sql`
-          select id from organic_observations
-          where organization_id = ${organizationId} and brand_id = ${brandId} and organic_post_id = ${postId}
-          limit 1
-        `;
-        if (observed.length === 0) {
-          const threeSecViews = r.views != null && r.hookRetention3s != null ? Math.round(r.views * r.hookRetention3s) : null;
-          await sql`
-            insert into organic_observations (
-              id, organization_id, brand_id, organic_post_id, creative_id, platform,
-              views, reach, three_second_views, completion_rate, shares, likes, comments, saves,
-              observed_on, created_at
-            ) values (
-              ${randomUUID()}, ${organizationId}, ${brandId}, ${postId}, ${r.creativeId}, ${r.platform},
-              ${r.views ?? null}, ${r.reach ?? null}, ${threeSecViews}, ${r.completionRate ?? null},
-              ${r.shares ?? null}, ${r.engagements ?? null}, null, ${r.saves ?? null},
-              current_date, now()
-            )
-          `;
-        }
+        await bridgeOrganicObservation(sql, organizationId, brandId, r, externalPostId);
       } catch {
         // Continue gracefully if the organic tables are unavailable
       }

@@ -88,7 +88,7 @@ test("google publish stores nothing when the budget response has no resource", a
     link: "",
     message: "",
     accessToken: "oauth",
-    env: { GOOGLE_ADS_DEVELOPER_TOKEN: "dev", GOOGLE_ADS_CUSTOMER_ID: "123" },
+    env: { GOOGLE_ADS_DEVELOPER_TOKEN: "dev", GOOGLE_ADS_DEVELOPER_TOKEN_SHARED_DEFAULT: "deployment", GOOGLE_ADS_CUSTOMER_ID: "123" },
     transport: scripted([{ status: 200, body: JSON.stringify({ results: [{}] }) }]),
   });
   assert.equal(published.externalId, null);

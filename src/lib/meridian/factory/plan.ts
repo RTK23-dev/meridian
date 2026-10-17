@@ -136,6 +136,10 @@ export type PlanInput = {
   audience: string;
   run: PlanRun;
   now: string;
+  /** A saved Factory Line video shape. Absent means the plan keeps the DNA length and 9:16. */
+  video?: { aspectRatio: "9:16" | "1:1" | "16:9" | "4:5"; durationSeconds: number } | null;
+  /** Saved brief instructions. Absent means the plan carries no extra direction. Spoken copy is still written at production. */
+  briefPrompt?: string | null;
 };
 
 const SCOPE_BY_FORMAT: Record<string, CreationScope> = { image: "image_only", video: "video_only", carousel: "carousel_only" };
@@ -146,16 +150,32 @@ const AUTONOMY_BY_AUTOMATION: Record<PlanRun["automation"], AutonomyMode> = {
 };
 
 /** A deliverable per run format. Its copy is empty: the words are written at production, never copied from the winning ad. */
-function deliverablesOf(templateId: string, concept: Concept, attributes: PlanAttributes, formats: string[]): CreativeDeliverable[] {
+function deliverablesOf(
+  templateId: string,
+  concept: Concept,
+  attributes: PlanAttributes,
+  formats: string[],
+  video: PlanInput["video"],
+  briefPrompt: string | null | undefined,
+): CreativeDeliverable[] {
+  const direction = briefPrompt?.trim() ?? "";
   return formats.map((format, index): CreativeDeliverable => {
-    const base = { id: `deliv-${templateId}-${format}`, sequenceIndex: index, title: concept.label, copy: "", provider: "auto", model: "" };
+    const base = {
+      id: `deliv-${templateId}-${format}`,
+      sequenceIndex: index,
+      title: concept.label,
+      copy: "",
+      provider: "auto",
+      model: "",
+      ...(direction ? { visualDirection: direction } : {}),
+    };
     if (format === "video") {
       return {
         ...base,
         kind: "video",
         format: "video_ugc",
-        aspectRatio: "9:16",
-        targetDurationSeconds: Math.max(1, Math.round(attributes.lengthMs / 1000)),
+        aspectRatio: video?.aspectRatio ?? "9:16",
+        targetDurationSeconds: video?.durationSeconds ?? Math.max(1, Math.round(attributes.lengthMs / 1000)),
         hook: { type: attributes.hook },
         concept: { mechanism: concept.label, theme: attributes.angle },
       };
@@ -168,7 +188,7 @@ function deliverablesOf(templateId: string, concept: Concept, attributes: PlanAt
 }
 
 /**
- * The CreativePlan for one pick. It is a draft that names the product and the decision it came from, and it spends nothing: no
+ * The CreativePlan for one pick. A manual or semi plan stays a draft and waits for a person. A full plan is approved on its own only when a spend cap is set and the estimate is within it. With no cap, a full plan stays a draft: an unpriced estimate of zero is not a cap. It spends nothing: no
  * production step is written here, and the estimate lists every deliverable as unpriced, since no provider has been chosen.
  * Throws when the plan has no lineage, no product, or no formats, so the caller records the refusal and writes no variant.
  */
@@ -184,10 +204,14 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
   if (formats.length === 0) {
     throw new Error("Creative plan refused: the run names no format the plan can make.");
   }
-  const deliverables = deliverablesOf(input.templateId, input.concept, input.attributes, formats);
+  const deliverables = deliverablesOf(input.templateId, input.concept, input.attributes, formats, input.video, input.briefPrompt);
   requireCitedDeliverables(lineage, deliverables.length);
   const scope: CreationScope = formats.length === 1 ? SCOPE_BY_FORMAT[formats[0] ?? ""] ?? "mixed_campaign" : "mixed_campaign";
   const autonomy = AUTONOMY_BY_AUTOMATION[input.run.automation];
+  const estimateUsd = 0;
+  const hasCap = input.run.capTotalCents > 0;
+  const withinCap = hasCap && estimateUsd <= input.run.capTotalCents / 100;
+  const autoApproved = autonomy === "fully_automatic" && withinCap;
   const objective: CampaignObjective = input.run.intent === "organic" ? "engagement" : "conversion";
   const rationale: DecisionRationale[] = [
     {
@@ -219,7 +243,7 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
   return {
     id: `plan-${input.templateId}`,
     version: "factory.v2.plan.1",
-    status: "draft",
+    status: autoApproved ? "approved" : "draft",
     scope,
     autonomy,
     objective,
@@ -229,20 +253,24 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
     assetPlan: [],
     productionPlan: [],
     estimatedCost: {
-      totalEstimatedUsd: 0,
+      totalEstimatedUsd: estimateUsd,
       perDeliverableUsd: {},
       unpricedDeliverableIds: deliverables.map((deliverable) => deliverable.id),
-      isHardCapped: input.run.capTotalCents > 0,
-      maxSpendUsd: input.run.capTotalCents > 0 ? input.run.capTotalCents / 100 : undefined,
+      isHardCapped: hasCap,
+      maxSpendUsd: hasCap ? input.run.capTotalCents / 100 : undefined,
       currency: "USD",
       label: "PRE_GENERATION_ESTIMATE",
     },
     approvalRequirements: [
       {
         id: `approval-production-${input.templateId}`,
-        level: "human_creative_director",
-        status: "pending",
-        reason: "Production spends money. A manual or semi run waits for a person before it.",
+        level: autoApproved ? "spend_threshold" : "human_creative_director",
+        status: autoApproved ? "auto_approved" : "pending",
+        reason: autoApproved
+          ? "Full automation is within the spend cap, so this plan is approved without a person."
+          : autonomy === "fully_automatic"
+            ? "Full automation has no spend cap, so this plan is not approved on its own."
+            : "Production spends money. A manual or semi run waits for a person before it.",
         requiredBeforeAction: "production_execution",
       },
     ],

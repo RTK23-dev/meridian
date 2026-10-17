@@ -83,6 +83,14 @@ export type CreativeSpec = {
   idempotencyKey?: string;
 };
 
+/** Spoken lines stay first. Visual direction, when present, is a separate instruction and is not spoken copy. */
+export function providerPromptOf(spec: { hookLine?: string; script: string; visualDirection?: string }): string {
+  const spoken = spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script;
+  const direction = spec.visualDirection?.trim();
+  if (!direction) return spoken;
+  return `${spoken}\n\nVisual direction (do not speak this):\n${direction}`;
+}
+
 export type ProductionJob = {
   jobId: string;
   meridianJobId?: string;
@@ -112,6 +120,14 @@ export type ProductionJob = {
   createdAt: string;
   updatedAt: string;
 };
+
+/** A bill the provider itself reported. An estimate, or a placeholder zero, is not a bill. */
+export function providerReportedUsd(job: Pick<ProductionJob, "costActualUsd" | "metadata">): number | null {
+  if (job.metadata?.costBasis !== "provider_reported") return null;
+  const value = job.costActualUsd;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  return value;
+}
 
 export interface ProductionProvider {
   readonly id: string;

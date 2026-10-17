@@ -20,6 +20,11 @@ export function holdoutArmOf(itemId: string, holdoutShare: number): HoldoutArm {
   return drawOf(`holdout:${itemId}`) < holdoutShare ? "holdout" : "treated";
 }
 
+/** Template ids production must not make. A treated arm, or a run with no assignment, is not in the set. */
+export function holdoutItemIds(rows: ReadonlyArray<{ item_id: string; arm: string }>): Set<string> {
+  return new Set(rows.filter((row) => row.arm === "holdout").map((row) => row.item_id));
+}
+
 export type ChallengerChoice =
   | { arm: "control"; version: null; reason: string }
   | { arm: "challenger"; version: string; reason: string };

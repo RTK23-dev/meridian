@@ -8,9 +8,8 @@
  * through it. A BLOCK refuses the spec with these reasons: the job is recorded as PREFLIGHT_FAILED and the provider is not called.
  * A PROCEED continues to the provider.
  *
- * Not connected: the image path. Image specs carry no duration (durationTargetSeconds is 0 for Studio and Factory images), so the
- * duration rule would refuse every image. Connecting images needs a structural rule for images, which is a decision of its own.
- * This check does not exempt images, and it does not fill the missing field.
+ * Not connected to video rules: an image has no duration. `evaluateImagePreflight` checks that a still has a hook or a script
+ * and does not apply the 1–300 second rule. Factory image production calls it before a provider is chosen.
  *
  * Claims are not judged here. The spec carries no brand claims, so a claim check run on it would be a check that never looked at
  * the copy. Claims are judged by the copy check (production/assess.ts, `judgeCopy`), which the job and studio paths call, and which
@@ -57,6 +56,30 @@ export function evaluateProductionPreflight(spec: CreativeSpec): PreflightResult
     passed: true,
     decision: "PROCEED",
     reasons: ["Preflight verified: script, hook, and storyboard structure complete."],
+    evaluatedAt: new Date().toISOString(),
+    claimsJudged: false,
+  };
+}
+
+/** A still has no duration. It still needs a hook or a script. An empty spec is blocked and no provider is called. */
+export function evaluateImagePreflight(spec: CreativeSpec): PreflightResult {
+  const reasons: string[] = [];
+  if (!spec.hookLine?.trim() && !spec.script?.trim() && (!spec.scenes || spec.scenes.length === 0)) {
+    reasons.push("Image spec has no hook line, script, or storyboard.");
+  }
+  if (reasons.length > 0) {
+    return {
+      passed: false,
+      decision: "BLOCK",
+      reasons,
+      evaluatedAt: new Date().toISOString(),
+      claimsJudged: false,
+    };
+  }
+  return {
+    passed: true,
+    decision: "PROCEED",
+    reasons: ["Image preflight verified: the still has a hook or a script. Duration does not apply."],
     evaluatedAt: new Date().toISOString(),
     claimsJudged: false,
   };

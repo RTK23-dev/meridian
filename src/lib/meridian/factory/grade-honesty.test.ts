@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sourceMetricsOf } from "../research/store.ts";
+import { sourceMetricsOf, deliveryFactsOf } from "../research/store.ts";
 import { buildAdTimeline } from "./timeline.ts";
 import { winnerScore, type WinnerEvidence } from "./winner-score.ts";
 
@@ -38,6 +38,16 @@ test("an ad that stopped scores lower on survival than one still delivering, ove
   assert.ok(stopped.evidence.some((line) => /stopped/.test(line)));
 });
 
+test("an unknown country or platform count is not stored as zero", () => {
+  const unknown = winnerScore({ ...complete, countries: null, platforms: null });
+  assert.equal(unknown.components.spread, 0);
+  assert.ok(unknown.evidence.some((line) => line === "countries not reported"));
+  assert.ok(unknown.evidence.some((line) => line === "platforms not reported"));
+  assert.ok(!unknown.evidence.some((line) => line.startsWith("0 countr")));
+  const measuredNone = winnerScore({ ...complete, countries: 0, platforms: 0 });
+  assert.ok(measuredNone.evidence.some((line) => line.startsWith("0 countr")));
+});
+
 test("missing evidence widens the range, and complete evidence gives the narrowest one", () => {
   const full = winnerScore(complete);
   const missing = winnerScore({ ...complete, stillRunning: null, advertiserSurvivorRate: null, creativeQuality: null });
@@ -52,4 +62,7 @@ test("the stored source metrics keep the stop time and the countries, so a later
 
   const stopped = JSON.parse(sourceMetricsOf({ stoppedAt: "2026-09-20T00:00:00.000Z", countries: [], capturedAt: "2026-10-01T00:00:00.000Z" })) as Record<string, unknown>;
   assert.equal(stopped.stoppedAt, "2026-09-20T00:00:00.000Z");
+  assert.deepEqual(deliveryFactsOf(JSON.stringify(stopped)).countries, []);
+  assert.equal(deliveryFactsOf("{}").countries, null, "a row from before delivery was stored does not report zero countries");
+  assert.equal(deliveryFactsOf(JSON.stringify({ stoppedAt: null })).countries, null);
 });

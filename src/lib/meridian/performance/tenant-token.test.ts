@@ -17,6 +17,7 @@ function fixture(sealed?: string) {
     if (query.includes("from creative_records")) return [{ id: "creative-a", organization_id: "org-a", brand_id: "brand-a" }];
     if (query.includes("from provider_objects")) return [{ external_id: "ad-a", organization_id: "org-a", brand_id: "brand-a" }];
     if (query.includes("from provider_secrets")) return sealed ? [{ sealed_token: sealed }] : [];
+    if (query.includes("from platform_accounts")) return [{ external_account_id: "acct-brand" }];
     return [];
   }) as unknown as Sql;
   const requests: TransportRequest[] = [];
@@ -68,7 +69,7 @@ test("Google Ads sync with no tenant token records NOT_CONNECTED, makes no reque
 });
 
 test("TikTok sync with a sealed tenant token sends only that token, never the environment token", async () => {
-  await withEnv({ TIKTOK_ACCESS_TOKEN: "env-tiktok-token", TIKTOK_ADVERTISER_ID: "adv-1" }, async () => {
+  await withEnv({ TIKTOK_ACCESS_TOKEN: "env-tiktok-token", TIKTOK_ADVERTISER_ID: "adv-env" }, async () => {
     const f = fixture(String(sealSecret("tenant-tiktok-token", KEY)));
     await assert.rejects(
       runPerformanceSync(
@@ -83,5 +84,7 @@ test("TikTok sync with a sealed tenant token sends only that token, never the en
       assert.equal(request.headers["Access-Token"], "tenant-tiktok-token");
     }
     assert.equal(JSON.stringify(f.requests).includes("env-tiktok-token"), false);
+    assert.equal(JSON.stringify(f.requests).includes("adv-env"), false, "the deployment advertiser id is not this brand's account");
+    assert.equal(JSON.stringify(f.requests).includes("acct-brand"), true);
   });
 });

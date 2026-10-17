@@ -22,13 +22,15 @@ import { BRIEF_LIST_MAX, BRIEF_SOURCE_TEXT_MAX, BRIEF_TEXT_MAX, productionReques
 import { engineRequestIdFor } from "../factory/engine-request.ts";
 import type { PageRequestKits } from "../pages/model.ts";
 import { characterCount, referenceVideoUri } from "./files.ts";
-import { type Attachment, type FileAttachment, type Message, PDF_TEXT_NOTE, type SessionSettings, type SourceAttachment } from "./model.ts";
+import { type Attachment, type FileAttachment, type Message, PDF_OVER_LIMIT_CONTENT, PDF_TEXT_LIMIT_NOTE, PDF_TEXT_NOTE, type SessionSettings, type SourceAttachment } from "./model.ts";
 import { SOURCE_PAGE_LABELS } from "./model.ts";
 
 export type SessionForRequest = {
   id: string;
   organizationId: string;
   createdAt: string;
+  /** Zero for the first video. A later revision gets its own request id. Omitted means the first video. */
+  revision?: number;
   settings: SessionSettings;
   messages: Pick<Message, "text" | "beatRole" | "attachments">[];
   /** The kits of the theme page attached as a source, read at start time. Null when no theme page is attached. */
@@ -80,18 +82,26 @@ export function referenceOf(attachments: readonly Attachment[]): FileAttachment 
   return (attachments.find((item) => item.kind === "file" && item.purpose === "reference_video") as FileAttachment | undefined) ?? null;
 }
 
-/** A text file read into the brief: a material file that carries its text. */
+function isOverLimitPdf(item: FileAttachment): boolean {
+  return item.mediaType === "application/pdf" && item.content === PDF_OVER_LIMIT_CONTENT;
+}
+
+/** A text file read into the brief: a material file that carries its text. An image's content is its measured size, not text. */
 function isTextFile(item: Attachment): item is FileAttachment {
-  return item.kind === "file" && item.purpose !== "reference_video" && item.content !== null;
+  return item.kind === "file" && item.purpose !== "reference_video" && item.content !== null && !item.mediaType.startsWith("image/") && !isOverLimitPdf(item);
 }
 
 /** A file that goes to the engine as an attachment: not the reference and not read into the brief. */
 function isMaterialFile(item: Attachment): item is FileAttachment {
-  return item.kind === "file" && item.purpose !== "reference_video" && item.content === null;
+  return item.kind === "file" && item.purpose !== "reference_video" && (item.content === null || item.mediaType.startsWith("image/") || isOverLimitPdf(item));
 }
 
-/** The note a brief attachment carries. A PDF's note says its text is not read yet. */
+const IMAGE_SIZE = /^(\d+)×(\d+)$/;
+
+/** The note a brief attachment carries. A measured image names its size. A PDF whose text was not readable says so. */
 function attachmentNote(file: FileAttachment): string {
+  if (file.mediaType.startsWith("image/") && file.content && IMAGE_SIZE.test(file.content)) return `${file.fileName}: ${file.content}`;
+  if (isOverLimitPdf(file)) return `${file.fileName}: ${PDF_TEXT_LIMIT_NOTE}`;
   return file.mediaType === "application/pdf" ? `${file.fileName}: ${PDF_TEXT_NOTE}` : file.fileName;
 }
 
@@ -105,12 +115,15 @@ function textFileLine(file: FileAttachment): string {
 
 /**
  * The lines the decision panel lists under Inputs: what each file does on its way to the engine. A text file is read into the brief
- * (its length is shown); a PDF's text is not read yet. Images and the reference video have no line here.
+ * (its length is shown). A PDF whose text could not be read says so. An image whose header gave a size shows that size. The
+ * reference video has no line here.
  */
 export function inputNotes(attachments: readonly Attachment[]): string[] {
   return attachments.flatMap((item): string[] => {
     if (item.kind !== "file" || item.purpose === "reference_video") return [];
-    if (item.content !== null) return [`${item.fileName}: read into the brief, ${characterCount(item.content)} characters.`];
+    if (item.mediaType.startsWith("image/") && item.content && IMAGE_SIZE.test(item.content)) return [`${item.fileName}: ${item.content}. Pixels were not read.`];
+    if (isOverLimitPdf(item)) return [`${item.fileName}: ${PDF_TEXT_LIMIT_NOTE}`];
+    if (item.content !== null && !item.mediaType.startsWith("image/")) return [`${item.fileName}: read into the brief, ${characterCount(item.content)} characters.`];
     return item.mediaType === "application/pdf" ? [attachmentNote(item)] : [];
   });
 }
@@ -153,9 +166,11 @@ export function buildProductionRequest(session: SessionForRequest): RequestBuild
   // A script request has no brief, so the records and text files travel as plain change lines, in the order attached.
   const context = attachments.flatMap((item) => (item.kind === "source" ? [sourceLine(item)] : isTextFile(item) ? [textFileLine(item)] : []));
 
+  const revision = session.revision ?? 0;
+  const seed = revision > 0 ? `content-factory:${session.id}:r${revision}` : `content-factory:${session.id}`;
   const candidate = present({
     schema: "meridian.production_request/v1",
-    requestId: engineRequestIdFor(`content-factory:${session.id}`, session.createdAt) ?? undefined,
+    requestId: engineRequestIdFor(seed, session.createdAt) ?? undefined,
     workspaceId: session.organizationId,
     format: present({
       formatId: reference ? `ref_${reference.sha256.slice(0, 24)}` : undefined,

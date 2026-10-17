@@ -1,10 +1,13 @@
 /**
  * A sliding-window limit, held in this process's memory.
  *
- * The hits are process-local. Each server instance keeps its own, so with N instances one caller can make up to N times the limit. A
- * shared store (a Postgres table, or Redis) is needed before the limit is a guarantee for the whole deployment. That is an owner decision
- * (docs/engine/PHASE_LOG.md, open list). Until it is made, the limit is per instance, and this code does not change.
+ * Used when DATABASE_URL is unset (one local process, and the unit tests).
+ * When DATABASE_URL is set, enforceNamedLimit counts the same bucket in
+ * rate_limit_windows so a second instance cannot multiply the allowance.
+ * A database error is left as a database error. Only a full window throws RateLimitError.
  */
+import { consumeWindow, type WindowQuery } from "./shared-limit.ts";
+
 export function createRateLimit(limit: number, windowMs: number) {
   const hits = new Map<string, number[]>();
   let calls = 0;
@@ -34,6 +37,32 @@ export function createRateLimit(limit: number, windowMs: number) {
 
 export const RATE_LIMIT_MESSAGE = "Too many requests. Wait a minute and try again.";
 
+/** A real limit breach. A database failure is a different error and must not be reported as this. */
+export class RateLimitError extends Error {
+  constructor() {
+    super(RATE_LIMIT_MESSAGE);
+    this.name = "RateLimitError";
+  }
+}
+
+export function isRateLimitError(error: unknown): boolean {
+  return error instanceof RateLimitError;
+}
+
+/** 429 only for a real limit. Any other failure is unavailable, not a lockout. */
+export function authFailureResponse(error: unknown): Response {
+  if (isRateLimitError(error)) {
+    return new Response(JSON.stringify({ message: RATE_LIMIT_MESSAGE }), {
+      status: 429,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  return new Response(JSON.stringify({ message: "Sign-in is temporarily unavailable." }), {
+    status: 503,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 /** Sign-in, password, and OAuth callbacks: 20 attempts / minute per route and client (or per targeted account). */
 export const authLimit = createRateLimit(20, 60_000);
 /** Invites and invite accepts: 10 / minute per user. */
@@ -48,7 +77,56 @@ export function refuseIfLimited(
   key: string,
   now = Date.now(),
 ): void {
-  if (!limiter.allow(key, now)) throw new Error(RATE_LIMIT_MESSAGE);
+  if (!limiter.allow(key, now)) throw new RateLimitError();
+}
+
+const NAMED_LIMITS = {
+  auth: authLimit,
+  invite: inviteLimit,
+  upload: uploadLimit,
+  model: modelLimit,
+} as const;
+
+const NAMED_SPEC = {
+  auth: { limit: 20, windowMs: 60_000 },
+  invite: { limit: 10, windowMs: 60_000 },
+  upload: { limit: 30, windowMs: 60_000 },
+  model: { limit: 20, windowMs: 60_000 },
+} as const;
+
+export type NamedLimit = keyof typeof NAMED_LIMITS;
+
+let sharedQuery: WindowQuery | null | undefined;
+
+async function databaseQuery(): Promise<WindowQuery | null> {
+  if (sharedQuery !== undefined) return sharedQuery;
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) {
+    sharedQuery = null;
+    return null;
+  }
+  const { default: pg } = await import("pg");
+  const pool = new pg.Pool({
+    connectionString: url,
+    max: 2,
+    ssl: url.includes("sslmode=disable") ? false : undefined,
+  });
+  // An idle client emits `error` when Postgres drops it. With no listener, Node exits the process.
+  pool.on("error", () => undefined);
+  sharedQuery = async (sql, params) => pool.query(sql, params);
+  return sharedQuery;
+}
+
+/** Counts against Postgres when DATABASE_URL is set, otherwise against this process. */
+export async function enforceNamedLimit(name: NamedLimit, key: string): Promise<void> {
+  const query = await databaseQuery();
+  if (!query) {
+    refuseIfLimited(NAMED_LIMITS[name], key);
+    return;
+  }
+  const spec = NAMED_SPEC[name];
+  const allowed = await consumeWindow(query, `${name}:${key}`, spec.limit, spec.windowMs);
+  if (!allowed) throw new RateLimitError();
 }
 
 export function clientKey(request: Request): string {

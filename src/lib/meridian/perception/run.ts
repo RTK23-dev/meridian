@@ -8,6 +8,7 @@
  * frames were analysed.
  */
 import { createHash, randomUUID } from "node:crypto";
+import { recordPerceptionSpend } from "../factory/decision-spend.ts";
 import type { Sql } from "../learning/store.ts";
 import { checkImageBytes } from "../media/image-input.ts";
 import { GeminiPerceptionProvider } from "./multimodal.ts";
@@ -230,6 +231,14 @@ export async function runPerception(
   await record(sql, scope, {
     id: runId, providerId: result.providerId, model: result.model, promptVersion: result.promptVersion, requestKey, status: "observed",
     media: summaries, observations: result.observations, coverage, credentialSource, latencyMs: result.latencyMs, usage: result.usage,
+  });
+  await recordPerceptionSpend(sql, {
+    organizationId: input.organizationId,
+    brandId: input.brandId,
+    perceptionRunId: runId,
+    providerId: result.providerId,
+    model: result.model,
+    usage: result.usage,
   });
   return {
     status: "observed", runId, reused: false, providerId: result.providerId, model: result.model, promptVersion: result.promptVersion,

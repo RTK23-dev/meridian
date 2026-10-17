@@ -48,6 +48,13 @@ test("manual: a spend or publish stage waits for a person, and runs once approve
   }
 });
 
+test("manual review runs without a person when the saved line says so, and spend or publish still waits", () => {
+  assert.equal(stageDecision({ ...base, stage: "factory.review", autoApproveReview: true }).action, "run");
+  assert.equal(stageDecision({ ...base, stage: "factory.produce", autoApproveReview: true }).action, "await_approval");
+  assert.equal(stageDecision({ ...base, stage: "factory.launch", autoApproveReview: true }).action, "await_approval");
+  assert.equal(stageDecision({ ...base, stage: "factory.test", autoApproveReview: true }).action, "await_approval");
+});
+
 test("manual: stages that neither spend nor publish run without approval", () => {
   assert.equal(stageDecision({ ...base, stage: "factory.discover" }).action, "run");
   assert.equal(stageDecision({ ...base, stage: "factory.grade" }).action, "run");

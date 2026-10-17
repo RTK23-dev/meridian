@@ -8,14 +8,15 @@
  *   looks that workspace up from the session id: a client never names the workspace of a session. A caller who is not a member gets the
  *   same refusal as for an unknown session, so a session id reveals nothing about other workspaces. A brand must be a brand of the
  *   session's workspace.
- * - One run per session (v1). Once "Make the video" has started the engine request, the session takes no more messages, files or
- *   settings. Revisions are not built yet.
+ * - One video at a time. While a request is running, the session takes no more messages, files or settings. When that request is
+ *   delivered or has failed, a revision reopens the session. The earlier request stays stored, and the next video gets its own id.
  * - The engine is reached only through src/engine/api: start, requestProblems (through request.ts), readiness and the request feed.
  */
 import { randomUUID } from "node:crypto";
 import {
   engineReadiness,
   engineRequestFeed,
+  engineRequestStatus,
   productionReadinessPorts,
   startEngineRequest,
   type EngineReadiness,
@@ -24,7 +25,8 @@ import {
 import { hasRole, isRole } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
 import { feedCards, type RunFeed } from "./feed.ts";
-import { checkFile, decodeUpload, driveFileStore, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
+import { extractPdf } from "../ingestion/pdf.ts";
+import { characterCount, checkFile, decodeUpload, driveFileStore, imageDimensions, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
 import {
   isKeepableGene,
   isPriority,
@@ -32,6 +34,8 @@ import {
   isSourcePage,
   MAX_SECONDS,
   MIN_SECONDS,
+  TEXT_FILE_MAX_CHARS,
+  PDF_OVER_LIMIT_CONTENT,
   type Attachment,
   type FilePurpose,
   type KeepableGene,
@@ -70,6 +74,8 @@ type SessionRow = {
   title: string;
   status: string;
   engine_request_id: string | null;
+  revision: number;
+  prior_request_ids: string;
   budget_usd: string | number | null;
   max_seconds: number | null;
   language: string | null;
@@ -81,8 +87,8 @@ type SessionRow = {
   updated_at: unknown;
 };
 
-const SESSION_COLUMNS = `s.id, s.organization_id, s.brand_id, s.title, s.status, s.engine_request_id, s.budget_usd, s.max_seconds, s.language,
-  s.priority, s.keep_genes, s.last_refusal, s.started_at, s.created_at, s.updated_at`;
+const SESSION_COLUMNS = `s.id, s.organization_id, s.brand_id, s.title, s.status, s.engine_request_id, s.revision, s.prior_request_ids,
+  s.budget_usd, s.max_seconds, s.language, s.priority, s.keep_genes, s.last_refusal, s.started_at, s.created_at, s.updated_at`;
 
 function iso(value: unknown): string {
   return new Date(value as string | Date).toISOString();
@@ -95,6 +101,10 @@ function jsonList(text: string): unknown[] {
   } catch {
     return [];
   }
+}
+
+function priorIds(text: string): string[] {
+  return jsonList(text).filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
 function summaryOf(row: SessionRow): SessionSummary {
@@ -363,6 +373,16 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   if (ready.status !== "ready") return { status: "not_connected", reason: ready.reason };
 
   const file = checked.file;
+  if (file.mediaType === "application/pdf") {
+    const extracted = await extractPdf(decoded.bytes);
+    if (extracted.status === "stored") {
+      file.content = characterCount(extracted.text) <= TEXT_FILE_MAX_CHARS ? extracted.text : PDF_OVER_LIMIT_CONTENT;
+    }
+  }
+  if (file.kind === "image") {
+    const size = imageDimensions(decoded.bytes);
+    if (size) file.content = `${size.width}×${size.height}`;
+  }
   const key = sessionFileKey(row.id, file);
   let storageObjectId: string | null;
   try {
@@ -420,6 +440,7 @@ async function buildFor(sql: Sql, row: SessionRow, messages: Message[]) {
     id: row.id,
     organizationId: row.organization_id,
     createdAt: iso(row.created_at),
+    revision: Number(row.revision) || 0,
     settings: settingsOf(row),
     messages,
     themePage,
@@ -473,6 +494,44 @@ export async function startRun(sql: Sql, userId: string, input: { sessionId: str
   return { status: "started", requestId: request.requestId };
 }
 
+export type ReviseOutcome =
+  | { status: "draft"; revision: number; priorRequestId: string }
+  | { status: "refused"; reason: string };
+
+/**
+ * Reopens a session after its current video is delivered or has failed. The current request id is kept. The next start uses
+ * the next revision, so it does not reuse that request. A video that is still running is left alone.
+ */
+export async function reviseSession(sql: Sql, userId: string, input: { sessionId: string }): Promise<ReviseOutcome> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  if (row.status !== "started" || row.engine_request_id === null) {
+    return { status: "refused", reason: "This session has no video to revise." };
+  }
+  const current = await engineRequestStatus(sql, row.organization_id, row.engine_request_id);
+  if (!current || (current.status !== "delivered" && current.status !== "failed")) {
+    return { status: "refused", reason: "A revision waits until this video is delivered or has failed. Nothing was changed." };
+  }
+  const kept = [...priorIds(row.prior_request_ids), row.engine_request_id];
+  const revision = (Number(row.revision) || 0) + 1;
+  const updated = await sql<{ id: string }>`
+    update content_factory_sessions
+    set status = 'draft', engine_request_id = null, revision = ${revision}, prior_request_ids = ${JSON.stringify(kept)},
+        last_refusal = '[]', updated_at = now()
+    where id = ${row.id} and organization_id = ${row.organization_id} and status = 'started' and engine_request_id = ${row.engine_request_id}
+    returning id
+  `;
+  if (!updated[0]) return { status: "refused", reason: "This session changed before the revision was saved. Nothing was changed." };
+  await audit(sql, {
+    organizationId: row.organization_id,
+    brandId: row.brand_id,
+    actorId: userId,
+    action: "content_factory.revised",
+    objectId: row.id,
+    metadata: { priorRequestId: row.engine_request_id, revision: String(revision) },
+  });
+  return { status: "draft", revision, priorRequestId: row.engine_request_id };
+}
+
 export type RunView =
   | {
       stage: "draft";
@@ -483,10 +542,12 @@ export type RunView =
       files: FileStoreReadiness;
       hasReference: boolean;
       referenceNote: string;
-      /** What each file does on its way to the engine (a text file is read into the brief; a PDF's text is not read yet). */
+      /** What each file does on its way to the engine. A readable PDF is in the brief. An unreadable PDF says so. */
       inputs: string[];
+      /** Earlier engine requests of this session, oldest first. Empty on the first draft. */
+      priorRequestIds: string[];
     }
-  | { stage: "started"; feed: RunFeed; referenceNote: string; inputs: string[] }
+  | { stage: "started"; feed: RunFeed; referenceNote: string; inputs: string[]; canRevise: boolean }
   | { stage: "missing"; reason: string };
 
 /** The run of a session: before the start, what is still missing; after it, the decision feed read from the engine. */
@@ -497,7 +558,13 @@ export async function readRun(sql: Sql, userId: string, input: { sessionId: stri
   if (row.status === "started" && row.engine_request_id !== null) {
     const feed = await engineRequestFeed(sql, row.organization_id, row.engine_request_id);
     if (!feed) return { stage: "missing", reason: `The engine has no request ${row.engine_request_id} in this workspace.` };
-    return { stage: "started", feed: feedCards(feed), referenceNote: REFERENCE_NOTE, inputs };
+    return {
+      stage: "started",
+      feed: feedCards(feed),
+      referenceNote: REFERENCE_NOTE,
+      inputs,
+      canRevise: feed.status.status === "delivered" || feed.status.status === "failed",
+    };
   }
   const build = await buildFor(sql, row, messages);
   const readiness = await readinessOf(sql, row.organization_id, ports);
@@ -512,5 +579,6 @@ export async function readRun(sql: Sql, userId: string, input: { sessionId: stri
     hasReference: referenceOf(messages.flatMap((message) => message.attachments)) !== null,
     referenceNote: REFERENCE_NOTE,
     inputs,
+    priorRequestIds: priorIds(row.prior_request_ids),
   };
 }

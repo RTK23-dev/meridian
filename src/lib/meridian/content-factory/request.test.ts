@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { requestProblems } from "../../../engine/api/index.ts";
 import { BRIEF_SOURCE_TEXT_MAX, BRIEF_TEXT_MAX } from "../../../engine/contracts/request.ts";
 import type { Attachment, FileAttachment, Message, SessionSettings } from "./model.ts";
-import { TEXT_FILE_MAX_CHARS } from "./model.ts";
+import { PDF_OVER_LIMIT_CONTENT, PDF_TEXT_LIMIT_NOTE, TEXT_FILE_MAX_CHARS } from "./model.ts";
 import { buildProductionRequest, inputNotes, problemWords, type SessionForRequest } from "./request.ts";
 
 const REFERENCE: FileAttachment = {
@@ -90,7 +90,7 @@ test("a session with instructions and no script lines maps to a brief the engine
       {
         uri: `store://content-factory/sess-1/${"d".repeat(64)}.pdf`,
         mediaType: "application/pdf",
-        note: "specs.pdf: PDF text is not read yet; the file is kept with the session.",
+        note: "specs.pdf: PDF text could not be read, so it is not in the brief. The file is kept with the session.",
       },
     ],
   });
@@ -105,6 +105,8 @@ test("a session with instructions and no script lines maps to a brief the engine
   assert.deepEqual(request.output, { master: true });
   const again = buildProductionRequest(session());
   assert.equal(again.status === "ready" ? again.request.requestId : null, request.requestId, "the same session gives the same request id");
+  const revised = buildProductionRequest(session({ revision: 1 }));
+  assert.notEqual(revised.status === "ready" ? revised.request.requestId : null, request.requestId, "a revision is a different request");
 });
 
 test("script lines make a script request instead of a brief, never both, and need their language", () => {
@@ -201,16 +203,26 @@ test("a PDF stays an attachment, and its note says its text is not read yet", ()
     {
       uri: `store://content-factory/sess-1/${"d".repeat(64)}.pdf`,
       mediaType: "application/pdf",
-      note: "specs.pdf: PDF text is not read yet; the file is kept with the session.",
+      note: "specs.pdf: PDF text could not be read, so it is not in the brief. The file is kept with the session.",
     },
   ]);
   assert.deepEqual(built.request.brief?.sources, []);
 });
 
+test("a PDF whose text is longer than the brief limit stays an attachment, and says why", () => {
+  const longPdf: Attachment = { ...PDF, content: PDF_OVER_LIMIT_CONTENT };
+  const built = buildProductionRequest(session({ messages: [message("Use the specs.", null, [REFERENCE, longPdf])] }));
+  assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+  if (built.status !== "ready") return;
+  assert.equal(built.request.brief?.attachments?.[0]?.note, `specs.pdf: ${PDF_TEXT_LIMIT_NOTE}`);
+  assert.deepEqual(built.request.brief?.sources, [], "the text is not copied into the brief");
+  assert.deepEqual(inputNotes([longPdf]), [`specs.pdf: ${PDF_TEXT_LIMIT_NOTE}`]);
+});
+
 test("the decision panel's inputs name a text file's length and a PDF's note, and list no image", () => {
   assert.deepEqual(inputNotes([REFERENCE, textFile("a".repeat(27)), PDF, IMAGE]), [
     "angle.txt: read into the brief, 27 characters.",
-    "specs.pdf: PDF text is not read yet; the file is kept with the session.",
+    "specs.pdf: PDF text could not be read, so it is not in the brief. The file is kept with the session.",
   ]);
 });
 

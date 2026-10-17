@@ -1,7 +1,6 @@
-# Content Factory: run settings, stop points and approvals
+# Content Factory
 
-This is the Factory as it works in this release. The plan it follows is [NORTH_STAR.md](NORTH_STAR.md) sections 4 and 5. Where this
-document and that plan differ, the plan is the target and this file says what is built.
+This is how the Factory works. The direction it follows is [NORTH_STAR.md](NORTH_STAR.md). Where this document and that direction differ, the direction is the target and this file says what is built. Live runs that still need a credential are in [ROADMAP.md](ROADMAP.md).
 
 ## One settings model
 
@@ -268,8 +267,8 @@ published organic posts and its paused paid ads (`measurement/pull.ts`):
 
 - **Organic metrics** come from the channel's `fetchMetrics`, through the workspace's stored token. A read returns observed values with
   the time they were read, `not_connected` (no stored token, no request sent), `not_implemented`, or `failed` with its reason. Only
-  observed readings are stored. Instagram Reels, YouTube Shorts and TikTok are read through their own read scopes; Instagram and TikTok
-  are not verified live. Facebook Page is not implemented: no request is built until its metric set is confirmed from the current docs.
+  observed readings are stored. Instagram Reels, YouTube Shorts, TikTok and Facebook Page video insights are read through their stored
+  tokens. None of these reads is verified live. Facebook Page stores views and average watch time, and does not store unique views as reach.
 - **Paid metrics** come from the workspace's stored token through the insights reader. Without a stored token, nothing is measured. The
   test publisher has no insights source.
 
@@ -458,8 +457,7 @@ A night:
   never runs produce, gate, review, launch or test. The run it creates **waits at produce** for a person's approval, so nothing is produced or
   published on the night's own authority.
 - **Assigns a holdout.** Each planned item goes to the holdout or to the treated arm by a hash of its id. The holdout share is 10%
-  (`thresholds.learning.holdoutShare`). Each assignment is stored in `factory_holdouts`. The summary says that production does not read the
-  holdout yet.
+  (`thresholds.learning.holdoutShare`). Each assignment is stored in `factory_holdouts`. Produce skips the holdout and makes the treated items.
 - **Holds tuned values to a change cap.** A proposed change to a tuned value is held to 15% of its value a night (`MAX_NIGHTLY_CHANGE_SHARE`).
   The part beyond the cap is refused and the value is kept at the cap, and the summary lists each refusal. Production passes a night no
   proposals yet, so the cap has nothing to hold in production. A night writes no engine configuration: an accepted change is recorded only.
@@ -474,43 +472,38 @@ this page makes one video with the video engine. It is admin only.
   pages and market intelligence). Each message stays with the session.
 - **Files.** A video is the reference: the engine analyses it and never reuses its footage, words, voice or music (Bible principle 4). Text
   files up to 4000 characters are read into the brief; longer ones are refused with a plain message. Images and PDFs are kept with the
-  session. The engine does not read PDF text yet, and does not use an image's pixels yet.
+  session. A readable PDF within the text limit is used in the brief. A PDF whose text cannot be read is kept and says so. An image whose header gives a width and height records that size. The pixels are not read.
 - **Brief.** A session is sent as a brief request by default. The engine writes the script from the brief and the reference's analysis, and
   a run of six or more words copied from the reference is refused. A session that has script lines typed by hand sends those instead.
 - **Run.** "Make the video" is enabled when the session has a reference video, a theme page with its kits, a length, a budget and a priority.
   The decision panel lists what is missing, and each engine reason as it happens.
 - **Decisions.** Each stage shows its inputs, its output, the model and provider it used, and its cost as estimate, reserved and billed. A
   cost with no bill shows as unknown, never as a number.
-- **Not built yet.** Revisions after the first run; PDF text and image pixels; avatar and lip-sync shots (no vendor chosen, so those shots
-  stay not connected). The narration and speech-to-text bills are unverified live.
+- **Revision.** After the video is delivered or has failed, "Revise this video" reopens the chat. The earlier request stays stored. The next
+  "Make the video" starts a new request. A video that is still running cannot be revised.
+- **Not built yet.** Avatar and lip-sync shots (no vendor chosen, so those shots stay not connected). Image pixels are not read; a header that names a size is recorded, and a header that does not leaves the size unknown. The narration and speech-to-text bills are unverified live.
 
 ## Not built yet
 
 Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is still open, and the live gaps, are listed here and in
 [ROADMAP.md](ROADMAP.md):
 
-- The Content Factory page: revisions after the first run, PDF text, image pixels, and text files that need a connected Drive (see the
-  Content Factory page section above).
-- A video's cost is an estimate from the provider's declared price, not a price the provider reports, so it is not metered in
-  `factory_costs`. Its estimate is held against the run's caps, but it does not appear as priced spend.
+- The Content Factory page: a revision is opened only after the current video is delivered or has failed. The earlier request stays stored, and the next video gets its own request id. Text files that need a connected Drive are still not read from Drive (see the Content Factory page section above). A readable PDF is used in the brief. An image records its header size and does not read pixels.
+- A video's cost is metered only when the provider returns its own bill (`costUsd` on a Hypit job, stored as `provider_reported`).
+  A declared estimate is held against the run's caps and is not written as priced spend.
 - A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.
-- Preflight and copy claims on the Factory image path. Factory images run no preflight and no claim check. Their specs carry no duration, and the Factory has no copy check (see [ROADMAP.md](ROADMAP.md)).
-- Learning is not re-run on a schedule. The learn stage runs once in the queue, and a waiting run is checked again only with its Check learning
-  button.
-- Cross-surface proposals: an organic winner proposed as an ad test, or the reverse. A run with intent `both` learns each surface for its
-  own arm, but no pattern on one surface is proposed as a test on the other.
-- A re-grade overwrites the grade of record on `ad_timelines`. A pick made under the earlier grade can no longer show that grade, only that
-  the ad was graded again. Keeping every grade needs a grade history table, which is not built.
-- Organic outcomes are still one observation per post. A later organic measurement of the same post is not added to `organic_observations`.
-  The paid path is per measurement (see [Learning per surface](#learning-per-surface)).
-- Spend from perception reads is not metered. A perception read is a separate call from the decision, and it writes no row.
+- Preflight on Factory images checks that the still has a hook or a script, and does not apply the video duration rule. The image asks the claim question before a provider is called. A rejection skips that image. An uncalibrated answer, or a brand with no stored claims, does not block it and is not a pass. A Factory video with an empty hook skips that variant. The run records each skip. If nothing is produced, the run stops with those reasons. Another preflight refusal still stops the run.
+- Learning is rechecked on the measurement cadence while a run is waiting at its learn step. The Check learning button still checks immediately.
+- Cross-surface proposals are stored when a learned win on one surface matches a concept the run can make. The other surface's pick weight is not changed. The proposal says which attribute won, and which surface it is proposed for.
+- A re-grade writes the new grade on `ad_timelines` and keeps the grade it replaced in `ad_timeline_grades`. The copy is not updated. A stored grade is not rewritten when a calibration report changes. A new run grades the ad again.
+- Organic outcomes are one observation per telemetry row. A later measurement of the same post is stored on its own day. Running the same sync again does not add a second copy of that row.
+- Spend from a perception read is metered only when the provider reports token counts. There is no published perception price in the price table, so the dollar cost stays null and caps do not count it. A read that reports no tokens writes no row.
 - Screens: before and after screenshots of the changed screens are in [feature-screens](feature-screens/README.md). The studio publish dialog
   and the B2 tier counts were not captured. The PHASE_LOG records no run of the button audit (`npm run ui:button-audit`) for these changes.
-- The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
-- The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
-- A live paid publish from a run is refused until the run carries a Facebook Page id and a destination link. A run has a targeting country
-  now; the Page and link are the next gap.
-- Uploads are not connected to Gather.
+- The Factory Line editor is read when the brand has saved a line. Pick uses the winner-score, P(beat), confidence, and 3 second retention floors. The retention floor applies only to a learned pattern whose metric is 3 second retention. Produce caps new variants per concept and per day, and uses the saved video engine when the run's video provider is auto. The video plan uses the saved aspect ratio and duration. The brief prompt, cut pacing, and the script prompt are stored on the video request as visual direction, after the spoken copy, and are not spoken as the script. Perception instructions are fixed, so the perception prompt is not sent. Grading stays on the versioned JEV questions, so the grading prompt is not sent. A brand with no saved line is unchanged. Auto-approve skips only the manual review step; a creative still has to be approved before publish. The strict claim switch blocks an unapproved claim when on and sends it to a person when off. A banned word still blocks. Produce skips items assigned to the sleep-mode holdout and makes the treated items.
+- A full run's plan is auto-approved when its estimate is within the spend cap. A manual or semi plan stays pending. Publish still waits for its own gate. A new sleep night uses the brand's saved automation as its run level, and stops when that automation is above the owner ceiling or is not allowed yet. The ceiling itself stays on Live tests.
+- A live paid publish from a run uses the run's Facebook Page id and destination link. It is refused, and nothing is sent, when either is missing.
+- Uploads already stored as research ads with source `upload` are counted by Gather. A brand with none is not connected. No file is invented.
 - Re-grading stored grades when a brand's calibrated report changes. A stored grade keeps the threshold it was made under until its ad is
   graded again by a new run.
 - Calibration beyond the five grading questions (creative QA and the others), and a success definition per question. The one rule above

@@ -127,18 +127,29 @@ async function judgeClaim(input: JudgeCopyInput, evidence: TextQaInput): Promise
     return claimCheck("not_judged", "Claim not judged: this check has no brand, so there are no brand claim facts to judge against.", null);
   }
 
-  // Only evidence that exists is passed. A blank brand fact is not evidence, so the question abstains and the claim is not judged.
+  // Only evidence that exists is passed. A blank brand fact is not evidence, so a brand with neither list is not judged.
+  const allowed = input.copy.allowedClaims.trim();
+  const prohibited = input.copy.prohibitedClaims.trim();
   const items: GateEvidenceInput[] = [];
   if (input.copy.text.trim()) {
     items.push({ kind: "text", name: "creative_copy", source: "copy", content: { text: input.copy.text } });
   }
-  if (input.copy.prohibitedClaims.trim()) {
+  if (allowed || prohibited) {
     items.push({
       kind: "text",
-      name: "brand_prohibited_claims",
+      name: "brand_claim_facts",
       source: "brand_brain",
-      content: { prohibitedClaims: input.copy.prohibitedClaims },
+      content: { ...(allowed ? { allowedClaims: allowed } : {}), ...(prohibited ? { prohibitedClaims: prohibited } : {}) },
     });
+  }
+  if (prohibited) {
+    items.push({ kind: "text", name: "brand_prohibited_claims", source: "brand_brain", content: { prohibitedClaims: prohibited } });
+  }
+  if (allowed) {
+    items.push({ kind: "text", name: "brand_allowed_claims", source: "brand_brain", content: { allowedClaims: allowed } });
+  }
+  if (!allowed && !prohibited) {
+    return claimCheck("not_judged", "Claim not judged: this brand has no stored allowed or prohibited claims, so the question has no brand facts.", null);
   }
 
   // Loaded when a claim is judged, not at import. The gate reaches the engine clients, which use Node's crypto, and this module is

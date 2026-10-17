@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { productionRouter } from "./router.ts";
-import { evaluateProductionPreflight } from "./preflight.ts";
+import { evaluateImagePreflight, evaluateProductionPreflight } from "./preflight.ts";
 import { evaluateProductionPostflight } from "./postflight.ts";
 import type { CreativeSpec, ProductionJob } from "./types.ts";
 
@@ -64,6 +64,38 @@ test("evaluateProductionPreflight approves valid specs", () => {
   const preflight = evaluateProductionPreflight(validSpec);
   assert.equal(preflight.passed, true);
   assert.equal(preflight.decision, "PROCEED");
+});
+
+test("evaluateImagePreflight ignores duration and blocks an empty still", () => {
+  const empty = evaluateImagePreflight({
+    id: "img-empty",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    title: "Empty",
+    modality: "image",
+    format: "single_image",
+    aspectRatio: "1:1",
+    durationTargetSeconds: 0,
+    hookLine: "",
+    script: "",
+    scenes: [],
+  });
+  assert.equal(empty.passed, false);
+  const still = evaluateImagePreflight({
+    id: "img-ok",
+    organizationId: "org-1",
+    brandId: "brand-1",
+    title: "Still",
+    modality: "image",
+    format: "single_image",
+    aspectRatio: "1:1",
+    durationTargetSeconds: 0,
+    hookLine: "Dry hands?",
+    script: "North Soap is a gentle wash.",
+    scenes: [],
+  });
+  assert.equal(still.passed, true);
+  assert.equal(still.claimsJudged, false);
 });
 
 test("evaluateProductionPostflight rejects empty byte artifacts", () => {

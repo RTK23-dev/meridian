@@ -22,11 +22,104 @@ import { brandFitQuestion } from "../jev/questions.ts";
 import type { BrainKey } from "../brain.ts";
 import { CREATIVE_DNA_VERSION, type CreativeDna } from "./creative-dna.ts";
 import { linesOf, loadFactoryBrain } from "./brain-facts.ts";
+import { loadSavedFactoryPipelineConfig } from "./pipeline-config-store.ts";
 import { thompsonRank, type ThompsonArm } from "./thompson.ts";
 import type { Intent } from "./run-settings.ts";
 import { predictionFingerprint, type GradeRecord } from "./prediction.ts";
 
-/** How far a learned pattern moves a concept's weight at most. A ranking scale, uncalibrated. */
+export type SurfaceProposal = {
+  concept: string;
+  fromSurface: LearningSurface;
+  toSurface: LearningSurface;
+  attribute: string;
+  value: string;
+  reason: string;
+};
+
+/**
+ * A positive learned pattern on one surface, proposed as a test on the other. A pattern that is already positive on the other surface
+ * is not proposed again. The proposal is a record only: it does not change either surface's weight.
+ */
+export function crossSurfaceProposals(
+  concept: { label: string; angle: string; hookType: string; format: string },
+  patterns: ReadonlyArray<{
+    attribute: string;
+    value: string;
+    surface: string;
+    lift: number;
+    sampleSize: number;
+    impressions: number;
+    pBeat?: number;
+    ciLow?: number;
+    ciHigh?: number;
+  }>,
+): SurfaceProposal[] {
+  const own: Record<string, string> = {
+    angle: concept.angle,
+    hook: concept.hookType,
+    hook_type: concept.hookType,
+    format: concept.format,
+  };
+  const wins = patterns.filter(
+    (row) =>
+      (row.surface === "organic" || row.surface === "paid")
+      && learningDirection({
+        lift: row.lift,
+        sampleSize: row.sampleSize,
+        impressions: row.impressions,
+        pBeat: row.pBeat,
+        ciLow: row.ciLow,
+        ciHigh: row.ciHigh,
+      }) === "POSITIVE",
+  );
+  const proposals: SurfaceProposal[] = [];
+  const seen = new Set<string>();
+  for (const row of wins) {
+    const owned = own[row.attribute];
+    if (!owned || owned.trim().toLowerCase() !== row.value.trim().toLowerCase()) continue;
+    const toSurface: LearningSurface = row.surface === "organic" ? "paid" : "organic";
+    const alreadyThere = wins.some(
+      (other) =>
+        other.surface === toSurface
+        && other.attribute === row.attribute
+        && other.value.trim().toLowerCase() === row.value.trim().toLowerCase(),
+    );
+    if (alreadyThere) continue;
+    const key = `${row.surface}|${toSurface}|${row.attribute}|${row.value.trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    proposals.push({
+      concept: concept.label,
+      fromSurface: row.surface as LearningSurface,
+      toSurface,
+      attribute: row.attribute,
+      value: row.value,
+      reason: `${row.attribute} ${row.value} won on ${row.surface}. It is proposed as a ${toSurface} test. The ${toSurface} weight is not changed.`,
+    });
+  }
+  return proposals;
+}
+
+/** A saved winner-score floor excludes a lower score. No saved line means every scored concept can be picked. */
+export function winnerClearsFloor(score: number, floor: number | null): boolean {
+  return floor === null || score >= floor;
+}
+
+/** A saved confidence floor excludes a decoded trait that is less sure. A trait with no confidence is still used. */
+export function confidenceClearsFloor(confidence: number | null, floor: number | null): boolean {
+  return floor === null || confidence === null || confidence >= floor;
+}
+/** A saved P(beat) floor excludes a pattern that measured a lower probability. A pattern with no probability is still used. */
+export function patternClearsBeatFloor(pBeat: number | null, floor: number | null): boolean {
+  return floor === null || pBeat === null || pBeat >= floor;
+}
+
+/** A 3 s retention floor ignores only a retention_3s pattern whose measured rate is lower. Other metrics are not compared to it. A missing rate is still used. */
+export function retentionClearsFloor(metric: string, observed: number | null, floor: number | null): boolean {
+  if (floor === null || metric !== "retention_3s" || observed === null || !Number.isFinite(observed)) return true;
+  return observed >= floor;
+}
+
 export const LEARNED_WEIGHT_SCALE = 0.5;
 
 /** The lowest weight a learned pattern can give. A concept the brand learned to lose on is still possible, and rarely picked. */
@@ -108,6 +201,8 @@ export type LearnedRow = {
   ci_high: number | null;
   surface: string;
   channel: string;
+  /** Measured rate for the pattern's metric. Absent on older callers. A retention floor reads it only for retention_3s. */
+  observed?: number | null;
 };
 
 /**
@@ -123,12 +218,20 @@ export function patternInScope(row: { surface: string; channel: string }, scope:
 }
 
 /** The weight of a concept from the patterns the brand has learned about its angle, hook type and format, on the scope. */
-export function learnedWeightOf(concept: Concept, rows: LearnedRow[], scope: LearningScope | null): { weight: number; notes: string[] } {
+export function learnedWeightOf(
+  concept: Concept,
+  rows: LearnedRow[],
+  scope: LearningScope | null,
+  beatFloor: number | null = null,
+  retentionFloor: number | null = null,
+): { weight: number; notes: string[] } {
   const attributes: Record<string, string> = { angle: concept.angle, hookType: concept.hookType, format: concept.format };
   let adjustment = 0;
   const notes: string[] = [];
   for (const row of rows) {
     if (!scope || !patternInScope(row, scope)) continue;
+    if (!patternClearsBeatFloor(row.p_beat, beatFloor)) continue;
+    if (!retentionClearsFloor(row.metric, row.observed ?? null, retentionFloor)) continue;
     const own = attributes[row.attribute];
     if (own === undefined || own === "" || row.value.trim().toLowerCase() !== own.trim().toLowerCase()) continue;
     const pattern: LearnedPattern = {
@@ -184,6 +287,8 @@ type Candidate = {
   known: number;
   /** Known ads still delivering at their last sighting. */
   running: number;
+  /** Confidence of the angle on the ad with the highest winner score, or null when the decode did not record one. */
+  confidence: number | null;
 };
 
 export type Pick = {
@@ -243,6 +348,7 @@ export async function pickConceptsForRun(
     const concept = dna?.adId ? conceptOf(dna) : null;
     if (!concept) continue;
     const winner = Number(row.winner_score);
+    const confidence = typeof dna.angle?.confidence === "number" && Number.isFinite(dna.angle.confidence) ? dna.angle.confidence : null;
     const candidate: Candidate = candidates.get(concept.key) ?? {
       concept,
       researchAdId: row.research_ad_id,
@@ -250,11 +356,13 @@ export async function pickConceptsForRun(
       bestWinner: winner,
       known: 0,
       running: 0,
+      confidence,
     };
     if (winner > candidate.bestWinner) {
       candidate.bestWinner = winner;
       candidate.researchAdId = row.research_ad_id;
       candidate.grade = row;
+      candidate.confidence = confidence;
     }
     if (row.still_running !== null) {
       candidate.known += 1;
@@ -263,6 +371,11 @@ export async function pickConceptsForRun(
     candidates.set(concept.key, candidate);
   }
 
+  const line = await loadSavedFactoryPipelineConfig(sql, input.organizationId, input.brandId);
+  const winnerFloor = line?.gradingThresholds.winnerScoreMin ?? null;
+  const beatFloor = line?.gradingThresholds.pBeatMin ?? null;
+  const confidenceFloor = line?.gradingThresholds.confidenceMin ?? null;
+  const retentionFloor = line?.gradingThresholds.retention3sMin ?? null;
   const brain = await loadFactoryBrain(sql, input.organizationId, input.brandId);
   // Only the surfaces the run makes creatives for are read, and only the channels it names (or every channel). The filter is in the
   // query and again in learnedWeightOf, so a pattern from another surface can never move an arm. No scope reads no pattern at all.
@@ -271,26 +384,68 @@ export async function pickConceptsForRun(
   const learned = surfaces.length === 0
     ? []
     : await sql<LearnedRow>`
-        select attribute, value, metric, lift, sample_size, impressions, state, p_beat, ci_low, ci_high, surface, channel
+        select attribute, value, metric, lift, sample_size, impressions, state, p_beat, ci_low, ci_high, surface, channel, observed
         from learned_patterns
         where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and scope = 'brand'
           and surface = any(${surfaces}) and (channel = '' or channel = any(${channels}))
       `;
+  const proposalPatterns = await sql<{
+    attribute: string;
+    value: string;
+    surface: string;
+    lift: number;
+    sample_size: number;
+    impressions: number;
+    p_beat: number | null;
+    ci_low: number | null;
+    ci_high: number | null;
+  }>`
+    select attribute, value, surface, lift, sample_size, impressions, p_beat, ci_low, ci_high from learned_patterns
+    where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and scope = 'brand'
+      and surface in ('organic', 'paid') and channel = ''
+  `;
+  const proposalRows = proposalPatterns.map((row) => ({
+    attribute: row.attribute,
+    value: row.value,
+    surface: row.surface,
+    lift: Number(row.lift),
+    sampleSize: Number(row.sample_size),
+    impressions: Number(row.impressions),
+    pBeat: row.p_beat ?? undefined,
+    ciLow: row.ci_low ?? undefined,
+    ciHigh: row.ci_high ?? undefined,
+  }));
   const filtered: Array<{ concept: string; reason: string }> = [];
   const arms: ThompsonArm[] = [];
   const weights: PickWeight[] = [];
   // Without a scope the arm is the concept itself, as before. With several scopes each arm is named by its surface, so the two arms of
   // a concept are separate draws.
   const scopes: Array<LearningScope | null> = input.learning.length > 0 ? input.learning : [null];
+  const proposals: SurfaceProposal[] = [];
   const armById = new Map<string, { candidate: Candidate; surface: LearningSurface | ""; weight: number }>();
   for (const candidate of candidates.values()) {
     const fit = brandFitOf(candidate.concept, brain.values, brain.completeness);
+    if (!winnerClearsFloor(candidate.bestWinner, winnerFloor)) {
+      filtered.push({
+        concept: candidate.concept.label,
+        reason: `The observed winner score ${candidate.bestWinner} is below this brand's floor of ${winnerFloor}.`,
+      });
+      continue;
+    }
+    if (!confidenceClearsFloor(candidate.confidence, confidenceFloor)) {
+      filtered.push({
+        concept: candidate.concept.label,
+        reason: `The decoded angle confidence ${candidate.confidence} is below this brand's floor of ${confidenceFloor}.`,
+      });
+      continue;
+    }
     if (!fit.passes) {
       filtered.push({ concept: candidate.concept.label, reason: fit.reason });
       continue;
     }
+    proposals.push(...crossSurfaceProposals(candidate.concept, proposalRows));
     for (const scope of scopes) {
-      const { weight, notes } = learnedWeightOf(candidate.concept, learned, scope);
+      const { weight, notes } = learnedWeightOf(candidate.concept, learned, scope, beatFloor, retentionFloor);
       const surface: LearningSurface | "" = scope ? scope.surface : "";
       const id = scopes.length > 1 && scope ? `${scope.surface}|${candidate.concept.key}` : candidate.concept.key;
       arms.push({ id, successes: candidate.running, failures: candidate.known - candidate.running, weight });
@@ -315,6 +470,19 @@ export async function pickConceptsForRun(
   }
 
   await sql`delete from factory_picks where run_id = ${input.runId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}`;
+  await sql`delete from factory_surface_proposals where run_id = ${input.runId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}`;
+  for (const proposal of proposals) {
+    await sql`
+      insert into factory_surface_proposals (
+        id, organization_id, brand_id, run_id, concept, from_surface, to_surface, attribute, value, reason
+      ) values (
+        ${`proposal:${input.runId}:${proposal.concept}:${proposal.fromSurface}:${proposal.toSurface}:${proposal.attribute}:${proposal.value}`},
+        ${input.organizationId}, ${input.brandId}, ${input.runId}, ${proposal.concept},
+        ${proposal.fromSurface}, ${proposal.toSurface}, ${proposal.attribute}, ${proposal.value}, ${proposal.reason}
+      )
+      on conflict (organization_id, run_id, concept, from_surface, to_surface, attribute, value) do nothing
+    `;
+  }
   const picks: Pick[] = [];
   for (const item of chosen) {
     const arm = armById.get(item.id);

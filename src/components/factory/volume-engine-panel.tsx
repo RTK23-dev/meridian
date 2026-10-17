@@ -55,7 +55,7 @@ export function VolumeEnginePanel({
         value={params.videoCount}
         onChange={(videoCount) => onChange({ videoCount })}
         disabled={!canEdit}
-        note={<NotAppliedNote reason={NOT_READ_REASON.videoCount} />}
+        note={<p className="text-sm text-fg-muted">{NOT_READ_REASON.videoCount}</p>}
       />
 
       <ChoiceGroup<Aspect>
@@ -65,7 +65,7 @@ export function VolumeEnginePanel({
         value={params.aspectRatio}
         onChange={(aspectRatio) => onChange({ aspectRatio })}
         disabled={!canEdit}
-        note={<NotAppliedNote reason={NOT_READ_REASON.aspectRatio} />}
+        note={<p className="text-sm text-fg-muted">{NOT_READ_REASON.aspectRatio}</p>}
       />
 
       <fieldset disabled className="min-w-0 space-y-2">
@@ -93,7 +93,7 @@ export function VolumeEnginePanel({
         value={params.durationSeconds}
         onChange={(durationSeconds) => onChange({ durationSeconds })}
         disabled={!canEdit}
-        note={<NotAppliedNote reason={NOT_READ_REASON.durationSeconds} />}
+        note={<p className="text-sm text-fg-muted">{NOT_READ_REASON.durationSeconds}</p>}
       />
 
       <ChoiceGroup<Pacing>
@@ -106,7 +106,7 @@ export function VolumeEnginePanel({
         note={
           <div className="space-y-2">
             <p className="text-sm text-fg-muted">{PACING_DETAIL[params.renderPacing]}</p>
-            <NotAppliedNote reason={NOT_READ_REASON.renderPacing} />
+            <p className="text-sm text-fg-muted">{NOT_READ_REASON.renderPacing}</p>
           </div>
         }
       />
@@ -157,7 +157,7 @@ export function VolumeEnginePanel({
             <span className="font-semibold text-fg">{selectedEngine.label}</span> is the draft choice, but its state is &quot;{selectedEngine.stateLabel}&quot;. Choose a configured engine to change it.
           </p>
         ) : null}
-        <NotAppliedNote reason={NOT_READ_REASON.provider} />
+        <p className="text-sm text-fg-muted">{NOT_READ_REASON.provider}</p>
       </fieldset>
 
       <SettingSlider
@@ -167,10 +167,10 @@ export function VolumeEnginePanel({
         min={DAILY_CAP_RANGE.min}
         max={DAILY_CAP_RANGE.max}
         format={(value) => `${value} per day`}
-        hint={`Limit on generated videos per day, from ${DAILY_CAP_RANGE.min} to ${DAILY_CAP_RANGE.max}. This is not the spend cap.`}
+        hint={`At most this many new variants for the brand today, from ${DAILY_CAP_RANGE.min} to ${DAILY_CAP_RANGE.max}. This is not the spend cap.`}
         disabled={!canEdit}
         onChange={(dailyGenerationCap) => onChange({ dailyGenerationCap })}
-        note={<NotAppliedNote reason={NOT_READ_REASON.dailyGenerationCap} />}
+        note={<p className="text-sm text-fg-muted">{NOT_READ_REASON.dailyGenerationCap}</p>}
       />
     </div>
   );

@@ -6,6 +6,9 @@ import type { OrganicConnection, OrganicPlatform } from "./types.ts";
 /** The Google scope a YouTube Shorts upload needs. */
 export const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 
+/** The Instagram scope the content publishing API needs to publish a Reel. */
+export const INSTAGRAM_PUBLISH_SCOPE = "instagram_content_publish";
+
 /** The TikTok scope the Content Posting API needs to upload a video. */
 export const TIKTOK_POSTING_SCOPE = "video.publish";
 
@@ -128,6 +131,9 @@ export async function resolveOrganicConnection(
     }
     if (input.platform === "tiktok" && scopes && !scopes.includes(TIKTOK_POSTING_SCOPE)) {
       return notConnected(input.platform, `The saved TikTok token does not include the posting scope (${TIKTOK_POSTING_SCOPE}). Save a token that grants it.`);
+    }
+    if (input.platform === "instagram" && scopes && !scopes.includes(INSTAGRAM_PUBLISH_SCOPE)) {
+      return notConnected(input.platform, `The saved Instagram token does not include the content publishing scope (${INSTAGRAM_PUBLISH_SCOPE}). Save a token that grants it.`);
     }
   }
 

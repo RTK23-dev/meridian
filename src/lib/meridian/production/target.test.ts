@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { providerPromptOf } from "./types.ts";
 import { resolveProductionTarget } from "./target.ts";
 
 test("production target accepts a registered compatible provider/model pair", () => {
@@ -19,6 +20,15 @@ test("production target rejects cross-provider and unsupported capability combin
   assert.throws(() => resolveProductionTarget({
     provider: "google_omni", model: "gemini-omni-1.1-flash", capability: "VIDEO_GENERATION", aspectRatio: "4:5",
   }), /does not support aspect ratio/);
+});
+
+test("a provider prompt keeps spoken copy first and adds visual direction only when one is stored", () => {
+  assert.equal(providerPromptOf({ hookLine: "Watch this", script: "It rinses clean." }), "Watch this\nIt rinses clean.");
+  assert.equal(
+    providerPromptOf({ hookLine: "Watch this", script: "It rinses clean.", visualDirection: "Cut pacing: dynamic." }),
+    "Watch this\nIt rinses clean.\n\nVisual direction (do not speak this):\nCut pacing: dynamic.",
+  );
+  assert.equal(providerPromptOf({ script: "It rinses clean.", visualDirection: "   " }), "It rinses clean.");
 });
 
 test("production target rejects unsupported model duration", () => {

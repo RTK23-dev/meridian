@@ -18,7 +18,8 @@ async function freshDatabase() {
       expires_at timestamptz not null,
       used_at timestamptz,
       redirect_origin text,
-      user_id text
+      user_id text,
+      return_path text
     );
   `);
   const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -51,7 +52,7 @@ test("a state is claimed once: the second presentation of the same state gets no
   await startAttempt(pg, { stateHash: "hash-once" });
   const first = await claimOauthState(sql, { stateHash: "hash-once", userId: INITIATOR, provider: "meta", origin: "https://meridian.example" });
   const second = await claimOauthState(sql, { stateHash: "hash-once", userId: INITIATOR, provider: "meta", origin: "https://meridian.example" });
-  assert.deepEqual(first, { organizationId: "org-oauth", redirectOrigin: "https://meridian.example" });
+  assert.deepEqual(first, { organizationId: "org-oauth", redirectOrigin: "https://meridian.example", returnPath: null });
   assert.equal(second, null);
 });
 

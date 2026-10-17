@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
-import { attemptedAccount, authAttemptKey, authLimit, refuseIfLimited, RATE_LIMIT_MESSAGE } from "@/lib/meridian/security/limits";
+import { attemptedAccount, authAttemptKey, authFailureResponse, enforceNamedLimit } from "@/lib/meridian/security/limits";
 
 async function handleAuth(request: Request) {
   // Only apply strict auth attempt rate limiting on authentication mutations
@@ -8,13 +8,9 @@ async function handleAuth(request: Request) {
   const isReadSession = request.method === "GET" && (request.url.includes("session") || request.url.includes("get-session"));
   if (!isReadSession) {
     try {
-      refuseIfLimited(authLimit, authAttemptKey(request, await attemptedAccount(request)));
+      await enforceNamedLimit("auth", authAttemptKey(request, await attemptedAccount(request)));
     } catch (error) {
-      const message = error instanceof Error ? error.message : RATE_LIMIT_MESSAGE;
-      return new Response(JSON.stringify({ message }), {
-        status: 429,
-        headers: { "content-type": "application/json" },
-      });
+      return authFailureResponse(error);
     }
   }
   return auth.handler(request);

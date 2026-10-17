@@ -148,6 +148,8 @@ export const SHARED_DEFAULT_ENV: Record<CredentialCategory, { variable: string; 
  */
 export const DEPLOYMENT_ONLY_KEY_ENV = {
   openrouter_chat: { keyVariable: "OPENROUTER_API_KEY", variable: "OPENROUTER_SHARED_DEFAULT", accepts: "deployment" },
+  /** Google Ads API client token. It identifies the deployment, not a customer's account. */
+  google_ads_developer: { keyVariable: "GOOGLE_ADS_DEVELOPER_TOKEN", variable: "GOOGLE_ADS_DEVELOPER_TOKEN_SHARED_DEFAULT", accepts: "deployment" },
 } as const;
 
 export type DeploymentOnlyKey = keyof typeof DEPLOYMENT_ONLY_KEY_ENV;

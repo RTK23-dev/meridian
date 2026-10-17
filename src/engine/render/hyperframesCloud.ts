@@ -39,7 +39,7 @@ export const HEYGEN_API_BASE_URL = "https://api.heygen.com";
 export const HEYGEN_CLIENT_SOURCE_HEADER = "X-HeyGen-Client-Source";
 export const HEYGEN_CLIENT_SOURCE = "hyperframes";
 
-/** Direct uploads go to S3 presigned URLs, and the CLI refuses an archive above this size before it uploads. */
+/** Direct uploads go to the provider's presigned URL, and the CLI refuses an archive above this size before it uploads. */
 export const DIRECT_UPLOAD_LIMIT_BYTES = 200 * 1024 * 1024;
 
 /** Settings sent with every render. The owner checks them against the first live render (STATUS.md). */

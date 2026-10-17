@@ -3,14 +3,17 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
 
+import { oauthReturnPath } from "./return-path.ts";
+
 export const beginOauth = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
-    const body = input && typeof input === "object" ? (input as { organizationId?: unknown; provider?: unknown; origin?: unknown }) : {};
+    const body = input && typeof input === "object" ? (input as { organizationId?: unknown; provider?: unknown; origin?: unknown; returnTo?: unknown }) : {};
     const organizationId = typeof body.organizationId === "string" ? body.organizationId : "";
     const provider = body.provider === "meta" || body.provider === "tiktok" || body.provider === "google" ? body.provider : "";
     const origin = typeof body.origin === "string" ? body.origin : "";
+    const returnTo = oauthReturnPath(typeof body.returnTo === "string" ? body.returnTo : "");
     if (!organizationId || !provider || !origin) throw new Error("OAuth needs a workspace, a provider, and this site's origin.");
-    return { organizationId, provider, origin };
+    return { organizationId, provider, origin, returnTo };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -30,8 +33,8 @@ export const beginOauth = createServerFn({ method: "POST" })
     const built = authorizationUrl(provider, { state, redirectUri, env: process.env });
     if ("error" in built) throw new Error(built.error);
     await sql`
-      insert into oauth_states (state_hash, organization_id, provider, expires_at, redirect_origin, user_id)
-      values (${hashOauthState(state)}, ${data.organizationId}, ${data.provider}, now() + interval '10 minutes', ${data.origin}, ${context.userId})
+      insert into oauth_states (state_hash, organization_id, provider, expires_at, redirect_origin, user_id, return_path)
+      values (${hashOauthState(state)}, ${data.organizationId}, ${data.provider}, now() + interval '10 minutes', ${data.origin}, ${context.userId}, ${data.returnTo})
     `;
     return { url: built.url };
   });

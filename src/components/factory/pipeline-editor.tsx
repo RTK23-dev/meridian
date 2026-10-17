@@ -104,7 +104,7 @@ export function PipelineEditor({
     setDraft(getPresetConfig(key));
     setFeedback({
       tone: "info",
-      message: `Draft filled from ${PRESET_LABEL[key]}. Nothing is saved yet. Save pipeline stores it for this brand. Factory runs do not read it yet.`,
+      message: `Draft filled from ${PRESET_LABEL[key]}. Nothing is saved yet. Save pipeline stores it for this brand.`,
     });
   };
 
@@ -116,7 +116,7 @@ export function PipelineEditor({
       await applyPipelinePreset({ data: { brandId, presetName: key } });
       refreshSaved();
       setDraft(getPresetConfig(key));
-      setFeedback({ tone: "success", message: `${PRESET_LABEL[key]} is saved to this brand. Factory runs do not read it yet.` });
+      setFeedback({ tone: "success", message: `${PRESET_LABEL[key]} is saved to this brand. A run reads this line. Perception and grading prompts stay unused.` });
     } catch (error) {
       setFeedback({ tone: "error", message: plainError(error).message, detail: plainError(error).raw });
     } finally {
@@ -131,7 +131,7 @@ export function PipelineEditor({
     try {
       await savePipelineConfig({ data: { brandId, config: configToSave(draft) } });
       refreshSaved();
-      setFeedback({ tone: "success", message: "Saved to this brand. Factory runs do not read these settings yet." });
+      setFeedback({ tone: "success", message: "Saved to this brand. A run reads this line. Perception and grading prompts stay unused." });
     } catch (error) {
       setFeedback({ tone: "error", message: plainError(error).message, detail: plainError(error).raw });
     } finally {
@@ -171,7 +171,7 @@ export function PipelineEditor({
         <p className="eyebrow">Factory line</p>
         <h2 id="factory-pipeline-settings" className="text-section text-fg font-semibold">Pipeline settings</h2>
         <p className="max-w-3xl text-sm text-fg-muted">
-          Settings save to this brand. Factory runs read the autopilot level and spend caps on the Live tests tab. They do not read the values on this page yet.
+          Settings save to this brand. A saved line is read by Pick, the plan, Produce, the review step, and the claim check. The autopilot level and spend caps stay on the Live tests tab. Perception and grading prompts are saved and not sent.
         </p>
       </header>
 

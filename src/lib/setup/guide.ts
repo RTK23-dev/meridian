@@ -57,8 +57,8 @@ export const GUIDE_STEPS: readonly Definition[] = [
   {
     id: "engine",
     title: "Choose a decision engine",
-    what: "The engine answers the questions Meridian asks about each idea and ad: does it fit the brand, are its claims supported, is there risk. Pick TypeSafe JEV or OpenAI Decisions. Meridian never switches to the other one silently.",
-    why: "No idea is graded without an engine, so nothing gets picked or made.",
+    what: "The engine answers the questions Meridian asks about each idea and ad. Pick TypeSafe JEV or OpenAI Decisions and save that engine's key on this step. Meridian never switches to the other one on its own.",
+    why: "No idea is graded by this engine until it is chosen and ready.",
     required: true,
   },
   {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
 import { encryptPayload } from "../vault/crypto.ts";
-import { resolveOrganicConnection, resolveOrganicConnections, YOUTUBE_UPLOAD_SCOPE } from "./connection.ts";
+import { INSTAGRAM_PUBLISH_SCOPE, resolveOrganicConnection, resolveOrganicConnections, YOUTUBE_UPLOAD_SCOPE } from "./connection.ts";
 
 const KEY = "connection-test-key";
 const ORG = "org-1";
@@ -175,6 +175,17 @@ test("a read connection for TikTok resolves with video.list and no video.publish
   assert.equal(read.connected, true);
   const publish = await resolveOrganicConnection(sql, { ...input, platform: "tiktok" });
   assert.equal(publish.connected, false, "publishing still needs video.publish");
+}));
+
+test("an Instagram token that declares scopes without instagram_content_publish is NOT_CONNECTED", withKey(async () => {
+  const payload = { accessToken: "ig-tok", customFields: { scopes: "instagram_basic" } };
+  const { sql } = fakeSql({ accounts: [account({ external_account_id: "1789" })], vault: [vaultRow(payload)] });
+  const state = await resolveOrganicConnection(sql, { ...input, platform: "instagram" });
+  assert.equal(state.connected, false);
+  if (state.connected) return;
+  assert.match(state.reason, new RegExp(INSTAGRAM_PUBLISH_SCOPE));
+  const read = await resolveOrganicConnection(sql, { ...input, platform: "instagram", purpose: "read" });
+  assert.equal(read.connected, true, "a metrics read is not refused for lacking the publish scope");
 }));
 
 test("resolveOrganicConnections returns every organic platform, each with its own state", withKey(async () => {

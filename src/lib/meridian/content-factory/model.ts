@@ -80,8 +80,14 @@ export const MAX_BASE64_CHARS = Math.ceil(MAX_FILE_BYTES / 3) * 4;
 /** A text file is read into the brief when it has at most this many characters: the engine's brief source limit (BRIEF_SOURCE_TEXT_MAX). */
 export const TEXT_FILE_MAX_CHARS = 4000;
 
-/** What the session says about a PDF: the engine does not read PDF text yet, so the file is kept and its text is not used. */
-export const PDF_TEXT_NOTE = "PDF text is not read yet; the file is kept with the session.";
+/** What the session says about a PDF whose text was not readable. A readable PDF within the text limit is used in the brief. */
+export const PDF_TEXT_NOTE = "PDF text could not be read, so it is not in the brief. The file is kept with the session.";
+
+/** Stored instead of brief text when a PDF was read and is longer than the brief limit. It is not brief text. */
+export const PDF_OVER_LIMIT_CONTENT = "pdf-over-brief-limit";
+
+/** What the session says when the PDF was read and excluded because it is too long. */
+export const PDF_TEXT_LIMIT_NOTE = "PDF text is longer than the brief allows, so it is not in the brief. The file is kept with the session.";
 
 export const ACCEPTED_FILE_LABEL = `MP4, MOV or WEBM video up to 40 MB, PNG, JPEG or WEBP images and PDFs up to 10 MB, and text files (TXT, Markdown, CSV or JSON) of at most ${TEXT_FILE_MAX_CHARS} characters`;
 

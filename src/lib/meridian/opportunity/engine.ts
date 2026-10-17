@@ -301,7 +301,16 @@ function scoreOne(input: {
         : `Brand-fit ${brandFit.toFixed(2)} is keyword overlap with the written brain, not a model opinion.`,
   });
 
-  const reproducibility = input.product ? (candidate.source === "prior" ? 0.9 : 0.62) : 0.35;
+  const reproducibility = input.product ? (candidate.source === "prior" ? 1 : 0.5) : 0;
+  evidence.push({
+    id: "reproducibility",
+    source: "products",
+    summary: input.product
+      ? candidate.source === "prior"
+        ? "Workflow coverage is 1: a product and a known template exist. This is not a measured reproduction rate."
+        : "Workflow coverage is 0.5: a product exists, and this angle is not a known template. This is not a measured reproduction rate."
+      : "Workflow coverage is 0: no product is recorded. Reproducibility is not measured from outcomes.",
+  });
   if (!input.product) {
     evidence.push({
       id: "product",

@@ -140,6 +140,26 @@ test("a plan is made only under an engine decision, and names the product it is 
   assert.throws(() => creativePlanFor(planInput({ productName: "   " })), /no product/);
 });
 
+test("a full run auto-approves the plan when the estimate is within the cap, and a manual or semi plan stays pending", () => {
+  const full = creativePlanFor(planInput({ run: { formats: ["video"], automation: "full", intent: "ad", capTotalCents: 5000 } }));
+  assert.equal(full.status, "approved");
+  assert.equal(full.autonomy, "fully_automatic");
+  assert.equal(full.approvalRequirements[0]?.status, "auto_approved");
+  assert.match(full.approvalRequirements[0]?.reason ?? "", /within the spend cap/);
+
+  const semi = creativePlanFor(planInput({ run: { formats: ["video"], automation: "semi", intent: "ad", capTotalCents: 5000 } }));
+  assert.equal(semi.status, "draft");
+  assert.equal(semi.approvalRequirements[0]?.status, "pending");
+
+  const manual = creativePlanFor(planInput());
+  assert.equal(manual.approvalRequirements[0]?.status, "pending");
+
+  const uncapped = creativePlanFor(planInput({ run: { formats: ["video"], automation: "full", intent: "ad", capTotalCents: 0 } }));
+  assert.equal(uncapped.status, "draft", "an unpriced estimate is not within a cap that was never set");
+  assert.equal(uncapped.approvalRequirements[0]?.status, "pending");
+  assert.match(uncapped.approvalRequirements[0]?.reason ?? "", /no spend cap/);
+});
+
 test("the plan is a draft for the brand's product, with its deliverables unpriced and no production step written", () => {
   const plan = creativePlanFor(planInput());
   assert.equal(plan.status, "draft");
@@ -148,12 +168,32 @@ test("the plan is a draft for the brand's product, with its deliverables unprice
   assert.equal(plan.autonomy, "manual");
   assert.equal(plan.deliverables.length, 1);
   assert.equal(plan.deliverables[0]?.kind, "video");
+  if (plan.deliverables[0]?.kind === "video") {
+    assert.equal(plan.deliverables[0].aspectRatio, "9:16");
+  }
   assert.equal(plan.deliverables[0]?.copy, "", "no words are taken from the winning ad");
+  assert.equal(plan.deliverables[0]?.visualDirection, undefined, "no saved brief means no extra direction");
   assert.deepEqual(plan.productionPlan, [], "production writes its steps, not the plan");
   assert.equal(plan.estimatedCost.totalEstimatedUsd, 0);
   assert.deepEqual(plan.estimatedCost.unpricedDeliverableIds, plan.deliverables.map((deliverable) => deliverable.id));
   assert.equal(plan.productionContext?.productName, "Glow Serum");
   assert.ok(plan.rationale.some((entry) => entry.groundedIn === "jev_answer" && entry.sourceId === "gate-1"));
+});
+
+test("a saved Factory Line sets the video plan's ratio and length", () => {
+  const plan = creativePlanFor(planInput({ video: { aspectRatio: "1:1", durationSeconds: 15 } }));
+  const video = plan.deliverables[0];
+  assert.equal(video?.kind, "video");
+  if (video?.kind === "video") {
+    assert.equal(video.aspectRatio, "1:1");
+    assert.equal(video.targetDurationSeconds, 15);
+  }
+});
+test("a saved brief prompt is stored as visual direction and does not become the spoken copy", () => {
+  const plan = creativePlanFor(planInput({ briefPrompt: "  Stay on the product.  " }));
+  const video = plan.deliverables[0];
+  assert.equal(video?.copy, "");
+  assert.equal(video?.visualDirection, "Stay on the product.");
 });
 
 test("a stored plan reads back with its control's attributes, and a missing one reads as none", () => {

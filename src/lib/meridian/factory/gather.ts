@@ -9,7 +9,8 @@
  *  - the Meta Ad Library collector stores the ads that grading reads;
  *  - the Instagram volume source (Apify, through the engine gateway) stores reel candidates with their creator's baseline and
  *    their tier (instagram-volume.ts), for a run that covers Instagram;
- *  - uploads, which no intake stores yet.
+ *  - uploads already stored as research ads with source `upload` are counted. A brand with none is not connected.
+ *    Nothing is invented to fill the source.
  *
  * Each source records one state on the run: ok, not_connected, or failed with its error. A source that is not connected or
  * fails does not stop the run, which continues with what it has. Gathered items go to the evidence tables that already exist:
@@ -72,7 +73,7 @@ const SOCIAL_HOSTS = [
   "linkedin.com",
 ];
 
-const UPLOAD_REASON = "No uploaded swipe file reaches this run. The upload parser is not connected to a saved upload yet.";
+const UPLOAD_REASON = "No uploaded swipe file is stored for this brand.";
 
 export type GatherState = "ok" | "not_connected" | "failed";
 
@@ -411,6 +412,8 @@ export async function gatherForRun(sql: Sql, input: GatherInput, deps: GatherDep
   const volume: Call | null =
     input.platforms.length === 0 || input.platforms.includes("instagram") ? await gatherVolumeSafely(sql, input, deps) : null;
 
+  const uploads = await gatherUploads(sql, input);
+
   const platformRows: GatheredSource[] = platformAdapters.map((adapterId) => {
     const call = combine(
       calls((state) => state.adapterId === adapterId && state.seed === input.niche),
@@ -427,10 +430,21 @@ export async function gatherForRun(sql: Sql, input: GatherInput, deps: GatherDep
     { source: "meta_ad_library", ...meta },
     ...platformRows,
     ...(volume ? [{ source: "instagram_volume", ...volume }] : []),
-    { source: "upload", state: "not_connected", reason: UPLOAD_REASON, items: 0 },
+    { source: "upload", ...uploads },
   ];
   await writeRunSources(sql, input, rows);
   return rows;
+}
+
+/** Uploaded swipe files already stored for the brand. None stored is not connected. No file is invented. */
+async function gatherUploads(sql: Sql, input: GatherInput): Promise<Call> {
+  const rows = await sql<{ n: number }>`
+    select count(*)::int as n from research_ads
+    where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and source = 'upload'
+  `;
+  const items = Number(rows[0]?.n ?? 0);
+  if (items === 0) return { state: "not_connected", reason: UPLOAD_REASON, items: 0 };
+  return { state: "ok", reason: `${items} uploaded swipe file(s) are stored and can be graded.`, items };
 }
 
 /** The job result the worker records for the discover stage. Counts only, so no figure is invented. */

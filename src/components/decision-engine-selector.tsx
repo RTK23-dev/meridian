@@ -52,7 +52,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
   const storedEngineId = status?.active.engineId ?? "";
   useEffect(() => {
     if (!form.formState.isDirty) form.reset({ engineId: storedEngineId });
-  }, [storedEngineId, form]);
+  }, [storedEngineId, form.formState.isDirty, form]);
   const [message, setMessage] = useState<string | null>(null);
   const save = useScopedMutation({
     mutationKey: ["mutation", "decision-engine.save", organizationId],
@@ -87,6 +87,8 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
     await save.mutateAsync(form.getValues("engineId")).catch(() => undefined);
   }
 
+  const choiceReady = status.engines.find((engine) => engine.id === choice)?.health.status === "READY";
+  const same = choice === status.active.engineId && status.active.source !== "default";
   const activeLabel = status.engines.find((engine) => engine.isActive)?.label ?? status.active.engineId;
   const sourceText =
     status.active.source === "workspace"
@@ -129,13 +131,8 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
                 {engine.health.status}
               </span>
             </div>
-            {engine.isActive ? <p className="text-xs font-semibold text-success">ACTIVE</p> : null}
+            {engine.isActive && status.active.source !== "default" ? <p className="text-xs font-semibold text-success">In use</p> : null}
             <p className="text-xs text-muted">{engine.health.message}</p>
-            <p className="text-xs text-muted">
-              Questions: {engine.capabilities.questionKinds.join(", ")} · Inputs: {engine.capabilities.inputModalities.join(", ")}
-              {engine.capabilities.maxImages > 0 ? ` (up to ${engine.capabilities.maxImages} images)` : " (no images)"}
-            </p>
-            <p className="text-xs text-muted font-mono">Adapter {engine.adapterVersion}</p>
           </div>
         ))}
       </div>
@@ -146,18 +143,19 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
             <Field label="Engine for this workspace" error={form.formState.errors.engineId?.message}>
               <SelectInput {...form.register("engineId")} disabled={saving}>
                 {status.engines.map((engine) => (
-                  <option key={engine.id} value={engine.id} disabled={engine.health.status !== "READY" && engine.id !== status.active.engineId}>
+                  <option key={engine.id} value={engine.id}>
                     {engine.label}
-                    {engine.health.status !== "READY" ? " (not configured)" : ""}
+                    {engine.health.status !== "READY" ? " (needs a key)" : ""}
                   </option>
                 ))}
               </SelectInput>
             </Field>
           </div>
-          <Button type="button" variant="secondary" onClick={handleSave} disabled={saving || choice === status.active.engineId} aria-describedby={choice === status.active.engineId ? "engine-save-reason" : undefined}>
+          <Button type="button" variant="secondary" onClick={handleSave} disabled={saving || same || !choiceReady} aria-describedby={same || !choiceReady ? "engine-save-reason" : undefined}>
             {saving ? "Saving..." : "Save engine"}
           </Button>
-          {choice === status.active.engineId && !saving ? <DisabledReason id="engine-save-reason">This engine is already active. Choose a different engine to save.</DisabledReason> : null}
+          {same && !saving ? <DisabledReason id="engine-save-reason">This engine is already in use.</DisabledReason> : null}
+          {!same && !choiceReady && !saving ? <DisabledReason id="engine-save-reason">This engine needs its key before it can be saved. Add the key on Setup, then come back.</DisabledReason> : null}
         </div>
       ) : (
         <p className="text-xs text-muted">Only workspace admins can change the decision engine.</p>

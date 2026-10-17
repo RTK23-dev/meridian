@@ -94,6 +94,7 @@ async function bridgeDatabase(): Promise<Sql> {
       comments integer,
       saves integer,
       observed_on date not null default current_date,
+      raw_metrics jsonb not null default '{}'::jsonb,
       created_at timestamptz not null default now()
     );
 
@@ -263,6 +264,46 @@ test("Telemetry bridge: running the sync twice does not duplicate a post or its 
   assert.equal(observed.length, 1);
 });
 
+test("Telemetry bridge: a later organic measurement of a post reaches learning, and a repeated sync adds nothing", async () => {
+  const sql = await bridgeDatabase();
+  const organizationId = "org_bridge_organic_later";
+  const brandId = "brand_bridge_organic_later";
+
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "instagram",
+    sourceType: "organic",
+    creativeId: "cr_ig_later",
+    externalPostId: "ig_later",
+    views: 100,
+    recordedAt: "2026-10-01T00:00:00.000Z",
+  });
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "instagram",
+    sourceType: "organic",
+    creativeId: "cr_ig_later",
+    externalPostId: "ig_later",
+    views: 250,
+    recordedAt: "2026-10-02T00:00:00.000Z",
+  });
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+
+  const rows = await sql<{ views: number | null; observed_on: string }>`
+    select views, observed_on::text as observed_on from organic_observations
+    where organization_id = ${organizationId}
+    order by observed_on
+  `;
+  assert.equal(rows.length, 2, "both days reach learning, and the repeated sync adds nothing");
+  assert.deepEqual(rows.map((row) => Number(row.views)), [100, 250]);
+  assert.deepEqual(rows.map((row) => String(row.observed_on).slice(0, 10)), ["2026-10-01", "2026-10-02"]);
+});
+
 test("Telemetry bridge: a later paid measurement of a creative reaches learning, and repeated syncs count each measurement once", async () => {
   const sql = await bridgeDatabase();
   const organizationId = "org_bridge_paid_later";
@@ -400,4 +441,38 @@ test("Telemetry bridge: a later measurement with an unreported metric stores tha
   assert.equal(rows[1]!.clicks, null, "a click count the second measurement did not report is unknown, not zero");
   assert.equal(rows[1]!.conversions, null);
   assert.equal(rows[1]!.spend_cents, null);
+});
+
+test("Telemetry bridge: an organic row stored on the sync day is adopted, and the measurement day is kept", async () => {
+  const sql = await bridgeDatabase();
+  const organizationId = "org_bridge_organic_legacy";
+  const brandId = "brand_bridge_organic_legacy";
+
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "instagram",
+    sourceType: "organic",
+    creativeId: "cr_organic_legacy",
+    externalPostId: "ig_legacy",
+    views: 900,
+    engagements: 40,
+    recordedAt: "2026-10-01T00:00:00.000Z",
+  });
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+  await sql`
+    update organic_observations
+    set observed_on = '2026-10-03', raw_metrics = '{}'::jsonb
+    where organization_id = ${organizationId}
+  `;
+
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+
+  const rows = await sql<{ id: string; observed_on: string; raw_metrics: { observationKey?: string } }>`
+    select id, observed_on::text as observed_on, raw_metrics from organic_observations
+    where organization_id = ${organizationId}
+  `;
+  assert.equal(rows.length, 1, "the earlier row is adopted instead of copied");
+  assert.equal(String(rows[0]!.observed_on).slice(0, 10), "2026-10-01");
+  assert.ok(rows[0]!.raw_metrics.observationKey?.startsWith("telemetry:"));
 });

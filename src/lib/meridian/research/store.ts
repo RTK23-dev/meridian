@@ -13,6 +13,26 @@ export function sourceMetricsOf(ad: Pick<MetaLibraryAd, "stoppedAt" | "countries
   return JSON.stringify({ stoppedAt: ad.stoppedAt, countries: ad.countries, observedAt: ad.capturedAt });
 }
 
+/**
+ * Delivery facts stored with an ad. A row without `stoppedAt` predates the field, so delivery and countries are unknown.
+ * A missing or non-array `countries` value is unknown. An empty array means the source reported no countries.
+ */
+export function deliveryFactsOf(sourceMetrics: string): { stillRunning: boolean | null; countries: string[] | null } {
+  let record: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(sourceMetrics) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) record = parsed as Record<string, unknown>;
+  } catch {
+    record = {};
+  }
+  if (!("stoppedAt" in record)) return { stillRunning: null, countries: null };
+  const stoppedAt = typeof record.stoppedAt === "string" && record.stoppedAt ? record.stoppedAt : null;
+  const countries = Array.isArray(record.countries)
+    ? record.countries.filter((item): item is string => typeof item === "string")
+    : null;
+  return { stillRunning: stoppedAt === null, countries };
+}
+
 export async function persistMetaAd(sql: Sql, input: { organizationId: string; brandId: string; runId: string; ad: MetaLibraryAd }): Promise<string> {
   const id = randomUUID();
   const rows = await sql<{ id: string }>`

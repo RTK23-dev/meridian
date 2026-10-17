@@ -12,7 +12,7 @@ export function guideFacts(input: { brandCount: number | null; summaries: SetupI
   const engine = engines
     ? {
         label: active?.label ?? engines.active.engineId,
-        // A workspace or deployment choice counts. The default engine does not, so a person has to pick one.
+        // A workspace or deployment choice counts. The default does not, so a person still has to pick an engine that is ready.
         chosen: engines.active.source !== "default",
         ready: active?.health.status === "READY",
         reason: active?.health.message ?? "The engine did not report its state.",

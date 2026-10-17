@@ -26,8 +26,9 @@ import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts"
 import { productionRouter } from "../production/router.ts";
 import { productionCostMode } from "../production/cost-mode.ts";
 import { submitWithPreflight, type SubmitWithPreflightResult } from "../production/submit.ts";
-import { openProductionReview, settleProductionReservation } from "../production/materialization.ts";
+import { openProductionReview, settleProductionReservation, storeReportedProductionCost } from "../production/materialization.ts";
 import type { CreativeSpec, ProductionJob } from "../production/types.ts";
+import { providerReportedUsd } from "../production/types.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
@@ -68,6 +69,8 @@ export type VideoRequest = {
   angle: string;
   planDeliverableId: string;
   durationSeconds: number;
+  aspectRatio: "9:16" | "1:1" | "16:9" | "4:5";
+  visualDirection: string;
   sequenceIndex: number;
 };
 
@@ -153,10 +156,11 @@ async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: Vid
     title: req.label,
     modality: "video",
     format: "video_ugc",
-    aspectRatio: "9:16",
+    aspectRatio: req.aspectRatio,
     durationTargetSeconds: req.durationSeconds,
     hookLine: req.hook,
     script: req.copy,
+    visualDirection: req.visualDirection || undefined,
     scenes: [],
     idempotencyKey: req.jobId,
   };
@@ -242,6 +246,8 @@ async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: Vid
     const reason = `Preflight refused the video for ${req.label} before any provider call: ${submission.reasons.join(" ")}`;
     await markJob(sql, scope, req.jobId, "PREFLIGHT_FAILED", "PREFLIGHT_BLOCKED", reason);
     await BudgetLedgerService.release(sql, { reservationId, reason });
+    const missingHook = submission.reasons.length > 0 && submission.reasons.every((item) => item === "Missing required hook line.");
+    if (missingHook) return { kind: "failed", reason };
     return { kind: "stop", reason };
   }
   const submitted: ProductionJob = submission.job;
@@ -288,6 +294,16 @@ async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: Vid
   }
 
   // The provider returned the video: store it, then materialize it through the shared materializer, which settles the reservation.
+  const billed = providerReportedUsd(submitted);
+  if (billed !== null) {
+    await storeReportedProductionCost(sql, {
+      organizationId: scope.organizationId,
+      brandId: scope.brandId,
+      productionJobId: req.jobId,
+      runId: input.runId,
+      provider: provider.id,
+    }, billed);
+  }
   const finalized = await finalizeProductionArtifact(sql, {
     jobId: req.jobId,
     organizationId: scope.organizationId,
@@ -345,7 +361,8 @@ async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: Vid
 
 /**
  * Whether one more video estimate would pass the run's cap. The metered spend and the estimates of the run's own video jobs that have not
- * failed are the spend the cap is held against. Returns the reason, or null.
+ * failed and have no provider bill yet are the spend the cap is held against. A job whose bill is already in factory_costs is not
+ * counted again as an estimate. Returns the reason, or null.
  */
 async function videoCapStop(sql: Sql, input: ProduceInput, scope: Scope, estimateCents: number): Promise<string | null> {
   const metered = await meteredSpendOf(sql, scope.organizationId, scope.brandId, input.runId);
@@ -355,6 +372,7 @@ async function videoCapStop(sql: Sql, input: ProduceInput, scope: Scope, estimat
     from production_jobs
     where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and modality = 'video'
       and input->>'runId' = ${input.runId} and status not in ('FAILED', 'CANCELLED', 'PREFLIGHT_FAILED', 'NOT_CONFIGURED', 'POSTFLIGHT_FAILED')
+      and actual_cost_cents is null
   `;
   // The unspent budgets of the run's engine requests are held against the same caps (one ledger, one cap).
   const engineHold = await engineHeldOf(sql, scope.organizationId, scope.brandId, input.runId);

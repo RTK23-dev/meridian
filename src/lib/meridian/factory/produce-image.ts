@@ -10,6 +10,9 @@
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
+import { loadBrandContext } from "../context/load.ts";
+import { judgeCopy } from "../production/assess.ts";
+import { evaluateImagePreflight } from "../production/preflight.ts";
 import { productionRouter } from "../production/router.ts";
 import type { ImageGenerationOutcome, ProductionImageProvider } from "../production/image-providers.ts";
 import type { CreativeSpec } from "../production/types.ts";
@@ -132,6 +135,35 @@ export async function produceImage(sql: Sql, input: ProduceInput, req: ImageRequ
     scenes: [],
     idempotencyKey: jobId,
   };
+  const structure = evaluateImagePreflight(baseSpec);
+  if (!structure.passed) return { kind: "stop", reason: `${structure.reasons.join(" ")} Nothing was spent.` };
+  try {
+    const loaded = await loadBrandContext(sql, scope.organizationId, scope.brandId);
+    const product = loaded.products.find((item) => item.name === productName) ?? null;
+    const judged = await judgeCopy({
+      copy: {
+        text: copy,
+        productName,
+        allowedClaims: product?.allowedClaims ?? "",
+        prohibitedClaims: [loaded.brain.prohibitedClaims, product?.prohibitedClaims ?? ""].filter(Boolean).join("\n"),
+        requiredDisclaimers: loaded.brain.requiredDisclaimers,
+        wordsToAvoid: loaded.brain.wordsToAvoid,
+        hook: req.hook,
+        cta: req.variant.cta,
+      },
+      sql,
+      organizationId: scope.organizationId,
+      brandId: scope.brandId,
+      subject: { type: "factory_variant", id: req.variant.id },
+      engines: input.engines,
+    });
+    if (judged.decision.decision === "REJECT") {
+      const reason = judged.decision.reasons[0] ?? "The copy breaks a stored claim rule.";
+      return { kind: "failed", reason: `The image for ${req.label} was refused before a provider was called. ${reason} Nothing was spent.` };
+    }
+  } catch (error) {
+    return { kind: "stop", reason: `The image copy could not be checked, so nothing was spent. ${errorText(error)}` };
+  }
   // A named provider is checked first. A provider that is not configured, or not connected, is refused with its reason, and no
   // reservation or call follows. A provider whose cost is unknown is never used: its spend cannot be counted against a cap, so a capped
   // run could overrun it, and an uncapped run has no bound at all. The run stops with the reason until the provider has a price.

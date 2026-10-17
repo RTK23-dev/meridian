@@ -1,7 +1,7 @@
 import type { HeldReservationResolution } from "../security/held-reservations.ts";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
+import { enforceNamedLimit } from "@/lib/meridian/security/limits";
 import { parseVariantReview } from "./variant-review-input.ts";
 
 function clip(value: unknown): string {
@@ -96,7 +96,7 @@ export const generateStudioVariants = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    refuseIfLimited(modelLimit, context.userId);
+    await enforceNamedLimit("model", context.userId);
     const api = await import("./session.server");
     return api.generateStudioVariants(context.userId, data);
   });
@@ -111,7 +111,7 @@ export const approveAndExecuteCreativePlan = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    refuseIfLimited(modelLimit, context.userId);
+    await enforceNamedLimit("model", context.userId);
     const api = await import("./session.server");
     return api.approveAndExecuteCreativePlan(context.userId, data);
   });
@@ -127,7 +127,7 @@ export const rejectCreativePlan = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    refuseIfLimited(modelLimit, context.userId);
+    await enforceNamedLimit("model", context.userId);
     const api = await import("./session.server");
     return api.rejectCreativePlan(context.userId, data);
   });

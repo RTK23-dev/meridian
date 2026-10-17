@@ -32,6 +32,20 @@ test("a stored run without a page reads as no page, and a stored page id survive
   assert.equal(stored?.pageId, "page-9");
 });
 
+test("a paid run stores a Facebook Page id and an https link, and refuses anything else", () => {
+  const saved = parseRunSettings({ facebookPageId: "123456", destinationLink: "https://brand.example/offer" });
+  assert.equal(saved.ok && saved.value.facebookPageId, "123456");
+  assert.equal(saved.ok && saved.value.destinationLink, "https://brand.example/offer");
+  assert.equal(parseRunSettings({ facebookPageId: "act_1" }).ok, false);
+  assert.equal(parseRunSettings({ destinationLink: "http://brand.example" }).ok, false);
+  const blank = parseRunSettings({ facebookPageId: "", destinationLink: "" }, {
+    ...DEFAULT_RUN_SETTINGS,
+    facebookPageId: "9",
+    destinationLink: "https://brand.example",
+  });
+  assert.equal(blank.ok && blank.value.facebookPageId, null);
+  assert.equal(blank.ok && blank.value.destinationLink, null);
+});
 test("the run builder carries the chosen page into the settings it starts with, and none when blank", () => {
   const draft = draftFromDefaults({ ...DEFAULT_RUN_SETTINGS, pageId: "page-7" });
   assert.equal(draft.pageId, "page-7");

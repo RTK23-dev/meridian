@@ -92,22 +92,27 @@ export async function recheckAdTimelines(
     if (!Number.isFinite(firstTime) || !Number.isFinite(lastTime)) continue;
 
     const daysRunning = Math.max(0, Math.round((lastTime - firstTime) / 86_400_000));
-    let platforms: string[] = [];
-    let countries: string[] = [];
+    let platforms: string[] | null = null;
+    let countries: string[] | null = null;
     try {
-      platforms = JSON.parse(row.platforms);
-      countries = JSON.parse(row.countries);
+      const parsedPlatforms = JSON.parse(row.platforms) as unknown;
+      platforms = Array.isArray(parsedPlatforms) ? parsedPlatforms.filter((item) => typeof item === "string") : null;
     } catch {
-      platforms = [];
-      countries = [];
+      platforms = null;
+    }
+    try {
+      const parsedCountries = JSON.parse(row.countries) as unknown;
+      countries = Array.isArray(parsedCountries) ? parsedCountries.filter((item) => typeof item === "string") : null;
+    } catch {
+      countries = null;
     }
 
     const scored = winnerScore({
       daysRunning,
       stillRunning: row.still_running,
       iterationCount: Math.max(1, row.sibling_variants),
-      countries: countries.length,
-      platforms: platforms.length,
+      countries: countries === null ? null : countries.length,
+      platforms: platforms === null ? null : platforms.length,
       advertiserSurvivorRate: null,
       creativeQuality: null,
     });

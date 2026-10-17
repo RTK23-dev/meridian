@@ -13,6 +13,7 @@ import {
   costPerMasterProblem,
   parseRunSettings,
   parseTargetingCountries,
+  destinationLinkOf,
   runCostProblem,
   type AutomationMode,
   type DecisionEngineChoice,
@@ -60,6 +61,10 @@ export type BuilderDraft = {
   countries: string;
   /** The theme page the run targets, by id. Blank is no page. */
   pageId: string;
+  /** The Facebook Page a paid ad is created for. Blank is none. */
+  facebookPageId: string;
+  /** The https link a paid ad sends people to. Blank is none. */
+  destinationLink: string;
 };
 
 /** The draft a run starts from: the brand's run defaults, with an empty niche. */
@@ -79,6 +84,8 @@ export function draftFromDefaults(defaults: RunSettings): BuilderDraft {
     maxVariants: String(defaults.caps.maxVariants),
     countries: defaults.targetingCountries.join(", "),
     pageId: defaults.pageId ?? "",
+    facebookPageId: defaults.facebookPageId ?? "",
+    destinationLink: defaults.destinationLink ?? "",
   };
 }
 
@@ -175,6 +182,11 @@ export function settingProblems(draft: BuilderDraft): string[] {
   if (!cost.ok) problems.push(cost.error);
   const variants = Number(draft.maxVariants);
   if (!Number.isInteger(variants) || variants < 1 || variants > 40) problems.push("Max variants per run is a whole number from 1 to 40.");
+  if (draft.facebookPageId.trim() && !/^[0-9]{1,32}$/.test(draft.facebookPageId.trim())) {
+    problems.push("The Facebook Page id is the numeric id of the Page.");
+  }
+  const link = destinationLinkOf(draft.destinationLink);
+  if (!link.ok) problems.push(link.error);
   const totalCents = centsOf(draft.totalDollars);
   if (draft.automation === "full" && totalCents <= 0) {
     problems.push("Full automation needs a total spend cap above zero. Set one, or choose semi or manual.");
@@ -202,6 +214,7 @@ export function settingsFromDraft(draft: BuilderDraft): RunSettings {
   const countries = countriesFromText(draft.countries);
   // The same holds for the cost: a value that does not parse is refused before this point, and a blank one is not set.
   const cost = costPerMasterFromText(draft.costPerMasterDollars);
+  const link = destinationLinkOf(draft.destinationLink);
   return {
     automation: draft.automation,
     decisionEngine: draft.decisionEngine,
@@ -217,6 +230,8 @@ export function settingsFromDraft(draft: BuilderDraft): RunSettings {
     targetingCountries: countries.ok ? countries.value : [],
     costPerMasterUsd: cost.ok ? cost.value : null,
     pageId: draft.pageId.trim() || null,
+    facebookPageId: draft.facebookPageId.trim() || null,
+    destinationLink: link.ok ? link.value : null,
   };
 }
 

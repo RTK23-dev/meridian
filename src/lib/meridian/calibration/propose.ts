@@ -20,6 +20,8 @@ export type ThresholdProposal = {
 /**
  * A proposal is not a threshold change.
  * Fewer than 30 reviewer rows produces no proposal.
+ * This floor is reviewer disagreement, not the 200 held-out outcomes the calibration report requires,
+ * and not the 100 outcomes a grading question needs. They count different rows.
  */
 export function proposeThresholdChange(input: {
   questionId: string;

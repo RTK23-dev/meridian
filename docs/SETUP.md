@@ -1,5 +1,7 @@
 # Setup
 
+How to run Meridian on a laptop or a server. What the product does is in the [README](../README.md). Which keys exist, and which stay off until you opt in, is in [PROVIDERS.md](PROVIDERS.md).
+
 ## Requirements
 
 - Node.js 22 (CI uses 22). Nothing else for a local trial.

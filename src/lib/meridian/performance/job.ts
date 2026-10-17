@@ -1,10 +1,11 @@
 import type { Sql } from "../learning/store.ts";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { startOperation } from "../observability/redact.ts";
+import { verifyMetaAdAccountAccess } from "../providers/meta.ts";
+import { resolveDeploymentOnlyKey } from "../credentials/resolve.ts";
 import { loadProviderInsights } from "./fetch.ts";
 import { ingestPerformanceRows } from "./sync.ts";
 import { loadTenantProviderToken, validatePerformanceOwnership } from "./ownership.ts";
-import { verifyMetaAdAccountAccess } from "../providers/meta.ts";
 
 type Job = { id: string; organization_id: string; brand_id: string | null };
 
@@ -59,6 +60,20 @@ export async function runPerformanceSync(
       throw new Error(account.error);
     }
   }
+  const accountId = await connectedAccountId(sql, job.organization_id, job.brand_id, provider);
+  const developer = provider === "google" ? resolveDeploymentOnlyKey("google_ads_developer") : null;
+  if (provider === "google" && developer?.status !== "ready") {
+    const reason = developer?.reason ?? "Google Ads has no developer token. No observations were stored.";
+    operation.finish(false, 0, reason);
+    throw new Error(`NOT_CONNECTED: ${reason}`);
+  }
+  if ((provider === "google" || provider === "tiktok") && !accountId) {
+    const reason = provider === "google"
+      ? "No Google Ads customer id is saved for this brand. Add it on Connected accounts. No observations were stored."
+      : "No TikTok advertiser id is saved for this brand. Add it on Connected accounts. No observations were stored.";
+    operation.finish(false, 0, reason);
+    throw new Error(`NOT_CONNECTED: ${reason}`);
+  }
   const loaded = await loadProviderInsights(
     {
       provider,
@@ -69,11 +84,9 @@ export async function runPerformanceSync(
       startDate: typeof payload.startDate === "string" ? payload.startDate : "",
       endDate: typeof payload.endDate === "string" ? payload.endDate : "",
       accessToken: credential.accessToken,
-      // The Google Ads developer token identifies the deployment's API client. It is not an account token, and the job reads it
-      // from the deployment, the same as the customer and advertiser ids.
-      developerToken: provider === "google" ? (process.env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "") : undefined,
-      advertiserId: process.env.TIKTOK_ADVERTISER_ID,
-      customerId: process.env.GOOGLE_ADS_CUSTOMER_ID,
+      developerToken: developer?.status === "ready" ? developer.secret : undefined,
+      advertiserId: provider === "tiktok" ? accountId : undefined,
+      customerId: provider === "google" ? accountId : undefined,
     },
     transport,
   );
@@ -137,6 +150,17 @@ export async function runPerformanceSync(
     on conflict (organization_id, idempotency_key) do nothing
   `;
   return `stored:${ingested.stored.length};correlation:${record.correlationId}`;
+}
+
+/** The brand's own ad account id. An environment id is never used, so one deployment cannot measure another brand's account. */
+async function connectedAccountId(sql: Sql, organizationId: string, brandId: string, platform: string): Promise<string> {
+  const rows = await sql<{ external_account_id: string | null }>`
+    select external_account_id from platform_accounts
+    where organization_id = ${organizationId} and brand_id = ${brandId} and platform = ${platform}
+      and external_account_id is not null and external_account_id <> ''
+    limit 1
+  `;
+  return rows[0]?.external_account_id?.trim() ?? "";
 }
 
 async function markNotConnected(sql: Sql, organizationId: string, provider: string, detail: string): Promise<void> {

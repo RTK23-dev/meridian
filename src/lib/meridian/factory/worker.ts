@@ -8,13 +8,16 @@ import { combineGates, originalityGate, claimsGate, policyGate, rightsGate, bran
 import { creativeIdsOfVariant, licencesForCreatives, variantLicenceFlags } from "./rights.ts";
 import { adsMustPause } from "./kill-switch.ts";
 import { isFactoryStage } from "./pipeline.ts";
-import { learnForRun } from "./learn.ts";
+import { clearLearnRecheck, learnForRun, scheduleLearnRecheck } from "./learn.ts";
+import { loadSavedFactoryPipelineConfig } from "./pipeline-config-store.ts";
+import { holdoutItemIds } from "./sleep-holdout.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
 import { KILL_SWITCH_STOP_REASON, stageDecision } from "./stage-decision.ts";
 import { brandCapFiguresOf, capOrNull, capStopForRun, meteredSpendOf, pauseRunEngineSpend } from "./spend.ts";
 import { produceFactoryCreatives, scheduleProduceRecheck } from "./produce.ts";
+import { predictionFingerprint, type GradeRecord } from "./prediction.ts";
 import type { FactoryEngineSeams } from "./produce-shared.ts";
 import { launchFactoryRun, recordTestPlan, scheduleRunMeasurement } from "./publish.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
@@ -32,6 +35,7 @@ import {
 import { conceptOf } from "./pick.ts";
 import { linesOf } from "./brain-facts.ts";
 import { buildAdTimeline } from "./timeline.ts";
+import { deliveryFactsOf } from "../research/store.ts";
 import { winnerScore } from "./winner-score.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
@@ -108,6 +112,9 @@ export async function executeFactoryJob(
     where run_id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and stage = ${job.job_type}
   `;
   const spend = await meteredSpendOf(sql, job.organization_id, job.brand_id, runId);
+  const autoApproveReview = job.job_type === "factory.review" && job.brand_id
+    ? (await loadSavedFactoryPipelineConfig(sql, job.organization_id, job.brand_id))?.gradingThresholds.autoApproveEnabled === true
+    : false;
   const decision = stageDecision({
     automation: settings.automation,
     stage: job.job_type,
@@ -119,6 +126,7 @@ export async function executeFactoryJob(
     dailySpentCents: spend.dailyCents,
     // The brand's caps are held against the brand's spend across all its runs, not this run's spend alone.
     ...(await brandCapFiguresOf(sql, job.organization_id, job.brand_id)),
+    autoApproveReview,
   });
   if (decision.action === "stop" || decision.action === "await_approval") {
     // A stage that waits or is stopped is recorded on the run with its reason. It is not a failure. The stages after it hold until
@@ -211,16 +219,24 @@ export async function executeFactoryJob(
   }
   // No stage below marks the run succeeded. The run finishes only when learn finds a measured outcome of its own (see learn.ts).
   if (job.job_type === "factory.template") {
+    const line = job.brand_id ? await savedPlanLine(sql, job.organization_id, job.brand_id) : null;
     const planned = await persistTemplates(sql, job.organization_id, job.brand_id, runId, {
       formats: settings.formats,
       automation: settings.automation,
       intent: settings.intent,
       capTotalCents: settings.caps.totalCents,
+      video: line?.video ?? null,
+      briefPrompt: line?.briefPrompt ?? null,
     });
     return `templates:${planned.templates};plans:${planned.plans};refused:${planned.refused.length}`;
   }
   if (job.job_type === "factory.produce") {
-    const made = await persistVariants(sql, job.organization_id, job.brand_id, runId, settings.caps.maxVariants);
+    const line = job.brand_id ? await loadSavedFactoryPipelineConfig(sql, job.organization_id, job.brand_id) : null;
+    const videosPerConcept = settings.formats.includes("video") ? line?.generationParams.videoCount ?? null : null;
+    const dailyCap = line?.generationParams.dailyGenerationCap ?? null;
+    const made = await persistVariants(sql, job.organization_id, job.brand_id, runId, settings.caps.maxVariants, videosPerConcept, dailyCap);
+    const videoChoice = settings.providers.video;
+    const lineProvider = !videoChoice || videoChoice === "auto" ? line?.generationParams.provider : undefined;
     // Each variant is materialized through the production router with the run's provider choice. A named provider that is not ready,
     // a cap that is reached, or a budget that refuses the reservation stops the run here, with the reason on the run row.
     const produced = await produceFactoryCreatives(sql, {
@@ -228,7 +244,10 @@ export async function executeFactoryJob(
       brandId: job.brand_id,
       runId,
       formats: settings.formats,
-      providers: settings.providers,
+      providers: lineProvider ? { ...settings.providers, video: lineProvider } : settings.providers,
+      lineDirection: line
+        ? { pacing: line.generationParams.renderPacing, scriptPrompt: line.prompts.scriptPrompt }
+        : null,
       caps: { totalCents: capOrNull(settings.caps.totalCents), dailyCents: capOrNull(settings.caps.dailyCents) },
       costPerMasterUsd: settings.costPerMasterUsd,
       engines: seams.decisionEngines,
@@ -248,10 +267,9 @@ export async function executeFactoryJob(
       return `stopped:${job.job_type}`;
     }
     if (produced.waiting) {
-      // A video is still at its provider. The run stays running with the reason, the stages after produce are held, and the stage checks
-      // again later. Nothing is marked produced.
+      const note = produced.notes.length > 0 ? `${produced.notes.join(" ")} ` : "";
       await sql`
-        update factory_runs set status = 'running', current_stage = ${job.job_type}, waiting_on = ${job.job_type}, error = ${produced.waiting}, updated_at = now()
+        update factory_runs set status = 'running', current_stage = ${job.job_type}, waiting_on = ${job.job_type}, error = ${`${note}${produced.waiting}`}, updated_at = now()
         where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
       `;
       await scheduleProduceRecheck(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId, niche: owned[0].niche });
@@ -259,8 +277,9 @@ export async function executeFactoryJob(
     }
     // Every variant is produced or has its reason. The wait, if there was one, is over, so the stages after produce are queued from gate.
     const wasWaiting = owned[0].waiting_on !== "";
+    const skipped = produced.notes.join(" ").slice(0, 500);
     await sql`
-      update factory_runs set waiting_on = '', error = '', updated_at = now()
+      update factory_runs set waiting_on = '', error = ${skipped}, updated_at = now()
       where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
     `;
     if (wasWaiting && payload.resumeWait === true) {
@@ -325,8 +344,19 @@ export async function executeFactoryJob(
   }
   if (job.job_type === "factory.learn") {
     // Learning recomputes the brand's patterns per surface. The run finishes here only when its own creatives have a measured outcome;
-    // otherwise it stays running, and the run row says what it waits for (learn.ts).
-    return learnForRun(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
+    // otherwise it stays running, and the scheduler checks it again on the measurement cadence.
+    const result = await learnForRun(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId });
+    if (result.startsWith("learn:waiting") && job.brand_id) {
+      await scheduleLearnRecheck(sql, {
+        organizationId: job.organization_id,
+        brandId: job.brand_id,
+        runId,
+        niche: text(payload.niche),
+      });
+    } else if (result.startsWith("learned:")) {
+      await clearLearnRecheck(sql, runId);
+    }
+    return result;
   }
   return `queued:${job.job_type}`;
 }
@@ -400,23 +430,6 @@ async function decodeStoredAds(sql: Sql, organizationId: string, brandId: string
   return count;
 }
 
-/** The delivery facts the collector stored with an ad. A row without the stop-time key predates it, so nothing is known. */
-type Delivery = { stillRunning: boolean | null; countries: string[] };
-
-function deliveryOf(sourceMetrics: string): Delivery {
-  let record: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(sourceMetrics) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) record = parsed as Record<string, unknown>;
-  } catch {
-    record = {};
-  }
-  if (!("stoppedAt" in record)) return { stillRunning: null, countries: [] };
-  const stoppedAt = typeof record.stoppedAt === "string" && record.stoppedAt ? record.stoppedAt : null;
-  const countries = Array.isArray(record.countries) ? record.countries.filter((item): item is string => typeof item === "string") : [];
-  return { stillRunning: stoppedAt === null, countries };
-}
-
 /** The caps a grade's engine calls are held to, in cents: the run's effective caps, null where none is set. */
 type GradeCaps = { totalCents: number | null; dailyCents: number | null };
 
@@ -470,7 +483,7 @@ async function gradeStoredAds(
     order by captured_at desc
     limit 80
   `;
-  const delivered = new Map(ads.map((ad) => [ad.id, deliveryOf(ad.source_metrics)]));
+  const delivered = new Map(ads.map((ad) => [ad.id, deliveryFactsOf(ad.source_metrics)]));
   // Variants and track record are counted per advertiser page, from the ads this brand has collected.
   const variantsByPage = new Map<string, number>();
   const knownByPage = new Map<string, number>();
@@ -528,14 +541,14 @@ async function gradeStoredAds(
   // The first reason an engine call was refused in this stage, or null. Every ad is still written, so a refused ad is never left unrecorded.
   let stop: string | null = null;
   for (const ad of ads) {
-    const facts = delivered.get(ad.id) ?? { stillRunning: null, countries: [] };
+    const facts = delivered.get(ad.id) ?? { stillRunning: null, countries: null };
     const known = knownByPage.get(ad.page_id) ?? 0;
     const timeline = buildAdTimeline({
       sightings: [
         {
           seenAt: String(ad.published_at || ad.captured_at),
           platforms: parseList(ad.platforms),
-          countries: facts.countries,
+          countries: facts.countries ?? [],
           reachLow: null,
           reachHigh: null,
           stillRunning: facts.stillRunning,
@@ -544,12 +557,20 @@ async function gradeStoredAds(
       siblingVariants: variantsByPage.get(ad.page_id) ?? 1,
     });
     if (!timeline) continue;
+    const countryCount = facts.countries === null ? null : timeline.countries.length;
+    let platformCount: number | null;
+    try {
+      const parsed = JSON.parse(ad.platforms) as unknown;
+      platformCount = Array.isArray(parsed) ? timeline.platforms.length : null;
+    } catch {
+      platformCount = null;
+    }
     const scored = winnerScore({
       daysRunning: timeline.daysRunning,
       stillRunning: timeline.stillRunning,
       iterationCount: Math.max(1, timeline.siblingVariants),
-      countries: timeline.countries.length,
-      platforms: timeline.platforms.length,
+      countries: countryCount,
+      platforms: platformCount,
       // Of this advertiser's ads whose delivery the source reported, the share still delivering. Unknown when none are.
       advertiserSurvivorRate: known > 0 ? (runningByPage.get(ad.page_id) ?? 0) / known : null,
       // No quality measure is stored for an ad yet, so quality is unknown, not a fixed value.
@@ -616,7 +637,9 @@ async function gradeStoredAds(
         }
       }
     }
+    const countriesJson = facts.countries === null ? "null" : JSON.stringify(timeline.countries);
     const id = `tl:${brandId}:${ad.id}`;
+    await keepEarlierGrade(sql, organizationId, brandId, ad.id, previous, stored);
     await sql`
       insert into ad_timelines (
         id, organization_id, brand_id, research_ad_id, first_seen, last_seen, still_running, days_running,
@@ -625,7 +648,7 @@ async function gradeStoredAds(
         jev_gate_record_id, jev_votes, graded_by_run_id
       ) values (
         ${id}, ${organizationId}, ${brandId}, ${ad.id}, ${timeline.firstSeen}, ${timeline.lastSeen}, ${timeline.stillRunning},
-        ${timeline.daysRunning}, ${timeline.siblingVariants}, ${JSON.stringify(timeline.platforms)}, ${JSON.stringify(timeline.countries)},
+        ${timeline.daysRunning}, ${timeline.siblingVariants}, ${JSON.stringify(timeline.platforms)}, ${countriesJson},
         ${timeline.reachLow}, ${timeline.reachHigh}, ${scored.score}, ${scored.low}, ${scored.high}, ${JSON.stringify(scored.evidence)},
         ${stored.status}, ${stored.action}, ${stored.reason}, ${stored.engineId}, ${stored.model}, ${stored.questionVersions},
         ${stored.policyVersion}, ${stored.gateRecordId}, ${stored.votes}, ${stored.gradedBy}
@@ -645,6 +668,44 @@ async function gradeStoredAds(
   return { count, stop };
 }
 
+function gradeRecordOf(grade: StoredGrade): GradeRecord {
+  return {
+    jev_status: grade.status,
+    jev_action: grade.action,
+    jev_reason: grade.reason,
+    jev_engine_id: grade.engineId,
+    jev_model: grade.model,
+    jev_question_versions: grade.questionVersions,
+    jev_policy_version: grade.policyVersion,
+    jev_gate_record_id: grade.gateRecordId,
+  };
+}
+
+/** Copies the grade a new grade replaces. The same grade is not copied again, and the copy is never updated. */
+async function keepEarlierGrade(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  researchAdId: string,
+  previous: StoredGrade | null,
+  next: StoredGrade,
+): Promise<void> {
+  if (!previous) return;
+  const fingerprint = predictionFingerprint(gradeRecordOf(previous));
+  if (fingerprint === predictionFingerprint(gradeRecordOf(next))) return;
+  await sql`
+    insert into ad_timeline_grades (
+      id, organization_id, brand_id, research_ad_id, fingerprint, jev_status, jev_action, jev_reason,
+      jev_engine_id, jev_model, jev_question_versions, jev_policy_version, jev_gate_record_id, graded_by_run_id
+    ) values (
+      ${`grade:${brandId}:${researchAdId}:${fingerprint}`}, ${organizationId}, ${brandId}, ${researchAdId}, ${fingerprint},
+      ${previous.status}, ${previous.action}, ${previous.reason}, ${previous.engineId}, ${previous.model},
+      ${previous.questionVersions}, ${previous.policyVersion}, ${previous.gateRecordId}, ${previous.gradedBy ?? ""}
+    )
+    on conflict (organization_id, brand_id, research_ad_id, fingerprint) do nothing
+  `;
+}
+
 /**
  * The reason a grade's engine call is refused now, or null. The kill switch and the run's caps are read before each call, against the
  * spend recorded so far, so a cap reached earlier in the stage refuses the next call and the call that would pass it is not made. The
@@ -656,7 +717,19 @@ async function gradeCallStop(sql: Sql, input: { organizationId: string; brandId:
 }
 
 /** The run's settings the plan reads. The plan takes its formats, automation, intent and spend cap from the run, and nothing else. */
-type PlanSettings = PlanRun;
+type PlanSettings = PlanRun & {
+  video?: { aspectRatio: "9:16" | "1:1" | "16:9" | "4:5"; durationSeconds: number } | null;
+  briefPrompt?: string | null;
+};
+
+async function savedPlanLine(sql: Sql, organizationId: string, brandId: string) {
+  const line = await loadSavedFactoryPipelineConfig(sql, organizationId, brandId);
+  if (!line) return null;
+  return {
+    video: { aspectRatio: line.generationParams.aspectRatio, durationSeconds: line.generationParams.durationSeconds },
+    briefPrompt: line.prompts.briefPrompt,
+  };
+}
 
 /**
  * The storyboard and the CreativePlan of each pick of this run (NORTH_STAR section 5, plan). The storyboard is the framework of the
@@ -728,6 +801,8 @@ async function persistTemplates(
           audience,
           run: settings,
           now,
+          video: settings.video,
+          briefPrompt: settings.briefPrompt,
         });
         plan = storedPlanOf(attributes, creativePlan);
         plans += 1;
@@ -745,12 +820,28 @@ async function persistTemplates(
   return { templates, plans, refused };
 }
 
+async function variantsMadeToday(sql: Sql, organizationId: string, brandId: string): Promise<number> {
+  const rows = await sql<{ n: number }>`
+    select count(*)::int as n from factory_variants
+    where organization_id = ${organizationId} and brand_id = ${brandId} and created_at >= date_trunc('day', now())
+  `;
+  return rows[0]?.n ?? 0;
+}
+
 /**
  * The variants of each planned pick (NORTH_STAR section 5, plan). A pick gets its control, and one variant for each entry the brain
  * supplies, changing one attribute. Every row records the attribute it tests: "control" for the control. The run's variant cap bounds
  * the rows written across all picks, and a pick the cap has no room for gets none.
  */
-async function persistVariants(sql: Sql, organizationId: string, brandId: string, runId: string, maxVariants: number): Promise<number> {
+async function persistVariants(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  runId: string,
+  maxVariants: number,
+  videosPerConcept: number | null = null,
+  dailyCap: number | null = null,
+): Promise<number> {
   const templates = await sql<{ id: string; plan: string }>`
     select id, plan from factory_templates
     where organization_id = ${organizationId} and brand_id = ${brandId} and id like ${`tpl:${runId}:%`} and plan <> ''
@@ -758,20 +849,30 @@ async function persistVariants(sql: Sql, organizationId: string, brandId: string
   `;
   const brain = await loadFactoryBrain(sql, organizationId, brandId);
   const entries = brainEntriesOf(brain.values);
+  const held = holdoutItemIds(await sql<{ item_id: string; arm: string }>`
+    select item_id, arm from factory_holdouts
+    where organization_id = ${organizationId} and brand_id = ${brandId} and run_id = ${runId}
+  `);
+  const madeToday = dailyCap === null ? 0 : await variantsMadeToday(sql, organizationId, brandId);
+  let dailyRoom = dailyCap === null ? Number.POSITIVE_INFINITY : Math.max(0, dailyCap - madeToday);
   let budget = Math.max(0, maxVariants);
   let count = 0;
   for (const template of templates) {
-    if (budget <= 0) break;
+    if (budget <= 0 || dailyRoom <= 0) break;
+    if (held.has(template.id)) continue;
     const stored = parseStoredPlan(template.plan);
     if (!stored) continue;
     const control: PlanAttributes = stored.attributes;
+    const room = videosPerConcept === null ? budget : Math.min(budget, Math.max(0, videosPerConcept));
     const rows: Array<{ attribute: string; attributes: PlanAttributes }> = [
       { attribute: "control", attributes: control },
-      ...variantsOf(control, entries, budget - 1).map((variant) => ({ attribute: variant.attribute, attributes: variant.attributes })),
-    ].slice(0, budget);
+      ...variantsOf(control, entries, Math.max(0, room - 1)).map((variant) => ({ attribute: variant.attribute, attributes: variant.attributes })),
+    ].slice(0, room);
+    let considered = 0;
     for (const [index, row] of rows.entries()) {
+      if (dailyRoom <= 0) break;
       const id = `var:${template.id}:${index}`;
-      await sql`
+      const inserted = await sql<{ id: string }>`
         insert into factory_variants (
           id, organization_id, brand_id, template_id, hook, cta, presenter, length_ms, gate_result, tests_attribute, angle, format, proof
         ) values (
@@ -780,10 +881,13 @@ async function persistVariants(sql: Sql, organizationId: string, brandId: string
           ${row.attributes.format}, ${row.attributes.proof}
         )
         on conflict (id) do nothing
+        returning id
       `;
+      considered += 1;
       count += 1;
+      if (inserted.length > 0) dailyRoom -= 1;
     }
-    budget -= rows.length;
+    budget -= considered;
   }
   return count;
 }
@@ -820,11 +924,13 @@ export function variantGateVerdicts(input: {
   rules: { approved: string[]; banned: string[] };
   /** The rights recorded for the variant's creatives: the two licences and the AI-label confirmation (rights.ts). */
   rights: { musicLicensed: boolean; footageLicensed: boolean; aiLabeled: boolean };
+  /** A saved line can turn an unapproved claim into review. Omitted means the strict gate, which blocks it. */
+  strictClaimGate?: boolean;
 }): GateVerdict[] {
   return [
     originalityGate({ frameHashDistance: null, embeddingDistance: null, textSimilarity: null }),
     brandGate({ logoPresent: null, paletteMatch: null, productLooksRight: null }),
-    claimsGate({ claims: recordedClaimsOf(input.storyboard ?? ""), approvedClaims: input.rules.approved, bannedWords: input.rules.banned }),
+    claimsGate({ claims: recordedClaimsOf(input.storyboard ?? ""), approvedClaims: input.rules.approved, bannedWords: input.rules.banned, strict: input.strictClaimGate }),
     // This job runs no policy check, so no flag is known. Unknown is review; it is never recorded as a pass.
     policyGate({ beforeAfter: null, personalAttribute: null, healthClaim: null, financeClaim: null }),
     // The three inputs come from the records for the variant's creatives (rights.ts): the two licences and the AI-label confirmation.
@@ -922,13 +1028,15 @@ async function gateVariantRows(
   variants: Array<{ id: string; storyboard: string | null }>,
   rules: { approved: string[]; banned: string[] },
 ): Promise<number> {
+  const line = await loadSavedFactoryPipelineConfig(sql, organizationId, brandId);
+  const strictClaimGate = line?.gradingThresholds.strictClaimGate !== false;
   let count = 0;
   for (const variant of variants) {
     const jev = await creativeQaVerdict(sql, organizationId, brandId, variant.id);
     const creativeIds = await creativeIdsOfVariant(sql, organizationId, brandId, variant.id);
     const licences = await licencesForCreatives(sql, organizationId, brandId, creativeIds);
     const rights = variantLicenceFlags(creativeIds, licences);
-    const combined = combineGates([...variantGateVerdicts({ storyboard: variant.storyboard, rules, rights }), jev]);
+    const combined = combineGates([...variantGateVerdicts({ storyboard: variant.storyboard, rules, rights, strictClaimGate }), jev]);
     await sql`
       update factory_variants set gate_result = ${combined.result}
       where id = ${variant.id} and organization_id = ${organizationId} and brand_id = ${brandId}

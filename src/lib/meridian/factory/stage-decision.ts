@@ -34,6 +34,8 @@ export type StageDecisionInput = {
   brandDailyCapCents?: number | null;
   /** The brand's metered spend across all of its runs in the last 24 hours, in cents. */
   brandDailySpentCents?: number;
+  /** A saved Factory Line asked manual review not to wait. Gates and publish approval are unchanged. */
+  autoApproveReview?: boolean;
 };
 
 /**
@@ -98,7 +100,7 @@ export function stageDecision(input: StageDecisionInput): StageDecision {
     }
     return { action: "run" };
   }
-  const needsApproval = spends || (input.automation === "manual" && review);
+  const needsApproval = spends || (input.automation === "manual" && review && input.autoApproveReview !== true);
   if (needsApproval && !input.approved) {
     return { action: "await_approval", reason: `This step waits for a person's approval in ${input.automation} mode.` };
   }

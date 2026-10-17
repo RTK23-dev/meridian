@@ -43,7 +43,7 @@ export function EmptyState({ icon, title, reason, action, className }: { icon?: 
 
 export function ErrorState({ message = "We could not load this information.", requestId, detail, onRetry, className }: { message?: string; requestId?: string; detail?: string; onRetry?: () => void; className?: string }) {
   return <Card role="alert" className={cn("space-y-3 border-danger/50", className)}>
-    <div className="flex items-start gap-3"><CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-danger" /><div><h2 className="font-semibold">Something went wrong</h2><p className="mt-1 text-sm text-fg-muted">{message}</p></div></div>
+    <div className="flex min-w-0 items-start gap-3"><CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-danger" /><div className="min-w-0"><h2 className="font-semibold">Something went wrong</h2><p className="mt-1 break-words text-sm text-fg-muted [overflow-wrap:anywhere]">{message}</p></div></div>
     {onRetry ? <Button size="md" variant="secondary" onClick={onRetry}>Try again</Button> : null}
     {requestId ? <p className="text-xs text-fg-muted">Request ID: <code>{requestId}</code></p> : null}
     {detail ? <details className="text-sm"><summary className="cursor-pointer text-fg-muted">Details</summary><pre className="mt-2 overflow-auto rounded bg-surface-2 p-3 text-xs">{detail}</pre></details> : null}

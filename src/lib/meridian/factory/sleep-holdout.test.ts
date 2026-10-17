@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { challengerArmOf, drawOf, holdoutArmOf } from "./sleep-holdout.ts";
+import { challengerArmOf, drawOf, holdoutArmOf, holdoutItemIds } from "./sleep-holdout.ts";
 
 test("a draw is a number in [0, 1), the same for the same key", () => {
   const draw = drawOf("holdout:tpl:run_1:research_1");
@@ -50,4 +50,14 @@ test("with a registered version, a share of 1 routes every call to a challenger 
 test("a bad share throws rather than routing", () => {
   assert.throws(() => holdoutArmOf("tpl:x", 1.5), /between 0 and 1/);
   assert.throws(() => challengerArmOf("call", -0.1, ["v1"]), /between 0 and 1/);
+});
+
+test("production reads only the holdout arm", () => {
+  const held = holdoutItemIds([
+    { item_id: "tpl:run:a", arm: "holdout" },
+    { item_id: "tpl:run:b", arm: "treated" },
+    { item_id: "tpl:run:c", arm: "holdout" },
+  ]);
+  assert.deepEqual([...held].sort(), ["tpl:run:a", "tpl:run:c"]);
+  assert.equal(holdoutItemIds([]).size, 0);
 });

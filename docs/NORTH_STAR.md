@@ -1,9 +1,9 @@
 # North Star: what Meridian is for
 
-Read this before any other document. It is written by the owner's lead engineer for the coding agents that build Meridian.
+People running Meridian should start with the [README](../README.md). This file is the product direction for anyone changing the code.
 It says what the owner is trying to build, which decisions are already made, how the existing code maps onto the goal, and
 what to build next, in order. When this file and another document disagree about direction, this file wins. The numbered
-rules in `ARCHITECTURE_CONTRACTS.md` still hold.
+rules in `ARCHITECTURE_CONTRACTS.md` still hold. The dated build record is under [engine/](engine/PHASE_LOG.md). It is not the product guide.
 
 ## 1. The product in one paragraph
 
@@ -43,7 +43,7 @@ These were decided by the owner. Do not reopen them in code, docs or PRs.
    providers, manual upload, and others later). The person chooses a provider or lets the capability matrix choose. No
    provider is hard-wired as the only path.
 7. **Choice everywhere** (section 4): automation mode, decision engine, intent (post or ad), format, platform and provider.
-8. **The Content Factory must be made better.** Today most of its stages are placeholders (section 5).
+8. **The Content Factory must keep getting better.** The stages are built and tested on recorded fixtures. A live path is not done until a live run is recorded. What is still open is [ROADMAP.md](ROADMAP.md). Do not mark a live provider done without that run, and do not invent its result.
 
 ## 3. What already exists, mapped to the loop
 
@@ -87,22 +87,8 @@ Mapping of the old values: Factory 0 = Gather and Grade only; 1 = up to Gate; 2 
 
 ## 5. Content Factory v2
 
-Current state, stage by stage (`factory/worker.ts`):
-
-| Stage                 | Today                                                                                   | Problem                                           |
-| --------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| discover              | gathers the crawler, social scraper, registry adapters and Ad Library; records each source's state on the run | uploads are not connected: no upload intake stores one yet |
-| ingest                | returns whether media snapshots are allowed                                             | ingests nothing                                   |
-| decode                | decodes stored research ads into DNA                                                    | works; keep                                       |
-| grade                 | winner score from the delivery the source stored: `stillRunning` is unknown (null) when the source gave no stop time, countries come from the source, quality is null | observed signal only; JEV not used                |
-| trend                 | clusters stored DNA                                                                     | works; keep                                       |
-| pick                  | counts rows                                                                             | picks nothing                                     |
-| template              | storyboards the 10 newest DNA rows                                                      | ignores the grades                                |
-| produce               | writes 8 rows per template from a fixed list of hooks and CTAs                          | produces no media; not linked to Studio creatives |
-| gate                  | runs the rule gates on storyboards                                                      | keep; add JEV QA                                  |
-| review                | counts the variants waiting for a person; never finishes the run                        | JEV QA is not in the gate (section 8, item 7)     |
-| launch / test / learn | launch and test return fixed strings; learn returns `learn:not-built` and the run stays running | no publish, no measure, no learn; no run finishes |
-| costs                 | no figure is written; a stage writes a cost only from a metered provider call, and none does yet | spend caps are declared, not enforced (FACTORY.md) |
+The stage table that used to live here described the Factory before the 2026-10-15 build. It is no longer the current state.
+What each stage does now, and what is still open, is [FACTORY.md](FACTORY.md). Section 8 below is the work queue and its status.
 
 Target behaviour:
 
@@ -171,8 +157,8 @@ merged and tested on recorded fixtures. No criterion has been checked against a 
    _Accept:_ no `S3` references outside the changelog; no fixed cost figures in `factory/worker.ts`; tests cover the null
    and no-receipt cases.
    _Status: partly done. `storage/s3.ts` is gone and `.env.example` has no `S3_` variable. Factory cost estimates were removed
-   (CHANGELOG 0.1.0-beta.11), and telemetry stores an unknown impression count as null. Open: S3 is still named in text in `src/engine`
-   and `src/lib/meridian/storage`, and `src/engine/render/hyperframesCloud.ts` (line 42) describes a direct upload to S3 presigned URLs.
+   (CHANGELOG 0.1.0-beta.11), and telemetry stores an unknown impression count as null. The HyperFrames upload comment no longer names S3.
+   Open: S3 is still named in comments that record the retirement, in `src/engine` and `src/lib/meridian/storage`.
    The no-receipt rule was not re-checked in this pass._
 2. **Run settings.** One settings model (section 4) with brand defaults and per-run overrides, a migration, server-side
    validation, and the old three vocabularies mapped onto it.

@@ -6,6 +6,7 @@ import { PlainErrorState } from "@/components/plain-error";
 import { FormError } from "@/components/settings/form-error";
 import { plainServerError } from "@/components/settings/form-model";
 import { ProviderCard, type CardAction } from "@/components/settings/provider-card";
+import { KeyForm } from "@/components/settings/setup-panel";
 import {
   INTEGRATION_GROUPS, integrationCards, processRows, publishingLine,
   type CardModel, type ProviderSummaries, type SummaryState, type SystemStatus,
@@ -42,7 +43,7 @@ function Integrations() {
   // Connecting leaves the page for the provider's consent screen, so it refreshes nothing here.
   const connect = useScopedMutation({
     mutationKey: connectKey,
-    mutationFn: (provider: OAuthProvider) => beginOauth({ data: { organizationId, provider, origin: window.location.origin } }),
+    mutationFn: (provider: OAuthProvider) => beginOauth({ data: { organizationId, provider, origin: window.location.origin, returnTo: "/integrations" } }),
     onSuccess: (result) => window.location.assign(result.url),
   });
   const probe = useScopedMutation({
@@ -155,19 +156,26 @@ function Integrations() {
     return [];
   }
 
-  function linkFor(card: CardModel): { to: "/settings"; label: string } | undefined {
-    if (!canAdmin) return undefined;
-    if (card.id === "google_ai_studio") return { to: "/settings", label: "Key settings" };
-    return undefined;
+  function keyField(category: "perception" | "meta_ad_library", label: string) {
+    if (!canAdmin || !summaries.data) return undefined;
+    const summary = (summaries.data as ProviderSummaries)[category];
+    return (
+      <KeyForm
+        row={{ label, fingerprint: summary?.keyFingerprint ?? null, removable: summary?.source === "workspace" }}
+        organizationId={organizationId}
+        canAdmin={canAdmin}
+        category={category}
+      />
+    );
   }
 
   return (
-    <div className="space-y-10">
+    <div className="min-w-0 space-y-10">
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Integrations</p>
-        <h1 className="page-title">What is actually connected</h1>
+        <h1 className="page-title">Workspace logins</h1>
         <p className="text-fg-muted">
-          A credential in the environment is not a connection. A provider shows as connected only after a request to it succeeds, and it changes again when someone disconnects it.
+          Sign in once for this workspace. Paid ads and performance use this login. A brand still names its own page or ad account on Connected accounts. A login is connected only after a request to it succeeds.
         </p>
       </div>
 
@@ -186,13 +194,13 @@ function Integrations() {
               <h2 id={`group-${group.id}`} className="text-section font-semibold text-fg">{group.label}</h2>
               <p className="text-sm text-fg-muted">{group.hint}</p>
             </div>
-            <ul className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <ul className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {groupCards.map((card) => (
                 <ProviderCard
                   key={card.id}
                   card={card}
                   actions={actionsFor(card)}
-                  link={linkFor(card)}
+                  extra={card.id === "google_ai_studio" ? keyField("perception", "Google AI Studio") : card.id === "ad_library" ? keyField("meta_ad_library", "Meta Ad Library") : undefined}
                   note={!canAdmin && card.kind !== "deployment" ? "An admin tests and changes providers." : undefined}
                 />
               ))}

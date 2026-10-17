@@ -8,7 +8,11 @@
 import type { Sql } from "../learning/store.ts";
 import { getDefaultPipelineConfig, validatePipelineConfig, type FactoryPipelineConfig } from "./pipeline-config.ts";
 
-export async function loadFactoryPipelineConfig(sql: Sql, organizationId: string, brandId: string): Promise<FactoryPipelineConfig> {
+export async function loadSavedFactoryPipelineConfig(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+): Promise<FactoryPipelineConfig | null> {
   const rows = await sql<{
     preset_name: string;
     stages: unknown;
@@ -22,7 +26,7 @@ export async function loadFactoryPipelineConfig(sql: Sql, organizationId: string
     limit 1
   `;
   const row = rows[0];
-  if (!row) return getDefaultPipelineConfig();
+  if (!row) return null;
   return validatePipelineConfig({
     presetName: row.preset_name as FactoryPipelineConfig["presetName"],
     stages: row.stages as FactoryPipelineConfig["stages"],
@@ -30,4 +34,8 @@ export async function loadFactoryPipelineConfig(sql: Sql, organizationId: string
     generationParams: row.generation_params as FactoryPipelineConfig["generationParams"],
     gradingThresholds: row.grading_thresholds as FactoryPipelineConfig["gradingThresholds"],
   });
+}
+
+export async function loadFactoryPipelineConfig(sql: Sql, organizationId: string, brandId: string): Promise<FactoryPipelineConfig> {
+  return (await loadSavedFactoryPipelineConfig(sql, organizationId, brandId)) ?? getDefaultPipelineConfig();
 }
