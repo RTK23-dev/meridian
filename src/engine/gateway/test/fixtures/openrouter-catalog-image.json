@@ -1,0 +1,35 @@
+{
+  "data": [
+    {
+      "id": "bytedance-seed/seedream-4.5",
+      "name": "Seedream 4.5",
+      "architecture": { "input_modalities": ["text", "image"], "output_modalities": ["image"] },
+      "pricing": { "prompt": "0", "completion": "0", "request": "0", "image_output": "0.04" }
+    },
+    {
+      "id": "vendor/text-to-image-flat",
+      "name": "A text-to-image model priced per request",
+      "architecture": { "input_modalities": ["text"], "output_modalities": ["image"] },
+      "pricing": { "prompt": "0", "completion": "0", "request": "0.02" }
+    },
+    {
+      "id": "google/gemini-image-tokens",
+      "name": "A model priced per token only",
+      "architecture": { "input_modalities": ["text", "image"], "output_modalities": ["image", "text"] },
+      "pricing": { "prompt": "0.0000003", "completion": "0.0000025", "request": "0" }
+    },
+    {
+      "id": "vendor/text-only",
+      "name": "A row that does not list image as an output",
+      "architecture": { "input_modalities": ["text"], "output_modalities": ["text"] },
+      "pricing": { "request": "0.01" }
+    },
+    {
+      "id": "vendor/variable-price",
+      "name": "A model whose price is variable (-1)",
+      "architecture": { "input_modalities": ["text"], "output_modalities": ["image"] },
+      "pricing": { "image_output": "-1", "request": "-1" }
+    },
+    { "id": 42, "name": "A row whose id is not a string" }
+  ]
+}

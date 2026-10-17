@@ -1,5 +1,25 @@
 # Gateway status
 
+## Model catalog (Bible 10.5 step 1, contract v7; 2026-10-17)
+
+- `catalog.ts`: `readModelCatalog(gateway, { organizationId, now? }): Promise<CatalogRead>` reads `GET /videos/models`,
+  `GET /models?output_modalities=image` and `GET /models?output_modalities=speech` through `gateway.call` (no fetch, key from the
+  credential source) and returns `{ readAt, entries: ModelCatalogEntry[], dropped, failed, videoListing }`, or `not_connected` with a
+  `NOT_CONNECTED:` reason (no key or a refused key; nothing more is sent). Rows are parsed with zod; a row that does not parse, cannot be
+  mapped, or has no positive price the engine can estimate from is dropped with its reason. Video: per-second SKU
+  `per-video-second-1080p`, then `per-video-second`. Image: `image_output` (per image), then `request`. Speech: `request`. Token-only,
+  zero and `-1` prices are dropped. Video rows serve `video.cinematic` and `video.budget` only (never `video.i2v_pinned`, which needs the
+  E2 frame test; never `avatar`, which the listing does not mark). Unknown capabilities stay null.
+- `modelCatalogCache({ gateway, ttlMs?, now? })`: per-workspace in-memory cache, TTL `adapters.catalog.ttlMs` (initial 10 min). Only a
+  read with no failed listing is kept; concurrent reads share one request set.
+- `catalog-fit.ts`: `eligibleCandidates(need: ModelNeed, entries) => { eligible, rejected: { id, reason, detail }[] }` with
+  `ModelNeed = { modelClass, durationSeconds, aspect: "9:16", resolution, firstFrame, lastFrame, refCount, audio }` and 16 rejection
+  reasons (`REJECTION_REASONS`); `rankCandidates(modelClass, eligible, ranked = modelPreferences.ranked)` (empty table: no reordering).
+- Tests: `catalog.test.ts` (12), `catalog-fit.test.ts` (22). Fixtures `test/fixtures/openrouter-catalog-*.json`.
+- **Unverified live**: the `pricing_skus` keys, the `/models` pricing field names and units (`image_output` per image), the speech
+  modality name, and whether `GET /models` pages (PROVIDER_APIS.md saw 10 of "400+" entries with `has_more: false`). The owner's live run:
+  `readModelCatalog` against a real key, compared with the fixtures.
+
 ## E3 (branch `eng-e3-pipeline`)
 
 - `download.ts`: `gatewayDownloader(gateway)` fetches a finished provider file (a generated take, a stock clip) through

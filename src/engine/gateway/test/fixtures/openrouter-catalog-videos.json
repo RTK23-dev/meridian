@@ -1,0 +1,79 @@
+{
+  "data": [
+    {
+      "id": "kwaivgi/kling-v3.0-std",
+      "canonical_slug": "kwaivgi/kling-v3.0-std",
+      "name": "Kling v3.0 Standard",
+      "generate_audio": true,
+      "supported_durations": [5, 10],
+      "supported_resolutions": ["720p", "1080p"],
+      "supported_aspect_ratios": ["9:16", "16:9"],
+      "supported_frame_images": ["first_frame", "last_frame"],
+      "supported_sizes": [],
+      "pricing_skus": { "per-video-second": "0.126", "per-video-second-1080p": "0.14" },
+      "seed": true,
+      "allowed_passthrough_parameters": []
+    },
+    {
+      "id": "google/veo-3.1-lite",
+      "canonical_slug": "google/veo-3.1-lite",
+      "name": "Veo 3.1 Lite",
+      "generate_audio": true,
+      "supported_durations": [4, 6, 8],
+      "supported_resolutions": ["720p", "1080p"],
+      "supported_aspect_ratios": ["9:16", "16:9"],
+      "supported_frame_images": ["first_frame"],
+      "supported_sizes": [],
+      "pricing_skus": { "per-video-second": "0.05" },
+      "seed": true,
+      "allowed_passthrough_parameters": []
+    },
+    {
+      "id": "alibaba/wan-2.6",
+      "canonical_slug": "alibaba/wan-2.6",
+      "name": "Wan 2.6",
+      "generate_audio": false,
+      "supported_durations": [5],
+      "supported_resolutions": ["1080p"],
+      "supported_aspect_ratios": ["9:16"],
+      "supported_sizes": [],
+      "pricing_skus": { "per-video-second-1080p": "0.0425" },
+      "seed": true,
+      "allowed_passthrough_parameters": []
+    },
+    {
+      "id": "bytedance/seedance-2.0",
+      "canonical_slug": "bytedance/seedance-2.0",
+      "name": "Seedance 2.0 (no pricing listed)",
+      "generate_audio": false,
+      "supported_durations": [5, 10],
+      "supported_resolutions": ["1080p"],
+      "supported_aspect_ratios": ["9:16", "16:9"],
+      "supported_frame_images": [],
+      "supported_sizes": []
+    },
+    {
+      "id": "vendor/free-preview",
+      "name": "A model listed at zero",
+      "supported_durations": [5],
+      "supported_resolutions": ["1080p"],
+      "supported_aspect_ratios": ["9:16"],
+      "pricing_skus": { "per-video-second": "0" }
+    },
+    {
+      "id": "vendor/per-video-only",
+      "name": "A model priced per video, not per second",
+      "supported_durations": [5],
+      "supported_resolutions": ["1080p"],
+      "supported_aspect_ratios": ["9:16"],
+      "pricing_skus": { "per-video": "0.50" }
+    },
+    {
+      "id": "broken/entry",
+      "name": "A row that does not match the listing shape",
+      "supported_durations": "five",
+      "pricing_skus": { "per-video-second": "0.1" }
+    },
+    "not an object"
+  ]
+}

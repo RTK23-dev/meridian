@@ -32,7 +32,7 @@ test("every Tunable in the config has floor <= value <= ceiling", () => {
   collectTunables(weights, "weights", found);
   collectTunables(budgets, "budgets", found);
   collectTunables(adapters, "adapters", found);
-  assert.equal(found.length, 78, `expected 78 tunables (thresholds 46, weights 16, budgets 1, adapters 15), found ${found.length}`);
+  assert.equal(found.length, 79, `expected 79 tunables (thresholds 46, weights 16, budgets 1, adapters 16), found ${found.length}`);
   for (const [path, value] of found) {
     assert.ok(value.floor <= value.value && value.value <= value.ceiling, `${path} is outside its bounds`);
     assert.ok(Number.isFinite(value.value), `${path} is not finite`);
@@ -72,6 +72,7 @@ test("the assets constants moved to config keep the values assets/STATUS.md reco
   assert.equal(adapters.retry.backoffCapMs.value, 30_000);
   assert.equal(adapters.reliabilityWindowMs, 7 * 24 * 60 * 60 * 1000);
   assert.equal(adapters.timeoutsMs.videoSubmit.value, 60_000);
+  assert.equal(adapters.catalog.ttlMs.value, 10 * 60_000, "the catalog read is kept for 10 minutes (initial, Bible 10.5 step 1)");
   assert.equal(adapters.timeoutsMs.image.value, 120_000);
   assert.equal(adapters.timeoutsMs.speech.value, 120_000);
   assert.equal(adapters.timeoutsMs.pexels.value, 30_000);

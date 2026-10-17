@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "id": "elevenlabs/eleven-v4",
+      "name": "Eleven v4",
+      "architecture": { "input_modalities": ["text"], "output_modalities": ["speech"] },
+      "pricing": { "prompt": "0", "completion": "0", "request": "0.003" }
+    },
+    {
+      "id": "google/gemini-flash-tts",
+      "name": "A speech model priced per token only",
+      "architecture": { "input_modalities": ["text"], "output_modalities": ["speech"] },
+      "pricing": { "prompt": "0.0000005", "completion": "0.000009" }
+    }
+  ]
+}

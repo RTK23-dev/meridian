@@ -48,6 +48,12 @@ export const adapters = {
     urlMaxLength: tunable(2048, 256, 8192),
   },
 
+  // OpenRouter's model catalog (Bible 10.5 step 1, gateway/catalog.ts). A read is kept in memory for this long, per workspace, then
+  // read again (the listings are free). Initial value: the Bible says "cached with its read time" and gives no lifetime.
+  catalog: {
+    ttlMs: tunable(10 * 60_000, 60_000, 6 * 60 * 60_000),
+  },
+
   // Stock search page sizes (assets/providers/pexels.ts, pixabay.ts). Pixabay's documented per_page range is 3 to 200
   // (PROVIDER_APIS.md). The Pexels ceiling is a proposal: PROVIDER_APIS.md does not give one. Integers.
   stock: {

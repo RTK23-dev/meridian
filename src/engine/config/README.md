@@ -27,7 +27,8 @@ Bible marks initial, in one versioned place. Logic elsewhere reads these; it nev
   overrun alert share (14.4) and the production mode (`cap`). There is no default budget by format: the user sets it.
 - `adapters.ts` (`adapters@1`): the provider adapter and router settings that the assets code held as constants: polling and
   retry timing (5 s, 1 s base, 30 s cap), HTTP timeouts per provider, output byte and URL limits (`normalise.ts`), and stock
-  page sizes. It also holds the 1080 x 1920 output (Bible 1) and the 7-day reliability window (10.2). The Bible gives none of
+  page sizes, and the model catalog's cache lifetime (`catalog.ttlMs`, initial 10 min, Bible 10.5 step 1). It also holds the
+  1080 x 1920 output (Bible 1) and the 7-day reliability window (10.2). The Bible gives none of
   the timing, limit or page-size numbers, so each is a Tunable with bounds (a proposal).
 - `tunable.ts`: `Tunable { value, floor, ceiling }`, `tunable(...)` (refuses a value outside its bounds) and
   `clampTunable(next, current, maxChangeShare = 0.15)` (section 16.3).

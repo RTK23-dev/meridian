@@ -19,6 +19,33 @@ export {
   type StructuredChatResult,
   type VideoSubmitInput,
 } from "./openrouter.ts";
+export {
+  CATALOG_SOURCES,
+  CATALOG_VIDEO_CLASSES,
+  VIDEO_SECOND_SKUS,
+  modelCatalogCache,
+  parseModelsCatalog,
+  parseVideoCatalog,
+  readModelCatalog,
+  type CatalogDrop,
+  type CatalogFailure,
+  type CatalogRead,
+  type CatalogSource,
+  type ModelCatalog,
+  type ModelCatalogSource,
+} from "./catalog.ts";
+export {
+  ESTIMABLE_UNITS,
+  REJECTION_REASONS,
+  eligibleCandidates,
+  isTimedClass,
+  rankCandidates,
+  rejectionOf,
+  type CandidateFit,
+  type CandidateRejection,
+  type ModelNeed,
+  type RejectionReason,
+} from "./catalog-fit.ts";
 export { meridianCredentialSource, type MeridianResolver } from "./meridian.ts";
 export { fetchHttpTransport } from "./transport.ts";
 export { textTransport } from "./text.ts";
