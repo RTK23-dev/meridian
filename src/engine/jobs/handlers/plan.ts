@@ -24,6 +24,7 @@ import { readArtifact, writeArtifact, type StoredArtifact } from "../artifact-st
 import type { StageContext, StageHandler, StageRunResult, ShotSummary } from "../types.ts";
 import { notImplementedError } from "../types.ts";
 import type { KitScope, ResolvedKits } from "./intake.ts";
+import { scriptOf, writtenScriptOf } from "../../script/resolve.ts";
 
 /**
  * The ports the plan stage needs from outside: the kit store (the same port intake uses) and the Claude client's deps for one
@@ -93,6 +94,15 @@ async function readInputOfType(ctx: StageContext, type: ArtifactType): Promise<S
   throw new EngineError("invalid_input", `${ctx.stage} needs its ${type} input artifact, and none of its inputs is one`, { stage: ctx.stage });
 }
 
+/** Every input artifact of the job, read (Bible 5.1: the job reads only its inputs). */
+async function inputArtifacts(ctx: StageContext): Promise<StoredArtifact[]> {
+  const stored: StoredArtifact[] = [];
+  for (const artifactId of ctx.payload.inputArtifactIds) {
+    stored.push(await readArtifact(ctx.sql, { organizationId: ctx.organizationId, artifactId }));
+  }
+  return stored;
+}
+
 /** The plan stage. Pass the ports the worker wires. Missing kits and missing reservations fail closed (see the file header). */
 export function createPlanHandler(ports: PlanPorts): StageHandler {
   return {
@@ -123,6 +133,10 @@ export function createPlanHandler(ports: PlanPorts): StageHandler {
       }
 
       const request = validated.request;
+      // The words the plan covers: the request's script, or the written script of a brief (contract v8). A brief whose script is not
+      // among the inputs is an internal error, never an empty plan.
+      const written = writtenScriptOf(await inputArtifacts(ctx), ctx.requestId);
+      const script = scriptOf(request, written);
       const kits = await ports.loadKits({ organizationId: ctx.organizationId, request });
       const bodies: PlanKitBodies = {
         ...(kits.styleKit === undefined ? {} : { styleKit: kits.styleKit }),
@@ -153,6 +167,7 @@ export function createPlanHandler(ports: PlanPorts): StageHandler {
         attempt,
         signal: ctx.signal,
         request,
+        script,
         validated,
         voice: voiceParsed.data,
         dna: dnaParsed.data,

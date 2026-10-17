@@ -12,8 +12,13 @@
 //     composition with no shotPorts keeps both stages not_implemented, which fails closed. The chain's providerUrl (Bible 10.1) is
 //     built by productionComposition from the gateway's base URLs and Meridian's signer. A chain provider with no base URL makes
 //     that link NOT_CONNECTED with its reason (jobs/STATUS.md).
-//   - with their ports: analyze_reference (the `analysis` ports) and voice (the `voice` ports), both W6. Without ports they stay
-//     not_implemented. A composition may also pass a handler for render (W10) through `handlers`.
+//   - with their ports: analyze_reference (the `analysis` ports), write_script (the `writeScript` ports, contract v8) and voice (the
+//     `voice` ports). Without ports each stays not_implemented. Production gives all three (productionComposition, production-stages.ts):
+//     analyze_reference reads the uploaded reference from Meridian's store (store:// uris) as bytes, through the media functions and the speech ports;
+//     write_script writes a brief's script with the scriptwriter; voice speaks through the asset router's speech route. Each is fail closed
+//     on its own: a brief's reference has no speech language yet (analyze stops, nothing is called); the speech output is MP3 and speech has
+//     no bill source, so voice refuses before any call (SPEECH_OUTPUT_BLOCKERS). A composition may also pass a handler for render (W10)
+//     through `handlers`.
 //   - E4 and E5 (this file, later pass): compose, pre_render_gate, variants and deliver are always registered. They need no provider:
 //     the kit store, the engine tables and the reservation's ledger. render (the HyperFrames and Shotstack deps) and
 //     post_render_review (the media, the object store and the Critic) are registered only when composition.render and
@@ -31,8 +36,11 @@ import { isVideoClass, type VideoProfile } from "../assets/providers/openrouterV
 import { adapterFor, stockProviderFor } from "../assets/providers/index.ts";
 import { EngineError, type ModelClass, type ProviderAdapter } from "../contracts/index.ts";
 import { noEligibleVideoModel, videoProfileLoader, type VideoProfileLoader } from "../assets/video-profiles.ts";
-import { createAnalyzeReferenceHandler } from "./handlers/analyze-reference.ts";
-import { createVoiceHandler, type VoiceStagePorts } from "./handlers/voice.ts";
+import { createAnalyzeReferenceHandler, type ReferencePortsFor } from "./handlers/analyze-reference.ts";
+import { createVoiceHandler, type VoicePortsFor, type VoiceStagePorts } from "./handlers/voice.ts";
+import { createWriteScriptHandler, type WriteScriptPorts } from "./handlers/write-script.ts";
+import { productionAnalysisPortsFor, productionReferenceSource, productionVoicePortsFor } from "./production-stages.ts";
+import { engineReferenceStore } from "../../lib/meridian/storage/engine-reference-store.ts";
 import type { ReferencePorts } from "../analyze/reference.ts";
 import { analysisReadings } from "../analyze/frameReader.ts";
 import { deepgramForRoute, deepgramProjects, speechPortsOf, type MediaFunctionsMode, type PictureClient, type SpeechPorts } from "../media/index.ts";
@@ -144,15 +152,28 @@ export type EngineComposition = {
   now?: () => string;
   /** The VideoDNA lookup (Bible 6.1 step 5). Absent, intake fails its dna_lookup check: no lookup is made and nothing is assumed. */
   lookupDna?: IntakePorts["lookupDna"];
-  /** analyze_reference (W6). Its ports are the media functions, the speech connection and the role deps. Absent: not_implemented. */
-  analysis?: ReferencePorts;
+  /**
+   * analyze_reference (W6). Its ports are the media functions, the speech connection and the role deps. A function of the job's reservation
+   * gives them per job (production: the ledger and the Claude deps are per reservation). Absent: not_implemented.
+   */
+  analysis?: ReferencePorts | ReferencePortsFor;
+  /** The media functions (probe, cuts, frames, timeline, loudness, picture). Production: the in-process or the HTTP form (productionComposition). */
+  media?: MediaFunctions;
   /**
    * The picture client (zoom and loop) of the reference readings. With it and without readings in `analysis`, analyze_reference reads
    * captions, shake, speed ramps, zoom and loop through analysisReadings (analyze/frameReader.ts). Absent, the readings stay unknown.
    */
   picture?: PictureClient;
-  /** voice (W6). Its ports are the asset router's speech route, the speech connection and the media functions. Absent: not_implemented. */
-  voice?: VoiceStagePorts;
+  /**
+   * voice (W6). Its ports are the asset router's speech route, the speech connection and the media functions. A function of the job's
+   * reservation gives them per job. Absent: not_implemented.
+   */
+  voice?: VoiceStagePorts | VoicePortsFor;
+  /**
+   * write_script (contract v8): the scriptwriter over the Claude deps and the kit store. Absent: not_implemented, so a brief request stops
+   * at write_script, and a script request never reaches it.
+   */
+  writeScript?: WriteScriptPorts;
   shotPorts?: ShotPorts;
   handlers?: ExternalStageHandlers;
   /** The style kit a validated request names (Bible 13). Absent, the kit store of this database is read. */
@@ -366,8 +387,12 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
   };
 
   if (composition.analysis !== undefined) {
-    handlers.analyze_reference = createAnalyzeReferenceHandler(analysisPortsOf(composition.analysis, composition.picture));
+    // A fixed ReferencePorts serves every job (tests); a function gives each job its own (production: per reservation).
+    const analysis = composition.analysis;
+    const portsFor: ReferencePortsFor = typeof analysis === "function" ? analysis : () => analysis;
+    handlers.analyze_reference = createAnalyzeReferenceHandler((scope) => analysisPortsOf(portsFor(scope), composition.picture));
   }
+  if (composition.writeScript !== undefined) handlers.write_script = createWriteScriptHandler(composition.writeScript);
   if (composition.voice !== undefined) handlers.voice = createVoiceHandler(composition.voice);
 
   // Stages 9 to 14 that need no model call or provider are registered on the kits and the engine tables (E4, E5).
@@ -484,16 +509,40 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
     catalog: modelCatalogCache({ gateway }),
     shotConnection: productionShotConnection({ sql, gateway, mediaFunctionsMode }),
   };
-  return {
+  // The analysis, voice and write_script ports (Bible 6.2, 6.3; contract v8). Their Claude deps and asset router are per reservation, so
+  // they are built from the composition, lazily: each call reads the composition's gateway, clock and stores for its own job.
+  const referenceSource = productionReferenceSource({ sql, store: engineReferenceStore(sql) });
+  const composition: EngineComposition = {
     sql,
     gateway,
     workspaceBudget,
+    media,
+    picture: media.picture,
     render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks, now: isoNow }),
     postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
     providerUrl: productionProviderUrl({ gateway, mediaLinks }),
     shotPorts,
     speech,
+    analysis: productionAnalysisPortsFor({
+      media,
+      speech,
+      roles: (scope) => rolesFor(composition)(scope),
+      source: referenceSource,
+    }),
+    writeScript: {
+      loadKits: kitPorts(sql).loadKits,
+      roleDeps: (scope) => rolesFor(composition)(scope),
+    },
+    voice: productionVoicePortsFor({
+      sql,
+      objects,
+      media,
+      speech,
+      roles: (scope) => rolesFor(composition)(scope),
+      router: (scope) => routerFor(composition, shotPorts, new Map<string, VideoProfile>())({ sql, ...scope }),
+    }),
   };
+  return composition;
 }
 
 /**

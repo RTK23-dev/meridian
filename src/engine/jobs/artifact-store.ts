@@ -16,6 +16,7 @@ import {
   gateResultSchema,
   idSchema,
   manifestSchema,
+  modelChoicesSchema,
   newId,
   productionRequestSchema,
   renderedVideoSchema,
@@ -26,6 +27,7 @@ import {
   validatedRequestSchema,
   videoDnaSchema,
   voiceTrackSchema,
+  writtenScriptSchema,
   type ArtifactEnvelope,
   type ArtifactType,
 } from "../contracts/index.ts";
@@ -49,6 +51,8 @@ export const ARTIFACT_BODY_SCHEMAS: Record<ArtifactType, z.ZodType> = {
   gate_result: gateResultSchema,
   review_result: reviewResultSchema,
   manifest: manifestSchema,
+  written_script: writtenScriptSchema,
+  model_choices: modelChoicesSchema,
 };
 
 /** The envelope's schema name for bodies that carry no schema literal of their own. */

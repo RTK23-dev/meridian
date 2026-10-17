@@ -1,5 +1,11 @@
 # STATUS: storage (engine shot ports, production)
 
+**Engine reference store (this branch, `engine-reference-store.ts`).** The engine's reference video, uploaded to Meridian's store as
+store://<key>, is read under its request's brand and released when the analysis ends: the Drive file the index names is deleted, then the
+storage_objects row. The object store is a parameter (a test passes a fake), and production passes the Drive store (`engineObjectStore`).
+Tests: `engine-reference-store.test.ts` (3, PGlite). Not verified live: the Drive delete and the upload's key format (`../../../engine/jobs/STATUS.md`).
+No other storage file changed.
+
 Added for the production shot ports (src/engine/jobs/runtime.ts, production-ports.ts). The engine reaches these only through its
 composition root, never by importing them into a stage.
 

@@ -4,13 +4,14 @@ import { EngineError, idSchema } from "../contracts/index.ts";
 import { videoDnaFixture, voiceTrackFixture, productionRequestFixture, FIXTURE_IDS } from "../contracts/fixtures/index.ts";
 import { alignBeat, alignmentDecisions, alignShots, DEFAULT_SHOT_LENGTH, shotIdFor, splitBeat, timedWordsOfShot, wordsOfShot, type AlignInput } from "./align.ts";
 import { BLENDER } from "./test/helpers.ts";
+import { scriptOf } from "../script/resolve.ts";
 
 const LIMITS = { minMs: 400, maxMs: 6000 };
 
 function fixtureAlignInput(overrides: Partial<AlignInput> = {}): AlignInput {
   return {
     requestId: FIXTURE_IDS.request,
-    beats: productionRequestFixture.script.beats.map((beat) => ({ beatId: beat.beatId, role: beat.role, emphasis: beat.emphasis })),
+    beats: scriptOf(productionRequestFixture, null).beats.map((beat) => ({ beatId: beat.beatId, role: beat.role, emphasis: beat.emphasis })),
     visualRequests: productionRequestFixture.visualRequests,
     classifications: [{ beatId: "b3", want: BLENDER, properties: ["real_product"] }],
     voice: { durationMs: voiceTrackFixture.durationMs, beatSpans: voiceTrackFixture.beatSpans, words: voiceTrackFixture.words },

@@ -18,6 +18,7 @@ import {
 } from "../contracts/fixtures/index.ts";
 import { buildEdl } from "../edit/editor.ts";
 import { emphasisOf } from "../jobs/handlers/edit.ts";
+import { scriptOf } from "../script/resolve.ts";
 import { assembleVariantEdl } from "./assemble.ts";
 import { variantScenePlan } from "./plan.ts";
 
@@ -53,7 +54,7 @@ function buildMaster(): EditDecisionList {
     referenceDurationMs: videoDnaFixture.durationMs,
     takes: masterTakes,
     kit: styleKitFixture,
-    emphasis: emphasisOf(validatedRequestFixture),
+    emphasis: emphasisOf(scriptOf(validatedRequestFixture.request, null)),
   });
   assert.equal(build.pass, true, `the master's EDL passes the edit rules: ${build.checks.filter((check) => !check.pass).map((check) => check.rule).join(", ")}`);
   if (build.edl === null) throw new Error("the master's EDL is missing");
@@ -70,7 +71,7 @@ function assemblyOf(takes: Take[]) {
     dna: videoDnaFixture,
     takes,
     kit: styleKitFixture,
-    emphasis: emphasisOf(validatedRequestFixture),
+    emphasis: emphasisOf(scriptOf(validatedRequestFixture.request, null)),
   });
 }
 

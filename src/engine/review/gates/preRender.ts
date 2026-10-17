@@ -26,6 +26,7 @@ import {
   type GateResult,
 } from "../../contracts/index.ts";
 import { checkEdl, shotIdOf, type RuleContext } from "../../edit/rules.ts";
+import type { ScriptBody } from "../../script/resolve.ts";
 import { check, asShotIds, gateResult, notEvaluated } from "./common.ts";
 import { shotUsesProductImagery } from "./plan.ts";
 import { slideshowRisk } from "../slideshowRisk.ts";
@@ -40,8 +41,10 @@ export type PreRenderInput = {
   composition: unknown;
   /** The scene plan the EDL was cut from. Parsed here. */
   plan: unknown;
-  /** The validated request: the script beats, the visual requests and the kit references. Parsed here. */
+  /** The validated request: the visual requests and the kit references. Parsed here. */
   validated: unknown;
+  /** The words the video speaks: the request's script, or a brief's written script (script/resolve.ts). Its beats are checked here. */
+  script: ScriptBody;
   /** The voice track the EDL was timed on. Parsed here. */
   voice: unknown;
   /** The reference's video DNA, for the edit grammar. Parsed here. */
@@ -189,12 +192,12 @@ export function checkPreRender(input: PreRenderInput): GateResult {
   );
 
   // 4. Slideshow risk (Bible 12.3): the coded-run rule and the weighted mean, from the plan, the EDL and the script.
-  const slide = slideshowRisk({ shots: plan.shots, edl, beats: validated.request.script.beats });
+  const slide = slideshowRisk({ shots: plan.shots, edl, beats: input.script.beats });
   checks.push(...slide.checks);
   failing.push(...slide.failingShotIds);
 
   // 5. Delivery promise (Bible 12.3): what the plan promised is in the cut.
-  const beats = validated.request.script.beats;
+  const beats = input.script.beats;
   const shotBeats = new Set(plan.shots.map((shot) => shot.beatId));
   const uncovered = beats.filter((beat) => !shotBeats.has(beat.beatId)).map((beat) => beat.beatId);
   checks.push(

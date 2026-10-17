@@ -1,5 +1,10 @@
 # STATUS: analyze_reference (W6), `src/engine/analyze/`, `src/engine/edit/grammar.ts`, `src/engine/claude/roles/genome.ts` and `tightener.ts`
 
+**Brief requests (contract v8, this branch).** `ReferenceSource.resolve` and `release` take the request id (the store's brand). The speech
+language is `referenceSpeechLanguageOf(request)`: a script's language, or null for a brief, which stops the stage with NOT_CONNECTED before
+any call. `ReferencePorts.speechLanguage` is the port that sets it (the owner's decision, `../jobs/STATUS.md` decision 1). Production's
+reference source is `jobs/production-stages.ts`. `copy.ts` is unchanged; write_script uses it through the scriptwriter's answer contract.
+
 ## W2 wiring pass (branch `eng-e45-leftovers-2`)
 
 Not run in this pass. `jobs/runtime.ts` `analysisPortsOf(analysis, picture)` wires `analysisReadings({ picture, roles })` into

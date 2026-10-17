@@ -32,6 +32,8 @@ export type StartRequestInput = {
   variantCount: number;
   requestArtifactId: string;
   gateMetrics?: Record<string, GoldMetrics>;
+  /** The request sends a brief, so write_script writes its script (contract v8). Absent: a script request. */
+  brief?: boolean;
 };
 
 export type StartRequestOptions = {
@@ -63,6 +65,7 @@ export async function startEngineRequest(
       variantCount: input.variantCount,
       requestArtifactId: input.requestArtifactId,
       ...(input.gateMetrics ? { gateMetrics: input.gateMetrics } : {}),
+      ...(input.brief === undefined ? {} : { brief: input.brief }),
     });
     await tx`
       insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, current_stage, state)

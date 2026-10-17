@@ -15,6 +15,7 @@ import {
 import { runVoice, VOICE_STAGE, type VoicePorts } from "../../voice/voice.ts";
 import { NOT_CONNECTED, notConnectedReason } from "../../media/stt-connection.ts";
 import { readArtifact, writeArtifact, type StoredArtifact } from "../artifact-store.ts";
+import { scriptOf, writtenScriptOf } from "../../script/resolve.ts";
 import type { StageContext, StageHandler, StageRunResult } from "../types.ts";
 
 /** The ports of the voice stage: the voice stage's ports, and the kit and claim stores it reads. */
@@ -24,6 +25,18 @@ export type VoiceStagePorts = VoicePorts & {
   /** The approved claim texts the request may make (the product kit's claims for claimIds). Absent means none. */
   claims?: (organizationId: string, request: ProductionRequest) => Promise<string[]>;
 };
+
+/** The voice ports of one job, built for its reservation (the router and the Claude deps are per reservation in production). */
+export type VoicePortsFor = (scope: { organizationId: string; requestId: string; reservationId: string }) => VoiceStagePorts;
+
+/** Every input artifact of the job, read (Bible 5.1). */
+async function allInputs(ctx: StageContext): Promise<StoredArtifact[]> {
+  const stored: StoredArtifact[] = [];
+  for (const artifactId of ctx.payload.inputArtifactIds) {
+    stored.push(await readArtifact(ctx.sql, { organizationId: ctx.organizationId, artifactId }));
+  }
+  return stored;
+}
 
 /** The one input artifact of a type. An input that is not of that type is skipped; none of the type is refused. */
 async function readInputOfType(ctx: StageContext, type: ArtifactType): Promise<StoredArtifact> {
@@ -50,8 +63,11 @@ function attemptNumber(value: string): number {
   return parsed;
 }
 
-/** The voice stage. Pass the ports the worker wires; a port that is absent fails closed with NOT_CONNECTED. */
-export function createVoiceHandler(ports: VoiceStagePorts): StageHandler {
+/**
+ * The voice stage. Pass the ports the worker wires, or a function that builds them for the job's reservation (production: the router
+ * and the Claude deps are per reservation). A port that is absent fails closed with NOT_CONNECTED.
+ */
+export function createVoiceHandler(portsOrFor: VoiceStagePorts | VoicePortsFor): StageHandler {
   return {
     async run(ctx: StageContext): Promise<StageRunResult> {
       const reservationId = ctx.payload.budgetReservationId;
@@ -62,6 +78,10 @@ export function createVoiceHandler(ports: VoiceStagePorts): StageHandler {
           { stage: ctx.stage },
         );
       }
+      const ports =
+        typeof portsOrFor === "function"
+          ? portsOrFor({ organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId })
+          : portsOrFor;
       const stored = await readInputOfType(ctx, "production_request");
       const parsed = productionRequestSchema.safeParse(stored.envelope.body);
       if (!parsed.success) {
@@ -72,6 +92,9 @@ export function createVoiceHandler(ports: VoiceStagePorts): StageHandler {
         );
       }
       const request = parsed.data;
+      // The words to speak: the request's script, or a brief's written script (contract v8). A brief whose script is not written yet
+      // is an internal error (script/resolve.ts), so voice never speaks an empty or guessed script.
+      const script = scriptOf(request, writtenScriptOf(await allInputs(ctx), ctx.requestId));
       if (ports.voiceKit === undefined) {
         throw new EngineError(
           "config",
@@ -100,6 +123,7 @@ export function createVoiceHandler(ports: VoiceStagePorts): StageHandler {
           attempt: attemptNumber(ctx.payload.attempt),
           subjectId: ctx.subjectId,
           request,
+          script,
           voice: kit,
           claims,
         },

@@ -17,6 +17,7 @@
 import { budgets } from "../config/budgets.ts";
 import { EngineError, roundUsd, sumUsd, type EditDecisionList, type ProductionRequest, type ScenePlan, type VariantMatrix } from "../contracts/index.ts";
 import { ATTRIBUTE_ORDER, CAPTION_BANDS, type CaptionBand, type VariantAttribute } from "./config.ts";
+import type { ScriptBody } from "../script/resolve.ts";
 
 /** A music track the matrix names, as the handler loaded it. Missing tracks are not in the map, and the variant is skipped. */
 export type VariantMusicTrack = { trackId: string; uri: string; durationMs: number };
@@ -86,6 +87,8 @@ export type VariantExpansion = {
 
 export type ExpansionInput = {
   request: ProductionRequest;
+  /** The master's words: the request's script, or a brief's written script (script/resolve.ts). */
+  script: ScriptBody;
   plan: ScenePlan;
   master: EditDecisionList;
   matrix: VariantMatrix;
@@ -146,14 +149,14 @@ function shotsWhere(plan: ScenePlan, predicate: (shot: ScenePlan["shots"][number
 }
 
 /** The work an attribute needs, or null when the request has no beat for it (a hook without a hook beat). */
-export function workFor(attribute: VariantAttribute, request: ProductionRequest, plan: ScenePlan): VariantWork | null {
-  const beatIds = request.script.beats.map((beat) => beat.beatId);
+export function workFor(attribute: VariantAttribute, script: ScriptBody, plan: ScenePlan): VariantWork | null {
+  const beatIds = script.beats.map((beat) => beat.beatId);
   switch (attribute) {
     case "caption":
     case "music":
       return NO_WORK;
     case "hook": {
-      const hook = request.script.beats.find((beat) => beat.role === "hook");
+      const hook = script.beats.find((beat) => beat.role === "hook");
       if (hook === undefined) return null;
       return {
         produceShotIds: shotsWhere(plan, (shot) => shot.beatId === hook.beatId && isGenerated(shot)),
@@ -211,7 +214,7 @@ export function expandVariants(input: ExpansionInput): VariantExpansion {
   if (!Number.isFinite(input.headroomUsd) || input.headroomUsd < 0) {
     throw new EngineError("invalid_input", "the reservation headroom must be a finite amount, zero or more", { stage: "variants" });
   }
-  const { request, plan, master, matrix } = input;
+  const { request, script, plan, master, matrix } = input;
   const edlId = master.edlId;
   const skipped: SkippedVariant[] = [];
   const offers: Offer[] = [];
@@ -267,9 +270,9 @@ export function expandVariants(input: ExpansionInput): VariantExpansion {
 
   for (let index = 1; index <= (matrix.hooks ?? 0); index += 1) {
     offer("hook", String(index), () => {
-      const work = workFor("hook", request, plan);
+      const work = workFor("hook", script, plan);
       if (work === null) return "no_hook_beat";
-      const hook = request.script.beats.find((beat) => beat.role === "hook");
+      const hook = script.beats.find((beat) => beat.role === "hook");
       return plannedVariant({
         attribute: "hook",
         value: String(index),
@@ -290,7 +293,7 @@ export function expandVariants(input: ExpansionInput): VariantExpansion {
         change: { kind: "product", sku },
         from: request.product?.sku ?? null,
         to: sku,
-        work: workFor("product", request, plan) ?? NO_WORK,
+        work: workFor("product", script, plan) ?? NO_WORK,
         masterEdlId: edlId,
       }),
     );
@@ -304,7 +307,7 @@ export function expandVariants(input: ExpansionInput): VariantExpansion {
         change: { kind: "persona", personaId },
         from: request.page.personaId ?? null,
         to: personaId,
-        work: workFor("persona", request, plan) ?? NO_WORK,
+        work: workFor("persona", script, plan) ?? NO_WORK,
         masterEdlId: edlId,
       }),
     );
@@ -316,9 +319,9 @@ export function expandVariants(input: ExpansionInput): VariantExpansion {
         attribute: "language",
         value: language,
         change: { kind: "language", language },
-        from: request.script.language,
+        from: script.language,
         to: language,
-        work: workFor("language", request, plan) ?? NO_WORK,
+        work: workFor("language", script, plan) ?? NO_WORK,
         masterEdlId: edlId,
       }),
     );

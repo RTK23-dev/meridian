@@ -1,0 +1,21 @@
+{
+  "id": "gen-recorded-scriptwriter-unknown-label-0001",
+  "model": "recorded/scriptwriter",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"language\":\"en\",\"beats\":[{\"beatId\":\"b1\",\"role\":\"hook\",\"text\":\"Your counter is full again.\"},{\"beatId\":\"b2\",\"role\":\"cta\",\"text\":\"Comment BLEND for the link.\"}],\"rationale\":\"The hook names the mess and the call to action names the next step.\",\"sourceLabels\":[\"competitor study\"]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 5120,
+    "completion_tokens": 120,
+    "total_tokens": 5240,
+    "cost": 0.0158
+  }
+}

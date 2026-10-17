@@ -13,11 +13,12 @@ import {
 } from "./registry.ts";
 import { jobSettings } from "./settings.ts";
 
-test("the registry holds the 14 stages of Bible section 3 as engine.<stage> job types, in pipeline order", () => {
-  assert.equal(ENGINE_STAGES.length, 14);
+test("the registry holds the 15 stages (Bible section 3, and write_script of contract v8) as engine.<stage> job types, in pipeline order", () => {
+  assert.equal(ENGINE_STAGES.length, 15);
   assert.deepEqual(ENGINE_JOB_TYPES, [
     "engine.intake",
     "engine.analyze_reference",
+    "engine.write_script",
     "engine.voice",
     "engine.plan",
     "engine.estimate_reserve",
@@ -58,7 +59,7 @@ test("each stage names only real artifact types and gates, and the paid stages a
   }
   assert.deepEqual(
     ENGINE_STAGES.filter((stage) => STAGE_SPECS[stage].paid),
-    ["analyze_reference", "voice", "plan", "produce_shot", "check_take", "render", "post_render_review", "variants"],
+    ["analyze_reference", "write_script", "voice", "plan", "produce_shot", "check_take", "render", "post_render_review", "variants"],
   );
   assert.deepEqual(STAGE_SPECS.produce_shot.writes, ["take"]);
   assert.deepEqual(STAGE_SPECS.deliver.writes, ["manifest"]);

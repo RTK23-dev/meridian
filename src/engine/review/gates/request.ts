@@ -198,9 +198,12 @@ export function checkRequest(input: RequestGateInput): GateResult {
   }
   checks.push(check("dna_lookup_resolved", dnaPass, { detail: dnaDetail }));
 
-  // Budget (6.1 step 6): the request budget must cover the cheapest plan for its beats.
+  // Budget (6.1 step 6): the request budget must cover the cheapest plan for its beats. A brief has no beats until write_script writes
+  // them, so its minimum is computed there, and the check is not part of intake (contract v8, the write_script stage).
   const budgetUsd = request.constraints.budgetUsd;
-  if (input.formatMinimumUsd === undefined) {
+  if (input.formatMinimumUsd === undefined && request.brief !== undefined) {
+    // Deferred: write_script checks the minimum of the written beats and fails the stage when the budget is below it.
+  } else if (input.formatMinimumUsd === undefined) {
     checks.push(check("budget_above_format_minimum", false, { detail: "the format minimum has not been computed" }));
   } else {
     const minimum = input.formatMinimumUsd;
@@ -215,9 +218,16 @@ export function checkRequest(input: RequestGateInput): GateResult {
 
   // Must requests (6.1 step 7, 7.3): every must needs a classification whose properties some type can deliver.
   const problems: string[] = [];
-  const beatIds = new Set(request.script.beats.map((beat) => beat.beatId));
+  // A script request names its beats here. A brief request has none yet, so every visual request it sends names a beat that does not
+  // exist: the contract does not refuse that, so intake refuses it here (contract v8, open point 2).
+  const beatIds = new Set((request.script?.beats ?? []).map((beat) => beat.beatId));
   const musts = request.visualRequests.filter((item) => item.strength === "must");
-  for (const must of musts) {
+  if (request.brief !== undefined) {
+    for (const item of request.visualRequests) {
+      problems.push(`"${item.want}" names beat ${item.beatId}, which a brief does not have until its script is written`);
+    }
+  }
+  for (const must of request.script === undefined ? [] : musts) {
     if (!beatIds.has(must.beatId)) {
       problems.push(`must "${must.want}" names beat ${must.beatId}, which the script does not have`);
       continue;
@@ -250,7 +260,9 @@ export function checkRequest(input: RequestGateInput): GateResult {
   } else if (input.kits.productKit === undefined) {
     checks.push(notEvaluated("forbidden_terms_absent", "product kit missing"));
   } else {
-    const texts = [...request.script.beats.map((beat) => beat.text), ...request.visualRequests.map((item) => item.want)];
+    // The words the request carries: the script's beats, or a brief's own text and its sources (a brief has no script yet).
+    const spoken = request.script?.beats.map((beat) => beat.text) ?? [request.brief?.text ?? "", ...(request.brief?.sources.map((source) => source.text) ?? [])];
+    const texts = [...spoken, ...request.visualRequests.map((item) => item.want)];
     const hits = input.kits.productKit.forbidden.filter((term) => {
       const pattern = new RegExp(`\\b${escapeRegExp(term)}\\b`, "i");
       return texts.some((text) => pattern.test(text));

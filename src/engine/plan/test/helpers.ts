@@ -23,6 +23,7 @@ import { WORKSPACE_ID } from "../../contracts/fixtures/chain.ts";
 import type { HttpResponse } from "../../gateway/types.ts";
 import type { PlanSceneInput, PlanKitBodies } from "../build.ts";
 import type { VisualClassification } from "../../review/gates/request.ts";
+import { scriptOf } from "../../script/resolve.ts";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 export const NOW = "2026-10-14T10:01:00.000Z";
@@ -107,6 +108,7 @@ export async function planInputWith(
       reservationId: FIXTURE_IDS.reservation,
       attempt: 1,
       request: validated.request,
+      script: scriptOf(validated.request, null),
       validated,
       voice: structuredClone(voiceTrackFixture),
       dna: structuredClone(videoDnaFixture),

@@ -13,7 +13,8 @@ import {
   variantWriterInputSchema,
   type VariantWriterInput,
 } from "../claude/roles/variant_writer.ts";
-import { EngineError, type ProductionRequest } from "../contracts/index.ts";
+import { EngineError } from "../contracts/index.ts";
+import type { ScriptBody } from "../script/resolve.ts";
 
 const STAGE = "variants";
 
@@ -24,12 +25,12 @@ export type WriterChange = { kind: "hook"; index: number; count: number } | { ki
  * The writer's lines input for one variant (Bible 6.13). A hook writes the request's hook beat, as the one line of its row. A language
  * writes every beat, in the target language. The beats are the master's text: they are data for the writer, not instructions. Pure.
  */
-export function writerInputFor(input: { request: ProductionRequest; change: WriterChange; claims: readonly string[] }): VariantWriterInput {
-  const { request, change, claims } = input;
+export function writerInputFor(input: { script: ScriptBody; change: WriterChange; claims: readonly string[] }): VariantWriterInput {
+  const { script, change, claims } = input;
   const beats =
     change.kind === "hook"
-      ? request.script.beats.filter((beat) => beat.role === "hook").slice(0, 1)
-      : request.script.beats;
+      ? script.beats.filter((beat) => beat.role === "hook").slice(0, 1)
+      : script.beats;
   if (beats.length === 0) {
     throw new EngineError("invalid_input", "the request has no hook beat for a hook variant", { stage: STAGE });
   }
@@ -39,7 +40,7 @@ export function writerInputFor(input: { request: ProductionRequest; change: Writ
       change.kind === "hook"
         ? { attribute: "hook", label: `hook line ${change.index} of ${change.count}` }
         : { attribute: "language", label: `language ${change.language}` },
-    targetLanguage: change.kind === "language" ? change.language : request.script.language,
+    targetLanguage: change.kind === "language" ? change.language : script.language,
     beats: beats.map((beat) => ({ beatId: beat.beatId, role: beat.role, text: beat.text, emphasis: beat.emphasis ?? [] })),
     claims: [...claims],
   });

@@ -1,5 +1,9 @@
 # STATUS: variants (W13, phase E5)
 
+**Brief requests (contract v8, this branch).** `expand.ts`, `work.ts` (`variantScriptFor` replaces `variantRequestFor`, and returns the
+script, not a request), `writer.ts` and `speak.ts` read the master's words through `script` (the resolved script). The variants handler
+resolves it from the job's inputs (the written script of a brief). No brief variant run is tested end to end (`../jobs/STATUS.md`, decision 6).
+
 ## E5 item 3: the generation variant sub-graph, assembled and rendered (this branch)
 
 What a generation variant (hook, product, persona, language) does now, end to end, on recorded answers:

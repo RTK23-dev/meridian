@@ -1,5 +1,8 @@
 # Claude client and segmenter: status (W3, task A5)
 
+**Contract v8 (this branch).** The client is unchanged. Two roles are added: `roles/scriptwriter.ts` (write_script, Opus) and its recorded
+answers in `test/fixtures/openrouter-scriptwriter-*.json`. The full account is in `../jobs/STATUS.md`.
+
 ## E3 integration pass (branch `eng-e3-wiring`)
 
 - **`roles/director_check.ts` is version 2.** `DIRECTOR_CHECK_PROMPT` is `director_check@2`, and the shot input takes an optional

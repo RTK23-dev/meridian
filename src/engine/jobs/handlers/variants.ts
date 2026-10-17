@@ -72,6 +72,7 @@ import { NOT_CONNECTED, notConnectedReason } from "../../media/stt-connection.ts
 import { assembleVariantEdl, type AssemblyInput } from "../../variants/assemble.ts";
 import { editIdentity } from "../../edit/editor.ts";
 import { editGate, emphasisOf, type EditKitScope } from "./edit.ts";
+import { scriptOf, writtenScriptOf, type ScriptBody } from "../../script/resolve.ts";
 import { readJobInputs, type StoredArtifact } from "../artifact-store.ts";
 import { stableId } from "../stable-id.ts";
 import { writeArtifactOnce } from "../../deliver/write-once.ts";
@@ -161,6 +162,8 @@ function refuse(message: string): EngineError {
 /** The inputs of the request phase, parsed. The master is the edl the job names; every other input is refused. */
 export type VariantInputs = {
   request: ProductionRequest;
+  /** The master's words: the request's script, or a brief's written script (contract v8, script/resolve.ts). */
+  script: ScriptBody;
   plan: ScenePlan;
   master: EditDecisionList;
   masterStored: StoredArtifact;
@@ -193,11 +196,12 @@ async function readVariantInputs(sql: Sql, ctx: StageContext): Promise<VariantIn
     throw refuse(`the variants inputs do not parse: ${bad.join(", ")}`);
   }
   if (master.data.requestId !== ctx.requestId || plan.data.requestId !== ctx.requestId) throw refuse("a variants input belongs to another request");
-  return { request: request.data, plan: plan.data, master: master.data, masterStored, requestStored, planStored };
+  const script = scriptOf(request.data, writtenScriptOf(stored, ctx.requestId));
+  return { request: request.data, script, plan: plan.data, master: master.data, masterStored, requestStored, planStored };
 }
 
 /** The inputs of a phase job: the request and the master's plan, each exactly one. */
-type PhaseInputs = { request: ProductionRequest; plan: ScenePlan; requestStored: StoredArtifact; planStored: StoredArtifact };
+type PhaseInputs = { request: ProductionRequest; script: ScriptBody; plan: ScenePlan; requestStored: StoredArtifact; planStored: StoredArtifact };
 
 async function readPhaseInputs(sql: Sql, ctx: StageContext): Promise<PhaseInputs> {
   const stored = await readJobInputs(sql, { organizationId: ctx.organizationId, requestId: ctx.requestId, inputArtifactIds: ctx.payload.inputArtifactIds });
@@ -211,7 +215,8 @@ async function readPhaseInputs(sql: Sql, ctx: StageContext): Promise<PhaseInputs
   const plan = scenePlanSchema.safeParse(planStored.envelope.body);
   if (!request.success || !plan.success) throw refuse("the variant phase's inputs do not parse");
   if (request.data.requestId !== ctx.requestId || plan.data.requestId !== ctx.requestId) throw refuse("a variant phase input belongs to another request");
-  return { request: request.data, plan: plan.data, requestStored, planStored };
+  const script = scriptOf(request.data, writtenScriptOf(stored, ctx.requestId));
+  return { request: request.data, script, plan: plan.data, requestStored, planStored };
 }
 
 /** What the reservation has room for: its headroom (held, not yet committed) and how far the request budget lets it grow. */
@@ -348,6 +353,7 @@ async function runRequestPhase(ctx: StageContext, ports: VariantPorts): Promise<
   const room = await roomOf(ports, ctx.organizationId, reservationId, inputs.request.constraints.budgetUsd);
   const expansion = expandVariants({
     request: inputs.request,
+    script: inputs.script,
     plan: inputs.plan,
     master: inputs.master,
     matrix,
@@ -365,7 +371,7 @@ async function runRequestPhase(ctx: StageContext, ports: VariantPorts): Promise<
   const itemOf = new Map<string, VariantWorkItem>();
   for (const variant of expansion.planned) {
     if (variant.build !== "generation") continue;
-    const item = generationWorkOf(variant, inputs.request);
+    const item = generationWorkOf(variant, inputs.script);
     if (item === null) throw refuse(`variant ${variant.key} has no work item`);
     itemOf.set(variant.key, item);
   }
@@ -465,7 +471,7 @@ async function writerPhase(
   reservationId: string,
   hookCount: number,
 ): Promise<VariantWriterOutcome> {
-  const { request, plan } = inputs;
+  const { request, script, plan } = inputs;
   const organizationId = ctx.organizationId;
   if (item.writer === null) throw refuse(`variant ${item.key} has no writer call`);
   try {
@@ -479,7 +485,7 @@ async function writerPhase(
       if (claims === null) {
         return { status: "not_built", reason: `the product kit of SKU ${request.product?.sku ?? ""} is not in this workspace, so its approved claims cannot be checked` };
       }
-      input = writerInputFor({ request, change, claims });
+      input = writerInputFor({ script, change, claims });
     } else {
       if (item.change.kind !== "product") return { status: "not_built", reason: `a ${item.change.kind} change writes prompts, which it does not` };
       const kit = await generation.loadProductKit({ organizationId, sku: item.change.sku });
@@ -526,7 +532,7 @@ async function voicePhase(
   reservationId: string,
   at: string,
 ): Promise<VariantVoiceOutcome> {
-  const { request } = inputs;
+  const { request, script } = inputs;
   const organizationId = ctx.organizationId;
   if (generation.voice === undefined && generation.speak === undefined) {
     return { status: "not_built", reason: asNotConnected("the voice stage's ports (speech route, speech-to-text, media, audio) are not wired") };
@@ -547,7 +553,7 @@ async function voicePhase(
   if (claims === null) {
     return { status: "not_built", reason: `the product kit of SKU ${request.product?.sku ?? ""} is not in this workspace, so its approved claims cannot be checked` };
   }
-  const language = item.change.kind === "language" ? item.change.language : request.script.language;
+  const language = item.change.kind === "language" ? item.change.language : script.language;
   const lines = text !== null && text.kind === "lines" ? text.lines : [];
   const spoken = await speakVariantScript(
     generation.voice,
@@ -558,6 +564,7 @@ async function voicePhase(
       attempt: attemptOf(ctx),
       subject: item.subject,
       request,
+      script,
       language,
       voice: voiceKit,
       claims,
@@ -739,6 +746,8 @@ async function runAssemblePhase(ctx: StageContext, ports: VariantPorts, details:
   if (plan.requestId !== ctx.requestId || voice.requestId !== ctx.requestId || validated.requestId !== ctx.requestId) {
     throw refuse("an assembly input belongs to another request");
   }
+  // The emphasis marks are the master's words: the request's script, or a brief's written script (contract v8).
+  const script = scriptOf(validated.request, writtenScriptOf(stored, ctx.requestId));
   if (plan.videoDnaId !== dna.videoDnaId) throw refuse("the variant's plan was made from another video DNA");
   if (plan.voiceTrackId !== voice.voiceTrackId) throw refuse("the variant's plan was made from another voice track");
 
@@ -763,7 +772,7 @@ async function runAssemblePhase(ctx: StageContext, ports: VariantPorts, details:
     dna,
     takes,
     kit,
-    emphasis: emphasisOf(validated),
+    emphasis: emphasisOf(script),
   };
   const result = assembleVariantEdl(input);
   const gate = editGate(result.edlId, result.checks, result.failingShotIds);

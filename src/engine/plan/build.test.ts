@@ -135,7 +135,7 @@ describe("the fixture request at $4", () => {
     const { input, requests } = await planInputWith([recordedAnswer(PLANNER), recordedAnswer(DIRECTOR)]);
     await planScene(input);
     const director = sentText(requests[1]?.body);
-    const beat = input.request.script.beats.find((item) => item.beatId === "b3");
+    const beat = input.script.beats.find((item) => item.beatId === "b3");
     assert.ok(beat);
     assert.ok(director.includes(beat.text), "the director's table carries the beat text of the blender beat");
     assert.match(director, /<untrusted-data/);

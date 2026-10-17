@@ -6,9 +6,14 @@ import { EngineError } from "../contracts/index.ts";
 import { thresholds } from "../config/thresholds.ts";
 import { jobSettings, type RequestPriority } from "./settings.ts";
 
+/**
+ * The stages in pipeline order. write_script (contract v8) is the stage that writes a brief request's script after analyze_reference and
+ * before voice. A script request skips it as done (the orchestrator's start).
+ */
 export const ENGINE_STAGES = [
   "intake",
   "analyze_reference",
+  "write_script",
   "voice",
   "plan",
   "estimate_reserve",
@@ -69,12 +74,24 @@ const rows: Record<EngineStage, Row> = {
   // (handlers/intake.ts). The dispatcher therefore never refuses it for want of a reservation.
   intake: { stage: "intake", group: 1, timeoutClass: "claude", paid: false, reads: ["production_request"], writes: ["validated_request"], gate: "request" },
   analyze_reference: { stage: "analyze_reference", group: 2, timeoutClass: "claude", paid: true, reads: ["production_request"], writes: ["video_dna"], gate: "dna" },
-  voice: { stage: "voice", group: 2, timeoutClass: "generation", paid: true, reads: ["production_request"], writes: ["voice_track"], gate: "voice" },
-  plan: { stage: "plan", group: 3, timeoutClass: "claude", timeoutFactor: 3, paid: true, reads: ["validated_request", "video_dna", "voice_track"], writes: ["scene_plan"], gate: "plan" },
+  // The scriptwriter (Opus) writes a brief's beats from the brief and the analysed reference (contract v8). It has no gate of its own: its
+  // checks are the role's answer contract (copied runs, length, claims) and the stage's minimum, and a failure fails the stage with its reason.
+  write_script: {
+    stage: "write_script",
+    group: 2,
+    timeoutClass: "claude",
+    paid: true,
+    reads: ["production_request", "video_dna"],
+    writes: ["written_script"],
+    gate: null,
+  },
+  // Voice reads the written script of a brief (the request's own script otherwise, contract v8).
+  voice: { stage: "voice", group: 2, timeoutClass: "generation", paid: true, reads: ["production_request", "written_script"], writes: ["voice_track"], gate: "voice" },
+  plan: { stage: "plan", group: 3, timeoutClass: "claude", timeoutFactor: 3, paid: true, reads: ["validated_request", "video_dna", "voice_track", "written_script"], writes: ["scene_plan"], gate: "plan" },
   estimate_reserve: { stage: "estimate_reserve", group: 3, timeoutClass: "claude", paid: false, reads: ["scene_plan", "production_request"], writes: ["budget_reservation"], gate: "budget" },
   produce_shot: { stage: "produce_shot", group: 4, timeoutClass: "generation", paid: true, reads: ["scene_plan"], writes: ["take"], gate: null },
   check_take: { stage: "check_take", group: 4, timeoutClass: "claude", paid: true, reads: ["take", "scene_plan"], writes: ["take_verdict"], gate: "take" },
-  edit: { stage: "edit", group: 5, timeoutClass: "claude", paid: false, reads: ["scene_plan", "take", "voice_track", "video_dna", "validated_request"], writes: ["edl"], gate: "edit" },
+  edit: { stage: "edit", group: 5, timeoutClass: "claude", paid: false, reads: ["scene_plan", "take", "voice_track", "video_dna", "validated_request", "written_script"], writes: ["edl"], gate: "edit" },
   compose: { stage: "compose", group: 6, timeoutClass: "claude", paid: false, reads: ["edl", "validated_request"], writes: ["composition"], gate: null },
   // The pre-render gate reads every input its checks need: the plan and the DNA (the grammar), the voice, the validated request
   // (the kit references and the script), and the accepted takes (Bible 6.10, review/STATUS.md decision 6).
@@ -83,7 +100,7 @@ const rows: Record<EngineStage, Row> = {
     group: 6,
     timeoutClass: "claude",
     paid: false,
-    reads: ["composition", "edl", "scene_plan", "validated_request", "voice_track", "video_dna", "take"],
+    reads: ["composition", "edl", "scene_plan", "validated_request", "voice_track", "video_dna", "take", "written_script"],
     writes: ["gate_result"],
     gate: "pre_render",
   },
@@ -107,7 +124,7 @@ const rows: Record<EngineStage, Row> = {
     timeoutClass: "generation",
     paid: true,
     // The assembly (phase assemble) reads the variant's plan, the DNA, its voice, the validated request and the takes its EDL plays.
-    reads: ["production_request", "scene_plan", "edl", "video_dna", "voice_track", "validated_request", "take"],
+    reads: ["production_request", "scene_plan", "edl", "video_dna", "voice_track", "validated_request", "take", "written_script"],
     writes: ["edl", "scene_plan", "voice_track"],
     gate: null,
   },
@@ -142,7 +159,7 @@ export function stageFromJobType(jobType: string): EngineStage {
   }
   const stage = jobType.slice("engine.".length);
   if (!isEngineStage(stage)) {
-    throw new EngineError("invalid_input", `${jobType} is not one of the 14 engine stages`);
+    throw new EngineError("invalid_input", `${jobType} is not one of the engine stages`);
   }
   return stage;
 }

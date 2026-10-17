@@ -1,5 +1,13 @@
 # STATUS: Claude roles added in E5 (W13)
 
+**scriptwriter (contract v8, this branch).** `scriptwriter.ts`: Opus (llm.direction), stage write_script, prompt `scriptwriter@1.md`. Its
+input carries the brief, its sources, the attachments' types and notes, the reference's structure (genome, genes, segments with durations),
+the constraints and the approved claims. The reference's transcript is an input of the answer check only and is never sent (the test
+asserts that). The answer contract refuses copied runs (COPY_RUN_WORDS = 3, a named constant, see `../../jobs/STATUS.md` decision 4), a
+script over maxMs, a forbidden term, an emphasis word outside its beat, an unknown source label and a bad language tag. Tests:
+`scriptwriter.test.ts` (11) on the recorded answers in `../test/fixtures/openrouter-scriptwriter-*.json`. The live run is the owner's.
+`model_chooser` (contract v8) is not built here: another agent builds its call.
+
 Branch `eng-e5-variants`, then this worktree (`agent-a88fc87eb7108bf53`). Covers `variant_writer.ts` and its test in this folder, and the
 prompts `variant_writer@1.md` (kept as shipped) and `variant_writer@2.md`. The other roles of this folder are not changed here.
 

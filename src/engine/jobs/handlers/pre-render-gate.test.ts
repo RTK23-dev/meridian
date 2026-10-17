@@ -11,6 +11,7 @@ import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../test
 import type { EnginePayload, StageContext, StageOutput } from "../types.ts";
 import { validateStageOutput } from "../validate.ts";
 import { createPreRenderGateHandler, type PreRenderPorts } from "./pre-render-gate.ts";
+import { scriptOf } from "../../script/resolve.ts";
 
 const WS = "ws_pre_render";
 const REQ = FIXTURE_IDS.request;
@@ -173,7 +174,7 @@ describe("pre_render_gate on PostgreSQL (Bible 6.10, 12.3)", () => {
 
   test("the five coded shots in a row are blocked and named in the stored gate result", async () => {
     const render = cleanRender();
-    const beats = fx.validatedRequestFixture.request.script.beats;
+    const beats = scriptOf(fx.validatedRequestFixture.request, null).beats;
     const span = Math.floor(fx.VOICE_DURATION_MS / 5);
     const shots: ShotSpec[] = [1, 2, 3, 4, 5].map((n, index) => ({
       shotId: fixtureId("shot_", 70 + n),

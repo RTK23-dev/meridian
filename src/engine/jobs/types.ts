@@ -44,6 +44,11 @@ export type StageOutput =
    */
   | (StageOutputBase & { stage: "intake"; gate: GateResult; budgetReservationId: string | null; budgetPause: string | null })
   | (StageOutputBase & { stage: "analyze_reference"; gate: GateResult })
+  /**
+   * The script written from a brief (contract v8). It has no gate: its checks are the role's answer contract and the stage's minimum,
+   * and a failure fails the stage with its reason. Its artifacts name the written script (slot "script") when it passes.
+   */
+  | (StageOutputBase & { stage: "write_script" })
   | (StageOutputBase & { stage: "voice"; gate: GateResult })
   | (StageOutputBase & { stage: "plan"; gate: GateResult; shots: ShotSummary[] })
   | (StageOutputBase & { stage: "estimate_reserve"; gate: GateResult; budgetReservationId: string | null })
@@ -137,6 +142,8 @@ export type EngineEvent =
       cachedDna: boolean;
       /** Set when the format's VideoDNA is cached (Bible 6.1 step 5). Analysis is then skipped. */
       cachedDnaArtifactId?: string;
+      /** The request sends a brief, so write_script writes its script (contract v8). Absent or false: a script request, which skips it. */
+      brief?: boolean;
       variantCount: number;
       requestArtifactId: string;
       /** The gold metrics the request's gates are judged by (Bible 12.4). Absent: no check is proven, so every failure is reviewed. */

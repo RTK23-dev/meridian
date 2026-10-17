@@ -156,6 +156,7 @@ test("must: an empty property list, and a beat the script does not have, both fa
 
 test("policy: a forbidden term from the product kit in the script fails forbidden_terms_absent", () => {
   const request = structuredClone(productionRequestFixture);
+  assert.ok(request.script, "the fixture is a script request");
   request.script.beats[1] = { ...request.script.beats[1], text: "This blender cures the morning rush." };
   const result = checkRequest(fixtureInput({ request }));
   assert.equal(check(result, "forbidden_terms_absent").pass, false);

@@ -120,6 +120,7 @@ function runFor(maxMs?: number): VoiceRun {
     attempt: 1,
     subjectId: "subject_voice_1",
     request: request(maxMs === undefined ? {} : { maxMs }),
+    script: { language: "en", beats: BEATS },
     voice: voiceKitFixture,
     claims: [],
   };

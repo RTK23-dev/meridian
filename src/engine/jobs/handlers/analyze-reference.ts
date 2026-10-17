@@ -55,8 +55,14 @@ function requestOf(body: unknown): ProductionRequest {
   return parsed.data;
 }
 
-/** The analyze_reference stage. Pass the ports the worker wires (ReferencePorts); a port that is not connected fails closed. */
-export function createAnalyzeReferenceHandler(ports: ReferencePorts): StageHandler {
+/**
+ * The ports of the analysis for one job's reservation (production: the role deps and the ledger are per reservation). A fixed ReferencePorts
+ * serves every job (tests).
+ */
+export type ReferencePortsFor = (scope: { organizationId: string; requestId: string; reservationId: string }) => ReferencePorts;
+
+/** The analyze_reference stage. Pass the ports the worker wires (ReferencePorts, or a function of the job's reservation); a port that is not connected fails closed. */
+export function createAnalyzeReferenceHandler(portsOrFor: ReferencePorts | ReferencePortsFor): StageHandler {
   return {
     async run(ctx: StageContext): Promise<StageRunResult> {
       const reservationId = ctx.payload.budgetReservationId;
@@ -67,6 +73,10 @@ export function createAnalyzeReferenceHandler(ports: ReferencePorts): StageHandl
           { stage: ctx.stage },
         );
       }
+      const ports =
+        typeof portsOrFor === "function"
+          ? portsOrFor({ organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId })
+          : portsOrFor;
       const stored = await readInputOfType(ctx, "production_request");
       const request = requestOf(stored.envelope.body);
       const outcome = await analyzeReference(

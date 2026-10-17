@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { thresholds } from "../../config/thresholds.ts";
-import type { EditDecisionList, ScenePlan, ShotSpec, ValidatedRequest } from "../../contracts/index.ts";
+import type { EditDecisionList, ScenePlan, ShotSpec } from "../../contracts/index.ts";
 import { fixtureId } from "../../contracts/fixtures/index.ts";
 import * as fx from "../../contracts/fixtures/index.ts";
 import { shotIdOf } from "../../edit/rules.ts";
+import { scriptOf } from "../../script/resolve.ts";
 import { decideGate, goldMetricsForCheck } from "../gold.ts";
 import {
   PRODUCT_IMAGES,
@@ -38,7 +39,7 @@ function editedEdl(render: CleanRender, change: (edl: EditDecisionList) => void)
 
 /** A plan of five coded shots in a row, each on a beat of the request, covering the voice (Bible 12.3 acceptance). */
 function fiveCodedPlan(plan: ScenePlan): ScenePlan {
-  const beats = cleanValidated.request.script.beats;
+  const beats = scriptOf(cleanValidated.request, null).beats;
   const span = Math.floor(fx.VOICE_DURATION_MS / 5);
   const shots: ShotSpec[] = [1, 2, 3, 4, 5].map((n, index) => ({
     shotId: fixtureId("shot_", 90 + n),
@@ -174,14 +175,9 @@ describe("pre_render gate: the delivery promise (Bible 12.3)", () => {
   });
 
   it("a script beat that no planned shot covers fails", () => {
-    const validated: ValidatedRequest = {
-      ...cleanValidated,
-      request: {
-        ...cleanValidated.request,
-        script: { ...cleanValidated.request.script, beats: [...cleanValidated.request.script.beats, { beatId: "b9", role: "cta", text: "buy now" }] },
-      },
-    };
-    const result = checkPreRender({ ...cleanPreRenderInput(), validated });
+    const script = scriptOf(cleanValidated.request, null);
+    const withExtra = { ...script, beats: [...script.beats, { beatId: "b9", role: "cta" as const, text: "buy now" }] };
+    const result = checkPreRender({ ...cleanPreRenderInput(), script: withExtra });
     assert.equal(check(result, "promised_beats_covered").pass, false);
     assert.match(check(result, "promised_beats_covered").detail ?? "", /b9/);
   });

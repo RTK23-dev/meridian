@@ -41,6 +41,7 @@ import { alignTokens } from "./align.ts";
 import { buildVoiceText, scriptTokens } from "./text.ts";
 import { beatSpansOf, type BeatSpan } from "./timings.ts";
 import { voiceConfig } from "./config.ts";
+import type { ScriptBody } from "../script/resolve.ts";
 
 export const VOICE_STAGE = "voice";
 
@@ -67,6 +68,8 @@ export type VoiceRun = {
   attempt: number;
   subjectId: string;
   request: ProductionRequest;
+  /** The words to speak: the request's script, or a brief's written script (script/resolve.ts). */
+  script: ScriptBody;
   /** The page's voice kit: its provider's voice id is what the speech route speaks with. */
   voice: VoiceKit;
   /** Approved claim texts the narration may make (the product kit's claims for the request). The tightener keeps their numbers. */
@@ -218,10 +221,10 @@ export async function runVoice(run: VoiceRun, ports: VoicePorts): Promise<VoiceO
     return { status: "not_connected", reason: ports.speech.reason };
   const stt: SpeechToText = ports.speech.stt;
   const maxMs = run.request.constraints.maxMs;
-  const language = run.request.script.language;
+  const language = run.script.language;
   const checks: GateCheck[] = [];
 
-  let beats: ScriptBeat[] = [...run.request.script.beats];
+  let beats: ScriptBeat[] = [...run.script.beats];
   let speed = 1;
   let paceTries = 0;
   let tightened = 0;

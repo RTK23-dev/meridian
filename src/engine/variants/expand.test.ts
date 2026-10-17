@@ -5,6 +5,7 @@ import { edlFixture, FIXTURE_IDS, productionRequestFixture, scenePlanFixture } f
 import { thresholds } from "../config/thresholds.ts";
 import { variantMusicMix } from "./config.ts";
 import { expandVariants, masterBand, workFor, type ExpansionInput, type VariantMusicTrack } from "./expand.ts";
+import { scriptOf } from "../script/resolve.ts";
 
 const HOOK_SHOT = FIXTURE_IDS.shot1;
 const PRODUCT_SHOT = FIXTURE_IDS.shot3;
@@ -38,6 +39,7 @@ function masterWithCaptions(): EditDecisionList {
 function input(matrix: Partial<VariantMatrix>, overrides: Partial<ExpansionInput> = {}): ExpansionInput {
   return {
     request: productionRequestFixture as ProductionRequest,
+    script: scriptOf(productionRequestFixture as ProductionRequest, null),
     plan: scenePlanFixture,
     master: masterWithCaptions(),
     matrix: { maxVariants: 20, budgetUsd: 5, ...matrix },
@@ -182,11 +184,13 @@ describe("variant expansion: the matrix into planned variants (Bible 6.13, 14.3)
 
   it("a hook variant needs a hook beat in the request", () => {
     const noHook: ProductionRequest = structuredClone(productionRequestFixture as ProductionRequest);
+    assert.ok(noHook.script, "the fixture is a script request");
     noHook.script.beats = noHook.script.beats.map((beat) => ({ ...beat, role: beat.role === "hook" ? "setup" : beat.role }));
-    const expansion = expandVariants(input({ hooks: 1, maxVariants: 4, budgetUsd: 1 }, { request: noHook }));
+    const script = scriptOf(noHook, null);
+    const expansion = expandVariants(input({ hooks: 1, maxVariants: 4, budgetUsd: 1 }, { request: noHook, script }));
     assert.equal(expansion.planned.length, 0);
     assert.deepEqual(expansion.skipped.map((skip) => skip.reason), ["no_hook_beat"]);
-    assert.equal(workFor("hook", noHook, scenePlanFixture), null);
+    assert.equal(workFor("hook", script, scenePlanFixture), null);
   });
 
   it("is pure: the same input gives the same plan", () => {

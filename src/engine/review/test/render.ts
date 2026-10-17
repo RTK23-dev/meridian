@@ -8,6 +8,7 @@ import { compositionHash } from "../../contracts/render.ts";
 import { buildEdl, type EditBuild } from "../../edit/editor.ts";
 import { mediaUrisOf } from "../gates/preRender.ts";
 import { requiredFrameTimes } from "../gates/postRender.ts";
+import { scriptOf } from "../../script/resolve.ts";
 import type { CriticFinalOutcome } from "../criticFinal.ts";
 import type { FinalRubricItem } from "../../claude/roles/critic_final.ts";
 import type { PreRenderInput } from "../gates/preRender.ts";
@@ -84,6 +85,7 @@ export function cleanPreRenderInput(render: CleanRender = cleanRender()): PreRen
     composition: render.composition,
     plan: render.plan,
     validated: cleanValidated,
+    script: scriptOf(cleanValidated.request, null),
     voice: cleanVoice,
     dna: cleanDna,
     takes: cleanTakes,

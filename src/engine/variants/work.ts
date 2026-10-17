@@ -8,8 +8,9 @@
 
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { EngineError, type ProductionRequest } from "../contracts/index.ts";
+import { EngineError } from "../contracts/index.ts";
 import type { PlannedVariant } from "./expand.ts";
+import type { ScriptBody } from "../script/resolve.ts";
 
 /**
  * The phases of a generation variant. Its writer call, its voice and its plan run first, in that order (nextPhaseOf). Its assembly (the EDL
@@ -65,9 +66,9 @@ export function variantShotSubjectOf(subject: string, shotId: string): string {
  * The work list item of a generation variant, or null for a caption or music variant (it needs no generation). The request gives the
  * beats of the full re-speak. Pure.
  */
-export function generationWorkOf(variant: PlannedVariant, request: ProductionRequest): VariantWorkItem | null {
+export function generationWorkOf(variant: PlannedVariant, script: ScriptBody): VariantWorkItem | null {
   if (variant.build !== "generation") return null;
-  const allBeats = request.script.beats.map((beat) => beat.beatId);
+  const allBeats = script.beats.map((beat) => beat.beatId);
   const change = variant.change;
   switch (change.kind) {
     case "hook":
@@ -125,14 +126,14 @@ export function nextPhaseOf(item: Pick<VariantWorkItem, "writer" | "voiceBeatIds
 }
 
 /**
- * The request the voice stage speaks for one variant: every beat of the master's script, in order, with the lines the writer wrote in
+ * The script the voice stage speaks for one variant: every beat of the master's script, in order, with the lines the writer wrote in
  * place of the beats it changed, and the variant's language. An emphasis word survives only when the new text still contains it. Pure.
  */
-export function variantRequestFor(input: {
-  request: ProductionRequest;
+export function variantScriptFor(input: {
+  script: ScriptBody;
   language: string;
   lines: readonly { beatId: string; text: string }[];
-}): ProductionRequest {
+}): ScriptBody {
   const textOf = new Map<string, string>();
   for (const line of input.lines) {
     if (textOf.has(line.beatId)) {
@@ -140,13 +141,13 @@ export function variantRequestFor(input: {
     }
     textOf.set(line.beatId, line.text);
   }
-  const known = new Set(input.request.script.beats.map((beat) => beat.beatId));
+  const known = new Set(input.script.beats.map((beat) => beat.beatId));
   for (const beatId of textOf.keys()) {
-    if (!known.has(beatId)) throw new EngineError("invalid_input", `beat ${beatId} is not a beat of the request`, { stage: "variants" });
+    if (!known.has(beatId)) throw new EngineError("invalid_input", `beat ${beatId} is not a beat of the script`, { stage: "variants" });
   }
-  const beats = input.request.script.beats.map((beat) => {
+  const beats = input.script.beats.map((beat) => {
     const text = textOf.get(beat.beatId) ?? beat.text;
     return { ...beat, text, emphasis: (beat.emphasis ?? []).filter((word) => text.includes(word)) };
   });
-  return { ...input.request, script: { language: input.language, beats } };
+  return { language: input.language, beats };
 }

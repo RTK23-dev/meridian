@@ -5,6 +5,7 @@ import type { ReferenceShotType, VisualType } from "../contracts/index.ts";
 import { FIXTURE_IDS, productionRequestFixture } from "../contracts/fixtures/index.ts";
 import type { VisualDecisionInput } from "./visual.ts";
 import type { ClassifiedRequest, PlanKits, ShotInput } from "./types.ts";
+import { scriptOf } from "../script/resolve.ts";
 
 const NO_FLAGS = { textInPixels: false, handsOnProduct: false, showsProduct: false };
 
@@ -16,7 +17,7 @@ export const blenderMust: ClassifiedRequest = {
 };
 
 export function fixtureShots(): ShotInput[] {
-  const beats = productionRequestFixture.script.beats;
+  const beats = scriptOf(productionRequestFixture, null).beats;
   const roleOf = (beatId: string) => beats.find((beat) => beat.beatId === beatId)?.role ?? "setup";
   const spec: { shotId: string; beatId: string; refShot: ReferenceShotType; startMs: number; endMs: number }[] = [
     { shotId: FIXTURE_IDS.shot1, beatId: "b1", refShot: "talking_head", startMs: 0, endMs: 3000 },

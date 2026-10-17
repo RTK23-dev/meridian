@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import { deps, gatewayFor, json, ledgerWith, REQUEST_ID, RESERVATION_ID, WORKSPACE } from "../claude/test/helpers.ts";
 import type { VariantWriterInput, VariantWriterLinesInput } from "../claude/roles/variant_writer.ts";
 import { EngineError, type ProductionRequest } from "../contracts/index.ts";
+import { scriptOf, type ScriptBody } from "../script/resolve.ts";
 import { productionRequestFixture } from "../contracts/fixtures/index.ts";
 import { productPromptsInputFor, writeVariantText, writerInputFor, type WriterCall } from "./writer.ts";
 
@@ -13,6 +14,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const HOOK_ANSWER = readFileSync(join(HERE, "test", "fixtures", "openrouter-variant-writer-hook.json"), "utf8");
 const CLAIMS = ["Makes four smoothies in under two minutes"];
 const FIXTURE_REQUEST = productionRequestFixture as ProductionRequest;
+const FIXTURE_SCRIPT: ScriptBody = scriptOf(FIXTURE_REQUEST, null);
 
 /** A recorded chat answer whose content is the given object, in the shape the gateway parses. */
 function chat(content: unknown) {
@@ -30,23 +32,22 @@ function linesOf(input: VariantWriterInput): VariantWriterLinesInput {
   return input;
 }
 
-function hookCall(request: ProductionRequest = FIXTURE_REQUEST): WriterCall {
+function hookCall(script: ScriptBody = FIXTURE_SCRIPT): WriterCall {
   return {
     requestId: REQUEST_ID,
     workspaceId: WORKSPACE,
     reservationId: RESERVATION_ID,
     attempt: 1,
-    input: writerInputFor({ request, change: { kind: "hook", index: 2, count: 3 }, claims: CLAIMS }),
+    input: writerInputFor({ script, change: { kind: "hook", index: 2, count: 3 }, claims: CLAIMS }),
   };
 }
 
 /** The fixture request with its hook beat saying a number, so a line that drops it breaks the contract. */
-function numericHookRequest(): ProductionRequest {
-  const request = structuredClone(FIXTURE_REQUEST);
-  request.script.beats = request.script.beats.map((beat) =>
-    beat.beatId === "b1" ? { ...beat, text: "Your counter has lied to you 2 times." } : beat,
-  );
-  return request;
+function numericHookScript(): ScriptBody {
+  return {
+    ...FIXTURE_SCRIPT,
+    beats: FIXTURE_SCRIPT.beats.map((beat) => (beat.beatId === "b1" ? { ...beat, text: "Your counter has lied to you 2 times." } : beat)),
+  };
 }
 
 function productCall(): WriterCall {
@@ -66,7 +67,7 @@ function productCall(): WriterCall {
 
 describe("the variant writer's input (Bible 6.13)", () => {
   it("a hook writes its hook beat only, in the request's language, as one line of its row", () => {
-    const input = linesOf(writerInputFor({ request: FIXTURE_REQUEST, change: { kind: "hook", index: 2, count: 3 }, claims: CLAIMS }));
+    const input = linesOf(writerInputFor({ script: FIXTURE_SCRIPT, change: { kind: "hook", index: 2, count: 3 }, claims: CLAIMS }));
     assert.deepEqual(input.beats.map((beat) => beat.beatId), ["b1"]);
     assert.equal(input.targetLanguage, "en");
     assert.deepEqual(input.variant, { attribute: "hook", label: "hook line 2 of 3" });
@@ -74,17 +75,16 @@ describe("the variant writer's input (Bible 6.13)", () => {
   });
 
   it("a language writes every beat, in the target language", () => {
-    const input = linesOf(writerInputFor({ request: FIXTURE_REQUEST, change: { kind: "language", language: "de" }, claims: CLAIMS }));
-    assert.equal(input.beats.length, FIXTURE_REQUEST.script.beats.length);
+    const input = linesOf(writerInputFor({ script: FIXTURE_SCRIPT, change: { kind: "language", language: "de" }, claims: CLAIMS }));
+    assert.equal(input.beats.length, FIXTURE_SCRIPT.beats.length);
     assert.equal(input.targetLanguage, "de");
     assert.deepEqual(input.variant, { attribute: "language", label: "language de" });
   });
 
   it("a hook is refused, before any call, when the request has no hook beat", () => {
-    const request = structuredClone(FIXTURE_REQUEST);
-    request.script.beats = request.script.beats.filter((beat) => beat.role !== "hook");
+    const script: ScriptBody = { ...FIXTURE_SCRIPT, beats: FIXTURE_SCRIPT.beats.filter((beat) => beat.role !== "hook") };
     assert.throws(
-      () => writerInputFor({ request, change: { kind: "hook", index: 1, count: 1 }, claims: CLAIMS }),
+      () => writerInputFor({ script, change: { kind: "hook", index: 1, count: 1 }, claims: CLAIMS }),
       (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
     );
   });
@@ -145,7 +145,7 @@ describe("one writer call through the Claude client (Bible 6.13, 11, 14.1)", () 
       chat({ lines: [{ beatId: "b1", text: "Your counter has lied to you." }] }),
       chat({ lines: [{ beatId: "b1", text: "Your counter has lied to you 2 times." }] }),
     ]);
-    const outcome = await writeVariantText(deps(gateway, ledger), hookCall(numericHookRequest()));
+    const outcome = await writeVariantText(deps(gateway, ledger), hookCall(numericHookScript()));
     assert.equal(outcome.status, "done");
     if (outcome.status !== "done") return;
     assert.deepEqual(outcome.text, { kind: "lines", lines: [{ beatId: "b1", text: "Your counter has lied to you 2 times." }] });
@@ -161,7 +161,7 @@ describe("one writer call through the Claude client (Bible 6.13, 11, 14.1)", () 
       chat({ lines: [{ beatId: "b1", text: "Your counter has lied to you." }] }),
       chat({ lines: [{ beatId: "b9", text: "Not a beat." }] }),
     ]);
-    const outcome = await writeVariantText(deps(gateway, ledger), hookCall(numericHookRequest()));
+    const outcome = await writeVariantText(deps(gateway, ledger), hookCall(numericHookScript()));
     assert.equal(outcome.status, "failed");
     if (outcome.status === "failed") assert.match(outcome.reason, /did not match its contract after 2 attempts/);
   });

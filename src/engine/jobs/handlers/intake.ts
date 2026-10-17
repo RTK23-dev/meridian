@@ -93,6 +93,16 @@ const CLASSIFIER_RULES = new Set(["every_must_deliverable", "budget_above_format
 
 type Built = { value: ValidatedRequest } | { problem: string };
 
+/**
+ * The spoken length of a brief, estimated before its script exists: its text as one beat at the voice's words per minute (the same
+ * estimator a script's beats use). A text with no words has no length, and that is an error, never a zero.
+ */
+export function briefSpeechEstimateMs(text: string, wordsPerMinute: number): number {
+  const ms = spokenBeatMs([{ beatId: "brief", text }], wordsPerMinute)[0];
+  if (ms === undefined) throw new EngineError("internal", "the brief's speech length has no value", { stage: "intake" });
+  return ms;
+}
+
 /** The validated request built from the request and the kits that loaded (6.1 steps 2 and 5). */
 function buildValidated(
   request: ProductionRequest,
@@ -168,30 +178,44 @@ export function decideIntake(input: IntakeDecisionInput): IntakeDecision {
       );
     }
     const wordsPerMinute = input.kits.persona?.wordsPerMinute ?? input.kits.voice?.wordsPerMinute;
+    // A script request's length and minimum come from its beats. A brief has no beats until write_script writes them (contract v8): its
+    // length is estimated from the brief's own words, an estimate the check's detail says, and its minimum is computed by write_script.
+    const script = request.script;
     if (wordsPerMinute === undefined) {
       const problem = `voice ${request.page.voiceId} has no words per minute, because neither its persona nor its voice kit did load; speech length cannot be estimated`;
       handlerChecks.push(check("speech_length_estimated", false, { detail: problem }));
-      handlerChecks.push(check("format_minimum_computed", false, { detail: `the minimum needs the speech length: ${problem}` }));
+      if (script !== undefined) {
+        handlerChecks.push(check("format_minimum_computed", false, { detail: `the minimum needs the speech length: ${problem}` }));
+      }
     } else {
       try {
-        estimatedSpeechMs = spokenBeatMs(request.script.beats, wordsPerMinute).reduce((sum, ms) => sum + ms, 0);
-        handlerChecks.push(check("speech_length_estimated", true));
+        estimatedSpeechMs =
+          script === undefined
+            ? briefSpeechEstimateMs(request.brief?.text ?? "", wordsPerMinute)
+            : spokenBeatMs(script.beats, wordsPerMinute).reduce((sum, ms) => sum + ms, 0);
+        handlerChecks.push(
+          check("speech_length_estimated", true, {
+            ...(script === undefined ? { detail: "estimated from the brief's words, before its script is written (write_script measures the script)" } : {}),
+          }),
+        );
       } catch (error) {
         if (!(error instanceof EngineError)) throw error;
         handlerChecks.push(check("speech_length_estimated", false, { detail: error.message }));
       }
-      try {
-        minimum = minimumMasterBudgetUsd({
-          beats: request.script.beats,
-          wordsPerMinute,
-          visualRequests: request.visualRequests,
-          classifications: input.classifications,
-          kits: planKitsOf(input.kits),
-        });
-        handlerChecks.push(check("format_minimum_computed", true));
-      } catch (error) {
-        if (!(error instanceof EngineError)) throw error;
-        handlerChecks.push(check("format_minimum_computed", false, { detail: error.message }));
+      if (script !== undefined) {
+        try {
+          minimum = minimumMasterBudgetUsd({
+            beats: script.beats,
+            wordsPerMinute,
+            visualRequests: request.visualRequests,
+            classifications: input.classifications,
+            kits: planKitsOf(input.kits),
+          });
+          handlerChecks.push(check("format_minimum_computed", true));
+        } catch (error) {
+          if (!(error instanceof EngineError)) throw error;
+          handlerChecks.push(check("format_minimum_computed", false, { detail: error.message }));
+        }
       }
     }
 

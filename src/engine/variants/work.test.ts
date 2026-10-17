@@ -3,10 +3,12 @@ import { describe, it } from "node:test";
 import { EngineError, type EditDecisionList, type ProductionRequest, type VariantMatrix } from "../contracts/index.ts";
 import { edlFixture, FIXTURE_IDS, productionRequestFixture, scenePlanFixture } from "../contracts/fixtures/index.ts";
 import { expandVariants, type ExpansionInput, type PlannedVariant } from "./expand.ts";
-import { generationWorkOf, nextPhaseOf, variantRequestFor, variantSubjectOf, variantWorkItemSchema, type VariantWorkItem } from "./work.ts";
+import { generationWorkOf, nextPhaseOf, variantScriptFor, variantSubjectOf, variantWorkItemSchema, type VariantWorkItem } from "./work.ts";
+import { scriptOf } from "../script/resolve.ts";
 
 const REQUEST = productionRequestFixture as ProductionRequest;
-const ALL_BEATS = REQUEST.script.beats.map((beat) => beat.beatId);
+const SCRIPT = scriptOf(REQUEST, null);
+const ALL_BEATS = SCRIPT.beats.map((beat) => beat.beatId);
 const HOOK_SHOT = FIXTURE_IDS.shot1;
 const PRODUCT_SHOT = FIXTURE_IDS.shot3;
 
@@ -14,6 +16,7 @@ const PRODUCT_SHOT = FIXTURE_IDS.shot3;
 function planned(matrix: Partial<VariantMatrix>): PlannedVariant[] {
   const input: ExpansionInput = {
     request: REQUEST,
+    script: SCRIPT,
     plan: scenePlanFixture,
     master: edlFixture as EditDecisionList,
     matrix: { maxVariants: 20, budgetUsd: 5, ...matrix },
@@ -26,7 +29,7 @@ function planned(matrix: Partial<VariantMatrix>): PlannedVariant[] {
 function itemOf(matrix: Partial<VariantMatrix>): VariantWorkItem {
   const variant = planned(matrix)[0];
   if (variant === undefined) throw new Error("the matrix plans no variant");
-  const item = generationWorkOf(variant, REQUEST);
+  const item = generationWorkOf(variant, SCRIPT);
   if (item === null) throw new Error("the variant needs no generation");
   return item;
 }
@@ -67,7 +70,7 @@ describe("the work list of a generation variant (Bible 6.13)", () => {
   it("a caption or a music variant has no work list item: it needs no generation", () => {
     const caption = planned({ captionStyles: ["lower"] })[0];
     assert.ok(caption);
-    if (caption) assert.equal(generationWorkOf(caption, REQUEST), null);
+    if (caption) assert.equal(generationWorkOf(caption, SCRIPT), null);
   });
 
   it("every item parses against its schema, and its subject carries no ':' or '.'", () => {
@@ -103,19 +106,19 @@ describe("the phases of a generation variant, in order (jobs/variant-runs.ts)", 
 
 describe("a variant's own script, and its job subject (variants/work.ts)", () => {
   it("speaks every beat of the master, with the writer's line in place of its beat, and the variant's language", () => {
-    const built = variantRequestFor({ request: REQUEST, language: "en", lines: [{ beatId: "b1", text: "A new opening." }] });
-    assert.deepEqual(built.script.beats.map((beat) => beat.beatId), ALL_BEATS);
-    assert.equal(built.script.beats[0]?.text, "A new opening.");
-    assert.equal(built.script.beats[1]?.text, REQUEST.script.beats[1]?.text);
+    const built = variantScriptFor({ script: SCRIPT, language: "en", lines: [{ beatId: "b1", text: "A new opening." }] });
+    assert.deepEqual(built.beats.map((beat) => beat.beatId), ALL_BEATS);
+    assert.equal(built.beats[0]?.text, "A new opening.");
+    assert.equal(built.beats[1]?.text, SCRIPT.beats[1]?.text);
   });
 
   it("refuses a line for a beat that is not in the request, and two lines for one beat", () => {
     assert.throws(
-      () => variantRequestFor({ request: REQUEST, language: "en", lines: [{ beatId: "b9", text: "x" }] }),
+      () => variantScriptFor({ script: SCRIPT, language: "en", lines: [{ beatId: "b9", text: "x" }] }),
       (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
     );
     assert.throws(
-      () => variantRequestFor({ request: REQUEST, language: "en", lines: [{ beatId: "b1", text: "x" }, { beatId: "b1", text: "y" }] }),
+      () => variantScriptFor({ script: SCRIPT, language: "en", lines: [{ beatId: "b1", text: "x" }, { beatId: "b1", text: "y" }] }),
       (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
     );
   });

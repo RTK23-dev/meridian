@@ -21,11 +21,13 @@ import {
   type GateResult,
   type StyleKit,
   type ValidatedRequest,
+  type WrittenScript,
 } from "../../contracts/index.ts";
 import { buildEdl, editIdentity, type EditMusic } from "../../edit/editor.ts";
 import type { RuleResult } from "../../edit/rules.ts";
 import { readArtifact, writeArtifact, type StoredArtifact } from "../artifact-store.ts";
 import type { StageContext, StageHandler, StageRunResult } from "../types.ts";
+import { scriptOf, writtenScriptOf, type ScriptBody } from "../../script/resolve.ts";
 
 /** What a port is given: the workspace, the request, and the validated request the style kit reference comes from. */
 export type EditKitScope = { organizationId: string; requestId: string; validated: ValidatedRequest };
@@ -45,6 +47,8 @@ type Inputs = {
   voice: StoredArtifact;
   validated: StoredArtifact;
   takes: StoredArtifact[];
+  /** The written script, when the request is a brief (contract v8). Null for a script request. */
+  written: WrittenScript | null;
 };
 
 function refuse(message: string, stage: string): EngineError {
@@ -73,12 +77,14 @@ async function readInputs(ctx: StageContext): Promise<Inputs> {
     }
     found.set(stored.envelope.type, [...(found.get(stored.envelope.type) ?? []), stored]);
   }
+  const written = writtenScriptOf([...found.values()].flat(), ctx.requestId);
   return {
     plan: oneOf(found, "scene_plan", ctx.stage),
     dna: oneOf(found, "video_dna", ctx.stage),
     voice: oneOf(found, "voice_track", ctx.stage),
     validated: oneOf(found, "validated_request", ctx.stage),
     takes,
+    written,
   };
 }
 
@@ -113,9 +119,9 @@ export function editGate(subjectId: string, checks: readonly RuleResult[], faili
   return parsed.data;
 }
 
-/** The emphasis marks the script carries, one per term and beat (Bible 8.2 step 10). */
-export function emphasisOf(validated: ValidatedRequest): { beatId: string; term: string }[] {
-  return validated.request.script.beats.flatMap((beat) => (beat.emphasis ?? []).map((term) => ({ beatId: beat.beatId, term })));
+/** The emphasis marks the script carries, one per term and beat (Bible 8.2 step 10). The script is the resolved one (script/resolve.ts). */
+export function emphasisOf(script: ScriptBody): { beatId: string; term: string }[] {
+  return script.beats.flatMap((beat) => (beat.emphasis ?? []).map((term) => ({ beatId: beat.beatId, term })));
 }
 
 /** The edit stage. Pass the ports the worker wires; see EditPorts for what an absent port means. */
@@ -128,6 +134,7 @@ export function createEditHandler(ports: EditPorts): StageHandler {
       const voice = parseBody(voiceTrackSchema, inputs.voice.envelope.body, "voice_track", ctx.stage);
       const validated = parseBody(validatedRequestSchema, inputs.validated.envelope.body, "validated_request", ctx.stage);
       const takes = inputs.takes.map((stored) => parseBody(takeSchema, stored.envelope.body, "take", ctx.stage));
+      const script = scriptOf(validated.request, inputs.written);
 
       // The inputs must all belong to this request, and the plan must name the DNA and the voice it was made from.
       const belongs = [plan.requestId, voice.requestId, validated.requestId, validated.request.requestId].every((id) => id === ctx.requestId);
@@ -158,7 +165,7 @@ export function createEditHandler(ports: EditPorts): StageHandler {
         referenceDurationMs: dna.durationMs,
         takes,
         kit,
-        emphasis: emphasisOf(validated),
+        emphasis: emphasisOf(script),
         ...(music !== undefined ? { music } : {}),
       });
       const gate = editGate(build.edlId, build.checks, build.failingShotIds);

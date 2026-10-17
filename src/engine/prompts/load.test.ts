@@ -9,6 +9,7 @@ const PINNED = {
   "segmenter@1": "sha256:a57745f3df2ca06a32a3e4168c7fa6ad4430afcbcd2d63fac8d6eaf4442fe39b",
   "variant_writer@1": "sha256:4c2aac567b21387d7e31cb972fdc59dc998f3c9b154c99f9af531a2256f891de",
   "variant_writer@2": "sha256:8a61f29242ff6f546ee1d8e078a818536a70f292fe4cd167ea8bf550ee2421f0",
+  "scriptwriter@1": "sha256:e97b4e3426bc77af9e7221e8916c6c45267779d5ab3ab230a82bcd03502d867a",
 } as const;
 
 describe("prompt loading", () => {

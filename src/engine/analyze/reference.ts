@@ -35,6 +35,7 @@ import {
   type MeasuredCaptions,
   type MeasuredZoom,
 } from "../edit/grammar.ts";
+import { notConnectedReason } from "../media/stt-connection.ts";
 import { check, gateResult } from "../review/gates/common.ts";
 import {
   framesAtCutsAndSamples,
@@ -52,18 +53,31 @@ import { segmentMeasures, type SegmentMeasures } from "./measure.ts";
 
 export const ANALYZE_STAGE = "analyze_reference";
 
-/** The source store (Bible 5.2, 20.2): the reference as a media source, and its deletion once the analysis ends. */
+/**
+ * The source store (Bible 5.2, 20.2): the reference as a media source, and its deletion once the analysis ends. The request id names
+ * the request the reference belongs to: its brand is the store's key (engine-media-link.ts keeps the same rule).
+ */
 export type ReferenceSource = {
-  /** The reference as a URL the functions can read. not_connected when no store is wired (CLAUDE.md working rule 1). */
+  /** The reference as bytes the functions can read. not_connected when no store is wired (CLAUDE.md working rule 1). */
   resolve(
     referenceVideo: string,
     organizationId: string,
+    requestId: string,
   ): Promise<
     { status: "ready"; source: MediaSource } | { status: "not_connected"; reason: string }
   >;
   /** Deletes any copy of the reference Meridian holds. Called once the analysis ends, pass or fail (Bible 5.2, 6.2 step 7). */
-  release(referenceVideo: string, organizationId: string): Promise<void>;
+  release(referenceVideo: string, organizationId: string, requestId: string): Promise<void>;
 };
+
+/**
+ * The speech language of the reference, which speech-to-text is asked for (the adapter sends it, with detection off). A script request
+ * names its script's language. A brief has none (contract v8, open point 3): its speech language is null until a port says otherwise,
+ * and the stage then stops before any call, with the reason.
+ */
+export function referenceSpeechLanguageOf(request: ProductionRequest): string | null {
+  return request.script?.language ?? null;
+}
 
 /**
  * The readings that need frames: captions, zoom and loop (Bible 8.1). Each is null until its reader answers. reasons says why a
@@ -101,6 +115,11 @@ export type ReferencePorts = {
   readings?: (scope: ReadingsScope) => Promise<GrammarReadings>;
   /** The DNA id. A test passes a fixed one; production makes a new one. */
   newDnaId?: () => string;
+  /**
+   * The reference's speech language for speech-to-text (see referenceSpeechLanguageOf). Absent, a script request's language is used
+   * and a brief stops (null). A port returns the language it knows, or null to stop.
+   */
+  speechLanguage?: (run: ReferenceRun) => string | null;
 };
 
 export type ReferenceRun = {
@@ -162,8 +181,18 @@ export async function analyzeReference(
     return { status: "not_connected", reason: ports.speech.reason };
   const stt: SpeechToText = ports.speech.stt;
   const { request } = run;
+  // The language is read before anything is measured: a reference with no known language stops here, with nothing spent.
+  const language = ports.speechLanguage ? ports.speechLanguage(run) : referenceSpeechLanguageOf(request);
+  if (language === null) {
+    return {
+      status: "not_connected",
+      reason: notConnectedReason(
+        "the reference's speech language is not known: a brief request has no language, and speech-to-text is not asked without one (contract v8, open point 3)",
+      ),
+    };
+  }
   const attempt = attemptOf(run.attempt);
-  const resolved = await ports.source.resolve(request.format.referenceVideo, run.organizationId);
+  const resolved = await ports.source.resolve(request.format.referenceVideo, run.organizationId, run.requestId);
   if (resolved.status === "not_connected")
     return { status: "not_connected", reason: resolved.reason };
   const source = resolved.source;
@@ -172,7 +201,7 @@ export async function analyzeReference(
   const probe = await ports.media.probe({ source });
   const durationMs = probe.durationMs;
   if (durationMs === null || durationMs <= 0) {
-    await ports.source.release(request.format.referenceVideo, run.organizationId);
+    await ports.source.release(request.format.referenceVideo, run.organizationId, run.requestId);
     return {
       status: "done",
       gate: gateResult("dna", run.subjectId, [
@@ -200,7 +229,7 @@ export async function analyzeReference(
   // (3) Speech-to-text with word timings. The metered wrapper reserves, keys and reconciles the call (Bible 14.1).
   const metered = await transcribeMetered(
     stt,
-    { source, durationMs, language: request.script.language, organizationId: run.organizationId },
+    { source, durationMs, language, organizationId: run.organizationId },
     {
       store: ports.roles.ledger,
       reservationId: run.reservationId,
@@ -385,7 +414,7 @@ export async function analyzeReference(
   );
 
   // (8) Release the source, then build the DNA. sourceDeletedAt is the time of the release (Bible 4.1).
-  await ports.source.release(request.format.referenceVideo, run.organizationId);
+  await ports.source.release(request.format.referenceVideo, run.organizationId, run.requestId);
   const sourceDeletedAt = ports.roles.now();
 
   let dna: VideoDNA | null = null;

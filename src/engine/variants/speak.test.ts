@@ -3,10 +3,12 @@ import { describe, it } from "node:test";
 import { EngineError, type ProductionRequest, type VoiceKit } from "../contracts/index.ts";
 import { productionRequestFixture, voiceKitFixture } from "../contracts/fixtures/index.ts";
 import type { VoiceOutcome, VoicePorts, VoiceRun } from "../voice/voice.ts";
-import { variantRequestFor, variantSubjectOf } from "./work.ts";
+import { variantScriptFor, variantSubjectOf } from "./work.ts";
+import { scriptOf } from "../script/resolve.ts";
 import { runVoiceOverPorts, speakVariantScript, type VariantSpeech, type VoiceRunner } from "./speak.ts";
 
 const REQUEST = productionRequestFixture as ProductionRequest;
+const SCRIPT = scriptOf(REQUEST, null);
 const VOICE = voiceKitFixture as VoiceKit;
 const CLAIMS = ["Makes four smoothies in under two minutes"];
 const SUBJECT_HOOK = variantSubjectOf("hook:2");
@@ -32,7 +34,8 @@ function speech(overrides: Partial<VariantSpeech> = {}): VariantSpeech {
     attempt: 1,
     subject: SUBJECT_HOOK,
     request: REQUEST,
-    language: REQUEST.script.language,
+    language: SCRIPT.language,
+    script: SCRIPT,
     voice: VOICE,
     claims: CLAIMS,
     lines: [{ beatId: "b1", text: "Your counter has been lying to you all along." }],
@@ -45,18 +48,18 @@ describe("a variant speaks its full script (Bible 6.13, the deviation in variant
     const { runner, runs } = recordingRunner();
     await speakVariantScript(undefined, speech(), runner);
     assert.equal(runs.length, 1);
-    const beats = runs[0]?.request.script.beats ?? [];
-    assert.deepEqual(beats.map((beat) => beat.beatId), REQUEST.script.beats.map((beat) => beat.beatId), "every beat is spoken");
+    const beats = runs[0]?.script.beats ?? [];
+    assert.deepEqual(beats.map((beat) => beat.beatId), SCRIPT.beats.map((beat) => beat.beatId), "every beat is spoken");
     assert.equal(beats[0]?.text, "Your counter has been lying to you all along.", "the hook beat is the writer's line");
-    assert.equal(beats[1]?.text, REQUEST.script.beats[1]?.text, "the other beats are the master's own text");
+    assert.equal(beats[1]?.text, SCRIPT.beats[1]?.text, "the other beats are the master's own text");
   });
 
   it("speaks a language variant's lines in the variant's language", async () => {
     const { runner, runs } = recordingRunner();
-    const lines = REQUEST.script.beats.map((beat) => ({ beatId: beat.beatId, text: `DE ${beat.text}` }));
+    const lines = SCRIPT.beats.map((beat) => ({ beatId: beat.beatId, text: `DE ${beat.text}` }));
     await speakVariantScript(undefined, speech({ language: "de", lines, subject: variantSubjectOf("language:de") }), runner);
-    assert.equal(runs[0]?.request.script.language, "de");
-    assert.ok(runs[0]?.request.script.beats.every((beat) => beat.text.startsWith("DE ")));
+    assert.equal(runs[0]?.script.language, "de");
+    assert.ok(runs[0]?.script.beats.every((beat) => beat.text.startsWith("DE ")));
   });
 
   it("speaks a persona's voice over the master's own text, with the persona's voice kit", async () => {
@@ -64,15 +67,15 @@ describe("a variant speaks its full script (Bible 6.13, the deviation in variant
     const persona: VoiceKit = { ...VOICE, voiceId: "voice_variant", providerVoiceId: "variant-voice-id" };
     await speakVariantScript(undefined, speech({ voice: persona, lines: [], subject: SUBJECT_PERSONA }), runner);
     assert.equal(runs[0]?.voice.voiceId, "voice_variant");
-    assert.deepEqual(runs[0]?.request.script.beats.map((beat) => beat.text), REQUEST.script.beats.map((beat) => beat.text));
+    assert.deepEqual(runs[0]?.script.beats.map((beat) => beat.text), SCRIPT.beats.map((beat) => beat.text));
   });
 
   it("keeps an emphasis word only while the new text still contains it", () => {
-    const beats = REQUEST.script.beats.map((beat, index) => ({ ...beat, emphasis: ["lying"], text: index === 1 ? "The lying counter is full." : beat.text }));
-    const request = { ...REQUEST, script: { ...REQUEST.script, beats } };
-    const built = variantRequestFor({ request, language: "en", lines: [{ beatId: "b1", text: "Your counter fooled you." }] });
-    assert.deepEqual(built.script.beats[0]?.emphasis, []);
-    assert.deepEqual(built.script.beats[1]?.emphasis, ["lying"]);
+    const beats = SCRIPT.beats.map((beat, index) => ({ ...beat, emphasis: ["lying"], text: index === 1 ? "The lying counter is full." : beat.text }));
+    const script = { ...SCRIPT, beats };
+    const built = variantScriptFor({ script, language: "en", lines: [{ beatId: "b1", text: "Your counter fooled you." }] });
+    assert.deepEqual(built.beats[0]?.emphasis, []);
+    assert.deepEqual(built.beats[1]?.emphasis, ["lying"]);
   });
 
   it("refuses a line for a beat the request does not have, and two lines for one beat, before any call", async () => {

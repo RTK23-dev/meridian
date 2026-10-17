@@ -107,6 +107,8 @@ export async function startEngineRequest(sql: Sql, input: StartInput): Promise<S
       cachedDna: false,
       variantCount,
       requestArtifactId,
+      // A brief has no script: its write_script stage writes the script after analysis (contract v8).
+      brief: request.brief !== undefined,
       ...(input.gateMetrics ? { gateMetrics: input.gateMetrics } : {}),
     },
     {

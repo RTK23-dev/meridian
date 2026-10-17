@@ -38,6 +38,7 @@ import type { VoiceOutcome, VoiceRun } from "../../voice/voice.ts";
 import type { VoiceRunner } from "../../variants/speak.ts";
 import { generationWorkOf, variantSubjectOf, type VariantPhase, type VariantWorkItem } from "../../variants/work.ts";
 import { expandVariants } from "../../variants/expand.ts";
+import { scriptOf } from "../../script/resolve.ts";
 import type { EnginePayload, StageContext, StageOutput, VariantPlanOutcome, VariantVoiceOutcome, VariantWriterOutcome } from "../types.ts";
 import { captionVariantMaster } from "../test/caption-variant.ts";
 import { assetSpecFor, takeIdFor } from "./produce-shot.ts";
@@ -293,8 +294,8 @@ test("a hook variant calls the writer once for its hook line, speaks every beat 
   const { outcome, artifacts } = await runVoice(h, inputIds, item, writer.text);
   assert.equal(outcome.status, "done");
   assert.equal(h.calls.length, 1, "the voice is called once");
-  assert.deepEqual(h.calls[0]?.request.script.beats.map((beat) => beat.beatId), ["b1", "b2", "b3", "b4", "b5"], "every beat is spoken: a full re-speak");
-  assert.equal(h.calls[0]?.request.script.beats[0]?.text, writer.text.kind === "lines" ? writer.text.lines[0]?.text : "", "the hook beat is the writer's line");
+  assert.deepEqual(h.calls[0]?.script.beats.map((beat) => beat.beatId), ["b1", "b2", "b3", "b4", "b5"], "every beat is spoken: a full re-speak");
+  assert.equal(h.calls[0]?.script.beats[0]?.text, writer.text.kind === "lines" ? writer.text.lines[0]?.text : "", "the hook beat is the writer's line");
   assert.equal(h.calls[0]?.subjectId, item.subject, "the gate names the variant");
   assert.ok(artifacts[`voice:${item.key}`], "the spoken track is stored as the variant's voice");
 
@@ -470,7 +471,7 @@ test("a persona variant speaks every beat in the persona's voice with no writer 
   const { outcome } = await runVoice(h, inputIds, item, null);
   assert.equal(outcome.status, "done");
   assert.equal(h.calls.length, 1);
-  assert.equal(h.calls[0]?.request.script.beats.length, productionRequestFixture.script.beats.length, "every beat is spoken again");
+  assert.equal(h.calls[0]?.script.beats.length, scriptOf(productionRequestFixture, null).beats.length, "every beat is spoken again");
   assert.equal(h.calls[0]?.voice.voiceId, ALT_VOICE_ID, "in the persona's voice");
 
   const plan = await runPlan(h, inputIds, item, { text: null, voiceTrackId: PASS_TRACK.voiceTrackId });
@@ -503,13 +504,14 @@ test("a variant's produce job names its own take and spec: neither is the master
 test("the work item's subject is the one the orchestrator queues, and the generation work is the full re-speak", () => {
   const variants = expandVariants({
     request: requestWith({ hooks: 1, maxVariants: 4, budgetUsd: 1 }),
+    script: scriptOf(requestWith({ hooks: 1, maxVariants: 4, budgetUsd: 1 }), null),
     plan: master,
     master: captionVariantMaster() as EditDecisionList,
     matrix: { hooks: 1, maxVariants: 4, budgetUsd: 1 },
     tracks: new Map(),
     headroomUsd: 1,
   }).planned;
-  const item = variants[0] ? generationWorkOf(variants[0], requestWith({ hooks: 1, maxVariants: 4, budgetUsd: 1 })) : null;
+  const item = variants[0] ? generationWorkOf(variants[0], scriptOf(requestWith({ hooks: 1, maxVariants: 4, budgetUsd: 1 }), null)) : null;
   assert.equal(item?.subject, variantSubjectOf("hook:1"));
   assert.equal(item?.voiceBeatIds.length, 5);
 });

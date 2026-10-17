@@ -1,0 +1,21 @@
+{
+  "id": "gen-recorded-scriptwriter-long-0001",
+  "model": "recorded/scriptwriter",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"language\":\"en\",\"beats\":[{\"beatId\":\"b1\",\"role\":\"hook\",\"text\":\"Your counter is full again and the pile keeps growing every single morning, with the toaster, the kettle, the mixer, the grinder, the juicer and the peeler all fighting for the same narrow strip of space by the sink, while the knife block sits forgotten at the back and the cutting board leans against the fruit bowl.\"},{\"beatId\":\"b2\",\"role\":\"setup\",\"text\":\"Most mornings it is the same story: you reach for one thing and knock over three others, then you give up and make toast on the floor of the hallway while the coffee goes cold beside the stack of plates you meant to wash last night.\"},{\"beatId\":\"b3\",\"role\":\"item\",\"text\":\"One blender can live on the counter and stay out of the way, with a lid that stacks, a base that wipes clean and a cord that wraps neatly around the handle, so the rest of the kitchen can breathe again.\"},{\"beatId\":\"b4\",\"role\":\"proof\",\"text\":\"Four smoothies in under two minutes, from frozen fruit to glass, every morning, without a single extra gadget.\"},{\"beatId\":\"b5\",\"role\":\"cta\",\"text\":\"Comment BLEND for the link.\"}],\"rationale\":\"The hook opens on the mess the viewer already has, then the setup makes it concrete. The proof uses the source's figure and no other claim.\",\"sourceLabels\":[\"product sheet\"]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 5120,
+    "completion_tokens": 420,
+    "total_tokens": 5540,
+    "cost": 0.0511
+  }
+}

@@ -1,5 +1,92 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## Brief requests and write_script (contract v8, engine-contracts@8; branch worktree-agent-a16624873a0973b89)
+
+Built on this branch, not merged (the lead merges). Commits: 4b3ca24 and 65bb76b (the worker's in-process ffmpeg and Deepgram), 823cbf7
+(contract v8), 429faa0 (WIP checkpoint), then the work of this pass on top. Typecheck: `npx tsc --noEmit` exit 0. Engine tests: 3015 pass, 0
+fail (with src/lib/meridian/storage and scripts/migration-plan.test.mjs). Lint: exit 0 on the touched folders.
+
+**What changed**
+- `registry.ts`: a 15th stage, `write_script`, after analyze_reference and before voice (group 2, claude lease, paid, no gate). Voice reads
+  `written_script`; plan, edit, pre_render_gate and the variants read it too.
+- `orchestrator.ts`: `start` takes `brief` (set by `api/index.ts` from the request). A script request starts with write_script passed (skipped
+  as done). A brief queues write_script after analysis (or at once with a cached DNA), and voice after write_script. Slot `script` is the
+  written script's artifact id; voice, plan, edit, the pre-render gate and the variant jobs name it as an input. A write_script that passes
+  without its artifact is refused. A dead write_script pauses the request as any single node does.
+- `handlers/write-script.ts`: the scriptwriter over `runRole` on the job's reservation. The answer contract (claude/roles/scriptwriter.ts)
+  refuses copied runs of the reference's words (COPY_RUN_WORDS, analyze/copy.ts), a script over maxMs at the voice's words per minute, a
+  forbidden product term, an emphasis word outside its beat, an unknown source label and a bad language tag; the single retry names those by
+  path. The stage then checks the written_script contract and the format minimum for the written beats (a budget below it fails the stage).
+  A script request is refused. No voice words per minute is NOT_CONNECTED before any call.
+- `script/resolve.ts`: the one resolver. `scriptOf(request, written)` returns the request's own script, or the written script of a brief,
+  and throws internal for a brief with none. `writtenScriptOf(inputs, requestId)` finds it among a job's inputs. Every consumer reads the
+  script through it: edit, plan (build.ts takes `script`), pre-render gate (`checkPreRender` takes `script`), variants (expand, work, writer,
+  speak, the assembly), voice (`VoiceRun.script`), intake and the request gate (no beat checks for a brief; visual requests refused).
+- Intake for a brief: speech length estimated from the brief's words (one beat at the voice's words per minute, labelled in the check's
+  detail); the format minimum is not an intake check (write_script computes it). Reference analysis: `referenceSpeechLanguageOf` (a brief has
+  none, so analyze stops with NOT_CONNECTED before any call unless a `speechLanguage` port gives one).
+- `production-stages.ts` (new): the production ports. The reference is read from Meridian's store under the request's brand (store://
+  keys, as bytes for the media functions) and released when the analysis ends (`lib/meridian/storage/engine-reference-store.ts`, Drive
+  delete of the index's file id, then the index row). Analysis and voice ports are per reservation (`ReferencePortsFor`, `VoicePortsFor`),
+  so the ledger and the Claude deps are the reservation's. write_script takes the kit store and the composition's roleDeps.
+- `runtime.ts`: `analysis`, `voice` accept a per-reservation function or a fixed port set; `writeScript`, `media` and `picture` are on the
+  composition. productionEngineRuntime registers analyze_reference, write_script and voice.
+- Migration `migrations/0100_engine_script_roles.sql`: engine_artifacts.type adds written_script and model_choices; engine_role_calls.role adds
+  model_chooser and scriptwriter. migration-0081.test.ts passes (it failed on main before this change).
+
+**What each stage does in production now**
+- analyze_reference, script request: reads the store:// reference as bytes, probes, cuts, frames, timeline, speech-to-text (Deepgram, the stt
+  route), the segmenter, the genome and the frame reader (Claude through the gateway, on the reservation), then releases the reference. Live
+  behaviour is not verified: no key is held here.
+- analyze_reference, brief: stops before any call with NOT_CONNECTED (speech language not known). Open decision (see below).
+- write_script, brief: the scriptwriter (Opus) through the gateway, on the reservation, then the checks above. A refused answer is retried once,
+  and a second refusal fails the stage with the failing paths. Meridian's queue retries the job; the role journal reuses the stored answers,
+  so a retry does not pay for the same answer twice (claude/client.ts resume rules).
+- voice: refuses before any call with NOT_CONNECTED and the two blockers in `SPEECH_OUTPUT_BLOCKERS` (production-stages.ts): speech is MP3,
+  which the engine's asset store does not hold, and a speech call has no bill source, so it stays unsettled. Voice does not speak in
+  production until the owner decides both.
+
+**Tests (all fixture-based, no live call)**
+- `script/resolve.test.ts` (10): script and brief paths, the refusal of a script given a written script, a brief with none, another request's
+  script, the artifact reader's refusals.
+- `claude/roles/scriptwriter.test.ts` (11): the role's metadata, the sent message (no transcript words, no attachment uri), the four recorded
+  answers (ok, copies, unknown label, long), each contract refusal by path, the client on recorded calls (one retry, then RoleAnswerError).
+- `jobs/handlers/write-script.test.ts` (7, PGlite): accepted, copied twice (nothing stored), over maxMs (nothing stored), script request
+  refused, no words per minute, budget below the minimum, no reservation.
+- `jobs/orchestrator-brief.test.ts` (8): script and brief routing, the script slot in voice and plan inputs, a dead write_script.
+- `jobs/handlers/intake-brief.test.ts` (6): the brief's intake decision.
+- `jobs/production-stages.test.ts` (7, PGlite): the reference read and release, the not-connected reference, a brief stopping before any call,
+  the voice guard sending nothing, the three registrations.
+- `jobs/brief-pipeline.test.ts` (2, PGlite): analyze, write_script, voice and plan on fixtures, the orchestrator queuing each stage on the
+  artifacts the previous one wrote. Two fixtures are stated in the file: the voice track (the written script's words on the fixture's spans),
+  and the plan's DNA (the fixture's, because the recorded planner answer names the fixture's reference segments; a plan on the analysed DNA
+  needs an answer recorded on it, which the live run gives).
+- `jobs/migration-0100.test.ts` (5, PGlite): the two checks and the two new artifact types.
+- Updated: `registry.test.ts` (15 stages), `prompts/load.test.ts` (scriptwriter@1 pinned), and the brief fixtures in the tests that read the
+  script through the resolver (plan, review, variants, voice).
+
+**Not verified live (the owner's run)**
+1. Every Claude call (segmenter, genome, frame_reader, scriptwriter, planner, director) on OpenRouter, with the recorded answers replaced by
+   live answers. The fixtures are authored in the recorded shape (claude/test/fixtures/README.md).
+2. The reference store: a store:// upload read from Drive and released (Drive delete and the index row). The key format of the Content
+   Factory's upload is not in this branch (main 7edb203 has the Factory page; not merged here).
+3. Speech-to-text on the reference (Deepgram, nova-3) for a script request, with its bill.
+4. The media functions on the reference (in-process ffmpeg under MEDIA_FUNCTIONS_MODE=in_process, or the HTTP form).
+
+**Decisions for the lead (the owner's where marked)**
+1. A brief's reference speech language (owner). Options: a language on the brief (a contract change), speech-to-text detection (a media
+   change: detect_language is off in the Deepgram adapter), or the page's language. Until one is chosen, a brief stops at analyze_reference.
+2. Speech output format (owner). The speech adapter asks for MP3 and the engine stores png, mp4 and wav (lib/meridian/storage/engine-asset-media.ts,
+   and the link route). Storing MP3 is a storage change; a WAV output is a provider change. Until decided, voice refuses before any call.
+3. Speech billing (owner). A speech call has no bill source (openrouterSpeech.ts, contract v6), so it stays unsettled after the call.
+4. COPY_RUN_WORDS = 3 applies to scripts too (analyze/copy.ts, a named constant, not in config). Three words in a row may refuse ordinary
+   phrases ("this is the"). A separate script constant (5?) is the lead's call; the test fixtures are written to pass the current value.
+5. The Bible needs: section 3 (15 stages: write_script), a write_script section (6.x), a scriptwriter row in 11.1 with its prompt, and the
+   10.5 "director role" = model_chooser (contract v8 open point 1). Not edited here (Bible owned by the lead).
+6. Not built: model_chooser (another agent), the variants of a brief (the script slot is wired and the variant jobs read it; no test of a brief
+   variant run), and the Factory's brief path (the Factory maps only a script; it does not send a brief yet).
+7. Intake of a brief names no beats: a visual request on a brief fails intake (contract v8 open point 2, decided here).
+
 ## Model choice (Bible 10.5, contract v7; 2026-10-17): router side wired, director call blocked on a contract change
 
 **Wired.** `runtime.ts`: `ShotPorts.catalog` (production: `modelCatalogCache({ gateway })`) is passed to every asset router. A spec with

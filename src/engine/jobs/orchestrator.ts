@@ -37,7 +37,7 @@ export const ORCHESTRATOR_STATE_SCHEMA = "engine.orchestrator_state/v1" as const
 const CHAIN_STAGES = ["compose", "pre_render_gate", "render", "post_render_review"] as const;
 
 /** The stages that run once per request. Shots, takes and branches are tracked in their own maps. */
-export const SINGLE_NODES = ["intake", "analyze_reference", "voice", "plan", "estimate_reserve", "edit", "variants", "deliver"] as const;
+export const SINGLE_NODES = ["intake", "analyze_reference", "write_script", "voice", "plan", "estimate_reserve", "edit", "variants", "deliver"] as const;
 export type SingleNode = (typeof SINGLE_NODES)[number];
 
 /** Branch stages: the chain from an EDL to a delivered video (stages 9 to 12). "done" means the branch passed review. */
@@ -227,9 +227,12 @@ function initialState(event: Extract<EngineEvent, { type: "start" }>): Orchestra
     invalid("variantCount must be a whole number of zero or more");
   }
   const idle = (): NodeState => ({ status: "idle", redos: 0, hints: [] });
+  // A script request skips write_script as done (contract v8). A brief waits for it, after analysis.
+  const writeScript: NodeState = event.brief === true ? idle() : { status: "passed", redos: 0, hints: [] };
   const nodes: OrchestratorState["nodes"] = {
     intake: idle(),
     analyze_reference: idle(),
+    write_script: writeScript,
     voice: idle(),
     plan: idle(),
     estimate_reserve: idle(),
@@ -309,6 +312,8 @@ function applyOutput(state: OrchestratorState, output: StageOutput, effects: Eng
       checkGate(output.stage, output.gate);
       effects.push({ kind: "gate", gate: output.gate });
       return applySingleGate(state, "analyze_reference", output, effects, orchestratorLimits.analyzeRedos);
+    case "write_script":
+      return applyWriteScript(state, output);
     case "voice":
       checkGate(output.stage, output.gate);
       effects.push({ kind: "gate", gate: output.gate });
@@ -410,6 +415,17 @@ function applyIntake(state: OrchestratorState, output: Extract<StageOutput, { st
   state.nodes.intake.status = "passed";
   if (output.budgetReservationId !== null) state.budgetReservationId = output.budgetReservationId;
   if (state.cachedDna) state.nodes.analyze_reference.status = "passed";
+}
+
+/**
+ * The written script of a brief passed (contract v8). Its artifact is the request's "script" slot, which voice, plan, edit, the pre-render
+ * gate and the variants read. A write_script that passes names the script it wrote; without it the stage did not pass.
+ */
+function applyWriteScript(state: OrchestratorState, output: Extract<StageOutput, { stage: "write_script" }>): void {
+  expectQueued(state, "write_script", output.subjectId);
+  if (output.artifacts.script === undefined) invalid("write_script passed without its written script artifact", "write_script");
+  mergeArtifacts(state, output.artifacts);
+  state.nodes.write_script.status = "passed";
 }
 
 /** The reason a paid stage pauses the request when no reservation exists yet (Bible 5.1, 14). Names the stage. */
@@ -1092,7 +1108,16 @@ function variantChainIds(state: OrchestratorState, run: VariantRun): { plan: str
  */
 function preRenderIdsOf(state: OrchestratorState, run: VariantRun, edlId: string): (string | undefined)[] {
   const own = variantChainIds(state, run);
-  return [state.artifacts[`composition:${edlId}`], state.artifacts[`edl:${edlId}`], own.plan, state.artifacts.validated, own.voice, state.artifacts.dna, ...own.takes];
+  return [
+    state.artifacts[`composition:${edlId}`],
+    state.artifacts[`edl:${edlId}`],
+    own.plan,
+    state.artifacts.validated,
+    state.artifacts.script,
+    own.voice,
+    state.artifacts.dna,
+    ...own.takes,
+  ];
 }
 
 /**
@@ -1266,7 +1291,7 @@ function branchSlots(state: OrchestratorState, branch: BranchState): string[] {
     case "compose":
       return [edl, "validated"];
     case "pre_render_gate":
-      return [`composition:${branch.edlId}`, edl, "plan", "validated", "voice", "dna", ...acceptedTakeSlots(state)];
+      return [`composition:${branch.edlId}`, edl, "plan", "validated", "script", "voice", "dna", ...acceptedTakeSlots(state)];
     case "render":
       return [`composition:${branch.edlId}`, edl, "validated"];
     case "post_render_review":
@@ -1325,7 +1350,9 @@ function schedule(state: OrchestratorState): QueuedJob[] {
   const ready: Record<SingleNode, boolean> = {
     intake: true,
     analyze_reference: n.intake.status === "passed" && !state.cachedDna,
-    voice: n.intake.status === "passed",
+    // A brief is written after its reference is analysed (contract v8); a script request's write_script is passed from the start.
+    write_script: n.intake.status === "passed" && n.analyze_reference.status === "passed",
+    voice: n.intake.status === "passed" && n.write_script.status === "passed",
     plan: n.analyze_reference.status === "passed" && n.voice.status === "passed",
     estimate_reserve: n.plan.status === "passed",
     edit: n.estimate_reserve.status === "passed" && allShotsAccepted(state),
@@ -1345,14 +1372,17 @@ function schedule(state: OrchestratorState): QueuedJob[] {
   const nodeSlots: Record<SingleNode, string[]> = {
     intake: ["request"],
     analyze_reference: ["request"],
-    voice: ["request"],
-    plan: ["validated", "dna", "voice"],
+    // The scriptwriter reads the brief (the request) and the analysed reference (the dna slot).
+    write_script: ["request", "dna"],
+    // Voice reads the request's script, or the written script of a brief ("script" slot, contract v8).
+    voice: ["request", "script"],
+    plan: ["validated", "dna", "voice", "script"],
     // The request artifact carries the request's budget (constraints.budgetUsd), which the reservation needs (Bible 14.1).
     estimate_reserve: ["plan", "request"],
     // The validated request names the style kit and carries the emphasis marks the editor reads (E3, edit/STATUS.md item 1).
-    edit: ["plan", "dna", "voice", "validated", ...Object.values(state.shots).flatMap((shot) => (shot.acceptedTakeId ? [`take:${shot.acceptedTakeId}`] : []))],
+    edit: ["plan", "dna", "voice", "validated", "script", ...Object.values(state.shots).flatMap((shot) => (shot.acceptedTakeId ? [`take:${shot.acceptedTakeId}`] : []))],
     // The variants stage expands the request's matrix against its plan and its master (Bible 6.13).
-    variants: state.masterEdlId === null ? [] : [`edl:${state.masterEdlId}`, "request", "plan"],
+    variants: state.masterEdlId === null ? [] : [`edl:${state.masterEdlId}`, "request", "plan", "script"],
     deliver: Object.keys(state.artifacts),
   };
   for (const node of SINGLE_NODES) {
@@ -1398,7 +1428,7 @@ function schedule(state: OrchestratorState): QueuedJob[] {
         "plan",
         shot.shotId,
         { directive: shot.replanDirective, shotId: shot.shotId, visualType: shot.visualType, downgradeTo: shot.downgradeTo },
-        ["validated", "dna", "voice", "plan"],
+        ["validated", "dna", "voice", "plan", "script"],
         shot.replanHints,
       );
     }
@@ -1423,7 +1453,7 @@ function schedule(state: OrchestratorState): QueuedJob[] {
           "variants",
           run.subject,
           { phase, variantKey: run.key, masterEdlId: state.masterEdlId, work: run.work, text: run.text, voiceTrackId: run.voiceTrackId },
-          ["request", "plan"],
+          ["request", "plan", "script"],
           [],
         );
       }
@@ -1464,7 +1494,7 @@ function schedule(state: OrchestratorState): QueuedJob[] {
         { phase: "assemble", variantKey: run.key, masterEdlId: state.masterEdlId, work: run.work, text: null, voiceTrackId: run.voiceTrackId },
         [],
         [],
-        [own.plan, state.artifacts.dna, state.artifacts.validated, own.voice, ...own.takes],
+        [own.plan, state.artifacts.dna, state.artifacts.validated, state.artifacts.script, own.voice, ...own.takes],
       );
     }
   }

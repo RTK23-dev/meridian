@@ -43,6 +43,7 @@ import { directorTaskOf, needsPrompt, needsQuery, plannerTaskOf } from "./prompt
 import { heroUriOf, productImageUris } from "./product.ts";
 import { buildSource, componentBuildRefusals, emphasisIn, type WordSpan } from "./sources.ts";
 import { DOWNGRADE_TO } from "./tables.ts";
+import type { ScriptBody } from "../script/resolve.ts";
 import type { PlanKits, ShotInput } from "./types.ts";
 import { decideVisuals, type ShotChoice, type VisualDecisionResult } from "./visual.ts";
 
@@ -62,6 +63,8 @@ export type PlanSceneInput = {
   attempt?: number;
   signal?: AbortSignal;
   request: ProductionRequest;
+  /** The words the plan covers: the request's script, or a brief's written script (script/resolve.ts). */
+  script: ScriptBody;
   validated: ValidatedRequest;
   voice: VoiceTrack;
   dna: VideoDNA;
@@ -144,7 +147,7 @@ function shotText(shot: ShotInput, input: PlanSceneInput): ShotText {
   if (span === undefined) {
     throw new EngineError("invalid_input", `beat ${shot.beatId} has no voice span`);
   }
-  const beat = input.request.script.beats.find((item) => item.beatId === shot.beatId);
+  const beat = input.script.beats.find((item) => item.beatId === shot.beatId);
   const timed = timedWordsOfShot(input.voice.words, shot, span);
   const words = timed.map((word) => word.text);
   return {
@@ -248,7 +251,7 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
   const aligned: AlignOutput = alignShots(
     {
       requestId,
-      beats: input.request.script.beats.map((beat) => ({ beatId: beat.beatId, role: beat.role, emphasis: beat.emphasis })),
+      beats: input.script.beats.map((beat) => ({ beatId: beat.beatId, role: beat.role, emphasis: beat.emphasis })),
       visualRequests: input.request.visualRequests,
       classifications: input.classifications,
       voice: { durationMs: input.voice.durationMs, beatSpans: input.voice.beatSpans, words: input.voice.words },
@@ -368,7 +371,7 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
       durationMs: shot.endMs - shot.startMs,
       showsProduct: shot.flags.showsProduct,
       mustSatisfy: choice.mustSatisfy,
-      beatText: input.request.script.beats.find((beat) => beat.beatId === shot.beatId)?.text,
+      beatText: input.script.beats.find((beat) => beat.beatId === shot.beatId)?.text,
       visualType: choice.visualType,
       generated: choice.generated,
       baseUsd: choice.baseUsd,

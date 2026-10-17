@@ -16,10 +16,11 @@ import {
 import { isGeneratedType } from "./tables.ts";
 import { decideVisuals, type VisualDecisionInput } from "./visual.ts";
 import type { ClassifiedRequest, ShotInput } from "./types.ts";
+import { scriptOf } from "../script/resolve.ts";
 
 // The fixture request: five beats, one `must` (the blender on b3, classified real_product), and the fixture kits. At 150 words a
 // minute the beats last 2.8, 4.4, 4.0, 3.2 and 2.4 seconds (the words of each beat, from the contracts fixture).
-const beats = productionRequestFixture.script.beats;
+const beats = scriptOf(productionRequestFixture, null).beats;
 const WORDS_PER_MINUTE = personaFixture.wordsPerMinute;
 const BLENDER = "the blender on a clean kitchen counter";
 const blenderClassification: MinimumClassification = { beatId: "b3", want: BLENDER, properties: ["real_product"] };

@@ -1,5 +1,10 @@
 # STATUS: the plan stage (W7), E3 and E5 (W9 plan-side support)
 
+**Brief requests (contract v8, this branch).** `planScene` takes `script` (the resolved words, `script/resolve.ts`). `build.ts` reads the beats
+from it, not from `request.script`. The handler resolves it from the job's written_script input. `minimum.ts` and `fixtureInputs.ts` read the
+script of a script request through the resolver. The plan's recorded answers name shots by the fixture request's id and reference segments,
+so a brief plan on other inputs needs answers recorded on them (`../jobs/STATUS.md`, decision 6 and the brief pipeline test).
+
 ## Decision (lead, 2026-10-15): stop-motion call count is 24 to 36, refused above 36, never clamped
 
 This replaces the frame count and rate of the stop-motion chain described below (`stopMotionTiming`). The chain's call count only

@@ -10,7 +10,8 @@
 
 import { EngineError, type ProductionRequest, type VoiceKit } from "../contracts/index.ts";
 import { runVoice, type VoiceOutcome, type VoicePorts, type VoiceRun } from "../voice/voice.ts";
-import { variantRequestFor } from "./work.ts";
+import { variantScriptFor } from "./work.ts";
+import type { ScriptBody } from "../script/resolve.ts";
 
 /** One variant's voice call: the master request, the lines the writer changed, and the voice that speaks. */
 export type VariantSpeech = {
@@ -21,8 +22,10 @@ export type VariantSpeech = {
   attempt: number;
   /** The variant's job subject (variants/work.ts). It names the gate of the call. */
   subject: string;
-  /** The master request: its beats give the order, and its maxMs bounds the narration. */
+  /** The master request: its maxMs bounds the narration, and its voice page names the speech. */
   request: ProductionRequest;
+  /** The master's words (script/resolve.ts): its beats give the order, and the variant's lines replace the beats they change. */
+  script: ScriptBody;
   /** The language the lines are spoken in: the request's own, or the variant's for a language change. */
   language: string;
   /** The voice kit that speaks: the persona's voice for a persona change, else the page's. */
@@ -51,14 +54,14 @@ export const runVoiceOverPorts: VoiceRunner = async (run, ports) => {
 
 /**
  * Speaks one variant's full script (Bible 6.13, the deviation above). The outcome is the voice stage's: not_connected, or done with a
- * gate and, when it passes, the track. A line that names no beat of the request is refused by variantRequestFor, before any call.
+ * gate and, when it passes, the track. A line that names no beat of the script is refused by variantScriptFor, before any call.
  */
 export async function speakVariantScript(
   ports: VoicePorts | undefined,
   run: VariantSpeech,
   runner: VoiceRunner = runVoiceOverPorts,
 ): Promise<VoiceOutcome> {
-  const request = variantRequestFor({ request: run.request, language: run.language, lines: run.lines });
+  const script = variantScriptFor({ script: run.script, language: run.language, lines: run.lines });
   return runner(
     {
       organizationId: run.organizationId,
@@ -66,7 +69,8 @@ export async function speakVariantScript(
       reservationId: run.reservationId,
       attempt: run.attempt,
       subjectId: run.subject,
-      request,
+      request: run.request,
+      script,
       voice: run.voice,
       claims: run.claims,
     },

@@ -1,5 +1,12 @@
 # STATUS: intake and estimate_reserve stage handlers (A4, updated in E2)
 
+**Brief requests (contract v8, this branch; full account in `../STATUS.md`).** New: `write-script.ts` (the write_script stage, the
+scriptwriter over runRole, its checks and the format minimum; tests in `write-script.test.ts`). Changed: `intake.ts` (a brief's speech length
+is estimated from its words, the format minimum is left to write_script, and `intake-brief.test.ts` covers it), `analyze-reference.ts` and
+`voice.ts` (per-reservation ports, `ReferencePortsFor` and `VoicePortsFor`, and the script resolved through `script/resolve.ts`), `plan.ts`,
+`edit.ts`, `pre-render-gate.ts` and `variants.ts` (each reads the resolved script; the variants' request and phase inputs carry the written
+script when there is one).
+
 ## Update: providerUrl and kit images are wired (branch `worktree-agent-afd76db5012a9b7ba`); the full account is `../STATUS.md`
 
 - **Item 1 (`providerUrl` in runtime.ts): answered.** `productionComposition` builds the production `providerUrl` from the gateway's base

@@ -27,6 +27,7 @@ import {
 } from "../../contracts/index.ts";
 import { checkPreRender, type RenderBudgetInput } from "../../review/gates/preRender.ts";
 import { readArtifact, writeArtifact, type StoredArtifact } from "../artifact-store.ts";
+import { scriptOf, writtenScriptOf } from "../../script/resolve.ts";
 import type { StageContext, StageHandler, StageRunResult } from "../types.ts";
 
 /** What a port is given: the workspace, the request, and the validated request the kit references come from. */
@@ -112,6 +113,8 @@ export function createPreRenderGateHandler(ports: PreRenderPorts): StageHandler 
       if (plan.videoDnaId !== dna.videoDnaId) throw refuse("the scene plan was made from another video DNA", stage);
       if (plan.voiceTrackId !== voice.voiceTrackId) throw refuse("the scene plan was made from another voice track", stage);
 
+      // The words the video speaks: the request's script, or a brief's written script (contract v8). Resolved before any check runs.
+      const script = scriptOf(validated.request, writtenScriptOf([...found.values()].flat(), ctx.requestId));
       const scope: PreRenderScope = { organizationId: ctx.organizationId, requestId: ctx.requestId, validated };
       const styleKit = await ports.loadStyleKit(scope);
       const renderBudget = ports.renderBudget ? await ports.renderBudget(scope) : undefined;
@@ -124,6 +127,7 @@ export function createPreRenderGateHandler(ports: PreRenderPorts): StageHandler 
         composition: composition.envelope.body,
         plan,
         validated,
+        script,
         voice,
         dna,
         takes,

@@ -1,0 +1,21 @@
+{
+  "id": "gen-recorded-scriptwriter-ok-0001",
+  "model": "recorded/scriptwriter",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"language\":\"en\",\"beats\":[{\"beatId\":\"b1\",\"role\":\"hook\",\"text\":\"Your counter is full again.\",\"emphasis\":[\"full\"]},{\"beatId\":\"b2\",\"role\":\"setup\",\"text\":\"Most mornings it is the same pile of gadgets.\"},{\"beatId\":\"b3\",\"role\":\"item\",\"text\":\"One blender can live on the counter and stay out of the way.\"},{\"beatId\":\"b4\",\"role\":\"proof\",\"text\":\"Four smoothies in under two minutes.\"},{\"beatId\":\"b5\",\"role\":\"cta\",\"text\":\"Comment BLEND for the link.\"}],\"rationale\":\"The hook opens on the mess the viewer already has. The proof uses the source's figure and no other claim. The blender is the only product named.\",\"sourceLabels\":[\"product sheet\"]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 5120,
+    "completion_tokens": 260,
+    "total_tokens": 5380,
+    "cost": 0.0307
+  }
+}

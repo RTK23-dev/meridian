@@ -1,5 +1,8 @@
 # Role prompts: status (W3, task A5)
 
+**scriptwriter@1.md (contract v8, this branch).** The four-part prompt of Bible 11.2 for the scriptwriter (see `../claude/roles/STATUS.md`).
+Its hash is pinned in `load.test.ts`. A change to the file is a new version (scriptwriter@2), not an edit.
+
 ## E5 generation variants (this worktree, `agent-a88fc87eb7108bf53`)
 
 - **`variant_writer@2.md`** is new, a complete file for the role's two tasks: `lines` (the hook and language lines of @1, unchanged in

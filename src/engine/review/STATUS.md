@@ -1,5 +1,10 @@
 # STATUS: review gates, pre-production (W11)
 
+**Brief requests (contract v8, this branch).** `gates/request.ts`: for a brief the beat checks are not run (a brief has no beats). Its
+visual requests fail the gate (they name beats the writer has not written), its forbidden-term check reads the brief's text and sources, and
+the format minimum is not checked (write_script does it). `gates/preRender.ts`: `checkPreRender` takes `script` (the resolved words) for the
+slideshow risk and the promised-beats check. No gate id was added: write_script has no gate (`../jobs/STATUS.md`).
+
 ## W2 wiring pass (branch `eng-e45-leftovers-2`): decision 8 partly answered
 
 Not run in this pass. The measurements the review gates read are now wired in `jobs/`, with no change to `takeCheck.ts` (it already takes

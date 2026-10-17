@@ -1,5 +1,8 @@
 # src/engine/api: the engine's API for Meridian (lead tasks I1 to I3)
 
+**Brief requests (contract v8, this branch).** `startEngineRequest` passes `brief: request.brief !== undefined` to the orchestrator's start,
+so a brief's write_script runs and a script request skips it (`../jobs/STATUS.md`).
+
 ## Built
 
 - `index.ts` is the only surface the Factory and the Reviews inbox use for the engine:
