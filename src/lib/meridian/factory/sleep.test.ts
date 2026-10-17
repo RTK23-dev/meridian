@@ -77,6 +77,8 @@ function fakeSleepDb(options: {
     }
     if (text.includes("from brands")) return [{ run_defaults: "" }];
     if (text.includes("from factory_costs")) return [{ total: 0 }];
+    // The brand's engine requests: none, so the engine's spend is nothing (brandCapFiguresOf).
+    if (text.includes("from factory_engine_requests")) return [];
     if (text.includes("from factory_settings")) return [];
     throw new Error(`The fake database does not answer this statement: ${text}`);
   };

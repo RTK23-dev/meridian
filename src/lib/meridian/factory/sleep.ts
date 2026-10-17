@@ -17,7 +17,7 @@ import type { ExecutableJob } from "../jobs/execute.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { adsMustPause } from "./kill-switch.ts";
 import type { FactoryStage } from "./pipeline.ts";
-import { effectiveCap, spendCapsOf } from "./spend.ts";
+import { brandCapFiguresOf, capOrNull } from "./spend.ts";
 import { capStopReason } from "./stage-decision.ts";
 import { runSettingsFromStorage, type RunSettings } from "./run-settings.ts";
 import { challengerArmOf, holdoutArmOf } from "./sleep-holdout.ts";
@@ -57,17 +57,6 @@ type SleepSettingsRow = {
 export type NightSource = { source: string; state: string; reason: string; items: number };
 type StageRecord = { stage: string; result: string };
 type NightEnd = "planned" | "stopped" | "failed";
-
-/** The brand's cost of one day of metered spend, in cents. The same rule as meteredSpendOf: a provider cost counts in cents. */
-async function brandDailySpendCents(sql: Sql, organizationId: string, brandId: string): Promise<number> {
-  const rows = await sql<{ total: number }>`
-    select coalesce(sum(coalesce(micros, cents::bigint * 10000)), 0)::float8 as total
-    from factory_costs
-    where organization_id = ${organizationId} and brand_id = ${brandId} and created_at >= now() - interval '1 day'
-  `;
-  // 10,000 micros make one cent (MICROS_PER_CENT in spend.ts). A total is rounded up so a cap is never under-counted.
-  return Math.ceil(Number(rows[0]?.total ?? 0) / 10_000);
-}
 
 async function killSwitchEngaged(sql: Sql, organizationId: string, brandId: string): Promise<boolean> {
   const rows = await sql<{ scope: string; engaged: boolean }>`
@@ -344,15 +333,20 @@ async function runNight(
     return conclude({ end: "stopped", reason: "The kill switch is engaged. Nothing runs until it is released.", summary: "Stopped: the kill switch is engaged.", runStatus: null, runError: "", runStage: "" });
   }
 
-  // The budget. A night with no cap set does nothing, and says so. The total cap applies per run, and a new run starts at zero.
-  const caps = await spendCapsOf(sql, organizationId, brandId);
+  // The budget. A night with no cap set does nothing, and says so. Each scope is checked on its own, the way the stage check checks it
+  // (capStopReason): the run's default caps against the run's own spend, and the brand's caps against the brand's spend across all its
+  // runs. A new run starts at zero, so the run's caps are not reached at the start; the stage checks hold them as the run spends. The
+  // scopes are not merged, because a merged cap compares one scope's spend with another scope's cap and names the wrong scope. The first
+  // scope reached stops the night, and the reason names it.
   const brandRows = await sql<{ run_defaults: string }>`
     select run_defaults from brands where id = ${brandId} and organization_id = ${organizationId} and deleted_at is null limit 1
   `;
   const defaults: RunSettings = runSettingsFromStorage(brandRows[0]?.run_defaults, 0);
-  const totalCap = effectiveCap(defaults.caps.totalCents, caps.totalCents);
-  const dailyCap = effectiveCap(defaults.caps.dailyCents, caps.dailyCents);
-  if (totalCap === null && dailyCap === null) {
+  const runTotalCap = capOrNull(defaults.caps.totalCents);
+  const runDailyCap = capOrNull(defaults.caps.dailyCents);
+  const brand = await brandCapFiguresOf(sql, organizationId, brandId);
+  const anyCapSet = [runTotalCap, runDailyCap, capOrNull(brand.brandCapCents), capOrNull(brand.brandDailyCapCents)].some((cap) => cap !== null);
+  if (!anyCapSet) {
     return conclude({
       end: "stopped",
       reason: "No spend cap is set for this brand, so sleep mode did not run. Set a cap in the Factory, and the night will run within it.",
@@ -363,10 +357,11 @@ async function runNight(
     });
   }
   const reached = capStopReason({
-    capCents: totalCap,
+    capCents: runTotalCap,
     spentCents: 0,
-    dailyCapCents: dailyCap,
-    dailySpentCents: await brandDailySpendCents(sql, organizationId, brandId),
+    dailyCapCents: runDailyCap,
+    dailySpentCents: 0,
+    ...brand,
   });
   if (reached) {
     return conclude({ end: "stopped", reason: reached, summary: `Stopped: ${reached}`, runStatus: null, runError: "", runStage: "" });
