@@ -661,7 +661,7 @@ async function bridgeOrganicObservation(
   const keyed = await sql<{ id: string }>`
     select id from organic_observations
     where organization_id = ${organizationId} and brand_id = ${brandId} and organic_post_id = ${postId}
-      and raw_metrics->>'observationKey' = ${key}
+      and (observation_key = ${key} or raw_metrics->>'observationKey' = ${key})
     limit 1
   `;
   if (keyed.length > 0) return;
@@ -678,6 +678,7 @@ async function bridgeOrganicObservation(
   }>`
     select id, observed_on, views, shares, likes, saves from organic_observations
     where organization_id = ${organizationId} and brand_id = ${brandId} and organic_post_id = ${postId}
+      and coalesce(observation_key, '') = ''
       and (raw_metrics->>'observationKey' is null or raw_metrics->>'observationKey' = '')
   `;
   const countMatches = earlier.filter((row) =>
@@ -687,27 +688,38 @@ async function bridgeOrganicObservation(
     && sameCount(row.saves, record.saves));
   const adopted = countMatches.find((row) => dayOf(row.observed_on) === day) ?? (countMatches.length === 1 ? countMatches[0] : undefined);
   if (adopted) {
-    await sql`
+    const updated = await sql<{ id: string }>`
       update organic_observations
       set observed_on = ${day},
+          observation_key = ${key},
           raw_metrics = coalesce(raw_metrics, '{}'::jsonb) || ${JSON.stringify({ observationKey: key })}::jsonb
       where id = ${adopted.id}
+        and coalesce(observation_key, '') = ''
         and (raw_metrics->>'observationKey' is null or raw_metrics->>'observationKey' = '')
+      returning id
     `;
-    return;
+    if (updated.length > 0) return;
+    const taken = await sql<{ id: string }>`
+      select id from organic_observations
+      where organization_id = ${organizationId} and brand_id = ${brandId} and organic_post_id = ${postId}
+        and (observation_key = ${key} or raw_metrics->>'observationKey' = ${key})
+      limit 1
+    `;
+    if (taken.length > 0) return;
   }
 
   await sql`
     insert into organic_observations (
       id, organization_id, brand_id, organic_post_id, creative_id, platform,
       views, reach, three_second_views, completion_rate, shares, likes, comments, saves,
-      observed_on, raw_metrics, created_at
+      observed_on, observation_key, raw_metrics, created_at
     ) values (
       ${randomUUID()}, ${organizationId}, ${brandId}, ${postId}, ${record.creativeId}, ${record.platform},
       ${record.views ?? null}, ${record.reach ?? null}, ${threeSecViews}, ${record.completionRate ?? null},
       ${record.shares ?? null}, ${record.engagements ?? null}, null, ${record.saves ?? null},
-      ${day}, ${JSON.stringify({ observationKey: key })}::jsonb, now()
+      ${day}, ${key}, ${JSON.stringify({ observationKey: key })}::jsonb, now()
     )
+    on conflict (organization_id, brand_id, organic_post_id, observation_key) do nothing
   `;
 }
 

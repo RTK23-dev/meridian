@@ -32,9 +32,14 @@ const PLATFORMS = [
   { id: "facebook", name: "Facebook", type: "social_page", placeholder: "Brand Page" },
   { id: "youtube", name: "YouTube Shorts", type: "channel", placeholder: "@brand_shorts" },
   { id: "tiktok", name: "TikTok", type: "creator_profile", placeholder: "@brand_tiktok" },
+  { id: "tiktok_ads", name: "TikTok Ads", type: "ad_account", placeholder: "Advertiser id" },
   { id: "meta_ads", name: "Meta Ads", type: "ad_account", placeholder: "act_1234567890" },
   { id: "google_ads", name: "Google Ads", type: "ad_account", placeholder: "123-456-7890" },
 ] as const;
+
+function usesWorkspaceLogin(platform: string): boolean {
+  return platform === "meta_ads" || platform === "google_ads" || platform === "tiktok_ads";
+}
 
 function BrandAccounts({ brandId }: { brandId: string }) {
   const { data: workspace } = useWorkspace();
@@ -126,7 +131,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       setErrorMessage("Enter the account name and the account ID. Pasting a profile link fills both.");
       return;
     }
-    const usesWorkspaceLogin = platform === "meta_ads" || platform === "google_ads";
+    const workspaceLogin = usesWorkspaceLogin(platform);
     const ok = await connectAccount
       .mutateAsync({
         platform,
@@ -134,7 +139,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
         handle: handle.trim(),
         externalAccountId: accountId.trim(),
         accountType: selectedPlatformMeta.type,
-        token: usesWorkspaceLogin ? "" : token.trim(),
+        token: workspaceLogin ? "" : token.trim(),
       })
       .then(() => true, () => false);
     if (!ok) setErrorMessage("Failed to connect account.");
@@ -155,7 +160,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
           <p className="eyebrow">Account Vault</p>
           <h1 className="page-title">Connected accounts</h1>
           <p className="text-muted">
-            This names the page or ad account this brand uses. Meta and Google ads use the workspace login from Integrations, then the ad account ID here. Instagram, Facebook, YouTube, and TikTok still need their own token on this form.
+            This names the page or ad account this brand uses. Meta, Google, and TikTok ads use the workspace login from Integrations, then the ad account ID here. Instagram, Facebook, YouTube, and a TikTok creator profile still need their own token on this form.
           </p>
         </div>
         {canAdmin && accounts.length > 0 ? (
@@ -194,7 +199,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
               pending: signingIn === signInProvider,
               onStart: () => void startSignIn(signInProvider),
             } : null}
-            workspaceLogin={platform === "meta_ads" || platform === "google_ads"}
+            workspaceLogin={usesWorkspaceLogin(platform)}
           />
         ) : <p className="text-sm text-muted">No accounts yet. A workspace admin can connect one.</p>
       ) : (
@@ -251,7 +256,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
         <DialogContent aria-describedby="connect-account-description">
           <DialogTitle>Connect an account</DialogTitle>
           <DialogDescription id="connect-account-description">
-            Paste a link or an ID. Sign-in is there for Meta Ads and Google Ads when this deployment has it.
+            Paste a link or an ID. Sign-in is there for Meta Ads, Google Ads, and TikTok Ads when this deployment has it.
           </DialogDescription>
           <div className="mt-4">
             <ConnectForm
@@ -279,7 +284,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
                 pending: signingIn === signInProvider,
                 onStart: () => void startSignIn(signInProvider),
               } : null}
-              workspaceLogin={platform === "meta_ads" || platform === "google_ads"}
+              workspaceLogin={usesWorkspaceLogin(platform)}
             />
           </div>
         </DialogContent>
@@ -287,6 +292,12 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       ) : null}
     </div>
   );
+}
+
+function signInName(provider: AccountSignInProvider): string {
+  if (provider === "meta") return "Meta";
+  if (provider === "google") return "Google";
+  return "TikTok";
 }
 
 function ConnectForm({
@@ -352,10 +363,10 @@ function ConnectForm({
       {errorMessage ? <ErrorNotice>{errorMessage}</ErrorNotice> : null}
       {signIn ? (
         <div className="space-y-2 rounded-md border border-border p-3">
-          <p className="text-sm font-semibold">Sign in with {signIn.provider === "meta" ? "Meta" : "Google"}</p>
-          <p className="text-sm text-fg-muted">Sign-in stores the workspace login and brings you back to this page. Then enter the ad account ID. It does not connect an Instagram or Facebook page.</p>
+          <p className="text-sm font-semibold">Sign in with {signInName(signIn.provider)}</p>
+          <p className="text-sm text-fg-muted">Sign-in stores the workspace login and brings you back to this page. Then enter the ad account ID. It does not connect a page or a creator profile.</p>
           <Button type="button" disabled={!signIn.enabled} aria-describedby={signIn.enabled || !signIn.reason ? undefined : "accounts-signin-reason"} onClick={signIn.onStart}>
-            {signIn.pending ? "Opening sign-in…" : `Sign in with ${signIn.provider === "meta" ? "Meta" : "Google"}`}
+            {signIn.pending ? "Opening sign-in…" : `Sign in with ${signInName(signIn.provider)}`}
           </Button>
           {!signIn.enabled && signIn.reason ? <DisabledReason id="accounts-signin-reason">{signIn.reason}</DisabledReason> : null}
         </div>
@@ -375,7 +386,7 @@ function ConnectForm({
       {workspaceLogin ? (
         <p className="text-sm text-fg-muted">Paid ads use the workspace login. This form does not take a second token. Enter the ad account this brand should use.</p>
       ) : (
-        <Field label="Access token" hint="Required to publish or sync this page. The Meta or Google ads login does not include this permission. Stored encrypted.">
+        <Field label="Access token" hint="Required to publish or sync this page. The ads login does not include this permission. Stored encrypted.">
           <Input type="password" value={token} onChange={(event) => onToken(event.target.value)} placeholder="Paste the access token" autoComplete="new-password" spellCheck={false} />
         </Field>
       )}

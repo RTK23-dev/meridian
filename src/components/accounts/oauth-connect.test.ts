@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { signInProviderForPlatform, signInState } from "./oauth-connect.ts";
 
-test("only Meta and Google ad accounts start a sign-in", () => {
+test("ad accounts start the workspace sign-in, and a creator profile does not", () => {
   assert.equal(signInProviderForPlatform("meta_ads"), "meta");
   assert.equal(signInProviderForPlatform("google_ads"), "google");
+  assert.equal(signInProviderForPlatform("tiktok_ads"), "tiktok");
+  assert.equal(signInProviderForPlatform("tiktok"), null);
   assert.equal(signInProviderForPlatform("instagram"), null);
   assert.equal(signInProviderForPlatform("facebook"), null);
   assert.equal(signInProviderForPlatform("youtube"), null);

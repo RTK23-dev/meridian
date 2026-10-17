@@ -153,7 +153,7 @@ export function SetupGuide() {
   );
 }
 
-function SetupStep({ step, index, body }: { step: GuideStep; index: number; body: React.ReactNode }) {
+function SetupStep({ step, index, body }: { step: GuideStep; index: number; body: ReactNode }) {
   const mark = STEP_MARK[step.status];
   const Icon = mark.icon;
   const isCurrent = step.status === "current";

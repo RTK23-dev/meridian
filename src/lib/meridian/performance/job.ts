@@ -60,7 +60,10 @@ export async function runPerformanceSync(
       throw new Error(account.error);
     }
   }
-  const accountId = await connectedAccountId(sql, job.organization_id, job.brand_id, provider);
+  const accountPlatform = provider === "google" ? "google_ads" : provider === "tiktok" ? "tiktok_ads" : null;
+  const accountId = accountPlatform
+    ? await connectedAccountId(sql, job.organization_id, job.brand_id, accountPlatform)
+    : "";
   const developer = provider === "google" ? resolveDeploymentOnlyKey("google_ads_developer") : null;
   if (provider === "google" && developer?.status !== "ready") {
     const reason = developer?.reason ?? "Google Ads has no developer token. No observations were stored.";
@@ -152,11 +155,12 @@ export async function runPerformanceSync(
   return `stored:${ingested.stored.length};correlation:${record.correlationId}`;
 }
 
-/** The brand's own ad account id. An environment id is never used, so one deployment cannot measure another brand's account. */
+/** The brand's saved ad account. Google is `google_ads` and TikTok is `tiktok_ads`. A creator profile is not an advertiser id. */
 async function connectedAccountId(sql: Sql, organizationId: string, brandId: string, platform: string): Promise<string> {
   const rows = await sql<{ external_account_id: string | null }>`
     select external_account_id from platform_accounts
     where organization_id = ${organizationId} and brand_id = ${brandId} and platform = ${platform}
+      and account_type = 'ad_account'
       and external_account_id is not null and external_account_id <> ''
     limit 1
   `;
