@@ -3,7 +3,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, ErrorState, Skeleton, toast } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
-import { startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
+import { reviseContentFactorySession, startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
 import { costLabel, type CardStatus, type FeedCard } from "@/lib/meridian/content-factory/feed";
 import type { RunView } from "@/lib/meridian/content-factory/service";
 
@@ -48,6 +48,7 @@ export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId
       <ol aria-label="Engine steps" className="space-y-3">
         {feed.cards.map((card, index) => <StepCard key={card.id} card={card} index={index + 1} />)}
       </ol>
+      {view.canRevise ? <ReviseControl sessionId={sessionId} onStarted={onStarted} /> : null}
     </Card>
   );
 }
@@ -88,6 +89,9 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: st
       ) : (
         <p className="mb-4 text-sm">The session has everything the engine's request needs.</p>
       )}
+      {view.priorRequestIds.length > 0 ? (
+        <p className="mb-4 text-sm text-fg-muted">This is a revision. The earlier {view.priorRequestIds.length === 1 ? "request stays" : "requests stay"} stored: {view.priorRequestIds.join(", ")}.</p>
+      ) : null}
       {view.inputs.length > 0 ? <div className="mb-4"><Lines title="Inputs" lines={view.inputs} /></div> : null}
       {view.notConnected.length > 0 ? (
         <section aria-labelledby="cf-not-connected" className="mb-4 space-y-2 rounded-md border border-border bg-surface-2 p-3">
@@ -106,6 +110,29 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: st
         </div>
       ) : null}
     </Card>
+  );
+}
+
+function ReviseControl({ sessionId, onStarted }: { sessionId: string; onStarted: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const revise = async () => {
+    setBusy(true);
+    try {
+      const outcome = await reviseContentFactorySession({ data: { sessionId } });
+      if (outcome.status === "draft") toast.success("The session is open for a revision. The earlier video stays stored.");
+      else toast.error(outcome.reason);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The revision was not opened.");
+    } finally {
+      setBusy(false);
+      onStarted();
+    }
+  };
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3">
+      <Button size="md" variant="secondary" loading={busy} disabled={busy} onClick={() => void revise()}>Revise this video</Button>
+      <p className="text-sm text-fg-muted">Adds your next instruction, then makes another video. This one is kept.</p>
+    </div>
   );
 }
 

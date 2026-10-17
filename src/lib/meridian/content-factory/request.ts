@@ -29,6 +29,8 @@ export type SessionForRequest = {
   id: string;
   organizationId: string;
   createdAt: string;
+  /** Zero for the first video. A later revision gets its own request id. Omitted means the first video. */
+  revision?: number;
   settings: SessionSettings;
   messages: Pick<Message, "text" | "beatRole" | "attachments">[];
   /** The kits of the theme page attached as a source, read at start time. Null when no theme page is attached. */
@@ -158,9 +160,11 @@ export function buildProductionRequest(session: SessionForRequest): RequestBuild
   // A script request has no brief, so the records and text files travel as plain change lines, in the order attached.
   const context = attachments.flatMap((item) => (item.kind === "source" ? [sourceLine(item)] : isTextFile(item) ? [textFileLine(item)] : []));
 
+  const revision = session.revision ?? 0;
+  const seed = revision > 0 ? `content-factory:${session.id}:r${revision}` : `content-factory:${session.id}`;
   const candidate = present({
     schema: "meridian.production_request/v1",
-    requestId: engineRequestIdFor(`content-factory:${session.id}`, session.createdAt) ?? undefined,
+    requestId: engineRequestIdFor(seed, session.createdAt) ?? undefined,
     workspaceId: session.organizationId,
     format: present({
       formatId: reference ? `ref_${reference.sha256.slice(0, 24)}` : undefined,

@@ -480,16 +480,16 @@ this page makes one video with the video engine. It is admin only.
   The decision panel lists what is missing, and each engine reason as it happens.
 - **Decisions.** Each stage shows its inputs, its output, the model and provider it used, and its cost as estimate, reserved and billed. A
   cost with no bill shows as unknown, never as a number.
-- **Not built yet.** Revisions after the first run; avatar and lip-sync shots (no vendor chosen, so those shots
-  stay not connected). Image pixels are not read; a header that names a size is recorded, and a header that does not leaves the size unknown. The narration and speech-to-text bills are unverified live.
+- **Revision.** After the video is delivered or has failed, "Revise this video" reopens the chat. The earlier request stays stored. The next
+  "Make the video" starts a new request. A video that is still running cannot be revised.
+- **Not built yet.** Avatar and lip-sync shots (no vendor chosen, so those shots stay not connected). Image pixels are not read; a header that names a size is recorded, and a header that does not leaves the size unknown. The narration and speech-to-text bills are unverified live.
 
 ## Not built yet
 
 Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is still open, and the live gaps, are listed here and in
 [ROADMAP.md](ROADMAP.md):
 
-- The Content Factory page: revisions after the first run, and text files that need a connected Drive (see the
-  Content Factory page section above). A readable PDF is used in the brief. An image records its header size and does not read pixels.
+- The Content Factory page: a revision is opened only after the current video is delivered or has failed. The earlier request stays stored, and the next video gets its own request id. Text files that need a connected Drive are still not read from Drive (see the Content Factory page section above). A readable PDF is used in the brief. An image records its header size and does not read pixels.
 - A video's cost is metered only when the provider returns its own bill (`costUsd` on a Hypit job, stored as `provider_reported`).
   A declared estimate is held against the run's caps and is not written as priced spend.
 - A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.

@@ -105,6 +105,8 @@ test("a session with instructions and no script lines maps to a brief the engine
   assert.deepEqual(request.output, { master: true });
   const again = buildProductionRequest(session());
   assert.equal(again.status === "ready" ? again.request.requestId : null, request.requestId, "the same session gives the same request id");
+  const revised = buildProductionRequest(session({ revision: 1 }));
+  assert.notEqual(revised.status === "ready" ? revised.request.requestId : null, request.requestId, "a revision is a different request");
 });
 
 test("script lines make a script request instead of a brief, never both, and need their language", () => {

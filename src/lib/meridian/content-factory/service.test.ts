@@ -19,6 +19,7 @@ import {
   MESSAGE_REFUSAL,
   postMessage,
   readRun,
+  reviseSession,
   saveSettings,
   searchSources,
   SESSION_REFUSAL,
@@ -289,6 +290,25 @@ describe("Content Factory sessions", () => {
     if (run.stage !== "started") return;
     assert.equal(run.feed.requestId, started.requestId);
     assert.equal(run.feed.active, true, "a queued request is polled");
+    assert.equal(run.canRevise, false, "a queued video is not revised");
+    const tooSoon = await reviseSession(db.sql, ADMIN, { sessionId: session.id });
+    assert.equal(tooSoon.status, "refused");
+    assert.equal((await getSession(db.sql, ADMIN, { sessionId: session.id })).status, "started");
+
+    await db.sql`update engine_requests set status = 'rejected' where organization_id = ${WS} and id = ${started.requestId}`;
+    const opened = await reviseSession(db.sql, ADMIN, { sessionId: session.id });
+    assert.equal(opened.status, "draft");
+    if (opened.status !== "draft") return;
+    assert.equal(opened.priorRequestId, started.requestId);
+    await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "Make the hook shorter.", beatRole: null });
+    const next = await startRun(db.sql, ADMIN, { sessionId: session.id }, { readiness: readyPorts() });
+    assert.equal(next.status, "started");
+    if (next.status !== "started") return;
+    assert.notEqual(next.requestId, started.requestId);
+    const revised = await getSession(db.sql, ADMIN, { sessionId: session.id });
+    assert.equal(revised.engineRequestId, next.requestId);
+    const kept = await engineRequestStatus(db.sql, WS, started.requestId);
+    assert.equal(kept?.status, "failed", "the first request stays stored");
     assert.equal(run.feed.cards.find((card) => card.id === "script")?.status, "waiting", "intake is queued");
     assert.match(run.referenceNote, /deletes the source media after the analysis/);
     await assert.rejects(readRun(db.sql, OTHER_ADMIN, { sessionId: session.id }), { message: SESSION_REFUSAL });
