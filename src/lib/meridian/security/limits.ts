@@ -1,3 +1,10 @@
+/**
+ * A sliding-window limit, held in this process's memory.
+ *
+ * The hits are process-local. Each server instance keeps its own, so with N instances one caller can make up to N times the limit. A
+ * shared store (a Postgres table, or Redis) is needed before the limit is a guarantee for the whole deployment. That is an owner decision
+ * (docs/engine/PHASE_LOG.md, open list). Until it is made, the limit is per instance, and this code does not change.
+ */
 export function createRateLimit(limit: number, windowMs: number) {
   const hits = new Map<string, number[]>();
   let calls = 0;
