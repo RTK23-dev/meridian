@@ -83,8 +83,34 @@ function shotCost(key: PriceKey, shot: ShotSpec, takes: number): number {
   return roundUsd(price.usd * units);
 }
 
-/** One line for one paid call of a shot: the route's price key for its model class, priced over the call's takes. */
-function callLine(shot: ShotSpec, modelClass: ModelClass, takes: number): BudgetLine {
+/** The output name of a plain generate shot's one call (lead decision, contract v8). Chain calls are named by their output. */
+export const GENERATE_CALL_OUTPUT = "shot";
+
+/**
+ * The price of one call whose model the orchestrator chose (Bible 10.5 step 5): the chosen model as `provider`
+ * ("openrouter:<modelId>") and the catalog estimate of ONE call, the same figure the router authorizes per submit. A take is one call.
+ */
+export type ChosenCallPrice = { provider: string; perCallUsd: number };
+
+/** Chosen call prices by call, keyed callPriceKey(shotId, output). A call with no entry is priced from the price table. */
+export type ChosenCallPrices = ReadonlyMap<string, ChosenCallPrice>;
+
+export function callPriceKey(shotId: string, output: string): string {
+  return `${shotId}\u0000${output}`;
+}
+
+/**
+ * One line for one paid call of a shot, priced over the call's takes: the chosen model's catalog price when the call has one, and
+ * otherwise the route's price key for its model class.
+ */
+function callLine(shot: ShotSpec, modelClass: ModelClass, takes: number, output: string, chosen: ChosenCallPrices): BudgetLine {
+  const picked = chosen.get(callPriceKey(shot.shotId, output));
+  if (picked !== undefined) {
+    if (!Number.isFinite(picked.perCallUsd) || picked.perCallUsd <= 0) {
+      throw new UnknownPriceError(shot.shotId, `shot ${shot.shotId} call ${output} has no usable chosen price; the estimate refuses to guess`);
+    }
+    return { stage: "produce_shot", shotId: shot.shotId, provider: picked.provider, estimateUsd: roundUsd(picked.perCallUsd * takes) };
+  }
   const key = prices.routeFor[modelClass];
   return { stage: "produce_shot", shotId: shot.shotId, provider: key, estimateUsd: shotCost(key, shot, takes) };
 }
@@ -94,13 +120,13 @@ function callLine(shot: ShotSpec, modelClass: ModelClass, takes: number): Budget
  * call. A chain (contract v5) has one line per call, so every link is reserved: a per-second call bills the shot's length, and a
  * per-image call bills its takes. Components, stock and assets have one line at their source's price.
  */
-function linesForShot(shot: ShotSpec): { lines: BudgetLine[]; generated: boolean } {
+function linesForShot(shot: ShotSpec, chosen: ChosenCallPrices): { lines: BudgetLine[]; generated: boolean } {
   const { source } = shot;
   switch (source.kind) {
     case "generate":
-      return { lines: [callLine(shot, source.modelClass, source.takes)], generated: true };
+      return { lines: [callLine(shot, source.modelClass, source.takes, GENERATE_CALL_OUTPUT, chosen)], generated: true };
     case "chain":
-      return { lines: source.calls.map((call) => callLine(shot, call.modelClass, call.takes)), generated: true };
+      return { lines: source.calls.map((call) => callLine(shot, call.modelClass, call.takes, call.output, chosen)), generated: true };
     case "component":
     case "stock":
     case "asset": {
@@ -128,9 +154,10 @@ export function fixedBudgetLines(): BudgetLine[] {
 
 /**
  * Estimate a plan. Throws a typed EngineError for an invalid plan, and UnknownPriceError for a shot whose price is
- * unknown. The redo allowance (Bible 6.5, 14.1) is a share of the generated-shot cost only.
+ * unknown. The redo allowance (Bible 6.5, 14.1) is a share of the generated-shot cost only. `chosen` prices the calls whose model the
+ * orchestrator chose (Bible 10.5); with none, every call is priced from the price table, as before.
  */
-export function estimatePlan(plan: ScenePlan): Estimate {
+export function estimatePlan(plan: ScenePlan, chosen: ChosenCallPrices = new Map()): Estimate {
   const parsed = scenePlanSchema.safeParse(plan);
   if (!parsed.success) {
     throw new EngineError("invalid_input", `scene plan is invalid: ${parsed.error.message}`, {
@@ -138,7 +165,7 @@ export function estimatePlan(plan: ScenePlan): Estimate {
     });
   }
 
-  const shotResults = parsed.data.shots.map(linesForShot);
+  const shotResults = parsed.data.shots.map((shot) => linesForShot(shot, chosen));
   const shotLines = shotResults.flatMap((result) => result.lines);
   const generatedLines = shotResults.filter((result) => result.generated).flatMap((result) => result.lines);
   const fixed = fixedBudgetLines();

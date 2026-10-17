@@ -58,9 +58,14 @@ function ceilUsd(value: number): number {
  * call are not known before it is made, so it is never estimated.
  */
 export function catalogEstimateUsd(entry: ModelCatalogEntry, spec: AssetSpec): number {
+  return catalogCallUsd(entry, spec.durationMs);
+}
+
+/** The same estimate from a call's length, for estimate_reserve, which prices calls before their specs exist. */
+export function catalogCallUsd(entry: ModelCatalogEntry, durationMs: number): number {
   switch (entry.price.unit) {
     case "per_second":
-      return ceilUsd(entry.price.usd * (spec.durationMs / 1000));
+      return ceilUsd(entry.price.usd * (durationMs / 1000));
     case "per_image":
     case "per_request":
       return ceilUsd(entry.price.usd);

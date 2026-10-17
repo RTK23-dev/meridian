@@ -23,7 +23,7 @@ import {
   type BudgetReservation,
   type ScenePlan,
 } from "../contracts/index.ts";
-import { estimatePlan, fixedBudgetLines } from "./estimate.ts";
+import { estimatePlan, fixedBudgetLines, type ChosenCallPrices } from "./estimate.ts";
 import { committedFor, type BudgetAlert, type ReserveResult } from "./reserve.ts";
 import type { LedgerStore } from "./store.ts";
 
@@ -166,6 +166,8 @@ export type ExtendReservationInput = {
   /** The workspace's monthly budget for the month of the reservation (and of `now`, which must be the same month). */
   workspaceMonthBudgetUsd: number;
   now: string;
+  /** The catalog prices of the calls whose model the orchestrator chose (Bible 10.5). Absent: every call is priced from the price table. */
+  chosenPrices?: ChosenCallPrices;
 };
 
 export type ExtendResult =
@@ -191,7 +193,7 @@ export async function extendReservation(store: LedgerStore, input: ExtendReserva
   const stage = EXTEND_STAGE;
   const reservationId = reservationIdIn(input.reservationId, stage);
   const limits = limitsIn(input, stage);
-  const estimate = estimatePlan(input.plan);
+  const estimate = estimatePlan(input.plan, input.chosenPrices);
 
   const current = await store.getReservation(reservationId);
   if (!current) {

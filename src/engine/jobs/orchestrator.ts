@@ -1378,7 +1378,7 @@ function schedule(state: OrchestratorState): QueuedJob[] {
     voice: ["request", "script"],
     plan: ["validated", "dna", "voice", "script"],
     // The request artifact carries the request's budget (constraints.budgetUsd), which the reservation needs (Bible 14.1).
-    estimate_reserve: ["plan", "request"],
+    estimate_reserve: ["plan", "request", "model_choices"],
     // The validated request names the style kit and carries the emphasis marks the editor reads (E3, edit/STATUS.md item 1).
     edit: ["plan", "dna", "voice", "validated", "script", ...Object.values(state.shots).flatMap((shot) => (shot.acceptedTakeId ? [`take:${shot.acceptedTakeId}`] : []))],
     // The variants stage expands the request's matrix against its plan and its master (Bible 6.13).

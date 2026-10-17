@@ -22,6 +22,10 @@ import {
   type ScenePlan,
 } from "../../contracts/index.ts";
 import { extendReservation } from "../../budget/preflight.ts";
+import type { ChosenCallPrices } from "../../budget/estimate.ts";
+import { modelChoicesSchema } from "../../contracts/model-choices.ts";
+import type { CatalogRead, ModelCatalogSource } from "../../gateway/catalog.ts";
+import { chosenCallPricesOf } from "../../plan/model-choices.ts";
 import type { LedgerStore } from "../../budget/store.ts";
 import { checkBudget } from "../../review/gates/budget.ts";
 import { check, gateResult } from "../../review/gates/common.ts";
@@ -42,6 +46,8 @@ export type ExtendForPlanInput = {
   workspaceMonthBudgetUsd: number;
   /** ISO time of the extension. */
   now: string;
+  /** The catalog prices of the calls whose model the orchestrator chose (Bible 10.5). Absent: the price table prices every call. */
+  chosenPrices?: ChosenCallPrices;
 };
 
 export type ExtendForPlanResult = {
@@ -68,6 +74,7 @@ export async function extendForPlan(store: LedgerStore, input: ExtendForPlanInpu
       requestBudgetUsd: input.requestBudgetUsd,
       workspaceMonthBudgetUsd: input.workspaceMonthBudgetUsd,
       now: input.now,
+      ...(input.chosenPrices === undefined ? {} : { chosenPrices: input.chosenPrices }),
     });
   } catch (error) {
     if (error instanceof EngineError && error.kind === "unknown_price") {
@@ -81,7 +88,9 @@ export async function extendForPlan(store: LedgerStore, input: ExtendForPlanInpu
   if (outcome.status === "extended") {
     return { gate: checkBudget(outcome.reservation), reservation: outcome.reservation };
   }
-  const reason = outcome.status === "paused" ? outcome.reasons.join("; ") : outcome.reason;
+  const chosen = input.chosenPrices?.size ?? 0;
+  const priced = chosen === 0 ? "" : ` (${chosen} call${chosen === 1 ? "" : "s"} priced at the chosen model's catalog price, Bible 10.5)`;
+  const reason = `${outcome.status === "paused" ? outcome.reasons.join("; ") : outcome.reason}${priced}`;
   return {
     gate: gateResult("budget", input.reservationId, [check("reservation_succeeded", false, { detail: `the hold is not raised: ${reason}` })]),
     reservation: null,
@@ -114,7 +123,22 @@ export const notConnectedWorkspaceBudget: WorkspaceBudgetSource = {
 export type EstimateReservePorts = {
   /** Optional. Absent means the default source, which is not connected, so nothing is extended. */
   workspaceBudget?: WorkspaceBudgetSource;
+  /**
+   * OpenRouter's model catalog (gateway/catalog.ts), the same cache the routers read. With a model_choices input, each chosen call is
+   * priced at its chosen model's catalog estimate (the router's per-submit estimate), so the reservation covers what will be called.
+   * Absent, or a choice the catalog no longer supports: that call is priced from the price table, as the router then routes it.
+   */
+  catalog?: ModelCatalogSource;
 };
+
+/** The optional input artifact of a type, or null when the job names none. */
+async function readOptionalInput(ctx: StageContext, type: ArtifactType): Promise<StoredArtifact | null> {
+  for (const artifactId of ctx.payload.inputArtifactIds) {
+    const stored = await readArtifact(ctx.sql, { organizationId: ctx.organizationId, artifactId });
+    if (stored.envelope.type === type) return stored;
+  }
+  return null;
+}
 
 /** The one input artifact of a type. An input that is not of that type is skipped; none of the type is refused. */
 async function readInputOfType(ctx: StageContext, type: ArtifactType): Promise<StoredArtifact> {
@@ -167,6 +191,20 @@ export function createEstimateReserveHandler(ports: EstimateReservePorts = {}): 
         return refusedBeforeExtending(ctx, `the workspace monthly budget source returned ${String(month.usd)}, which is not a usable amount`);
       }
 
+      // The chosen models' catalog prices (Bible 10.5 step 5). A request with no model_choices input is priced as before.
+      let chosenPrices: ChosenCallPrices | undefined;
+      const choicesArtifact = await readOptionalInput(ctx, "model_choices");
+      if (choicesArtifact !== null) {
+        const choices = modelChoicesSchema.safeParse(choicesArtifact.envelope.body);
+        const plan = scenePlanSchema.safeParse(planArtifact.envelope.body);
+        if (!choices.success || !plan.success) {
+          throw new EngineError("invalid_input", "the model choices or the scene plan do not parse", { stage: ctx.stage });
+        }
+        const catalog: CatalogRead =
+          ports.catalog === undefined ? { status: "not_connected", reason: "this runtime has no model catalog" } : await ports.catalog.read(ctx.organizationId);
+        chosenPrices = chosenCallPricesOf({ plan: plan.data, choices: choices.data, catalog }).prices;
+      }
+
       const result = await withWorkspaceLedger(ctx.sql, ctx.organizationId, (store) =>
         extendForPlan(store, {
           requestId: ctx.requestId,
@@ -176,6 +214,7 @@ export function createEstimateReserveHandler(ports: EstimateReservePorts = {}): 
           requestBudgetUsd: parsedRequest.data.constraints.budgetUsd,
           workspaceMonthBudgetUsd: month.usd,
           now,
+          ...(chosenPrices === undefined ? {} : { chosenPrices }),
         }),
       );
 

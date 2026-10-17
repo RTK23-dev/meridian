@@ -409,7 +409,10 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
       roleDeps: roles,
       ...(composition.shotPorts?.catalog === undefined ? {} : { catalog: composition.shotPorts.catalog }),
     }),
-    estimate_reserve: createEstimateReserveHandler({ workspaceBudget: composition.workspaceBudget }),
+    estimate_reserve: createEstimateReserveHandler({
+      workspaceBudget: composition.workspaceBudget,
+      ...(composition.shotPorts?.catalog === undefined ? {} : { catalog: composition.shotPorts.catalog }),
+    }),
     edit: createEditHandler({ loadStyleKit: kits.loadStyleKit }),
   };
 
