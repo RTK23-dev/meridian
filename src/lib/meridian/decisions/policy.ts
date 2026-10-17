@@ -152,13 +152,21 @@ function voteFor(answer: JevAnswer, policy: DecisionPolicy): PolicyVote | null {
 function voteForAnswer(answer: JevAnswer, policy: DecisionPolicy): PolicyVote | null {
   if (answer.status !== "answered") return null;
   const calibrationStatus = calibrationOf(answer, policy);
-  if (policy.minConfidence !== undefined && typeof answer.confidence === "number" && answer.confidence < policy.minConfidence) {
-    return {
-      questionId: answer.questionId,
-      outcome: "HUMAN_REVIEW",
-      reason: `Confidence ${answer.confidence} is below the policy minimum ${policy.minConfidence}.`,
-      calibrationStatus,
-    };
+  // The minimum is checked on every answer it is set on. An answer that reports no confidence, or one that is not a finite number,
+  // fails the check: a missing confidence is not a passing one, so it is never skipped.
+  if (policy.minConfidence !== undefined) {
+    const confidence = answer.confidence;
+    if (typeof confidence !== "number" || !Number.isFinite(confidence)) {
+      return { questionId: answer.questionId, outcome: "HUMAN_REVIEW", reason: "confidence not reported", calibrationStatus };
+    }
+    if (confidence < policy.minConfidence) {
+      return {
+        questionId: answer.questionId,
+        outcome: "HUMAN_REVIEW",
+        reason: `Confidence ${confidence} is below the policy minimum ${policy.minConfidence}.`,
+        calibrationStatus,
+      };
+    }
   }
   const kind = answerKindOf(answer);
   if (kind === "predicate") return predicateVote(answer, policy, calibrationStatus);

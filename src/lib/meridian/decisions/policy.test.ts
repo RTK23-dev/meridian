@@ -62,6 +62,27 @@ test("a refused, unsupported, malformed, or missing answer is never an approval"
   assert.equal(missing.unresolved[0].status, "missing");
 });
 
+test("a policy minimum confidence fails closed: an answer with no confidence goes to review and is not skipped", () => {
+  const policy: DecisionPolicy = { ...CREATIVE_QA_POLICY, minConfidence: 0.7 };
+  // predicate() reports no confidence, so the answer would approve on its probability alone if the minimum were skipped.
+  const result = evaluateDecisionPolicy(byId([predicate("q.a", 0.95, "calibrated")]), policy, ["q.a"]);
+  assert.equal(result.outcome, "HUMAN_REVIEW");
+  assert.equal(result.votes[0]?.reason, "confidence not reported");
+  const notANumber = evaluateDecisionPolicy(byId([{ ...predicate("q.a", 0.95, "calibrated"), confidence: Number.NaN } as JevAnswer]), policy, ["q.a"]);
+  assert.equal(notANumber.outcome, "HUMAN_REVIEW");
+  assert.equal(notANumber.votes[0]?.reason, "confidence not reported");
+});
+
+test("a policy minimum confidence: an answer at or above the minimum is judged by its value, and one below it goes to review", () => {
+  const policy: DecisionPolicy = { ...CREATIVE_QA_POLICY, minConfidence: 0.7 };
+  const confident = { ...predicate("q.a", 0.95, "calibrated"), confidence: 0.8 } as JevAnswer;
+  assert.equal(evaluateDecisionPolicy(byId([confident]), policy, ["q.a"]).outcome, "AUTO_APPROVE");
+  const unsure = { ...predicate("q.a", 0.95, "calibrated"), confidence: 0.3 } as JevAnswer;
+  const low = evaluateDecisionPolicy(byId([unsure]), policy, ["q.a"]);
+  assert.equal(low.outcome, "HUMAN_REVIEW");
+  assert.equal(low.votes[0]?.reason, "Confidence 0.3 is below the policy minimum 0.7.");
+});
+
 test("a safety-critical gate fails closed: an unresolved required answer rejects", () => {
   const result = evaluateDecisionPolicy(byId([predicate("q.safe", 0.99, "calibrated"), unresolved("q.other", "refused")]), SAFETY_GATE_POLICY, ["q.safe", "q.other"]);
   assert.equal(result.outcome, "REJECT");
