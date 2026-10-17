@@ -94,9 +94,12 @@ async function bridgeDatabase(): Promise<Sql> {
       comments integer,
       saves integer,
       observed_on date not null default current_date,
+      observation_key text,
       raw_metrics jsonb not null default '{}'::jsonb,
       created_at timestamptz not null default now()
     );
+    create unique index if not exists organic_observations_observation_key_uidx
+      on organic_observations (organization_id, brand_id, organic_post_id, observation_key);
 
     create table if not exists jev_account_profiles (
       id text primary key,
@@ -462,7 +465,7 @@ test("Telemetry bridge: an organic row stored on the sync day is adopted, and th
   await syncTelemetryToLearning(sql, organizationId, brandId);
   await sql`
     update organic_observations
-    set observed_on = '2026-10-03', raw_metrics = '{}'::jsonb
+    set observed_on = '2026-10-03', raw_metrics = '{}'::jsonb, observation_key = null
     where organization_id = ${organizationId}
   `;
 

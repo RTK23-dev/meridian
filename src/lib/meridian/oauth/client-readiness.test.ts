@@ -8,6 +8,8 @@ test("account sign-in is not ready when the client id and secret are missing, an
   assert.deepEqual(readiness.meta.missing, ["META_APP_ID", "META_APP_SECRET"]);
   assert.equal(readiness.google.ready, false);
   assert.deepEqual(readiness.google.missing, ["GOOGLE_ADS_CLIENT_ID", "GOOGLE_ADS_CLIENT_SECRET"]);
+  assert.equal(readiness.tiktok.ready, false);
+  assert.deepEqual(readiness.tiktok.missing, ["TIKTOK_APP_ID", "TIKTOK_APP_SECRET"]);
 });
 
 test("a client id without its secret is still not ready, and only the secret is named", () => {

@@ -1,9 +1,10 @@
-/** Which account sign-in, if any, a platform on the Accounts screen starts. Meta and Google ad accounts have one; the rest do not. */
-export type AccountSignInProvider = "meta" | "google";
+/** Which account sign-in, if any, a platform on the Accounts screen starts. Ad accounts use the workspace login. A creator profile does not. */
+export type AccountSignInProvider = "meta" | "google" | "tiktok";
 
 export function signInProviderForPlatform(platform: string): AccountSignInProvider | null {
   if (platform === "meta_ads") return "meta";
   if (platform === "google_ads") return "google";
+  if (platform === "tiktok_ads") return "tiktok";
   return null;
 }
 
@@ -18,7 +19,7 @@ export function signInState(input: {
   canAdmin: boolean;
   readiness: SignInReadiness;
 }): { enabled: boolean; reason: string | null } {
-  const name = input.provider === "meta" ? "Meta" : "Google Ads";
+  const name = input.provider === "meta" ? "Meta" : input.provider === "google" ? "Google Ads" : "TikTok";
   if (!input.canAdmin) return { enabled: false, reason: "Only a workspace admin can start sign-in." };
   if (!input.readiness) return { enabled: false, reason: "Checking the sign-in settings for this deployment." };
   if (!input.readiness.ready) {

@@ -109,10 +109,14 @@ async function databaseQuery(): Promise<WindowQuery | null> {
   const pool = new pg.Pool({
     connectionString: url,
     max: 2,
+    connectionTimeoutMillis: 10_000,
     ssl: url.includes("sslmode=disable") ? false : undefined,
   });
   // An idle client emits `error` when Postgres drops it. With no listener, Node exits the process.
-  pool.on("error", () => undefined);
+  pool.on("error", (error: unknown) => {
+    const message = error instanceof Error ? error.message : "idle client error";
+    console.error(`[rate-limit] idle Postgres client error: ${message}`);
+  });
   sharedQuery = async (sql, params) => pool.query(sql, params);
   return sharedQuery;
 }
