@@ -16,6 +16,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAlertsRouteImport } from './routes/_app/alerts'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
+import { Route as AppContentFactoryRouteImport } from './routes/_app/content-factory'
 import { Route as AppExportsRouteImport } from './routes/_app/exports'
 import { Route as AppIntegrationsRouteImport } from './routes/_app/integrations'
 import { Route as AppInviteRouteImport } from './routes/_app/invite'
@@ -83,6 +84,11 @@ const AppAlertsRoute = AppAlertsRouteImport.update({
 const AppAuditRoute = AppAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppContentFactoryRoute = AppContentFactoryRouteImport.update({
+  id: '/content-factory',
+  path: '/content-factory',
   getParentRoute: () => AppRoute,
 } as any)
 const AppExportsRoute = AppExportsRouteImport.update({
@@ -269,6 +275,7 @@ export interface FileRoutesByFullPath {
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
+  '/content-factory': typeof AppContentFactoryRoute
   '/exports': typeof AppExportsRoute
   '/integrations': typeof AppIntegrationsRoute
   '/invite': typeof AppInviteRoute
@@ -310,6 +317,7 @@ export interface FileRoutesByTo {
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
+  '/content-factory': typeof AppContentFactoryRoute
   '/exports': typeof AppExportsRoute
   '/integrations': typeof AppIntegrationsRoute
   '/invite': typeof AppInviteRoute
@@ -354,6 +362,7 @@ export interface FileRoutesById {
   '/_app/$': typeof AppSplatRoute
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/audit': typeof AppAuditRoute
+  '/_app/content-factory': typeof AppContentFactoryRoute
   '/_app/exports': typeof AppExportsRoute
   '/_app/integrations': typeof AppIntegrationsRoute
   '/_app/invite': typeof AppInviteRoute
@@ -399,6 +408,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/alerts'
     | '/audit'
+    | '/content-factory'
     | '/exports'
     | '/integrations'
     | '/invite'
@@ -440,6 +450,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/alerts'
     | '/audit'
+    | '/content-factory'
     | '/exports'
     | '/integrations'
     | '/invite'
@@ -483,6 +494,7 @@ export interface FileRouteTypes {
     | '/_app/$'
     | '/_app/alerts'
     | '/_app/audit'
+    | '/_app/content-factory'
     | '/_app/exports'
     | '/_app/integrations'
     | '/_app/invite'
@@ -585,6 +597,13 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/audit'
       preLoaderRoute: typeof AppAuditRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/content-factory': {
+      id: '/_app/content-factory'
+      path: '/content-factory'
+      fullPath: '/content-factory'
+      preLoaderRoute: typeof AppContentFactoryRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/exports': {
@@ -832,6 +851,7 @@ interface AppRouteChildren {
   AppSplatRoute: typeof AppSplatRoute
   AppAlertsRoute: typeof AppAlertsRoute
   AppAuditRoute: typeof AppAuditRoute
+  AppContentFactoryRoute: typeof AppContentFactoryRoute
   AppExportsRoute: typeof AppExportsRoute
   AppIntegrationsRoute: typeof AppIntegrationsRoute
   AppInviteRoute: typeof AppInviteRoute
@@ -863,6 +883,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSplatRoute: AppSplatRoute,
   AppAlertsRoute: AppAlertsRoute,
   AppAuditRoute: AppAuditRoute,
+  AppContentFactoryRoute: AppContentFactoryRoute,
   AppExportsRoute: AppExportsRoute,
   AppIntegrationsRoute: AppIntegrationsRoute,
   AppInviteRoute: AppInviteRoute,

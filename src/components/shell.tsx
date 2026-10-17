@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowLeftRight, ArrowRight, BarChart3, Bell, BellRing, Brain, Cable, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, ListChecks, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, BarChart3, Bell, BellRing, Brain, Cable, Clapperboard, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, ListChecks, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { hasRole } from "@/lib/meridian/access";
@@ -31,6 +31,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   reviews: ClipboardCheck,
   studio: WandSparkles,
   factory: Factory,
+  "content-factory": Clapperboard,
   library: Library,
   learning: GraduationCap,
   calibration: Gauge,

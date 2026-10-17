@@ -18,6 +18,7 @@ test("brandIdFromPath reads the brand from brand paths and never from /brands/ne
 test("workspace pages list the workspace overview and the Settings group, and no brand groups", () => {
   const groups = sidebarGroups({ reviewCount: 4 });
   assert.deepEqual(groups.map((group) => group.id), ["overview", "settings"]);
+  assert.deepEqual(groups[0]?.items.map((item) => item.to), ["/", "/content-factory"], "Content Factory is a workspace screen");
   assert.deepEqual(groups[1]?.items.map((item) => item.id), ["setup", "integrations", "jobs", "settings"]);
   for (const group of groups) {
     for (const item of group.items) assert.equal(item.to.startsWith("/brands/"), false, `${item.id} must not be a brand link off brand pages`);

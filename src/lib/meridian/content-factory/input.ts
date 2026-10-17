@@ -1,0 +1,129 @@
+/**
+ * Input checks for the Content Factory server functions. Plain code with no server imports. Each check keeps only the fields it names: a
+ * workspace named in a session's request body is never a way to reach another workspace (service.ts reads the workspace from the session).
+ */
+import { MAX_BASE64_CHARS } from "./model.ts";
+import {
+  isFilePurpose,
+  isKeepableGene,
+  isScriptRole,
+  isSourcePage,
+  MAX_MESSAGE_CHARS,
+  MAX_TITLE_CHARS,
+  type FilePurpose,
+  type KeepableGene,
+  type ScriptRole,
+  type SourcePage,
+} from "./model.ts";
+
+const ID = /^[A-Za-z0-9_:-]{1,100}$/;
+
+function fields(input: unknown): Record<string, unknown> {
+  return input && typeof input === "object" && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function idOf(value: unknown, label: string): string {
+  const id = text(value);
+  if (!ID.test(id)) throw new Error(`Choose a valid ${label}.`);
+  return id;
+}
+
+function optionalId(value: unknown, label: string): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  return idOf(value, label);
+}
+
+function numberOrNull(value: unknown, label: string): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number)) throw new Error(`Enter a number for ${label}.`);
+  return number;
+}
+
+export function workspaceInput(input: unknown): { organizationId: string } {
+  return { organizationId: idOf(fields(input).organizationId, "workspace") };
+}
+
+export function sessionInput(input: unknown): { sessionId: string } {
+  return { sessionId: idOf(fields(input).sessionId, "session") };
+}
+
+export function createSessionInput(input: unknown): { organizationId: string; brandId: string | null; title: string } {
+  const body = fields(input);
+  const title = text(body.title).replace(/\s+/g, " ");
+  if (!title) throw new Error("Give the session a title.");
+  if (title.length > MAX_TITLE_CHARS) throw new Error(`Keep the title to ${MAX_TITLE_CHARS} characters.`);
+  return { organizationId: idOf(body.organizationId, "workspace"), brandId: optionalId(body.brandId, "brand"), title };
+}
+
+export function messageInput(input: unknown): { sessionId: string; text: string; beatRole: ScriptRole | null } {
+  const body = fields(input);
+  const raw = typeof body.text === "string" ? body.text : "";
+  if (raw.length > MAX_MESSAGE_CHARS) throw new Error(`Keep a message to ${MAX_MESSAGE_CHARS} characters.`);
+  const beatRole = body.beatRole === null || body.beatRole === undefined || body.beatRole === "" ? null : body.beatRole;
+  if (beatRole !== null && !isScriptRole(beatRole)) throw new Error("Choose a script role: hook, setup, item, proof, twist, payoff or cta.");
+  return { sessionId: idOf(body.sessionId, "session"), text: raw.trim(), beatRole };
+}
+
+export function uploadInput(input: unknown): { sessionId: string; messageId: string; fileName: string; purpose: FilePurpose; base64: string } {
+  const body = fields(input);
+  const base64 = typeof body.base64 === "string" ? body.base64 : "";
+  if (!base64) throw new Error("No file was sent.");
+  if (base64.length > MAX_BASE64_CHARS) throw new Error("The file is too large to store.");
+  if (!isFilePurpose(body.purpose)) throw new Error("Say whether the file is the reference video or other material.");
+  return {
+    sessionId: idOf(body.sessionId, "session"),
+    messageId: idOf(body.messageId, "message"),
+    fileName: typeof body.fileName === "string" ? body.fileName.slice(0, 300) : "",
+    purpose: body.purpose,
+    base64,
+  };
+}
+
+export function sourceSearchInput(input: unknown): { sessionId: string; brandId: string; page: SourcePage; query: string } {
+  const body = fields(input);
+  if (!isSourcePage(body.page)) throw new Error("Choose a page to search.");
+  return { sessionId: idOf(body.sessionId, "session"), brandId: idOf(body.brandId, "brand"), page: body.page, query: text(body.query).slice(0, 200) };
+}
+
+export function attachSourceInput(input: unknown): { sessionId: string; messageId: string; brandId: string; page: SourcePage; recordId: string } {
+  const body = fields(input);
+  if (!isSourcePage(body.page)) throw new Error("Choose a page.");
+  return {
+    sessionId: idOf(body.sessionId, "session"),
+    messageId: idOf(body.messageId, "message"),
+    brandId: idOf(body.brandId, "brand"),
+    page: body.page,
+    recordId: idOf(body.recordId, "record"),
+  };
+}
+
+export function settingsInput(input: unknown): {
+  sessionId: string;
+  brandId?: string | null;
+  budgetUsd: number | null;
+  maxSeconds: number | null;
+  language: string | null;
+  priority: string | null;
+  keepGenes: KeepableGene[];
+} {
+  const body = fields(input);
+  const language = text(body.language);
+  if (language && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(language)) throw new Error("Use a language code such as en or en-US.");
+  const keep = Array.isArray(body.keepGenes) ? body.keepGenes : [];
+  if (!keep.every(isKeepableGene)) throw new Error("Choose genes from the list.");
+  const priority = text(body.priority);
+  return {
+    sessionId: idOf(body.sessionId, "session"),
+    ...(Object.prototype.hasOwnProperty.call(body, "brandId") ? { brandId: optionalId(body.brandId, "brand") } : {}),
+    budgetUsd: numberOrNull(body.budgetUsd, "the budget"),
+    maxSeconds: numberOrNull(body.maxSeconds, "the length"),
+    language: language || null,
+    priority: priority || null,
+    keepGenes: keep as KeepableGene[],
+  };
+}

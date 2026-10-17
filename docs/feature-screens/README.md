@@ -45,3 +45,20 @@ The Studio publish dialog and two Factory details could not be captured (see Not
 - **B2 gather tier counts** (`src/components/factory/run-list.tsx`). They appear only on a run that has Instagram candidates. Without an
   Apify key the source is not connected, nothing is gathered, and no candidate exists.
 - **B5 orders per reel.** No Shopify shop is connected, so no orders show. Only the not-connected state of the sales panel is captured.
+
+## Content Factory (`/content-factory`)
+
+- **Before:** `6bf831f` (main), exported with `git archive` and run with `npm run dev` on port 8092 and a fresh PGlite database.
+- **After:** this branch, `npm run dev` on port 8091 with its own fresh PGlite database. No provider key and no Drive credential were set.
+- A fixture account, workspace and brand were created through the app's sign-up flow ("Feature screens fixture"). For the session
+  capture, one session ("Fixture session (screenshot only)") with one instruction and one hook line was created through the screen.
+  Playwright with `/opt/pw-browsers/chromium-1194`. 1280x800 and 390x844 viewport captures; `-full` is a full-page capture.
+
+| Screen id | Before (`6bf831f`) | After |
+| --- | --- | --- |
+| `content-factory` | "Page not found": the route does not exist at the base. | Content Factory in the workspace sidebar, the empty state and the new-session form (title, optional brand). |
+| `content-factory-session` | Not available. | Chat on the left (messages with their role, composer, file attach and drop zone, "Attach from Meridian", the Drive not-connected line), video settings below it, and the Decisions panel: what the engine's schema still needs, the engine's NOT_CONNECTED reasons, and "Make the video" disabled with its reason. Stacked on phone width. |
+
+Not captured: a started run's decision feed. The engine is not connected here (no budget, no OpenRouter or render key, no
+analyze_reference or voice handler), so no request can start, and a feed would have to be invented. The feed is covered by
+`src/lib/meridian/content-factory/feed.test.ts` on a recorded engine run.

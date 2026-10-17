@@ -43,7 +43,17 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
     ],
   };
   if (!brandId) {
-    return [{ id: "overview", label: "Overview", items: [{ id: "overview", label: "Workspace overview", to: "/" }] }, settings];
+    return [
+      {
+        id: "overview",
+        label: "Overview",
+        items: [
+          { id: "overview", label: "Workspace overview", to: "/" },
+          { id: "content-factory", label: "Content Factory", to: "/content-factory" },
+        ],
+      },
+      settings,
+    ];
   }
   const base = `/brands/${brandId}`;
   const openReviews = reviewCount !== null && reviewCount > 0 ? reviewCount : undefined;
