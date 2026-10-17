@@ -47,8 +47,18 @@ test("each config file carries its version string", () => {
   assert.equal(adapters.version, "adapters@1");
 });
 
-test("the contract set is at version 7 (the model choice on the asset spec, Bible section 4 v7 note)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@7");
+test("the contract set is at version 8 (the brief, the written script, model_choices and two roles, Bible section 4 v8 note)", () => {
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@8");
+});
+
+test("the tiers the v8 roles run on are routed to priced Claude models: scriptwriter on llm.direction, model_chooser on llm.check", () => {
+  // The roles keep no config of their own: each runs on a capability, and the route table and the token rates price it.
+  const direction = routes.table["llm.direction"].targets[0];
+  const check = routes.table["llm.check"].targets[0];
+  assert.equal(direction.model, "anthropic/claude-opus-5.5", "scriptwriter runs on the Opus tier (Bible 11.1 direction)");
+  assert.equal(check.model, "anthropic/claude-haiku-5.5", "model_chooser runs on the Haiku check tier (Bible 11.1 check)");
+  assert.ok(direction.model !== null && direction.model in prices.tokenRates, "the direction tier has a token rate");
+  assert.ok(check.model !== null && check.model in prices.tokenRates, "the check tier has a token rate");
 });
 
 test("the model preference table is versioned, covers the production classes and starts empty (Bible 10.5 step 4)", () => {

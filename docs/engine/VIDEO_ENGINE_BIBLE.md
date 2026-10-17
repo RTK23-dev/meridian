@@ -494,6 +494,68 @@ choice, as with v4 and v5.
 Adding the model id to the key only when a choice is present would leave every v6 key unchanged; that is left to the lead. The shot's `Decision` of section 10.5 step 3 is a planner
 or director record, not a schema change here; the choice's reason is on `modelChoice`.
 
+### v8 changes and migration (model chooser, model choices, brief and written script, contract version `engine-contracts@8`)
+
+Approved by the lead, 2026-10-17. The set version is `CONTRACTS_VERSION` in `src/engine/contracts/version.ts`. The change is additive: no
+field is removed, no field changes its meaning, and no existing schema literal changes.
+
+**Why.** Section 10.5 chooses each production call's model from OpenRouter's catalog, so the choice needs a role that makes it and a
+request-level record of every choice. The owner also wants the engine to write the script from the user's brief and the analysed
+reference. A request may therefore send a brief instead of a script, and a role writes the script from it.
+
+**What changed.**
+- `CLAUDE_ROLES` (Bible 11.1) gains two roles:
+  - `model_chooser` picks a call's model from the candidates of 10.5 step 2. It runs on `llm.check` (Haiku, the check tier of
+    `config/routes.ts`). Bible 10.5 step 2 says "the director role" for this pick; this change names `model_chooser`, and the lead is to
+    confirm that 10.5 is read as meaning it.
+  - `scriptwriter` writes a request's script from its brief and its analysed reference. It runs on `llm.direction` (Opus).
+  - Neither role has a config entry of its own, as no other role has one. Each runs on a capability that `config/routes.ts` already
+    routes to a priced Claude model. A role's per-call token estimate belongs to its role file (`engine/claude/roles/`), not to config.
+    No number is set for either role here.
+- `ProductionRequest` (`meridian.production_request/v1`, literal unchanged):
+  - `script` becomes optional. A v7 request has a script and parses unchanged.
+  - `brief` is new and optional: `{ text, sources, attachments }`. `text` is 1 to 8000 characters and not blank. `sources` is up to 20
+    entries of `{ label, text }`: the label is 1 to 200 characters, the text 1 to 4000, both not blank. `attachments` is up to 20 entries
+    of `{ uri, mediaType, note? }`, the note up to 500 characters. `sources` and `attachments` are present and may be empty.
+  - Exactly one of `script` and `brief` is present. A request with both is refused with the path `brief`; a request with neither is
+    refused with the path `script`.
+- `ValidatedRequest` (`meridian.validated_request/v1`) carries the request unchanged, so its refusals come from the request. Intake's
+  `estimatedSpeechMs` is still required; how intake estimates the speech of a brief request, before its script exists, is the intake
+  stage's decision and not a contract rule.
+- `WrittenScript` (`meridian.written_script/v1`, artifact type `written_script`): `{ requestId, language, beats, rationale, basedOn }`.
+  `beats` is the script beat shape of the request, at least one beat, each `beatId` unique. `rationale` is 1 to 2000 characters, not
+  blank. `basedOn` is `{ videoDnaId, sourceLabels }`: the analysed reference, and the labels of the brief's sources the script used.
+  The `write_script` stage that writes it is built by another workstream, after `analyze_reference`.
+- `ModelChoices` (`meridian.model_choices/v1`, artifact type `model_choices`): `{ requestId, catalogReadAt, choices }`. Each choice is
+  `{ shotId, output, modelClass, modelChoice }`. `output` is the chain call's output name, the key the asset spec is built for.
+  `modelChoice` is the v7 choice and is never null. The pair `(shotId, output)` occurs at most once. A request has one such artifact, keyed
+  by its request id: the store writes at most one, and refuses a second for the same request. `catalogReadAt` is the request's read time;
+  each choice also carries the read time of its own catalog, because a video read and an image read are separate. An empty `choices` list
+  is a valid record that the request made no model choice.
+- `ARTIFACT_TYPES` gains `written_script` and `model_choices`.
+- `CONTRACTS_VERSION` is `engine-contracts@8`.
+
+**How a v7 request and artifact read.** A v7 request has a script and no brief, and reads unchanged. A v7 asset spec keeps
+`modelChoice` null (the v7 note), and a request written under v7 has no `model_choices` artifact: no choice is backfilled. A v7 reader
+refuses a brief request, which has no script, so it fails closed. Deploy the v8 readers before any writer stores a brief request or a
+model choice, as with v4 to v7.
+
+**Migration (not in this change; eng-pipeline writes it).** Two stored checks name the roles and artifact types of earlier versions, and
+they refuse the new values until a migration extends them:
+- `engine_artifacts.type` (migration 0077) lists the v1 artifact types. A `written_script` or `model_choices` row is refused until it is
+  extended.
+- `engine_role_calls.role` (migration 0081) lists the Claude roles. A `model_chooser` or `scriptwriter` call is refused until it is
+  extended, and `migration-0081.test.ts` fails until then.
+
+**Open points for the lead.**
+1. A plain generate shot has no output name. Its asset spec is keyed by its shot id and attempt (`assetSpecFor`), so its choice cannot be
+   keyed by `output` under this schema. `model_choices` therefore holds the chain calls only, and the fixture's choices are the two calls
+   of the cartoon chain. The lead decides whether a single call gets a fixed output name, which is a further version.
+2. `visualRequests` of a brief request name beats that do not exist until the script is written. The contract does not refuse them; a
+   brief request should send none.
+3. A brief has no language. The written script carries one, and the choice is the writer's.
+4. Not in this change: the rows of Bible 11.1 for the two roles (to add with their prompts), the prompt files, and the stages.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.

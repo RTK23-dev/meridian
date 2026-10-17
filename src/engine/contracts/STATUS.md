@@ -1,6 +1,104 @@
 # STATUS: engine contracts (W1, with config)
 
-## Model choice: contract version `engine-contracts@7` (current)
+## Contract v8: brief, written script, model choices and two roles (`engine-contracts@8`, current)
+
+Lead-approved change (engine-contracts@8), with the coordinator's addition (the brief and the written script) on the same version.
+Bible section 4 has the "v8 changes and migration" note. Committed on this worktree's branch; not pushed; the lead merges.
+
+### Changes
+
+1. **Model choices (`model-choices.ts`).** `modelChoicesSchema` (`meridian.model_choices/v1`): `{ requestId, catalogReadAt, choices }`.
+   Each choice is `{ shotId, output, modelClass, modelChoice }`, where `modelChoice` is the v7 `modelChoiceSchema`, never null
+   (`modelChoiceEntrySchema` refuses null). The pair `(shotId, output)` occurs at most once: a repeat is refused at `choices[i]`. An
+   empty `choices` list is valid. Exports: `modelChoicesSchema`, `ModelChoices`, `modelChoiceEntrySchema`, `ModelChoiceEntry`.
+2. **Written script (`written-script.ts`).** `writtenScriptSchema` (`meridian.written_script/v1`): `{ requestId, language, beats
+   (scriptBeatSchema, at least one), rationale (1 to 2000, not blank), basedOn: { videoDnaId, sourceLabels } }`. My addition, not in the
+   brief: each `beatId` is unique (a refinement at `beats`), because beat ids address the spans and the visual requests.
+3. **Brief (`request.ts`).** `briefSchema`, `Brief`, `BriefSource`, `BriefAttachment` and the limits (`BRIEF_TEXT_MAX` 8000,
+   `BRIEF_SOURCE_LABEL_MAX` 200, `BRIEF_SOURCE_TEXT_MAX` 4000, `BRIEF_ATTACHMENT_NOTE_MAX` 500, `BRIEF_LIST_MAX` 20). `productionRequestSchema`:
+   `script` is optional, `brief` is optional, and a refinement requires exactly one. Both: issue at `brief`. Neither: issue at `script`.
+   `page` stays required. The literal stays `meridian.production_request/v1`: a v7 request parses unchanged.
+4. **Blank text (`primitives.ts`).** `nonBlankText(max)`: a string of at most `max` characters that is not white space only. Used for the
+   brief, its sources, its notes and the rationale. The length is the JavaScript string length (UTF-16 units).
+5. **Roles (`ledger.ts`).** `CLAUDE_ROLES` gains `model_chooser` (on `llm.check`, Haiku) and `scriptwriter` (on `llm.direction`, Opus).
+6. **Artifact types (`envelope.ts`).** `ARTIFACT_TYPES` gains `written_script` and `model_choices` (17 types now).
+7. **Version.** `CONTRACTS_VERSION = "engine-contracts@8"`. `config.test.ts` pins it.
+8. **Fixtures.** `fixtures/brief.ts`: `briefFixture`, `productionRequestBriefFixture` (no script, no beats, `visualRequests: []`),
+   `writtenScriptFixture` (the brief request's script; its `basedOn` names the chain's DNA and the brief's source label). `chain.ts`:
+   `modelChoicesFixture`, the two calls of the cartoon chain (keyframe on `image.keyframe`, clip on `video.budget`). `fixtures/index.ts`
+   adds the schemas' keys (`productionRequestBrief`, `writtenScript`, `modelChoices`) and the two envelopes (`modelChoicesEnvelopeFixture`,
+   `writtenScriptEnvelopeFixture`). `ids.ts` adds `briefRequest`.
+9. **Config (`config/`).** No new file. The two new roles run on tiers that `routes.ts` already routes to a Claude model with a token rate
+   (`llm.direction`: Opus 5.5; `llm.check`: Haiku 5.5). `config.test.ts` checks that. No role has a config entry of its own, so none is
+   added (the lead's "like the other roles"). A role's token estimate belongs to its role file (`claude/roles/`).
+
+### Decisions and open points (for the lead)
+
+1. **A plain generate shot cannot key a model choice.** Its spec is keyed by shot id and attempt (`assetSpecFor`, `produce-shot.ts`), with no
+   output name. So `model_choices` holds the chain calls only, and the plain shots' choices (shot 1 and shot 3 of the fixture) are not in
+   it. The fixture's shot 3 keeps its v7 `modelChoice` on the asset spec, which the artifact does not record. Decide: a fixed output name
+   for a single call (a further version), or another key.
+2. **Bible 10.5 says "the director role" for the model pick.** This change names `model_chooser`. The Bible note asks the lead to confirm.
+3. **`visualRequests` of a brief request** name beats that do not exist until the script is written. The contract does not refuse them. A
+   brief request should send none. Refuse them, or leave it to intake?
+4. **A brief has no language.** The written script carries one.
+5. **Empty `model_choices.choices` is valid** (the request made no choice). Refuse it instead, if the lead prefers.
+6. **`validatedRequestSchema` is unchanged.** It takes the request, so it inherits the rule. `estimatedSpeechMs` is still required: how
+   intake estimates a brief request's speech before its script exists is the intake stage's decision.
+
+### Breakage outside this folder (NOT edited here; typecheck, `npx tsc --noEmit`)
+
+62 errors in 24 files, all outside `contracts/` and `config/`. 61 come from `script` becoming optional (TS18048 "possibly undefined", TS2532,
+and one TS2322 in each of two test files). One (`jobs/artifact-store.ts:36`, TS2739) comes from the two new artifact types: the
+`Record<ArtifactType, ...>` of `ARTIFACT_BODY_SCHEMAS` lacks `written_script` and `model_choices`.
+
+Production code that reads `request.script` must branch: a script request reads the script, and a brief request reads the written script
+(stage work, not a type fix). Until a stage does, a brief request must fail closed there, not read an empty script.
+
+- `src/engine/analyze/reference.ts`: 203
+- `src/engine/jobs/artifact-store.ts`: 36 (artifact types, not `script`)
+- `src/engine/jobs/handlers/edit.ts`: 118
+- `src/engine/jobs/handlers/intake.ts`: 177, 185
+- `src/engine/jobs/handlers/variants.ts`: 550
+- `src/engine/plan/build.ts`: 147, 251, 371
+- `src/engine/plan/fixtureInputs.ts`: 19
+- `src/engine/review/gates/preRender.ts`: 192, 197
+- `src/engine/review/gates/request.ts`: 218, 253
+- `src/engine/variants/expand.ts`: 150, 156, 272, 319
+- `src/engine/variants/work.ts`: 70, 143, 147
+- `src/engine/variants/writer.ts`: 31, 32, 42
+- `src/engine/voice/voice.ts`: 221, 224
+- Tests only: `src/engine/jobs/handlers/pre-render-gate.test.ts`: 176; `src/engine/jobs/handlers/variants-generation.test.ts`: 296, 473;
+  `src/engine/plan/align.test.ts`: 13; `src/engine/plan/build.test.ts`: 138; `src/engine/plan/minimum.test.ts`: 22;
+  `src/engine/review/gates/preRender.test.ts`: 41, 181; `src/engine/review/gates/request.test.ts`: 159;
+  `src/engine/variants/expand.test.ts`: 185; `src/engine/variants/speak.test.ts`: 35, 48, 49, 51, 56, 58, 67, 71, 73, 74, 75;
+  `src/engine/variants/work.test.ts`: 9, 107, 108, 109; `src/engine/variants/writer.test.ts`: 46, 78, 85.
+
+**A test that fails outside this folder:** `src/engine/jobs/migration-0081.test.ts` (in `npm test`, on the test database) fails on
+"the role check allows model_chooser". The SQL check `engine_role_calls_role_check` (migration 0081) lists the v4 roles. `scriptwriter` fails the
+same way. This needs a migration by eng-pipeline. The same is true of `engine_artifacts.type` (migration 0077): a `written_script` or
+`model_choices` row is refused until a migration extends it. No contract writes a migration.
+
+### Tests (this worktree; `NODE_ENV=development node --experimental-strip-types --test`)
+
+- `src/engine/contracts/*.test.ts` and `src/engine/config/*.test.ts`: 321 pass, 0 fail (before this change, 252).
+- `invalid.test.ts`: the brief cases (both, neither, blank and over-long text, source and attachment bounds, `page` still required), the
+  written-script cases, the model-choice cases (duplicate pair, null choice, unknown class and provider), the role cases (`model_choosr`,
+  a role with another role's prompt version), and the envelope types.
+- `v8.test.ts` (new): the exactly-one rule and its paths, a v7 request unchanged, the brief at its bounds, the brief with empty lists,
+  the written script's agreement with the brief, the model-choice fixture against the chain's calls, the envelopes, the two new types and
+  roles, and the version.
+- `schemas.test.ts`: the round trip covers the three new schemas and the two envelopes.
+- `npx tsc --noEmit`: 62 errors, all outside this folder (listed above). None in `contracts/` or `config/`.
+- `npx eslint` on every changed TypeScript file: exit 0 (the unused-import warnings in `schemas.test.ts` are fixed).
+
+### Checked, not found
+
+- `src/engine/jobs/STATUS.md` has no note on where a request-level model choice lives. Searches for "model", "choice", "chooser" and
+  "10.5" find only the v7 pick, the orchestrator's model class notes and unrelated "human choice" text. The v7 note (Bible section 4) says
+  the choice is on the asset spec, so `model_choices` is the request-level record and the choice stays on the spec.
+
+## Model choice: contract version `engine-contracts@7` (superseded by v8; its content still holds)
 
 Branch `worktree-agent-ace5eed12ff323956`, fast-forwarded to `main` (6bf831f) before the change, so it carries Bible 10.5 and
 the CLAUDE.md rule 3 change. Bible section 4 has the "v7 changes and migration" note. Not pushed; the lead merges.

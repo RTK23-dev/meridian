@@ -36,4 +36,6 @@ export const FIXTURE_IDS = {
   artVoice: fixtureId("art_", 31),
   artDna: fixtureId("art_", 32),
   artPlan: fixtureId("art_", 33),
+  // A brief-only request (contract v8): its own id, so it never shares the chain's request.
+  briefRequest: fixtureId("req_", 36),
 } as const;

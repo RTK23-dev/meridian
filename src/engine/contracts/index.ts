@@ -18,5 +18,7 @@ export * from "./manifest.ts";
 export * from "./ledger.ts";
 export * from "./assets.ts";
 export * from "./catalog.ts";
+export * from "./written-script.ts";
+export * from "./model-choices.ts";
 export * from "./envelope.ts";
 export * from "./version.ts";

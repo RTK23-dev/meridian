@@ -21,6 +21,9 @@ export const ARTIFACT_TYPES = [
   "gate_result",
   "review_result",
   "manifest",
+  // Contract v8: the script written from a brief (Bible 6.x write_script), and one request's orchestrator model choices (Bible 10.5).
+  "written_script",
+  "model_choices",
 ] as const;
 
 export const artifactTypeSchema = z.enum(ARTIFACT_TYPES);

@@ -62,6 +62,9 @@ export type BudgetReservation = z.infer<typeof budgetReservationSchema>;
  * a contract change (a version bump and a Bible section 4 note).
  * `frame_reader` (contract v4) is the Haiku vision role that reads captions, shake and speed ramps from sampled frames, as
  * measurements only. It returns no visible text (Bible 1, copy genes never content).
+ * `model_chooser` (contract v8) picks each production call's model from the OpenRouter catalog (Bible 10.5). It runs on llm.check.
+ * `scriptwriter` (contract v8) writes a request's script from its brief and the analysed reference (Bible 6.x write_script). It runs
+ * on llm.direction.
  */
 export const CLAUDE_ROLES = [
   "segmenter",
@@ -75,6 +78,8 @@ export const CLAUDE_ROLES = [
   "prompt_fixer",
   "variant_writer",
   "frame_reader",
+  "model_chooser",
+  "scriptwriter",
 ] as const;
 export const claudeRoleSchema = z.enum(CLAUDE_ROLES);
 export type ClaudeRole = z.infer<typeof claudeRoleSchema>;

@@ -3,6 +3,7 @@ import test from "node:test";
 import { z } from "zod";
 import {
   assetSpecSchema,
+  briefSchema,
   budgetReservationSchema,
   characterSheetSchema,
   compositionSchema,
@@ -16,7 +17,9 @@ import {
   manifestSchema,
   MODEL_CHOICE_REASON_MAX,
   modelCatalogEntrySchema,
+  modelChoiceEntrySchema,
   modelChoiceSchema,
+  modelChoicesSchema,
   personaSchema,
   productKitSchema,
   productionRequestSchema,
@@ -32,10 +35,17 @@ import {
   videoDnaSchema,
   voiceKitSchema,
   voiceTrackSchema,
+  writtenScriptSchema,
 } from "./index.ts";
 import {
   FIXTURE_IDS as ID,
   fixtureId,
+  briefFixture,
+  modelChoicesEnvelopeFixture,
+  modelChoicesFixture,
+  productionRequestBriefFixture,
+  writtenScriptEnvelopeFixture,
+  writtenScriptFixture,
   assetSpecFixture,
   assetSpecV6Fixture,
   modelCatalogEntryFixture,
@@ -175,6 +185,65 @@ const cases: Case[] = [
   { name: "catalog entry: readAt is not an ISO time", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.readAt = "yesterday")) },
   { name: "catalog entry: a capability left out instead of null", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => delete d.capabilities.audio) },
   { name: "catalog entry: no capabilities block", schema: modelCatalogEntrySchema, value: without(modelCatalogEntryFixture, "capabilities") },
+
+  // Contract v8: a request sends its script or its brief, never both and never neither; the brief's text, sources and attachments are bounded.
+  { name: "request: both script and brief", schema: productionRequestSchema, value: edit(productionRequestFixture, (d) => (d.brief = briefFixture)) },
+  { name: "request: neither script nor brief", schema: productionRequestSchema, value: without(productionRequestFixture, "script") },
+  { name: "brief request: empty brief text", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.text = "")) },
+  { name: "brief request: brief text of white space only", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.text = "   \n")) },
+  { name: "brief request: brief text over 8000 characters", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.text = "x".repeat(8001))) },
+  { name: "brief request: no brief text key", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => delete d.brief.text) },
+  { name: "brief request: a source with an empty label", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.sources[0].label = "")) },
+  { name: "brief request: a source with a label over 200 characters", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.sources[0].label = "s".repeat(201))) },
+  { name: "brief request: a source whose text is white space", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.sources[0].text = " ")) },
+  { name: "brief request: a source text over 4000 characters", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.sources[0].text = "x".repeat(4001))) },
+  { name: "brief request: 21 sources", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.sources = Array.from({ length: 21 }, (_, i) => ({ label: `s${i}`, text: "x" })))) },
+  { name: "brief request: no page (the page stays required)", schema: productionRequestSchema, value: without(productionRequestBriefFixture, "page") },
+  { name: "brief request: sources left out", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => delete d.brief.sources) },
+  { name: "brief request: attachments left out", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => delete d.brief.attachments) },
+  { name: "brief request: an attachment without a media type", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => delete d.brief.attachments[0].mediaType) },
+  { name: "brief request: an attachment note over 500 characters", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.attachments[0].note = "n".repeat(501))) },
+  { name: "brief request: 21 attachments", schema: productionRequestSchema, value: edit(productionRequestBriefFixture, (d) => (d.brief.attachments = Array.from({ length: 21 }, () => ({ uri: "store://x/a.png", mediaType: "image/png" })))) },
+  { name: "brief: the brief alone with no text", schema: briefSchema, value: without(briefFixture, "text") },
+
+  // Written script (contract v8, Bible 6.x write_script): the beats, the rationale and what the script was based on.
+  { name: "written script: no beats", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.beats = [])) },
+  { name: "written script: two beats with the same beatId", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.beats[1].beatId = "b1")) },
+  { name: "written script: an unknown beat role", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.beats[0].role = "outro")) },
+  { name: "written script: an empty rationale", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.rationale = "")) },
+  { name: "written script: a rationale of white space", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.rationale = "  ")) },
+  { name: "written script: a rationale over 2000 characters", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.rationale = "r".repeat(2001))) },
+  { name: "written script: no basedOn", schema: writtenScriptSchema, value: without(writtenScriptFixture, "basedOn") },
+  { name: "written script: basedOn without a DNA id", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => delete d.basedOn.videoDnaId) },
+  { name: "written script: basedOn names the request, not the DNA", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.basedOn.videoDnaId = ID.request)) },
+  { name: "written script: a blank source label", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.basedOn.sourceLabels = [""])) },
+  { name: "written script: wrong schema literal", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.schema = "meridian.written_script/v2")) },
+  { name: "written script: requestId with the dna prefix", schema: writtenScriptSchema, value: edit(writtenScriptFixture, (d) => (d.requestId = ID.dna)) },
+
+  // Model choices (contract v8, Bible 10.5): one entry per call, the choice never null, and the role names are contract names.
+  { name: "model choices: a duplicate (shotId, output) pair", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => d.choices.push({ ...d.choices[0] })) },
+  { name: "model choices: a null modelChoice inside choices", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => (d.choices[0].modelChoice = null)) },
+  { name: "model choices: a choice with no modelChoice key", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => delete d.choices[1].modelChoice) },
+  { name: "model choice entry: a null modelChoice", schema: modelChoiceEntrySchema, value: edit(modelChoicesFixture.choices[0], (d) => (d.modelChoice = null)) },
+  { name: "model choices: wrong schema literal", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => (d.schema = "meridian.model_choices/v2")) },
+  { name: "model choices: requestId with the take prefix", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => (d.requestId = ID.take1)) },
+  { name: "model choices: catalogReadAt is not an ISO time", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => (d.catalogReadAt = "yesterday")) },
+  { name: "model choices: no choices key", schema: modelChoicesSchema, value: without(modelChoicesFixture, "choices") },
+  { name: "model choices: an output name with a capital letter", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => (d.choices[0].output = "Keyframe")) },
+  { name: "model choices: a shot id with the take prefix", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => (d.choices[0].shotId = ID.take1)) },
+  { name: "model choices: a model class the contract does not have", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => (d.choices[1].modelClass = "video.banana")) },
+  { name: "model choices: a choice from a provider other than openrouter", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => (d.choices[0].modelChoice.provider = "anthropic")) },
+  { name: "model choices: a choice with an empty model id", schema: modelChoicesSchema, value: edit(modelChoicesFixture, (d) => (d.choices[1].modelChoice.modelId = "")) },
+
+  // Roles added in contract v8: an unknown role name is refused, and a role takes only its own prompt version.
+  { name: "ledger: role model_choosr (a misspelt model_chooser)", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => { d.role = "model_choosr"; d.promptVersion = "model_choosr@1"; }) },
+  { name: "ledger: scriptwriter with the model chooser's prompt version", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => { d.role = "scriptwriter"; d.promptVersion = "model_chooser@1"; }) },
+  { name: "ledger: model_chooser with the scriptwriter's prompt version", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => { d.role = "model_chooser"; d.promptVersion = "scriptwriter@1"; }) },
+  { name: "manifest role call: a role name that is not a contract role", schema: manifestRoleCallSchema, value: { ...manifestRoleCallsFixture[1], role: "chooser", promptVersion: "chooser@1" } },
+
+  // Envelope types of contract v8.
+  { name: "envelope: model choices body under the type of a typo", schema: envelopeSchema(modelChoicesSchema), value: edit(modelChoicesEnvelopeFixture, (d) => (d.type = "model_choice")) },
+  { name: "envelope: written script body under the model choices schema", schema: envelopeSchema(writtenScriptSchema), value: edit(writtenScriptEnvelopeFixture, (d) => (d.schema = "meridian.model_choices/v1")) },
 
   // Take and verdict.
   { name: "take: attempt zero", schema: takeSchema, value: edit(take1Fixture, (d) => (d.attempt = 0)) },

@@ -18,6 +18,8 @@ import {
   manifestSchema,
   modelCatalogEntrySchema,
   modelChoiceSchema,
+  modelChoicesSchema,
+  writtenScriptSchema,
   personaSchema,
   productKitSchema,
   productionRequestSchema,
@@ -64,6 +66,9 @@ import {
 
 const schemas = {
   productionRequest: productionRequestSchema,
+  productionRequestBrief: productionRequestSchema,
+  writtenScript: writtenScriptSchema,
+  modelChoices: modelChoicesSchema,
   validatedRequest: validatedRequestSchema,
   intakeRejection: intakeRejectionSchema,
   videoDna: videoDnaSchema,
@@ -95,6 +100,8 @@ const schemas = {
   productKit: productKitSchema,
   voiceKit: voiceKitSchema,
   artifactEnvelope: envelopeSchema(scenePlanSchema),
+  modelChoicesEnvelope: envelopeSchema(modelChoicesSchema),
+  writtenScriptEnvelope: envelopeSchema(writtenScriptSchema),
 } as const;
 
 type SchemaName = keyof typeof schemas;
@@ -120,6 +127,7 @@ test("parse, canonicalJson and parse again is stable for every fixture", () => {
 
 test("the request, DNA, voice, plan, takes, EDL, composition, render, review and manifest agree", () => {
   const requestId = productionRequestFixture.requestId;
+  assert.ok(productionRequestFixture.script, "the chain request is a script request (contract v8: script or brief)");
   assert.equal(validatedRequestFixture.requestId, requestId);
   assert.equal(scenePlanFixture.requestId, requestId);
   assert.equal(voiceTrackFixture.requestId, requestId);
@@ -149,7 +157,9 @@ test("the shots tile the voice duration exactly, with no gap or overlap", () => 
 });
 
 test("voice words contain every script word in order and the beat spans cover the duration", () => {
-  const scriptWords = productionRequestFixture.script.beats.flatMap((beat) =>
+  const script = productionRequestFixture.script;
+  assert.ok(script, "the chain request has a script");
+  const scriptWords = script.beats.flatMap((beat) =>
     beat.text.replace(/[.,]/g, "").split(/\s+/),
   );
   assert.deepEqual(
@@ -164,7 +174,7 @@ test("voice words contain every script word in order and the beat spans cover th
   }
   assert.equal(spans[spans.length - 1].endMs, voiceTrackFixture.durationMs);
 
-  const beatIds = productionRequestFixture.script.beats.map((beat) => beat.beatId);
+  const beatIds = script.beats.map((beat) => beat.beatId);
   assert.deepEqual(
     spans.map((span) => span.beatId),
     beatIds,
@@ -172,7 +182,9 @@ test("voice words contain every script word in order and the beat spans cover th
 });
 
 test("every shot belongs to a beat of the request, and the request's must visual request is honoured", () => {
-  const beatIds = new Set(productionRequestFixture.script.beats.map((beat) => beat.beatId));
+  const script = productionRequestFixture.script;
+  assert.ok(script, "the chain request has a script");
+  const beatIds = new Set(script.beats.map((beat) => beat.beatId));
   for (const shot of scenePlanFixture.shots) {
     assert.ok(beatIds.has(shot.beatId), `${shot.shotId} names an unknown beat`);
   }

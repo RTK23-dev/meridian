@@ -21,6 +21,7 @@ import {
   type ManifestRoleCall,
   type ModelCatalogEntry,
   type ModelChoice,
+  type ModelChoices,
   type ProductionRequest,
   type RenderedVideo,
   type ReviewResult,
@@ -489,6 +490,39 @@ export const modelChoiceFixture: ModelChoice = {
   source: "orchestrator",
   reason: "The hero image is pinned as the first frame; this candidate takes a first frame for 6 s at the lowest eligible per-second price.",
   catalogReadAt: "2026-10-13T09:00:04.000Z",
+};
+
+/**
+ * The model choices of the chain fixture's generated calls (contract v8, Bible 10.5): both calls of the cartoon chain, the keyframe
+ * (image.keyframe) and the clip (video.budget). They are the recorded shape of the orchestrator's answer, not a live read.
+ * Not in this artifact: the plain generate shots (shot 1 and shot 3), whose spec has no output name to key a choice by (see the v8
+ * note of Bible section 4), and the stop-motion frames, whose image.edit class has no usable price, so no candidate exists and no
+ * choice is made. Every choice here has a catalog candidate with a usable price.
+ */
+const keyframeChoice: ModelChoice = {
+  provider: "openrouter",
+  modelId: "bytedance-seed/seedream-4.5",
+  source: "orchestrator",
+  reason: "The keyframe takes the character sheet as a reference; this candidate accepts references at a per-image price the engine can estimate.",
+  catalogReadAt: "2026-10-13T09:00:04.000Z",
+};
+
+const clipChoice: ModelChoice = {
+  provider: "openrouter",
+  modelId: "seedance-2.0-mini",
+  source: "orchestrator",
+  reason: "The first frame is the keyframe output; this candidate takes a first frame for 3 s at the lowest eligible per-second price.",
+  catalogReadAt: "2026-10-13T09:00:04.000Z",
+};
+
+export const modelChoicesFixture: ModelChoices = {
+  schema: "meridian.model_choices/v1",
+  requestId: ID.request,
+  catalogReadAt: "2026-10-13T09:00:04.000Z",
+  choices: [
+    { shotId: ID.shotCartoonChain, output: "keyframe", modelClass: "image.keyframe", modelChoice: keyframeChoice },
+    { shotId: ID.shotCartoonChain, output: "clip", modelClass: "video.budget", modelChoice: clipChoice },
+  ],
 };
 
 export const assetSpecFixture: AssetSpec = {

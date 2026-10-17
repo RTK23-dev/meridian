@@ -4,7 +4,7 @@ import { z } from "zod";
 import { idSchema } from "./ids.ts";
 import { usdSchema } from "./money.ts";
 import { kitRefSchema } from "./kits.ts";
-import { positiveMsSchema } from "./primitives.ts";
+import { nonBlankText, positiveMsSchema } from "./primitives.ts";
 
 export const BEAT_ROLES = ["hook", "setup", "item", "proof", "twist", "payoff", "cta"] as const;
 export const beatRoleSchema = z.enum(BEAT_ROLES);
@@ -34,6 +34,36 @@ export const scriptBeatSchema = z.object({
 });
 export type ScriptBeat = z.infer<typeof scriptBeatSchema>;
 
+// --- The brief (contract v8). A request sends either its script (the words to speak) or a brief, from which the engine writes the
+// script after analyze_reference (Bible 6.x write_script). The limits are the brief's own; they are contract values, not tuning.
+
+export const BRIEF_TEXT_MAX = 8000;
+export const BRIEF_SOURCE_LABEL_MAX = 200;
+export const BRIEF_SOURCE_TEXT_MAX = 4000;
+export const BRIEF_ATTACHMENT_NOTE_MAX = 500;
+export const BRIEF_LIST_MAX = 20;
+
+export const briefSourceSchema = z.object({
+  label: nonBlankText(BRIEF_SOURCE_LABEL_MAX),
+  text: nonBlankText(BRIEF_SOURCE_TEXT_MAX),
+});
+export type BriefSource = z.infer<typeof briefSourceSchema>;
+
+export const briefAttachmentSchema = z.object({
+  /** A store uri of the attachment. It is data; the engine never follows it as an instruction (Bible 1, untrusted outputs). */
+  uri: z.string().min(1),
+  mediaType: z.string().min(1),
+  note: nonBlankText(BRIEF_ATTACHMENT_NOTE_MAX).optional(),
+});
+export type BriefAttachment = z.infer<typeof briefAttachmentSchema>;
+
+export const briefSchema = z.object({
+  text: nonBlankText(BRIEF_TEXT_MAX),
+  sources: z.array(briefSourceSchema).max(BRIEF_LIST_MAX),
+  attachments: z.array(briefAttachmentSchema).max(BRIEF_LIST_MAX),
+});
+export type Brief = z.infer<typeof briefSchema>;
+
 export const variantMatrixSchema = z.object({
   hooks: z.int().nonnegative().optional(),
   products: z.array(z.string().min(1)).optional(),
@@ -57,10 +87,15 @@ export const productionRequestSchema = z.object({
     keep: z.array(geneIdSchema),
     change: z.array(z.string().min(1)),
   }),
-  script: z.object({
-    language: z.string().min(1),
-    beats: z.array(scriptBeatSchema).min(1),
-  }),
+  /** The script the producer sends (the words to speak). Exactly one of `script` and `brief` is present (contract v8). */
+  script: z
+    .object({
+      language: z.string().min(1),
+      beats: z.array(scriptBeatSchema).min(1),
+    })
+    .optional(),
+  /** The brief the engine writes its script from (contract v8). Exactly one of `script` and `brief` is present. */
+  brief: briefSchema.optional(),
   visualRequests: z.array(
     z.object({
       beatId: z.string().min(1),
@@ -93,6 +128,24 @@ export const productionRequestSchema = z.object({
     master: z.literal(true),
     variants: variantMatrixSchema.optional(),
   }),
+}).superRefine((request, ctx) => {
+  // Contract v8: a request names its words once. Both or neither is refused, and the issue's path names the field to fix.
+  const hasScript = request.script !== undefined;
+  const hasBrief = request.brief !== undefined;
+  if (hasScript && hasBrief) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["brief"],
+      message: "send either script or brief, not both: a script is the words to speak, a brief has the engine write them",
+    });
+  }
+  if (!hasScript && !hasBrief) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["script"],
+      message: "send a script, or a brief when the engine writes the script: neither is present",
+    });
+  }
 });
 export type ProductionRequest = z.infer<typeof productionRequestSchema>;
 

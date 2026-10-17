@@ -34,6 +34,20 @@ version bump, a note in Bible section 4 and the lead's approval.
 - A manifest's role calls (v2, optional `roleCalls`) name a Bible 11.1 role. Each call's prompt version is the one `promptVersions`
   records for its role. An unknown cost, and an invalid answer, are held as the estimate (`actualIsEstimate: true`).
 
+## Contract v8 (`CONTRACTS_VERSION`, see Bible section 4 "v8 changes and migration")
+
+- `ProductionRequest` takes `brief` (`briefSchema`: text, sources, attachments), and `script` is optional. Exactly one of the two is
+  present; both is refused at `brief`, neither at `script`. The schema literal stays `meridian.production_request/v1`.
+- `written-script.ts`: `writtenScriptSchema` (`meridian.written_script/v1`), the script written from a brief, with `basedOn`.
+- `model-choices.ts`: `modelChoicesSchema` (`meridian.model_choices/v1`), one request's model choices, one entry per chain call
+  `(shotId, output)`, each with a non-null `modelChoice`. A duplicate pair is refused.
+- `ledger.ts`: `CLAUDE_ROLES` gains `model_chooser` (on `llm.check`) and `scriptwriter` (on `llm.direction`).
+- `envelope.ts`: `ARTIFACT_TYPES` gains `written_script` and `model_choices`.
+- `primitives.ts`: `nonBlankText(max)`, text that is not blank (a brief, a source or a rationale).
+- Fixtures: `productionRequestBriefFixture` and `briefFixture` (fixtures/brief.ts), `writtenScriptFixture`, `modelChoicesFixture`
+  (the cartoon chain's two calls) and the two envelopes.
+- The DB checks of migrations 0077 (artifact types) and 0081 (roles) do not list the new values; eng-pipeline's migration must extend them.
+
 ## Contract v7 (`CONTRACTS_VERSION`, see Bible section 4 "v7 changes and migration")
 
 - `AssetSpec` takes `modelChoice`: `{ provider: 'openrouter', modelId, source: 'orchestrator' | 'fallback', reason (1 to 500
