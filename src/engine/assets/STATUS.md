@@ -1,5 +1,21 @@
 # Asset router and adapters (W5): E3 asynchronous submit and settle
 
+## Orchestrator model choice in the router (Bible 10.5, contract v7; 2026-10-17)
+
+- `router.ts`: `RouterDeps.catalog?: ModelCatalogSource`. When `spec.modelChoice` is set, the router reads the (cached) catalog, checks
+  the chosen model is still listed for the spec's class and still fits the spec (`needOf` + `rejectionOf`), and makes it the only target:
+  route `openrouter:<modelId>`, the adapter of its class, the video profile from the same catalog read, and the estimate from the catalog
+  price (`catalogEstimateUsd`, rounded up to 4 decimals). The adapter id is `openrouter:<modelId>`, so `assetCacheKey` and the ledger key
+  distinguish models. A decision records the choice and its price. If the model left the catalog, no longer fits, the catalog cannot be
+  read, or the runtime has none, a decision says why and the route table's targets are used (the fallback). Settlement is unchanged
+  (OpenRouter's `usage.cost`). `modelChoice: null` takes exactly the old path and reads no catalog.
+- `model-choice.ts`: `needOf(spec)`, `catalogEstimateUsd(entry, spec)`, `fallbackModelsFor(gateway, class)` and
+  `resolveModelChoice({ modelClass, eligible, pick, failure, fallbackModels, catalogReadAt, at }) => { modelChoice, decision }`: a pick is
+  accepted only if it is one of the call's eligible ids; otherwise (or with no pick) the first route-table model that is eligible, source
+  `fallback`; with none, `modelChoice: null` and the route table applies. The director's reason is kept as one-line data, max 500 chars.
+- Tests: `model-choice.test.ts` (9), `router-model-choice.test.ts` (7). All recorded; no live call.
+- Not built here: the director call that produces `pick` (see jobs/STATUS.md, "Model choice: blocked on a contract change").
+
 ## Video profiles for production (this pass): `video-profiles.ts`
 
 - `videoProfileLoader({ gateway })` is the production loader the shot ports use (`jobs/runtime.ts`, `ShotPorts.videoProfiles`). It reads

@@ -55,6 +55,7 @@ import type { MediaLinkSigner } from "./media-link.ts";
 import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
+import { modelCatalogCache, type ModelCatalogSource } from "../gateway/catalog.ts";
 import { meridianCredentialSource } from "../gateway/meridian.ts";
 import { fetchHttpTransport } from "../gateway/transport.ts";
 import type { MediaFunctions } from "../media/interface.ts";
@@ -111,6 +112,11 @@ export type ShotPorts = {
    * those reasons. Absent: no video model is eligible, and produce_shot says so.
    */
   videoProfiles?: VideoProfileLoader;
+  /**
+   * OpenRouter's model catalog, cached per runtime (gateway/catalog.ts, Bible 10.5). The router checks a spec's modelChoice against it
+   * and estimates the chosen model from its price. Absent, a spec with a choice is routed by the route table, with a decision saying so.
+   */
+  catalog?: ModelCatalogSource;
   /**
    * The reason the shot ports cannot make or store a take for this workspace, or null when they can. It is checked before any paid call
    * (produce_shot's generate, check_take's read). Production: productionShotConnection (media functions and Drive connected). Absent,
@@ -223,6 +229,7 @@ function routerFor(composition: EngineComposition, ports: ShotPorts, profiles: R
       buckets: sqlBucketStore(scope.sql, scope.organizationId),
       media: ports.assetMediaFor?.({ organizationId: scope.organizationId, requestId: scope.requestId }) ?? ports.assetMedia,
       videoProfiles: profiles,
+      ...(ports.catalog === undefined ? {} : { catalog: ports.catalog }),
       ...(ports.routerSettings === undefined ? {} : { settings: ports.routerSettings }),
       ...(ports.sleep === undefined ? {} : { sleep: ports.sleep }),
       now: () => Date.parse(now()),
@@ -267,12 +274,17 @@ export function shotGeneratorOf(composition: EngineComposition, shot: ShotPorts)
       const blocked = shot.shotConnection === undefined ? null : await shot.shotConnection(input.organizationId);
       if (blocked !== null) return { status: "not_connected", reasons: [blocked] };
       const profiles = await profilesFor(input.organizationId, input.spec.modelClass);
-      const refusal = noEligibleVideoModel({
-        gateway: composition.gateway,
-        modelClass: input.spec.modelClass,
-        profiles,
-        gaps: loader?.gapsFor(input.organizationId) ?? [],
-      });
+      // A spec with a model choice (Bible 10.5) is checked by the router against the catalog, which has the chosen model's own profile;
+      // the route table's profiles do not decide it. If the choice cannot be used, the router's route-table targets refuse it the same way.
+      const refusal =
+        input.spec.modelChoice !== null
+          ? null
+          : noEligibleVideoModel({
+              gateway: composition.gateway,
+              modelClass: input.spec.modelClass,
+              profiles,
+              gaps: loader?.gapsFor(input.organizationId) ?? [],
+            });
       if (refusal !== null) return { status: "not_connected", reasons: refusal };
       await brandOfRequest(input.sql, input.organizationId, input.requestId);
       return routerGenerator(routerFor(composition, shot, profiles)).generate(input);
@@ -448,6 +460,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
         { organizationId: scope.organizationId, requestId: scope.requestId },
       ),
     videoProfiles: videoProfileLoader({ gateway }),
+    catalog: modelCatalogCache({ gateway }),
     shotConnection: productionShotConnection({ sql, gateway }),
   };
   return {

@@ -54,7 +54,11 @@ import {
   type ScoreResult,
 } from "./score.ts";
 import { adapterFor as buildAdapter, type AdapterContext } from "./providers/index.ts";
-import type { VideoProfile } from "./providers/openrouterVideo.ts";
+import { isVideoClass, videoProfilesFromListing, type VideoProfile } from "./providers/openrouterVideo.ts";
+import type { ModelCatalog, ModelCatalogSource } from "../gateway/catalog.ts";
+import { rejectionOf } from "../gateway/catalog-fit.ts";
+import type { ModelCatalogEntry } from "../contracts/catalog.ts";
+import { catalogEstimateUsd, needOf } from "./model-choice.ts";
 import { authorizeSubmit, confirmAbsentSubmit, reconcileSubmit } from "./ledger-steps.ts";
 import {
   ASSET_JOB_SCHEMA,
@@ -145,6 +149,12 @@ export type RouterDeps = {
   takes?: { downloader?: MediaDownloader };
   /** Verified video profiles from GET /videos/models. Empty means no video model is connected. */
   videoProfiles?: ReadonlyMap<string, VideoProfile>;
+  /**
+   * OpenRouter's model catalog (gateway/catalog.ts, Bible 10.5). Read only for a spec that carries a modelChoice: the chosen model is
+   * checked against it again, and its price is the estimate. Absent, a spec with a choice is routed by the route table, with a
+   * decision that says so.
+   */
+  catalog?: ModelCatalogSource;
   signals?: RouterSignals;
   settings?: Partial<RouterSettings>;
   /** Epoch milliseconds. Injected so that tests control time. */
@@ -371,38 +381,64 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
   const limitFor = (modelClass: ModelClass): number => settings.concurrency[bucketClassFor(modelClass)];
   const backoffFor = (attempt: number): number => Math.min(settings.backoffCapMs, settings.backoffBaseMs * 2 ** (attempt - 1));
 
-  function contextFor(workspaceId: string, voiceId: string | null | undefined, speechSpeed: number | undefined): AdapterContext {
+  function contextFor(
+    workspaceId: string,
+    voiceId: string | null | undefined,
+    speechSpeed: number | undefined,
+    profiles: ReadonlyMap<string, VideoProfile>,
+  ): AdapterContext {
     return {
       gateway: deps.gateway,
       organizationId: workspaceId,
       workspaceId,
       media: deps.media,
-      videoProfiles,
+      videoProfiles: profiles,
       voice: voiceId ?? null,
       speechSpeed: speechSpeed ?? 1,
     };
   }
 
   /**
-   * The adapter for a route, built once per capability, route, workspace and voice. Keeping the instance matters for adapters that
-   * keep a job's result in process (images): the poll must reach the instance that submitted the job.
+   * The adapter for a route, built once per capability, route, workspace, voice and (for video) profile. Keeping the instance matters
+   * for adapters that keep a job's result in process (speech): the poll must reach the instance that submitted the job. `profiles`
+   * replaces the router's video profiles for a model chosen from the catalog (Bible 10.5), whose profile comes from the same read.
    */
-  function adapterFor(route: ResolvedRoute, workspaceId: string, voiceId: string | null | undefined, speechSpeed?: number): RoutedAdapter | null {
-    const key = `${route.capability}\u0000${route.provider.id}:${route.model}\u0000${workspaceId}\u0000${voiceId ?? ""}\u0000${speechSpeed ?? 1}`;
+  function adapterFor(
+    route: ResolvedRoute,
+    workspaceId: string,
+    voiceId: string | null | undefined,
+    speechSpeed?: number,
+    profiles: ReadonlyMap<string, VideoProfile> = videoProfiles,
+  ): RoutedAdapter | null {
+    const profile = isVideoClass(route.capability) ? (profiles.get(route.model) ?? null) : null;
+    const key = `${route.capability}\u0000${route.provider.id}:${route.model}\u0000${workspaceId}\u0000${voiceId ?? ""}\u0000${speechSpeed ?? 1}\u0000${profile === null ? "" : JSON.stringify(profile)}`;
     const cached = adapterCache.get(key);
     if (cached) return cached;
-    const adapter = buildAdapter(route, contextFor(workspaceId, voiceId, speechSpeed));
+    const adapter = buildAdapter(route, contextFor(workspaceId, voiceId, speechSpeed, profiles));
     if (adapter !== null) adapterCache.set(key, adapter);
     return adapter;
   }
 
+  /** A route to an OpenRouter model the orchestrator chose (Bible 10.5). It has no price key: its price is the catalog's. */
+  function chosenRouteOf(modelClass: ModelClass, modelId: string): ResolvedRoute {
+    return { capability: modelClass, provider: deps.gateway.provider("openrouter"), model: modelId, priceKey: null, verified: false };
+  }
+
   /** The adapter of a job's target, looked up again so that a route that has changed since the submit fails closed. */
   function adapterForTarget(target: AssetTarget, modelClass: ModelClass, input: ProduceInput): RoutedAdapter {
-    const route = deps.gateway.routes(modelClass).find((candidate) => candidate.provider.id === target.provider && candidate.model === target.model);
+    const choice = input.spec.modelChoice;
+    const chosen = choice !== null && target.provider === choice.provider && target.model === choice.modelId;
+    const route = chosen
+      ? chosenRouteOf(modelClass, target.model)
+      : deps.gateway.routes(modelClass).find((candidate) => candidate.provider.id === target.provider && candidate.model === target.model);
     if (route === undefined) {
       throw new EngineError("config", `${target.adapterId} is no longer routed for ${modelClass}; the job cannot be settled`, { stage: input.stage });
     }
-    const adapter = adapterFor(route, input.workspaceId, input.voiceId, input.speechSpeed);
+    // A chosen video model's profile comes from the catalog read its submit was checked against (kept in chosenProfiles). In a process
+    // that has not read it, the profile is unknown, which a poll does not need; a submit then refuses before any request.
+    const adapter = chosen
+      ? adapterFor(route, input.workspaceId, input.voiceId, input.speechSpeed, withChosenProfiles())
+      : adapterFor(route, input.workspaceId, input.voiceId, input.speechSpeed);
     if (adapter === null || adapter.id !== target.adapterId) {
       throw new EngineError("config", `${target.adapterId} has no adapter in this runtime`, { stage: input.stage });
     }
@@ -591,15 +627,76 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     return finalOutcome(next);
   }
 
+  /** The video profiles of a catalog read, from its GET /videos/models body. Built once per read. */
+  const catalogProfiles = new WeakMap<ModelCatalog, ReadonlyMap<string, VideoProfile>>();
+  function profilesOf(catalog: ModelCatalog): ReadonlyMap<string, VideoProfile> {
+    let profiles = catalogProfiles.get(catalog);
+    if (profiles === undefined) {
+      profiles = catalog.videoListing === null ? new Map<string, VideoProfile>() : videoProfilesFromListing(catalog.videoListing).profiles;
+      catalogProfiles.set(catalog, profiles);
+    }
+    return profiles;
+  }
+
+  /** The catalog profile of each chosen video model this router has checked, so its submits and polls reach the same adapter. */
+  const chosenProfiles = new Map<string, VideoProfile>();
+  function withChosenProfiles(): ReadonlyMap<string, VideoProfile> {
+    return new Map([...videoProfiles, ...chosenProfiles]);
+  }
+
+  type Chosen = { route: ResolvedRoute; entry: ModelCatalogEntry; profiles: ReadonlyMap<string, VideoProfile> };
+
+  /**
+   * The orchestrator's model for this spec, checked again against the catalog (Bible 10.5): the model must still be listed for the
+   * spec's class and still fit the spec. Null when the spec has no choice. When the choice cannot be used, the reason is a decision and
+   * the route table's targets are used instead (the fallback), as for a spec with no choice.
+   */
+  async function chosenFor(session: Session, input: ProduceInput): Promise<Chosen | null> {
+    const choice = input.spec.modelChoice;
+    if (choice === null) return null;
+    const chosenId = `${choice.provider}:${choice.modelId}`;
+    const fallBack = (why: string): null => {
+      session.decisions.push({
+        at: at(),
+        chose: `route table for ${input.spec.modelClass}`,
+        alternatives: [],
+        reason: `the ${choice.source} choice ${chosenId} is not used: ${why}; the route table's targets are used (Bible 10.5)`,
+        by: "scorer",
+      });
+      return null;
+    };
+    if (deps.catalog === undefined) return fallBack("this runtime has no model catalog to check it against");
+    let read;
+    try {
+      read = await deps.catalog.read(input.workspaceId);
+    } catch (error) {
+      return fallBack(`the catalog could not be read (${excerpt(error instanceof Error ? error.message : "unknown error")})`);
+    }
+    if (read.status === "not_connected") return fallBack(read.reason);
+    const entry = read.catalog.entries.find((candidate) => candidate.id === choice.modelId && candidate.modelClasses.includes(input.spec.modelClass));
+    if (entry === undefined) {
+      return fallBack(`it is no longer in the catalog for ${input.spec.modelClass} (read at ${read.catalog.readAt}; chosen from the read at ${choice.catalogReadAt})`);
+    }
+    const gap = rejectionOf(needOf(input.spec), entry);
+    if (gap !== null) return fallBack(`it no longer fits the call (${gap.reason}: ${gap.detail})`);
+    const profile = profilesOf(read.catalog).get(entry.id);
+    if (profile !== undefined) chosenProfiles.set(entry.id, profile);
+    return { route: chosenRouteOf(input.spec.modelClass, entry.id), entry, profiles: withChosenProfiles() };
+  }
+
   /** Makes the first submit of an asset: scores the targets, serves a cache hit, and launches the best one that is free. */
   async function submit(input: ProduceInput): Promise<StepReport> {
     const session = newSession();
     const { spec, workspaceId } = input;
 
+    // 0. A model the orchestrator chose (Bible 10.5) is the only target, priced from the catalog. A choice that cannot be used, or no
+    // choice, routes by the route table as before.
+    const chosen = await chosenFor(session, input);
+
     // 1. The routed targets of this model class, in priority order.
     let routes: ResolvedRoute[];
     try {
-      routes = deps.gateway.routes(spec.modelClass);
+      routes = chosen === null ? deps.gateway.routes(spec.modelClass) : [chosen.route];
     } catch (error) {
       return report(session, { status: "not_connected", reasons: [error instanceof Error ? error.message : "no route"] });
     }
@@ -618,7 +715,10 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     const notConnected: string[] = [];
     const excluded: string[] = [];
     for (const [priority, route] of routes.entries()) {
-      const adapter = adapterFor(route, workspaceId, input.voiceId, input.speechSpeed);
+      const built = chosen === null ? adapterFor(route, workspaceId, input.voiceId, input.speechSpeed) : adapterFor(route, workspaceId, input.voiceId, input.speechSpeed, chosen.profiles);
+      // A chosen model is estimated from its catalog price (Bible 10.5 step 5), not from the route table's price key.
+      const adapter: RoutedAdapter | null =
+        built === null || chosen === null ? built : { ...built, price: (priced: AssetSpec) => ({ estimateUsd: catalogEstimateUsd(chosen.entry, priced) }) };
       if (adapter === null) {
         excluded.push(`${route.provider.id}:${route.model}: no adapter for this provider`);
         continue;
@@ -651,6 +751,16 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         continue;
       }
       candidates.push({ priority, route, adapter, estimateUsd, cacheKey: routeCacheKey(spec, adapter.id, input) });
+      if (chosen !== null && spec.modelChoice !== null) {
+        const price = chosen.entry.price;
+        session.decisions.push({
+          at: at(),
+          chose: adapter.id,
+          alternatives: [],
+          reason: `the ${spec.modelChoice.source} choice from the catalog read at ${spec.modelChoice.catalogReadAt}, still listed in the read at ${chosen.entry.readAt}; estimated $${estimateUsd} from the catalog price $${price.usd} ${price.unit}${price.sku === null ? "" : ` (${price.sku})`}`,
+          by: spec.modelChoice.source === "orchestrator" ? "director" : "scorer",
+        });
+      }
     }
     if (candidates.length === 0) {
       if (notConnected.length > 0 && excluded.length === 0) return report(session, { status: "not_connected", reasons: notConnected });
