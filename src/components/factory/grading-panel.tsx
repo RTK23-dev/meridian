@@ -50,7 +50,7 @@ export function GradingPanel({
   return (
     <div className="space-y-6">
       <p className="max-w-3xl text-sm text-fg-muted">
-        These thresholds save to this brand. The winner score is built in the scoring module, and no job compares it with these floors yet.
+        These thresholds save to this brand. Pick uses the winner-score floor and the P(beat) floor when a line is saved. The other two floors are saved and not read yet.
       </p>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -70,7 +70,9 @@ export function GradingPanel({
                 hint={`${GRADING_META[key].detail} Default ${formatPercent(DEFAULT_GRADING_THRESHOLDS[key])}. Allowed ${min}% to ${max}%.`}
                 disabled={!canEdit}
                 onChange={(percent) => onChange(gradingPatch(key, fromPercent(percent)))}
-                note={<NotAppliedNote reason={NOT_READ_REASON[key]} />}
+                note={key === "winnerScoreMin" || key === "pBeatMin"
+                  ? <p className="text-sm text-fg-muted">{NOT_READ_REASON[key]}</p>
+                  : <NotAppliedNote reason={NOT_READ_REASON[key]} />}
               />
             </div>
           );

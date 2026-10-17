@@ -9,6 +9,7 @@ import { creativeIdsOfVariant, licencesForCreatives, variantLicenceFlags } from 
 import { adsMustPause } from "./kill-switch.ts";
 import { isFactoryStage } from "./pipeline.ts";
 import { clearLearnRecheck, learnForRun, scheduleLearnRecheck } from "./learn.ts";
+import { loadSavedFactoryPipelineConfig } from "./pipeline-config-store.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
@@ -216,11 +217,15 @@ export async function executeFactoryJob(
       automation: settings.automation,
       intent: settings.intent,
       capTotalCents: settings.caps.totalCents,
+      video: job.brand_id ? await savedVideoShape(sql, job.organization_id, job.brand_id) : null,
     });
     return `templates:${planned.templates};plans:${planned.plans};refused:${planned.refused.length}`;
   }
   if (job.job_type === "factory.produce") {
-    const made = await persistVariants(sql, job.organization_id, job.brand_id, runId, settings.caps.maxVariants);
+    const videosPerConcept = settings.formats.includes("video") && job.brand_id
+      ? (await loadSavedFactoryPipelineConfig(sql, job.organization_id, job.brand_id))?.generationParams.videoCount ?? null
+      : null;
+    const made = await persistVariants(sql, job.organization_id, job.brand_id, runId, settings.caps.maxVariants, videosPerConcept);
     // Each variant is materialized through the production router with the run's provider choice. A named provider that is not ready,
     // a cap that is reached, or a budget that refuses the reservation stops the run here, with the reason on the run row.
     const produced = await produceFactoryCreatives(sql, {
@@ -667,7 +672,13 @@ async function gradeCallStop(sql: Sql, input: { organizationId: string; brandId:
 }
 
 /** The run's settings the plan reads. The plan takes its formats, automation, intent and spend cap from the run, and nothing else. */
-type PlanSettings = PlanRun;
+type PlanSettings = PlanRun & { video?: { aspectRatio: "9:16" | "1:1" | "16:9" | "4:5"; durationSeconds: number } | null };
+
+async function savedVideoShape(sql: Sql, organizationId: string, brandId: string) {
+  const line = await loadSavedFactoryPipelineConfig(sql, organizationId, brandId);
+  if (!line) return null;
+  return { aspectRatio: line.generationParams.aspectRatio, durationSeconds: line.generationParams.durationSeconds };
+}
 
 /**
  * The storyboard and the CreativePlan of each pick of this run (NORTH_STAR section 5, plan). The storyboard is the framework of the
@@ -739,6 +750,7 @@ async function persistTemplates(
           audience,
           run: settings,
           now,
+          video: settings.video,
         });
         plan = storedPlanOf(attributes, creativePlan);
         plans += 1;
@@ -761,7 +773,14 @@ async function persistTemplates(
  * supplies, changing one attribute. Every row records the attribute it tests: "control" for the control. The run's variant cap bounds
  * the rows written across all picks, and a pick the cap has no room for gets none.
  */
-async function persistVariants(sql: Sql, organizationId: string, brandId: string, runId: string, maxVariants: number): Promise<number> {
+async function persistVariants(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  runId: string,
+  maxVariants: number,
+  videosPerConcept: number | null = null,
+): Promise<number> {
   const templates = await sql<{ id: string; plan: string }>`
     select id, plan from factory_templates
     where organization_id = ${organizationId} and brand_id = ${brandId} and id like ${`tpl:${runId}:%`} and plan <> ''
@@ -776,10 +795,11 @@ async function persistVariants(sql: Sql, organizationId: string, brandId: string
     const stored = parseStoredPlan(template.plan);
     if (!stored) continue;
     const control: PlanAttributes = stored.attributes;
+    const room = videosPerConcept === null ? budget : Math.min(budget, Math.max(0, videosPerConcept));
     const rows: Array<{ attribute: string; attributes: PlanAttributes }> = [
       { attribute: "control", attributes: control },
-      ...variantsOf(control, entries, budget - 1).map((variant) => ({ attribute: variant.attribute, attributes: variant.attributes })),
-    ].slice(0, budget);
+      ...variantsOf(control, entries, Math.max(0, room - 1)).map((variant) => ({ attribute: variant.attribute, attributes: variant.attributes })),
+    ].slice(0, room);
     for (const [index, row] of rows.entries()) {
       const id = `var:${template.id}:${index}`;
       await sql`

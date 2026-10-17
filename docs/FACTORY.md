@@ -505,7 +505,7 @@ Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is st
 - Spend from perception reads is not metered. A perception read is a separate call from the decision, and it writes no row.
 - Screens: before and after screenshots of the changed screens are in [feature-screens](feature-screens/README.md). The studio publish dialog
   and the B2 tier counts were not captured. The PHASE_LOG records no run of the button audit (`npm run ui:button-audit`) for these changes.
-- The Factory Line editor (prompts, grading thresholds, presets) is saved for the brand, but no job reads it yet. The screen says so.
+- The Factory Line editor is read by Pick and Produce when the brand has saved a line. Pick uses the winner-score floor and the P(beat) floor. Produce caps variants per concept at the saved video count, and the video plan uses the saved aspect ratio and duration. Prompts, cut pacing, the render-engine choice, the daily generation cap, the 3 s retention floor, the confidence floor, auto-approve and the strict-claim switch are still saved and not read. A brand with no saved line is unchanged.
 - The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
 - A live paid publish from a run uses the run's Facebook Page id and destination link. It is refused, and nothing is sent, when either is missing.
 - Uploads are not connected to Gather.

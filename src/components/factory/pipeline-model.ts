@@ -323,14 +323,14 @@ export const PROMPT_META: Record<PromptKey, { label: string; purpose: string }> 
 
 /** Why a saved value does not change any run. Shown next to the control, so no control looks active. */
 export const NOT_READ_REASON = {
-  videoCount: "No factory job reads the video count yet.",
-  aspectRatio: "No factory job reads the aspect ratio yet.",
-  durationSeconds: "No factory job reads the duration yet.",
+  videoCount: "Produce writes at most this many variants for each concept when the run makes video.",
+  aspectRatio: "A saved line sets the video plan's aspect ratio. A brand with no saved line keeps 9:16.",
+  durationSeconds: "A saved line sets the video plan's length. A brand with no saved line keeps the ad's own length.",
   renderPacing: "No factory job reads the cut pacing yet.",
-  provider: "No factory job reads the render engine yet.",
+  provider: "No factory job reads the render engine yet. The run's own provider choice is the one produce uses.",
   dailyGenerationCap: "No factory job reads this daily cap yet. The spend caps on the Live tests tab are the ones launch reads.",
-  winnerScoreMin: "winner-score.ts defines no floor, and no job reads this value.",
-  pBeatMin: "No factory job computes or checks P(beat) against this value yet.",
+  winnerScoreMin: "Pick skips a concept whose observed winner score is below this floor. A brand with no saved line does not apply it.",
+  pBeatMin: "Pick ignores a learned pattern whose measured P(beat) is below this floor. A pattern with no probability is still used.",
   retention3sMin: "No factory job checks 3 s retention against this value yet.",
   confidenceMin: "No factory job reads this value yet.",
   autoApproveEnabled: "No job reads this switch. JEV's own approval rules run separately.",

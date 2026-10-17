@@ -136,6 +136,8 @@ export type PlanInput = {
   audience: string;
   run: PlanRun;
   now: string;
+  /** A saved Factory Line video shape. Absent means the plan keeps the DNA length and 9:16. */
+  video?: { aspectRatio: "9:16" | "1:1" | "16:9" | "4:5"; durationSeconds: number } | null;
 };
 
 const SCOPE_BY_FORMAT: Record<string, CreationScope> = { image: "image_only", video: "video_only", carousel: "carousel_only" };
@@ -146,7 +148,13 @@ const AUTONOMY_BY_AUTOMATION: Record<PlanRun["automation"], AutonomyMode> = {
 };
 
 /** A deliverable per run format. Its copy is empty: the words are written at production, never copied from the winning ad. */
-function deliverablesOf(templateId: string, concept: Concept, attributes: PlanAttributes, formats: string[]): CreativeDeliverable[] {
+function deliverablesOf(
+  templateId: string,
+  concept: Concept,
+  attributes: PlanAttributes,
+  formats: string[],
+  video: PlanInput["video"],
+): CreativeDeliverable[] {
   return formats.map((format, index): CreativeDeliverable => {
     const base = { id: `deliv-${templateId}-${format}`, sequenceIndex: index, title: concept.label, copy: "", provider: "auto", model: "" };
     if (format === "video") {
@@ -154,8 +162,8 @@ function deliverablesOf(templateId: string, concept: Concept, attributes: PlanAt
         ...base,
         kind: "video",
         format: "video_ugc",
-        aspectRatio: "9:16",
-        targetDurationSeconds: Math.max(1, Math.round(attributes.lengthMs / 1000)),
+        aspectRatio: video?.aspectRatio ?? "9:16",
+        targetDurationSeconds: video?.durationSeconds ?? Math.max(1, Math.round(attributes.lengthMs / 1000)),
         hook: { type: attributes.hook },
         concept: { mechanism: concept.label, theme: attributes.angle },
       };
@@ -184,7 +192,7 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
   if (formats.length === 0) {
     throw new Error("Creative plan refused: the run names no format the plan can make.");
   }
-  const deliverables = deliverablesOf(input.templateId, input.concept, input.attributes, formats);
+  const deliverables = deliverablesOf(input.templateId, input.concept, input.attributes, formats, input.video);
   requireCitedDeliverables(lineage, deliverables.length);
   const scope: CreationScope = formats.length === 1 ? SCOPE_BY_FORMAT[formats[0] ?? ""] ?? "mixed_campaign" : "mixed_campaign";
   const autonomy = AUTONOMY_BY_AUTOMATION[input.run.automation];

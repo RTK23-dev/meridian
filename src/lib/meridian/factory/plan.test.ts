@@ -148,6 +148,9 @@ test("the plan is a draft for the brand's product, with its deliverables unprice
   assert.equal(plan.autonomy, "manual");
   assert.equal(plan.deliverables.length, 1);
   assert.equal(plan.deliverables[0]?.kind, "video");
+  if (plan.deliverables[0]?.kind === "video") {
+    assert.equal(plan.deliverables[0].aspectRatio, "9:16");
+  }
   assert.equal(plan.deliverables[0]?.copy, "", "no words are taken from the winning ad");
   assert.deepEqual(plan.productionPlan, [], "production writes its steps, not the plan");
   assert.equal(plan.estimatedCost.totalEstimatedUsd, 0);
@@ -156,6 +159,15 @@ test("the plan is a draft for the brand's product, with its deliverables unprice
   assert.ok(plan.rationale.some((entry) => entry.groundedIn === "jev_answer" && entry.sourceId === "gate-1"));
 });
 
+test("a saved Factory Line sets the video plan's ratio and length", () => {
+  const plan = creativePlanFor(planInput({ video: { aspectRatio: "1:1", durationSeconds: 15 } }));
+  const video = plan.deliverables[0];
+  assert.equal(video?.kind, "video");
+  if (video?.kind === "video") {
+    assert.equal(video.aspectRatio, "1:1");
+    assert.equal(video.targetDurationSeconds, 15);
+  }
+});
 test("a stored plan reads back with its control's attributes, and a missing one reads as none", () => {
   const input = planInput();
   const plan = creativePlanFor(input);

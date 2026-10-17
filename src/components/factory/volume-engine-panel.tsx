@@ -55,7 +55,7 @@ export function VolumeEnginePanel({
         value={params.videoCount}
         onChange={(videoCount) => onChange({ videoCount })}
         disabled={!canEdit}
-        note={<NotAppliedNote reason={NOT_READ_REASON.videoCount} />}
+        note={<p className="text-sm text-fg-muted">{NOT_READ_REASON.videoCount}</p>}
       />
 
       <ChoiceGroup<Aspect>
@@ -65,7 +65,7 @@ export function VolumeEnginePanel({
         value={params.aspectRatio}
         onChange={(aspectRatio) => onChange({ aspectRatio })}
         disabled={!canEdit}
-        note={<NotAppliedNote reason={NOT_READ_REASON.aspectRatio} />}
+        note={<p className="text-sm text-fg-muted">{NOT_READ_REASON.aspectRatio}</p>}
       />
 
       <fieldset disabled className="min-w-0 space-y-2">
@@ -93,7 +93,7 @@ export function VolumeEnginePanel({
         value={params.durationSeconds}
         onChange={(durationSeconds) => onChange({ durationSeconds })}
         disabled={!canEdit}
-        note={<NotAppliedNote reason={NOT_READ_REASON.durationSeconds} />}
+        note={<p className="text-sm text-fg-muted">{NOT_READ_REASON.durationSeconds}</p>}
       />
 
       <ChoiceGroup<Pacing>

@@ -22,11 +22,21 @@ import { brandFitQuestion } from "../jev/questions.ts";
 import type { BrainKey } from "../brain.ts";
 import { CREATIVE_DNA_VERSION, type CreativeDna } from "./creative-dna.ts";
 import { linesOf, loadFactoryBrain } from "./brain-facts.ts";
+import { loadSavedFactoryPipelineConfig } from "./pipeline-config-store.ts";
 import { thompsonRank, type ThompsonArm } from "./thompson.ts";
 import type { Intent } from "./run-settings.ts";
 import { predictionFingerprint, type GradeRecord } from "./prediction.ts";
 
-/** How far a learned pattern moves a concept's weight at most. A ranking scale, uncalibrated. */
+/** A saved winner-score floor excludes a lower score. No saved line means every scored concept can be picked. */
+export function winnerClearsFloor(score: number, floor: number | null): boolean {
+  return floor === null || score >= floor;
+}
+
+/** A saved P(beat) floor excludes a pattern that measured a lower probability. A pattern with no probability is still used. */
+export function patternClearsBeatFloor(pBeat: number | null, floor: number | null): boolean {
+  return floor === null || pBeat === null || pBeat >= floor;
+}
+
 export const LEARNED_WEIGHT_SCALE = 0.5;
 
 /** The lowest weight a learned pattern can give. A concept the brand learned to lose on is still possible, and rarely picked. */
@@ -123,12 +133,18 @@ export function patternInScope(row: { surface: string; channel: string }, scope:
 }
 
 /** The weight of a concept from the patterns the brand has learned about its angle, hook type and format, on the scope. */
-export function learnedWeightOf(concept: Concept, rows: LearnedRow[], scope: LearningScope | null): { weight: number; notes: string[] } {
+export function learnedWeightOf(
+  concept: Concept,
+  rows: LearnedRow[],
+  scope: LearningScope | null,
+  beatFloor: number | null = null,
+): { weight: number; notes: string[] } {
   const attributes: Record<string, string> = { angle: concept.angle, hookType: concept.hookType, format: concept.format };
   let adjustment = 0;
   const notes: string[] = [];
   for (const row of rows) {
     if (!scope || !patternInScope(row, scope)) continue;
+    if (!patternClearsBeatFloor(row.p_beat, beatFloor)) continue;
     const own = attributes[row.attribute];
     if (own === undefined || own === "" || row.value.trim().toLowerCase() !== own.trim().toLowerCase()) continue;
     const pattern: LearnedPattern = {
@@ -263,6 +279,9 @@ export async function pickConceptsForRun(
     candidates.set(concept.key, candidate);
   }
 
+  const line = await loadSavedFactoryPipelineConfig(sql, input.organizationId, input.brandId);
+  const winnerFloor = line?.gradingThresholds.winnerScoreMin ?? null;
+  const beatFloor = line?.gradingThresholds.pBeatMin ?? null;
   const brain = await loadFactoryBrain(sql, input.organizationId, input.brandId);
   // Only the surfaces the run makes creatives for are read, and only the channels it names (or every channel). The filter is in the
   // query and again in learnedWeightOf, so a pattern from another surface can never move an arm. No scope reads no pattern at all.
@@ -285,12 +304,19 @@ export async function pickConceptsForRun(
   const armById = new Map<string, { candidate: Candidate; surface: LearningSurface | ""; weight: number }>();
   for (const candidate of candidates.values()) {
     const fit = brandFitOf(candidate.concept, brain.values, brain.completeness);
+    if (!winnerClearsFloor(candidate.bestWinner, winnerFloor)) {
+      filtered.push({
+        concept: candidate.concept.label,
+        reason: `The observed winner score ${candidate.bestWinner} is below this brand's floor of ${winnerFloor}.`,
+      });
+      continue;
+    }
     if (!fit.passes) {
       filtered.push({ concept: candidate.concept.label, reason: fit.reason });
       continue;
     }
     for (const scope of scopes) {
-      const { weight, notes } = learnedWeightOf(candidate.concept, learned, scope);
+      const { weight, notes } = learnedWeightOf(candidate.concept, learned, scope, beatFloor);
       const surface: LearningSurface | "" = scope ? scope.surface : "";
       const id = scopes.length > 1 && scope ? `${scope.surface}|${candidate.concept.key}` : candidate.concept.key;
       arms.push({ id, successes: candidate.running, failures: candidate.known - candidate.running, weight });
