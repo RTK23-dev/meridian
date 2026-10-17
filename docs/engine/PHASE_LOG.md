@@ -412,6 +412,35 @@ The reviews found more than the fixes below. Items not fixed are listed under "O
 code is returned to the admin. That is the intended use: a device gateway on the operator's network. The status code is the only oracle,
 and only an admin can set the URL. Accepted.
 
+**Closed on 2026-10-17, from the open list.** Each was confirmed by reading the code first. Items 2, 3 and 11 were not on the open list
+and are recorded here.
+- Factory sleep cap (`factory/sleep.ts`): each cap scope is checked on its own. The run's default caps are checked against the run's
+  spend, and the brand's caps against the brand's spend across all its runs, through `capStopReason`, as the stage check does. The night
+  stops at the first scope reached, and the reason names it. Before, the stricter of the two caps was compared with the brand's daily
+  spend, and the brand's total spend was not read at the start of a night (`sleep-caps.test.ts`).
+- Learned patterns (`learning/store.ts`): a failed organic observation read now fails the recomputation. Before, the read was caught and
+  taken as no organic rows, so the replacement deleted the brand's patterns and stored a set without them. The replacement already ran in
+  one transaction under an advisory lock, and that is unchanged (`replace-transaction.test.ts`).
+- Decision policy (`decisions/policy.ts`): a policy's minimum confidence is no longer skipped for an answer that reports none. Such an
+  answer goes to review with the reason "confidence not reported". A `noul` answer carries no confidence (`jev/router.ts`), so a minimum set
+  on a `noul` question now sends every answer to review. No production mapping sets one (`policy.test.ts`).
+- Engine settlement (`budget/reconcile.ts`): a verified bill is rounded up to the ledger's four decimals, not to nearest, so the recorded
+  actual is never below the bill (at most $0.0001 more). Six decimals would need a contract change and a column change (`actual_usd` is
+  `numeric(14, 4)`). That is not made here (`reconcile.test.ts`).
+- Engine alerts (`ops/alerts.ts`): already fixed. Unsettled ledger rows are not averaged into actuals. The snapshot gives a null actual
+  while any row is unsettled, and `alerts.test.ts` pins it. The open part is in the failed-calls entry below.
+- Migration runner (`scripts/migrate.mjs`): one advisory lock on a fixed key is taken before the applied list is read, and released in a
+  `finally`, only when it was taken. A dead connection releases it on close. The PGlite fallback takes no lock, because PGlite is
+  single-process (`migrate.test.mjs`).
+- Environment scanner (`config/env-example.test.ts`): names read through the account key table, the OAuth client lists, the Drive
+  deployment names and the `settingValue` helper are found. Each was already listed, so `.env.example` is unchanged.
+- Auth flag (`scripts/with-app-env.mjs`): `build`, `build:dev` and `preview` load `.env` the way `dev` does, before the app env file is
+  merged. The server reads `VITE_AUTH_ENABLED` from `process.env`, so it now agrees with the client. The fix is in the wrapper, not a
+  `with-dotenv` prefix, because that prefix does not forward signals to `vite preview` (`with-app-env.test.mjs`).
+- Migration numbering (`scripts/migration-plan.test.mjs`): the known gaps (`0083` to `0089`) and the known duplicate (`0027`) are pinned, and
+  a new gap or duplicate fails the test. The gaps themselves are not filled.
+- `Dockerfile.worker`: deleted. Nothing built or named it, and `docs/SETUP.md` says the services use the root `Dockerfile`.
+
 **Open.** Each needs an owner decision or a live run before the live path is trusted.
 - Engine render cost. With no bill and no list price, `budget/reconcile.ts` records the fixed render hold as the actual, flagged
   `actualIsEstimate`. `render/hyperframesCloud.ts` writes that value as `costUsd` in the rendered video record, which has no estimate flag
@@ -422,13 +451,12 @@ and only an admin can set the URL. Accepted.
   can be submitted and billed twice. The owner has recorded this risk (`assets/STATUS.md`) and has an open test for it. The test "a server
   error is retried on the same provider" pins the current behaviour and stays until that test is recorded.
 - Engine failed calls. `assets/router.ts` holds the estimate of a refused or failed submit, and `api/index.ts` adds it to the spend total.
-  Alerts average those holds as actuals (`ops/alerts.ts`). An unbilled overrun does not alert.
+  Alerts no longer average those holds (closed above). An unbilled overrun still does not alert: the reservation alert reads settled sums
+  only, and no alert reads the `unsettledRows` count in the snapshot. Owner decision: whether a held call should alert, and after how long.
 - Engine cap mode. `budget/reconcile.ts` raises a reservation to a reconciled bill in cap mode without pausing and without checking the
   request or month cap. `sql-ledger-store.ts` takes no workspace lock for the raise, so a concurrent `reserve()` can pass the monthly check.
 - Engine holds. A request that fails or goes to review keeps its full hold in the monthly total (`sql-ledger-store.ts`). Only a rejection
   and a delivery release it.
-- Engine rounding. Bills are rounded to four decimals before they are recorded (`budget/reconcile.ts`), which can lose up to $0.00005 per
-  call.
 - Factory Apify cap. `factory/instagram-volume.ts` counts candidates against the weekly cap, not the baseline and snapshot calls. The
   total is read before the request is sent, so concurrent gathers can pass together.
 - Factory sleep. A night that fails is marked failed, but its run stays `running`, so the retry returns `already-ran` and the night never
@@ -441,13 +469,14 @@ and only an admin can set the URL. Accepted.
 - Factory learning bridge. `organic/learning-bridge.ts` can write an `organic_posts` row with status `published` and no external id, and
   its errors are swallowed. Nothing in production calls it. It is still a breach of AGENTS.md rule 1 if wired up, so it should be removed or
   gated before the bridge is used.
-- Factory sleep cap. `sleep.ts` checks its night against the stricter of the default run cap and the brand cap, not each scope.
-- Migration runner. `scripts/migrate.mjs` takes no advisory lock. Two overlapping builds can race, and the loser fails and rolls back.
-- Environment scanner. `env-example.test.ts` misses names read through constants and tables (`providers/boundaries.ts`,
-  `oauth/client-readiness.ts`, `storage/google-auth.ts`). Every current name is listed, so this is latent.
-- Auth flag. `VITE_AUTH_ENABLED` is read by the client from `.env` through Vite, and by the server from `process.env`. `build` and `preview`
-  go through `with-app-env.mjs`, which does not load `.env`. This was inferred from the code and not run.
-- Migration gaps. `0027` appears twice, and `0083` to `0089` are absent. Each file applies once, and nothing tests the gap.
+- Owner decision, video DNA frame labelling. `factory/decode.ts` (`defaultVisionLabeller`) calls OpenRouter directly through
+  `completeWithImage`, not the perception provider (`perception/run.ts`). So `PERCEPTION_PROVIDER=none` does not turn it off, and no
+  perception run is recorded. Routing it there needs `decodeVideoDna` to receive a sql handle (the worker, `factory/worker.ts`, does not
+  pass one), and a mapping from `MediaObservation` to `SceneVisionLabels`, because the fields differ (no overlay, another shot-type set,
+  OCR without roles). Owner decision: whether frame labels follow the perception setting, and which provider reads them.
+- Owner decision, rate limits. `security/limits.ts` keeps its counts in each process, so with N instances one caller can make up to N
+  times a limit. A shared store (Postgres or Redis) is needed for a deployment-wide limit. Owner decision: which store, and whether to
+  build it before a second instance runs. The behaviour is unchanged until then.
 
 **Checks on this pre-release.** The targeted test files for every changed area pass (OAuth, Factory caps and approvals, the asset router and
 its cache key, the chain store and the migration tests, accounts, workspace, configuration). `npm run typecheck` is clean. The full
