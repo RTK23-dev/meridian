@@ -13,6 +13,7 @@ import {
   manifestSchema,
   newId,
   productionRequestSchema,
+  writtenScriptSchema,
   renderedVideoSchema,
   roundUsd,
   scenePlanSchema,
@@ -458,8 +459,9 @@ export type FeedShot = {
 };
 
 export type FeedArtifact =
-  | { type: "production_request"; artifactId: string; createdAt: string; language: string; beats: { beatId: string; role: string; text: string }[]; referenceVideo: string; keep: string[]; change: string[]; maxMs: number; budgetUsd: number }
+  | { type: "production_request"; artifactId: string; createdAt: string; language: string | null; beats: { beatId: string; role: string; text: string }[]; brief: string | null; referenceVideo: string; keep: string[]; change: string[]; maxMs: number; budgetUsd: number }
   | { type: "validated_request"; artifactId: string; createdAt: string; estimatedSpeechMs: number }
+  | { type: "written_script"; artifactId: string; createdAt: string; language: string; beats: { beatId: string; role: string; text: string }[]; rationale: string }
   | { type: "video_dna"; artifactId: string; createdAt: string; durationMs: number; segments: number; transcriptWords: number; genes: string[]; transferable: string[]; sourceDeletedAt: string | null }
   | { type: "voice_track"; artifactId: string; createdAt: string; voiceId: string; provider: string; durationMs: number; lufs: number; words: number }
   | { type: "scene_plan"; artifactId: string; createdAt: string; planId: string; estimatedUsd: number; shots: FeedShot[]; decisions: FeedDecision[] }
@@ -536,13 +538,25 @@ function feedArtifactOf(stored: Awaited<ReturnType<typeof readArtifact>>, stage:
       return {
         type: "production_request",
         ...base,
-        language: request.script.language,
-        beats: request.script.beats.map((beat) => ({ beatId: beat.beatId, role: beat.role, text: beat.text })),
+        // Contract v8: a request carries its own script or a brief; a brief's script arrives later as the written_script artifact.
+        language: request.script?.language ?? null,
+        beats: request.script?.beats.map((beat) => ({ beatId: beat.beatId, role: beat.role, text: beat.text })) ?? [],
+        brief: request.brief?.text ?? null,
         referenceVideo: request.format.referenceVideo,
         keep: request.format.keep,
         change: request.format.change,
         maxMs: request.constraints.maxMs,
         budgetUsd: request.constraints.budgetUsd,
+      };
+    }
+    case "written_script": {
+      const script = writtenScriptSchema.parse(body);
+      return {
+        type: "written_script",
+        ...base,
+        language: script.language,
+        beats: script.beats.map((beat) => ({ beatId: beat.beatId, role: beat.role, text: beat.text })),
+        rationale: script.rationale,
       };
     }
     case "validated_request":

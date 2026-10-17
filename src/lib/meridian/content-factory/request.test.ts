@@ -66,7 +66,7 @@ test("a complete session maps to a request the engine's schema accepts", () => {
   assert.equal(request.format.formatId, `ref_${"b".repeat(24)}`);
   assert.deepEqual(request.format.keep, ["hook_mechanism", "pacing"]);
   assert.deepEqual(request.format.change, ["Make it feel like the reference, but for our blender.", "Context from Products: Blender X · Benefits: quiet"]);
-  assert.deepEqual(request.script.beats, [
+  assert.deepEqual(request.script?.beats, [
     { beatId: "b1", role: "hook", text: "Your smoothie is lying to you." },
     { beatId: "b2", role: "cta", text: "Send BLEND for the link." },
   ]);

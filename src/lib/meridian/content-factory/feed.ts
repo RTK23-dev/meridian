@@ -211,7 +211,8 @@ function cardDetail(id: CardId, feed: EngineRequestFeed): Pick<FeedCard, "inputs
       break;
     }
     case "plan": {
-      if (request) out.inputs.push(`${request.beats.length} script lines, a budget of ${usd(request.budgetUsd)}, up to ${seconds(request.maxMs)}`);
+      const scriptLines = latest(artifacts, "written_script")?.beats.length ?? request?.beats.length ?? 0;
+      if (request) out.inputs.push(`${scriptLines} script lines, a budget of ${usd(request.budgetUsd)}, up to ${seconds(request.maxMs)}`);
       if (plan) {
         out.output.push(`${plan.shots.length} shots, estimated at ${usd(plan.estimatedUsd)}`);
         for (const shot of plan.shots) out.output.push(`${shot.beatId}: ${shot.visualType} (${shot.sourceKind}), ${seconds(shot.startMs)} to ${seconds(shot.endMs)}`);
@@ -244,9 +245,16 @@ function cardDetail(id: CardId, feed: EngineRequestFeed): Pick<FeedCard, "inputs
     }
     case "script": {
       if (request) {
-        out.inputs.push(`Language ${request.language}; keep: ${request.keep.length > 0 ? request.keep.join(", ") : "nothing chosen"}`);
+        if (request.brief) out.inputs.push(`Brief: ${request.brief}`);
+        out.inputs.push(`Language ${request.language ?? "chosen by the script writer"}; keep: ${request.keep.length > 0 ? request.keep.join(", ") : "nothing chosen"}`);
         for (const change of request.change) out.inputs.push(change);
         for (const beat of request.beats) out.output.push(`${beat.role}: ${beat.text}`);
+      }
+      const written = latest(artifacts, "written_script");
+      if (written) {
+        out.output.push(`Written by the engine (${written.language}):`);
+        for (const beat of written.beats) out.output.push(`${beat.role}: ${beat.text}`);
+        out.reasons.push(written.rationale);
       }
       const validated = latest(artifacts, "validated_request");
       if (validated) out.output.push(`Estimated speech: ${seconds(validated.estimatedSpeechMs)}`);
